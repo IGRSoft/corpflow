@@ -4,45 +4,34 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-### Fixed
+## [4.0.27] — 2026-08-29
 
-- **`cache-lint --anchor-lint` rejected `## summary`, which `pl0-procedure.md` requires**, and the
-  conditional `## design-preview` it mandates whenever the task carries a Figma URL. `## summary` is
-  now a mandatory PL anchor; `## design-preview` and PL's unmandated `## test-strategy` joined the
-  allowed-but-never-required set.
-- **`cache-lint --anchor-lint` rejected a review's own `## re-review` section** — the same gap that
-  `## rework-<N>` had. Both are shipped conventions the DR gate reads; both are now allowed anchors.
-- **The `$defs` note attributed the schema injection to a section that does not perform it.** It now
-  states the obligation and says plainly that no shipped file implements it, rather than reading as
-  verified. `commands/worktask.md § Step B` likewise no longer describes its harness call as
-  uniformly advisory: the three sweep checks inside it hard-fail regardless of `--strict`.
-- **`agents/product-manager.md` had no `## Handoff Protocol` section**, so
-  `cache-lint.sh --frontmatter-template-lint` failed on it repo-wide — a pre-existing gap unrelated
-  to the sweep, fixed here on an explicit user decision. It now carries the same pointer-only
-  section the other thirteen stage agents use, citing `stage-contracts.md#tpl-pl`; no template copy
-  was inlined.
-
-- **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
-  passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
-  release while `skill_version()` read this repo — a sweep could exercise one version and stamp
-  another on all 156 records. Measured, not argued: with the old flags a command shipping only in
-  the installed 4.0.25 was offered and one shipping only here was not. Dispatches now run in a
-  detached worktree at HEAD, pinned with `--plugin-dir` and with the ambient copy disabled.
-- **The answer key was inside the searched tree.** `evals.json` carries `expected_outcome`, and 7
-  of 114 responses in the 0.0.1 capture reached the corpus. The capture tree strips the answer key
-  — but not `evals/scripts/*.py`, which six cases ground on. A worktree rather than a copy, because
-  it excludes gitignored material by construction: `.context/` held a per-trace map of every known
-  failure that the prompt-leak lint could never have seen.
-- **`label-align.py` could not run.** Its `--grades` default pointed at a `/tmp` path nothing
-  produces, so the only calibration tool in the repo was unusable.
-- **A rate-limited sweep lost 38 consecutive cases.** Capture now retries transient dispatches with
-  backoff; the never-fabricate contract is unchanged.
-- **`eval-grade.py --json` omitted `split`**, which both calibration tools key on.
-- **Five eval cases whose premise the repo had already answered** converted to `refute`; three
-  repointed where the declared ground file did not own the behaviour. `prompt_digest` untouched, so
-  nothing needed re-capturing.
+Claude Code **2.1.234 → 2.1.251** integration. The band's theme is cross-agent and cross-session
+communication, and the plugin surface that moves most is the resume loop: almost every entry either
+makes a message's fate observable or removes a false negative from agent discovery.
 
 ### Added
+
+- **`PreModelSwitch` / `PostModelSwitch` hooks** (`hooks/model-switch-gate.sh`,
+  `hooks/model-switch-audit.sh`, shared `hooks/model-switch-lib.sh`). The gate refuses a
+  mid-worktask re-tier away from a stage's pinned `metadata.model`; the observer records
+  `model_switched` so cost is attributed to the model that ran. The gate **fails open by
+  construction**, not by convention: a block is reachable only once the destination-model coalesce
+  matches a real payload field, so a wholly wrong schema guess degrades to annotate-or-silent
+  rather than wedging every session that switches models. The payload schema is unconfirmed —
+  2.1.251 postdates every doc in this repo — and carries a CONFIRMED/ASSUMED split in the script
+  header per the `headless-dispatch.md § Schema Versioning Watch` discipline. The **pin** is not
+  guessed: it is read from `facts.dispatched_agents[].model_requested`. Three bats files (39
+  assertions), both anti-vacuity guards mutation-verified against a matcher that always returns
+  empty and one that collapses every model to a single family.
+- **`handoff.cross_session_ask`** — an optional handoff field naming who to ask and what, legal
+  alongside `verdict: "blocked"`. A subagent's `SendMessage` to another *session* delivers the
+  reply into the parent conversation, so a stage that sent its own ask would wait for something
+  that structurally never arrives; the stage names the ask and the orchestrator sends it
+  (new orchestrator arm **Step 6.5a3**, resume branch **§ Reply routing**).
+- `stale-check.sh` classifications **`reattach-undeliverable`** and **`hook-config-broken`**, with
+  three new bats cases including a last-wins anti-vacuity guard.
+
 
 - **Closing elicitation sweep — every stage now has to ask.** Before handing off, all thirteen
   stages emit a typed `open_questions[]` sweep: 2–4 options with exactly one marked `recommended`,
@@ -94,18 +83,32 @@ All notable changes to this project are documented here. The format is based on 
   The scan was itself wrong in both directions before being pinned by tests: 12% on false
   positives, then 2% on missed phrasings.
 
-### Removed
-
-- **Both pre-sweep `open_questions[]` item shapes are gone.** The free-text string
-  (`"q1: … (AR to decide)"`) and the bare `{id, summary}` object are no longer valid in any
-  transport, and the `not: { required: [class] }` disjointness guard that kept them apart from the
-  stub went with them — with one shape there is nothing to discriminate. `handoff-harness.sh`
-  `check_sweep_stub_shape` is now the shape gate and rejects each defect by name (not a map, id not
-  `sw-<TASK_ID>-<n>`, class not `decision|escalate`, no `ref`), and `state-patch.sh --facts`
-  rejects an `open_questions` item lacking a string `.class` or `.ref`. Existing artifacts carrying
-  a legacy item must be migrated; there is no non-retroactive tolerance left anywhere.
-
 ### Changed
+
+- **The resume loop checks the result of its own `SendMessage`.** Every row that said "reattach via
+  `SendMessage`" assumed the send succeeded; CC 2.1.234–2.1.238 make `refused`, `dropped`,
+  `oversized`, `burst_limited` and `session_list_truncated` observable. Anything but delivered
+  leaves the stage parked, spends no `retry_count`, and — for a truncated session list — makes any
+  "agent gone" verdict *unconfirmed rather than established*, so it can never justify a
+  re-delegate. **This is what the min-CC floor bump rests on.**
+- **A `maxTurns` partial return routes to the reattach arm**, not a re-delegate. Step 6.5a2's
+  incomplete test gained an OR-branch on the partial marker, independent of whether a verdict was
+  written, and `metadata.reason` gained a third value `max_turns_partial`. Contrasted explicitly
+  with a budget halt: both skip `retry_count`, but a budget halt is re-dispatched while this is
+  reattached — the agent still holds the tree it edited.
+- Handoff and escalation message formats are **verdict-first**: peer messages now collapse to a
+  one-line preview, so a verdict below the fold is invisible.
+- `min` Claude Code **2.1.233 → 2.1.251**; README requirements row now carries both justifications.
+- Documented across the remaining band surfaces: `notify_when_idle`, unconditional cross-session
+  availability (never gate a handoff on provider or host OS), `ListAgents` listing teammates and
+  reporting a session's own name, `claude attach` vs `--resume`, `CLAUDE_CODE_SUBAGENT_MODEL` as a
+  *default* rather than an override, silent `xhigh`→`high` when thinking is disabled,
+  `experimental.cacheTtl` / `promptCacheTtl` / `subagentPromptCacheTtl`, `/cost`'s prompt-cache line
+  as the way to *verify* the ≈60% cross-stage target rather than assert it, worktree lock-holding
+  and `.worktreeinclude`, five security-hardening rows (TOCTOU on file tools, marketplace
+  path-traversal rejection, project-settings tracing limits, `--restricted`, Bash arithmetic
+  auto-approve).
+
 
 - **PL speaks the same sweep contract as every other stage.** `skills/shared/figma-capture.md`'s
   auth-pending and persist-failure questions are full sweep items under
@@ -192,6 +195,62 @@ All notable changes to this project are documented here. The format is based on 
   Per the spec-change rule these apply from a 0.3.0 capture forward; 0.2.0 labels are not
   re-flipped. Until that capture runs, the effect of all three is argued, not measured.
 
+### Removed
+
+- **Both pre-sweep `open_questions[]` item shapes are gone.** The free-text string
+  (`"q1: … (AR to decide)"`) and the bare `{id, summary}` object are no longer valid in any
+  transport, and the `not: { required: [class] }` disjointness guard that kept them apart from the
+  stub went with them — with one shape there is nothing to discriminate. `handoff-harness.sh`
+  `check_sweep_stub_shape` is now the shape gate and rejects each defect by name (not a map, id not
+  `sw-<TASK_ID>-<n>`, class not `decision|escalate`, no `ref`), and `state-patch.sh --facts`
+  rejects an `open_questions` item lacking a string `.class` or `.ref`. Existing artifacts carrying
+  a legacy item must be migrated; there is no non-retroactive tolerance left anywhere.
+
+### Fixed
+
+- **`token-baselines.md` claimed a per-session spawn cap of 200 that no longer exists**, directly
+  contradicting `agent-coordination/SKILL.md § No total cap; concurrency is the one that bites`.
+- The audit `action` enum was missing **`stage_returned_incomplete`**, which the orchestrator has
+  emitted since before this band — a pre-existing gap found while adding the new actions.
+- The README hooks table claimed to mirror `plugin.json` 1:1 but omitted `test-execution-gate.sh`
+  and `dv-comment-density-gate.sh`.
+
+- **`cache-lint --anchor-lint` rejected `## summary`, which `pl0-procedure.md` requires**, and the
+  conditional `## design-preview` it mandates whenever the task carries a Figma URL. `## summary` is
+  now a mandatory PL anchor; `## design-preview` and PL's unmandated `## test-strategy` joined the
+  allowed-but-never-required set.
+- **`cache-lint --anchor-lint` rejected a review's own `## re-review` section** — the same gap that
+  `## rework-<N>` had. Both are shipped conventions the DR gate reads; both are now allowed anchors.
+- **The `$defs` note attributed the schema injection to a section that does not perform it.** It now
+  states the obligation and says plainly that no shipped file implements it, rather than reading as
+  verified. `commands/worktask.md § Step B` likewise no longer describes its harness call as
+  uniformly advisory: the three sweep checks inside it hard-fail regardless of `--strict`.
+- **`agents/product-manager.md` had no `## Handoff Protocol` section**, so
+  `cache-lint.sh --frontmatter-template-lint` failed on it repo-wide — a pre-existing gap unrelated
+  to the sweep, fixed here on an explicit user decision. It now carries the same pointer-only
+  section the other thirteen stage agents use, citing `stage-contracts.md#tpl-pl`; no template copy
+  was inlined.
+
+- **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
+  passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
+  release while `skill_version()` read this repo — a sweep could exercise one version and stamp
+  another on all 156 records. Measured, not argued: with the old flags a command shipping only in
+  the installed 4.0.25 was offered and one shipping only here was not. Dispatches now run in a
+  detached worktree at HEAD, pinned with `--plugin-dir` and with the ambient copy disabled.
+- **The answer key was inside the searched tree.** `evals.json` carries `expected_outcome`, and 7
+  of 114 responses in the 0.0.1 capture reached the corpus. The capture tree strips the answer key
+  — but not `evals/scripts/*.py`, which six cases ground on. A worktree rather than a copy, because
+  it excludes gitignored material by construction: `.context/` held a per-trace map of every known
+  failure that the prompt-leak lint could never have seen.
+- **`label-align.py` could not run.** Its `--grades` default pointed at a `/tmp` path nothing
+  produces, so the only calibration tool in the repo was unusable.
+- **A rate-limited sweep lost 38 consecutive cases.** Capture now retries transient dispatches with
+  backoff; the never-fabricate contract is unchanged.
+- **`eval-grade.py --json` omitted `split`**, which both calibration tools key on.
+- **Five eval cases whose premise the repo had already answered** converted to `refute`; three
+  repointed where the declared ground file did not own the behaviour. `prompt_digest` untouched, so
+  nothing needed re-capturing.
+
 ### Notes
 
 - **First calibrated measurement of `request-plan` 0.2.0.** Harness 127/156 = 81%; corrected 77%,
@@ -204,6 +263,11 @@ All notable changes to this project are documented here. The format is based on 
   10 failures caught. Verdicts committed as evidence.
 - **The held-out tranche has no negatives left**, because its only three failures were among the
   five corrected cases. Held-out failure detection is still unmeasured.
+
+### Verified, unchanged
+
+- `.claude-plugin/marketplace.json` declares no command, agent or skill path outside the plugin
+  directory, so the 2.1.251 path-traversal rejection changes nothing here.
 
 ## [4.0.26] — 2026-08-26
 

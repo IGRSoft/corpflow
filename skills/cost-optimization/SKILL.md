@@ -104,9 +104,23 @@ The handoff protocol (`skills/worktask/references/handoff-protocol.md`) is built
 
 Why: the 5-min default is shorter than many stages (DV/QA on complex features), so the preamble cache goes cold mid-pipeline — retries inside a stage still save, cross-stage hits are lost. (RK-8 in `analyzing.md#risks`.)
 
+### Finer-grained TTL controls
+
+Three knobs, narrowest first — reach for the narrowest that solves the problem:
+
+| Knob | Scope | Use when |
+|---|---|---|
+| `experimental.cacheTtl` (`"5m"`/`"1h"`) | One agent, via its frontmatter | A single long-running stage needs the longer TTL and the rest do not. Applies only when no subagent TTL setting is configured |
+| `promptCacheTtl` / `subagentPromptCacheTtl` | Settings, main conversation vs subagents separately | The orchestrator's own context is worth holding for an hour while stage agents stay at 5 minutes |
+| `ENABLE_PROMPT_CACHING_1H` | Session-wide | The whole pipeline is long enough that everything benefits |
+
+Two upstream cache-miss bugs are fixed and no longer need working around: tool definitions re-rendered after an OAuth token refresh (roughly hourly in long sessions, which also lost extended-thinking context), and the `ScheduleWakeup` tool definition changing between a session and its `--resume` under usage overage.
+
 ### Expected cache_read_input_tokens ratio
 
 0% at PL (cold) → ≈20% cross-stage → ≈80% on retries within a stage → ≈60% cross-stage average, meeting AC-14 (`handoff-protocol.md#cache-prefix`).
+
+**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
 
 Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2]+[4] across consecutive stages of one `worktask_id`. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
 

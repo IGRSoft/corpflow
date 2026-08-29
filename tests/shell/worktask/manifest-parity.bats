@@ -68,6 +68,29 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   assert_output --partial 'hooks/test-execution-gate.sh'
 }
 
+@test "AC-14: model-switch-gate.sh is registered under PreModelSwitch and is executable on disk" {
+  [ -x "$PLUGIN_ROOT/hooks/model-switch-gate.sh" ]
+  run jq -r '.hooks.PreModelSwitch[].hooks[].command' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output --partial 'hooks/model-switch-gate.sh'
+}
+
+@test "AC-14: model-switch-audit.sh is registered under PostModelSwitch and is executable on disk" {
+  [ -x "$PLUGIN_ROOT/hooks/model-switch-audit.sh" ]
+  run jq -r '.hooks.PostModelSwitch[].hooks[].command' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output --partial 'hooks/model-switch-audit.sh'
+}
+
+@test "AC-14: the shared model-switch library is sourced-only, never registered as a hook" {
+  # A library wired as a hook command would be exec'd, hit its anti-execution
+  # guard and exit 2 on every model switch.
+  [ ! -x "$PLUGIN_ROOT/hooks/model-switch-lib.sh" ]
+  run jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  refute_output --partial 'model-switch-lib.sh'
+}
+
 # Hooks reach the runtime by two independent routes: plugin.json (repo-wide firing) and
 # agent frontmatter (fires only for that agent). The frontmatter route has no manifest to
 # drift against, so a renamed or deleted script fails silently at dispatch time instead.

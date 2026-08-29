@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.26 · Requires Claude Code 2.1.233+**
+**Plugin 4.0.27 · Requires Claude Code 2.1.251+**
 
 ## Features
 
@@ -50,7 +50,7 @@ lock, the atomic write, and the disk guard.
 
 | Requirement | Needed for |
 |-------------|------------|
-| **Claude Code 2.1.233+** | The state ledger. 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger) |
+| **Claude Code 2.1.251+** | Two things. The state ledger: 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger). And the resume loop: from 2.1.234–2.1.238 a `SendMessage` reports non-delivery (refused, dropped, oversized, rate-limited, or an incompletely-enumerated session list) instead of silently succeeding, which is what the reattach path now branches on — on an older build an undelivered nudge reads as a delivered one and a parked stage is silently abandoned |
 | **git** | Every worktask runs in a dedicated worktree |
 | **jq** | `state-patch.sh`, the only writer to the ledger. Hard requirement — without it no stage can complete |
 | **`gh`**, authenticated | Post-PL issue publishing, `/megatask` milestone and issue reads, FN pull requests |
@@ -421,11 +421,15 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 
 | Hook | Event | Purpose |
 |------|-------|---------|
+| `test-execution-gate.sh` | PreToolUse (`Bash`/`Skill`/`Task`/test MCP) | **Blocks** a test run by a stage that holds no test-execution authority |
+| `model-switch-gate.sh` | PreModelSwitch | **Blocks** a mid-worktask re-tier away from the stage's pinned `metadata.model` |
+| `model-switch-audit.sh` | PostModelSwitch | Records `model_switched` so cost is attributed to the model that ran |
 | `audit-tooluse.sh` | PostToolUse (`Bash`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl`; Bash rows only for ledger patches |
 | `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
 | `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion when the screenshot manifest is missing |
+| `dv-comment-density-gate.sh` | SubagentStop | **Blocks** DV completion when a change's comment density breaches the standard |
 | `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |

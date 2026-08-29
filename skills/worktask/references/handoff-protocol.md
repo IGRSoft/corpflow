@@ -126,6 +126,17 @@ properties:
       open_questions:
         type: array
         items: { $ref: '#/$defs/SweepStub' }   # closing elicitation sweep, the only item shape
+      cross_session_ask:
+        type: object
+        description: >
+          OPTIONAL. Legal only alongside verdict "blocked". Names WHO to ask and WHAT; the stage
+          never sends it itself, because a subagent's reply from another session is delivered to
+          the parent conversation and would never reach the stage. The orchestrator owns the send
+          (resume.md § Reply routing).
+        required: [to, question]
+        properties:
+          to: { type: string, maxLength: 200 }
+          question: { type: string, maxLength: 160 }
       refs:
         type: object
         additionalProperties: { type: string }
@@ -289,7 +300,9 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
 
 #### Conventions — the sweep field
 
-Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`. 
+Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`.
+
+`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. 
 ###### Conventions — the $defs pointer is an obligation
 
 The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.

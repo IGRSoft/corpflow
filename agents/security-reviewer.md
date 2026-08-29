@@ -224,7 +224,7 @@ rules or mid-pattern file rules like `Read(secrets-*/config.json)`.
 
 - Single-segment `dir/**` allow rules and hook `if:` conditions are cwd-anchored — they match only `<cwd>/dir`; any-depth needs `**/dir/**`. `deny`/`ask` rules keep any-depth matching.
 - `Write(path)`/`NotebookEdit(path)`/`Glob(path)` rules trigger a startup warning — those tools take no path predicate the way Edit/Read do; recommend `Edit(path)`/`Read(path)`.
-- Bash analysis fail-closes on previously-permissive shapes (FD redirects, commands over 10k characters, zsh subscripts in `[[ ]]`, unsafe `help`/`man` forms). Extra ask prompts there are the detection improving, not a regression.
+- Bash analysis fail-closes on previously-permissive shapes (FD redirects, commands over 10k characters, zsh subscripts in `[[ ]]`, unsafe `help`/`man` forms, arithmetic assignment to an integer variable such as `OPTIND=1` or `RANDOM=2+2`). Extra ask prompts there are the detection improving, not a regression.
 
 ## Escalation Rules
 

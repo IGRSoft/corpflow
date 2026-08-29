@@ -109,7 +109,7 @@ tools: Read, Glob, Grep, Write, Edit
 ---
 ```
 
-Optional fields keep fixed slots: `isolation:` between `maxTurns:` and `tools:`; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
+Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:` and `tools:`, in that order; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
 
 ### Body sections
 
