@@ -49,6 +49,8 @@
 #                           atomic window, so one call patches both the ledger row and the
 #                           facts a stage recorded; standalone it exits 0 after the merge.
 #                           Union, never replace — identity rule at § Facts union below.
+#                           open_questions items must be FULL sweep stubs (string .id, .class
+#                           and .ref); a partial one exits 2 with state.json untouched.
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -656,6 +658,9 @@ _FACTS_UNION_FILTER='
 
 # Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
 # union filter would otherwise persist an array no downstream reader can parse.
+# open_questions is held to the FULL sweep stub (.id, .class, .ref), not just .id: a partial
+# item reaches the FN render with no anchor to resolve its options[] from, and the union would
+# have already replaced the incumbent object that did carry one. decisions stays id-only.
 _FACTS_VALIDATE_FILTER='
       def _allowed: ["decisions","files_modified","open_questions","tests_added"];
       if type != "object" then "must be a JSON object"
@@ -663,11 +668,19 @@ _FACTS_VALIDATE_FILTER='
       else
         (keys - _allowed) as $unknown
         | [ to_entries[]
-            | select(.key == "decisions" or .key == "open_questions")
+            | select(.key == "decisions")
             | select((.value | type) != "array"
                      or ((.value | map(select((type != "object")
                                               or ((.id | type) != "string")))) | length) > 0)
             | .key ] as $badkeyed
+        | [ to_entries[]
+            | select(.key == "open_questions")
+            | select((.value | type) != "array"
+                     or ((.value | map(select((type != "object")
+                                              or ((.id | type) != "string")
+                                              or ((.class | type) != "string")
+                                              or ((.ref | type) != "string")))) | length) > 0)
+            | .key ] as $badstub
         | [ to_entries[]
             | select(.key == "files_modified" or .key == "tests_added")
             | select((.value | type) != "array"
@@ -679,6 +692,8 @@ _FACTS_VALIDATE_FILTER='
           elif ($badkeyed | length) > 0
           then "bad shape for " + ($badkeyed | join(", "))
                + " (expected an array of objects each with a string .id)"
+          elif ($badstub | length) > 0
+          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref)"
           elif ($badscalar | length) > 0
           then "bad shape for " + ($badscalar | join(", "))
                + " (expected an array of strings)"
@@ -1354,6 +1369,32 @@ EOSTATE
     printf 'T18: live-target guard (rc=%s): FAIL\n' "$st18_rc" >&2
     exit 1
   fi
+
+  # ---- T19: a partial sweep stub via --facts is rejected before the lock ----
+  # The union REPLACES the incumbent object for that id, so admitting {id} alone would
+  # silently drop the class/ref the FN render resolves options[] through.
+  make_state
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}' \
+    > /dev/null || {
+      printf 'T19: a full sweep stub was rejected\n' >&2
+      exit 1
+    }
+  cp .context/state.json .context/state.json.snap19
+  st19_rc=0
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1"}]}' > /dev/null 2>&1 || st19_rc=$?
+  if [[ "$st19_rc" -eq 2 ]] \
+    && diff -q .context/state.json .context/state.json.snap19 > /dev/null; then
+    printf 'T19: partial sweep stub exits 2, state byte-unchanged: ok\n'
+  else
+    printf 'T19: partial-stub guard (rc=%s): FAIL\n' "$st19_rc" >&2
+    exit 1
+  fi
+  # decisions keeps the id-only contract: the tightening is scoped to open_questions.
+  bash "$SELF" --facts '{"decisions":[{"id":"d1","summary":"s","ref":"planning-0.md#stages"}]}' \
+    > /dev/null || {
+      printf 'T19: decisions payload was rejected: FAIL\n' >&2
+      exit 1
+    }
 
   printf 'self-test: ALL PASS\n'
   exit 0

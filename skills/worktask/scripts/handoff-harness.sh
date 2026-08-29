@@ -40,7 +40,7 @@
 #       The three closing-sweep checks (stub shape, ref anchor, ledger parity)
 #       ride on the same invocation for EVERY stage and hard-fail in both modes.
 #       Ledger parity needs --state; when --state is unreadable and the artifact
-#       carries a class-bearing stub it fails rather than skips.
+#       carries a sweep stub it fails rather than skips.
 #
 #       Exception: an unreadable --state (file missing, jq unavailable, or
 #       invalid JSON) is itself a gate violation, not a silent skip -- it
@@ -131,19 +131,51 @@ required_for() {
   esac
 }
 
-# A sweep stub carrying `class` but no `ref` matches NO oneOf branch: `class` trips the
-# legacy branch's `not` guard and `ref` is required by SweepStub. That is intended — a stub
-# with no anchor cannot be resolved to its options[] at render time — but a bare schema
-# rejection names no cause, so the harness says it plainly.
+SWEEP_ID_RE='^sw-[A-Z]{2}[0-9]+-[0-9]+$'
+
+# THE shape gate for open_questions[]: the sweep stub is the only item shape the field
+# accepts, so this runs first and the two checks below may assume every surviving item is a
+# map carrying id/class/ref. A bare schema rejection names no cause, so each defect gets its
+# own sentence. Composed from four yq selects rather than one because yq v4 has no if/elif:
+# each select yields the offenders of exactly one defect and bash prints a line per offender.
+# Offenders are addressed by index, the only identity a non-map item has.
 check_sweep_stub_shape() {
-  local fmfile="$1" bad
-  bad=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | select(has("ref") | not) | .id] | .[]' \
-        "$fmfile" 2> /dev/null) || return 0
-  if [[ -n "$bad" ]]; then
-    echo "fail: sweep stub(s) $(echo "$bad" | tr '\n' ' ')carry class but no ref — such an object matches no open_questions branch; add ref: \"<artifact>-N.md#elicitation-sweep\"" >&2
-    return 1
-  fi
-  return 0
+  local fmfile="$1" rc=0 line
+  local base='[.handoff.open_questions[]?] | to_entries | .[]'
+  local nonmap badid badclass noref
+
+  nonmap=$(yq eval "$base | select(.value | type != \"!!map\") | .key" "$fmfile" 2> /dev/null) || return 0
+  badid=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.id // \"\") | test(\"$SWEEP_ID_RE\") | not) | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
+  badclass=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.class // \"\") != \"decision\" and (.value.class // \"\") != \"escalate\") | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
+  noref=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.ref | type) != \"!!str\") | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    echo "fail: open_questions[$line] is not a sweep stub — every item is { id: sw-<TASK_ID>-<n>, class: decision|escalate, ref: \"<artifact>-N.md#elicitation-sweep\" }" >&2
+    rc=1
+  done <<< "$nonmap"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    echo "fail: open_questions[${line%% *}] id \"${line#* }\" is not sw-<TASK_ID>-<n>" >&2
+    rc=1
+  done <<< "$badid"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    echo "fail: sweep stub $(_sweep_label "$line") class is not decision|escalate" >&2
+    rc=1
+  done <<< "$badclass"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    echo "fail: sweep stub $(_sweep_label "$line") carries no ref — add ref: \"<artifact>-N.md#elicitation-sweep\"" >&2
+    rc=1
+  done <<< "$noref"
+  return $rc
+}
+
+# "<index> <id>" -> the id when the item has one, else its positional address.
+_sweep_label() {
+  local id="${1#* }"
+  [[ -n "$id" ]] && printf '%s' "$id" || printf 'open_questions[%s]' "${1%% *}"
 }
 
 # The stub's `ref` anchor is the SOLE transport of the options[] the FN gate renders —
@@ -151,13 +183,13 @@ check_sweep_stub_shape() {
 # Step C: C.4 either skips the item or invents options, which is silent degradation of
 # exactly the kind the ledger-parity check above exists to prevent. Verifying the FIELD
 # exists is not enough; check_sweep_stub_shape's own error message hands the agent the
-# literal to paste. Non-retroactive by construction: only class-bearing stubs are walked,
-# and no artifact predating the sweep carries one.
+# literal to paste. An empty open_questions array walks nothing, so there is nothing to
+# compare and the check is silent.
 check_sweep_ref_anchor() {
   local artifact="$1" fmfile="$2"
   local dir rows line id ref file anchor target
   dir=$(dirname "$artifact")
-  rows=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | .id + " " + (.ref // "")] | .[]' \
+  rows=$(yq eval '[.handoff.open_questions[]? | .id + " " + (.ref // "")] | .[]' \
          "$fmfile" 2> /dev/null) || return 0
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
@@ -193,12 +225,12 @@ check_sweep_ref_anchor() {
 #
 # An unreadable --state is a FAILURE here whenever there is a stub to compare, not a
 # skip: check_ar_ref makes that case loud for DV only, and the other twelve stages
-# would otherwise pass parity by never running it. With no class-bearing stub there is
-# nothing to compare, so a legacy artifact keeps passing.
+# would otherwise pass parity by never running it. An empty open_questions array leaves
+# nothing to compare, so the check is silent.
 check_sweep_ledger() {
   local fmfile="$1"
   local ids id
-  ids=$(yq eval '[.handoff.open_questions[]? | select(type == "!!map") | select(has("class")) | .id] | .[]' \
+  ids=$(yq eval '[.handoff.open_questions[]? | .id] | .[]' \
         "$fmfile" 2> /dev/null) || return 0
   [[ -n "$ids" ]] || return 0
   local unreadable=""
@@ -500,7 +532,8 @@ handoff:
   key_decisions:
     - { id: ad1, summary: "Atomic write", anchor: "architecture.md#decisions" }
   next_stage_focus: "TL fans out edits"
-  open_questions: ["q3: hook lang"]
+  open_questions:
+    - { id: sw-AR0-1, class: decision, ref: "architecture.md#elicitation-sweep" }
   refs: { plan: planning-0.md#requirements }
 ---
 
@@ -535,6 +568,10 @@ q3, q4, q5, q6.
 ## risks
 
 Listed.
+
+## elicitation-sweep
+
+- sw-AR0-1 — hook language: Bash or Python?
 EOF
 
   cat > "$d/.context/development.md" <<'EOF'
@@ -675,8 +712,9 @@ self_test_ar_gate() {
   jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
 
   # The shared preamble every gate fixture needs; only refs differ per case.
+  # $3 replaces the default empty sweep array, so a case can plant a rejected item shape.
   _dv_artifact() {
-    local path="$1" refs_block="$2"
+    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}"
     {
       echo '---'
       echo 'handoff:'
@@ -685,12 +723,16 @@ self_test_ar_gate() {
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
       echo '  next_stage_focus: "DR reviews"'
-      echo '  open_questions: []'
+      printf '%s\n' "$oq"
       echo '  refs:'
       printf '%s\n' "$refs_block"
       echo '---'
       echo
       echo '# Development'
+      echo
+      echo '## elicitation-sweep'
+      echo
+      echo 'nothing to elicit'
     } > "$path"
   }
 
@@ -739,7 +781,7 @@ self_test_ar_gate() {
   _ar_case "badstate/corrupt/default" "$ctx/state-corrupt.json" 0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
   _ar_case "badstate/corrupt/strict"  "$ctx/state-corrupt.json" 1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
 
-  # Sweep ledger parity rides on the same invocation: a class-bearing stub must be in the
+  # Sweep ledger parity rides on the same invocation: every stub must be in the
   # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
   {
     echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
@@ -750,12 +792,28 @@ self_test_ar_gate() {
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
     echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
   } > "$ctx/dv-stub.md"
-  jq '.facts.open_questions += [{"id":"sw-DV0-1"}]' "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
+  jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep"}]' \
+     "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
   _ar_case "sweep/stub+ledger"        "$ctx/state-stub.json"    0 0 -                                              "$ctx/dv-stub.md"
   _ar_case "sweep/stub+not-in-ledger" "$ctx/state-no-ar.json"   0 1 "fail: sweep stub sw-DV0-1 is in the frontmatter" "$ctx/dv-stub.md"
   _ar_case "sweep/stub+missing-state" "$ctx/nope.json"          0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
   _ar_case "sweep/stub+corrupt-state" "$ctx/state-corrupt.json" 0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
   _ar_case "sweep/nostub+missing-state" "$ctx/nope.json"        0 0 "warn: AR-ref check skipped"                    "$ctx/dv-no-ref.md"
+
+  # The stub is the ONLY item shape: the two pre-sweep forms and a mistyped class are
+  # rejected by name, so the diagnostic tells the agent what to write instead.
+  _dv_artifact "$ctx/dv-legacy-string.md" '    dev: development.md#files-changed' \
+    '  open_questions:
+    - "q1: hook lang (AR to decide)"'
+  _dv_artifact "$ctx/dv-legacy-bare.md" '    dev: development.md#files-changed' \
+    '  open_questions:
+    - { id: q2, summary: "bare object" }'
+  _dv_artifact "$ctx/dv-bad-class.md" '    dev: development.md#files-changed' \
+    '  open_questions:
+    - { id: sw-DV0-9, class: advisory, ref: "dv-bad-class.md#elicitation-sweep" }'
+  _ar_case "sweep/legacy-string" - 0 1 "fail: open_questions\[0\] is not a sweep stub" "$ctx/dv-legacy-string.md"
+  _ar_case "sweep/legacy-bare"   - 0 1 'fail: open_questions\[0\] id "q2" is not sw-'   "$ctx/dv-legacy-bare.md"
+  _ar_case "sweep/bad-class"     - 0 1 "fail: sweep stub sw-DV0-9 class is not decision|escalate" "$ctx/dv-bad-class.md"
 }
 
 # ---------- main ----------
