@@ -66,7 +66,10 @@ All notable changes to this project are documented here. The format is based on 
 - A closing-sweep stub's `ref` anchor is now verified to exist: `handoff-harness.sh` resolves each
   stub's `ref` against the artifact it names and fails on a dangling one. The stub
   carries no `options[]`, so that anchor is the only transport of what the FN gate renders — a
-  dangling ref would have made the orchestrator skip the item or invent its options.
+  dangling ref would have made the orchestrator skip the item or invent its options. The three
+  sweep checks are fail-closed: a yq read error, a non-string id, or a scalar `open_questions`
+  each fail by name rather than pass, and a ref spelled with the artifact's own directory
+  (`.context/<artifact>-N.md#…`, the `refs:` convention) resolves to the artifact itself.
 - `## elicitation-sweep` is a **mandatory** H2 anchor in every stage artifact — the full items or
   the explicit empty statement — enforced by `cache-lint.sh --anchor-lint` for all 13 stages with
   no grace for artifacts written before this release. It is a single universal-anchor constant, not
