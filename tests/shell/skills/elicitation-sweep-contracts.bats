@@ -904,6 +904,44 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   assert_output --partial "class is not decision|escalate"
 }
 
+@test "shape gate: a non-string id fails by name instead of passing on a yq error" {
+  # yq's test() throws on an int; the gate must report the id, not pass on the read error.
+  local d
+  d="$(mk_tmpworkdir)"
+  sweep_fixture_items "$d" \
+    '    - { id: 5, class: decision, ref: "documentation-0.md#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_failure
+  assert_output --partial 'id "5" is not sw-'
+}
+
+@test "shape gate: a scalar open_questions is rejected — [] is the only empty form" {
+  local d
+  d="$(mk_tmpworkdir)"
+  mkdir -p "$d"
+  {
+    printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n'
+    printf '  summary: "fixture"\n  files_touched: [a.md]\n'
+    printf '  open_questions: "none"\n'
+    printf '  refs: { dev: development-0.md#files-changed }\n'
+    printf -- '---\n\n# Documentation\n\n## elicitation-sweep\n\nnothing to elicit\n'
+  } > "$d/documentation-0.md"
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_failure
+  assert_output --partial "open_questions is !!str, not a sequence"
+}
+
+@test "sw-DV0-5: a ref that repeats the artifact's own directory resolves to the same file" {
+  # The templates' refs: rows use `.context/<artifact>-N.md#…`; a stub copying that
+  # convention names the artifact itself, not `.context/.context/…`.
+  local d
+  d="$(mk_tmpworkdir)/.context"
+  sweep_fixture_items "$d" \
+    '    - { id: sw-DC0-1, class: decision, ref: ".context/documentation-0.md#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
+  assert_success
+}
+
 @test "shape gate twin: an all-stub artifact with its anchor passes (the gate is not unconditional)" {
   local d
   d="$(mk_tmpworkdir)"
@@ -1088,6 +1126,19 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
         | jq -c --argjson f "{\"open_questions\":[$stub]}" "$filter")"
   [ "$out" = "{\"facts\":{\"open_questions\":[$stub]}}" ] \
     || fail "the union mutated an unanswered stub: $out"
+}
+
+@test "q8 union: blocks_next_stage is raise-only — a bare re-emit keeps the flag, a raise is honoured" {
+  local filter out
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}}' \
+        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0].blocks_next_stage == true' > /dev/null \
+    || fail "a bare re-emit cleared blocks_next_stage: $out"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}}' \
+        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0].blocks_next_stage == true' > /dev/null \
+    || fail "raising to blocking was refused: $out"
 }
 
 @test "q8 artifact side: § Item shape requires a re-emitted stub to carry its answer forward" {

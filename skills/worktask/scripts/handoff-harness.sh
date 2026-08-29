@@ -133,6 +133,17 @@ required_for() {
 
 SWEEP_ID_RE='^sw-[A-Z]{2}[0-9]+-[0-9]+$'
 
+# A yq failure inside a sweep check is a gate FAILURE, never a skip: the gate has no advisory
+# tier, so a read that cannot be trusted must not yield a pass. First error line is surfaced.
+_sweep_yq() {  # <expr> <fmfile>
+  local out
+  if ! out=$(yq eval "$1" "$2" 2>&1); then
+    echo "fail: open_questions could not be read as sweep stubs — ${out%%$'\n'*}" >&2
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
 # THE shape gate for open_questions[]: the sweep stub is the only item shape the field
 # accepts, so this runs first and the two checks below may assume every surviving item is a
 # map carrying id/class/ref. A bare schema rejection names no cause, so each defect gets its
@@ -142,12 +153,23 @@ SWEEP_ID_RE='^sw-[A-Z]{2}[0-9]+-[0-9]+$'
 check_sweep_stub_shape() {
   local fmfile="$1" rc=0 line
   local base='[.handoff.open_questions[]?] | to_entries | .[]'
-  local nonmap badid badclass noref
+  local oqtype nonmap badid badclass noref
 
-  nonmap=$(yq eval "$base | select(.value | type != \"!!map\") | .key" "$fmfile" 2> /dev/null) || return 0
-  badid=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.id // \"\") | test(\"$SWEEP_ID_RE\") | not) | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
-  badclass=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.class // \"\") != \"decision\" and (.value.class // \"\") != \"escalate\") | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
-  noref=$(yq eval "$base | select(.value | type == \"!!map\") | select((.value.ref | type) != \"!!str\") | (.key | tostring) + \" \" + (.value.id // \"\")" "$fmfile" 2> /dev/null) || return 0
+  # `[]?` below silently yields nothing for a scalar, and the required-field loop only asks
+  # for a non-empty value, so `open_questions: "none"` would otherwise pass every check.
+  oqtype=$(_sweep_yq '.handoff.open_questions | type' "$fmfile") || return 1
+  case "$oqtype" in
+    '!!seq' | '!!null') ;;
+    *)
+      echo "fail: open_questions is $oqtype, not a sequence — write open_questions: [] when there is nothing to elicit" >&2
+      return 1 ;;
+  esac
+
+  # `tostring` on the id keeps a non-string id inside the bad-id arm rather than in yq's error path.
+  nonmap=$(_sweep_yq "$base | select(.value | type != \"!!map\") | .key" "$fmfile") || return 1
+  badid=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select(((.value.id // \"\") | tostring) | test(\"$SWEEP_ID_RE\") | not) | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
+  badclass=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select((.value.class // \"\") != \"decision\" and (.value.class // \"\") != \"escalate\") | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
+  noref=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select((.value.ref | type) != \"!!str\") | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
@@ -189,8 +211,8 @@ check_sweep_ref_anchor() {
   local artifact="$1" fmfile="$2"
   local dir rows line id ref file anchor target
   dir=$(dirname "$artifact")
-  rows=$(yq eval '[.handoff.open_questions[]? | .id + " " + (.ref // "")] | .[]' \
-         "$fmfile" 2> /dev/null) || return 0
+  rows=$(_sweep_yq '[.handoff.open_questions[]? | (.id | tostring) + " " + (.ref // "")] | .[]' \
+         "$fmfile") || return 1
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     id="${line%% *}"
@@ -204,6 +226,12 @@ check_sweep_ref_anchor() {
     fi
     target="$dir/$file"
     [[ -n "$file" ]] || target="$artifact"           # anchor-only ref resolves to this artifact
+    # The per-stage templates spell the `refs:` rows `.context/<artifact>-N.md#…`, two lines
+    # under a stub written `<artifact>-N.md#…`, so a ref that repeats the artifact's own
+    # directory names the same file — not a nested one — and must not fail as missing.
+    if [[ ! -f "$target" && "$file" == "$(basename "$dir")/"* ]]; then
+      target="$dir/${file#*/}"
+    fi
     if [[ ! -f "$target" ]]; then
       echo "fail: sweep stub $id ref \"$ref\" names a file that does not exist: $target" >&2
       return 1
@@ -230,8 +258,8 @@ check_sweep_ref_anchor() {
 check_sweep_ledger() {
   local fmfile="$1"
   local ids id
-  ids=$(yq eval '[.handoff.open_questions[]? | .id] | .[]' \
-        "$fmfile" 2> /dev/null) || return 0
+  ids=$(_sweep_yq '[.handoff.open_questions[]? | (.id | tostring)] | .[]' \
+        "$fmfile") || return 1
   [[ -n "$ids" ]] || return 0
   local unreadable=""
   if [[ ! -f "$STATE_ARG" ]]; then
@@ -814,6 +842,23 @@ self_test_ar_gate() {
   _ar_case "sweep/legacy-string" - 0 1 "fail: open_questions\[0\] is not a sweep stub" "$ctx/dv-legacy-string.md"
   _ar_case "sweep/legacy-bare"   - 0 1 'fail: open_questions\[0\] id "q2" is not sw-'   "$ctx/dv-legacy-bare.md"
   _ar_case "sweep/bad-class"     - 0 1 "fail: sweep stub sw-DV0-9 class is not decision|escalate" "$ctx/dv-bad-class.md"
+
+  # Fail-closed: a non-string id (yq's test() throws on it) and a scalar open_questions
+  # (invisible to `[]?`) must both fail by name rather than pass on the read error.
+  _dv_artifact "$ctx/dv-int-id.md" '    dev: development.md#files-changed' \
+    '  open_questions:
+    - { id: 5, class: decision, ref: "dv-int-id.md#elicitation-sweep" }'
+  _dv_artifact "$ctx/dv-scalar.md" '    dev: development.md#files-changed' \
+    '  open_questions: "none"'
+  _ar_case "sweep/int-id"  - 0 1 'fail: open_questions\[0\] id "5" is not sw-'        "$ctx/dv-int-id.md"
+  _ar_case "sweep/scalar"  - 0 1 "fail: open_questions is !!str, not a sequence"     "$ctx/dv-scalar.md"
+
+  # A ref spelled with the artifact's own directory (the templates' refs: convention) is the
+  # same file: it resolves rather than failing as missing.
+  _dv_artifact "$ctx/dv-ctx-ref.md" '    dev: development.md#files-changed' \
+    "  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\" }"
+  _ar_case "sweep/dir-prefixed-ref" - 0 0 - "$ctx/dv-ctx-ref.md"
 }
 
 # ---------- main ----------
