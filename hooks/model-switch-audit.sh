@@ -89,7 +89,7 @@ run_audit() {
       ts: $ts,
       actor: "hook:model-switch-audit",
       action: "model_switched",
-      subject: (if ($task | length) > 0 then $task else ($stage // "unknown") end),
+      subject: (if ($task | length) > 0 then $task elif ($stage | length) > 0 then $stage else "unknown" end),
       result: "ok",
       metadata: {
         stage: $stage,

@@ -149,7 +149,10 @@ tree it edited, so re-delegating discards that work and re-pays the stage
 Every row above that says "reattach via `SendMessage`" assumed the send succeeds. It no longer
 does: each non-delivery mode is observable rather than a silent success. **This is the entry the
 plugin's min-CC floor rests on.** Read the result before treating any reattach as done, and log one
-`reattach_send_result` row per attempt.
+`reattach_send_result` row per attempt. Contract: `result: "ok"` means delivered; every non-delivery
+is `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`, `burst_limited`,
+`session_list_truncated`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`:
+`stale-check.sh` reads anything other than `ok` as undelivered.
 
 #### Reattach rows — the result table
 

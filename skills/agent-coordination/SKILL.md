@@ -139,7 +139,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11) |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
@@ -162,6 +162,13 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 #### Plugin-hook row fields
 
 Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. `stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
+
+#### Writers — model-switch hooks (authoritative)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| `hook:model-switch-gate` (PreModelSwitch, plugin) | `model_switch_blocked`, `model_switch_confirm_requested`, `model_switch_annotated`, and one-shot `model_switch_gate_disabled` hatch note — `metadata.{stage, task_id, pinned, requested, kind}` |
+| `hook:model-switch-audit` (PostModelSwitch, plugin) | `model_switched` with `metadata.{pinned, origin, resolved, off_tier, dedupe_key}`, gated on an existing ledger |
 
 #### Writers — external & adapters
 

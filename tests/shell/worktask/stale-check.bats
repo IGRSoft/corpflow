@@ -119,6 +119,22 @@ agents_file() {
   refute_output --partial "[reattach-undeliverable]"
 }
 
+@test "reattach-undeliverable: a settled dispatch keeps its reconcile remedy" {
+  # The override applies only where a nudge is the remedy. A dispatch record that is
+  # already terminal never sends again, so a stale failed row must not hide
+  # dispatch-settled behind delivery advice that can no longer apply.
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0 completed)"
+  agents_file "$w/agents.json" '[{"id":"sess-dv0","state":"blocked"}]'
+  printf '%s\n' '{"action":"reattach_send_result","task_id":"DV0","result":"blocked"}' \
+    > "$w/.context/logs/audit.jsonl"
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_failure 1
+  assert_output --partial "[dispatch-settled]"
+  refute_output --partial "[reattach-undeliverable]"
+}
+
 @test "gone: an absent agent_id yields re-delegate (single stage stays 'gone')" {
   local w; w="$(mk_tmpworkdir)"
   mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"

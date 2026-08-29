@@ -48,7 +48,9 @@ _run_audit() {
   printf '%s' '{"tasks":{"DV0":{"status":"completed"}}}' > "$WD/.context/state.json"
   _run_audit '{"session_id":"s1","from_model":"opus","to_model":"sonnet"}'
   assert_success
-  assert_audit_row model_switched --meta resolved=sonnet --meta off_tier=false
+  # subject falls back to the literal "unknown": an empty --arg is truthy to jq's `//`,
+  # so a `$stage // "unknown"` coalesce would write "" here.
+  assert_audit_row model_switched --subject unknown --meta resolved=sonnet --meta off_tier=false
 }
 
 @test "edge: malformed payload exits 0 without wedging the switch" {

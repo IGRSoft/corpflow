@@ -368,13 +368,16 @@ if len(gone) >= 2 and not had_stage_failure(context_dir):
     for f in gone:
         f["classification"] = "budget-halt"
 
-# An undelivered reattach outranks whatever liveness said: the stage reads parked
-# (or gone, when discovery itself was truncated) but the remedy is the delivery
-# failure, and re-delegating off it spends a retry the stage never earned.
+# An undelivered reattach outranks what liveness said, but only where a nudge is
+# the remedy: the stage reads parked (or gone, when discovery itself was
+# truncated) yet the fix is the delivery failure, and re-delegating off it spends
+# a retry the stage never earned. A settled or unrecorded dispatch never sends
+# again, so a stale failed row must not hide its reconcile/re-derive remedy.
+NUDGE_REMEDY = {"alive-parked", "gone", "budget-halt", "liveness-unknown"}
 undelivered = undelivered_reattach(context_dir)
 if undelivered:
     for f in findings:
-        if f["task_id"] in undelivered and f["classification"] != "hook-config-broken":
+        if f["task_id"] in undelivered and f["classification"] in NUDGE_REMEDY:
             f["classification"] = "reattach-undeliverable"
 
 for f in findings:
