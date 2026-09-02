@@ -119,9 +119,22 @@ _run_gate() {
 
 # --- row 6: block -------------------------------------------------------------
 
-@test "row 6: unrecognized trigger + family change -> block, exit still 0" {
+@test "row 6a: no trigger field at all + family change -> annotate, never deny" {
+  # The trigger field names are assumed, so their absence is missing evidence.
+  # Denying here would refuse every switch under a payload schema nobody has seen.
   _ledger
   _run_gate "$(switch_payload to_model=sonnet)"
+  assert_success
+  echo "$output" | jq -e '
+    .decision == "annotate" and (.hookSpecificOutput | has("permissionDecision") | not)
+  '
+  assert_audit_row model_switch_annotated --meta kind=trigger_unobserved --meta requested=sonnet
+  assert_audit_row model_switch_blocked --absent
+}
+
+@test "row 6b: a present-but-unrecognized trigger + family change -> block, exit still 0" {
+  _ledger
+  _run_gate "$(switch_payload to_model=sonnet reason=quantum_flux)"
   assert_success   # the block travels in stdout JSON; a non-zero exit would wedge the session
   echo "$output" | jq -e '
     .decision == "block" and .hookSpecificOutput.permissionDecision == "deny"
@@ -137,7 +150,7 @@ _run_gate() {
       {"stage":"QA","task_id":"QA7","subagent_type":"corpflow:qa-engineer",
        "agent_id":"agt_dv","model_requested":"haiku","status":"launched"}]}}' \
     > "$WD/.context/state.json"
-  _run_gate "$(switch_payload to_model=fable)"
+  _run_gate "$(switch_payload to_model=fable reason=quantum_flux)"
   echo "$output" | jq -e '
     (.hookSpecificOutput.additionalContext | test("QA7"))
     and (.hookSpecificOutput.additionalContext | test("haiku"))
@@ -149,11 +162,13 @@ _run_gate() {
 # --- alternate assumed field names --------------------------------------------
 
 @test "drift tolerance: each assumed destination spelling resolves identically" {
+  # Carries an unrecognized trigger so every arm reaches row 6b: this asserts the
+  # DESTINATION axis, whose deny path is retained.
   local field
   for field in to_model toModel requested_model requestedModel new_model newModel; do
     rm -f "$WD/.context/logs/audit.jsonl"
     _ledger
-    _run_gate "$(switch_payload "$field=sonnet")"
+    _run_gate "$(switch_payload "$field=sonnet" reason=quantum_flux)"
     echo "$output" | jq -e --arg f "$field" '.decision == "block"' \
       || fail "destination field '$field' did not resolve"
   done
