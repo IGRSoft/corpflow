@@ -16,10 +16,16 @@ biases both rates — so each stratum's sampling fraction is recorded and
 estimate.
 
 Take the held-out tranche whole. `evals/splits/request-plan.json` calls its own
-`test` membership nominal for ids below the batch-4 boundary: those cases predate
-the corpus reset and have been read. Only the ids written after the manifest were
-pinned before any capture saw them, and there are few enough that sampling them
-would leave nothing to measure. They are taken entire and reported apart.
+`test` membership nominal below the floor it records: those cases have been read,
+whether they predate the corpus reset or were spent by a later labelling pass.
+Only the ids at or above the floor were pinned before any capture saw them, and
+there are few enough that sampling them would leave nothing to measure. They are
+taken entire and reported apart, which makes `--budget` a ceiling the tranche can
+exceed: that conflict is refused rather than resolved by trimming either side.
+
+Between batches the manifest records no floor at all, because the pass that spends a
+tranche deletes it. That is not a defect to route around -- a run needing held-out
+cases needs a batch nobody has read, so this exits 64 and says so.
 
 Usage: sample-for-labelling.py --grades PATH [--budget N] [--held-out-from ID]
 """
@@ -28,12 +34,42 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 
 DEFAULT_BUDGET = 60
-DEFAULT_HELD_OUT_FROM = 122
 SEED = 20260826
+
+SPLIT_MANIFEST = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "splits", "request-plan.json")
+
+
+def held_out_floor(manifest_path: str) -> int:
+    """First id of the tranche still unread. Raises `LookupError` rather than
+    defaulting: a stale floor re-samples a spent tranche and reports the result as
+    held-out, which is the one error no output here would reveal.
+
+    An absent key is a legitimate manifest state, not damage: it is deleted by the
+    edit that spends a tranche and re-pinned by the edit that appends the successor.
+    It is reported apart because its remedy is the opposite one -- pin a NEW batch,
+    never re-name the spent tranche the manifest just stopped vouching for.
+    """
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+        if "held_out_from" in manifest:
+            return int(manifest["held_out_from"])
+    except (OSError, ValueError, TypeError) as exc:
+        raise LookupError(
+            f"no usable held_out_from in {manifest_path} ({exc}); "
+            f"pass --held-out-from with the first id of the current tranche") from exc
+    raise LookupError(
+        f"{manifest_path} pins no held_out_from, so nothing in it is held out right "
+        f"now: the last tranche was spent by a labelling pass and no successor has "
+        f"been appended. Append a batch and pin its first id there, or pass "
+        f"--held-out-from to name a tranche for this run -- but not a spent one")
 
 
 def allocate(dev_by_stratum: dict, budget: int) -> dict:
@@ -61,10 +97,20 @@ def main(argv) -> int:
     p = argparse.ArgumentParser(prog="sample-for-labelling")
     p.add_argument("--grades", required=True, help="eval-grade.py --json output")
     p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                   help="total labels affordable, held-out tranche included")
-    p.add_argument("--held-out-from", type=int, default=DEFAULT_HELD_OUT_FROM)
+                   help="ceiling on total labels, held-out tranche included; a budget "
+                        "below the tranche is refused, never silently exceeded")
+    p.add_argument("--held-out-from", type=int, default=None,
+                   help="first id of the current tranche; defaults to the "
+                        "held_out_from recorded in the split manifest")
     p.add_argument("--out", default=None, help="write the id list here for --only")
     args = p.parse_args(argv)
+
+    if args.held_out_from is None:
+        try:
+            args.held_out_from = held_out_floor(SPLIT_MANIFEST)
+        except LookupError as exc:
+            sys.stderr.write(f"sample-for-labelling: {exc}\n")
+            return 64
 
     try:
         with open(args.grades, encoding="utf-8") as f:
@@ -84,6 +130,18 @@ def main(argv) -> int:
 
     if not dev_by_stratum:
         sys.stderr.write("sample-for-labelling: no dev cases in the grades\n")
+        return 64
+
+    # Refused rather than clamped. A partial tranche is still reported at a sampling
+    # fraction of 1.0, which `label-align.py` divides back out as if the whole tranche
+    # had been drawn — so trimming here would understate the held-out population and
+    # nothing downstream could tell. The operator picks which constraint gives.
+    if args.budget < len(held_out):
+        sys.stderr.write(
+            f"sample-for-labelling: budget {args.budget} is below the held-out tranche "
+            f"({len(held_out)} ids at or above {args.held_out_from}), which is taken "
+            f"whole or not at all. Raise --budget to at least {len(held_out)}, or pass "
+            f"--held-out-from to name a smaller tranche\n")
         return 64
 
     rng = random.Random(SEED)

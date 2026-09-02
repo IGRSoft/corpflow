@@ -99,7 +99,11 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 #                      re-runs after rework records it here rather than rewriting its verdict.
 #   design-preview     PL's Figma capture block, written only when a Figma URL is present.
 #   test-strategy      PL's test-strategy section; pl0-procedure.md never mandates it.
-OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy)$'
+#   <Platform> App Architecture, Test Architecture
+#                      the two H2s agents/software-architector.md mandates in every AR artifact,
+#                      the first named for the detected platform. Title-case by that agent's own
+#                      template, so they are matched literally rather than as kebab anchors.
+OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture)$'
 
 # ---------- Frontmatter stage extractor ----------
 # Prints stage code on stdout; empty if not found.

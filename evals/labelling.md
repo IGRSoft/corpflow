@@ -130,14 +130,23 @@ python3 evals/scripts/label-align.py \
 `<grades.json>` is `eval-grade.py --json` output over the same responses directory —
 regenerate it freely, it is offline and deterministic.
 
-### `--min-id` is load-bearing, and its default goes stale
+### `--min-id` is load-bearing, and the floor moves
 
 Held-out means *never read*. Once a tranche has been labelled it is spent, and the floor
-moves to the first id of its successor. `--min-id` and `sample-for-labelling.py
---held-out-from` both carry a hardcoded default that was correct for one past cycle
-(`DEFAULT_HELD_OUT_FROM = 122`) and silently re-samples spent cases afterwards. **Pass the
-value explicitly** and take it from the current `-sample.json`, not from the default or the
-help text.
+moves to the first id of its successor. One place records it: `held_out_from` in
+`evals/splits/request-plan.json`. `sample-for-labelling.py --held-out-from` defaults to
+that value and refuses to run when the key is missing rather than falling back to a
+literal; `label-align.py --min-id` has no default, so **pass it explicitly**.
+
+**The key is absent right now, and that is the correct state.** The 0.3.0 pass spent batch
+5 (ids 168-212) whole, so nothing in the manifest is currently held out and both tools stop
+instead of guessing. A new cut needs a batch 6 appended and its first id pinned as
+`held_out_from` in the same edit -- not 168, and not a `--min-id` read off the newest
+`-sample.json`, which names the tranche that pass just spent.
+
+Pin `held_out_from` in the edit that appends a batch and delete it in the pass that spends
+one. A floor left pointing at a spent tranche re-samples read cases and labels the result
+held-out, which nothing downstream can detect.
 
 ## Which cases, and why those
 

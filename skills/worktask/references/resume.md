@@ -151,8 +151,10 @@ does: each non-delivery mode is observable rather than a silent success. **This 
 plugin's min-CC floor rests on.** Read the result before treating any reattach as done, and log one
 `reattach_send_result` row per attempt. Contract: `result: "ok"` means delivered; every non-delivery
 is `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`, `burst_limited`,
-`session_list_truncated`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`:
-`stale-check.sh` reads anything other than `ok` as undelivered.
+`session_list_truncated`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`, and never omit the
+field: `stale-check.sh` reads any *present* result other than `ok` as undelivered, while a missing
+or null `result` counts as delivered — an omitted result hides a non-delivery instead of surfacing
+it.
 
 #### Reattach rows — the result table
 
