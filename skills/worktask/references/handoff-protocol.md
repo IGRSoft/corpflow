@@ -898,9 +898,8 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
             # re-prompted on a resumed run. `open < resolved` is a MONOTONE join at
             # the union (state-patch.sh): a later write may raise, never downgrade.
             status: { type: string, enum: [open, resolved] }
-            # Where a sweep ANSWER lands. Deliberately not facts.decisions[]:
-            # that ring clamps to newest-8 and sweep answers were evicting
-            # architectural decisions faster than a run could accumulate them.
+            # Where a sweep ANSWER lands. Deliberately not facts.decisions[] —
+            # stage-contracts.md § Closing Elicitation Sweep states why.
             resolution: { type: string, maxLength: 160 }
 ```
 

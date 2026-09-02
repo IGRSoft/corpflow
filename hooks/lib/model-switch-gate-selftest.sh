@@ -13,10 +13,10 @@
     printf '%s' '{"version":1,"worktask_id":"wid-ms","tasks":{"DV0":{"status":"in_progress"}},"facts":{"dispatched_agents":[{"stage":"DV","task_id":"DV0","subagent_type":"stage-agent","agent_id":"agt_dv","model_requested":"opus","status":"launched"}]}}' > "$1/state.json"
   }
 
-  # --- Block: pinned opus, destination sonnet, no recognized trigger ---
+  # --- Block: pinned opus, destination sonnet, trigger present but unrecognized ---
   _bctx="$_tmp/block/.context"
   _mkledger "$_bctx"
-  _bout=$(run_gate '{"session_id":"s1","agent_id":"agt_dv","to_model":"sonnet"}' "$_bctx")
+  _bout=$(run_gate '{"session_id":"s1","agent_id":"agt_dv","to_model":"sonnet","reason":"quantum_flux"}' "$_bctx")
   printf '%s' "$_bout" | jq -e '.decision == "block"' > /dev/null 2>&1 \
     || { echo "model-switch-gate: self-test FAIL (block: no block decision)"; _fail=1; }
   printf '%s' "$_bout" | jq -e '
@@ -31,6 +31,17 @@
     and .metadata.task_id == "DV0" and .metadata.pinned == "opus"
   ' > /dev/null 2>&1 \
     || { echo "model-switch-gate: self-test FAIL (block: audit row)"; _fail=1; }
+
+  # --- No trigger field observed: the trigger axis annotates, it does not deny ---
+  _uctx="$_tmp/trigger-unobserved/.context"
+  _mkledger "$_uctx"
+  _uout=$(run_gate '{"session_id":"s5","agent_id":"agt_dv","to_model":"sonnet"}' "$_uctx")
+  printf '%s' "$_uout" | jq -e '.decision == "annotate"' > /dev/null 2>&1 \
+    || { echo "model-switch-gate: self-test FAIL (trigger-unobserved: expected annotate)"; _fail=1; }
+  tail -n 1 "$_uctx/logs/audit.jsonl" | jq -e '
+    .action == "model_switch_annotated" and .metadata.kind == "trigger_unobserved"
+  ' > /dev/null 2>&1 \
+    || { echo "model-switch-gate: self-test FAIL (trigger-unobserved: audit row)"; _fail=1; }
 
   # --- Same family, different spelling: alias vs resolved id is not a re-tier ---
   _sctx="$_tmp/samefamily/.context"

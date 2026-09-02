@@ -175,8 +175,8 @@ _pl_artifact() {  # _pl_artifact <path> <extra-headings...>
 }
 
 @test "failure: --anchor-lint rejects a PL plan with no ## summary" {
-  # pl0-procedure.md mandates `## summary` unconditionally; anchor-lint used to call it
-  # unexpected, so every real plan file failed the lint its own procedure demands.
+  # `## summary` is mandatory in every PL plan (pl0-procedure.md), so the lint must
+  # require it: a PL artifact without one is incomplete, not merely unconventional.
   _pl_artifact "$WD/pl-no-summary.md"
   run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/pl-no-summary.md"
   assert_failure 1
@@ -194,6 +194,25 @@ _pl_artifact() {  # _pl_artifact <path> <extra-headings...>
   run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/pl-invented.md"
   assert_failure 1
   [[ "$stderr" == *"unexpected: not-an-anchor"* ]]
+}
+
+# --- AR: the two title-case H2s the architect agent mandates -----------------
+
+@test "happy: an architect-merged AR artifact with the two platform H2s passes" {
+  # agents/software-architector.md mandates `## <Platform> App Architecture` and
+  # `## Test Architecture`, so a merged AR artifact must not read as unexpected.
+  cp "$FIXTURES/worktask/architecture-0.merged.sample.md" "$WD/architecture-0.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/architecture-0.md"
+  assert_success
+  assert_output --partial "ok"
+}
+
+@test "failure: the App Architecture allowance is scoped to that exact suffix" {
+  cp "$FIXTURES/worktask/architecture-0.merged.sample.md" "$WD/arch-invented.md"
+  printf '\n## Deployment Architecture\n\nx\n' >> "$WD/arch-invented.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/arch-invented.md"
+  assert_failure 1
+  [[ "$stderr" == *"unexpected: Deployment Architecture"* ]]
 }
 
 @test "happy: prefix-lint with stable sections reports no drift (exit 0)" {

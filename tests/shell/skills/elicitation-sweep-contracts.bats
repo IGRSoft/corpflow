@@ -32,11 +32,22 @@ left_codes() {
     sed -nE 's/^ *"title": "([A-Z]{2})Handoff",?$/\1/p' "$2" ; } | sort -u
 }
 
-# The obligation matrix's own rows. `####` sub-headings stay inside the range;
+# The obligation section's own body. `####` sub-headings stay inside the range;
 # the next `### ` ends it, so the range needs no knowledge of what follows it.
-matrix_codes() {
-  awk '/^### Sweep obligation matrix/{f=1;next} /^### /{f=0} f' "$1" \
-    | sed -nE 's/^\| ([A-Z]{2}) \|.*/\1/p' | sort -u
+matrix_body() {
+  awk '/^### Sweep obligation matrix/{f=1;next} /^### /{f=0} f' "$1"
+}
+
+# The stages that DEPART from the universal obligation — the exceptions table's rows.
+exception_codes() {
+  matrix_body "$1" | sed -nE 's/^\| ([A-Z]{2}) \|.*/\1/p' | sort -u
+}
+
+# The stages the default sentence covers, named so a code can never fall between the
+# two lists. Together these must reconstitute the canonical vocabulary exactly.
+default_codes() {
+  matrix_body "$1" | sed -nE 's/^Every other code — (.*) — takes the default.*/\1/p' \
+    | tr ',' '\n' | tr -d ' ' | grep -E '^[A-Z]{2}$' | sort -u
 }
 
 canonical_phrase() { sed -nE 's/^## (Closing Elicitation Sweep)$/\1/p' "$1"; }
@@ -54,16 +65,34 @@ section_body() {  # section_body <file> <heading-regex>
 
 # --- contract helpers (each carries its own non-vacuity guard) ---------------
 
+# Vocabulary parity, over a section that no longer restates the obligation once per
+# stage. The obligation is universal, so the completeness question moved: every canonical
+# code must be accounted for EXACTLY ONCE, either as a named exception or as a member of
+# the default-covered list. A code in neither list, or in both, is the silent gap the
+# thirteen-row table used to make impossible.
 check_matrix_completeness() {  # <contracts> <stage-codes> <handoff>
-  local left right nl nr
-  left="$(left_codes "$2" "$3")"; right="$(matrix_codes "$1")"
+  local left exc def union nl ne nd both
+  left="$(left_codes "$2" "$3")"
+  exc="$(exception_codes "$1")"
+  def="$(default_codes "$1")"
   nl=$(printf '%s\n' "$left" | grep -c '[A-Z]' || true)
-  nr=$(printf '%s\n' "$right" | grep -c '[A-Z]' || true)
+  ne=$(printf '%s\n' "$exc" | grep -c '[A-Z]' || true)
+  nd=$(printf '%s\n' "$def" | grep -c '[A-Z]' || true)
   [ "$nl" -ge 12 ] || { echo "non-vacuity: canonical stage list extracted only $nl codes"; return 1; }
-  [ "$nr" -ge 12 ] || { echo "non-vacuity: matrix extracted only $nr rows"; return 1; }
-  [ "$left" = "$right" ] || {
-    echo "matrix rows and canonical stage list disagree:"
-    diff <(printf '%s\n' "$left") <(printf '%s\n' "$right") || true
+  [ "$ne" -ge 1 ] || { echo "non-vacuity: no exception rows extracted"; return 1; }
+  [ "$nd" -ge 1 ] || { echo "non-vacuity: the default-covered list extracted no codes"; return 1; }
+
+  # The exceptions must stay exceptions: a section that listed every code again would
+  # satisfy the union check while reintroducing exactly the duplication this removed.
+  [ "$ne" -lt "$nl" ] || { echo "the exceptions table names every stage; it is a matrix again"; return 1; }
+
+  both="$(comm -12 <(printf '%s\n' "$exc") <(printf '%s\n' "$def"))"
+  [ -z "$both" ] || { echo "code(s) both excepted and defaulted: $both"; return 1; }
+
+  union="$(printf '%s\n%s\n' "$exc" "$def" | grep -E '^[A-Z]{2}$' | sort -u)"
+  [ "$left" = "$union" ] || {
+    echo "the obligation section and the canonical stage list disagree:"
+    diff <(printf '%s\n' "$left") <(printf '%s\n' "$union") || true
     return 1
   }
 }
@@ -131,19 +160,31 @@ check_empty_obligation_once() {  # <contracts>
   [ "$n" -eq 1 ] || { echo "explicit-empty obligation stated $n times, expected exactly 1"; return 1; }
 }
 
-check_raise_only() {  # <worktask-cmd>
-  local body c2 c3
-  body="$(section_body "$1" '^##### Escalation guard — raise-only self-labels')"
-  [ -n "$body" ] || { echo "non-vacuity: raise-only guard section absent"; return 1; }
+# The LATTICE is asserted where it is stated — once, in the contracts file. The command
+# file is asserted for the two things only it can carry: that it points at that statement
+# instead of copying it, and that classification is ordered before auto-answer.
+check_raise_only() {  # <worktask-cmd> <contracts>
+  local body cmd c2 c3
+  body="$(section_body "$2" '^#{2,5} Self-labels raise, never lower')"
+  [ -n "$body" ] || { echo "non-vacuity: raise-only section absent from the contracts file"; return 1; }
   printf '%s\n' "$body" | grep -q 'max(' || { echo "guard is not stated as a monotone join"; return 1; }
   printf '%s\n' "$body" | grep -q 'decision < escalate' || { echo "the class lattice is not ordered"; return 1; }
   # Raising honoured AND lowering refused — both directions must be spelled out.
-  [ "$(printf '%s\n' "$body" | grep -o '→ `escalate`' | grep -c . || true)" -ge 2 ] \
-    || { echo "both lattice directions are not stated"; return 1; }
+  printf '%s\n' "$body" | grep -q 'raising is honoured' || { echo "the raise direction is unstated"; return 1; }
+  printf '%s\n' "$body" | grep -q 'lowering is refused' || { echo "the lower direction is unstated"; return 1; }
+
+  cmd="$(section_body "$1" '^##### Escalation guard — raise-only self-labels')"
+  [ -n "$cmd" ] || { echo "non-vacuity: raise-only guard section absent from the command"; return 1; }
+  printf '%s\n' "$cmd" | grep -q 'Self-labels raise, never lower' \
+    || { echo "the command neither points at the canonical statement nor is one"; return 1; }
+  printf '%s\n' "$cmd" | grep -q 'max(' \
+    && { echo "the command restates the join instead of pointing at it"; return 1; }
+
   c2=$(grep -n 'C.2 — Classify' "$1" | head -1 | cut -d: -f1)
   c3=$(grep -n 'C.3 — Auto-answer' "$1" | head -1 | cut -d: -f1)
   [ -n "$c2" ] && [ -n "$c3" ] || { echo "non-vacuity: Step C.2/C.3 not found"; return 1; }
   [ "$c2" -lt "$c3" ] || { echo "classification does not precede auto-answer"; return 1; }
+  return 0
 }
 
 # Carriers are extracted from the files that DEFINE them, never listed here.
@@ -261,7 +302,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
   printf '%s' "$out"
 }
 
-# --- AC-1: obligation matrix covers every stage code -------------------------
+# --- obligation matrix covers every stage code -------------------------
 
 @test "AC-1: sweep obligation matrix rows equal the canonical stage list (both sides extracted)" {
   run check_matrix_completeness "$PLUGIN_ROOT/$CONTRACTS" "$PLUGIN_ROOT/$STAGE_CODES" "$PLUGIN_ROOT/$HANDOFF"
@@ -270,12 +311,12 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
 
 @test "AC-1 twin: dropping one matrix row makes the completeness check fail" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" '/^| ET | Required |/d')"
+  planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" 's/, RE, ET — takes the default/, RE — takes the default/')"
   run check_matrix_completeness "$planted" "$PLUGIN_ROOT/$STAGE_CODES" "$PLUGIN_ROOT/$HANDOFF"
   assert_failure
 }
 
-# --- AC-2: one pointer per stage agent, never a restatement ------------------
+# --- one pointer per stage agent, never a restatement ------------------
 
 @test "AC-2: every stage agent carries the sweep pointer exactly once" {
   run check_pointer_once "$PLUGIN_ROOT/agents" "$PLUGIN_ROOT/$CONTRACTS"
@@ -303,7 +344,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
   assert_failure
 }
 
-# --- AC-3: one item shape, and exactly-one-recommended still pinned ----------
+# --- one item shape, and exactly-one-recommended still pinned ----------
 
 @test "AC-3: open_questions accepts the sweep stub and nothing else, and pins exactly-one-recommended" {
   run check_schema_shape "$PLUGIN_ROOT/$HANDOFF"
@@ -351,7 +392,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
   assert_failure
 }
 
-# --- AC-3b: the other two transports carry the same single shape -------------
+# --- the other two transports carry the same single shape -------------
 
 # Every typed-return schema must reach SweepItem through a bare `items: { "$ref": ... }`.
 # Counted against the number of *Handoff titles so a dropped schema cannot pass by absence.
@@ -405,7 +446,7 @@ ledger_oq_required() {  # <handoff>
   [ "$ledger" != "$stub" ] || fail "the planted divergence was not observable: '$ledger' vs '$stub'"
 }
 
-# --- AC-4: every template carries the field; empty obligation stated once ----
+# --- every template carries the field; empty obligation stated once ----
 
 @test "AC-4: every per-stage frontmatter template carries open_questions" {
   run check_templates_carry_field "$PLUGIN_ROOT/$CONTRACTS"
@@ -433,21 +474,31 @@ A stage with nothing to ask says so: nothing to elicit.')"
   assert_failure
 }
 
-# --- AC-5: raise-only classification -----------------------------------------
+# --- raise-only classification -----------------------------------------
 
 @test "AC-5: the class self-label may be raised, never lowered, and is applied before auto-answer" {
-  run check_raise_only "$PLUGIN_ROOT/$WORKTASK_CMD"
+  run check_raise_only "$PLUGIN_ROOT/$WORKTASK_CMD" "$PLUGIN_ROOT/$CONTRACTS"
   assert_success
 }
 
 @test "AC-5 twin: removing the monotone-join statement fails the guard check" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$WORKTASK_CMD" 's/`effective = max(agent_label, orchestrator_label)`/the orchestrator picks a label/')"
-  run check_raise_only "$planted"
+  planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" 's/`max(agent label, orchestrator label)`/a label the orchestrator picks/')"
+  run check_raise_only "$PLUGIN_ROOT/$WORKTASK_CMD" "$planted"
   assert_failure
 }
 
-# --- AC-6: one behaviour row per unattended carrier --------------------------
+@test "AC-5 twin: the command restating the join, instead of pointing at it, fails" {
+  # The failure mode R-24 closes: a second copy that drifts from the first while both
+  # read as authoritative.
+  local planted
+  planted="$(plant "$PLUGIN_ROOT/$WORKTASK_CMD" '/^A closing-sweep item arrives/a\
+The orchestrator computes `effective = max(agent_label, orchestrator_label)`.')"
+  run check_raise_only "$planted" "$PLUGIN_ROOT/$CONTRACTS"
+  assert_failure
+}
+
+# --- one behaviour row per unattended carrier --------------------------
 
 @test "AC-6: every carrier named in its defining file has exactly one fallback row" {
   run check_carriers "$PLUGIN_ROOT/$CONTRACTS" "$PLUGIN_ROOT/$PL0_PROC" "$PLUGIN_ROOT/$WORKTASK_CMD" "$PLUGIN_ROOT/$PREFLIGHT"
@@ -461,7 +512,7 @@ A stage with nothing to ask says so: nothing to elicit.')"
   assert_failure
 }
 
-# --- AC-7: no duplication of channels that already exist ---------------------
+# --- no duplication of channels that already exist ---------------------
 
 @test "AC-7: each of the four pre-existing channels is named once and resolves in the file it cites" {
   run check_channels "$PLUGIN_ROOT/$CONTRACTS" "$PLUGIN_ROOT"
@@ -476,7 +527,7 @@ A stage with nothing to ask says so: nothing to elicit.')"
   assert_failure
 }
 
-# --- AC-8: single-sourcing across the whole prompt surface -------------------
+# --- single-sourcing across the whole prompt surface -------------------
 
 @test "AC-8: the canonical section heading exists in exactly one file" {
   run check_single_heading "$PLUGIN_ROOT"
@@ -501,7 +552,7 @@ A stage with nothing to ask says so: nothing to elicit.')"
   assert_failure
 }
 
-# --- AC-13: the 30-line frontmatter budget survives the wider template -------
+# --- the 30-line frontmatter budget survives the wider template -------
 
 @test "AC-13: every per-stage template yaml block stays within the 30-line budget" {
   run check_frontmatter_line_budget "$PLUGIN_ROOT/$CONTRACTS"
@@ -557,7 +608,7 @@ A stage with nothing to ask says so: nothing to elicit.')"
   [ "$rc" -eq 0 ]
 }
 
-# --- AC-15: strict from day one, no escape hatch -----------------------------
+# --- strict from day one, no escape hatch -----------------------------
 
 @test "AC-15: the sweep surface carries no warn-only mode, opt-in variable, or advisory tier" {
   run check_no_escape_hatch "$PLUGIN_ROOT/$CONTRACTS"
@@ -574,7 +625,7 @@ A missing sweep is warn-only until the next minor.')"
 
 @test "AC-15 twin: an advisory column in the matrix fails" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" 's/^| Code | Obligation |/| Code | Advisory | Obligation |/')"
+  planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" 's/^| Code | Obligation |/| Code | Advisory |/')"
   run check_no_escape_hatch "$planted"
   assert_failure
 }
@@ -1209,12 +1260,21 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 }
 
 @test "q9: the raise-only guard covers the blocking axis by OR, and keeps the axes orthogonal" {
+  # Asserted at the ONE surviving statement. The command file used to carry a second
+  # copy; it now carries the procedural step and a pointer, so asserting there would
+  # pin a restatement back into existence.
   local body
-  body="$(awk '/^###### Escalation guard — the blocking axis/{f=1;next} f && /^#{2,6} /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
-  [ -n "$body" ] || fail "non-vacuity: the blocking-axis guard is absent"
+  body="$(section_body "$PLUGIN_ROOT/$CONTRACTS" '^#{2,5} Self-labels raise, never lower')"
+  [ -n "$body" ] || fail "non-vacuity: the raise-only section is absent"
   printf '%s\n' "$body" | grep -q 'OR' || fail "the join is not stated as OR"
   printf '%s\n' "$body" | grep -qi 'never clear' || fail "raise-only is not stated for the blocking axis"
   printf '%s\n' "$body" | grep -qi 'orthogonal' || fail "orthogonality with class is unstated"
+
+  # And the command file points at it rather than restating it.
+  body="$(awk '/^##### Escalation guard — raise-only self-labels/{f=1;next} f && /^#{2,6} /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+  [ -n "$body" ] || fail "non-vacuity: the command-side procedural step is absent"
+  printf '%s\n' "$body" | grep -q 'Self-labels raise, never lower' \
+    || fail "the command file neither states the join nor points at where it is stated"
 }
 
 @test "q9: agent-coordination's checkpoint clause survives its third reconciliation" {
@@ -1368,8 +1428,9 @@ check_no_legacy_pl_ids() {  # <repo-root> <files...>
   assert_output --partial "legacy q<N>"
 }
 
-# One resolution idiom: PL used to DELETE answered items while the other twelve stages
-# marked them. A deleted item takes its ref anchor and its recorded answer with it.
+# One resolution idiom across all thirteen stages: an answered item is MARKED resolved,
+# never deleted. Deleting it takes its ref anchor and its recorded answer with it, so a
+# resumed run can neither re-render the question nor show what was decided.
 PL_RESOLVERS="$WORKTASK_CMD $WORKTASK_SKILL $PL0_PROC"
 
 check_resolved_not_dropped() {  # <repo-root> <files...>

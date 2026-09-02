@@ -4,6 +4,53 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+Twenty-six fixes from a six-angle code review of `develop 6e09ea8..0dd3d6d`, banded by the priority
+the review assigned them.
+
+### Fixed
+
+- **Contradictory escalation-under-bypass rules** (P1a). `skills/shared/stage-contracts.md`
+  commanded opposite behaviour for the same escalation item across four surfaces depending on
+  which one a reader consulted; the rules now agree everywhere.
+- **Lint/doc/data mismatches** (P1b): `cache-lint.sh` rejected the two H2 headings
+  `agents/software-architector.md` itself mandates, failing every architecture merge on contact;
+  the eval split manifest's held-out note had gone stale against the code; `resume.md` prose
+  contradicted what the implementation actually does.
+- **Six live-repro behavioural bugs, each now fails closed** (P1c): an empty sweep-stub `ref`
+  passed all three validation checks; `corpflow_resolve_pin` could return a pin from an already
+  completed row; `stale-check.sh` exited with the "needs human decision" code (`1`) on a usage
+  error instead of `2`; a contamination-detection pattern matched benign prose; `eval-capture.py
+  --dry-run` printed an argv it would not actually run; `--budget` was advisory rather than a hard
+  ceiling.
+- **Model-switch gate trigger axis now fails open** (P2), matching the destination axis it
+  previously diverged from; dead `read_stdin` code path removed.
+
+### Changed
+
+- **Consolidated duplicated logic** (P3/P4): hook-side model-switch checks now share
+  `model-switch-lib.sh`; eval loaders now share `eval-engine.py`. Hot paths were cut along the way —
+  capability-registry load measured 2.38s → 0.69s with byte-identical output.
+- **Deduplicated documentation** (P5): the raise-only sweep lattice statement and the sweep-answers
+  rationale each now appear exactly once, with pointers from every other site that used to restate
+  them.
+
+### Corrected
+
+- `development-0.md:52` described R-7 as shipping `held_out_from: 168`; that key was deleted
+  during review remediation (ledger decision `dr-6`) and the row was stale against the tree. The
+  merged development artifact has been corrected to match what actually shipped: no
+  `held_out_from` key.
+
+### Known issues (tracked, not fixed here)
+
+- `cache-lint.sh --anchor-lint` still fails on two `## remediation — …` H2 headings in
+  `development-0.md` that are outside cache-lint's DV anchor set. Left as-is rather than demoting
+  the headings — they are the audit trail for two review blockers.
+- Test suite carries 4 pre-existing failures (2 `AC-3 twin`, 1 `PL-3` in
+  `tests/shell/skills/elicitation-sweep-contracts.bats`, plus `tests/shell/worktask/section-lint.bats`
+  case 6 on 6 inherited `CORPFLOW.md` template sections over the 1000-char cap), all red at `HEAD`
+  and outside the scope of these 26 fixes; verified at baseline parity, not quarantined.
+
 ## [4.0.27] — 2026-08-29
 
 Claude Code **2.1.234 → 2.1.251** integration. The band's theme is cross-agent and cross-session

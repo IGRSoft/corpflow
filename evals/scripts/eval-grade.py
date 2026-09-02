@@ -31,13 +31,12 @@ sys.modules["eval_engine"] = engine
 _spec.loader.exec_module(engine)
 
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def repo_resolver(rel: str) -> bool:
     """A cited path counts only if it exists here — an invented path is the failure
     paths_resolve is looking for."""
-    return os.path.exists(os.path.join(REPO, rel))
+    return os.path.exists(os.path.join(engine.REPO, rel))
 
 
 def grade_record(eval_set: dict, record: dict) -> dict:
@@ -79,14 +78,12 @@ def main(argv_in: list) -> int:
         return 64
 
     try:
-        with open(args.eval_set, encoding="utf-8") as f:
-            eval_set = json.load(f)
+        eval_set = engine.load_eval_set(args.eval_set)
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"eval-grade: cannot read eval set: {exc}\n")
         return 64
 
-    responses_dir = args.responses or os.path.join(
-        os.path.dirname(os.path.abspath(args.eval_set)), "responses")
+    responses_dir = engine.responses_dir(args.eval_set, args.responses)
     if not os.path.isdir(responses_dir):
         sys.stderr.write(
             f"eval-grade: no responses at {responses_dir}; run eval-capture.py first\n")

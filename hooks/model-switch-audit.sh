@@ -17,13 +17,26 @@ set -eu
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
+# Guarded source (AD-2): a truncated library is a syntax error, fatal under
+# `set -e` and unrescuable by `||`, which `[ -f ]` alone does not cover. The
+# `command -v` probe then catches the likelier failure, a renamed symbol; it names
+# the LAST symbol the library defines, so a mid-file truncation is caught too.
+# Degraded signalling is library-free — the audit appender is IN the library.
 _LIB="$(dirname "$0")/model-switch-lib.sh"
-if [ ! -f "$_LIB" ]; then
-  echo "model-switch-audit: library missing at $_LIB" >&2
+_cf_opts=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_cf_opts" in *e*) set -e ;; esac
+
+if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+  echo "model-switch-audit: shared library unusable at $_LIB — switch not recorded" >&2
+  _cf_ctx="${CLAUDE_PROJECT_DIR:-.}/.context"
+  if [ -f "$_cf_ctx/state.json" ]; then
+    { mkdir -p "$_cf_ctx/logs" && : > "$_cf_ctx/logs/.corpflow-lib-missing"; } 2> /dev/null || :
+  fi
   exit 0
 fi
-# shellcheck source=hooks/model-switch-lib.sh
-. "$_LIB"
 
 read_stdin() {
   if [ "$SELF_TEST" -eq 1 ]; then
@@ -45,22 +58,30 @@ run_audit() {
 
   [ -f "$_ctx/state.json" ] || return 0
 
-  _stage=$(corpflow_active_stage "$_ctx")
-  _agent_id=$(printf '%s' "$_payload" | jq -r '.agent_id // ""' 2> /dev/null || printf '')
-  _pin_pair=""
-  [ -n "$_stage" ] && _pin_pair=$(corpflow_resolve_pin "$_ctx" "$_stage" "$_agent_id")
+  # One jq over the payload, one over the ledger. An empty payload read means
+  # unparseable JSON — nothing to attribute, so no row.
+  _fields=$(corpflow_switch_fields "$_payload")
+  [ -n "$_fields" ] || return 0
+  # Split by parameter expansion, not a tab-delimited `read`: TAB is IFS
+  # *whitespace*, so read collapses a run of tabs into ONE delimiter and an empty
+  # middle field then silently shifts every later field. @tsv escapes any tab
+  # inside a value, so the three separators here are unambiguous.
+  _rest="$_fields"
+  _agent_id="${_rest%%$'\t'*}"; _rest="${_rest#*$'\t'}"
+  _dest="${_rest%%$'\t'*}"; _rest="${_rest#*$'\t'}"
+  _origin="${_rest%%$'\t'*}"
+  _trigger_unused="${_rest#*$'\t'}"
+
+  _pin_row=$(corpflow_stage_and_pin "$_ctx" "$_agent_id")
+  _stage=""
   _pin=""
   _task_id=""
-  if [ -n "$_pin_pair" ]; then
-    _pin=${_pin_pair%% *}
-    _task_id=${_pin_pair##* }
+  if [ -n "$_pin_row" ]; then
+    _rest="$_pin_row"
+    _stage="${_rest%%$'\t'*}"; _rest="${_rest#*$'\t'}"
+    _pin="${_rest%%$'\t'*}"
+    _task_id="${_rest#*$'\t'}"
   fi
-
-  _dest=$(printf '%s' "$_payload" | jq -r '
-    .to_model // .toModel // .requested_model // .requestedModel
-    // .new_model // .newModel // ""' 2> /dev/null || printf '')
-  _origin=$(printf '%s' "$_payload" | jq -r '
-    .from_model // .fromModel // .current_model // .currentModel // ""' 2> /dev/null || printf '')
 
   # Same-family rule as the gate's row 3: an alias and a resolved id are one tier.
   # Only when either side is unrecognized does the raw spelling decide.
@@ -75,37 +96,36 @@ run_audit() {
     fi
   fi
 
-  _log_dir="$_ctx/logs"
-  _log_file="$_log_dir/audit.jsonl"
-  mkdir -p "$_log_dir" 2> /dev/null || return 0
-  [ ! -L "$_log_file" ] || return 0
+  # The appender never parses a payload, so dedupe_key is composed here. That
+  # split is what lets one shared writer serve three differing row shapes.
+  #
+  # The row's own ts must equal the appender's, so it is computed once here and
+  # passed through; deriving it twice would key the dedupe on a timestamp the row
+  # does not carry.
   _ts=$(date -u +%FT%TZ 2> /dev/null) || _ts="unknown"
-
-  _row=$(printf '%s' "$_payload" | jq -c \
+  _meta=$(printf '%s' "$_payload" | jq -c \
     --arg ts "$_ts" --arg stage "$_stage" --arg task "$_task_id" \
     --arg pin "$_pin" --arg dest "$_dest" --arg origin "$_origin" \
     --argjson off_tier "$_off_tier" '
     {
-      ts: $ts,
-      actor: "hook:model-switch-audit",
-      action: "model_switched",
-      subject: (if ($task | length) > 0 then $task elif ($stage | length) > 0 then $stage else "unknown" end),
-      result: "ok",
-      metadata: {
-        stage: $stage,
-        task_id: $task,
-        pinned: $pin,
-        origin: $origin,
-        resolved: $dest,
-        off_tier: $off_tier,
-        # ts is part of the key on purpose: audit-dedup collapses rows per key, and a
-        # session that switches twice (fallback, then back) must keep both rows.
-        dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent")
-                     + ":model-switch:" + $ts + ":" + $dest)
-      }
+      stage: $stage,
+      task_id: $task,
+      pinned: $pin,
+      origin: $origin,
+      resolved: $dest,
+      off_tier: $off_tier,
+      # ts is part of the key on purpose: audit-dedup collapses rows per key, and a
+      # session that switches twice (fallback, then back) must keep both rows.
+      dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent")
+                   + ":model-switch:" + $ts + ":" + $dest)
     }') || { echo "model-switch-audit: jq parse failed" >&2; return 0; }
 
-  { printf '%s\n' "$_row" >> "$_log_file"; } 2> /dev/null || return 0
+  _subject="$_task_id"
+  [ -n "$_subject" ] || _subject="$_stage"
+  [ -n "$_subject" ] || _subject="unknown"
+
+  corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-audit \
+    --action "model_switched" --result ok --subject "$_subject" --meta "$_meta"
 }
 
 if [ "$SELF_TEST" -eq 1 ]; then

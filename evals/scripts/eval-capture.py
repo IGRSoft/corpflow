@@ -33,6 +33,7 @@ for a capture whose number will be quoted.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import glob
 import json
@@ -113,7 +114,29 @@ class PreflightError(Exception):
 
 
 def repo_root() -> str:
-    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return engine.REPO
+
+
+@contextlib.contextmanager
+def isolated_surface(root: str, base_settings: str | None):
+    """The tree a dispatch actually sees, torn down on every exit path.
+
+    One definition for the dry run and the paid run: a dry run that built a
+    different surface would print an argv nobody could act on, and the teardown is
+    the only thing standing between a failed pre-flight and a stray copy of the
+    repo in /tmp.
+    """
+    tmp_parent = capture_tree = None
+    try:
+        tmp_parent = tempfile.mkdtemp(prefix="eval-capture-")
+        capture_tree = make_capture_tree(root, os.path.join(tmp_parent, "tree"))
+        stripped = strip_answer_keys(capture_tree)
+        yield capture_tree, stripped, write_capture_settings(root, tmp_parent, base_settings)
+    finally:
+        if capture_tree:
+            remove_capture_tree(root, capture_tree)
+        if tmp_parent:
+            shutil.rmtree(tmp_parent, ignore_errors=True)
 
 
 def run(argv: list, stdin_text: str | None = None, timeout: float | None = None,
@@ -544,35 +567,31 @@ def main(argv_in: list) -> int:
         return 2
 
     isolate = not args.no_isolate
-    tmp_parent = capture_tree = settings_path = None
+    # settings_path survives as the validated --settings: it is the value every
+    # un-isolated dispatch uses, and isolation replaces it with generated settings.
+    capture_tree = None
 
     if args.dry_run:
         # The argv shown must be the argv that would run, so the isolated surface is
         # built here too. A dry run that prints the un-isolated command would advertise
         # the very defect this refuses to ship.
-        if isolate:
-            try:
-                tmp_parent = tempfile.mkdtemp(prefix="eval-capture-")
-                capture_tree = make_capture_tree(root, os.path.join(tmp_parent, "tree"))
-                stripped = strip_answer_keys(capture_tree)
-                settings_path = write_capture_settings(root, tmp_parent, args.settings)
-                print(json.dumps({"capture_tree": capture_tree,
-                                  "stripped": stripped,
-                                  "settings": settings_path}, indent=2))
+        with contextlib.ExitStack() as stack:
+            if isolate:
+                try:
+                    capture_tree, stripped, settings_path = stack.enter_context(
+                        isolated_surface(root, args.settings))
+                    print(json.dumps({"capture_tree": capture_tree,
+                                      "stripped": stripped,
+                                      "settings": settings_path}, indent=2))
+                except PreflightError as exc:
+                    sys.stderr.write(f"eval-capture: {exc}\n")
+                    return 2
                 # Inspecting is free, so a dirty tree only warns here. The paid path
                 # refuses: the capture tree is HEAD, so uncommitted work is not in it.
                 try:
                     assert_clean_tree(root)
                 except PreflightError as exc:
                     sys.stderr.write(f"eval-capture: note (dry run only): {exc}\n")
-            except PreflightError as exc:
-                sys.stderr.write(f"eval-capture: {exc}\n")
-                if capture_tree:
-                    remove_capture_tree(root, capture_tree)
-                if tmp_parent:
-                    shutil.rmtree(tmp_parent, ignore_errors=True)
-                return 2
-        try:
             for cid in selected:
                 case = engine.find_case(eval_set, cid)
                 print(json.dumps({
@@ -582,11 +601,6 @@ def main(argv_in: list) -> int:
                     "sent_prompt": build_prompt(case, args.mode, eval_set["skill_name"]),
                     "out": os.path.join(out_dir, f"{cid}.json"),
                 }, indent=2))
-        finally:
-            if capture_tree:
-                remove_capture_tree(root, capture_tree)
-            if tmp_parent:
-                shutil.rmtree(tmp_parent, ignore_errors=True)
         return 0
 
     if not has_credential():
@@ -601,16 +615,13 @@ def main(argv_in: list) -> int:
             return 2
 
     expected_version = skill_version(root, eval_set["skill_name"])
-    try:
+    with contextlib.ExitStack() as stack:
         if isolate:
-            tmp_parent = tempfile.mkdtemp(prefix="eval-capture-")
-            capture_tree = make_capture_tree(root, os.path.join(tmp_parent, "tree"))
-            stripped = strip_answer_keys(capture_tree)
-            settings_path = write_capture_settings(root, tmp_parent, args.settings)
+            capture_tree, stripped, settings_path = stack.enter_context(
+                isolated_surface(root, args.settings))
             print(f"capture tree: {capture_tree}")
             print(f"answer-key paths removed: {len(stripped)} -> {stripped}")
         else:
-            settings_path = args.settings
             sys.stderr.write(
                 "eval-capture: WARNING --no-isolate: dispatching against the repo, so "
                 "the eval corpus is readable and the ambient plugin answers. Any number "
@@ -675,11 +686,6 @@ def main(argv_in: list) -> int:
         }
         return _sweep(args, eval_set, selected, out_dir, provenance,
                       settings_path=settings_path, cwd=cwd, plugin_dir=capture_tree)
-    finally:
-        if capture_tree:
-            remove_capture_tree(root, capture_tree)
-        if tmp_parent:
-            shutil.rmtree(tmp_parent, ignore_errors=True)
 
 
 def _sweep(args, eval_set, selected, out_dir, provenance, *,

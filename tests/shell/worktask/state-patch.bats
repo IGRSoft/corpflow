@@ -327,6 +327,37 @@ setup() {
   assert_failure 2
 }
 
+@test "facts: a stub failing the shared predicate exits 2, naming the field, ledger unchanged" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  cp .context/state.json .context/state.json.snap
+  # Each defect names itself: "bad shape" hands the caller nothing to act on.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-P0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  assert_failure 2
+  assert_output --partial "id sw-P0-1 is not sw-<TASK_ID>-<n>"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"question","ref":"planning-0.md#elicitation-sweep"}]}'
+  assert_failure 2
+  assert_output --partial "class is not decision|escalate"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":""}]}'
+  assert_failure 2
+  assert_output --partial "ref is not an optional <artifact>.md path plus one non-empty #anchor"
+  run diff -q .context/state.json .context/state.json.snap
+  assert_success
+}
+
+@test "facts: an anchor-only ref is accepted (the tightening is not blanket)" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-9","class":"escalate","ref":"#elicitation-sweep"}]}'
+  assert_success
+  run jq -r '.facts.open_questions[-1].ref' .context/state.json
+  assert_output "#elicitation-sweep"
+}
+
 @test "facts: decisions stay id-only — the stub tightening is scoped to open_questions" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"d1"}]}'

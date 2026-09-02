@@ -326,6 +326,23 @@ agents_file() {
   assert_failure 2
 }
 
+@test "a value-taking flag with nothing after it is a usage error, not a finding" {
+  # Exit 1 means "a stage needs a human decision"; a truncated command line must never
+  # be reported in that vocabulary.
+  local flag
+  for flag in --state --context --agents-json; do
+    run_script_env "$SCRIPT" "$flag"
+    assert_failure 2
+    assert_output --partial "$flag needs a value"
+  done
+}
+
+@test "a value-taking flag followed by another flag is still a usage error" {
+  run_script_env "$SCRIPT" --state --json
+  assert_failure 2
+  assert_output --partial "--state needs a value"
+}
+
 # --- the read-only contract --------------------------------------------------
 
 @test "READ-ONLY: the ledger and .context/ are byte-identical after every arm" {
