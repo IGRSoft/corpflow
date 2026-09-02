@@ -131,7 +131,17 @@ required_for() {
   esac
 }
 
-SWEEP_ID_RE='^sw-[A-Z]{2}[0-9]+-[0-9]+$'
+# The SweepStub predicate is defined once, in sweep-stub-lib.sh, and enforced twice — here and
+# in state-patch.sh --facts. A shape gate that cannot load its shape must not pass anything.
+_SWEEP_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sweep-stub-lib.sh"
+if [ -r "$_SWEEP_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$_SWEEP_LIB"
+fi
+if [ -z "${SWEEP_ID_RE:-}" ] || [ -z "${SWEEP_CLASS_ENUM:-}" ] || [ -z "${SWEEP_REF_RE:-}" ]; then
+  echo "fail: sweep-stub-lib.sh unreachable at $_SWEEP_LIB — the sweep shape gate cannot run" >&2
+  exit 1
+fi
 
 # A yq failure inside a sweep check is a gate FAILURE, never a skip: the gate has no advisory
 # tier, so a read that cannot be trusted must not yield a pass. First error line is surfaced.
@@ -144,20 +154,65 @@ _sweep_yq() {  # <expr> <fmfile>
   printf '%s' "$out"
 }
 
+# ONE yq pass over the frontmatter, feeding all three sweep checks. This runs at every one
+# of the thirteen stage boundaries, and the six separate `yq eval` processes it replaces
+# each re-parsed the same file to answer one question about the same list.
+#
+# Still one select per defect, because yq v4 has no if/elif and a lumped rejection names no
+# cause: the arms are concatenated into one array and splatted, each row tagged with the
+# defect it evidences. The three predicates are SWEEP_ID_RE, SWEEP_CLASS_ENUM and
+# SWEEP_REF_RE from sweep-stub-lib.sh — the same constants state-patch.sh --facts enforces,
+# interpolated here and passed as jq arguments there, never re-stated in either place.
+#
+# The trailing STUB rows are the id/ref inventory the anchor and ledger-parity checks walk;
+# they cover map items only, so those two never have to re-ask what shape an item was.
+_sweep_scan() {  # <fmfile> -> tagged rows on stdout
+  local base='[.handoff.open_questions[]?] | to_entries | .[]'
+  local classexpr="" cls
+  for cls in $SWEEP_CLASS_ENUM; do
+    classexpr="${classexpr:+$classexpr and }(.value.class // \"\") != \"$cls\""
+  done
+  # `tostring` on the id keeps a non-string id inside the bad-id arm rather than in yq's error path.
+  local ismap='select(.value | type == "!!map")'
+  _sweep_yq "(
+      [\"TYPE \" + (.handoff.open_questions | type)]
+    + [$base | select(.value | type != \"!!map\") | \"NONMAP \" + (.key | tostring)]
+    + [$base | $ismap | select(((.value.id // \"\") | tostring) | test(\"$SWEEP_ID_RE\") | not) | \"BADID \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
+    + [$base | $ismap | select($classexpr) | \"BADCLASS \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
+    + [$base | $ismap | select(((.value.ref // \"\") | tostring) | test(\"$SWEEP_REF_RE\") | not) | \"NOREF \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
+    + [$base | $ismap | \"STUB \" + ((.value.id // \"\") | tostring) + \" \" + ((.value.ref // \"\") | tostring)]
+  ) | .[]" "$1"
+}
+
+# Memoised per artifact: the three checks run back to back against one file, and a second
+# scan would re-pay the parse this consolidation exists to remove.
+_sweep_scan_for=""
+_sweep_scan_out=""
+_sweep_load() {  # <fmfile>
+  [[ "$_sweep_scan_for" == "$1" ]] && return 0
+  _sweep_scan_out=$(_sweep_scan "$1") || return 1
+  _sweep_scan_for="$1"
+  return 0
+}
+
+# Rows of one tag, with the tag stripped.
+_sweep_rows() {  # <TAG>
+  printf '%s' "$_sweep_scan_out" | sed -n "s/^$1 //p"
+}
+
 # THE shape gate for open_questions[]: the sweep stub is the only item shape the field
 # accepts, so this runs first and the two checks below may assume every surviving item is a
 # map carrying id/class/ref. A bare schema rejection names no cause, so each defect gets its
-# own sentence. Composed from four yq selects rather than one because yq v4 has no if/elif:
-# each select yields the offenders of exactly one defect and bash prints a line per offender.
-# Offenders are addressed by index, the only identity a non-map item has.
+# own sentence. Offenders are addressed by index, the only identity a non-map item has.
 check_sweep_stub_shape() {
   local fmfile="$1" rc=0 line
-  local base='[.handoff.open_questions[]?] | to_entries | .[]'
   local oqtype nonmap badid badclass noref
 
-  # `[]?` below silently yields nothing for a scalar, and the required-field loop only asks
-  # for a non-empty value, so `open_questions: "none"` would otherwise pass every check.
-  oqtype=$(_sweep_yq '.handoff.open_questions | type' "$fmfile") || return 1
+  _sweep_load "$fmfile" || return 1
+
+  # `[]?` in the scan silently yields nothing for a scalar, and the required-field loop only
+  # asks for a non-empty value, so `open_questions: "none"` would otherwise pass every check.
+  oqtype=$(_sweep_rows TYPE)
   case "$oqtype" in
     '!!seq' | '!!null') ;;
     *)
@@ -165,11 +220,10 @@ check_sweep_stub_shape() {
       return 1 ;;
   esac
 
-  # `tostring` on the id keeps a non-string id inside the bad-id arm rather than in yq's error path.
-  nonmap=$(_sweep_yq "$base | select(.value | type != \"!!map\") | .key" "$fmfile") || return 1
-  badid=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select(((.value.id // \"\") | tostring) | test(\"$SWEEP_ID_RE\") | not) | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
-  badclass=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select((.value.class // \"\") != \"decision\" and (.value.class // \"\") != \"escalate\") | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
-  noref=$(_sweep_yq "$base | select(.value | type == \"!!map\") | select((.value.ref | type) != \"!!str\") | (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)" "$fmfile") || return 1
+  nonmap=$(_sweep_rows NONMAP)
+  badid=$(_sweep_rows BADID)
+  badclass=$(_sweep_rows BADCLASS)
+  noref=$(_sweep_rows NOREF)
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
@@ -183,12 +237,12 @@ check_sweep_stub_shape() {
   done <<< "$badid"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    echo "fail: sweep stub $(_sweep_label "$line") class is not decision|escalate" >&2
+    echo "fail: sweep stub $(_sweep_label "$line") class is not $(printf '%s' "$SWEEP_CLASS_ENUM" | tr ' ' '|')" >&2
     rc=1
   done <<< "$badclass"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    echo "fail: sweep stub $(_sweep_label "$line") carries no ref — add ref: \"<artifact>-N.md#elicitation-sweep\"" >&2
+    echo "fail: sweep stub $(_sweep_label "$line") carries no ref anchor — add ref: \"<artifact>-N.md#elicitation-sweep\" (an optional .md path plus one non-empty #anchor)" >&2
     rc=1
   done <<< "$noref"
   return $rc
@@ -211,8 +265,8 @@ check_sweep_ref_anchor() {
   local artifact="$1" fmfile="$2"
   local dir rows line id ref file anchor target
   dir=$(dirname "$artifact")
-  rows=$(_sweep_yq '[.handoff.open_questions[]? | (.id | tostring) + " " + (.ref // "")] | .[]' \
-         "$fmfile") || return 1
+  _sweep_load "$fmfile" || return 1
+  rows=$(_sweep_rows STUB)
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     id="${line%% *}"
@@ -244,6 +298,21 @@ check_sweep_ref_anchor() {
   return 0
 }
 
+# state_unreadable_reason -> echoes why $STATE_ARG cannot be trusted, or nothing.
+#
+# Detection only. The two callers deliberately DISAGREE on the verdict — check_ar_ref
+# downgrades to an advisory skip, check_sweep_ledger fails outright — so the verdict stays
+# at the call site and only the three ways a ledger can be unusable are shared.
+state_unreadable_reason() {
+  if [[ ! -f "$STATE_ARG" ]]; then
+    printf 'state file not found: %s' "$STATE_ARG"
+  elif ! command -v jq > /dev/null 2>&1; then
+    printf 'jq unavailable; cannot read %s' "$STATE_ARG"
+  elif ! jq empty "$STATE_ARG" > /dev/null 2>&1; then
+    printf 'state file is not valid JSON: %s' "$STATE_ARG"
+  fi
+}
+
 # Sweep-stub ledger parity. The frontmatter stub and facts.open_questions[] are two
 # transports with two writers and no derivation between them, so a stage that writes
 # the stub but omits it from `state-patch.sh --facts` produces a schema-valid artifact
@@ -257,31 +326,36 @@ check_sweep_ref_anchor() {
 # nothing to compare, so the check is silent.
 check_sweep_ledger() {
   local fmfile="$1"
-  local ids id
-  ids=$(_sweep_yq '[.handoff.open_questions[]? | (.id | tostring)] | .[]' \
-        "$fmfile") || return 1
+  local ids id missing unreadable
+  _sweep_load "$fmfile" || return 1
+  ids=$(_sweep_rows STUB | sed 's/ .*//')
   [[ -n "$ids" ]] || return 0
-  local unreadable=""
-  if [[ ! -f "$STATE_ARG" ]]; then
-    unreadable="state file not found: $STATE_ARG"
-  elif ! command -v jq > /dev/null 2>&1; then
-    unreadable="jq unavailable; cannot read $STATE_ARG"
-  elif ! jq empty "$STATE_ARG" > /dev/null 2>&1; then
-    unreadable="state file is not valid JSON: $STATE_ARG"
-  fi
+
+  unreadable=$(state_unreadable_reason)
   if [[ -n "$unreadable" ]]; then
     echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— $unreadable" >&2
     return 1
   fi
-  for id in $ids; do
-    [[ -n "$id" && "$id" != "null" ]] || continue
-    if ! jq -e --arg id "$id" \
-         '[.facts.open_questions[]? | .id] | index($id) != null' "$STATE_ARG" > /dev/null 2>&1; then
-      echo "fail: sweep stub $id is in the frontmatter but not in facts.open_questions[] — pass it in the state-patch.sh --facts payload, or the FN gate never sees it" >&2
-      return 1
-    fi
-  done
-  return 0
+
+  # One jq set difference, not one membership probe per id: the ledger is re-read and
+  # re-parsed by every probe, and a sweep of any size pays that per item.
+  #
+  # 2>&1 into the same capture, like _sweep_yq: a ledger whose open_questions is a string
+  # or a list of non-objects aborts jq mid-filter, and treating that exit as "nothing
+  # missing" would pass the gate on exactly the shapes it exists to catch.
+  if ! missing=$(printf '%s\n' "$ids" | jq -r -R -s --slurpfile st "$STATE_ARG" '
+      (($st[0].facts.open_questions? // []) | map(.id)) as $have
+      | split("\n") | map(select(length > 0 and . != "null"))
+      | . - $have | .[]' 2>&1); then
+    echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— facts.open_questions in $STATE_ARG could not be read as an array of stubs: ${missing%%$'\n'*}" >&2
+    return 1
+  fi
+  [[ -n "$missing" ]] || return 0
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    echo "fail: sweep stub $id is in the frontmatter but not in facts.open_questions[] — pass it in the state-patch.sh --facts payload, or the FN gate never sees it" >&2
+  done <<< "$missing"
+  return 1
 }
 
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
@@ -304,14 +378,8 @@ check_ar_ref() {
   # A state file we cannot read is NOT evidence that AR did not run. Saying so
   # out loud keeps the two cases distinguishable once --strict becomes the
   # default, where a silent skip would be a false negative on every jq-less host.
-  local unreadable=""
-  if [[ ! -f "$STATE_ARG" ]]; then
-    unreadable="state file not found: $STATE_ARG"
-  elif ! command -v jq >/dev/null 2>&1; then
-    unreadable="jq unavailable; cannot read $STATE_ARG"
-  elif ! jq empty "$STATE_ARG" >/dev/null 2>&1; then
-    unreadable="state file is not valid JSON: $STATE_ARG"
-  fi
+  local unreadable
+  unreadable=$(state_unreadable_reason)
 
   if [[ -n "$unreadable" ]]; then
     ar_ref_violation "AR-ref check skipped — $unreadable" || return 1

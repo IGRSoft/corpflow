@@ -50,11 +50,26 @@ OUT_FORMAT="text"
 
 usage() { awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; }
 
+# A value-taking option with nothing after it is a usage error, not a finding: exit 1 is
+# reserved for "a stage needs a human decision", and `shift 2` on a one-element "$@" aborts
+# under `set -u` with that very code.
+# A bare `-` stays legal: --agents-json reads stdin under it. Only a `--flag` in the value
+# position is refused, which is the shape a truncated command line actually takes.
+need_value() {  # <flag> [candidate]
+  case "${2:-}" in
+    '' | --*) ;;
+    *) return 0 ;;
+  esac
+  printf 'stale-check: %s needs a value\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --state)       STATE_PATH="${2:-}"; shift 2 ;;
-    --context)     CONTEXT_DIR="${2:-}"; shift 2 ;;
-    --agents-json) AGENTS_JSON="${2:-}"; shift 2 ;;
+    --state)       need_value "$@"; STATE_PATH="$2"; shift 2 ;;
+    --context)     need_value "$@"; CONTEXT_DIR="$2"; shift 2 ;;
+    --agents-json) need_value "$@"; AGENTS_JSON="$2"; shift 2 ;;
     --json)        OUT_FORMAT="json"; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) printf 'stale-check: unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;

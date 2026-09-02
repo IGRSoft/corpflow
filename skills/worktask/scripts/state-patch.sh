@@ -665,6 +665,9 @@ _FACTS_UNION_FILTER='
 # open_questions is held to the FULL sweep stub (.id, .class, .ref), not just .id: a partial
 # item reaches the FN render with no anchor to resolve its options[] from, and the union would
 # have already replaced the incumbent object that did carry one. decisions stays id-only.
+# The three predicates come from sweep-stub-lib.sh and are passed in as jq arguments, never
+# spliced into the filter text — a spliced regex would make the jq program caller-controlled.
+# Each defect gets its own message: "bad shape" names no cause the caller can act on.
 _FACTS_VALIDATE_FILTER='
       def _allowed: ["decisions","files_modified","open_questions","tests_added"];
       if type != "object" then "must be a JSON object"
@@ -685,6 +688,19 @@ _FACTS_VALIDATE_FILTER='
                                               or ((.class | type) != "string")
                                               or ((.ref | type) != "string")))) | length) > 0)
             | .key ] as $badstub
+        | [ (.open_questions // [])[]
+            | select(type == "object")
+            | select(((.id | type) == "string") and ((.id | test($idre)) | not))
+            | .id ] as $badid
+        | [ (.open_questions // [])[]
+            | select(type == "object")
+            | select(((.class | type) == "string")
+                     and ((.class as $c | $classes | index($c)) == null))
+            | (.id // "?") ] as $badclass
+        | [ (.open_questions // [])[]
+            | select(type == "object")
+            | select(((.ref | type) == "string") and ((.ref | test($refre)) | not))
+            | (.id // "?") ] as $badref
         | [ to_entries[]
             | select(.key == "files_modified" or .key == "tests_added")
             | select((.value | type) != "array"
@@ -698,6 +714,14 @@ _FACTS_VALIDATE_FILTER='
                + " (expected an array of objects each with a string .id)"
           elif ($badstub | length) > 0
           then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref)"
+          elif ($badid | length) > 0
+          then "open_questions id " + ($badid | join(", ")) + " is not sw-<TASK_ID>-<n>"
+          elif ($badclass | length) > 0
+          then "open_questions " + ($badclass | join(", ")) + " class is not "
+               + ($classes | join("|"))
+          elif ($badref | length) > 0
+          then "open_questions " + ($badref | join(", "))
+               + " ref is not an optional <artifact>.md path plus one non-empty #anchor"
           elif ($badscalar | length) > 0
           then "bad shape for " + ($badscalar | join(", "))
                + " (expected an array of strings)"
@@ -1798,7 +1822,23 @@ if [[ -n "$FACTS_ARG" ]]; then
     exit 1
   }
 
-  FACTS_ERR=$(printf '%s' "$FACTS_ARG" | jq -r "$_FACTS_VALIDATE_FILTER" 2> /dev/null) \
+  _SWEEP_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sweep-stub-lib.sh"
+  if [ -r "$_SWEEP_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$_SWEEP_LIB"
+  fi
+  # --facts is the only op that needs the predicate, so its absence fails this op alone and
+  # leaves --stage/--prev/--task-create untouched.
+  if [[ -z "${SWEEP_ID_RE:-}" || -z "${SWEEP_CLASS_ENUM:-}" || -z "${SWEEP_REF_RE:-}" ]]; then
+    printf >&2 'invalid --facts: sweep-stub-lib.sh unreachable at %s; state.json unchanged\n' "$_SWEEP_LIB"
+    log_msg ERROR "sweep-stub-lib.sh unreachable; --facts refused, state.json unchanged"
+    usage
+  fi
+  SWEEP_CLASS_JSON=$(printf '%s' "$SWEEP_CLASS_ENUM" | tr ' ' '\n' | jq -R . | jq -s .)
+
+  FACTS_ERR=$(printf '%s' "$FACTS_ARG" \
+    | jq -r --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
+            --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_VALIDATE_FILTER" 2> /dev/null) \
     || FACTS_ERR="not valid JSON"
   if [[ -n "$FACTS_ERR" ]]; then
     printf >&2 'invalid --facts: %s\n' "$FACTS_ERR"
