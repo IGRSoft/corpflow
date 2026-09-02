@@ -4,9 +4,15 @@ description: Use for DV stage development, code implementation, debugging, and r
 model: opus
 color: magenta
 effort: high
-version: 0.9.1
+version: 0.9.2
 maxTurns: 80
-isolation: worktree
+# isolation: deliberately ABSENT. Frontmatter isolation makes the harness create a
+# fresh worktree per dispatch, cut from the session base ref, BEFORE this agent runs —
+# so it is neither `task.metadata.workspace_path` nor current `main`. An orchestrator
+# that pre-creates per-stream worktrees and lands a shared contract into them has its
+# assignment silently discarded and that contract rendered invisible; § D0.0a then
+# correctly blocks every stream. Isolation is not lost: § D0.0 requires EnterWorktree
+# on the ASSIGNED path, which satisfies assignment and isolation together.
 # tools: Skill is REQUIRED — `## Visual evidence` mandates
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
