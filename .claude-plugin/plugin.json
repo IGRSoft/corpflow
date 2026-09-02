@@ -1,7 +1,7 @@
 {
   "name": "corpflow",
   "description": "Staged worktask pipeline (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, cross-plugin delegation, and /megatask dependency-DAG orchestration of many worktasks across a GitHub milestone.",
-  "version": "4.0.25",
+  "version": "4.0.27",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -66,6 +66,27 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/comment-standard-context.sh",
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
+    "PreModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/model-switch-gate.sh"
+          }
+        ]
+      }
+    ],
+    "PostModelSwitch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/model-switch-audit.sh",
             "continueOnBlock": true
           }
         ]

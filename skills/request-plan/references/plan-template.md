@@ -48,12 +48,26 @@ T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/S
 | <XS–XL> | <score> | key drivers (new tech, integration points, unknowns) |
 
 ## Risks & Dependencies
-The 2–4 things most likely to derail this, each with a one-line mitigation. Flag any
-security-sensitive surface (auth / PII / payments) explicitly — it forces the worktask tier.
+The 2–4 things most likely to derail this, each with a one-line mitigation. Name any credential,
+PII or payment surface you found — it does not move the tier; only an asset the **request** names
+does (`skills/estimation-methodology/SKILL.md`).
 
 ## Recommended next step
+**Surface check:** the verdict, then why — e.g. `no credential, untrusted-input or live-failure
+surface → standard tier`. Required, on its own line, immediately before the trigger.
+
 A single ready-to-paste worktask trigger line + one sentence of rationale. See `handoff.md`.
 ```
+
+##### Why the surface-check line is required
+
+Required the same way `P2 — v1.1: none` is: it forces an existing check to produce visible output.
+The tier rules in `skills/estimation-methodology/SKILL.md` are precise and were still skipped
+silently, because skipping them cost nothing. A verdict that has to be written is a verdict that has
+to be reached, and a wrong one is visible to a reviewer instead of inferable only from the flag.
+
+It must agree with the flag on the trigger line — see `handoff.md` § "The flag must match what the
+plan body argues".
 
 ## Notes on filling it
 

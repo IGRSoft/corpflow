@@ -66,7 +66,7 @@ only purpose and normative use.
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are not accepted |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance. A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6) |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset (`skills/shared/model-selection.md § Default Subagent Model`). A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6) |
 
 ### Run & context fields
 
@@ -293,6 +293,8 @@ the conditional `if` field) and configuration examples:
 With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has **one implicit team** — spawn
 teammates via the **Agent tool's `name` parameter** (`Agent(name: …)`; `team_name` is accepted but
 ignored), and `SendMessage` remains the inter-teammate channel. Teammates coordinate through the
-same `.context/state.json` ledger as every other stage and can self-claim available work. Megatask
-patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
+same `.context/state.json` ledger as every other stage and can self-claim available work. Live
+teammates are now visible to `ListAgents`/`claude agents --json`, so a lead resuming mid-batch uses
+the same pre-check as the stage loop (`../worktask/references/resume.md § Step 0 notes — own-name &
+teammate visibility`). Megatask patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
 in settings for worktask-specific auto-memory, separate from the default `~/.claude/`.

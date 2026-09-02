@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.25 · Requires Claude Code 2.1.233+**
+**Plugin 4.0.27 · Requires Claude Code 2.1.251+**
 
 ## Features
 
@@ -50,7 +50,7 @@ lock, the atomic write, and the disk guard.
 
 | Requirement | Needed for |
 |-------------|------------|
-| **Claude Code 2.1.233+** | The state ledger. 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger) |
+| **Claude Code 2.1.251+** | Two things. The state ledger: 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger). And the resume loop: from 2.1.234–2.1.238 a `SendMessage` reports non-delivery (refused, dropped, oversized, rate-limited, or an incompletely-enumerated session list) instead of silently succeeding, which is what the reattach path now branches on — on an older build an undelivered nudge reads as a delivered one and a parked stage is silently abandoned |
 | **git** | Every worktask runs in a dedicated worktree |
 | **jq** | `state-patch.sh`, the only writer to the ledger. Hard requirement — without it no stage can complete |
 | **`gh`**, authenticated | Post-PL issue publishing, `/megatask` milestone and issue reads, FN pull requests |
@@ -312,19 +312,15 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 
 ### Commands
 
-36 commands, grouped by domain prefix. Top-level orchestration commands stay unprefixed; every other command carries a stable domain prefix.
+28 commands. Orchestration, planning, and publishing commands are unprefixed; the rest carry a stable domain prefix (`design-`, `arch-`, `test-`, `docs-`) naming the surface they act on.
 
 #### Core / Orchestration
 | Command | Description |
 |---------|-------------|
 | `/worktask` | Initialize a single staged worktask (milestone-agnostic) |
 | `/megatask` | Orchestrate many worktasks across a milestone or issue array, ordered by a dependency/blocker DAG |
-| `/estimate` | Estimate task complexity and effort; `--review` senior-reviews an estimate, `--export csv` emits the CSV pack |
-| `/context-status` | Check context and worktask state |
-| `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
+| `/estimate` | Estimate task complexity and effort; `--detailed` runs the platform review inline, `--review` reviews an existing estimate, `--export csv` emits the CSV pack |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
-| `/cost-report` | Worktask token-cost report |
-| `/agent-report` | Which agents actually executed, from the audit trail |
 | `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
 
 #### Design (`design-`)
@@ -334,15 +330,14 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/design-review` | Review design decisions |
 | `/design-accessibility` | Accessibility audit (WCAG) |
 
-#### Product (`pm-`)
+#### Planning
 | Command | Description |
 |---------|-------------|
-| `/pm-prioritize` | RICE/WSJF prioritization |
-| `/pm-requirements` | Generate PRD |
-| `/pm-roadmap` | Product roadmap planning |
-| `/pm-milestone` | Generate milestone tickets with agent assignments |
-| `/pm-sprint` | Sprint planning |
-| `/pm-risk` | Risk assessment |
+| `/request-plan` | Turn a free-form request into a lightweight, context-aware plan |
+| `/product-requirements` | Generate PRD |
+| `/roadmap` | Product roadmap planning |
+| `/milestone` | Generate milestone tickets with agent assignments |
+| `/sprint` | Sprint planning |
 
 #### Architecture (`arch-`)
 | Command | Description |
@@ -351,17 +346,16 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/arch-decision` | Create ADRs, or TDRs via `--type tdr` |
 | `/arch-debt` | Technical debt analysis |
 
-#### Development (`dev-`)
+#### Development
 | Command | Description |
 |---------|-------------|
-| `/dev-code-review` | Developer code-review DR gate; `--depth deep` adds full technical-review analysis |
+| `/tech-code-review` | Technical code-review DR gate; `--depth deep` adds full technical-review analysis |
 
 #### QA / Test (`test-`)
 | Command | Description |
 |---------|-------------|
 | `/test-plan` | Generate test plan |
 | `/test-coverage` | Coverage analysis |
-| `/test-report` | QA summary report |
 
 #### Docs (`docs-`)
 | Command | Description |
@@ -369,11 +363,6 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/docs-audit` | Documentation audit |
 | `/docs-readme` | README maintenance |
 | `/docs-release-notes` | Generate release notes |
-
-#### Business (`business-`)
-| Command | Description |
-|---------|-------------|
-| `/business-report` | Business reporting via `--type case\|roi\|summary` |
 
 #### Ethics
 | Command | Description |
@@ -388,23 +377,19 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/optimize-command` | Optimize command definition |
 | `/prompt-audit` | Audit prompt effectiveness |
 
-#### App Store / Publishing (`appstore-`)
-
-**These three commands are Apple-specific and are the only ones that are.** They target
-App Store Connect and the Apple listing format, and have no cross-platform equivalent.
-Every other command in this plugin is platform-neutral and routes through
-`skills/shared/platform-detection.md`. `/appstore-screenshots` takes `--apple-platform`
-(an Apple device class), deliberately distinct from the plugin-wide `--platform`.
+#### Publishing
 
 | Command | Description |
 |---------|-------------|
-| `/appstore-info` | Scaffold App Store listing content from README (Apple-only) |
-| `/appstore-iap` | Set up App Store Connect in-app purchases (Apple-only) |
-| `/appstore-screenshots` | Generate App Store screenshots (Apple-only) |
+| `/appstore` | Store publishing front door — listing, screenshots, or IAP; delegates to the platform plugin's release engineer |
 
-### Skills (25 total)
+The store flows themselves live in the plugin that ships to that store
+(`apple-developer:gen-appstore-*`, `android-developer:gen-playstore-*`), because App Store Connect
+and Play Console differ field by field. `--apple-platform` selects an Apple device class and is
+passed through unchanged — it is deliberately distinct from the plugin-wide `--platform`.
+
+### Skills (23 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
-- `appstore-screenshots` — App Store screenshot generation (device specs, layout, Pencil MCP)
 - `claude-constitution` — Constitutional principles and ethics framework
 - `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
 - `context-compression` — Context compression between agent handoffs
@@ -424,7 +409,6 @@ Every other command in this plugin is platform-neutral and routes through
 - `request-plan` — Turn a free-form request into a lightweight, context-aware plan
 - `security-review-process` — OWASP Top 10 checklist, dependency supply-chain triage, secure-coding patterns (SR)
 - `self-improvement` — ST-stage retrospective: propose scoped updates from user edits
-- `senior-developer-review` — Senior technical review framework for estimates
 - `task-folder-organization` — `.context/` folder structure and artifact naming
 - `worktask` — Complete staged worktask system (dynamic sizing, init, stage management)
 - `worktask-testing-strategy` — Test-strategy planning for PL/AR stages
@@ -437,11 +421,15 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 
 | Hook | Event | Purpose |
 |------|-------|---------|
+| `test-execution-gate.sh` | PreToolUse (`Bash`/`Skill`/`Task`/test MCP) | **Blocks** a test run by a stage that holds no test-execution authority |
+| `model-switch-gate.sh` | PreModelSwitch | **Blocks** a mid-worktask re-tier away from the stage's pinned `metadata.model` |
+| `model-switch-audit.sh` | PostModelSwitch | Records `model_switched` so cost is attributed to the model that ran |
 | `audit-tooluse.sh` | PostToolUse (`Bash`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl`; Bash rows only for ledger patches |
 | `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
 | `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion when the screenshot manifest is missing |
+| `dv-comment-density-gate.sh` | SubagentStop | **Blocks** DV completion when a change's comment density breaches the standard |
 | `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |

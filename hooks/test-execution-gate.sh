@@ -23,6 +23,23 @@ set -f
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
+# Guarded source of the shared hook library (AD-2). This file has no `set -e`, so
+# the save/restore is a no-op today; the idiom is kept identical across all four
+# consumers so it stays correct if that ever changes. `[ -f ]` alone is not
+# enough: a TRUNCATED library is a syntax error, which `||` cannot rescue.
+#
+# The probe names the LAST symbol the library defines, so a rename and a mid-file
+# truncation are both caught. A silently missing symbol here would disarm the
+# gate, which is why degradation is announced rather than inferred.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+LIB_DEGRADED=0
+command -v corpflow_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
+
 # ---------------------------------------------------------------------------
 # RUNNERS — parity counterpart of testing-strategy.md's canonical list;
 # test-authority-matrix.bats asserts the two agree. Matched against the head
@@ -537,49 +554,25 @@ classify_segment() {
 }
 
 # ---------------------------------------------------------------------------
-# resolve_stage <ctx> -> echoes the single in_progress stage code, or empty.
-# Every ambiguity resolves to empty (never a guess) — no state.json, no jq,
-# an unparseable file, zero or more than one stage in progress, or a stage
-# token this hook doesn't recognize. An empty result is the caller's signal
-# to allow unconditionally: there is no reliable "who is acting" answer, and
+# Stage resolution is corpflow_active_stage from the shared hook library: it
+# echoes the single in_progress stage code, or empty for every ambiguity — no
+# state.json, no jq, an unparseable file, zero or more than one stage in
+# progress, or an unrecognized token. An empty result is this hook's signal to
+# allow unconditionally: there is no reliable "who is acting" answer, and
 # guessing wrong in the deny direction would deadlock an unrelated session.
-# Fixture-reachable via a temp .context/ root — no live process needed.
+#
+# CTX stays CLAUDE_PROJECT_DIR-only (see the live-invocation block): the shared
+# WORKSPACE ROOT resolver is deliberately NOT used here, because its extra arms
+# would widen the resolution surface of an anti-evasion invariant. Only the pure,
+# ctx-parameterised stage lookup is shared.
 # ---------------------------------------------------------------------------
-resolve_stage() {
-  local _ctx="$1" _state _stages
-  _state="$_ctx/state.json"
-  [ -f "$_state" ] || { printf ''; return; }
-  command -v jq >/dev/null 2>&1 || { printf ''; return; }
-
-  # Ledger keys are numbered (DV0, DV1); authority is per stage CODE, so parallel
-  # tracks of one stage collapse to a single unambiguous answer.
-  _stages=$(jq -r '
-    if (.tasks|type=="object") then
-      (.tasks | to_entries | map(select(.value.status=="in_progress"))
-        | map(.key | sub("[0-9]+$"; "")) | unique)
-    else [] end
-    | join(",")
-  ' "$_state" 2>/dev/null) || { printf ''; return; }
-
-  case "$_stages" in
-    # Empty (no stage in progress — the common between-stage window and every
-    # non-worktask session) or more than one DISTINCT stage (ambiguous — cannot
-    # tell which issued this call) both resolve to unknown.
-    *,*|"") printf ''; return ;;
-  esac
-
-  case "$_stages" in
-    PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET) printf '%s' "$_stages" ;;
-    *) printf '' ;;  # not a recognized stage code — treat as unresolved
-  esac
-}
 
 # ---------------------------------------------------------------------------
 # ledger_settled <ctx> -> "settled" when the ledger positively says NOBODY is
 # acting: state.json parses, .tasks is a non-empty object, zero in_progress.
 # Empty for every other shape.
 #
-# Split from resolve_stage's single empty answer: "cannot tell" (no state.json,
+# Split from corpflow_active_stage's single empty answer: "cannot tell" (no state.json,
 # no jq, unparseable, >1 in_progress) must fail open, while "nobody is acting"
 # is not an ambiguity — no stage holds test authority then. Reads the SESSION's
 # ledger under CLAUDE_PROJECT_DIR, so cd'ing elsewhere does not evade it.
@@ -762,7 +755,7 @@ run_gate() {
       # means no worktask is in flight — the common case in a repo where the
       # plugin is merely installed — and such a session must see zero side
       # effects: no directory creation, no log growth.
-      _stage=$(resolve_stage "$_ctx")
+      _stage=$(corpflow_active_stage "$_ctx")
       if [ -n "$_stage" ]; then
         _subagent=$(printf '%s' "$_payload" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
         # Truncate to a short bounded length before it ever reaches the log —
@@ -873,7 +866,7 @@ run_gate() {
   # A settled ledger is a deny, not an allow — see ledger_settled(). The sentinel
   # is not a stage code, so it can never match the DV/QA authority arms below; it
   # only selects its own deny reason.
-  _stage=$(resolve_stage "$_ctx")
+  _stage=$(corpflow_active_stage "$_ctx")
   _settled=""
   if [ -z "$_stage" ]; then
     [ "$(ledger_settled "$_ctx")" = "settled" ] || return 0  # cannot tell — allow
@@ -972,36 +965,34 @@ first_runner_token() {
   printf ''
 }
 
-# write_audit_row <ctx> <action> <metadata json> — the deny JSON is always
-# printed BEFORE this is called, so a logging failure (unwritable dir, no
-# `date`, disk full) can never swallow a legitimate deny. Never logs the
-# full command — command_head only, since the full command can carry a
-# secret token or a path that shouldn't land in a committed log file.
+# write_audit_row <ctx> <action> <metadata json> — binds this hook's actor onto
+# the shared appender. The deny JSON is always printed BEFORE this is called, so
+# a logging failure (unwritable dir, no `date`, disk full) can never swallow a
+# legitimate deny. Never logs the full command — command_head only, since the
+# full command can carry a secret token or a path that shouldn't land in a
+# committed log file. These rows carry no `subject`, and the appender omits the
+# key entirely rather than emitting an empty one, so the shape is unchanged.
 write_audit_row() {
-  local _ctx="$1" _action="$2" _meta="$3" _log_dir _log_file _ts _row
-  _log_dir="$_ctx/logs"
-  _log_file="$_log_dir/audit.jsonl"
-  mkdir -p "$_log_dir" 2>/dev/null || return 0
-  # A symlinked audit.jsonl would turn this append into a write primitive
-  # against an arbitrary target file (content is jq-escaped JSON, so no code
-  # execution results, but it is still an unintended write). Refuse to
-  # append through a symlink — this is a pre-existing pattern shared with
-  # other hooks in this plugin, closed here rather than left as a residual.
-  [ ! -L "$_log_file" ] || return 0
-  _ts=$(date -u +%FT%TZ 2>/dev/null) || _ts="unknown"
-  _row=$(jq -cn --arg ts "$_ts" --arg action "$_action" --argjson meta "$_meta" '
-    {ts:$ts, actor:"hook:test-execution-gate", action:$action, result:"ok", metadata:$meta}
-  ' 2>/dev/null) || return 0
-  printf '%s\n' "$_row" >> "$_log_file" 2>/dev/null || return 0
+  corpflow_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
+    --action "${2:-}" --result ok --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------
 # --self-test
 # ---------------------------------------------------------------------------
 # The body lives in lib/ — it is test code, and this file is a hot-path gate.
-# Sourced only here, never on the dispatch path below, so the PreToolUse call
-# resolves no sibling path at hook time. Unlike that path this arm fails CLOSED:
-# a self-test that cannot find its cases must report a failure, never "OK".
+# Sourced only here, never on the dispatch path below, so no TEST code is loaded
+# at hook time.
+#
+# This is no longer a claim that the dispatch path resolves NO sibling path: the
+# shared hook library is sourced at the top of this file on every invocation.
+# That is deliberate and guarded — see the AD-2 idiom there — and the property
+# that still holds, and that matters, is narrower: the only sibling loaded on the
+# dispatch path is the library, under a guard that survives an absent, stubbed or
+# truncated file, and this test body is never among them.
+#
+# Unlike the dispatch path this arm fails CLOSED: a self-test that cannot find
+# its cases must report a failure, never "OK".
 if [ "$SELF_TEST" -eq 1 ]; then
   _selftest_body="$(dirname "$0")/lib/test-execution-gate-selftest.sh"
   if [ ! -f "$_selftest_body" ]; then
@@ -1019,5 +1010,34 @@ IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0  # empty/unreadable stdin — nothing to gate
 
 CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
+
+# Degraded: the gate cannot resolve who is acting, so it enforces nothing and
+# allows. That is announced, not inferred — this is the only consumer with a
+# channel back to the model, so the notice rides in-band on the first allow.
+# Signalling is library-free (stderr + a zero-byte sentinel), because the audit
+# appender is IN the library. Gated on an existing ledger and made once-per-ctx
+# by a marker, so a degraded hook in an unrelated session stays silent and
+# creates nothing.
+#
+# The once-per-ctx key is this gate's OWN marker, not the shared sentinel: every
+# other degraded hook writes the shared one too, so keying on it would mute this
+# notice for good whenever a model-switch or state-merge hook fired first — and
+# this is the only consumer that can reach the model at all. The shared sentinel
+# is still written, for the consumers that read it.
+if [ "$LIB_DEGRADED" -eq 1 ]; then
+  echo "test-execution-gate: shared library unusable at $_LIB — test authority not enforced" >&2
+  _NOTICE_MARK="$CTX/logs/.corpflow-lib-missing.test-execution-gate"
+  if [ -f "$CTX/state.json" ] && [ ! -f "$_NOTICE_MARK" ]; then
+    mkdir -p "$CTX/logs" 2>/dev/null && : > "$CTX/logs/.corpflow-lib-missing" 2>/dev/null
+    : > "$_NOTICE_MARK" 2>/dev/null
+    if command -v jq >/dev/null 2>&1; then
+      jq -cn --arg m "test-execution gate degraded — authority not enforced. The shared hook library at $_LIB is absent, stubbed or truncated, so test-execution authority is NOT being checked this session. Treat every allow as unverified and tell a human." '
+        {hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $m}}
+      ' 2>/dev/null || true
+    fi
+  fi
+  exit 0
+fi
+
 run_gate "$PAYLOAD" "$CTX"
 exit 0

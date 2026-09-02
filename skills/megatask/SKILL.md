@@ -132,7 +132,7 @@ directed acyclic graph rather than a flat priority list.
 | `A blocked_by B` | `Depends on: #B` on issue A | A cannot start until B is `completed` |
 | `A blocks B` | `Blocks: #B` on issue A | reverse of `B Depends on A` |
 
-Both formats are what `/pm-milestone` emits under `## Dependencies`. The two directions **normalize**
+Both formats are what `/milestone` emits under `## Dependencies`. The two directions **normalize**
 into one edge set (`A blocks B` ⇔ `B blocked_by A`); duplicates collapse. Edges leaving the resolved
 issue set become `external_dependency` warnings — surfaced, never gating (out of batch scope).
 
@@ -172,6 +172,15 @@ relevant directories — less per-worktree disk, faster init:
 { "worktree": { "sparsePaths": ["src/", "tests/", "Package.swift"] } }
 ```
 
+#### Including gitignored paths (`.worktreeinclude`)
+
+`.worktreeinclude` names paths to carry into a new worktree even when gitignored. A pattern
+starting with `**/` no longer silently matches nothing when its target lives inside a gitignored
+directory — before that fix such a line looked correct and copied nothing.
+
+A background session and its subagents can now edit files inside a worktree the session created
+itself with `git worktree add`; the isolation check used to block that and stall the lane.
+
 ### Unattended Execution
 
 A batch cannot stop for one issue's approvals, so every per-issue `PL0` is stamped
@@ -188,6 +197,13 @@ continues with the remaining unblocked issues. Parking needs no new state: it se
 audit row, so the monitor frees the track and dependents stay `blocked`, and the batch summary lists
 each parked issue with its unanswered questions. Mechanics:
 `../../commands/megatask.md § Step 3 — parking mechanics`.
+
+##### Parking — non-planning stages
+
+The same path covers non-planning stages: an escalate-class closing-sweep item parks the issue
+identically, with the audit subject set to the boundary that surfaced it — `FN<N>` for a batched
+item, the emitting stage's own `<CODE><N>` for one marked `blocks_next_stage`
+(`skills/shared/stage-contracts.md § Closing Elicitation Sweep`).
 
 > For headless `-p` runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
 > with `--mcp-config`, server connections are bounded at 5s rather than blocking on the slowest.

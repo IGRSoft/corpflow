@@ -1,1 +1,0 @@
-{"ts":"2026-08-16T10:15:00Z","agent_type":"corpflow:product-manager","task_id":"20260816-csv-cost-export","stage":"PL","model":"opus","input_tokens":6800,"output_tokens":700,"cache_read_input_tokens":0,"cache_creation_input_tokens":6600,"duration_ms":41200,"effort":"high","status":"success"}

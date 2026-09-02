@@ -21,7 +21,6 @@
 #         local paths never resolve in a PR/issue body).
 #     P4  a missing required section (Motivation / Changes / Test plan) or a
 #         missing `Closes #<N>` trailer.
-#     P5  an AI-attribution footer, which git-conventions.md forbids.
 #
 #   Warn-only by DEFAULT: findings print and the exit status stays 0, so this
 #   can land without breaking in-flight worktasks. --strict (or
@@ -101,7 +100,7 @@ usage() {
   exit 2
 }
 
-# ---------- per-line rules (P1, P3, P5) ----------
+# ---------- per-line rules (P1, P3) ----------
 # One awk pass. Emits "<rule>\t<lineno>\t<text>" for each finding.
 scan_lines() {
   LC_ALL=C awk '
@@ -126,8 +125,6 @@ scan_lines() {
         sub(/^!\[[^]]*\]\(/, "", ref); sub(/\)$/, "", ref)
         if (ref !~ /^https:\/\//) emit("P3", $0)
       }
-
-      if ($0 ~ /Generated with/ || $0 ~ /Co-Authored-By:[[:space:]]*Claude/ || $0 ~ /🤖/) emit("P5", $0)
     }
     function emit(rule, text) { printf "%s\t%d\t%s\n", rule, NR, text }
   ' "$1"
@@ -305,8 +302,6 @@ x
 - y
 ## Test plan
 - z
-'
-  _expect p5-attribution        P5   "$CLEAN"'Co-Authored-By: Claude <noreply@anthropic.com>
 '
 
   # Usage error: nothing on stdout. A piped caller treats stdout as the run's output,

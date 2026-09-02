@@ -4,6 +4,562 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+Twenty-six fixes from a six-angle code review of `develop 6e09ea8..0dd3d6d`, banded by the priority
+the review assigned them.
+
+### Fixed
+
+- **Contradictory escalation-under-bypass rules** (P1a). `skills/shared/stage-contracts.md`
+  commanded opposite behaviour for the same escalation item across four surfaces depending on
+  which one a reader consulted; the rules now agree everywhere.
+- **Lint/doc/data mismatches** (P1b): `cache-lint.sh` rejected the two H2 headings
+  `agents/software-architector.md` itself mandates, failing every architecture merge on contact;
+  the eval split manifest's held-out note had gone stale against the code; `resume.md` prose
+  contradicted what the implementation actually does.
+- **Six live-repro behavioural bugs, each now fails closed** (P1c): an empty sweep-stub `ref`
+  passed all three validation checks; `corpflow_resolve_pin` could return a pin from an already
+  completed row; `stale-check.sh` exited with the "needs human decision" code (`1`) on a usage
+  error instead of `2`; a contamination-detection pattern matched benign prose; `eval-capture.py
+  --dry-run` printed an argv it would not actually run; `--budget` was advisory rather than a hard
+  ceiling.
+- **Model-switch gate trigger axis now fails open** (P2), matching the destination axis it
+  previously diverged from; dead `read_stdin` code path removed.
+
+### Changed
+
+- **Consolidated duplicated logic** (P3/P4): hook-side model-switch checks now share
+  `model-switch-lib.sh`; eval loaders now share `eval-engine.py`. Hot paths were cut along the way —
+  capability-registry load measured 2.38s → 0.69s with byte-identical output.
+- **Deduplicated documentation** (P5): the raise-only sweep lattice statement and the sweep-answers
+  rationale each now appear exactly once, with pointers from every other site that used to restate
+  them.
+
+### Corrected
+
+- `development-0.md:52` described R-7 as shipping `held_out_from: 168`; that key was deleted
+  during review remediation (ledger decision `dr-6`) and the row was stale against the tree. The
+  merged development artifact has been corrected to match what actually shipped: no
+  `held_out_from` key.
+
+### Known issues (tracked, not fixed here)
+
+- `cache-lint.sh --anchor-lint` still fails on two `## remediation — …` H2 headings in
+  `development-0.md` that are outside cache-lint's DV anchor set. Left as-is rather than demoting
+  the headings — they are the audit trail for two review blockers.
+- Test suite carries 4 pre-existing failures (2 `AC-3 twin`, 1 `PL-3` in
+  `tests/shell/skills/elicitation-sweep-contracts.bats`, plus `tests/shell/worktask/section-lint.bats`
+  case 6 on 6 inherited `CORPFLOW.md` template sections over the 1000-char cap), all red at `HEAD`
+  and outside the scope of these 26 fixes; verified at baseline parity, not quarantined.
+
+## [4.0.27] — 2026-08-29
+
+Claude Code **2.1.234 → 2.1.251** integration. The band's theme is cross-agent and cross-session
+communication, and the plugin surface that moves most is the resume loop: almost every entry either
+makes a message's fate observable or removes a false negative from agent discovery.
+
+### Added
+
+- **`PreModelSwitch` / `PostModelSwitch` hooks** (`hooks/model-switch-gate.sh`,
+  `hooks/model-switch-audit.sh`, shared `hooks/model-switch-lib.sh`). The gate refuses a
+  mid-worktask re-tier away from a stage's pinned `metadata.model`; the observer records
+  `model_switched` so cost is attributed to the model that ran. The gate **fails open by
+  construction**, not by convention: a block is reachable only once the destination-model coalesce
+  matches a real payload field, so a wholly wrong schema guess degrades to annotate-or-silent
+  rather than wedging every session that switches models. The payload schema is unconfirmed —
+  2.1.251 postdates every doc in this repo — and carries a CONFIRMED/ASSUMED split in the script
+  header per the `headless-dispatch.md § Schema Versioning Watch` discipline. The **pin** is not
+  guessed: it is read from `facts.dispatched_agents[].model_requested`. Three bats files (39
+  assertions), both anti-vacuity guards mutation-verified against a matcher that always returns
+  empty and one that collapses every model to a single family.
+- **`handoff.cross_session_ask`** — an optional handoff field naming who to ask and what, legal
+  alongside `verdict: "blocked"`. A subagent's `SendMessage` to another *session* delivers the
+  reply into the parent conversation, so a stage that sent its own ask would wait for something
+  that structurally never arrives; the stage names the ask and the orchestrator sends it
+  (new orchestrator arm **Step 6.5a3**, resume branch **§ Reply routing**).
+- `stale-check.sh` classifications **`reattach-undeliverable`** and **`hook-config-broken`**, with
+  three new bats cases including a last-wins anti-vacuity guard.
+
+
+- **Closing elicitation sweep — every stage now has to ask.** Before handing off, all thirteen
+  stages emit a typed `open_questions[]` sweep: 2–4 options with exactly one marked `recommended`,
+  a one-line rationale, and a `decision`/`escalate` class. A stage with nothing to ask emits an
+  explicit empty array plus a "nothing to elicit" line — silence is a contract violation, because
+  an omitted sweep and an empty one are otherwise indistinguishable. Contract:
+  `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; schema: `$defs/SweepItem` /
+  `$defs/SweepStub` in `handoff-protocol.md`. Strict from this release: no warn-only mode, no
+  opt-in environment variable, no per-stage exemption.
+- Agents emit; the orchestrator alone asks. Non-planning sweeps accumulate in the ledger and render
+  at the **existing** FN gate in batches of ≤4, grouped by originating stage, immediately before
+  the approve/reject call — which fires last and unmodified. No new gate, no per-stage round-trip
+  (`commands/worktask.md § Step C`; loop step 4.9 (a1)(a2)(c+)).
+- Sweep stubs reach the ledger because each stage writes them: `open_questions` is now part of
+  every agent's `state-patch.sh --facts` example, and
+  `handoff-harness.sh --validate-frontmatter --state` fails a stage whose frontmatter
+  stub never reached `facts.open_questions[]`. The orchestrator runs that invocation at **every**
+  stage completion (`commands/worktask.md § Step B.1`, loop step 6.5c), not only at DV, and an
+  unreadable ledger fails the parity check instead of skipping it. Without that pairing the sweep
+  was schema-valid, harness-clean, and silently dropped before the FN gate for 12 of 13 stages.
+- A closing-sweep stub's `ref` anchor is now verified to exist: `handoff-harness.sh` resolves each
+  stub's `ref` against the artifact it names and fails on a dangling one. The stub
+  carries no `options[]`, so that anchor is the only transport of what the FN gate renders — a
+  dangling ref would have made the orchestrator skip the item or invent its options. The three
+  sweep checks are fail-closed: a yq read error, a non-string id, or a scalar `open_questions`
+  each fail by name rather than pass, and a ref spelled with the artifact's own directory
+  (`.context/<artifact>-N.md#…`, the `refs:` convention) resolves to the artifact itself.
+- `## elicitation-sweep` is a **mandatory** H2 anchor in every stage artifact — the full items or
+  the explicit empty statement — enforced by `cache-lint.sh --anchor-lint` for all 13 stages with
+  no grace for artifacts written before this release. It is a single universal-anchor constant, not
+  thirteen per-stage rows.
+- **A sweep item can be answered at its own stage boundary.** `blocks_next_stage: true` on an item
+  routes it to a render immediately after its emitting stage completes, before the next stage is
+  dispatched — because a next stage that builds on a guess is what the sweep exists to prevent.
+  Everything else still batches at the FN gate. This adds no gate and changes no gate's firing
+  condition; the flag is set per item, never per stage. It is orthogonal to `class`, and joins
+  raise-only by OR, the same monotone idiom `decision < escalate` already uses
+  (`commands/worktask.md § Step C.0`; loop step 6.6).
+- `commands/worktask.md` and `commands/megatask.md` now declare `AskUserQuestion` in
+  `allowed-tools`; both called it from their bodies without declaring it.
+- **Stratum-weighted calibration.** A labelling budget smaller than the corpus forces an enriched
+  sample, and selecting on the grader's own verdict while measuring agreement with it biases both
+  rates. Each case now carries `population/sampled`; verified against the 0.0.1 labels, an enriched
+  sample reads TPR 42% unweighted against a population truth of 63%, and 63% weighted.
+- **Seeded bootstrap confidence interval**, stdlib only — no point estimate, no interval.
+- **`sample-for-labelling.py`** — picks the labelling sample by design: even split across harness
+  strata, held-out tranche taken whole, seeded.
+- **`scan-contamination.py`** — measures what a capture still leaks after the strip, by channel.
+  The scan was itself wrong in both directions before being pinned by tests: 12% on false
+  positives, then 2% on missed phrasings.
+
+### Changed
+
+- **The resume loop checks the result of its own `SendMessage`.** Every row that said "reattach via
+  `SendMessage`" assumed the send succeeded; CC 2.1.234–2.1.238 make `refused`, `dropped`,
+  `oversized`, `burst_limited` and `session_list_truncated` observable. Anything but delivered
+  leaves the stage parked, spends no `retry_count`, and — for a truncated session list — makes any
+  "agent gone" verdict *unconfirmed rather than established*, so it can never justify a
+  re-delegate. **This is what the min-CC floor bump rests on.**
+- **A `maxTurns` partial return routes to the reattach arm**, not a re-delegate. Step 6.5a2's
+  incomplete test gained an OR-branch on the partial marker, independent of whether a verdict was
+  written, and `metadata.reason` gained a third value `max_turns_partial`. Contrasted explicitly
+  with a budget halt: both skip `retry_count`, but a budget halt is re-dispatched while this is
+  reattached — the agent still holds the tree it edited.
+- Handoff and escalation message formats are **verdict-first**: peer messages now collapse to a
+  one-line preview, so a verdict below the fold is invisible.
+- `min` Claude Code **2.1.233 → 2.1.251**; README requirements row now carries both justifications.
+- Documented across the remaining band surfaces: `notify_when_idle`, unconditional cross-session
+  availability (never gate a handoff on provider or host OS), `ListAgents` listing teammates and
+  reporting a session's own name, `claude attach` vs `--resume`, `CLAUDE_CODE_SUBAGENT_MODEL` as a
+  *default* rather than an override, silent `xhigh`→`high` when thinking is disabled,
+  `experimental.cacheTtl` / `promptCacheTtl` / `subagentPromptCacheTtl`, `/cost`'s prompt-cache line
+  as the way to *verify* the ≈60% cross-stage target rather than assert it, worktree lock-holding
+  and `.worktreeinclude`, five security-hardening rows (TOCTOU on file tools, marketplace
+  path-traversal rejection, project-settings tracing limits, `--restricted`, Bash arithmetic
+  auto-approve).
+
+
+- **PL speaks the same sweep contract as every other stage.** `skills/shared/figma-capture.md`'s
+  auth-pending and persist-failure questions are full sweep items under
+  `planning-<N>.md#elicitation-sweep` with `id: sw-PL<N>-<n>`, and the plan-gate batching section
+  now describes items under that anchor rather than a numbered list in `## summary`, which keeps a
+  one-line-per-item preview only. One resolution idiom across the pipeline: an answered item is
+  marked `status: "resolved"` with its `resolution`, **never deleted** — PL's plan-gate path used
+  to delete while all twelve other stages marked. Step A.4 still also appends `(auto-decided)` to
+  `facts.decisions[]`, a stated deviation from § Step C.5: AR/TL/DV read that array on stage entry,
+  and ≤4 PL items cannot evict AR's newest-8 ring.
+- **The sweep stub no longer carries `summary`.** `$defs/SweepStub` requires `[id, class, ref]`;
+  the question text is read from the item's `ref` anchor body, whose existence the harness verifies.
+  `summary` stays legal but optional; with the stub the only accepted item shape, an optional field
+  needs no discriminator. The driver is the 200-token budget on the whole `handoff:` block, a
+  property of the block rather than of the sweep.
+- **`facts.open_questions[]` merges monotonically.** A re-emitted stub carrying `status: open` can no
+  longer destroy a recorded `resolution`: `open < resolved` is joined, never overwritten, and the
+  matching writer-side rule is stated in `§ Item shape`. Scoped to `open_questions` only —
+  `facts.decisions` keeps last-writer-wins. Both arms are needed: the ledger clamp can evict the
+  incumbent a ledger-only fix would have refused against, and the artifact rule survives eviction.
+- Sweep answers are recorded in `facts.open_questions[].resolution`, never appended to
+  `facts.decisions[]` — that ring keeps only the newest 8, and a 13-stage run's sweep answers were
+  evicting the architectural decisions it exists to hold. `facts.open_questions[]` is itself now
+  clamped to the newest 12 with `status: resolved` entries evicted first, matching the existing
+  single-chokepoint clamp idiom.
+
+- `open_questions` moved from Optional to **Required** for all thirteen stages in the per-stage
+  required-field matrix, with the matching `*_REQ` lists in `handoff-harness.sh` updated in the same
+  change. `facts.open_questions[]` gained the optional `status: open|resolved` that eviction rule 2
+  already referenced but no schema defined.
+- `skills/agent-coordination/SKILL.md § Gate prompts` said the plan gate was the *one* checkpoint
+  while the same file's comparison table said two. Reconciled to two; the FN gate is where the
+  sweep renders.
+
+- **`request-plan` 0.3.0 → 0.4.0 — three drifted rule copies reconciled.** The 0.3.0 capture's 13
+  graded failures were first diagnosed as a missing rule each. That was wrong: the skill states
+  each of these rules more than once and the copies contradict each other, so every failure is a
+  model correctly following the wrong copy. All three fixes remove a copy; none adds a fourth.
+  - **`SKILL.md § 4`'s "absent from the file it was blamed on" is bounded.** It licensed a plan for
+    a defect the repo does not contain, which `§ 1`'s ask branch prohibits. It now covers only a
+    file that exists whose defect sits elsewhere; anything else is `§ 1`'s, and `§ 1` wins.
+  - **`references/context-gathering.md` no longer states a stop condition.** It carried the
+    refuted 0.2.0 rule verbatim for a whole version while `SKILL.md` rejected it in as many words;
+    eight responses stopped at a plausible neighbour. The section points at `SKILL.md` instead.
+  - **All three tier-trigger copies reconciled to canon.** `handoff.md` listed "security review,
+    threat modelling" — topic flavour that `estimation-methodology` rules out by name — its
+    `--secure` table row still framed the trigger as "work handling" a protected asset, the
+    discovery reading canon replaced at 0.3.0, and `plan-template.md` said a security-sensitive
+    surface *forces* the tier, contradicting canon's "a surface you discover does not raise the
+    tier". The asset list is now enumerated in exactly one place under `skills/request-plan/`.
+  - **Pinned by new parity contracts** in `tests/shell/skills/request-plan-contracts.bats` —
+    stop-condition single-sourcing, asset-enumeration-exists-once, and a subset check whose two
+    sides are both *extracted* (canon's surface-check pseudocode; `handoff.md`'s `--secure` row)
+    rather than restated in the test, so a novel non-canon term fails on membership and not on a
+    deny-list. Each has a paired can-actually-fail test. The absence of any of them let the drift in.
+  - **`capability-registry.sh` closes stdout with a class-level trailer** naming what it does not
+    enumerate. Complete-by-construction over six classes reads as complete over the repo unless the
+    output says otherwise. Classes only, never a file, so no eval case becomes a lookup.
+
+  Per the spec-change rule this applies from a 0.4.0 capture forward; 0.3.0 labels are not
+  re-flipped. It will not fix all eight stop-at-a-neighbour failures and **cannot be cleanly
+  measured** — cases 202 and 203 are structurally identical and split, which is variance, not a
+  rule difference. Repairing verified drift stands on its own merits; no re-capture should be
+  commissioned to prove it.
+
+- **`request-plan` 0.2.0 → 0.3.0 and `estimation-methodology` 0.2.0 → 0.3.0**, resolving the two
+  rule contradictions the 0.2.0 calibration measured. Both are fixed at the surface rather than by
+  restating the losing rule, which is what created the contradictions in the first place.
+  - **The tier surface check reads the request, not the findings.** It asked whether "the work"
+    handles a secret, which escalates on discovery: three plans took `--secure` for a webhook URL,
+    a CI login and a dependency scan that none of their requests named. It also left the tier
+    undecidable at planning time, since two searches of one repo find different things. Now aligned
+    with `derive_route()`, which can only ever see the prompt.
+  - **`SKILL.md § 1`'s branches are reordered.** The fold-the-ambiguity branch was listed first and
+    was broader than the no-surface branch, so it consumed the cases that branch exists for — four
+    responses on `absent` grounding named the ambiguity and planned anyway, executing the first rule
+    correctly. The no-surface branch now precedes it, and folding is bounded to requests whose
+    surface was found.
+  - **`references/handoff.md` reconciled with both.** Its flag-matches-the-body check keyed on
+    anything the body argued, so a plan naming a credential path its search turned up would carry
+    `--secure` — reintroducing the same escalation one layer down. It now compares the flag against
+    what the body says the *request* needs. Found by the contradiction cross-read, not by a test.
+
+  Per the spec-change rule these apply from a 0.3.0 capture forward; 0.2.0 labels are not
+  re-flipped. Until that capture runs, the effect of all three is argued, not measured.
+
+### Removed
+
+- **Both pre-sweep `open_questions[]` item shapes are gone.** The free-text string
+  (`"q1: … (AR to decide)"`) and the bare `{id, summary}` object are no longer valid in any
+  transport, and the `not: { required: [class] }` disjointness guard that kept them apart from the
+  stub went with them — with one shape there is nothing to discriminate. `handoff-harness.sh`
+  `check_sweep_stub_shape` is now the shape gate and rejects each defect by name (not a map, id not
+  `sw-<TASK_ID>-<n>`, class not `decision|escalate`, no `ref`), and `state-patch.sh --facts`
+  rejects an `open_questions` item lacking a string `.class` or `.ref`. Existing artifacts carrying
+  a legacy item must be migrated; there is no non-retroactive tolerance left anywhere.
+
+### Fixed
+
+- **`token-baselines.md` claimed a per-session spawn cap of 200 that no longer exists**, directly
+  contradicting `agent-coordination/SKILL.md § No total cap; concurrency is the one that bites`.
+- The audit `action` enum was missing **`stage_returned_incomplete`**, which the orchestrator has
+  emitted since before this band — a pre-existing gap found while adding the new actions.
+- The README hooks table claimed to mirror `plugin.json` 1:1 but omitted `test-execution-gate.sh`
+  and `dv-comment-density-gate.sh`.
+
+- **`cache-lint --anchor-lint` rejected `## summary`, which `pl0-procedure.md` requires**, and the
+  conditional `## design-preview` it mandates whenever the task carries a Figma URL. `## summary` is
+  now a mandatory PL anchor; `## design-preview` and PL's unmandated `## test-strategy` joined the
+  allowed-but-never-required set.
+- **`cache-lint --anchor-lint` rejected a review's own `## re-review` section** — the same gap that
+  `## rework-<N>` had. Both are shipped conventions the DR gate reads; both are now allowed anchors.
+- **The `$defs` note attributed the schema injection to a section that does not perform it.** It now
+  states the obligation and says plainly that no shipped file implements it, rather than reading as
+  verified. `commands/worktask.md § Step B` likewise no longer describes its harness call as
+  uniformly advisory: the three sweep checks inside it hard-fail regardless of `--strict`.
+- **`agents/product-manager.md` had no `## Handoff Protocol` section**, so
+  `cache-lint.sh --frontmatter-template-lint` failed on it repo-wide — a pre-existing gap unrelated
+  to the sweep, fixed here on an explicit user decision. It now carries the same pointer-only
+  section the other thirteen stage agents use, citing `stage-contracts.md#tpl-pl`; no template copy
+  was inlined.
+
+- **The eval capture measured the installed plugin, not the tree under test.** `eval-capture.py`
+  passed no `--plugin-dir`, so the CLI resolved `/corpflow:request-plan` from the marketplace
+  release while `skill_version()` read this repo — a sweep could exercise one version and stamp
+  another on all 156 records. Measured, not argued: with the old flags a command shipping only in
+  the installed 4.0.25 was offered and one shipping only here was not. Dispatches now run in a
+  detached worktree at HEAD, pinned with `--plugin-dir` and with the ambient copy disabled.
+- **The answer key was inside the searched tree.** `evals.json` carries `expected_outcome`, and 7
+  of 114 responses in the 0.0.1 capture reached the corpus. The capture tree strips the answer key
+  — but not `evals/scripts/*.py`, which six cases ground on. A worktree rather than a copy, because
+  it excludes gitignored material by construction: `.context/` held a per-trace map of every known
+  failure that the prompt-leak lint could never have seen.
+- **`label-align.py` could not run.** Its `--grades` default pointed at a `/tmp` path nothing
+  produces, so the only calibration tool in the repo was unusable.
+- **A rate-limited sweep lost 38 consecutive cases.** Capture now retries transient dispatches with
+  backoff; the never-fabricate contract is unchanged.
+- **`eval-grade.py --json` omitted `split`**, which both calibration tools key on.
+- **Five eval cases whose premise the repo had already answered** converted to `refute`; three
+  repointed where the declared ground file did not own the behaviour. `prompt_digest` untouched, so
+  nothing needed re-capturing.
+
+### Notes
+
+- **First calibrated measurement of `request-plan` 0.2.0.** Harness 127/156 = 81%; corrected 77%,
+  95% CI [65%, 85%]; dev TPR 93% / TNR 69%. TPR clears the 90% target, TNR misses the 80% floor and
+  is reported rather than tuned. `missed-the-real-surface` — 15 of 22 failures in 0.0.1 — is now
+  zero. Full record in `evals/findings/request-plan-0.2.0.md`.
+- **The 0.0.1 baseline is retired as a comparison point.** It ran on the un-isolated surface, so its
+  records cannot say which skill version produced them. Its labels stay sound; its rates do not.
+- **The LLM judge is refuted a second time.** Re-validated on labels it had not seen: TNR 0%, 0 of
+  10 failures caught. Verdicts committed as evidence.
+- **The held-out tranche has no negatives left**, because its only three failures were among the
+  five corrected cases. Held-out failure detection is still unmeasured.
+
+### Verified, unchanged
+
+- `.claude-plugin/marketplace.json` declares no command, agent or skill path outside the plugin
+  directory, so the 2.1.251 path-traversal rejection changes nothing here.
+
+## [4.0.26] — 2026-08-26
+
+Command-surface reorganization. **38 → 28 commands, 26 → 23 registered skills, and no deprecation
+aliases** — seven commands are gone and five are renamed, so every saved invocation of an affected
+name stops resolving. Shipped as a PATCH per this plugin's own precedent (`MEMORY.md:53` records the
+`company-workflow` → `corpflow` rename, breaking with no alias, shipping as one); the bump is
+load-bearing either way, because the plugin cache is version-keyed and a rename without one serves
+stale paths.
+
+Two further changes ride along, both consequences of the first. **`request-plan` 0.2.0** resolves the
+rule contradictions the 0.0.1 eval capture exposed, extends the capability registry to the executable
+surfaces every search miss grounded on, and rebuilds the eval signal that extension spends. And the
+verification pass turned up a **`megatask` defect** that had been failing `init-worktree.sh`'s own
+self-test: the base branch was resolved against the caller's repository rather than the one being
+initialised.
+
+### Removed
+
+- **Six commands with no runtime or no reader.** `business-report`, `test-report`, `pm-prioritize`
+  and `pm-risk` were prompt specs with no aggregator behind them, and the last two duplicated
+  judgement PL0 already makes. `/worktask-status` and `/agent-report` were working code that nothing
+  in the pipeline referenced — grepping `commands/worktask.md`, `commands/megatask.md`,
+  `skills/worktask/**`, every agent and every hook returns zero hits for either.
+- **`/context-status`, which could not perform any part of its own contract.** Its mandated output is
+  a `### Utilization` block (Current Usage, Window Size, Utilization %) and a `### Distribution`
+  table of tokens by source — but a model cannot observe its own token accounting, and its grants
+  were `Read, Glob` against no file in the repo that carries those figures, so every number it
+  emitted was invented. Worse than `/cost-report`, which at least read a real path that happened to
+  be empty. Separately `--compress` ("apply compression") and `--dry-run` ("without applying") were
+  the same no-op, because there was no `Write` or `Edit` grant to apply anything with, and its own
+  `## Integration` section claimed use "by `workflow-engineer` for diagnostics" while
+  `agents/workflow-engineer.md` never mentioned it. Nothing is lost:
+  `skills/context-compression/` stays (four agents, `hooks/precompact-checkpoint.sh`,
+  `skills/worktask/SKILL.md`, `references/resume.md`, and a bats suite consume it), the
+  "> 50% window → summarize completed stages" trigger lives in that skill rather than the command,
+  and surviving compaction is already automatic through the `PreCompact` hook with no command in the
+  loop.
+- **The whole cost-observability feature, not just `/cost-report`.** It aggregated
+  `.context/logs/cost-*.jsonl` and **nothing in the shipped plugin has ever written those files** —
+  no `cost-log.sh` exists in the repo, and none of the five registered `SubagentStop` hooks is a
+  cost logger. `skills/cost-optimization/SKILL.md` said so outright while still documenting the
+  hook. Getting a single row required hand-writing the capture script from a snippet and registering
+  it yourself, so the command has been inert since it shipped. The `§ Per-Stage Tracking` setup
+  instructions go with it: leaving them would keep advertising a hook whose only readers are being
+  deleted. What stays is everything that needed no data — the model cost tiers and selection matrix,
+  per-effort thinking budgets, the five reduction strategies, prompt caching, and the cost
+  estimation formula that `estimation-methodology` cites as canonical.
+- **`skills/worktask/scripts/status-view.sh` and `tests/shell/worktask/status-view.bats`**, in the
+  same commit as the command that wrapped them. They had to move together: `coverage-proxy` C2
+  reddens on a script with no `.bats` and C5 on a `.bats` orphaned from its script.
+- **`skills/worktask/scripts/attachments-preseed-test.sh`** — superseded twice over and unreachable.
+  It was a hand-rolled harness for what became `attachments-preseed.sh`, which is live, ships its
+  own `--self-test`, and has a real suite. Its only references were `tests/COVERAGE.md`, its own
+  bats (a test testing a test), and itself; it survived because commit `719d6e7` mechanically moved
+  every `references/*.sh` into `scripts/`.
+- **`skills/worktask-status/`** — the only skill directory a command removal deletes. Every other
+  skill the removed commands touched has other consumers and stays.
+
+### Changed
+
+- **The `pm-` family disappears.** `pm-milestone` → `milestone`, `pm-roadmap` → `roadmap`,
+  `pm-sprint` → `sprint`, `pm-requirements` → `product-requirements`. The prefix carried no
+  information the bare name did not.
+- **`dev-code-review` → `tech-code-review`.** The old name existed to disambiguate Claude Code's
+  built-in `/code-review`; the new one does not collide, so the disambiguation note is now a pointer
+  rather than a warning.
+- **App Store publishing moved to the plugin that ships to that store.** The three `appstore-*`
+  commands each opened with an `> **Apple-only.**` banner admitting they were misplaced in a
+  platform-neutral plugin. They are now `apple-developer` 1.30.0's `gen-appstore-listing`,
+  `gen-appstore-screenshots`, and `gen-appstore-iap`, with `skills/appstore-screenshots/` re-homed
+  as `skills/tooling/appstore-screenshots/` and its 16 layout tests migrated rather than dropped.
+  `android-developer` 1.5.0 gains `gen-playstore-listing` and `gen-playstore-screenshots` — original
+  authoring, not a port: Play's field budgets and asset rules differ field by field from App Store
+  Connect's. Play Billing IAP is deferred.
+- **New `/appstore`, a front door that writes nothing.** All three old commands held `Write`; this
+  one holds `Read, Glob, Grep, Task`. It dispatches `agents/release-engineer.md`, which owns platform
+  detection, alias resolution, and the sibling dispatch — routing policy has exactly one home
+  (`skills/shared/routing-matrix.md`) and no test reads a command body against it. Both apple and
+  android markers present, or neither, stops and reports: silently picking a store and then writing
+  to a live account is the failure this design exists to prevent.
+- **`release-engineer` absorbs store publishing rather than a new agent being added.** Its own
+  capability table already claimed "App Store (iOS), Play Store (Android)"; that claim is now real.
+  It had **no `Task` grant** and could not delegate to anything, so it gains a bare one, and the
+  `haiku` / `maxTurns: 25` budget sized for a non-delegating changelog writer becomes `sonnet` /
+  `maxTurns: 40`. Agent count is unchanged at 16.
+- **`skills/shared/routing-matrix.md` gains a Release-engineer aliases section** — a section of its
+  own, not rows inside § Functional-role aliases, whose grammar is four roles × six platforms and
+  would have demanded a web/backend/systems/ai release engineer that does not exist. There is
+  deliberately no bare `corpflow:release-engineer` alias: it would collide with the agent of that
+  name and redden the no-collision test immediately.
+- **`senior-developer-review` folds into `estimation-methodology`** as
+  `references/estimate-review.md`, and its step 8 stops being inert. `estimation-run.md:16` already
+  listed "Senior review: platform-specific adjustments" while nothing on `/estimate`'s default path
+  loaded the reference. `--detailed` now runs it inline when its existing trigger fires (complexity
+  ≥ 15, or AR/ML/Vision, BLE/hardware, real-time camera, unknown third-party SDKs, background
+  processing), with `--no-review` to opt out; `--review` stays for reviewing an *existing* estimate
+  with `--focus`/`--update`, which the in-run step cannot do. The adjusted SP feed
+  `### Budget Calculation`, so the budget is post-adjustment — `estimation-run.md`'s step order was
+  corrected to match. Two sections that arrived there by accident of the `skills/review/` rename
+  (Dependency Upgrade Review, Review Feedback Hygiene) move to `commands/tech-code-review.md`;
+  neither adjusts a story point.
+- **Content the survivors cited as canonical was inlined, not dropped.** The business-case skeleton
+  moved into `agents/stakeholder.md` (split as two H4s — it is ~1250 chars against a 1000-char leaf
+  cap), the RICE input scales and worked example into `agents/product-manager.md`, and `pm-risk`'s
+  scoring bands into `estimate-review.md § Risk Scoring`.
+- **README command taxonomy restated.** The invariant claimed every non-orchestration command
+  carries a domain prefix; after this change `milestone`, `roadmap`, `sprint` and
+  `product-requirements` are unprefixed and are not orchestration. They form a new **Planning**
+  group with `/request-plan`. The `business-`, `pm-` and `dev-` groups are empty and gone. The
+  README's own count was also wrong in both directions — it claimed 36 while the tables listed 37
+  and disk held 38, because `/worktask-status` was missing from the Core table; removing it settles
+  the discrepancy rather than requiring a row.
+- **`capability-registry.bats`** — floor raised 40 → 120 (it was set when the registry held 79
+  lines and had been vacuous since), plus per-class presence assertions, a negative assertion on the
+  deliberately-unlisted directories, and fixture tests for each description extractor.
+- **`skills/request-plan/SKILL.md` 0.1.0 → 0.2.0**; `evals.json` `eval_set_version` 0.1.0 → 0.2.0.
+  The "found the surface → plan it" test moves from § 1's ladder into § 2 beside the registry, where
+  the evidence arrives; content unchanged.
+- **Eval case 4 reverted from `refute` to `plan`** and its byte count corrected. The `CHANGELOG.md`
+  split left the premise's *number* stale, not its *request* — it belongs with the correct-the-figure
+  cases, not the shipped-work conversions. Cases 5 and 53 were re-audited against the same test and
+  stay `refute`: both cite shipped behaviour, not a stale measurement.
+- **New eval cases** covering the search surfaces the registry deliberately does not enumerate, plus
+  the three 4.0.26 behaviours that shipped with no coverage (`/appstore` marker ambiguity,
+  `/estimate --detailed`, `release-engineer` dispatch when the platform plugin is absent).
+- **Three cases still naming surfaces 4.0.26 deleted.** Case 9 ("add a machine-readable summary to
+  cost-report") is **retired**: the command went with the whole cost-observability feature, so the
+  premise names nothing and no answer to it can be right — the same treatment 74/98/114 got, and the
+  id stays open rather than renumbering. Cases 16 and 22 stay `refute`; only their *evidence* was
+  stale, and both now cite what actually ships (`/estimate --export csv` and its 13-file pack;
+  `hooks/audit-subagent.sh` plus `audit-dedup.sh` as the reader) instead of `/cost-report --export`
+  and `/agent-report`. Corpus 157 → **156** (121 plan / 17 clarify / 18 refute).
+- **The generator fails closed on a deleted command.** `validate_named_surfaces()` rejects any case
+  whose prompt or `premise_refuted_by` names a `/command` absent from `commands/`. This table
+  carried two dead names for three days after 4.0.26 and only a hand grep found them;
+  `premise_refuted_by` is the evidence a refute case is graded against, so a dead citation lets the
+  case keep passing while proving nothing.
+
+### Added
+
+- **The capability registry enumerates executable surfaces.** `capability-registry.sh` now also
+  lists `hooks/*.sh`, `skills/*/scripts/*.{sh,py}` and `benchmark/harness/**/*.py` — 66 → 148 lines,
+  ~3.2k → ~7k tokens. Every search miss in the 0.0.1 capture grounded on one of those classes, which
+  behaviour search resolved two times in three while the markdown classes ran at 83–87%. Shell
+  descriptions come from `@description` or the first comment block after the shebang, Python from
+  the module docstring's summary paragraph; a file with no description still emits no line.
+  `tests/`, `evals/`, `skills/*/references/` and `skills/shared/*.md` stay deliberately unlisted —
+  the exclusion is on shared *canon*, not shared code. Two executable surfaces the first cut still
+  missed are now listed: `benchmark/run-benchmark.sh` (the harness entry point) and
+  `skills/shared/milestone-helpers/scripts/milestone-helpers.sh`, whose skill nests its code one
+  level deeper than the flat `skills/*/scripts/` glob reached. 66 → **148** lines; the only
+  executables left out are the four `hooks/lib/*-selftest.sh`, which are test scaffolding.
+- **Three rules for situations nothing covered.** `SKILL.md § 2` gains the six surface classes a
+  behaviour can live in (a search that has not decided which class owns it has not finished) and
+  turns "do not assert absence you did not check" into a structural requirement that every negative
+  claim carry its scope. `estimation-methodology` gains the rule that a quiet local tree — no
+  `.context/`, no live `state.json`, a green local run — is not evidence about a failure the user is
+  reporting.
+- **A required surface-check verdict in the plan template.** `references/plan-template.md` now
+  requires one line stating the tier verdict immediately before the trigger, the way
+  `P2 — v1.1: none` requires an empty phase row to be stated. Five of the graded routing failures
+  shared one shape: the check produced no visible output, so skipping it cost nothing.
+  `references/handoff.md` gains the matching consistency rule — a body arguing for a security review
+  and a plain `/worktask` line are two different recommendations.
+- **`tests/shell/skills/request-plan-contracts.bats`** — the three mechanical parts of the
+  cross-surface read: no rule surface names a command that does not resolve (the check that would
+  have caught `/pm-prioritize`), the command file makes no "no exception" claim and cites § 4, and
+  the template carries the surface-check line inside its Recommended-next-step block.
+
+### Fixed
+
+- **`skills/worktask/SKILL.md` ordered a skill that has never existed.** Its DR step emitted
+  `Skill("dev-code-review")` against `commands/dev-code-review.md`; there is no
+  `skills/dev-code-review/`. This is the exact defect class `tests/shell/skills/skill-refs.bats` was
+  written for — its header names this very call — but the checker could not see it:
+  `collect_skill_targets` globbed `agents/*.md` and `commands/*.md` only, and the call lives under
+  `skills/`. It silently no-opped and the DR stage fell back to the command doc via
+  `agents/technical-lead.md`. The line now names the command file, and the collector is widened to
+  `skills/**/*.md`. Widening it also required reading only the **first** quoted argument of a
+  `Skill(...)` call — `platform="apple"` in `dv-screenshot-capture` is an argument, not a target.
+- **Nothing validated a path-scoped `Bash(...)` grant against the file it names.** A grant like
+  `Bash(bash skills/foo/scripts/bar.sh:*)` does not error when its path moves — it simply stops
+  matching, and the agent silently loses the capability. `skill-refs.bats` gains a predicate
+  asserting every such path in a `tools:`/`allowed-tools:` line resolves to a real file.
+- **`cross-plugin-refs.bats` was passing while verifying nothing.** It resolved sibling plugins at
+  `$PLUGIN_ROOT/..`, which is a Conductor workspace directory locally and a bare checkout in CI —
+  neither contains siblings, so the per-plugin loop found none and both contract tests were green
+  against an empty set. It now takes `CORPFLOW_SIBLING_ROOT`, announces an empty sibling set on
+  every run so green is never read as verified, and CI shallow-clones the six registered sibling
+  repos before the suite. A clone failure warns rather than failing the job: a sibling repo's outage
+  is not a defect in this one.
+- **`request-plan` rule surfaces that contradicted each other.** `commands/request-plan.md` step 2
+  licensed routing to a sibling command *instead of* the worktask, which `SKILL.md § 4` forbids; it
+  now names no sibling at all and points at § 4 as the authority — naming one is what made the file
+  go stale twice (`/pm-requirements`, then `/pm-prioritize`). Step 3 claimed the trigger rule had
+  "no exception" while § 4 has had exactly one since 0.1.0; it now cites that exception rather than
+  denying it. `references/handoff.md` still told XL work to emit no command, contradicting both § 4
+  and step 3 — XL now names its sub-tasks and triggers the first.
+- **`init-worktree.sh` resolved the base branch against the wrong repository.** Step 7 correctly
+  uses `git -C "$repo_root"`, but `resolve_base_branch()` shelled out to `milestone-helpers.sh
+  base-branch` in the *caller's* cwd, and that helper's develop-vs-master probe is a `git ls-remote`
+  against whatever repo it is standing in. Initialising a worktree in a repo without `develop` from
+  a repo that has one picked `develop`, then fetched it in the other repo and died:
+  `fatal: couldn't find remote ref develop`, exit 128. It runs in `$repo_root` now (subshell, so the
+  no-cwd-drift discipline holds). This is what the script's own `--self-test` had been failing on.
+- **`milestone-helpers.bats` asserted a property of the developer's remote.** The base-branch
+  default test called the helper with no cwd control, so it passed or failed on whether the ambient
+  `origin` happened to carry `develop`. Both arms now run in a fixture with a controlled remote, and
+  the develop arm — which is what tells a working probe from one hardcoded to `master` — is covered
+  for the first time.
+- **The escalation canon called a live failure standard work.** `estimation-methodology/SKILL.md`
+  said "a wedged task or a runaway batch is standard work" immediately above the test that decides
+  it, so a reader who stopped at the example got the wrong answer. The example is now scoped to a
+  task that has *stopped*, and a task that is both stuck and still failing escalates.
+
+### Notes
+
+- **No commit in this release carries `!` or a `BREAKING CHANGE:` footer**, deliberately.
+  `version-bump-from-git.sh` computes `major` from either marker and shares
+  `conventional-commits-lib.sh` with `changelog-from-git.sh`, so a breaking marker would put the
+  release tooling in direct conflict with the chosen version number. The breakage is recorded here
+  in prose instead.
+- **Eight eval grounding paths were repointed and two cases retired**, because
+  `tests/python/test_skill_evals.py:182` asserts every case's grounding file exists and runs in CI.
+  Prompts are untouched, so no `prompt_digest` moved and no human label was invalidated. Cases 98
+  and 114 grounded solely on `status-view.sh` and `skills/worktask-status/SKILL.md`; with no
+  successor surface there is nothing to re-ground them on, so they join the `RETIRED` table and
+  their ids stay open rather than renumbering. Case 74 retires for the same reason with
+  `/context-status`: nothing else in the repo reports remaining context.
+
+- **Three spec versions are unmeasured, and a capture cannot attribute between them.**
+
+  `SKILL.md` 0.1.0 shipped in PR #325 with no capture. The 4.0.26 command-surface reorganization
+  (PR #332, in this release) then removed seven commands, renamed five and repointed eight eval
+  groundings — all inside
+  the tree `eval-capture.py` reads. 0.2.0 stacks on both. Whenever a capture eventually runs it
+  measures **all three at once** and cannot separate them. Recorded here while it is cheap: a later
+  reader comparing a 0.2.0 number against the 0.0.1 baseline will otherwise attribute the whole delta
+  to whichever change they happen to be reading about.
+
+  Separately, extending the registry converts most of the `buried` tranche from a search into a
+  lookup, so **`buried` stops measuring search quality from 0.2.0 forward**. The replacement cases
+  ground only on unlisted surfaces; the note is also carried in `evals.json` `grading`.
+
 ## [4.0.25] — 2026-08-24
 
 ### Fixed

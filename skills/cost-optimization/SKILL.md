@@ -88,64 +88,6 @@ When the location is known (grep hit, error line, prior read), pass `offset`/`li
 
 Cost by size (PL0-sized): trivial ~1-4 stages $0.01-0.10 · standard 9 stages $0.20-0.40 · complex 9 + iterations $0.50-1.00+.
 
-## Per-Stage Tracking
-
-A `SubagentStop` hook writes the per-stage JSONL trail that `/cost-report` and the FN timing recap consume. **Opt-in**: the plugin ships no `cost-log.sh`, so without the setup below no JSONL exists and `/cost-report` has nothing to aggregate.
-
-### SubagentStop Hook
-
-Add to project `settings.json`:
-
-```json
-{
-  "hooks": {
-    "SubagentStop": [
-      {
-        "matcher": "corpflow:.*",
-        "command": ".claude/hooks/cost-log.sh",
-        "if": "$CLAUDE_TASK_METADATA_STAGE != ''"
-      }
-    ]
-  }
-}
-```
-
-### Capture Script — create it yourself (conventional path `.claude/hooks/cost-log.sh`)
-
-```bash
-#!/usr/bin/env bash
-mkdir -p .context/logs
-STAGE="${CLAUDE_TASK_METADATA_STAGE:-unknown}"
-TS=$(date -u +%Y%m%d-%H%M%S)
-LOG=".context/logs/cost-${STAGE}-${TS}.jsonl"
-jq -cn --arg ts "$(date -u +%FT%TZ)" '{
-  ts: $ts,
-  agent_type: env.CLAUDE_SUBAGENT_TYPE,
-  task_id: env.CLAUDE_TASK_ID,
-  stage: env.CLAUDE_TASK_METADATA_STAGE,
-  model: env.CLAUDE_TASK_METADATA_MODEL,
-  input_tokens: (env.CLAUDE_INPUT_TOKENS // "0" | tonumber),
-  output_tokens: (env.CLAUDE_OUTPUT_TOKENS // "0" | tonumber),
-  cache_read_input_tokens: (env.CLAUDE_CACHE_READ_INPUT_TOKENS // "0" | tonumber),
-  cache_creation_input_tokens: (env.CLAUDE_CACHE_CREATION_INPUT_TOKENS // "0" | tonumber),
-  duration_ms: (env.CLAUDE_DURATION_MS // "0" | tonumber),
-  effort: (env.CLAUDE_EFFORT // "unknown"),
-  status: env.CLAUDE_SUBAGENT_STATUS
-}' >> "$LOG"
-```
-
-#### Env Vars & Fallbacks
-
-`CLAUDE_CACHE_READ_INPUT_TOKENS`, `CLAUDE_CACHE_CREATION_INPUT_TOKENS`, and `CLAUDE_EFFORT` are exported on SubagentStop alongside `CLAUDE_INPUT_TOKENS`/`CLAUDE_OUTPUT_TOKENS` (hook stdin JSON also carries `effort.level`). The `// "0"`/`"unknown"` fallbacks keep the line valid when one is absent — `/cost-report` flags such rows (`n/a` hit ratio, `unknown` effort).
-
-### Schema
-
-One line per invocation, fields exactly as the jq filter emits them (`ts` is ISO-8601 UTC, `task_id` the ledger key such as `DV0`). Enums: `stage` per `skills/shared/stage-codes.md`, `model` `opus|sonnet|haiku`, `effort` `low|medium|high|xhigh|max|unknown`, `status` `completed|error|cancelled`. `cache_read_input_tokens` is served from the prompt cache, `cache_creation_input_tokens` seeded into it that turn.
-
-### Aggregation
-
-`/cost-report` reads all `.context/logs/cost-*.jsonl`, groups by `stage`, and renders `### By Stage` plus `### Cache Performance` — the latter validates AC-14 (`cache_read_input_tokens` ≥ 60% cross-stage average). See `commands/cost-report.md § Data Source`, `§ Cache Performance`.
-
 ## Prompt Caching (1h TTL) & Handoff Protocol
 
 The handoff protocol (`skills/worktask/references/handoff-protocol.md`) is built around the Anthropic prompt cache. Its `state-merge.sh` SubagentStop hook needs no wiring — it ships default-on in `.claude-plugin/plugin.json`, contract in the handoff protocol.
@@ -162,9 +104,23 @@ The handoff protocol (`skills/worktask/references/handoff-protocol.md`) is built
 
 Why: the 5-min default is shorter than many stages (DV/QA on complex features), so the preamble cache goes cold mid-pipeline — retries inside a stage still save, cross-stage hits are lost. (RK-8 in `analyzing.md#risks`.)
 
+### Finer-grained TTL controls
+
+Three knobs, narrowest first — reach for the narrowest that solves the problem:
+
+| Knob | Scope | Use when |
+|---|---|---|
+| `experimental.cacheTtl` (`"5m"`/`"1h"`) | One agent, via its frontmatter | A single long-running stage needs the longer TTL and the rest do not. Applies only when no subagent TTL setting is configured |
+| `promptCacheTtl` / `subagentPromptCacheTtl` | Settings, main conversation vs subagents separately | The orchestrator's own context is worth holding for an hour while stage agents stay at 5 minutes |
+| `ENABLE_PROMPT_CACHING_1H` | Session-wide | The whole pipeline is long enough that everything benefits |
+
+Two upstream cache-miss bugs are fixed and no longer need working around: tool definitions re-rendered after an OAuth token refresh (roughly hourly in long sessions, which also lost extended-thinking context), and the `ScheduleWakeup` tool definition changing between a session and its `--resume` under usage overage.
+
 ### Expected cache_read_input_tokens ratio
 
 0% at PL (cold) → ≈20% cross-stage → ≈80% on retries within a stage → ≈60% cross-stage average, meeting AC-14 (`handoff-protocol.md#cache-prefix`).
+
+**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
 
 Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2]+[4] across consecutive stages of one `worktask_id`. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
 
@@ -187,7 +143,15 @@ Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity M
 
 ### Budget Alert Thresholds
 
-Ladder: 50% warning · 75% notify · 90% critical · 100% pause. The `level` and `action` strings are canonical in `commands/cost-report.md § Alert Thresholds` (emitted verbatim in `--json`) — cite them from there rather than restating.
+Canonical ladder — `level` and `action` are these strings verbatim:
+
+| Threshold | Level | Action | Visual |
+|-----------|-------|--------|--------|
+| < 50% | normal | Normal | Green |
+| 50-74% | warning | Warning logged | Yellow |
+| 75-89% | notify | User notified | Orange |
+| 90-99% | critical | Compression suggested | Red |
+| 100% | pause | Worktask paused | Critical |
 
 ## Optimization Checklist
 

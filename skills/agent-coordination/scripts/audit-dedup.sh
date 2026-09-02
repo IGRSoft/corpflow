@@ -16,7 +16,7 @@
 #   audit-dedup.sh -                          # read from stdin
 #   audit-dedup.sh --self-test                # synthetic fixture, exits 0 on success
 #
-# Pipe into /cost-report aggregation to avoid double-counting effort/duration
+# Pipe into any audit aggregation to avoid double-counting effort/duration
 # on (session, agent, tool) pairs that emit both hook and agent rows.
 #
 # Stability: input order within a dedup group is preserved (jq groups by key,

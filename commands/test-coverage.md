@@ -7,7 +7,6 @@ model: haiku
 related:
   - agents/qa-engineer.md
   - commands/test-plan.md
-  - commands/test-report.md
 ---
 
 # Test Coverage Command
@@ -171,4 +170,3 @@ hitting a shared live environment, evals with no recorded threshold.
 Use this command:
 - Before `/test-plan` - Identify what needs testing
 - During QA stage - Verify coverage goals
-- In `/test-report` - Include coverage metrics

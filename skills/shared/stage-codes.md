@@ -94,10 +94,16 @@ Support agents own no worktask stage but can be invoked on-demand via the Task t
 | `maxTurns` | number | Limit agent turn count |
 | `disallowedTools` | comma-separated | Block specific tools from the agent |
 | `initialPrompt` | string | Auto-submit first turn on agent start |
+
+### Agent Frontmatter Fields (continued)
+
+| Field | Type | Purpose |
+|-------|------|---------|
 | `permissionMode` | string | Permission flow for built-in agents launched via `--agent <name>` |
 | `mcpServers` | YAML map | MCP servers loaded for subagent and main-thread (`--agent`) sessions |
 | `hooks` | YAML map | Hooks fire for subagent and main-thread (`--agent`) runs |
 | `paths` | YAML list of globs | Path-based activation (e.g. `- "src/**/*.swift"`) |
+| `experimental.cacheTtl` | `"5m"` / `"1h"` | Per-agent prompt-cache TTL, applied only when no subagent TTL setting is configured (`skills/cost-optimization/SKILL.md § Finer-grained TTL controls`) |
 
 > **`--print` mode honors agent frontmatter**: `tools:` and `disallowedTools:` are enforced
 > in `--print`/SDK runs, matching interactive mode. Plugin agents shipping a least-privilege

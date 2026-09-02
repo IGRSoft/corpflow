@@ -15,7 +15,6 @@ scanning the table. They are expected to diverge, and a divergence is not drift 
 |-------|-------------|--------|
 | [dv-screenshot-capture](dv-screenshot-capture/SKILL.md) | DV-stage screenshot evidence for QA acceptance and DR review; platform-aware adapters (apple/web/android/cli-fallback) | medium |
 | [agent-coordination](agent-coordination/SKILL.md) | Multi-agent coordination, handoffs, parallel execution, and error escalation | medium |
-| [appstore-screenshots](appstore-screenshots/SKILL.md) | Device specs, layout patterns, typography, and Pencil MCP worktask for App Store screenshots | high |
 | [claude-constitution](claude-constitution/SKILL.md) | Constitutional principles, ethics, and behavioral guidelines for AI agent behavior | medium |
 | [context-compression](context-compression/SKILL.md) | Context compression between agent handoffs preserving critical information | medium |
 
@@ -46,7 +45,6 @@ scanning the table. They are expected to diverge, and a divergence is not drift 
 |-------|-------------|--------|
 | [code-comment-standard](code-comment-standard/SKILL.md) | Compact source-comment standard — WHY + contract only; budgets + ban-list; wraps code-documentation.md | low |
 | [request-plan](request-plan/SKILL.md) | Context-aware plan (goal, scope, phases, effort, risks) from a request; worktask-trigger handoff | medium |
-| [senior-developer-review](senior-developer-review/SKILL.md) | Review framework for platform-specialist estimates | low |
 | [security-review-process](security-review-process/SKILL.md) | OWASP Top 10 checklist, supply-chain triage, secure coding | medium |
 | [self-improvement](self-improvement/SKILL.md) | ST retrospective: diff-based learning from user edits → `.context/learnings.md` (approval checklist) | medium |
 | [task-folder-organization](task-folder-organization/SKILL.md) | `.context/` folder structure: artifact naming + path resolution | medium |
@@ -56,7 +54,6 @@ scanning the table. They are expected to diverge, and a divergence is not drift 
 | Skill | Description | Effort |
 |-------|-------------|--------|
 | [worktask](worktask/SKILL.md) | Complete staged worktask system with dynamic sizing and stage management | high |
-| [worktask-status](worktask-status/SKILL.md) | One-table status board over the local ledger plus active megatask groups; polled `--watch` mode | low |
 | [worktask-testing-strategy](worktask-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR worktask stages | medium |
 
 ## Shared Utilities

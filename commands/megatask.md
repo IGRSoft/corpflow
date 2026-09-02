@@ -4,7 +4,7 @@ description: Orchestrate many worktasks across a GitHub milestone or an explicit
 argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
 model: opus
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -13,7 +13,7 @@ related:
   - skills/shared/milestone-helpers/SKILL.md
   - hooks/megatask-monitor.sh
   - commands/worktask.md
-  - commands/pm-milestone.md
+  - commands/milestone.md
   - agents/workflow-engineer.md
 ---
 
@@ -84,7 +84,7 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 
 ### Phase 1 · Steps 3–4 — Build the DAG & compute order
 
-3. **Build the DAG** — parse each body for `Depends on: #N` / `Blocks: #M` (what `/pm-milestone`
+3. **Build the DAG** — parse each body for `Depends on: #N` / `Blocks: #M` (what `/milestone`
    writes) plus the `P0`–`P3` label into `blocked_by[]`/`blocks[]`; normalize `A Blocks B` ⇔
    `B Depends on A` to one edge. Edges leaving the resolved set become `external_dependency`
    warnings — surfaced, never gating.
@@ -214,9 +214,9 @@ apart by `execution.reason`) so the user can re-run it interactively, re-scope, 
 6. **Terminate** when no track is active and every issue is `completed`, `failed`, or `skipped`:
    print per-issue status + PR links, then `git worktree prune`.
 
-## Relationship to /worktask and /pm-milestone
+## Relationship to /worktask and /milestone
 
-`/pm-milestone` writes issues carrying `Depends on` / `Blocks` / `P0`–`P3` → `/megatask` reads that
+`/milestone` writes issues carrying `Depends on` / `Blocks` / `P0`–`P3` → `/megatask` reads that
 DAG and runs one `/worktask` per issue → `/worktask` executes ONE issue's pipeline (PL→…→ST),
 milestone-agnostic and no longer accepting `--milestone:N`. Everything multi-issue (issue-set
 resolution, DAG, track derivation, the monitoring hook, gate-bypass) is megatask's. Edge semantics

@@ -139,10 +139,28 @@ SCRIPT="skills/shared/milestone-helpers/scripts/milestone-helpers.sh"
 }
 
 # --- base-branch ------------------------------------------------------------
-@test "happy: base-branch with no args defaults to master" {
-  run_script "$SCRIPT" base-branch
+# The develop probe is a `git ls-remote` against the AMBIENT repo, so running these
+# from the plugin checkout asserted a property of whatever remote the developer
+# happened to have. Both arms run in a fixture whose remote is controlled here.
+
+@test "happy: base-branch falls back to master when the remote has no develop" {
+  local repo; repo="$(mk_git_fixture --branch master --file 'a.txt:x' --commit init)"
+  local origin; origin="$(mk_git_fixture --branch master --file 'a.txt:x' --commit init)"
+  git -C "$repo" remote add origin "$origin"
+  run_script_env --cwd "$repo" "$SCRIPT" base-branch
   assert_success
   assert_output "master"
+}
+
+@test "happy: base-branch prefers develop when the remote carries it" {
+  # The negative arm above passes just as well against a broken probe that always
+  # says master; this is the arm that tells the two apart.
+  local repo; repo="$(mk_git_fixture --branch master --file 'a.txt:x' --commit init)"
+  local origin; origin="$(mk_git_fixture --branch develop --file 'a.txt:x' --commit init)"
+  git -C "$repo" remote add origin "$origin"
+  run_script_env --cwd "$repo" "$SCRIPT" base-branch
+  assert_success
+  assert_output "develop"
 }
 
 # --- failure / usage --------------------------------------------------------

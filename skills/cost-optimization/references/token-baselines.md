@@ -26,9 +26,16 @@ Claude Code's context savings across 2.1.51–2.1.220 are overwhelmingly automat
 | Setting | Since | Effect |
 |---|---|---|
 | `ENABLE_PROMPT_CACHING_1H` | 2.1.108 | 1h prompt-cache TTL; since 2.1.129 it no longer silently downgrades to 5 min |
+| `promptCacheTtl` / `subagentPromptCacheTtl` | 2.1.243 | Separate TTLs for the main conversation and its subagents |
+| `experimental.cacheTtl` (agent frontmatter) | 2.1.248 | Per-agent TTL, used only when no subagent TTL setting is configured |
 | `effort:` on skills/commands | 2.1.80 | Per-invocation cost control; default is `high` on non-Pro since 2.1.94 — set `medium` to save |
 | `showThinkingSummaries: true` | 2.1.89 | Restores thinking summaries, off by default because they cost tokens |
 | `MCP_TOOL_TIMEOUT` | 2.1.142 | Honoured by remote HTTP/SSE servers — lifts the silent 60s cap that drove retry churn |
+
+#### Knobs (continued)
+
+| Setting | Since | Effect |
+|---|---|---|
 | `CLAUDE_CODE_ENABLE_AUTO_MODE=1` | 2.1.158 | Auto model/effort on Bedrock/Vertex/Foundry; explicit `--model`/`--effort` still win |
 | `--forward-subagent-text` | 2.1.219 | stream-json forwards depth-2+ spawns, so attribution stops folding Tier-2 into the parent |
 | `/recap`, `--recap` | 2.1.108 | Session recap, reusable as handoff context |
@@ -49,7 +56,7 @@ Claude Code's context savings across 2.1.51–2.1.220 are overwhelmingly automat
 
 | Surface | Since | Shows |
 |---|---|---|
-| `/cost` | 2.1.92 | Per-model and cache-hit breakdown |
+| `/cost` | 2.1.92 | Per-model and cache-hit breakdown; a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) plus a `prompt_cache` object for status-line scripts |
 | `/stats` | 2.1.89 | Includes subagent usage |
 | `/context all` | 2.1.139 | Per-skill token estimates via the active model's tokenizer |
 | `/skills` (press `t`) | 2.1.111 | Sorts the skill list by token cost |
@@ -63,8 +70,15 @@ These change how pre-fix numbers compare to current ones.
 |---|---|---|
 | `cache_creation_input_tokens` nested breakdown | 2.1.152 | Nested calls attribute to the sub-call layer; previously double-counted in the parent |
 | Bedrock/Vertex/Mantle/Foundry cache regression | 2.1.211 | Trailing system block was billed as fresh input — reconcile pre-fix dashboards against provider billing |
-| Streaming cost/token double-count | 2.1.214 | `/cost` and `/cost-report` are trustworthy on streaming turns only from here on |
+| Streaming cost/token double-count | 2.1.214 | `/cost` is trustworthy on streaming turns only from here on |
 | Mid-conversation cache block behind gateways | 2.1.212 | Bedrock/Vertex/1P and custom base URLs get direct-API cache economics |
+
+#### Telemetry corrections (continued)
+
+| Fix | Since | Consequence |
+|---|---|---|
+| Tool-definition re-render after OAuth refresh | 2.1.248 | Cost a full prompt-cache miss roughly hourly in long sessions, and lost extended-thinking context with it |
+| `ScheduleWakeup` definition drift across `--resume` | 2.1.248 | Under usage overage the tool definition changed between a session and its resume, missing the cache on the resumed first turn |
 
 ### Behaviors worth exploiting
 
@@ -78,7 +92,7 @@ These change how pre-fix numbers compare to current ones.
 
 ### Canonical elsewhere
 
-Model defaults and aliases, 1M credit gates, fast-mode rates, and managed `availableModels`/`enforceAvailableModels` allowlists: `skills/shared/model-selection.md`. Spawn ceilings (depth, 20 concurrent, 200/session), `--max-budget-usd` halting *running* subagents, and `workflowSizeGuideline` fan-out sizing: `skills/agent-coordination/SKILL.md`.
+Model defaults and aliases, 1M credit gates, fast-mode rates, and managed `availableModels`/`enforceAvailableModels` allowlists: `skills/shared/model-selection.md`. Spawn ceilings (depth 3, 20 concurrent — there is **no per-session total-spawn cap**, `skills/agent-coordination/SKILL.md § No total cap; concurrency is the one that bites`), `--max-budget-usd` halting *running* subagents, and `workflowSizeGuideline` fan-out sizing: `skills/agent-coordination/SKILL.md`.
 
 ## Calendar Month Billing
 

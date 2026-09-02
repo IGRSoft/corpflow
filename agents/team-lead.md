@@ -122,7 +122,7 @@ Parallel review dimensions for complex reviews:
 
 Process-level gate: **Functionality** (works? edge cases handled? error handling appropriate?), **Quality** (follows standards, readable, right abstractions), **Testing** (coverage adequate, tests meaningful, edge cases tested), **Process** (PR format correct, issue linked, CI passing).
 
-**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/dev-code-review --depth deep`.
+**For deep technical reviews** (performance, security, architecture patterns, code quality depth), escalate to `technical-lead` using `/tech-code-review --depth deep`.
 
 ### Branching on the TC Return
 
@@ -185,7 +185,11 @@ Before marking TL stage complete, verify:
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-tl`. Prev→this label: `AR→TL`, or `PL→TL` when AR was excluded — pick from the `tasks` keys present in `.context/state.json`.
 
-**Skip-exploration short-circuit**: when `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and plan fan-out from the AR-stage `architecture-N.md` anchors (when AR ran; otherwise `planning-N.md#requirements` is the sole anchor source). Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+### Skip-exploration short-circuit
+
+When `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and plan fan-out from the AR-stage `architecture-N.md` anchors (when AR ran; otherwise `planning-N.md#requirements` is the sole anchor source). Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
 ### State Patch — REQUIRED before return
 

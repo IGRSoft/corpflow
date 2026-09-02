@@ -299,16 +299,71 @@ setup() {
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --facts '{
     "decisions":[{"id":"d1","summary":"s","ref":"r"}],
-    "open_questions":[{"id":"q1","summary":"s","stage":"PL"}],
+    "open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}],
     "files_modified":["a.sh"], "tests_added":["a.bats"]}'
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{
     "decisions":[{"id":"d2","summary":"s","ref":"r"}],
-    "open_questions":[{"id":"q2","summary":"s","stage":"AR"}],
+    "open_questions":[{"id":"sw-AR0-1","class":"escalate","ref":"architecture-0.md#elicitation-sweep"}],
     "files_modified":["b.sh"], "tests_added":["b.bats"]}'
   assert_success
   run jq -c '[(.facts.decisions|map(.id)), (.facts.open_questions|map(.id)),
               .facts.files_modified, .facts.tests_added]' .context/state.json
-  assert_output '[["d1","d2"],["q1","q2"],["a.sh","b.sh"],["a.bats","b.bats"]]'
+  assert_output '[["d1","d2"],["sw-PL0-1","sw-AR0-1"],["a.sh","b.sh"],["a.bats","b.bats"]]'
+}
+
+@test "facts: an open_questions item lacking class/ref is rejected, ledger byte-unchanged" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  cp .context/state.json .context/state.json.snap
+  # The union REPLACES the incumbent object for that id, so a partial item would silently
+  # drop the anchor the FN render resolves its options[] through.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"open_questions":[{"id":"sw-PL0-1"}]}'
+  assert_failure 2
+  run diff -q .context/state.json .context/state.json.snap
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-2","class":"decision"}]}'
+  assert_failure 2
+}
+
+@test "facts: a stub failing the shared predicate exits 2, naming the field, ledger unchanged" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  cp .context/state.json .context/state.json.snap
+  # Each defect names itself: "bad shape" hands the caller nothing to act on.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-P0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  assert_failure 2
+  assert_output --partial "id sw-P0-1 is not sw-<TASK_ID>-<n>"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"question","ref":"planning-0.md#elicitation-sweep"}]}'
+  assert_failure 2
+  assert_output --partial "class is not decision|escalate"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":""}]}'
+  assert_failure 2
+  assert_output --partial "ref is not an optional <artifact>.md path plus one non-empty #anchor"
+  run diff -q .context/state.json .context/state.json.snap
+  assert_success
+}
+
+@test "facts: an anchor-only ref is accepted (the tightening is not blanket)" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-9","class":"escalate","ref":"#elicitation-sweep"}]}'
+  assert_success
+  run jq -r '.facts.open_questions[-1].ref' .context/state.json
+  assert_output "#elicitation-sweep"
+}
+
+@test "facts: decisions stay id-only — the stub tightening is scoped to open_questions" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"d1"}]}'
+  assert_success
+  run jq -r '.facts.decisions[0].id' .context/state.json
+  assert_output "d1"
 }
 
 @test "facts: same .id from a later stage supersedes and moves to the tail" {

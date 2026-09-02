@@ -50,11 +50,26 @@ OUT_FORMAT="text"
 
 usage() { awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; }
 
+# A value-taking option with nothing after it is a usage error, not a finding: exit 1 is
+# reserved for "a stage needs a human decision", and `shift 2` on a one-element "$@" aborts
+# under `set -u` with that very code.
+# A bare `-` stays legal: --agents-json reads stdin under it. Only a `--flag` in the value
+# position is refused, which is the shape a truncated command line actually takes.
+need_value() {  # <flag> [candidate]
+  case "${2:-}" in
+    '' | --*) ;;
+    *) return 0 ;;
+  esac
+  printf 'stale-check: %s needs a value\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --state)       STATE_PATH="${2:-}"; shift 2 ;;
-    --context)     CONTEXT_DIR="${2:-}"; shift 2 ;;
-    --agents-json) AGENTS_JSON="${2:-}"; shift 2 ;;
+    --state)       need_value "$@"; STATE_PATH="$2"; shift 2 ;;
+    --context)     need_value "$@"; CONTEXT_DIR="$2"; shift 2 ;;
+    --agents-json) need_value "$@"; AGENTS_JSON="$2"; shift 2 ;;
     --json)        OUT_FORMAT="json"; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) printf 'stale-check: unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -140,6 +155,20 @@ CLASSES = {
         f"{RESUME} § Resume Procedure step 0 before touching the stage",
         f"{RESUME} § Step 0 notes — why the pre-check",
     ),
+    "reattach-undeliverable": (
+        True,
+        "A reattach SendMessage did not deliver (refused / dropped / oversized / burst_limited / "
+        "session_list_truncated). The stage is still parked, not nudged. Do NOT re-delegate and do "
+        "NOT increment metadata.retry_count — resolve the delivery failure first",
+        f"{RESUME} § Reattach rows — the SendMessage has a result too",
+    ),
+    "hook-config-broken": (
+        True,
+        "Operator-owned park: a PermissionRequest/PreToolUse hook printed an invalid answer, so the "
+        "session is waiting on broken configuration. SendMessage cannot clear it — fix the hook, "
+        "then resume. Not a stage to re-dispatch",
+        f"{RESUME} § Live-agent rows — broken hook configuration",
+    ),
 }
 
 TERMINAL = {"done", "completed", "failed", "error", "stopped", "killed", "cancelled", "canceled"}
@@ -204,6 +233,13 @@ def match_row(entry, rows):
 
 
 def classify_row(row):
+    # A hook-config park is checked first: it presents as an ordinary park but
+    # SendMessage cannot clear it, so reading it as `alive-parked` sends a nudge
+    # the session will reject again. Field name is UNCONFIRMED — coalesce several
+    # spellings, exactly as the "Needs input" axis is handled.
+    for key in ("hookError", "hook_error", "brokenHook", "broken_hook"):
+        if str(row.get(key) or "").strip():
+            return "hook-config-broken"
     # `waitingFor` is the documented park signal but is absent from the shipping
     # CLI output; state/status carry it there, so both are consulted.
     if str(row.get("waitingFor") or "").strip().lower() in ("approval", "input"):
@@ -239,6 +275,35 @@ def had_stage_failure(context_dir):
     except OSError:
         return False
     return False
+
+
+def undelivered_reattach(context_dir):
+    """Task ids whose most recent reattach_send_result did not deliver.
+
+    A parked stage whose nudge never landed looks identical to one that was
+    nudged and is still working; only the audit trail separates them."""
+    path = os.path.join(context_dir, "logs", "audit.jsonl")
+    latest = {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                if row.get("action") != "reattach_send_result":
+                    continue
+                tid = row.get("task_id") or row.get("subject")
+                if tid:
+                    latest[tid] = row.get("result")
+    except OSError:
+        return set()
+    return {tid for tid, result in latest.items() if result not in ("ok", None)}
 
 
 if not os.path.exists(state_path):
@@ -317,6 +382,18 @@ gone = [f for f in findings if f["classification"] == "gone"]
 if len(gone) >= 2 and not had_stage_failure(context_dir):
     for f in gone:
         f["classification"] = "budget-halt"
+
+# An undelivered reattach outranks what liveness said, but only where a nudge is
+# the remedy: the stage reads parked (or gone, when discovery itself was
+# truncated) yet the fix is the delivery failure, and re-delegating off it spends
+# a retry the stage never earned. A settled or unrecorded dispatch never sends
+# again, so a stale failed row must not hide its reconcile/re-derive remedy.
+NUDGE_REMEDY = {"alive-parked", "gone", "budget-halt", "liveness-unknown"}
+undelivered = undelivered_reattach(context_dir)
+if undelivered:
+    for f in findings:
+        if f["task_id"] in undelivered and f["classification"] in NUDGE_REMEDY:
+            f["classification"] = "reattach-undeliverable"
 
 for f in findings:
     needs, action, source = CLASSES[f["classification"]]

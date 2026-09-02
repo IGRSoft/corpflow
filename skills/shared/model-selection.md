@@ -54,7 +54,10 @@ Opus 5 with no plugin change; `fable` is a valid operator override, never a plug
 `low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛. **Default effort is `high`** for
 API-key, Bedrock, Vertex, Foundry, Team, and Enterprise plans; Pro plan retains `medium`
 on older models. "ultrathink" still triggers high effort; `/effort auto` resets, and bare
-`/effort` opens the interactive Faster/Smarter slider.
+`/effort` opens the interactive Faster/Smarter slider. `/effort` now stores its default
+**per model**, so switching model no longer carries the previous model's effort — a user
+setting the pipeline does not control, which is why every stage still passes `effort`
+explicitly.
 
 ### xhigh routing
 
@@ -62,6 +65,12 @@ on older models. "ultrathink" still triggers high effort; `/effort auto` resets,
 > and Sonnet 5 does not change that: do not assume it accepts `xhigh` without verifying.
 > Prefer the `opus` alias; `fable` carries the credit gate above and hard-fails on
 > credit-gated accounts.
+
+> **Thinking disabled silently costs a tier**: `xhigh`/`max` requested in a session with
+> thinking turned off is sent as `high` rather than failing. A stage pinned to `xhigh`
+> (`agents/ethics-reviewer.md`, `agents/prompt-engineer.md`, `agents/security-reviewer.md`)
+> then runs one tier down with no error anywhere — the step-6 audit row is the only place
+> it shows. Verify there before trusting an `xhigh` stage's depth.
 
 ### Effort visibility and inheritance
 
@@ -94,6 +103,13 @@ hard-blocking the dispatch.
 | Restriction warning (CC 2.1.223) | Workflow agents, forked skills, slash commands, and resumed background agents warn when the parent runs instead of the requested restricted subagent model — check the step-6 audit row rather than assuming the alias resolved. |
 | Org default / restrictions | "Org default"/"Role default" shows in `/model`; restrictions cover the picker, `--model`, `/model`, and `ANTHROPIC_MODEL` ("restricted by your organization's settings"). |
 | Fable-5 auto-mode fallback | In auto mode, an org allowlist lacking the current top Opus falls back to the **best available Opus** rather than failing or down-tiering — restricted-org `xhigh` still lands on the strongest Opus available. |
+
+#### Restriction signals — model resolution
+
+| Control | Behaviour |
+|---------|-----------|
+| First-call 404 fallback | A subagent whose model 404s on its first call falls through the session's fallback-model chain instead of dying; the parent's error names type, HTTP status, request id and model. The stage then ran on a model `metadata.model` never asked for, so `dispatched_agents[].model_resolved` is the only trustworthy record — re-check it before attributing cost, never assume `model_requested` held. |
+| `modelPicker` / `modelPricing` | Managed settings: `modelPicker` curates which models the `/model` list offers; `modelPricing` applies an org's contracted rates to `/cost`, the status line, and telemetry — so a cost figure read under it is org-rated, not list-rated. |
 
 ## Provider Defaults (Bedrock / Vertex / Foundry)
 
@@ -142,9 +158,25 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 ```
 
 - Team agents inherit the leader's model — and, for tmux/pane-backed teammates, the
-  leader's `--effort`. Override only when complexity warrants it.
+  leader's `--effort`. Override only when complexity warrants it. The "Default teammate
+  model" setting was removed, so inheritance is the only path: there is no config knob to
+  check instead, and a lane's tier is pinned at `Agent(name: …, model: …)` or not at all.
 - The built-in `Explore` agent inherits the session model **capped at opus**, not haiku:
   fan-outs cost sonnet/opus-tier tokens, so budget for it or pass an explicit `model`.
 - An explicit per-call override **survives resume and follow-up `SendMessage`** — a pinned
   stage does not revert to the parent's model on reattach, so `model_requested`/
   `model_resolved` in `dispatched_agents[]` keep matching for the stage's whole lifecycle.
+
+## Default Subagent Model (`CLAUDE_CODE_SUBAGENT_MODEL`)
+
+`CLAUDE_CODE_SUBAGENT_MODEL` sets the **default** subagent model, not an override: an agent
+definition's frontmatter `model:` and an explicit per-spawn `model` both take precedence over it.
+
+This is what makes "always pass `metadata.model` explicitly" load-bearing rather than advisory.
+Ledger-dispatched stages are safe — `metadata.model` is required there and validated at step 6.
+The exposure is any dispatch that bypasses the ledger, such as the ad-hoc nested `Task()` calls a
+stage agent makes for a Tier-2 specialist: omit the model there and the spawn no longer falls back
+to the agent's own tier, it falls through to whatever an operator or CI runner exported.
+
+A mid-worktask switch away from a pinned model is separately gated by `hooks/model-switch-gate.sh`
+(`agent-coordination/references/hook-monitoring.md § Model-Switch Hooks`).

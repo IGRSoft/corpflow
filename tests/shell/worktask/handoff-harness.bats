@@ -104,6 +104,70 @@ setup() {
   assert_output --partial "ALL PASS"
 }
 
+# --- the sweep stub's ref must be anchor-shaped, not merely present ----------
+
+# A DV artifact whose only variable is the one sweep stub.
+sweep_artifact() {  # <path> <stub-yaml>
+  {
+    printf -- '---\n'
+    printf 'handoff:\n'
+    printf '  stage: DV\n'
+    printf '  verdict: ok\n'
+    printf '  summary: "sweep fixture"\n'
+    printf '  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions:\n'
+    printf '    - %s\n' "$2"
+    printf '  refs:\n'
+    printf '    dev: development.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nbody\n'
+  } > "$1"
+}
+
+@test "sweep: an empty ref fails the shape gate" {
+  sweep_artifact "$WD/dv-empty-ref.md" '{ id: sw-DV0-1, class: decision, ref: "" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-empty-ref.md"
+  assert_failure 1
+  assert_output --partial "sw-DV0-1 carries no ref anchor"
+}
+
+@test "sweep: a ref naming no anchor fails the shape gate" {
+  sweep_artifact "$WD/dv-no-anchor.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-no-anchor.md"
+  assert_failure 1
+  assert_output --partial "sw-DV0-1 carries no ref anchor"
+}
+
+@test "sweep: an uppercase anchor fails — anchors are lowercase-kebab" {
+  sweep_artifact "$WD/dv-caps.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md#Elicitation_Sweep" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-caps.md"
+  assert_failure 1
+  assert_output --partial "sw-DV0-1 carries no ref anchor"
+}
+
+@test "sweep: an anchor-only ref resolves to the emitting artifact and passes" {
+  sweep_artifact "$WD/dv-anchor-only.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-anchor-only.md"
+  assert_success
+}
+
+@test "sweep: the class vocabulary is the library's, not a re-spelling" {
+  sweep_artifact "$WD/dv-class.md" '{ id: sw-DV0-1, class: question, ref: "#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-class.md"
+  assert_failure 1
+  assert_output --partial "class is not decision|escalate"
+}
+
+@test "sweep: a ledger whose facts.open_questions is a string fails, never silently passes" {
+  # jq aborts on a scalar there, and an aborted parity read is not evidence of parity:
+  # the shapes that break the read are exactly the ones the gate exists to reject.
+  sweep_artifact "$WD/dv-scalar-ledger.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  printf '{"facts":{"open_questions":"none"}}\n' > "$WD/state-scalar.json"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-scalar-ledger.md" --state "$WD/state-scalar.json"
+  assert_failure 1
+  assert_output --partial "could not be read as an array of stubs"
+}
+
 # ---------------------------------------------------------------------------
 # AR→DV architecture-reference gate (--state / --strict, 3.42.0).
 # Ships warn-only: violations are `warn:` + exit 0 unless --strict is passed.
@@ -122,6 +186,7 @@ dv_artifact() {
     printf '  summary: "gate fixture"\n'
     printf '  files_touched: [a.md]\n'
     printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    %s\n' "$refs"
     printf -- '---\n\n# Development\n'

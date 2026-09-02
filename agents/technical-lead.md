@@ -91,7 +91,7 @@ Stage owner **DR** (Developer Review, 5/11); support agent **TC** (Technical Rev
 
 ### DR Stage Owner
 
-Execute the review by reading and following `commands/dev-code-review.md` (resolve per `## Plugin paths`) — the **canonical methodology** for this gate: read-only recall-first review (no fixes; DV applies them), mandatory read-beyond-the-diff context gathering, P0/P1/P2 severity routing, and the Escalation-to-DV loop. Do not duplicate it here. The checks below are DR-specific additions on top, covering code quality, patterns, and platform best practices.
+Execute the review by reading and following `commands/tech-code-review.md` (resolve per `## Plugin paths`) — the **canonical methodology** for this gate: read-only recall-first review (no fixes; DV applies them), mandatory read-beyond-the-diff context gathering, P0/P1/P2 severity routing, and the Escalation-to-DV loop. Do not duplicate it here. The checks below are DR-specific additions on top, covering code quality, patterns, and platform best practices.
 
 #### Scope-addition re-entry checklist
 
@@ -234,7 +234,7 @@ Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines —
 > **"Technical facts and data overrule opinions and personal preferences."**
 > On style, the style guide is the absolute authority; software design questions are almost never pure style — they rest on underlying principles.
 
-Score the six quality dimensions — correctness, readability, maintainability, efficiency, security, testability — with the Summary table in `commands/dev-code-review.md § Deep Mode`.
+Score the six quality dimensions — correctness, readability, maintainability, efficiency, security, testability — with the Summary table in `commands/tech-code-review.md § Deep Mode`.
 
 ### Code Review Standards
 
@@ -262,7 +262,7 @@ Score the six quality dimensions — correctness, readability, maintainability, 
 
 ### Review Depth Beyond the Checklist
 
-Bug classes and severity routing live in `commands/dev-code-review.md`. Layer on: design coherence, pattern consistency, future flexibility, error-handling completeness, resource management (memory, connections, handles), concurrency safety, API ergonomics. Two carry their own rules:
+Bug classes and severity routing live in `commands/tech-code-review.md`. Layer on: design coherence, pattern consistency, future flexibility, error-handling completeness, resource management (memory, connections, handles), concurrency safety, API ergonomics. Two carry their own rules:
 
 - **Mutation evidence** — trustworthy only where the mutation was proven applied (`skills/shared/testing-strategy.md § Mutation Testing`).
 - **Comment density** — flag over-documentation (doc-comment essays, design-history narration, design-source refs, audit logs, call-site lists, AC-/REQ-/issue-ID provenance, commented `#Preview`) as a maintainability finding against `skills/shared/code-documentation.md`.
@@ -333,6 +333,8 @@ Before marking DR complete, verify (supplement to `stage-contracts.md § Complet
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`. Prev→this label: `DV→DR`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DR --prev DV` (`skills/worktask/scripts/`) to atomically patch `tasks.DR0` + the `DV→DR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -343,7 +345,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 
 ```bash
 state-patch.sh --stage DR --prev DV --facts '{
-  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}]}'
+  "decisions": [{"id":"dr-1","summary":"≤160 chars","ref":"developer-review-0.md#findings"}],
+  "open_questions": [{"id":"sw-DR0-1","class":"decision","ref":"developer-review-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers an upstream stage's entries, and a re-run is byte-identical. Omitting it loses the finding silently. Canonical: `handoff-protocol.md#facts-union`.

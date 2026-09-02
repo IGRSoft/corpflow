@@ -55,7 +55,6 @@ the q3 documented proxy because kcov is impractical on this platform.
 | Source file | Test methods | Coverage approach |
 |-------------|---------|-------------------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | **16** | In-process importlib + CLI argparse smoke; Layout A proportional geometry (iPhone 6.9), screenshot centering (19.5:9), Layout D > A, full-bleed passthrough (tvOS), mac 16:10 landscape, unknown layout/device rejection, `--self-test`, `--list-devices` |
 
 The scripts are UNCHANGED (skill runtime contract). In-process testing asserts
 true contracts (unknown-model → sonnet fallback, unknown-layout → ValueError)
@@ -94,10 +93,9 @@ without completing. Per the LOCKED plan's open-question q3, where no coverage to
 use the **assertion-density proxy**: every shell script has a dedicated test file with ≥3 real
 scenario `@test`s (happy / edge / failure-exit) asserting its documented contracts.
 
-- **45/45** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
-  collide — `attachments-preseed.sh`/`attachments-preseed-test.sh` are two distinct scripts,
-  each with its own file); **47/47** total deterministic targets covered (45 shell + 2
-  Python). **Zero exemptions.**
+- **44/44** shell scripts + hooks have a dedicated `.bats` file (path-keyed where basenames
+  collide); **45/45** total deterministic targets covered (44 shell + 1 Python).
+  **Zero exemptions.**
 
 #### Measured, not derived (this file's fifth correction this worktask)
 
@@ -158,6 +156,9 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/dv-comment-density-gate.sh` | `tests/shell/hooks/comment-density-gate.bats` (aliased) | — | — | — |
 | `hooks/test-execution-gate.sh` | `tests/shell/hooks/test-execution-gate.bats` | — | — | — |
 | `hooks/state-merge.sh` | `tests/shell/hooks/state-merge.bats` | — | — | — |
+| `hooks/model-switch-lib.sh` | `tests/shell/hooks/model-switch-lib.bats` | — | — | — |
+| `hooks/model-switch-gate.sh` | `tests/shell/hooks/model-switch-gate.bats` | — | — | — |
+| `hooks/model-switch-audit.sh` | `tests/shell/hooks/model-switch-audit.bats` | — | — | — |
 
 ### Shell scripts — dv-screenshot (DV0c, kcov)
 
@@ -186,7 +187,6 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
 | `skills/worktask/scripts/attachments-preseed.sh` | `tests/shell/worktask/attachments-preseed.bats` | — | — | — |
-| `skills/worktask/scripts/attachments-preseed-test.sh` | `tests/shell/worktask/attachments-preseed-test.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
@@ -220,12 +220,11 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | Source file | Test file | Test methods |
 |-------------|-----------|-----------|
 | `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 21 |
-| `skills/appstore-screenshots/scripts/layout-calc.py` | `tests/python/test_layout_calc.py` | 16 |
 
 ### Meta / repo-invariant tests (no single source script — not part of the 45)
 
 These 14 files guard cross-cutting contracts, so they have no row in the tables above and are
-excluded from the 45/45 denominator. They are counted in the 59 `.bats` / 879 `@test` totals.
+excluded from the 44/44 denominator. They are counted in the 59 `.bats` / 879 `@test` totals.
 
 | Test file | Contract guarded |
 |-----------|------------------|

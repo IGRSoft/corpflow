@@ -200,6 +200,8 @@ Before marking AR stage complete, verify:
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ar`. Prev→this label: `PL→AR`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 **Skip-exploration short-circuit**: `task.metadata.skip_exploration === true` makes `metadata.exploration_anchors` (`<file>#<anchor>` refs) the authoritative pre-explored set — do NOT re-Glob/Grep the source tree for files it covers; read only those anchors and start from their facts (`skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`).
 
 ### next_stage_focus and key_decisions
@@ -227,7 +229,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 
 ```bash
 state-patch.sh --stage AR --prev PL --facts '{
-  "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}]}'
+  "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}],
+  "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers PL's entries, and a re-run is byte-identical. Omitting it loses the decision silently — the orchestrator does not digest it for you. Canonical rule: `handoff-protocol.md#facts-union`.

@@ -125,21 +125,98 @@ properties:
 # …continued: handoff.properties
       open_questions:
         type: array
-        items:
-          oneOf:
-            - type: string
-            - type: object
-              required: [id, summary]
-              properties:
-                id: { type: string }
-                summary: { type: string }
-                stage: { type: string }
+        items: { $ref: '#/$defs/SweepStub' }   # closing elicitation sweep, the only item shape
+      cross_session_ask:
+        type: object
+        description: >
+          OPTIONAL. Legal only alongside verdict "blocked". Names WHO to ask and WHAT; the stage
+          never sends it itself, because a subagent's reply from another session is delivered to
+          the parent conversation and would never reach the stage. The orchestrator owns the send
+          (resume.md § Reply routing).
+        required: [to, question]
+        properties:
+          to: { type: string, maxLength: 200 }
+          question: { type: string, maxLength: 160 }
       refs:
         type: object
         additionalProperties: { type: string }
 constraints:
   total_lines: { max: 30 }
   total_tokens: { max: 200, tokenizer: cl100k_base-proxy }
+```
+
+### Schema — $defs: SweepItem and SweepStub
+
+Closing elicitation sweep item, defined once for all three transports (contract:
+`skills/shared/stage-contracts.md § Closing Elicitation Sweep`). The frontmatter and ledger
+arrays carry `SweepStub`; the artifact body and the typed return carry the full `SweepItem`.
+
+#### $defs — SweepItem (full item)
+
+```yaml
+# …continued: HandoffFrontmatter.$defs — also referenced by #handoff-schemas
+$defs:
+  SweepItem:
+    type: object
+    required: [id, summary, class, options, rationale]
+    properties:
+      id:        { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
+      summary:   { type: string, maxLength: 160 }
+      rationale: { type: string, maxLength: 160 }
+      stage:     { type: string }
+      class:     { type: string, enum: [decision, escalate] }
+      blocks_next_stage: { type: boolean }   # q9 carrier; see $defs/SweepStub
+```
+
+##### $defs — SweepItem.options
+
+```yaml
+# …continued: $defs.SweepItem.properties
+      options:
+        type: array
+        minItems: 2
+        maxItems: 4                 # the ask tool's per-question option ceiling
+        items:
+          type: object
+          required: [label, detail]
+          properties:
+            label:       { type: string, maxLength: 24 }
+            detail:      { type: string, maxLength: 120 }
+            recommended: { type: boolean }
+        # Exactly one recommended option, as a schema fact rather than prose.
+        contains:    { type: object, required: [recommended], properties: { recommended: { const: true } } }
+        minContains: 1
+        maxContains: 1
+```
+
+#### $defs — SweepStub (frontmatter + ledger)
+
+```yaml
+# …continued: HandoffFrontmatter.$defs
+$defs:
+  SweepStub:
+    type: object
+    # `summary` is optional: the question text is read from the `ref` anchor body,
+    # which check_sweep_ref_anchor guarantees exists (q10).
+    required: [id, class, ref]
+    properties:
+      id:      { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
+      summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
+      stage:   { type: string }
+      class:   { type: string, enum: [decision, escalate] }
+      ref:     { type: string, description: "anchor into the emitting stage's own artifact" }
+```
+
+##### $defs — SweepStub, the routing and answer fields
+
+```yaml
+# …continued: $defs.SweepStub.properties
+      # q9 carrier. Orthogonal to `class`: an escalate item may or may not block.
+      # 2-element lattice false < true, joined with OR — the agent self-labels and the
+      # orchestrator may raise false→true, never lower (ad4b's monotone idiom, reused).
+      blocks_next_stage: { type: boolean }
+      status:            { type: string, enum: [open, resolved] }
+      resolution:        { type: string, maxLength: 160 }
 ```
 
 ### Schema — subagents_spawned (B2 governance)
@@ -186,24 +263,24 @@ constraints:
 
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
-| PL | next_stage_focus, key_decisions | files_touched, open_questions | ok / blocked / escalate |
+| PL | next_stage_focus, key_decisions, open_questions | files_touched | ok / blocked / escalate |
 | AR | key_decisions, next_stage_focus, open_questions | files_touched, subagents_spawned | ok / blocked / escalate |
-| TL | next_stage_focus | key_decisions, files_touched | ok / blocked / escalate |
-| DV | files_touched, next_stage_focus | key_decisions, open_questions, subagents_spawned | ok / blocked / escalate |
-| DR | key_decisions (= findings) | files_touched, open_questions | pass / fail |
+| TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
+| DV | files_touched, next_stage_focus, open_questions | key_decisions, subagents_spawned | ok / blocked / escalate |
+| DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
 
 #### Stages SR–ET
 
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
-| SR | key_decisions (= findings) | files_touched | pass / fail |
-| QA | files_touched (= tests added), key_decisions (= results) | open_questions | go / no-go |
-| DC | files_touched | key_decisions | ok / blocked / escalate |
-| RE | files_touched, key_decisions (= version) | open_questions | ok / blocked |
-| FN | next_stage_focus, files_touched | key_decisions, deep_reads | ok / blocked |
-| ST | key_decisions (= rationale) | open_questions | approve / reject |
-| IR | key_decisions (= root cause), next_stage_focus | files_touched | ok / escalate |
-| ET | key_decisions (= ethics findings) | open_questions | pass / fail |
+| SR | key_decisions (= findings), open_questions | files_touched | pass / fail |
+| QA | files_touched (= tests added), key_decisions (= results), open_questions | — | go / no-go |
+| DC | files_touched, open_questions | key_decisions | ok / blocked / escalate |
+| RE | files_touched, key_decisions (= version), open_questions | — | ok / blocked |
+| FN | next_stage_focus, files_touched, open_questions | key_decisions, deep_reads | ok / blocked |
+| ST | key_decisions (= rationale), open_questions | — | approve / reject |
+| IR | key_decisions (= root cause), next_stage_focus, open_questions | files_touched | ok / escalate |
+| ET | key_decisions (= ethics findings), open_questions | — | pass / fail |
 
 ### Token budget
 
@@ -221,6 +298,15 @@ Two parallel channels, neither replacing the other: the typed return is *validat
 
 JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
+#### Conventions — the sweep field
+
+Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`.
+
+`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. 
+###### Conventions — the $defs pointer is an obligation
+
+The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.
+
 > **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
 
 ### PLHandoff
@@ -230,14 +316,14 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PLHandoff",
   "type": "object",
-  "required": ["verdict", "summary", "key_decisions", "next_stage_focus"],
+  "required": ["verdict", "summary", "key_decisions", "next_stage_focus", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "summary": { "type": "string", "maxLength": 200 },
     "complexity": { "type": "integer", "minimum": 0, "maximum": 50 },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "next_stage_focus": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "type": "string" } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -249,13 +335,13 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ARHandoff",
   "type": "object",
-  "required": ["verdict", "summary", "key_decisions", "next_stage_focus"],
+  "required": ["verdict", "summary", "key_decisions", "next_stage_focus", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "summary": { "type": "string", "maxLength": 200 },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "next_stage_focus": { "type": "string" },
-    "open_questions": { "type": "array", "items": { "type": "string" } }
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -267,12 +353,13 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "TLHandoff",
   "type": "object",
-  "required": ["verdict", "summary", "next_stage_focus"],
+  "required": ["verdict", "summary", "next_stage_focus", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "summary": { "type": "string", "maxLength": 200 },
     "next_stage_focus": { "type": "string" },
-    "fanout": { "type": "array", "items": { "type": "string" } }
+    "fanout": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -284,7 +371,7 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DVHandoff",
   "type": "object",
-  "required": ["verdict", "files_modified", "build_status"],
+  "required": ["verdict", "files_modified", "build_status", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "files_modified": { "type": "array", "items": { "type": "string" } },
@@ -298,7 +385,8 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
         "applied": { "type": "boolean" }
       },
       "required": ["ref", "applied"]
-    }
+    },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -322,12 +410,13 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DRHandoff",
   "type": "object",
-  "required": ["verdict", "findings", "blockers"],
+  "required": ["verdict", "findings", "blockers", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["pass", "fail"] },
     "findings": { "type": "array", "items": { "type": "string" } },
     "blockers": { "type": "array", "items": { "type": "string" } },
-    "p2_only": { "type": "boolean" }
+    "p2_only": { "type": "boolean" },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -339,12 +428,13 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "SRHandoff",
   "type": "object",
-  "required": ["verdict", "findings", "blockers"],
+  "required": ["verdict", "findings", "blockers", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["pass", "fail"] },
     "findings": { "type": "array", "items": { "type": "string" } },
     "blockers": { "type": "array", "items": { "type": "string" } },
-    "threat_model": { "type": "string" }
+    "threat_model": { "type": "string" },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -356,12 +446,13 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "QAHandoff",
   "type": "object",
-  "required": ["verdict", "tests_passed", "tests_failed"],
+  "required": ["verdict", "tests_passed", "tests_failed", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["go", "no-go"] },
     "tests_passed": { "type": "integer", "minimum": 0 },
     "tests_failed": { "type": "integer", "minimum": 0 },
-    "blocking_defects": { "type": "array", "items": { "type": "string" } }
+    "blocking_defects": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -373,11 +464,12 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DCHandoff",
   "type": "object",
-  "required": ["verdict", "files_modified"],
+  "required": ["verdict", "files_modified", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "files_modified": { "type": "array", "items": { "type": "string" } },
-    "cross_references": { "type": "array", "items": { "type": "string" } }
+    "cross_references": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -389,12 +481,13 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "REHandoff",
   "type": "object",
-  "required": ["verdict", "version", "files_modified"],
+  "required": ["verdict", "version", "files_modified", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked"] },
     "version": { "type": "string" },
     "files_modified": { "type": "array", "items": { "type": "string" } },
-    "changelog": { "type": "array", "items": { "type": "string" } }
+    "changelog": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -406,13 +499,14 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FNHandoff",
   "type": "object",
-  "required": ["verdict", "summary", "next_stage_focus"],
+  "required": ["verdict", "summary", "next_stage_focus", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked"] },
     "summary": { "type": "string", "maxLength": 200 },
     "next_stage_focus": { "type": "string" },
     "files_modified": { "type": "array", "items": { "type": "string" } },
-    "pr_url": { "type": "string" }
+    "pr_url": { "type": "string" },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -424,11 +518,12 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "STHandoff",
   "type": "object",
-  "required": ["verdict", "key_decisions"],
+  "required": ["verdict", "key_decisions", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["approve", "reject"] },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
-    "follow_ups": { "type": "array", "items": { "type": "string" } }
+    "follow_ups": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -440,12 +535,13 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "IRHandoff",
   "type": "object",
-  "required": ["verdict", "root_cause", "next_stage_focus"],
+  "required": ["verdict", "root_cause", "next_stage_focus", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "escalate"] },
     "root_cause": { "type": "string" },
     "next_stage_focus": { "type": "string" },
-    "blast_radius": { "type": "string" }
+    "blast_radius": { "type": "string" },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -457,11 +553,12 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ETHandoff",
   "type": "object",
-  "required": ["verdict", "findings"],
+  "required": ["verdict", "findings", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["pass", "fail"] },
     "findings": { "type": "array", "items": { "type": "string" } },
-    "mitigations": { "type": "array", "items": { "type": "string" } }
+    "mitigations": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
@@ -536,12 +633,24 @@ Only `tasks.<ID>.worktree` maps from a stage artifact — the DV handoff frontma
 written by `state-patch.sh --facts '<json>'`, passed on the same self-patch call that lands the
 stage's ledger row. It is the channel's ONLY scripted writer.
 
+##### #facts-union — who writes open_questions
+
+**`open_questions` is agent-written.** A stage's closing-sweep stubs reach the ledger only if that
+stage passes them in its own `--facts` payload; the two are separate transports with
+no derivation between them, so a stub written to frontmatter alone never reaches the FN gate.
+`handoff-harness.sh --validate-frontmatter --state`, run at each stage completion
+(`commands/worktask.md § Step B.1`), fails the stage when a sweep stub is missing from
+`facts.open_questions[]`, and fails when the ledger is unreadable.
+
+###### #facts-union — the merge table
+
 The merge is a union, never `. * $patch`: jq object-merge REPLACES arrays, which is exactly how a
 downstream stage silently dropped an upstream stage's entries.
 
 | Array | Identity | Collision | Order |
 |---|---|---|---|
-| `decisions`, `open_questions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `decisions` | `.id` | last writer wins | survivor moves to the TAIL |
+| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped | survivor moves to the TAIL |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
 
 ##### Ordering and idempotency
@@ -751,19 +860,53 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
             ref: { type: string }
 ```
 
-#### facts — open_questions, verdicts, files_read
+#### facts — open_questions
 
 ```yaml
 # …continued: WorktaskStateLedger.properties.facts.properties
       open_questions:
         type: array
+        maxItems: 12
+        description: "Bounded (B3): newest 12 survive, `status: resolved` evicted first. Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7) — every stage writes its closing sweep here. Matches eviction-order rule 2."
         items:
+          # Mirrors $defs/SweepStub — the sweep stub is the only accepted item shape here
+          # too, so the ledger and the frontmatter cannot disagree about what an entry is.
           type: object
-          required: [id, summary]
+          required: [id, class, ref]
           properties:
-            id: { type: string }
-            summary: { type: string }
-            stage: { type: string }
+            id: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
+            summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
+            stage: { type: string }                     # derived from the id when absent
+```
+
+##### facts — open_questions, the ledger-only fields
+
+```yaml
+# …continued: facts.open_questions.items.properties
+            class: { type: string, enum: [decision, escalate] }
+            ref: { type: string }
+            # q9 carrier: this item is answered at its own stage boundary, not held
+            # to the FN gate. See $defs/SweepStub for the raise-only rule.
+            blocks_next_stage: { type: boolean }
+```
+
+###### facts — open_questions, the answer fields
+
+```yaml
+# …continued: facts.open_questions.items.properties
+            # Read by eviction rule 2 and by the render, so an answered item is not
+            # re-prompted on a resumed run. `open < resolved` is a MONOTONE join at
+            # the union (state-patch.sh): a later write may raise, never downgrade.
+            status: { type: string, enum: [open, resolved] }
+            # Where a sweep ANSWER lands. Deliberately not facts.decisions[] —
+            # stage-contracts.md § Closing Elicitation Sweep states why.
+            resolution: { type: string, maxLength: 160 }
+```
+
+#### facts — verdicts, files_read
+
+```yaml
+# …continued: WorktaskStateLedger.properties.facts.properties
       verdicts:
         type: object
         additionalProperties: { type: string }
@@ -981,7 +1124,7 @@ OPTIONAL (additive). Probe cache for account-level hard-fails, so later stages d
 When state.json approaches the 500-token cap:
 
 1. Drop `tasks.<ID>.artifact` paths for stages with `status=completed` once their `handoffs[FROM→TO]` string captures the essentials.
-2. Drop `facts.open_questions` whose status is resolved.
+2. Drop `facts.open_questions` whose status is resolved (the `maxItems: 12` clamp applies the same preference automatically at every write).
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
 
@@ -1210,13 +1353,28 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below plus the one universal anchor. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+
+### Anchors — required in every artifact
+
+One anchor is **universal**: mandatory in all thirteen stage artifacts on top of that stage's own row below.
+
+- `## elicitation-sweep` — the closing elicitation sweep's canonical transport (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), the target the frontmatter and ledger stubs point at by `ref`. It carries either the full items or the explicit empty statement; a stage with nothing to ask still writes the heading. Enforced by `cache-lint.sh --anchor-lint` for all 13 stages, with no grace for older artifacts.
+
+### Anchors — allowed but never required
+
+These anchors are **allowed in every artifact and required in none**, so none retroactively fails an artifact written before it existed and none is reported as unexpected:
+
+- `## rework-<N>` — the scope-addition re-entry section the DR gate reads (`agents/technical-lead.md`).
+- `## re-review` — a review stage's second pass over reworked output, recorded beside its original findings rather than overwriting them.
+- `## design-preview` — PL's Figma capture block, written only when the task carries a Figma URL (`skills/shared/figma-capture.md`); absent otherwise.
+- `## test-strategy` — PL's optional test-strategy section; `pl0-procedure.md` never mandates it.
 
 ### Anchors — PL to DR
 
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
-| PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages` |
+| PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
 | AR | architecture-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |

@@ -165,6 +165,8 @@ Trigger one after any P0/P1, a customer-facing outage > 15 minutes, data loss or
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-ir`. Prev→this label: `USER→IR`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage IR --prev USER` (`skills/worktask/scripts/`) to atomically patch `tasks.IR0` + the `USER→IR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -175,7 +177,8 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 
 ```bash
 state-patch.sh --stage IR --prev USER --facts '{
-  "decisions": [{"id":"ir-root-cause","summary":"≤160 chars","ref":"incident-0.md#root-cause"}]}'
+  "decisions": [{"id":"ir-root-cause","summary":"≤160 chars","ref":"incident-0.md#root-cause"}],
+  "open_questions": [{"id":"sw-IR0-1","class":"decision","ref":"incident-0.md#elicitation-sweep"}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Canonical rule: `handoff-protocol.md#facts-union`.

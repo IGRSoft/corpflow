@@ -37,36 +37,41 @@ set -euo pipefail
 # Never resolve `.context/` from cwd: this fires on SubagentStop, often for a DV
 # stream, whose cwd is a linked worktree where `.context/` does not exist (it is
 # gitignored and never carried into a worktree checkout). A cwd-relative merge
-# lands in a throwaway ledger, silently.
+# lands in a throwaway ledger, silently. `write` mode, not `read`: this hook
+# writes, so the declared workspace must win even before `.context/` exists.
 #
-# Most-explicit source first. The git arm recovers the worktree case:
-# `--git-common-dir` points at the MAIN checkout's .git, whose parent owns
-# `.context/`.
-_resolve_workspace_root() {
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
-    printf '%s' "$WORKSPACE_ROOT"; return
-  fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
-    printf '%s' "$CLAUDE_PROJECT_DIR"; return
-  fi
-  local _common _parent
-  if _common=$(git rev-parse --git-common-dir 2> /dev/null) && [ -n "$_common" ]; then
-    _parent=$(cd "$(dirname "$_common")" 2> /dev/null && pwd) || _parent=""
-    if [ -n "$_parent" ] && [ -d "$_parent/.context" ]; then
-      printf '%s' "$_parent"; return
-    fi
-  fi
-  # Env vars win even when .context/ is absent yet — a first write must land in
-  # the declared workspace, not in whatever directory the hook happened to run.
-  if [ -n "${WORKSPACE_ROOT:-}" ]; then printf '%s' "$WORKSPACE_ROOT"; return; fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s' "$CLAUDE_PROJECT_DIR"; return; fi
-  pwd
-}
-WORKSPACE_DIR=$(_resolve_workspace_root)
+# Guarded source (AD-2): a truncated library is a syntax error, fatal under this
+# script's `set -e` and unrescuable by `||`, which would break a hook whose whole
+# contract is "exit 0 ALWAYS". Capture `$-`, drop `-e` across the source, restore.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+LIB_DEGRADED=0
+if command -v corpflow_audit_row > /dev/null 2>&1; then
+  WORKSPACE_DIR=$(corpflow_workspace_root write)
+else
+  # Library-free last resort. Resolution runs BEFORE $LOG exists, so a degraded
+  # root still has to be good enough for this hook to find its own log — which is
+  # why this one line stays local while the three probe arms and the git arm move
+  # to the library.
+  WORKSPACE_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
+  LIB_DEGRADED=1
+fi
 
 LOG_DIR="$WORKSPACE_DIR/.context/logs"
 mkdir -p "$LOG_DIR" 2> /dev/null || true
 LOG="$LOG_DIR/state-merge.log"
+
+# Degraded signalling is library-free by necessity — stderr plus a zero-byte
+# sentinel, never an audit row, because the appender is IN the library.
+if [ "$LIB_DEGRADED" -eq 1 ]; then
+  echo "state-merge: shared library unusable at $_LIB — workspace root resolved by fallback" >&2
+  : > "$LOG_DIR/.corpflow-lib-missing" 2> /dev/null || true
+fi
 
 log() {
   printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "${1:-INFO}" "${2:-}" >> "$LOG" 2> /dev/null || true

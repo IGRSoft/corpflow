@@ -122,12 +122,37 @@ Hardening for the agent's own execution surface — review when a worktask runs 
 | `sandbox.network.strictAllowlist` | Denies non-allowlisted hosts for sandboxed commands **without prompting**, rather than asking. Prefer for unattended batches — a prompt in an unattended run is an indefinite stall |
 | `sandbox.filesystem.disabled` | Skips filesystem isolation while **keeping** network egress control. Narrow escape hatch; document the justification, never set it to silence a failing command |
 
+#### Sandbox settings — the restricted posture
+
+| Setting | Effect |
+|---------|--------|
+| `--restricted` / `CLAUDE_CODE_RESTRICTED=1` | Removes the built-in tools that run commands or code plus `WebFetch` (unless named in `--tools`), keeps file tools inside the working directory, refuses `bypassPermissions`, and **ignores user, project and local settings files**. The strongest available posture for running untrusted or third-party plugin content; too restrictive for a normal worktask, since no stage could build or test |
+
 ### Claude Code path & config hardening
 
 | Behavior | Effect |
 |----------|--------|
 | Symlink hardening | Workflow saves and scheduled-task writes no longer follow a symlink at `.claude`, and `/rewind` no longer restores or deletes through symlinks or hard links at tracked paths (it reports how many paths it skipped). A repo with a symlinked `.claude` no longer redirects writes outside the project |
 | Managed MCP allowlist `${VAR}` | Resolves from the **startup environment** and managed-settings env — not the settings-file env. A settings-file variable will not expand there |
+
+#### Path & config hardening — 2.1.234→2.1.251
+
+| Behavior | Effect |
+|----------|--------|
+| TOCTOU on file tools | Read/Write/Edit no longer follow a symlink swapped inside the working directory *after* the permission check, which could read or write outside the approved location. Grep and Glob now apply `Read(...)` deny rules to files reached through a symlinked search path, and the Workflow tool no longer reads (or quotes in errors) a `scriptPath` outside what the session may read. Closes the check-then-use window the plugin's own scripts already guard by resolving through a `readlink` loop |
+
+#### Path & config hardening — marketplace paths
+
+| Behavior | Effect |
+|----------|--------|
+| Marketplace command path traversal | Plugin commands declared in a marketplace entry can no longer point outside the plugin directory; such paths are rejected as path traversal. **Directly relevant here** — this repo is both a marketplace and the plugin it publishes. Verified this band: every `commands[]`, `agents[]` and `skills[]` entry in `.claude-plugin/marketplace.json` is `./`-relative, with no `../`, absolute path, or external URL |
+
+#### Path & config hardening — settings scope
+
+| Behavior | Effect |
+|----------|--------|
+| Project settings cannot widen tracing | Project settings can no longer enable detailed beta tracing or raw API body logging, nor bypass an OTLP collector pinned by managed settings. Project `.claude/settings.json` `env` no longer sets `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_TMPDIR`, or `TMPDIR`/`TMP`/`TEMP` — a hostile repo can no longer redirect config or scratch state by shipping a settings file |
+| Bash arithmetic auto-approve | Permission checks no longer auto-approve a command assigning an arithmetic expression to an integer shell variable (`OPTIND=1/0`, `RANDOM=2+2`); these now prompt |
 
 ## Integration Points
 

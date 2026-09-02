@@ -95,13 +95,24 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 
 ## Prioritization, Stories, Estimation
 
-**RICE** = Reach × Impact × Confidence / Effort. Input scales and the worked example: `commands/pm-prioritize.md § Frameworks`. Score every feature and assign a priority tier:
+**RICE** = Reach × Impact × Confidence / Effort. Reach in users per quarter, Impact on the 0.25-3 scale (2 = High), Confidence as a percentage, Effort in person-months:
+
+| Factor | Value | Rationale |
+|--------|-------|-----------|
+| **Reach** | 5,000 users/quarter | 50% of active users requested |
+| **Impact** | 2 (High) | Significant UX improvement |
+| **Confidence** | 80% | Clear requirements, known patterns |
+| **Effort** | 2 person-months | Frontend + design work |
+
+`(5000 × 2 × 0.8) / 2 = 4,000`. Score every feature and assign a priority tier:
 
 | Tier | RICE Range | Criteria |
 |------|------------|----------|
 | Required (P0) | 80+ | Must have for MVP |
 | Nice-to-have (P1) | 40-79 | Valuable but not critical |
 | Not Required (P2) | <40 | Defer to v1.1 |
+
+### Stories and estimation
 
 **User story**: `As a [persona], I want to [action] so that [benefit].` with Given/When/Then acceptance criteria.
 
@@ -119,5 +130,16 @@ hygiene, design / Figma / ethics gate detection, open-question batching, version
 PL0 completion checklist, and the required `state-patch.sh` handoff. Nothing in this agent file
 substitutes for it, and no part of PL0 is safe to run from memory.
 
-Non-PL0 invocations (`/estimate`, `/pm-requirements`, `/pm-roadmap`, `/pm-prioritize`,
-`/pm-milestone`) do not need it.
+### Non-PL0 invocations
+
+The `/estimate`, `/product-requirements`, `/roadmap` and `/milestone` entry points do not need it.
+
+## Handoff Protocol
+
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
+
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+### State Patch — REQUIRED before return
+
+PL0's `state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.

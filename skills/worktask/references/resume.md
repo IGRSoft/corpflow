@@ -47,7 +47,7 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, PL0 handoff carries non-empty `open_questions[]` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]`; do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate (a `/megatask` per-issue run never reaches this row — it parks instead: settled `failed` + `parked_escalation`, `commands/worktask.md § Step A.4 Escalation guard`). |
+| PL0 `completed`, stage tasks `pending`, `PL0.metadata.decision_gate == "auto"`, `facts.open_questions[]` holds a `sw-PL<N>-*` item with `status != "resolved"` | `auto_decision_dispatched` for `PL<run_index>` present but no matching `auto_decision_resolved` | Auto-decision pass interrupted mid-delegate. Re-run `commands/worktask.md § Step A.4` — already-applied decisions are visible as `(auto-decided)` entries in `facts.decisions[]` and as items marked `status: "resolved"` (never dropped); do not re-decide those — then continue to the plan-gate row above. Unanswered `escalate` items always STOP for the user, even on a `bypass` plan gate (a `/megatask` per-issue run never reaches this row — it parks instead: settled `failed` + `parked_escalation`, `commands/worktask.md § Step A.4 Escalation guard`). |
 
 ### Mid-stage & FN-gate rows
 
@@ -71,6 +71,17 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 | Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
 | Live `agent_id` matching that stage AND its status reads **"Needs input"** (sandbox / MCP-input / managed-settings prompt) | — | Parked **on us** but operator-owned. Reattach via `SendMessage` only to surface the prompt verbatim — never auto-answer or re-dispatch a duplicate for that stage |
 | Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
+
+### Live-agent rows — broken hook configuration
+
+| Ledger Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| Live `agent_id` matching that stage AND its `claude agents` row names a **hook plus a schema error** (a `PermissionRequest`/`PreToolUse` hook printed an invalid answer) | — | Operator-owned park: broken hook config, not a stage to re-dispatch. `SendMessage` cannot clear it — the same hook rejects the next tool call too. Fix the hook, then resume normally. Do not spend a `retry_count` on it |
+
+Distinct from the "Needs input" row above, which is also operator-owned but *answerable*: that one
+parks on a prompt a human can respond to, this one parks on configuration that must be edited
+before the session can move at all. Before CC 2.1.248 such a session waited silently and read as a
+busy agent.
 
 ### Live-agent rows — parked or gone
 
@@ -109,7 +120,7 @@ which a human enters by name.
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| Stage returned (not live, not errored) but the artifact is absent, or present with no `handoff.verdict` | `stage_returned_incomplete` | Reattach via `SendMessage`; never re-delegate |
+| Stage returned (not live, not errored) but the artifact is absent, present with no `handoff.verdict`, or **marked `partial`** (`maxTurns` ceiling) even when a verdict IS present | `stage_returned_incomplete` | Reattach via `SendMessage`; never re-delegate |
 
 The agent ended its turn with budget remaining and no finished handoff. To the runtime that is an
 ordinary return, which is why 6.5a's errored-return arm never fires.
@@ -117,6 +128,71 @@ ordinary return, which is why 6.5a's errored-return arm never fires.
 Reattach via `SendMessage` to finish the same work. Do **not** re-delegate (a fresh dispatch redoes
 work against a tree the yielded agent already edited) and do **not** increment `retry_count`:
 nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
+
+#### Mid-stage yield — the three reasons
+
+`metadata.reason` carries `artifact_absent`, `handoff_verdict_missing`, or `max_turns_partial`.
+The third is the case where a subagent stopped at its `maxTurns` ceiling returns output **marked
+partial**, with a hint to continue via `SendMessage`. Every corpflow agent declares a ceiling
+(`agents/*.md`, e.g. `agents/team-lead.md`: 30), and this arm fires **regardless of whether a
+verdict was written** — a stage can hit the ceiling after writing one.
+
+#### Mid-stage yield vs a budget halt
+
+Both skip `retry_count`, and there the similarity ends: a budget halt is **re-dispatched** once the
+budget is raised, while a `max_turns_partial` stage is **reattached**. The agent still holds the
+tree it edited, so re-delegating discards that work and re-pays the stage
+(`agent-coordination/SKILL.md § Budget halts are not stage failures`).
+
+### Reattach rows — the SendMessage has a result too
+
+Every row above that says "reattach via `SendMessage`" assumed the send succeeds. It no longer
+does: each non-delivery mode is observable rather than a silent success. **This is the entry the
+plugin's min-CC floor rests on.** Read the result before treating any reattach as done, and log one
+`reattach_send_result` row per attempt. Contract: `result: "ok"` means delivered; every non-delivery
+is `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`, `burst_limited`,
+`session_list_truncated`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`, and never omit the
+field: `stale-check.sh` reads any *present* result other than `ok` as undelivered, while a missing
+or null `result` counts as delivered — an omitted result hides a non-delivery instead of surfacing
+it.
+
+#### Reattach rows — the result table
+
+| Send result | Action |
+|---|---|
+| Delivered | Proceed exactly as the triggering row says — leave the stage `in_progress` and await its return |
+| `refused` — recipient sets `crossSessionInbound: "refuse"`, or holds an invalid value under managed settings | Stage stays parked. Recipient-config block, operator-owned: escalate, do **not** re-delegate and do **not** increment `retry_count` |
+| `dropped` — recipient's inbox is full or rate-limited | Stage stays parked. Back off and retry once; a second drop escalates |
+| `oversized` — refused up front for message size | Stage stays parked. The reattach prompt is too large — an authoring defect on our side, not a recipient problem. Shorten and retry |
+| `burst_limited` — refused up front for send rate | Stage stays parked. Back off briefly, retry once |
+
+#### Reattach rows — an unconfirmed absence
+
+| Send result | Action |
+|---|---|
+| `session_list_truncated` — the account's session list was too long to enumerate fully | **Any "agent gone" verdict reached under this condition is unconfirmed, not established.** Never re-delegate off it: retry discovery once, then escalate |
+
+#### Reattach rows — undelivered means unchanged
+
+A delivered nudge advances the stage; every other result leaves it exactly where it was. Treating
+an undelivered send as delivered is how a parked stage silently becomes an abandoned one.
+
+### Reply routing
+
+| Ledger Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| Stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in **this** (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the `ok` leg. Absent → still outstanding; do **not** re-delegate and do **not** re-ask (a second send duplicates the question to the peer) |
+
+#### Reply routing — why the stage cannot ask for itself
+
+A subagent's `SendMessage` to another **session** delivers its reply to the parent session's
+conversation, so a stage agent that sends its own cross-session ask can never receive the answer —
+it would wait forever. The stage names who to ask and what; the orchestrator owns the send. Rule
+and schema: `agent-coordination/SKILL.md § Replies from a subagent land in the parent conversation`
+and `handoff-protocol.md § Schema — open_questions, refs, constraints`.
+
+A stage that sent its own ask before this rule existed has no path to the answer. Treat it like
+`stage_returned_incomplete` and reattach so the ask is redone through the orchestrator.
 
 ## Resume Procedure
 
@@ -136,6 +212,27 @@ nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
    `sessionId`, so match on prefix too) and liveness from `waitingFor` when present, else
    `state`/`status`. An unrecognised token is **unknown, not absent** — never re-delegate off one.
    `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
+
+### Step 0 notes — own-name & teammate visibility
+
+   `ListAgents`/`claude agents --json` now lists live **teammates** (previously invisible, so a
+   reachable teammate read as absent) and tells a session **its own name** — the address peers use,
+   and the one to avoid when constructing a `cross_session_ask` so a stage does not address itself.
+   The pre-warmed idle worker no longer appears until a task claims it, removing a phantom row from
+   the best-effort `subagent_type` match in § Degrade rules — absent or terminal rows.
+
+   Both change the pre-check's error profile, not its shape: fewer false negatives (a teammate
+   read as gone) and fewer false positives (a phantom read as live). The degrade rules are
+   unchanged and simply act on better input.
+
+### Step 0 notes — reattach vs re-dispatch has a price
+
+   `SessionStart` resume hooks receive the session's **staleness and an estimated re-cache cost**.
+   Reattach is not unconditionally cheaper than re-dispatch: a long-idle session whose prompt cache
+   has aged out pays that re-cache on its first turn, which can exceed a fresh dispatch for a short
+   stage. Weigh the reported cost rather than assuming, and prefer re-dispatch only when the
+   estimate clearly exceeds the stage's own cost — reattach still wins whenever the agent holds
+   edited tree state, at any cache price (§ Mid-stage yield).
 
 ### Step 0 notes — proactive detection
 
@@ -186,7 +283,7 @@ nothing failed. Detector: `skills/worktask/SKILL.md § Step 6.5a2`.
 #### Stopped & work preservation
 
    - **Stopped means stopped**: stopped stays stopped; an operator-killed agent never auto-respawns or re-runs a stale prompt; a daemon-restart-killed worker auto-resumes when the agents view next opens. Re-delegate only when the pre-check shows the agent truly absent.
-   - **Work preservation**: waking a background job never deletes its transcript or re-runs the prompt; returning to `claude agents` carries running work over; long-running commands survive session restarts; locked `.git/worktrees/` entries are swept once the owning process is gone — stale-worktree cleanup is not a resume chore.
+   - **Work preservation**: waking a background job never deletes its transcript or re-runs the prompt; returning to `claude agents` carries running work over; long-running commands survive session restarts. A **running** background session now holds its worktree's lock, so cleanup and `git worktree remove` leave it alone; the periodic sweep of locked `.git/worktrees/` entries is the backstop for a *killed* session's stale lock, not the primary mechanism. Either way stale-worktree cleanup is not a resume chore.
 #### Reattach, cross-spawn & inspection
 
    - **Reattach fidelity**: `SendMessage` asks the caller to retarget when a re-spawned agent reuses a previous name; a `SendMessage`-resumed agent does not stick as `failed`/`completed`; a per-stage model override survives resume and follow-up messages (`skills/shared/model-selection.md § Per-Invocation Override`); `/rename` persists across restarts.

@@ -108,17 +108,24 @@ SCRATCH_PATTERNS=('/workspace.json' '/.worktrees/')
 SCRATCH_HEADER='# megatask scratch — skills/megatask/scripts/init-worktree.sh'
 
 # ---------------------------------------------------------------------------
-# resolve_base_branch  <issue_num> [<json_file>]
+# resolve_base_branch  <repo_root> <issue_num> [<json_file>]
 # Delegates entirely to milestone-helpers cmd_base_branch — no hardcoding.
+#
+# Runs in <repo_root>: the helper's develop-vs-master probe is a `git ls-remote`
+# against the AMBIENT repo, so resolving it from the caller's cwd picks a branch
+# from one repo and step 7 then fetches it in another. A caller standing in a repo
+# with `develop` initialising a worktree in one without it got exit 128.
+# Subshell, so the -C discipline in step 7 still holds for everything else.
 # ---------------------------------------------------------------------------
 resolve_base_branch() {
-  local issue_num="$1"
-  local json_file="${2:-}"
+  local repo_root="$1"
+  local issue_num="$2"
+  local json_file="${3:-}"
 
   if [[ -n "$json_file" ]]; then
-    bash -- "$HELPERS_PATH" base-branch "$issue_num" --file "$json_file"
+    (cd -- "$repo_root" && bash -- "$HELPERS_PATH" base-branch "$issue_num" --file "$json_file")
   else
-    bash -- "$HELPERS_PATH" base-branch "$issue_num"
+    (cd -- "$repo_root" && bash -- "$HELPERS_PATH" base-branch "$issue_num")
   fi
 }
 
@@ -229,7 +236,7 @@ run_init() {
 
   # 1. Resolve base branch.
   local base_branch base_branch_src
-  base_branch=$(resolve_base_branch "$OPT_ISSUE" "${OPT_FILE:-}")
+  base_branch=$(resolve_base_branch "$repo_root" "$OPT_ISSUE" "${OPT_FILE:-}")
   # Determine source label (mirrors SKILL.md §Base Branch Resolution).
   if [[ -n "${OPT_FILE:-}" ]]; then
     local _body

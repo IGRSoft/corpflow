@@ -86,13 +86,32 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 > - tmux/pane teammates inherit the leader's `--effort` (`teammateMode: "iterm2"` available), and
 >   completion notifications carry `worktreePath`/`worktreeBranch` to locate each lane's worktree.
 
+#### Teammate lifecycle — results and visibility
+
+> - A teammate's **final answer arrives in the idle notification itself**, not a content-free
+>   "available" notice. Read the lane's result off the notification; a follow-up `SendMessage`
+>   asking what it concluded is a wasted round-trip per lane.
+> - Live teammates now appear in `ListAgents`/`claude agents --json`, so a lead resuming mid-batch
+>   can use the same pre-check the stage loop uses
+>   (`../../worktask/references/resume.md § Step 0 notes — own-name & teammate visibility`)
+>   instead of relying on `TeammateIdle` plus re-spawn-on-`failed` alone.
+> - The "Default teammate model" setting is gone: teammates run the leader's model unless the
+>   spawn names one. Pin a lane's tier at `Agent(name: …, model: …)`, never in config.
+
 ### Worktree and mailbox reliability
 
 > - Project-scoped plugins load inside worktrees of the same repository — lane teammates see the
 >   full skill set; the resume picker stays fast with many worktrees.
-> - Locked `.git/worktrees/` registrations from killed teammates are released by a **periodic
->   sweep** once the owning process is confirmed gone; a malformed mailbox message does not
->   crash-loop a team.
+> - A **running** backgrounded lane holds its worktree's lock, so cleanup and `git worktree remove`
+>   leave it alone — lane teardown needs no "is anyone still in there?" guard. The **periodic
+>   sweep** of locked `.git/worktrees/` registrations is the backstop for a *killed* teammate's
+>   stale lock. A malformed mailbox message does not crash-loop a team.
+> - A background session and its subagents can edit files inside a worktree the session created
+>   itself with `git worktree add` — previously blocked by the isolation check, which stalled the
+>   lane. Parent-checkout isolation below is unaffected.
+
+#### Worktree isolation guarantees
+
 > - `claude agents` teammates finishing code work in a worktree auto commit/push/open a **draft
 >   PR** — step 6 above, by design in lanes, since megatask stamps `fn_gate: "bypass"`.
 > - **Parent-checkout isolation** (runtime-enforced, CC 2.1.222): worktree-isolated sessions and

@@ -154,6 +154,8 @@ Before marking DC stage complete, verify:
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dc`. Prev→this label: `QA→DC`.
 
+**Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`) to atomically patch `tasks.DC0` + the `QA→DC` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
@@ -163,7 +165,9 @@ Run `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`) to atomic
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it:
 
 ```bash
-state-patch.sh --stage DC --prev QA --facts '{"files_modified": ["README.md"]}'
+state-patch.sh --stage DC --prev QA --facts '{
+  "files_modified": ["README.md"],
+  "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep"}]}'
 ```
 
 `files_modified` unions on the path string, first-seen order kept, so it never clobbers DV's entries and a re-run is byte-identical. Omitting it loses the file silently. Canonical rule: `handoff-protocol.md#facts-union`.

@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep
 related:
   - agents/software-architector.md
   - commands/arch-review.md
-  - commands/pm-sprint.md
+  - commands/sprint.md
 ---
 
 # Technical Debt Command

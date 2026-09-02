@@ -25,9 +25,18 @@ import argparse
 import collections
 import json
 import os
+import re
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import importlib.util
+
+_ENGINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval-engine.py")
+_spec = importlib.util.spec_from_file_location("eval_engine", _ENGINE_PATH)
+engine = importlib.util.module_from_spec(_spec)
+sys.modules["eval_engine"] = engine
+_spec.loader.exec_module(engine)
+
+REPO = engine.REPO
 DEFAULT_OUT = os.path.join(REPO, "skills", "request-plan", "evals", "evals.json")
 
 ROUTE_ASSERTION = {
@@ -55,215 +64,230 @@ ROUTE_ASSERTION = {
 RETIRED = {
     6: "megatask --dry-run shipped 2026-06-22; init-worktree.sh takes it and writes nothing",
     8: "branch-name.sh:464 already no-ops on a tracked upstream, so the rename never happens",
+    9: "cost-report was removed with the whole cost-observability feature; there is no command "
+       "left to add a machine-readable summary to",
     10: "analysis.py has carried a module docstring since f03065f",
     46: "attachments-preseed.sh makes no temp file outside its selftest, which traps its own cleanup",
     52: "rotation.py opens with a module docstring giving the retention and atomicity rationale",
     57: "qa-engineer.md:99 already states QA is the sole holder of full-suite authority",
     62: "hook-install.sh backs up on overwrite, and writes no settings file at all",
+    74: "context-status was removed; nothing in the repo reports remaining context to plan against",
+    98: "status-view.sh was removed with /worktask-status; no live-status table remains to plan",
+    114: "worktask-status was removed; its only grounding surface no longer exists",
 }
 
-# (type, grounding, route, prompt, grounding_paths, discovery_values)
-# discovery_values must NOT appear in the prompt — enforced below.
+# (type, grounding, route, prompt, grounding_paths)
+#
+# No vocabulary field, deliberately. `finds-the-real-surface` derives from
+# grounding_paths; accepting an author-supplied word list instead would pass any plan
+# that happened to use the word, which is the leak `surface_tokens` exists to close.
+# Repoint the path when a case grades the wrong file.
 CASES = [
     # ---- exists-obvious: prompt names the surface; discovery targets a relative ----
     ("bug", "obvious", "std", "state-merge.sh is dropping keys when two stages patch at once. plan a fix.",
-     ["hooks/state-merge.sh"], ["state-patch", "atomic", "ledger"]),
+     ["hooks/state-merge.sh"]),
     ("refactor", "obvious", "std", "dispatch.py has grown past 30KB. how would you break it up?",
-     ["benchmark/harness/benchmarklive/dispatch.py"], ["preamble", "baseline", "budget"]),
+     ["benchmark/harness/benchmarklive/dispatch.py"]),
     ("refactor", "obvious", "std", "fn-preflight.sh is 24KB in one file. plan an extraction.",
-     ["skills/worktask/scripts/fn-preflight.sh"], ["pr-body-lint", "branch-lib", "section-lint"]),
-    ("docs", "obvious", "std", "CHANGELOG.md is 183KB and unreadable. what's the plan to split it?",
-     ["CHANGELOG.md"], ["release", "version", "semver"]),
+     ["skills/worktask/scripts/fn-preflight.sh"]),
+    # The figure has now gone stale three times (183 -> 123 -> 145) and each drift silently
+    # changes what the case tests. If the corpus is ever re-cut, prefer a premise that does
+    # not embed a number the repo keeps moving; changing it here invalidates the human label,
+    # which is why it is corrected rather than removed.
+    ("docs", "obvious", "std", "CHANGELOG.md is 145KB and unreadable. what's the plan to split it?",
+     ["CHANGELOG.md"]),
     ("bug", "obvious", "std", "the comment density gate rejects DocC that looks fine to me. plan a fix.",
-     ["hooks/dv-comment-density-gate.sh"], ["comment-standard", "code-comment", "DocC ratio"]),
+     ["hooks/dv-comment-density-gate.sh"]),
     None,  # 6 — retired; see RETIRED
     ("refactor", "obvious", "std", "genlib.py mixes a subprocess wrapper with tree copying. plan a split.",
-     ["benchmark/harness/benchmarkkit/genlib.py"], ["oracle", "deterministic", "generators"]),
+     ["benchmark/harness/benchmarkkit/genlib.py"]),
     None,  # 8 — retired; see RETIRED
-    ("feature", "obvious", "std", "add a machine-readable summary to cost-report. plan it.",
-     ["commands/cost-report.md"], ["csv-export", "token", "usage"]),
+    None,  # 9 — retired; see RETIRED
     None,  # 10 — retired; see RETIRED
     ("migration", "obvious", "secure", "credentials.py still accepts an env key. plan dropping that path.",
-     ["benchmark/harness/benchmarklive/credentials.py"], ["login", "probe", "boolean"]),
+     ["benchmark/harness/benchmarklive/credentials.py"]),
     ("feature", "obvious", "secure", "add secret scanning to fn-preflight.sh before it opens a PR.",
-     ["skills/worktask/scripts/fn-preflight.sh"], ["gitleaks", "trufflehog", "scan"]),
+     ["skills/worktask/scripts/fn-preflight.sh"]),
     ("bug", "obvious", "secure", "audit-tooluse.sh may be logging tool inputs verbatim. plan a fix.",
-     ["hooks/audit-tooluse.sh"], ["redact", "sanitis", "sanitiz"]),
+     ["hooks/audit-tooluse.sh"]),
     ("incident", "obvious", "emerg", "megatask-monitor.sh is hanging mid-batch right now. plan the response.",
-     ["hooks/megatask-monitor.sh"], ["timeout", "watchdog", "stall"]),
+     ["hooks/megatask-monitor.sh"]),
     ("incident", "obvious", "emerg", "precompact-checkpoint.sh is failing and we're losing context. plan it.",
-     ["hooks/precompact-checkpoint.sh"], ["resume", "transcript", "ledger"]),
+     ["hooks/precompact-checkpoint.sh"]),
 
     # ---- exists-buried: prompt never names the surface; discovery must find it ----
     ("feature", "buried", "std", "i want the cost numbers exportable into a spreadsheet. what's the plan?",
-     ["skills/csv-export-templates/SKILL.md"], ["csv-export-templates", "13[- ]CSV"]),
+     ["skills/csv-export-templates/SKILL.md"]),
     # Two grounds, same repair as cases 31 and 84: state-merge.sh performs the union, but
     # `state-patch.sh --facts` is the layer that drives it and the one a fix plan lands in.
     ("bug", "buried", "std", "our stage handoffs silently lose facts between stages. plan a fix.",
-     ["hooks/state-merge.sh", "skills/worktask/scripts/state-patch.sh"],
-     ["state-merge", "state-patch", "ledger"]),
+     ["hooks/state-merge.sh", "skills/worktask/scripts/state-patch.sh"]),
     ("feature", "buried", "std", "i want screenshots attached to the PR automatically. plan it.",
-     ["skills/worktask/scripts/attach-visual-evidence.sh"], ["attach-visual-evidence", "dv-screenshot"]),
+     ["skills/worktask/scripts/attach-visual-evidence.sh"]),
     ("bug", "buried", "std", "PR descriptions keep leaking absolute paths from my machine. plan a fix.",
-     ["skills/worktask/scripts/pr-body-lint.sh"], ["pr-body-lint", "body.lint"]),
+     ["skills/worktask/scripts/pr-body-lint.sh"]),
     ("feature", "buried", "std", "i want the plugin to learn from my edits after a task ships. plan it.",
-     ["skills/self-improvement/SKILL.md"], ["self-improvement", "failure-labels"]),
+     ["skills/self-improvement/SKILL.md"]),
     ("bug", "buried", "std", "branches come out with inconsistent names across runs. plan a fix.",
-     ["skills/worktask/scripts/branch-lib.sh"], ["branch-lib", "derive_type", "conventional"]),
+     ["skills/worktask/scripts/branch-lib.sh"]),
     ("feature", "buried", "std", "i need to know which agents actually ran during a task. plan it.",
-     ["hooks/audit-subagent.sh"], ["audit-subagent", "coverage", "manifest"]),
+     ["hooks/audit-subagent.sh"]),
+    # Ground was section-lint.sh, which caps SECTION LENGTH and has nothing to do with
+    # anchors. anchor-preflight.sh is the anchor lint — it runs cache-lint --anchor-lint
+    # on stage artifacts so a bad H2 surfaces at the producing stage, which is the
+    # reported drift exactly. The 0.2.0 capture reached it and was scored a miss.
     ("bug", "buried", "std", "the doc anchors in stage artifacts drift from the templates. plan a fix.",
-     ["skills/worktask/scripts/section-lint.sh"], ["section-lint", "anchor-preflight"]),
+     ["hooks/anchor-preflight.sh"]),
     ("feature", "buried", "std", "i want an estimate broken down by phase and budget. plan it.",
-     ["skills/estimation-methodology/SKILL.md"], ["estimation-methodology", "complexity"]),
+     ["skills/estimation-methodology/SKILL.md"]),
     ("refactor", "buried", "std", "the prompt cache keeps missing between stages. plan an investigation.",
-     ["skills/worktask/scripts/cache-lint.sh"], ["cache-lint", "prefix", "preamble"]),
+     ["skills/worktask/scripts/cache-lint.sh"]),
     ("bug", "buried", "std", "we keep opening duplicate tickets for the same piece of work. plan a fix.",
-     ["skills/gh-issue-dedup/SKILL.md"], ["gh-issue-dedup", "anchor"]),
+     ["skills/gh-issue-dedup/SKILL.md"]),
     ("feature", "buried", "std", "i want to compare two runs of the same task for cost. plan it.",
-     ["benchmark/harness/benchmarkkit/pairing.py"], ["pairing", "paired", "arm"]),
+     ["benchmark/harness/benchmarkkit/pairing.py"]),
     ("docs", "buried", "std", "new contributors can't tell which agent owns which stage. plan the docs.",
-     ["skills/agent-coordination/SKILL.md"], ["agent-coordination", "nesting"]),
+     ["skills/agent-coordination/SKILL.md"]),
     ("migration", "buried", "secure", "the labels we write about user edits might contain their code. plan a fix.",
-     ["skills/self-improvement/SKILL.md"], ["redact", "no diff bodies", "summary only"]),
+     ["skills/self-improvement/SKILL.md"]),
     ("incident", "buried", "emerg", "a task is wedged in_progress and nothing will pick it up. plan the response.",
-     ["skills/worktask/scripts/state-patch.sh"], ["state-patch", "ledger", "stuck"]),
+     ["skills/worktask/scripts/state-patch.sh"]),
 
     # ---- adjacent-only: the near-miss surface exists and must be named ----
     # Two grounds: the protocol doc states the matrix, but the unbounded loop is the
     # retry_count reset at workflow-engineer.md:118 / agent-coordination SKILL.md:85 --
     # nothing counts round-trips on the same edge. A plan that names either has found it.
     ("bug", "adjacent", "std", "the retry matrix loops forever when a stage keeps failing. plan a fix.",
-     ["skills/worktask/references/handoff-protocol.md", "skills/agent-coordination/SKILL.md"],
-     ["handoff-protocol", "escalate"]),
+     ["skills/worktask/references/handoff-protocol.md", "skills/agent-coordination/SKILL.md"]),
     ("feature", "adjacent", "std", "put a spend ceiling on a task so it can't run away. plan it.",
-     ["commands/cost-report.md"], ["cost-report", "budget"]),
+     ["skills/cost-optimization/SKILL.md"]),
     ("feature", "adjacent", "std", "i want a per-stage timeout so nothing hangs forever. plan it.",
-     ["hooks/megatask-monitor.sh"], ["megatask-monitor", "monitor"]),
+     ["hooks/megatask-monitor.sh"]),
     ("migration", "adjacent", "secure", "move the audit trail into something encrypted at rest. plan it.",
-     ["hooks/audit-tooluse.sh"], ["audit", "jsonl"]),
+     ["hooks/audit-tooluse.sh"]),
     ("refactor", "adjacent", "std", "the three planning tiers should be data, not prose. plan it.",
-     ["skills/shared/three-stage-planning.md"], ["three-stage-planning", "P0"]),
+     ["skills/shared/three-stage-planning.md"]),
 
     # ---- absent: nothing to ground on; the correct answer is a question ----
-    ("feature", "absent", "std", "add a Slack notifier that posts when each stage completes. plan it.", [], []),
-    ("bug", "absent", "std", "the iOS build keeps failing on the signing step. help me plan a fix.", [], []),
-    ("feature", "absent", "std", "add dark mode to the settings screen. what's the plan?", [], []),
-    ("migration", "absent", "std", "plan migrating our Postgres schema off the legacy user table.", [], []),
-    ("incident", "absent", "emerg", "the production API is returning 503s right now. plan the response.", [], []),
-    ("bug", "absent", "std", "the checkout flow drops the cart on refresh. plan a fix.", [], []),
-    ("feature", "absent", "std", "add push notifications to the mobile app. what's the plan?", [], []),
-    ("refactor", "absent", "std", "our React components are a mess of prop drilling. plan a refactor.", [], []),
+    ("feature", "absent", "std", "add a Slack notifier that posts when each stage completes. plan it.", []),
+    ("bug", "absent", "std", "the iOS build keeps failing on the signing step. help me plan a fix.", []),
+    ("feature", "absent", "std", "add dark mode to the settings screen. what's the plan?", []),
+    ("migration", "absent", "std", "plan migrating our Postgres schema off the legacy user table.", []),
+    ("incident", "absent", "emerg", "the production API is returning 503s right now. plan the response.", []),
+    ("bug", "absent", "std", "the checkout flow drops the cart on refresh. plan a fix.", []),
+    ("feature", "absent", "std", "add push notifications to the mobile app. what's the plan?", []),
+    ("refactor", "absent", "std", "our React components are a mess of prop drilling. plan a refactor.", []),
 
     # ---- batch 2: obvious ----
     ("refactor", "obvious", "std", "state-patch.sh is 79KB. plan how to break it apart.",
-     ["skills/worktask/scripts/state-patch.sh"], ["state-merge", "ledger", "atomic"]),
+     ["skills/worktask/scripts/state-patch.sh"]),
     ("refactor", "obvious", "std", "publish-pl-issue.sh is 63KB even after an earlier split. plan a further extraction.",
-     ["skills/worktask/scripts/publish-pl-issue.sh"], ["gh-issue-dedup", "milestone", "anchor"]),
+     ["skills/worktask/scripts/publish-pl-issue.sh"]),
     None,  # 46 — retired; see RETIRED
     ("feature", "obvious", "std", "add a JSON output mode to desc-lint.sh. what's the plan?",
-     ["skills/worktask/scripts/desc-lint.sh"], ["section-lint", "structured", "machine"]),
+     ["skills/worktask/scripts/desc-lint.sh"]),
     ("bug", "obvious", "std", "detect-ui-change.sh misses SwiftUI-only diffs. plan a fix.",
-     ["skills/worktask/scripts/detect-ui-change.sh"], ["screenshot", "visual", "evidence"]),
+     ["skills/worktask/scripts/detect-ui-change.sh"]),
     ("refactor", "obvious", "std", "metrics.py has grown to 14KB of mixed concerns. plan a split.",
-     ["benchmark/harness/benchmarkkit/metrics.py"], ["coverage", "usage", "report"]),
+     ["benchmark/harness/benchmarkkit/metrics.py"]),
     # Ground is analysis.py, not report.py: report.py imports format_cost, while
     # analysis.py _outliers() builds its detail with a raw .4f, so one cost renders two ways.
     ("bug", "obvious", "std", "report.py rounds costs inconsistently. plan a fix.",
-     ["benchmark/harness/benchmarkkit/analysis.py", "benchmark/harness/benchmarkkit/report.py"], ["metrics", "analysis", "precision"]),
+     ["benchmark/harness/benchmarkkit/analysis.py", "benchmark/harness/benchmarkkit/report.py"]),
     ("feature", "obvious", "std", "add a resume flag to deterministic_run.py. plan it.",
-     ["benchmark/harness/benchmarkkit/deterministic_run.py"], ["oracle", "rotation", "seed"]),
+     ["benchmark/harness/benchmarkkit/deterministic_run.py"]),
     None,  # 52 — retired; see RETIRED
     ("bug", "obvious", "std", "baseline.py picks the wrong arm on a subset run. plan a fix.",
-     ["benchmark/harness/benchmarklive/baseline.py"], ["resolve_arm", "selection", "policy"]),
+     ["benchmark/harness/benchmarklive/baseline.py"]),
     ("feature", "obvious", "std", "let budget.py warn before the cap rather than after. plan it.",
-     ["benchmark/harness/benchmarklive/budget.py"], ["threshold", "running tally", "breach"]),
+     ["benchmark/harness/benchmarklive/budget.py"]),
     ("refactor", "obvious", "std", "the developer agent file is 48KB. plan how to shrink it.",
-     ["agents/developer.md"], ["routing", "platform", "delegate"]),
+     ["agents/developer.md"]),
     ("refactor", "obvious", "std", "the product-manager agent is 52KB of prose. plan a trim.",
-     ["agents/product-manager.md"], ["requirements", "planning", "template"]),
+     ["agents/product-manager.md"]),
     None,  # 57 — retired; see RETIRED
     ("feature", "obvious", "std", "add a machine-readable verdict to the technical-lead agent. plan it.",
-     ["agents/technical-lead.md"], ["frontmatter", "handoff", "structured"]),
+     ["agents/technical-lead.md"]),
     ("bug", "obvious", "std", "the release-engineer agent emits the wrong version bump. plan a fix.",
-     ["agents/release-engineer.md"], ["semver", "changelog", "release-engineering"]),
+     ["agents/release-engineer.md"]),
     ("feature", "obvious", "secure", "add a threat-model section to the security-reviewer agent. plan it.",
-     ["agents/security-reviewer.md"], ["OWASP", "security-review-process", "auditor"]),
+     ["agents/security-reviewer.md"]),
     ("bug", "obvious", "secure", "anchor-preflight.sh may execute untrusted anchor text. plan a fix.",
-     ["hooks/anchor-preflight.sh"], ["injection", "quote", "eval"]),
+     ["hooks/anchor-preflight.sh"]),
     None,  # 62 — retired; see RETIRED
     ("incident", "obvious", "emerg", "agent-stop.sh is killing live stages. plan the response.",
-     ["hooks/agent-stop.sh"], ["subagent", "stop", "signal"]),
+     ["hooks/agent-stop.sh"]),
     ("incident", "obvious", "emerg", "the dv screenshot gate is blocking every task right now. plan it.",
-     ["hooks/dv-screenshot-gate.sh"], ["visual", "evidence", "requires_screenshots"]),
+     ["hooks/dv-screenshot-gate.sh"]),
 
     # ---- batch 2: buried ----
     ("feature", "buried", "std", "i want to know why one run cost triple another. plan it.",
-     ["benchmark/harness/benchmarkkit/analysis.py"], ["analysis", "era", "comparab"]),
+     ["benchmark/harness/benchmarkkit/analysis.py"]),
     ("bug", "buried", "std", "the generated app passes its own tests but is still wrong. plan a fix.",
-     ["benchmark/harness/benchmarkkit/oracle.py"], ["oracle", "golden", "conformance"]),
+     ["benchmark/harness/benchmarkkit/oracle.py"]),
+    # Ground was rotation.py, which rotates history.json and never compares anything.
+    # "compared fairly" is pairing.py: the comparability gate that refuses to join two
+    # arm records taken under different conditions. The 0.2.0 capture grounded on it.
     ("feature", "buried", "std", "i want the same task run twice and compared fairly. plan it.",
-     ["benchmark/harness/benchmarkkit/rotation.py"], ["rotation", "order", "arm"]),
+     ["benchmark/harness/benchmarkkit/pairing.py"]),
     ("bug", "buried", "std", "our headless runs can reach the network when they shouldn't. plan a fix.",
-     ["benchmark/live/settings/benchmark-settings.json"], ["deny", "settings", "permission"]),
+     ["benchmark/live/settings/benchmark-settings.json"]),
     ("feature", "buried", "std", "i want a written record of every architectural choice. plan it.",
-     ["commands/arch-decision.md"], ["arch-decision", "ADR", "TDR"]),
+     ["commands/arch-decision.md"]),
     ("feature", "buried", "std", "i need to rank a backlog objectively. plan it.",
-     ["commands/pm-prioritize.md"], ["pm-prioritize", "RICE", "WSJF"]),
+     ["agents/product-manager.md"]),
     ("bug", "buried", "std", "our docs drift out of sync with the code. plan a fix.",
-     ["commands/docs-audit.md"], ["docs-audit", "gap", "outdated"]),
+     ["commands/docs-audit.md"]),
     ("feature", "buried", "std", "i want release notes written from what actually shipped. plan it.",
-     ["commands/docs-release-notes.md"], ["release-notes", "changelog"]),
+     ["commands/docs-release-notes.md"]),
     ("feature", "buried", "std", "i want to check a screen works for people using a reader. plan it.",
-     ["commands/design-accessibility.md"], ["accessibility", "audit", "WCAG"]),
-    ("bug", "buried", "std", "nobody can tell how much context is left before a compaction. plan a fix.",
-     ["commands/context-status.md"], ["context-status", "compression", "utilization"]),
+     ["commands/design-accessibility.md"]),
+    None,  # 74 — retired; see RETIRED
     ("feature", "buried", "std", "i want an outside opinion on whether a feature is worth building. plan it.",
-     ["commands/business-report.md"], ["business-report", "ROI", "case"]),
+     ["agents/stakeholder.md"]),
     ("refactor", "buried", "std", "our agent definitions have drifted apart in structure. plan a cleanup.",
-     ["commands/prompt-audit.md"], ["prompt-audit", "consistency"]),
+     ["commands/prompt-audit.md"]),
     ("bug", "buried", "std", "test coverage numbers look fine but bugs still ship. plan a fix.",
-     ["commands/test-coverage.md"], ["test-coverage", "gap", "quality"]),
+     ["commands/test-coverage.md"]),
     ("feature", "buried", "std", "i want to catch ethical problems before a feature ships. plan it.",
-     ["commands/ethics-review.md"], ["ethics-review", "constitutional", "harm"]),
+     ["commands/ethics-review.md"]),
     ("docs", "buried", "std", "there's no written rule for how comments should be written. plan the docs.",
-     ["skills/code-comment-standard/SKILL.md"], ["code-comment-standard", "WHY", "contract"]),
+     ["skills/code-comment-standard/SKILL.md"]),
     ("feature", "buried", "secure", "i want dependency risk checked before we ship. plan it.",
-     ["skills/security-review-process/SKILL.md"], ["security-review-process", "supply-chain", "OWASP"]),
+     ["skills/security-review-process/SKILL.md"]),
     ("migration", "buried", "secure", "our task descriptions end up in public branch names. plan a fix.",
-     ["skills/shared/git-conventions.md"], ["git-conventions", "credential", "durable"]),
+     ["skills/shared/git-conventions.md"]),
     ("incident", "buried", "emerg", "everything is failing and we need someone coordinating. plan it.",
-     ["skills/incident-response/SKILL.md"], ["incident-response", "triage", "post-mortem"]),
+     ["skills/incident-response/SKILL.md"]),
     ("incident", "buried", "emerg", "a hotfix needs to ship now and skip the usual gates. plan it.",
-     ["agents/incident-responder.md"], ["incident-responder", "emergency", "triage"]),
+     ["agents/incident-responder.md"]),
 
     # ---- batch 2: adjacent ----
-    # Grounds match cases 98 and 114, which ask the same thing in different words and
-    # ground on the status surfaces. Three sibling prompts must not have three grounds:
-    # megatask-monitor.sh is a reconciliation hook, not the live-status view.
+    # Once /worktask-status and status-view.sh were removed, megatask-monitor.sh is the
+    # only live-status surface left, so it is the whole ground rather than one of three.
+    # Its siblings 98 and 114 grounded ONLY on the removed surfaces and are retired.
     ("feature", "adjacent", "std", "i want a dashboard showing every task's live status. plan it.",
-     ["skills/worktask/scripts/status-view.sh", "skills/worktask-status/SKILL.md",
-      "hooks/megatask-monitor.sh"], ["megatask-monitor", "monitor"]),
+     ["hooks/megatask-monitor.sh"]),
     ("feature", "adjacent", "std", "let me replay a failed stage without rerunning the whole task. plan it.",
-     ["skills/worktask/scripts/state-patch.sh"], ["state-patch", "ledger"]),
+     ["skills/worktask/scripts/state-patch.sh"]),
     ("migration", "adjacent", "std", "move our estimates into a real database. plan it.",
-     ["skills/estimation-methodology/SKILL.md"], ["estimation-methodology", "complexity"]),
+     ["skills/estimation-methodology/SKILL.md"]),
     ("bug", "adjacent", "std", "the nesting depth limit silently drops a specialist. plan a fix.",
-     ["skills/agent-coordination/SKILL.md"], ["agent-coordination", "depth", "ceiling"]),
+     ["skills/agent-coordination/SKILL.md"]),
     ("feature", "adjacent", "secure", "i want every credential the harness touches rotated. plan it.",
-     ["benchmark/harness/benchmarklive/credentials.py"], ["auth status", "login", "probe"]),
+     ["benchmark/harness/benchmarklive/credentials.py"]),
     ("refactor", "adjacent", "std", "the plan template and the PRD template overlap. plan a merge.",
-     ["commands/pm-requirements.md"], ["pm-requirements", "PRD"]),
+     ["commands/product-requirements.md"]),
     ("incident", "adjacent", "emerg", "a batch run is burning budget with no way to stop it. plan it.",
-     ["benchmark/harness/benchmarklive/budget.py"], ["running tally", "breach", "ceiling"]),
+     ["benchmark/harness/benchmarklive/budget.py"]),
 
     # ---- batch 2: absent ----
-    ("feature", "absent", "std", "add SSO with Okta to the admin console. what's the plan?", [], []),
-    ("bug", "absent", "std", "our Kubernetes pods keep OOMing under load. plan a fix.", [], []),
-    ("migration", "absent", "secure", "plan moving customer PII out of the analytics warehouse.", [], []),
-    ("incident", "absent", "emerg", "the payment processor is rejecting every charge. plan the response.", [], []),
-    ("docs", "absent", "std", "our public API reference is out of date. plan the documentation.", [], []),
-    ("feature", "absent", "std", "add an offline mode to the desktop client. what's the plan?", [], []),
+    ("feature", "absent", "std", "add SSO with Okta to the admin console. what's the plan?", []),
+    ("bug", "absent", "std", "our Kubernetes pods keep OOMing under load. plan a fix.", []),
+    ("migration", "absent", "secure", "plan moving customer PII out of the analytics warehouse.", []),
+    ("incident", "absent", "emerg", "the payment processor is rejecting every charge. plan the response.", []),
+    ("docs", "absent", "std", "our public API reference is out of date. plan the documentation.", []),
+    ("feature", "absent", "std", "add an offline mode to the desktop client. what's the plan?", []),
 
     # ---- batch 3 (ids 97+): the replacement held-out tranche ----
     # The v0.1.0 test tranche held 9 failures and the taxonomy open-coded all 9, so
@@ -274,58 +298,289 @@ CASES = [
 
     # buried: the prompt names no surface, so the search has to reach it
     ("feature", "buried", "std", "there's no way to tell which of my running tasks are still alive. plan it.",
-     ["skills/worktask/scripts/stale-check.sh"], []),
-    ("feature", "buried", "std", "i want one table showing what every task is doing. plan it.",
-     ["skills/worktask/scripts/status-view.sh"], []),
+     ["skills/worktask/scripts/stale-check.sh"]),
+    None,  # 98 — retired; see RETIRED
     ("bug", "buried", "std", "the remote branch name stops matching the plan title once planning finishes. plan a fix.",
-     ["skills/worktask/scripts/refine-branch-target.sh"], []),
+     ["skills/worktask/scripts/refine-branch-target.sh"]),
     ("bug", "buried", "std", "an agent edited files in a stale checkout instead of the one it was assigned. plan a fix.",
-     ["skills/worktask/scripts/dv-tree-preflight.sh"], []),
+     ["skills/worktask/scripts/dv-tree-preflight.sh"]),
     ("feature", "buried", "std", "before work starts i want to know if someone already filed the same request. plan it.",
-     ["skills/worktask/scripts/preflight-issue-scan.sh"], []),
+     ["skills/worktask/scripts/preflight-issue-scan.sh"]),
     ("bug", "buried", "std", "agents re-run the whole suite when nothing changed since the last run. plan a fix.",
-     ["hooks/test-execution-gate.sh"], []),
+     ["hooks/test-execution-gate.sh"]),
     ("feature", "buried", "std", "developers stop following our comment rules partway through an edit session. plan it.",
-     ["hooks/comment-standard-context.sh"], []),
+     ["hooks/comment-standard-context.sh"]),
     ("docs", "buried", "std", "stage handoffs blow the window and nothing explains how to shrink them. plan the documentation.",
-     ["skills/context-compression/SKILL.md"], []),
+     ["skills/context-compression/SKILL.md"]),
     ("feature", "buried", "std", "i want guidance on choosing a cheaper model per stage. plan it.",
-     ["skills/cost-optimization/SKILL.md"], []),
+     ["skills/cost-optimization/SKILL.md"]),
     ("bug", "buried", "std", "background build output lands in a different place every run. plan a fix.",
-     ["skills/logging-conventions/SKILL.md"], []),
+     ["skills/logging-conventions/SKILL.md"]),
     ("refactor", "buried", "std", "artifact paths under the task directory drift between stages. plan a cleanup.",
-     ["skills/task-folder-organization/SKILL.md"], []),
+     ["skills/task-folder-organization/SKILL.md"]),
     ("incident", "buried", "emerg", "a stage handoff is failing schema validation and the run is stuck. plan the response.",
-     ["skills/worktask/scripts/handoff-harness.sh"], []),
+     ["skills/worktask/scripts/handoff-harness.sh"]),
 
     # obvious: the prompt names the surface; only fabrication is being tested
     ("docs", "obvious", "std", "cross-plugin-handoff has no worked example for adding a new plugin. plan the documentation.",
-     ["skills/cross-plugin-handoff/SKILL.md"], []),
+     ["skills/cross-plugin-handoff/SKILL.md"]),
     ("incident", "obvious", "emerg", "fn-preflight-cmds.sh is failing on every PR open. plan the response.",
-     ["skills/worktask/scripts/fn-preflight-cmds.sh"], []),
+     ["skills/worktask/scripts/fn-preflight-cmds.sh"]),
     ("bug", "obvious", "secure", "judge-traces.py feeds untrusted response text into a bypassPermissions session. plan a fix.",
-     ["evals/scripts/judge-traces.py"], []),
+     ["evals/scripts/judge-traces.py"]),
     ("feature", "obvious", "secure", "eval-capture.py stores raw model responses that may contain a password. plan a fix.",
-     ["evals/scripts/eval-capture.py"], []),
+     ["evals/scripts/eval-capture.py"]),
 
     # adjacent: the near-miss surface exists and the plan must name it
     ("docs", "adjacent", "std", "we have no written policy for what makes a release deployable. plan the documentation.",
-     ["skills/release-engineering/SKILL.md"], []),
-    ("feature", "adjacent", "std", "i want to poll a live board of in-flight work. plan it.",
-     ["skills/worktask-status/SKILL.md"], []),
+     ["skills/release-engineering/SKILL.md"]),
+    None,  # 114 — retired; see RETIRED
     ("incident", "adjacent", "emerg", "the trace review page is failing to load any captures. plan the response.",
-     ["evals/scripts/build-review-page.py"], []),
+     ["evals/scripts/build-review-page.py"]),
     ("refactor", "adjacent", "std", "the issue publishing helper duplicates logic with its selftest. plan a split.",
-     ["skills/worktask/scripts/publish-pl-issue-lib.sh"], []),
+     ["skills/worktask/scripts/publish-pl-issue-lib.sh"]),
     ("docs", "adjacent", "std", "reviewers don't know what a senior-level estimate review must cover. plan the documentation.",
-     ["skills/senior-developer-review/SKILL.md"], []),
+     ["skills/estimation-methodology/references/estimate-review.md"]),
     ("incident", "obvious", "emerg", "publish-pl-issue-selftest.sh is failing and blocking every plan publish. plan the response.",
-     ["skills/worktask/scripts/publish-pl-issue-selftest.sh"], []),
+     ["skills/worktask/scripts/publish-pl-issue-selftest.sh"]),
 
     # absent: nothing to ground on, so the case expects a clarification
-    ("docs", "absent", "std", "the onboarding guide in our Notion workspace is out of date. plan the documentation.", [], []),
-    ("incident", "absent", "emerg", "our Redis cluster is down and user sessions are dropping. plan the response.", [], []),
-    ("bug", "absent", "std", "the mobile app crashes on cold start for Android 14 users. plan a fix.", [], []),
+    ("docs", "absent", "std", "the onboarding guide in our Notion workspace is out of date. plan the documentation.", []),
+    ("incident", "absent", "emerg", "our Redis cluster is down and user sessions are dropping. plan the response.", []),
+    ("bug", "absent", "std", "the mobile app crashes on cold start for Android 14 users. plan a fix.", []),
+
+    # ---- batch 4 (ids 122+): rebuilding the search signal the registry spent ----
+    # capability-registry.sh now enumerates hooks, skill scripts and harness modules, which
+    # converts 42 of the 44 standing `buried` cases from a search into a lookup. From 0.2.0
+    # forward the `buried` rate on those cases measures reading a list, not searching a tree.
+    # These replace the lost denominator and ground ONLY on classes the registry deliberately
+    # does not list: skills/*/references/, skills/shared/, and evals/scripts/. That exclusion
+    # is pinned by capability-registry.bats, so widening the registry's globs breaks a test
+    # before it silently answers these.
+    #
+    # Held out by construction: written after the frozen manifest, so whatever the generator
+    # assigns to `test` is the first genuinely unseen tranche this corpus has had. Do not read
+    # it before a capture, and do not pass --restratify, which would move already-read cases in.
+
+    # buried: shared canon — behaviour that lives in a doc no registry line points at
+    ("refactor", "buried", "std", "every agent picks its own model name and they have drifted apart. plan a cleanup.",
+     ["skills/shared/model-selection.md"]),
+    ("docs", "buried", "std", "the two-letter abbreviations for pipeline steps mean different things in different files. plan the documentation.",
+     ["skills/shared/stage-codes.md"]),
+    ("docs", "buried", "std", "nobody can tell what one step of the pipeline owes the next. plan the documentation.",
+     ["skills/shared/stage-contracts.md"]),
+    ("docs", "buried", "std", "there is no written schema for the run record every step reads and writes. plan the documentation.",
+     ["skills/shared/state-ledger.md"]),
+    ("docs", "buried", "std", "we have no agreed split between unit, integration and end-to-end coverage. plan the documentation.",
+     ["skills/shared/testing-strategy.md"]),
+    ("bug", "buried", "std", "developers mark which tests to run in source comments and no two files agree on the format. plan a fix.",
+     ["skills/shared/test-selection-syntax.md"]),
+    ("bug", "buried", "std", "a request for a niche platform falls through to the generic implementer. plan a fix.",
+     ["skills/shared/platform-detection.md"]),
+    ("bug", "buried", "std", "the same role name resolves to a different specialist depending on which file you read. plan a fix.",
+     ["skills/shared/routing-matrix.md"]),
+    ("feature", "buried", "std", "i want a single record of which external plugins we support and from which version. plan it.",
+     ["skills/shared/compatible-plugins.md"]),
+    ("bug", "buried", "std", "our scripts break when the plugin is installed somewhere other than where we develop it. plan a fix.",
+     ["skills/shared/plugin-root-resolution.md"]),
+    ("bug", "buried", "std", "people start a task by pasting a phrase instead of running the entry point, and it half-works. plan a fix.",
+     ["skills/shared/worktask-invocation.md"]),
+    ("refactor", "buried", "std", "each agent restates the whole pipeline in its own words and the copies have drifted. plan a cleanup.",
+     ["skills/shared/worktask-stage-context.md"]),
+    ("bug", "buried", "std", "our post-mortems stop at the first plausible cause and never reach the systemic one. plan a fix.",
+     ["skills/shared/five-whys.md"]),
+    ("feature", "buried", "std", "i want to hand the planner a Word document and have it read as text. plan it.",
+     ["skills/shared/pandoc-ingestion.md"]),
+    ("bug", "buried", "std", "a design link pasted into a request is ignored unless someone also says the word design. plan a fix.",
+     ["skills/shared/figma-capture.md"]),
+
+    # buried: a skill's references/ — the half of a skill the registry line does not describe
+    ("feature", "buried", "std", "i want to launch one pipeline step from a CI runner with no interactive session. plan it.",
+     ["skills/agent-coordination/references/headless-dispatch.md"]),
+    ("docs", "buried", "std", "there is no written procedure for weighing a change that could hurt someone. plan the documentation.",
+     ["skills/claude-constitution/references/harm-framework.md"]),
+    ("feature", "buried", "std", "nobody knows what a normal per-step spend looks like, so nothing can be called excessive. plan it.",
+     ["skills/cost-optimization/references/token-baselines.md"]),
+    ("docs", "buried", "std", "we have nothing written down about which agent inside each external plugin serves each step. plan the documentation.",
+     ["skills/cross-plugin-handoff/references/plugin-protocols.md"]),
+    ("feature", "buried", "std", "we cannot get UI evidence for a target that has no runnable simulator. plan it.",
+     ["skills/dv-screenshot-capture/references/apple-canvas.md"]),
+    ("incident", "buried", "emerg", "every run is failing to attach any visual evidence because the capture tooling is missing. plan the response.",
+     ["skills/dv-screenshot-capture/references/cli-fallback.md"]),
+    ("bug", "buried", "std", "two people sizing the same work get different numbers because they do the steps in a different order. plan a fix.",
+     ["skills/estimation-methodology/references/estimation-run.md"]),
+    ("feature", "buried", "std", "i want the issues in a batch to run as one coordinated team rather than isolated sessions. plan it.",
+     ["skills/megatask/references/agent-teams.md"]),
+    ("bug", "buried", "std", "batch issues start before the ones they are waiting on have finished. plan a fix.",
+     ["skills/megatask/references/dependency-graph.md"]),
+    ("docs", "buried", "std", "the file that drives a batch run has no written schema. plan the documentation.",
+     ["skills/megatask/references/schemas.md"]),
+    ("bug", "buried", "std", "designers keep hardcoding hex values instead of reusing the variable system. plan a fix.",
+     ["skills/pencil-design-worktask/references/design-tokens.md"]),
+    ("bug", "buried", "std", "generated previews fail to compile because nothing knows what arguments the view needs. plan a fix.",
+     ["skills/preview-ensurer/references/mock-data-strategy.md"]),
+    ("bug", "buried", "std", "we cannot reliably tell which types in a Swift file are actually renderable screens. plan a fix.",
+     ["skills/preview-ensurer/references/view-detection.md"]),
+    ("incident", "buried", "emerg", "the release we shipped an hour ago is failing in production and we have no written way back. plan the response.",
+     ["skills/release-engineering/references/rollback-template.md"]),
+    ("bug", "buried", "secure", "every reviewer checks a different subset of the standard vulnerability classes. plan a fix.",
+     ["skills/security-review-process/references/owasp-checklist.md"]),
+    # Two surfaces genuinely own this and neither subsumes the other: review-template.md
+    # is the standalone-review shape but only for SECURITY reviews, while
+    # tech-code-review.md owns the code-review output format. The request says "our
+    # code", so a plan that reaches either has found the surface. Both listed rather
+    # than one picked — the 0.0.1 doc set that precedent for case 3.
+    ("docs", "buried", "std", "a one-off review of our code comes out in a different shape every time, with no fixed sections. plan the documentation.",
+     ["commands/tech-code-review.md",
+      "skills/security-review-process/references/review-template.md"]),
+    ("bug", "buried", "std", "we record what the user changed but nothing says how to classify each change. plan a fix.",
+     ["skills/self-improvement/references/change-categories.md"]),
+    ("docs", "buried", "std", "the learnings file a run leaves behind comes out differently every time. plan the documentation.",
+     ["skills/self-improvement/references/retrospective-template.md"]),
+    ("bug", "buried", "std", "we know the user rewrote something but not which agent should have gotten it right. plan a fix.",
+     ["skills/self-improvement/references/target-mapping.md"]),
+    ("refactor", "buried", "std", "the test-strategy block in a plan is written from scratch every run. plan a cleanup.",
+     ["skills/worktask-testing-strategy/references/stage-templates.md"]),
+    ("feature", "buried", "std", "the two files our review tool expects are hand-written on every run. plan it.",
+     ["skills/worktask/references/conductor-attachments.md"]),
+    ("docs", "buried", "std", "there is no written checklist for the human approval that happens before a PR opens. plan the documentation.",
+     ["skills/worktask/references/fn-gate.md"]),
+    ("docs", "buried", "std", "the planning step has no written procedure and every run improvises it. plan the documentation.",
+     ["skills/worktask/references/pl0-procedure.md"]),
+    ("feature", "buried", "std", "when a long run is interrupted there is no way to reattach and carry on. plan it.",
+     ["skills/worktask/references/resume.md"]),
+    ("feature", "buried", "std", "nobody compares the screen we built against the design it came from. plan it.",
+     ["skills/worktask/references/visual-qa.md"]),
+
+    # buried: eval infrastructure — real behaviour, and the registry lists none of evals/
+    ("feature", "buried", "std", "our graded checks are applied by eye and nobody can reproduce a score. plan it.",
+     ["evals/scripts/eval-engine.py"]),
+    ("feature", "buried", "std", "we have captured responses sitting on disk and nothing turns them into a pass rate. plan it.",
+     ["evals/scripts/eval-grade.py"]),
+    ("bug", "buried", "std", "human judgements and machine scores disagree and nobody reconciles the two. plan a fix.",
+     ["evals/scripts/label-align.py"]),
+
+    # obvious: the three 4.0.26 behaviours that shipped with no case at all. Framed as
+    # coverage requests because each behaviour already ships as specified — asking to BUILD
+    # one would be a refute case, and asking to VERIFY one is the plan SKILL.md § 4 owes.
+    ("feature", "obvious", "std", "/appstore has no test proving it stops instead of guessing when a repo carries markers for both stores. plan it.",
+     ["commands/appstore.md"]),
+    ("feature", "obvious", "std", "nothing checks that /estimate --detailed bases its budget on the post-review story points. plan a test.",
+     ["commands/estimate.md"]),
+    ("feature", "obvious", "std", "nothing verifies the release-engineer agent hands off instead of working inline when its platform plugin is absent. plan it.",
+     ["agents/release-engineer.md"]),
+    # ---- batch 5 (ids 168+): a held-out tranche built to contain failures ----
+    # Batch 4's tranche came back degenerate: 18 cases, all `pass`, so held-out TPR read
+    # 100% on an all-positive set and held-out TNR was unmeasurable — and TNR is the rate
+    # that missed its 80% floor (69% at 0.2.0). Sampling the model's strongest cells
+    # produced no failures for the grader to be scored against.
+    #
+    # These sample where the 0.2.0 dimension tables say the model actually fails, so the
+    # tranche contains failures by natural occurrence. A failure cannot be constructed,
+    # only made likely: 18 `absent` (harness 71%, human 2/6 — the weakest column measured,
+    # and it doubles that column from 17 to 35), 9 `refute`, 10 `adjacent` (16 in corpus,
+    # none held out), 8 `buried` weighted to incident/migration/feature, and route weighted
+    # to `emerg` (79%) over `std` (81%).
+    #
+    # Weighting to `absent` also dissolves batch 4's surface problem: an `absent` case
+    # grounds on nothing by definition, so 18 of the 45 spend no scarce surface. The 18
+    # plan cases that need one draw from what the registry still excludes and no case had
+    # claimed — skills/*/references/, skills/shared/*.md, and the tests/ tree, which
+    # capability-registry.sh excludes for the same reason and batch 4 never touched. The
+    # 9 refute cases ground on registry-LISTED scripts on purpose: the model is meant to
+    # find the shipped capability and dispute the premise, so a lookup is the right
+    # affordance there and it spends none of the search pool.
+    #
+    # Held out by construction, the same way batch 4 succeeded batch 3's 97-121: written
+    # after the frozen manifest, pinned before any capture reads them. Batch 4's 18 are
+    # REPLACED, not grown — they were read during 0.2.0 labelling, and per RESTRATIFY_NOTE
+    # re-stratifying does not make a case unread. Do not pass --restratify.
+
+    # absent: nothing in this repo to ground on, so the case expects a clarification.
+    # The weakest cell measured, and the negative-generating engine for this tranche.
+    ("incident", "absent", "emerg", "our primary database server is down and every write is failing. plan the response.", []),
+    ("incident", "absent", "emerg", "the payment provider is returning 503 on every charge right now. plan the response.", []),
+    ("incident", "absent", "emerg", "our load balancer is rejecting half the inbound traffic. plan the response.", []),
+    ("incident", "absent", "emerg", "the nightly ETL job is hanging and yesterday's figures never landed. plan the response.", []),
+    ("incident", "absent", "emerg", "our CDN is blocking image requests from European users right now. plan the response.", []),
+    ("incident", "absent", "emerg", "the search cluster is failing every query and the storefront shows empty results. plan the response.", []),
+    ("migration", "absent", "std", "we are moving our Rails monolith onto a managed container platform. plan the migration.", []),
+    ("migration", "absent", "std", "we need to move off MongoDB onto a relational store before the next quarter. plan it.", []),
+    ("migration", "absent", "std", "our iOS app has to move from CocoaPods to Swift Package Manager. plan the migration.", []),
+    ("migration", "absent", "std", "we are replacing Segment with a self-hosted analytics collector. plan it.", []),
+    ("feature", "absent", "std", "add a dark mode to our marketing site. plan it.", []),
+    ("feature", "absent", "std", "we want in-app messaging between buyers and sellers. plan it.", []),
+    ("feature", "absent", "std", "customers keep asking for a weekly digest email of their account activity. plan it.", []),
+    ("feature", "absent", "std", "we want offline editing in the mobile client with conflict resolution on reconnect. plan it.", []),
+    ("bug", "absent", "std", "the Android home-screen widget shows stale data until someone opens the app. plan a fix.", []),
+    ("bug", "absent", "std", "our Stripe webhook double-charges a customer when a retry arrives out of order. plan a fix.", []),
+    ("docs", "absent", "std", "our public API reference has drifted from what the service actually returns. plan the documentation.", []),
+    ("refactor", "absent", "std", "the checkout service carries three copies of the same tax calculation. plan a cleanup.", []),
+
+    # adjacent: the near-miss surface exists and the plan must name it. Corpus has 16 and
+    # the held-out tranche had none, so this cell has never been measured out of sample.
+    ("feature", "adjacent", "std", "we want a standing guard that every agent we ship is exercised by at least one test. plan it.",
+     ["tests/shell/meta/coverage-proxy.bats"]),
+    ("feature", "adjacent", "std", "nothing checks that an agent's frontmatter stays in step with the packaging manifest the way our version numbers do. plan it.",
+     ["tests/shell/worktask/manifest-parity.bats"]),
+    ("migration", "adjacent", "std", "we are moving the plan-approval check out of an agent instruction and into a script, and nothing exercises the script path. plan the migration.",
+     ["tests/shell/worktask/approval-gate.bats"]),
+    ("bug", "adjacent", "std", "we name sibling-plugin agents in prose tables and nothing checks those mentions resolve. plan a fix.",
+     ["tests/shell/skills/cross-plugin-refs.bats"]),
+    ("feature", "adjacent", "std", "we want the change-to-test picker to choose a sensible set for documentation-only edits. plan it.",
+     ["tests/bin/select-tests.sh"]),
+    ("docs", "adjacent", "std", "we have no written template for telling stakeholders an incident is over. plan the documentation.",
+     ["skills/incident-response/references/templates.md"]),
+    ("migration", "adjacent", "std", "we are adding a new deployment target and our release sign-off has no boxes for it. plan the migration.",
+     ["skills/release-engineering/references/checklists.md"]),
+    ("feature", "adjacent", "std", "screen recordings from a run have no stated home on disk the way our other captured assets do. plan it.",
+     ["skills/task-folder-organization/references/examples.md"]),
+    ("docs", "adjacent", "std", "our README and reference pages come out in whatever shape each writer prefers, and the rule we have covers source files only. plan the documentation.",
+     ["skills/shared/code-documentation.md"]),
+    ("incident", "adjacent", "emerg", "a runaway CI job is blocking every other run and nothing pins a time limit on the workflow. plan the response.",
+     ["tests/shell/meta/ci-workflow.bats"]),
+
+    # buried: the prompt names no surface, weighted to the three weakest types
+    # (incident 71%, migration 71%, feature 76%) and to `emerg` over `std`
+    ("incident", "buried", "emerg", "a lifecycle event stopped firing partway through a run and the pipeline is hanging with no signal. plan the response.",
+     ["skills/agent-coordination/references/hook-monitoring.md"]),
+    ("migration", "buried", "std", "we are onboarding a sixth external plugin and nothing states what it must expose to us. plan the migration.",
+     ["skills/cross-plugin-handoff/references/plugin-contract.md"]),
+    ("feature", "buried", "std", "our rules for shrinking a handoff are abstract and nothing shows one done on a real payload. plan it.",
+     ["skills/context-compression/references/compression-examples.md"]),
+    ("incident", "buried", "emerg", "a batch run is failing because two issues are writing into the same checkout. plan the response.",
+     ["skills/megatask/references/git-integration.md"]),
+    ("feature", "buried", "std", "before reviewing a change we want the trust boundaries it crosses enumerated first. plan it.",
+     ["skills/security-review-process/references/threat-model.md"]),
+    ("migration", "buried", "std", "we are running several tasks side by side and nothing states how a stage decides which working tree its files belong to. plan the migration.",
+     ["skills/worktask/references/workspace-modes.md"]),
+    ("bug", "buried", "std", "the same absolute-path prefix list is written out twice and the two copies can drift apart. plan a fix.",
+     ["tests/shell/worktask/local-path-regex-parity.bats"]),
+    ("refactor", "buried", "std", "the stage-to-artifact naming rule is copied into seven files with no owner and it has drifted once. plan a cleanup.",
+     ["tests/shell/worktask/artifact-map-parity.bats"]),
+
+    # refute: the premise is false and the answer owes a refutation with evidence, not a
+    # plan. Corpus has 23 and the 3 in the spent tranche were 0.2.0 conversions, so the
+    # cell has never been measured on cases written to be refutations. Each grounds on the
+    # surface that disproves it, which is also what premise_refuted_by cites.
+    ("feature", "buried", "std", "we have no way to roll up the correction labels we collect into per-agent counts. plan it.",
+     ["skills/self-improvement/scripts/label-stats.sh"]),
+    ("bug", "obvious", "secure", "scan-secrets.sh has no offline path and stops dead when gitleaks is missing. plan a fix.",
+     ["skills/security-review-process/scripts/scan-secrets.sh"]),
+    ("bug", "buried", "std", "when a merge conflict lands in the Xcode project file our tooling gives up and someone hand-merges the test file list. plan a fix.",
+     ["skills/megatask/scripts/resolve-pbxproj-membership.sh"]),
+    ("bug", "obvious", "std", "size-budget.sh warns about an oversized capture but never shrinks one. plan a fix.",
+     ["skills/dv-screenshot-capture/scripts/size-budget.sh"]),
+    ("feature", "buried", "std", "after a compaction the run cannot tell which stage it was in the middle of. plan it.",
+     ["skills/context-compression/scripts/post-compact-recovery.sh"]),
+    ("bug", "buried", "std", "the changelog and the version bump disagree about what counts as a breaking change. plan a fix.",
+     ["skills/release-engineering/scripts/conventional-commits-lib.sh"]),
+    ("bug", "obvious", "std", "validate-export.sh checks each CSV on its own and misses totals that disagree across files. plan a fix.",
+     ["skills/csv-export-templates/scripts/validate-export.sh"]),
+    ("bug", "buried", "std", "our audit trail counts an event twice when a hook and an agent both record it. plan a fix.",
+     ["skills/agent-coordination/scripts/audit-dedup.sh"]),
+    ("bug", "obvious", "std", "estimate-calc.py stops at hours and cannot turn them into money. plan a fix.",
+     ["skills/estimation-methodology/scripts/estimate-calc.py"]),
 ]
 
 
@@ -381,27 +636,36 @@ REFUTED_PREMISE = {
         "dispatch.py was split in 18ba0c2; it is now a 352-line orchestration shim"),
     3: ("shipped", "fn-preflight.sh is 24KB",
         "c51ffa7 extracted the command bodies into a sourced library; 24,961 -> 8,763 B"),
-    4: ("shipped", "CHANGELOG.md is 183KB",
-        "d32c8b3 split the release history into CHANGELOG-1/2/3.x.md; 183,163 -> 119,284 B"),
+    # NOT here, deliberately: case 4 ("CHANGELOG.md is <N>KB"). d32c8b3 split the release
+    # history, but the file has since regrown past the size the premise names, so what went
+    # stale was the NUMBER, not the request — it belongs with the correct-the-figure cases,
+    # not the shipped-work conversions. 5 and 53 were re-audited against the same test and
+    # stay: both cite shipped behaviour, and a shipped capability is not a stale measurement.
     5: ("shipped", "the comment density gate rejects DocC",
         "913d786 scores comment blocks rather than the raw ratio"),
     7: ("shipped", "genlib.py mixes a subprocess wrapper",
         "genlib.py was split in 8fe5aec; treecopy.py owns materialization"),
-    9: ("shipped", "add a machine-readable summary to cost-report",
-        "171c74f added --json and ad26a1f pinned the --export CSV schema"),
     13: ("shipped", "audit-tooluse.sh may be logging tool inputs",
          "e755c7e pinned the contract that only task_id and status derive from tool_input, "
          "guarded by audit-tooluse.bats"),
+    # Evidence repointed 2026-08-26: the original cited /cost-report --export, which 4.0.26
+    # deleted along with the rest of cost observability. The capability still ships, and now
+    # through the case's own grounding surface rather than a neighbouring command.
     16: ("shipped", "cost numbers exportable into a spreadsheet",
-         "/cost-report --export shipped, with cost-export-schema.bats pinning the schema"),
+         "/estimate --export csv emits the 13-file pack defined by "
+         "skills/csv-export-templates/SKILL.md, whose 07_budget_estimate.csv is the cost "
+         "breakdown; the schema is pinned by validate-export.sh and validate-export.bats"),
     17: ("shipped", "stage handoffs silently lose facts",
          "8718972 added the facts.* union op the handoff channel lacked"),
     19: ("shipped", "leaking absolute paths from my machine",
          "fe795df strips absolute paths from every mount and route"),
     21: ("shipped", "branches come out with inconsistent names",
          "4196f2d unified batch branch naming with the worktask convention"),
+    # Evidence repointed 2026-08-26: /agent-report was removed in 4.0.26. Only the packaged
+    # reader went — the recording hook and the canonical read path both survive it.
     22: ("shipped", "which agents actually ran during a task",
-         "audit-subagent.sh already records agent coverage; /agent-report reads it"),
+         "hooks/audit-subagent.sh writes one subagent_stopped row per agent, and "
+         "skills/agent-coordination/scripts/audit-dedup.sh is the canonical reader over it"),
     26: ("shipped", "duplicate tickets for the same piece of work",
          "107fc00 added the preflight issue scan that catches duplicates before the context exists"),
     30: ("shipped", "wedged in_progress and nothing will pick it up",
@@ -424,11 +688,70 @@ REFUTED_PREMISE = {
     # guarantee capture" — the mechanism is advisory, with no hook behind it. A plan for
     # the enforcing hook is therefore still a correct answer, so both outcomes are
     # defensible and the case cannot serve as ground truth for either. It stays a plan.
+    # --- 0.2.0 capture: five cases whose premise the repo had already answered ------
+    # Each states an absence the search disproves outright, so the plan they ask for is
+    # work that exists. Converted rather than relabelled: `evals/README.md` is explicit
+    # that a case whose PREMISE changed cannot be repaired by a rubric note, because the
+    # two captures then measure different ground truth.
+    18: ("shipped", "screenshots attached to the PR",
+         "attach-visual-evidence.sh embeds DV captures into the PR body and the issue on "
+         "any run with metadata.requires_screenshots=true; dv-screenshot-capture drives it"),
+    125: ("shipped", "no written schema for the run record",
+          "skills/shared/state-ledger.md carries the run-record JSON Schema, including the "
+          "task.metadata properties, across five documented parts"),
+    153: ("shipped", "nothing says how to classify each change",
+          "skills/self-improvement/references/change-categories.md is the classification "
+          "taxonomy: category table, first-match decision tree, and a confidence table"),
+    159: ("shipped", "the planning step has no written procedure",
+          "skills/worktask/references/pl0-procedure.md is 713 lines of PL0 procedure, cited "
+          "from product-manager.md and commands/worktask.md"),
+    163: ("shipped", "nothing turns them into a pass rate",
+          "eval-grade.py scores every stored response and prints per-case verdicts, a "
+          "per-dimension breakdown and the aggregate passed/graded line"),
+    # --- batch 5: nine cases written to be refutations ------------------------------
+    # The 0.2.0 refute cell is 23 cases, every one a conversion of a prompt that started
+    # life as a plan. These are the first written from the other end: a capability this
+    # repo ships, stated as an absence. Evidence is a path this tree resolves rather than
+    # a SHA — validate_named_surfaces() checks it for deleted commands, and a path stays
+    # checkable by a reader who cannot run git.
+    204: ("shipped", "roll up the correction labels",
+          "skills/self-improvement/scripts/label-stats.sh aggregates evals/failure-labels.jsonl "
+          "into per-target and per-category counts, which is the input error analysis reads; "
+          "tests/shell/skills/label-stats.bats pins the output shape"),
+    205: ("shipped", "has no offline path",
+          "scan-secrets.sh runs fallback_scan over six built-in regex patterns when gitleaks "
+          "is absent, and its --self-test exercises that path with no network and no external "
+          "dependency"),
+    206: ("shipped", "gives up and someone hand-merges",
+          "skills/megatask/scripts/resolve-pbxproj-membership.sh resolves a membershipExceptions "
+          "conflict by sorted union of both sides, which is exactly the hand-merge described; "
+          "tests/shell/skills/resolve-pbxproj-membership.bats pins it"),
+    207: ("shipped", "never shrinks one",
+          "size-budget.sh step 2 runs pngquant --quality=65-80 on any capture at or above "
+          "500 KB and re-stats it; step 3 quarantines whatever is still oversize"),
+    208: ("shipped", "which stage it was in the middle of",
+          "skills/context-compression/scripts/post-compact-recovery.sh parses the audit.jsonl "
+          "tail, resolves the in-progress stage and its error file, and writes a pointer to "
+          ".context/logs/post-compact-<ts>.json"),
+    209: ("shipped", "disagree about what counts as a breaking change",
+          "skills/release-engineering/scripts/conventional-commits-lib.sh holds the single "
+          "cc_parse that changelog-from-git.sh and version-bump-from-git.sh both route "
+          "breaking-change detection through, so that the two cannot disagree"),
+    210: ("shipped", "misses totals that disagree across files",
+          "validate-export.sh validates the 13-file set against cross-file sum constraints, "
+          "emits validation_report.csv and exits non-zero on a violation; "
+          "tests/shell/skills/validate-export.bats pins it"),
+    211: ("shipped", "counts an event twice when a hook and an agent both record it",
+          "skills/agent-coordination/scripts/audit-dedup.sh groups rows on "
+          "metadata.dedupe_key and keeps the hook-written row, dropping the agent copy"),
+    212: ("shipped", "stops at hours and cannot turn them into money",
+          "estimate-calc.py step 3 is budget(total_min, total_max, rate), wired to --rate; "
+          "tests/python/test_estimate_calc.py covers the arithmetic chain end to end"),
 }
 
 
 def build_case(index: int, spec) -> dict:
-    kind, grounding, _declared_route, prompt, paths, discovery = spec
+    kind, grounding, _declared_route, prompt, paths = spec
     route = derive_route(prompt)
     case = {"id": index, "prompt": prompt,
             "dimensions": {"type": kind, "grounding": grounding, "route": route}}
@@ -462,7 +785,11 @@ def build_case(index: int, spec) -> dict:
                         r"(?i)no longer", r"(?i)does not exist", r"(?i)is not (present|there)",
                         r"(?i)(premise|claim) (is|was) "
                         r"(stale|false|wrong|outdated|no longer true)",
-                        r"(?i)not\s+\d+(\.\d+)?\s*KB"]},
+                        r"(?i)not\s+\d+(\.\d+)?\s*KB",
+             # Separate alternatives because neither phrasing states a completion:
+             # the verb list above can only reach a refutation that names one.
+             r"(?i)the premise (?:doesn't|does not|no longer) holds?",
+             r"(?i)already\s+built",]},
             # Replaces no-build-plan-for-work-that-exists, withdrawn at 0.1.0. That criterion
             # forbade the plan template on any refute case. The 0.0.1 capture measured it:
             # it fired on 12 cases, ALL 12 of which a human passed, and did NOT fire on case
@@ -654,6 +981,39 @@ def validate_tables() -> list:
         elif anchor.lower() not in CASES[cid - 1][3].lower():
             errors.append(f"case {cid}: REFUTED_PREMISE anchor {anchor!r} is not in that "
                           f"case's prompt — the ids have shifted under this table")
+    errors += validate_named_surfaces()
+    return errors
+
+
+# Claude Code ships these; they resolve to no file in commands/ and never will.
+BUILTIN_COMMANDS = {"/clear", "/compact", "/config", "/context", "/cost", "/help",
+                    "/init", "/model", "/plugins", "/agents"}
+_SLASH = re.compile(r"(?<![A-Za-z0-9/._*!-])/([a-z][a-z0-9-]{2,})\b")
+
+
+def validate_named_surfaces() -> list:
+    """Fail closed on a prompt or a refutation that names a deleted command.
+
+    `premise_refuted_by` is the EVIDENCE a refute case is graded against, so a command
+    removed from the tree turns it into a citation of nothing while the case keeps
+    passing. 4.0.26 deleted eight commands and this table kept naming two of them for
+    three days; only a hand grep found it. A prompt naming one is worse — the case has
+    no correct answer at all, and belongs in RETIRED rather than here.
+    """
+    errors = []
+    live = {p[:-3] for p in os.listdir(os.path.join(REPO, "commands")) if p.endswith(".md")}
+    for cid, spec in enumerate(CASES, start=1):
+        if spec is None:
+            continue
+        fields = [("prompt", spec[3])]
+        if cid in REFUTED_PREMISE:
+            fields.append(("premise_refuted_by", REFUTED_PREMISE[cid][2]))
+        for field, text in fields:
+            for name in {m.group(1) for m in _SLASH.finditer(text)}:
+                if name in live or f"/{name}" in BUILTIN_COMMANDS:
+                    continue
+                errors.append(f"case {cid}: {field} names /{name}, which is not a command "
+                              f"in this tree")
     return errors
 
 

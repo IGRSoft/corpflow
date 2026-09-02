@@ -31,13 +31,12 @@ sys.modules["eval_engine"] = engine
 _spec.loader.exec_module(engine)
 
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def repo_resolver(rel: str) -> bool:
     """A cited path counts only if it exists here — an invented path is the failure
     paths_resolve is looking for."""
-    return os.path.exists(os.path.join(REPO, rel))
+    return os.path.exists(os.path.join(engine.REPO, rel))
 
 
 def grade_record(eval_set: dict, record: dict) -> dict:
@@ -79,14 +78,12 @@ def main(argv_in: list) -> int:
         return 64
 
     try:
-        with open(args.eval_set, encoding="utf-8") as f:
-            eval_set = json.load(f)
+        eval_set = engine.load_eval_set(args.eval_set)
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"eval-grade: cannot read eval set: {exc}\n")
         return 64
 
-    responses_dir = args.responses or os.path.join(
-        os.path.dirname(os.path.abspath(args.eval_set)), "responses")
+    responses_dir = engine.responses_dir(args.eval_set, args.responses)
     if not os.path.isdir(responses_dir):
         sys.stderr.write(
             f"eval-grade: no responses at {responses_dir}; run eval-capture.py first\n")
@@ -112,6 +109,12 @@ def main(argv_in: list) -> int:
         result = grade_record(eval_set, record)
         result["skill_version"] = record.get("skill_version")
         result["dimensions"] = engine.find_case(eval_set, cid).get("dimensions", {})
+        # Carried so the grades file is self-describing. `label-align.py` needs it to
+        # size each stratum's population, and `sample-for-labelling.py` to keep the
+        # held-out tranche out of the pool it draws from — neither should have to
+        # re-open the eval set and risk reading a different one than was graded.
+        result["split"] = engine.find_case(eval_set, cid).get("split")
+        result["plugin_sha"] = record.get("plugin_sha")
         if result["status"] == "stale":
             stale.append(cid)
         results.append(result)
@@ -131,6 +134,20 @@ def main(argv_in: list) -> int:
               "  Re-capture the older ones, grade with --case/--split, or pass "
               "--allow-mixed if a spanning number is genuinely what you want.\n")
         return 2
+
+    # Reported, not refused. A long sweep is interrupted and resumed, so spanning two
+    # SHAs is normal — and sound exactly when the diff between them leaves the measured
+    # surface alone, which is checkable but not from here. Silence would make it
+    # invisible; refusing would block a resume that is usually fine. Say it and let the
+    # findings doc carry the check.
+    shas = sorted({r.get("plugin_sha") for r in results if r.get("plugin_sha")})
+    if len(shas) > 1:
+        counts = collections.Counter(r.get("plugin_sha") for r in results)
+        sys.stderr.write(
+            "eval-grade: responses span plugin revisions "
+            + ", ".join(f"{v}x{counts[v]}" for v in shas)
+            + ".\n  Sound only if `git diff` between them does not touch the skill "
+              "under test; record which it was.\n")
 
     clarified = [r for r in results if r.get("asked_instead")]
     graded = [r for r in results if r["status"] != "stale"]

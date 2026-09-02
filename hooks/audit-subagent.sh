@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SubagentStop → audit.jsonl writer (corpflow worktask plugin).
 # Replaces prose-instructed `subagent_stopped` row emission. Pairs with
-# cost-log.sh; both fire on SubagentStop, both target .context/logs/.
+# state-merge.sh; both fire on SubagentStop, both target .context/.
 #
 # Dedupe: metadata.dedupe_key = "<session_id>:<agent_id>:stop".
 #

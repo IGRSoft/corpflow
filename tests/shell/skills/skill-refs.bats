@@ -10,7 +10,9 @@
 #   - agents/stakeholder.md ordered `Skill("self-improvement")` with the same
 #     omission, so the mandatory ST retrospective silently never ran.
 #   - agents/technical-lead.md called `Skill("dev-code-review")`, which names a
-#     command; skills/dev-code-review/ does not exist and never did.
+#     command; skills/dev-code-review/ does not exist and never did. Historical:
+#     both that call and the command are gone — the command is now
+#     commands/tech-code-review.md and the callers name the file, not a skill.
 # Every one of these passed the whole suite. Nothing read a `tools:` line
 # against the body that depended on it.
 #
@@ -44,14 +46,19 @@ ungranted_skill_calls() {
 }
 
 # Emit every skill name named by a `Skill(...)` call, plugin prefix stripped.
-# Template metavariables (`<command>`) are placeholders, not targets.
+# Only the FIRST quoted argument is the target -- later ones are call arguments
+# (`platform="apple"`), and reading them as targets is a false positive. Template
+# metavariables (`<command>`, `${embedded_cmd}`) are placeholders, not targets.
+# skills/ is in the glob because the defect that motivated this file lived there:
+# skills/worktask/SKILL.md ordered a skill that does not exist, and a collector
+# scoped to agents/ + commands/ silently no-opped on it.
 collect_skill_targets() {
   ( cd "$1" || return 1
-    git ls-files -z -- 'agents/*.md' 'commands/*.md' \
+    git ls-files -z -- 'agents/*.md' 'commands/*.md' 'skills/**/*.md' \
       | xargs -0 grep -hoE 'Skill\(\{?[^)]*' 2>/dev/null \
-      | grep -oE '"[^"]+"' | tr -d '"' \
+      | sed -nE 's/[^"]*"([^"]+)".*/\1/p' \
       | sed -E 's/^[a-z][a-z0-9-]*://' \
-      | grep -v '[<>]' \
+      | grep -v '[<>${}]' \
       | LC_ALL=C sort -u )
 }
 
@@ -139,6 +146,33 @@ unexecutable_state_patch_orders() {
     return 0 )
 }
 
+# --- path-scoped Bash grants --------------------------------------------------
+# A grant like `Bash(bash skills/foo/scripts/bar.sh:*)` names a file by path. When
+# that file moves or is deleted the grant does not error -- it simply never matches,
+# so the agent silently loses the capability. Nothing else in the suite reads these
+# paths against the filesystem.
+
+# Emit every plugin-root-relative script path named inside a `Bash(...)` grant on a
+# `tools:` or `allowed-tools:` line.
+collect_bash_grant_paths() {
+  ( cd "$1" || return 1
+    git ls-files -z -- 'agents/*.md' 'commands/*.md' \
+      | xargs -0 grep -hE '^(tools|allowed-tools):' 2>/dev/null \
+      | grep -oE 'Bash\([^)]*\)' \
+      | grep -oE '(agents|commands|hooks|skills|tests)/[A-Za-z0-9._/-]+\.(sh|py)' \
+      | LC_ALL=C sort -u )
+}
+
+# dangling_bash_grant_paths <plugin-root> — granted paths with no file behind them.
+dangling_bash_grant_paths() {
+  local root="$1" p
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -f "$root/$p" ] || printf '%s\n' "$p"
+  done <<< "$(collect_bash_grant_paths "$root")"
+  return 0
+}
+
 # A plugin tree that satisfies every predicate; prints its root.
 mk_skill_layout() {
   local root
@@ -187,7 +221,9 @@ mk_skill_layout() {
 }
 
 @test "resolver: a Skill target naming a command, not a skill, is named" {
-  # The live defect: `Skill("dev-code-review")` against commands/dev-code-review.md.
+  # The live defect, since fixed: `Skill("dev-code-review")` against a file that
+  # was only ever commands/dev-code-review.md. Driven against a synthetic tree,
+  # so the name below describes the fixture, not anything at HEAD.
   local root
   root="$(mk_skill_layout)"
   mkdir -p "$root/commands"; : > "$root/commands/code-review.md"
@@ -253,6 +289,29 @@ mk_skill_layout() {
   [ "$(printf '%s\n' "$ordering" | grep -c .)" -ge 13 ]
   run unexecutable_state_patch_orders "$PLUGIN_ROOT"
   assert_output ""
+}
+
+@test "contract: every path-scoped Bash grant in this repo names a real file" {
+  # Guard the collector first: this plugin genuinely ships path-scoped grants, so an
+  # empty candidate set means the matcher regressed, not that the repo went clean.
+  local granted
+  granted="$(collect_bash_grant_paths "$PLUGIN_ROOT")"
+  [ -n "$granted" ]
+  run dangling_bash_grant_paths "$PLUGIN_ROOT"
+  assert_output ""
+}
+
+@test "resolver: a path-scoped Bash grant naming a missing file is named" {
+  local root
+  root="$(mk_tmpworkdir)"
+  mk_git_fixture --dir "$root" \
+    --file 'agents/live.md:---\ntools: Read, Bash(bash skills/worktask/scripts/state-patch.sh:*)\n---\n\nx\n' \
+    --file 'commands/moved.md:---\nallowed-tools: Read, Bash(skills/gone/scripts/vanished.sh)\n---\n\nx\n' \
+    --file 'skills/worktask/scripts/state-patch.sh:#!/usr/bin/env bash\n' \
+    >/dev/null
+  run dangling_bash_grant_paths "$root"
+  assert_output --partial "skills/gone/scripts/vanished.sh"
+  refute_output --partial "state-patch.sh"
 }
 
 @test "resolver: an agent ordered to patch state with neither grant nor fallback is named" {

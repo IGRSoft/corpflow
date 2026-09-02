@@ -139,7 +139,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11) |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
@@ -152,7 +152,7 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 
 | Actor | Action Examples |
 |-------|-----------------|
-| `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped`, paired with a cost-*.jsonl entry |
+| `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
 | `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
 | `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}` |
 | `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
@@ -162,6 +162,13 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 #### Plugin-hook row fields
 
 Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. `stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
+
+#### Writers — model-switch hooks (authoritative)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| `hook:model-switch-gate` (PreModelSwitch, plugin) | `model_switch_blocked`, `model_switch_confirm_requested`, `model_switch_annotated`, and one-shot `model_switch_gate_disabled` hatch note — `metadata.{stage, task_id, pinned, requested, kind}` |
+| `hook:model-switch-audit` (PostModelSwitch, plugin) | `model_switched` with `metadata.{pinned, origin, resolved, off_tier, dedupe_key}`, gated on an existing ledger |
 
 #### Writers — external & adapters
 
@@ -174,7 +181,7 @@ Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows als
 
 #### Hook authority + dedupe rule
 
-Hook-emitted rows carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action stay forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are **advisory**. Readers (`/cost-report`, resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`.
+Hook-emitted rows carry `actor: "hook:<name>"` and `metadata.dedupe_key`. Agent-emitted rows for the same action stay forward-compatible (for installs where plugin hooks are disabled via `allowManagedHooksOnly: false` + plugin disabled) but are **advisory**. Readers (resume protocol, incident-responder) MUST prefer the `hook:*` row when two rows share a `dedupe_key`.
 
 #### Hook authority — canonical vs mirrored writers
 
@@ -190,6 +197,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 - `stage_completion_hook`: `"<session_id>:<agent_id>:stage:<PL|FN|ST>"`
 - `stage_replay`: `"<worktask_id>:<run_index>:<task_id>:replay:<ts>"` — the timestamp is deliberate: replay is repeatable by design, so two legitimate replays of one stage must NOT collapse. Written by `state-patch.sh --task-replay`, on success only; a refusal changed nothing and records nothing.
 - `github_issue_created`: `"<worktask_id>:<run_index>:gh_issue"` — collision on resume detects already-published; multi-track safety via `run_index` increment. Writer: orchestrator (via `skills/worktask/scripts/publish-pl-issue.sh` between PL approval and stage-loop entry).
+- `model_switched`: `"<session_id>:<agent_id>:model-switch:<ts>:<resolved>"` — timestamp and destination are deliberate: a session that switches twice (fallback, then back) must keep both rows. Writer: `hooks/model-switch-audit.sh`.
 
 ### Schema
 
@@ -197,7 +205,13 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|dispatch_depth_projected|dispatch_flattened",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+```
+
+#### Schema — remaining fields
+
+```jsonc
+// …continued: the same object
   "subject": "task ID or artifact path",
   "result": "ok|error|deferred|blocked",
   "task_id": "optional — ledger key, e.g. DV0",
@@ -275,7 +289,7 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 
 ##### Depth budget sharing
 
-> Foreground and background subagents share one depth budget — a foreground chain plus a backgrounded child count against the same cap. Each level summarizes upward, and `/cost-report`'s `dispatch_depth` column makes depth visible.
+> Foreground and background subagents share one depth budget — a foreground chain plus a backgrounded child count against the same cap. Each level summarizes upward, and the audit trail's `dispatch_depth` makes depth visible.
 
 > **`/megatask` consumes a level**: a batch run dispatches a per-issue `/worktask` orchestrator as its own sub-agent (depth 1), pushing that same DV chain to depth 4 — one past the default. Raise `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` before the batch, or accept a flattened Tier-2 dispatch. See `skills/megatask/SKILL.md § Nesting-depth budget`.
 
@@ -349,13 +363,31 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Cross-session reach & SendMessage authority
 
-> `SendMessage` reaches sessions on **other machines**; `ListAgents` discovers them, labelling disconnected Remote Control rows `offline` and cloud rows `cloud`. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic.
+> `SendMessage` reaches sessions on **other machines**; `ListAgents` discovers them, labelling disconnected Remote Control rows `offline` and cloud rows `cloud`, and it also lists live **teammates** and reports the session's **own name** — the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value warns and **holds** messages (user settings) or **refuses** them (managed settings) rather than being ignored.
 
 > **Authority does not relay** — and matters more across machines, not less. Receivers **refuse relayed permission requests**; auto mode blocks them outright. A reattach may *nudge* a parked agent (re-prompt, supply an awaited answer) but never *authorize*: permission escalations and the PL gate stay operator-owned.
 
+##### Delivery is reported, so check it
+
+> A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, or `burst_limited`, and `SendMessage`/`ListAgents` say when the account's session list was too long to enumerate fully — which makes any "peer is gone" conclusion drawn under that condition unconfirmed rather than established. Branch on the result; the resume loop's table is `references/resume.md § Reattach rows — the SendMessage has a result too`.
+
+##### notify_when_idle, availability & preview collapse
+
+> **`notify_when_idle`** on a cross-session `SendMessage` asks a peer for one notice when it next goes idle — opt-in, one-shot, no polling, **same-machine peers only** (macOS and Linux). Prefer it over a `claude agents --json` poll whenever exactly one peer is awaited.
+
+> **Availability is unconditional**: Bedrock/Vertex/Foundry, telemetry disabled, Windows, user namespaces and rootless containers, with a private per-user `/tmp` fallback when the default directory is unusable. Never gate a handoff, a dispatch flag, or a reattach path on provider or host OS.
+
+> **Peer messages collapse to one line** — `Message from @<sender>: <first line>`, Ctrl+O expands. A relayed handoff or escalation must carry its verdict in the **first line**.
+
+#### Replies from a subagent land in the parent conversation
+
+> A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly.
+
+> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.cross_session_ask` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — open_questions, refs, constraints`); the orchestrator sends, receives the reply natively, and relays it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`).
+
 #### Skill discovery & subagent_type resolution
 
-> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("name")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
+> Subagents resolve project + user + plugin skills natively at every depth — a Level-3 child resolves `Skill("<name>")` like a Level-1 one — so never inline-load skill instructions before delegating. `subagent_type` matching is case- and separator-insensitive (`"Corpflow:Developer"` → `corpflow:developer`); the bare-name → `corpflow:` convention still sets resolution priority.
 
 #### Dispatch flags & /agents UI
 
@@ -367,7 +399,7 @@ Claude Code keys installed agents by frontmatter `name`, so two plugins shipping
 
 ### Monitor Tool for Background Events
 
-`Monitor` streams stdout from background scripts started via Bash `run_in_background` — event-driven, no polling loops. Pattern: launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the Monitor session (`logging-conventions`), note the returned shell ID, attach `Monitor` to it. After Monitor detaches (timeout, stage transition) the `.log` is still readable via `Read`.
+`Monitor` streams stdout from background scripts started via Bash `run_in_background` — event-driven, no polling loops. It watches **this** session's own background work; waiting on a *peer session* to go idle is `notify_when_idle` instead (§ Cross-session reach & SendMessage authority). Different targets, different mechanisms — neither substitutes for the other. Pattern: launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the Monitor session (`logging-conventions`), note the returned shell ID, attach `Monitor` to it. After Monitor detaches (timeout, stage transition) the `.log` is still readable via `Read`.
 
 ```bash
 <command> 2>&1 | tee .context/logs/<kind>-<slug>-<ts>.log
@@ -460,8 +492,12 @@ PL → DV → DR → QA
 
 ## Handoff Message Format
 
+Verdict first, on the first line. When this is relayed to a peer session it collapses to a
+one-line preview (§ Cross-session reach & SendMessage authority), and that line has to say how the
+stage ended.
+
 ```markdown
-## [FROM]→[TO] Handoff
+## [FROM]→[TO] Handoff — [ok|blocked|escalate]: [one clause]
 
 **Summary**: [One sentence]
 
@@ -475,15 +511,17 @@ PL → DV → DR → QA
 ## Escalation Message Format
 
 ```markdown
-## Escalation: [FROM]→[TO]
+## Escalation [FROM]→[TO] — [blocking|degraded]: [the ask, in one clause]
 
 **Type**: [dependency|architecture|requirements]
-**Severity**: [blocking|degraded]
 
 **Problem**: [Description]
 **Attempted**: [What was tried]
 **Needed**: [Specific ask]
 ```
+
+`Severity` moves into the heading rather than sitting on its own line: an escalation whose preview
+reads only `## Escalation: DV→AR` tells the reader nothing they can triage on.
 
 ## Stage-Specific Handoffs
 
@@ -576,4 +614,8 @@ They compose: a DV agent inside a worktask may spin up a native dynamic workflow
 
 ### Gate prompts (AskUserQuestion)
 
-> `AskUserQuestion` prompts are reserved for genuine decisions needing user input: the PL plan-approval gate is the one such checkpoint; intra-loop transitions proceed without confirmation. These dialogs do not auto-continue on idle, so a PL/FN gate park holds indefinitely until the operator answers — the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.
+> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with one bounded exception: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess. That is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and it is opt-in per item, so the ordinary transition is unchanged.
+
+#### Gate prompts — idle behaviour
+
+These dialogs do not auto-continue on idle, so a PL/FN gate park holds indefinitely until the operator answers — the idle-timeout auto-continue is an explicit `/config` opt-in and MUST stay off on hosts running gated worktasks.

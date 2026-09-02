@@ -17,7 +17,35 @@
 # sibling layout that is built here, so the logic is verified everywhere; the
 # real tree is then checked against whatever siblings do exist, per plugin,
 # without an all-or-nothing skip.
+#
+# Where the siblings live is an input, not an assumption. `$PLUGIN_ROOT/..` is a
+# Conductor workspace directory or a bare CI checkout on most machines, so the
+# per-plugin loop found nothing and both contract tests passed while verifying
+# nothing at all. CORPFLOW_SIBLING_ROOT overrides it, and an empty sibling set is
+# now announced on every run so a green result is never read as "verified".
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+
+# Where sibling plugin checkouts live. CI exports this after shallow-cloning the
+# registry; locally it points at the directory holding all the plugin repos.
+sibling_root() {
+  if [ -n "${CORPFLOW_SIBLING_ROOT:-}" ]; then
+    ( cd "$CORPFLOW_SIBLING_ROOT" && pwd )
+  else
+    ( cd "$PLUGIN_ROOT/.." && pwd )
+  fi
+}
+
+# Announce the sibling set on stdout-fd-3 so a run against no siblings reads as
+# unverified rather than as a pass.
+report_sibling_coverage() {
+  local sibroot="$1" found
+  found="$(checked_siblings "$sibroot" | tr '\n' ' ')"
+  if [ -z "${found// /}" ]; then
+    echo "# no siblings at $sibroot; cross-plugin resolution unverified" >&3
+  else
+    echo "siblings checked: $found" >&3
+  fi
+}
 
 # Space-separated so this stays bash-3.2 portable (no associative arrays).
 SIBLINGS="apple-developer system-developer android-developer frontend-developer backend-developer ai-engineer"
@@ -123,7 +151,7 @@ mk_plugin_layout() {
 
 @test "contract: this repo's cross-plugin references are collected and resolve" {
   local sibroot refs
-  sibroot="$(cd "$PLUGIN_ROOT/.." && pwd)"
+  sibroot="$(sibling_root)"
   # Guard against the collector silently breaking: this plugin genuinely names
   # sibling commands and agents, so an empty set means the glob or the pattern
   # regressed, not that the repo became clean.
@@ -135,8 +163,7 @@ mk_plugin_layout() {
   assert_output ""
   run unresolved_refs "$PLUGIN_ROOT" "$sibroot" agent
   assert_output ""
-  # Report coverage so a checkout with no siblings is visible rather than silent.
-  echo "siblings checked: $(checked_siblings "$sibroot" | tr '\n' ' ')" >&3
+  report_sibling_coverage "$sibroot"
 }
 
 @test "contract: routing-matrix default targets resolve against present siblings" {
@@ -144,7 +171,7 @@ mk_plugin_layout() {
   # is the canonical list of intended targets — resolve each default target the way
   # the old frontmatter grants used to be resolved.
   local sibroot ref plug name missing=""
-  sibroot="$(cd "$PLUGIN_ROOT/.." && pwd)"
+  sibroot="$(sibling_root)"
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     plug="${ref%%:*}"; name="${ref##*:}"
@@ -153,6 +180,18 @@ mk_plugin_layout() {
   done <<< "$(grep -E '^\| `corpflow:' "$PLUGIN_ROOT/skills/shared/routing-matrix.md" \
     | sed -E 's/^\| `corpflow:[a-z0-9-]+` \| `([a-z0-9-]+:[a-z0-9-]+)`.*/\1/')"
   [ -z "$missing" ] || { echo "unresolved matrix targets:$missing" >&2; return 1; }
+  report_sibling_coverage "$sibroot"
+}
+
+@test "resolver: CORPFLOW_SIBLING_ROOT redirects resolution away from PLUGIN_ROOT/.." {
+  local root
+  root="$(mk_plugin_layout)"
+  rm -f "$root/apple-developer/commands/build-test.md"
+  CORPFLOW_SIBLING_ROOT="$root" run sibling_root
+  assert_output "$root"
+  # And the redirected root is the one actually resolved against.
+  run unresolved_refs "$root/corpflow" "$(CORPFLOW_SIBLING_ROOT="$root" sibling_root)" command
+  assert_output --partial "apple-developer:build-test"
 }
 
 # --- registry / sanitiser lockstep -------------------------------------------

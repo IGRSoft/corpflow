@@ -290,7 +290,7 @@ Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, 
 
 ### Validation check 11 — what warns, and what stays quiet
 
-**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing prints. Deliberate: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage and teach the operator to skip the line that matters. The zero-headroom fact still reaches `metadata.headroom`, where `/cost-report` and incident review look. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
+**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing prints. Deliberate: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage and teach the operator to skip the line that matters. The zero-headroom fact still reaches `metadata.headroom`, where incident review looks. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
 
 #### Never blocks; forecast, not observation
 
@@ -438,9 +438,10 @@ Before entering this loop, verify:
 `PL0.metadata.decision_gate` (default `"user"`) selects WHO answers PL0's `open_questions[]` at the
 plan gate; `"auto"` (stamped by `--auto=[decision]`) routes them through the Fable-model
 auto-decision pre-pass (`commands/worktask.md § Step A.4` is canon). Verify before loop entry: when
-`decision_gate == "auto"` and PL0's handoff carried a non-empty `open_questions[]`, an
-`auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST exist, and any `escalate`
-items MUST have an `approval_received` resolution — absent → STOP and return to Step A.4. The
+`decision_gate == "auto"` and `facts.open_questions[]` holds any `sw-PL<N>-*` item with
+`status != "resolved"`, an `auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST
+exist, and any `escalate` items MUST have an `approval_received` resolution — absent → STOP and
+return to Step A.4. The
 carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
@@ -769,6 +770,30 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
       //     The bypass path falls through to FN-agent Writer 2 inside the FN stage.
 ```
 
+##### Step 4.9 — sweep collection and classification (a1)(a2)
+
+```typescript
+      // …continued: step 4.9, after (a)
+      // (a1) Collect the closing elicitation sweep: read facts.open_questions[] and keep the
+      //      class-bearing items whose status != "resolved". Status is the WHOLE filter —
+      //      items answered at their own boundary (step 6.6) or at the plan gate are already
+      //      resolved. Never filter on stage: under blocks_next_stage any stage can be
+      //      answered at its own boundary. Resolve each item's `ref` anchor to its full
+      //      options[] body. Stage comes from the id's pinned sw-<TASK_ID>-<n> prefix and is
+      //      used for GROUPING only; an explicit `stage` field wins when present, but it is
+      //      optional, so never require it.
+```
+
+##### Step 4.9 — classify, then auto-answer (a2)
+
+```typescript
+      // …continued: step 4.9, after (a1)
+      // (a2) Classify, then auto-answer. The raise-only guard runs FIRST, on every item
+      //      (commands/worktask.md § Escalation guard — raise-only self-labels); only then,
+      //      and only when decision_gate == "auto", does the Fable delegate answer the
+      //      effective-decision items. No item reaches the delegate un-reclassified.
+```
+
 ##### Step 4.9 — checkpoint and bypass paths
 
 ```typescript
@@ -778,6 +803,27 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
                       subject: `FN${N}`, result: "ok" });
         // (c) Present the pre-FN summary: branch, resolved base branch, commit type,
         //     changed-file count, DR/QA verdicts, PR target + Closes #<issue>.
+```
+
+##### Step 4.9 — sweep render, then the unmoved STOP (c+)(d)
+
+```typescript
+      // …continued: step 4.9 checkpoint arm, after (c)
+        // (c+) Render the collected sweep, grouped by originating stage, in AskUserQuestion
+        //      calls of <=4 questions each (the tool's per-call ceiling). These PRECEDE the
+        //      approve/reject call below and never merge into it: merging would overflow at
+        //      4+ items and entangle sweep answers with the gate's reject/resume path.
+        //      Question text comes from the resolved ref anchor body, not the stub (which
+        //      carries no summary). Record each answer into the item itself — status =
+        //      "resolved" plus resolution = "<answer>" — and append a sweep_resolved audit
+        //      row (subject: `FN<N>`). NOT facts.decisions[] — stage-contracts.md
+        //      § Closing Elicitation Sweep states why that destination is refused.
+```
+
+##### Step 4.9 — the approve/reject STOP (d), unmoved
+
+```typescript
+      // …continued: step 4.9 checkpoint arm, after (c+)
         // (d) AskUserQuestion: approve → append `approval_received subject:"FN<N>"` and fall
         //     through to delegate FN. Reject → append `approval_rejected subject:"FN<N>"`,
         //     result:"rejected", and STOP (do NOT delegate FN); surface the feedback, then
@@ -790,6 +836,9 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 ```typescript
       // …continued: step 4.9 else-arm
       } else {  // "bypass" — --auto=[finalization] / --emergency, or per-issue by /megatask
+        // (e0) Record-only sweep: audit `sweep_recorded` for the collected items and, for any
+        //      effective-escalate item, `sweep_escalation_unprompted`. NEVER prompt here —
+        //      recording never stops, only prompting does.
         // (e) fn_gate_bypass, then delegate FN unattended (commit/push/PR).
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
                       subject: `FN${N}`, result: "ok", reason: "unattended" });
@@ -815,11 +864,13 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 #### Step 5b
 
 ```typescript
-    // 5b. dev-code-review Skill invocation (DR) — APPENDED as suffix [7] so the prefix
-    //     [1][2][3][4][5] stays byte-identical with neighbour stages.
+    // 5b. tech-code-review invocation (DR) — APPENDED as suffix [7] so the prefix
+    //     [1][2][3][4][5] stays byte-identical with neighbour stages. The review is a
+    //     COMMAND, not a skill: there is no skills/tech-code-review/ to invoke, so name
+    //     the file and let the stage read it.
     if (full.metadata.stage === "DR") {
       const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review via Skill tool: Skill("dev-code-review"). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save findings summary to .context/developer-review-${runIndex}.md`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 ```
@@ -1026,7 +1077,10 @@ never on the shape of the return message, so a normally-completed stage still ta
       const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
       const selfPatched = post.tasks?.[task.id]?.status === "completed"
                           && Boolean(post.tasks[task.id].verdict);
-      const incomplete = !selfPatched && !incHandoff?.verdict;
+      // Incomplete even WITH a verdict: a maxTurns stop can land after the frontmatter is
+      // written. Field name unconfirmed — read defensively, re-check at the next /cc-update.
+      const maxTurnsPartial = Boolean(launchAck?.partial);
+      const incomplete = maxTurnsPartial || (!selfPatched && !incHandoff?.verdict);
 ```
 
 ##### Step 6.5a2 — mark & audit
@@ -1041,7 +1095,8 @@ never on the shape of the return message, so a normally-completed stage still ta
           metadata: {
             artifact: incArtifact,
             artifact_present: fs.existsSync(incArtifact),
-            reason: fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
+            reason: maxTurnsPartial ? "max_turns_partial"
+                    : fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
           },
         });
 ```
@@ -1058,6 +1113,51 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
         continue;   // never falls through to the completion patch
       }
 ```
+
+##### Step 6.5a3 — why a cross-session ask needs its own arm
+
+A stage that needs another **session's** answer cannot get it: a subagent's `SendMessage` to a
+session delivers the reply into the *parent* conversation, so a stage agent that sent its own ask
+would wait for something that structurally never arrives. The stage therefore returns
+`verdict:"blocked"` naming who to ask and what, and the orchestrator — which *is* the session that
+receives the reply — sends on its behalf. Without this arm the return reads as an ordinary blocked
+verdict and burns a retry on a stage that never failed.
+
+##### Step 6.5a3 — cross-session ask (blocked-on-peer return)
+
+```typescript
+      // …continued: after the 6.5a2 block
+      const ask = incHandoff?.cross_session_ask;
+      if (!incomplete && incHandoff?.verdict === "blocked" && ask) {
+        atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
+        // notify_when_idle: one-shot wake instead of polling `claude agents --json`.
+        // Same-machine peers only; a remote peer simply never wakes us and the row stays deferred.
+        SendMessage({ to: ask.to, notify_when_idle: true, message: ask.question });
+        appendAudit({
+          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
+          result: "deferred",
+          metadata: { to: ask.to, question: ask.question, leg: "ask" },
+        });
+        continue;   // siblings keep moving; this stage is parked, not failed
+      }
+```
+
+##### Step 6.5a3 — relaying the answer
+
+The reply arrives in the orchestrator's own conversation on a later turn. Relay it and log the
+second leg; the `deferred`/`ok` pair is what `references/resume.md § Reply routing` branches on.
+
+```typescript
+        SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType, message: reply });
+        appendAudit({
+          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
+          result: "ok", metadata: { to: ask.to, leg: "relay" },
+        });
+```
+
+Check the send result on both legs (`references/resume.md § Reattach rows — the SendMessage has a
+result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
+was never asked for.
 
 ##### Step 6.5 — Layer 2 (synchronous patch)
 
@@ -1095,6 +1195,9 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
       // 6.5b. Flip the dispatch entry to "completed", backfilling model_resolved when the runtime
       //       surfaced it. Re-read state here (not the stale step-4.0 snapshot) so this maps over
       //       the fresh dispatched_agents[] that step 6a appended the `launched` entry to.
+      //       Two paths make resolved differ from requested: a managed-allowlist step-down, and a
+      //       first-call 404 falling through the session's fallback-model chain. Attribute this
+      //       stage's cost to model_resolved, never to model_requested.
       const stateForDispatch = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
       atomicMergeStateJson({
         facts: {
@@ -1102,6 +1205,31 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
         },
       });
     }
+```
+
+#### Step 6.5c — sweep checks, before anything reads the sweep
+
+```typescript
+    // 6.5c. After 6.5b and BEFORE 6.6: run the handoff harness on this stage's artifact with
+    //       --state (commands/worktask.md § Step B.1). It hard-fails a class-bearing stub with
+    //       no ref, a dangling ref anchor, a stub absent from facts.open_questions[] — the
+    //       transport 6.6 and step 4.9(a1) read — and an unreadable ledger. Exit 0 → audit
+    //       `sweep_check` ok. Non-zero with a `fail:` line → audit `sweep_check` fail and treat
+    //       it as a missing_input contract violation on this stage: skip 6.6, do NOT dispatch
+    //       the next stage, re-dispatch this stage with the fail line verbatim. For DV this is
+    //       the same call as § Step B (the AR-reference arm rides on it); run it once.
+```
+
+#### Step 6.6 — blocking sweep items, before the next dispatch
+
+```typescript
+    // 6.6. After the completed patch lands and BEFORE the next stage is dispatched, render
+    //      this stage's blocking sweep items: facts.open_questions[] entries this stage
+    //      wrote with blocks_next_stage == true and status != "resolved". Usually none, in
+    //      which case 6.6 is a no-op. Procedure: commands/worktask.md § Step C.0 (it reuses
+    //      C.2-C.5 verbatim), audit subject `<CODE><N>` rather than `FN<N>`.
+    //      Not a gate: the same render, moved earlier for items whose answers the next
+    //      stage needs. Bypassed lanes record and never prompt, so nothing can deadlock.
 ```
 
 #### Step 7
@@ -1262,12 +1390,19 @@ already `completed`; the plan amendments are its only writes.
 
 ### Orchestrator ledger merge
 
-On the delegate's return the ORCHESTRATOR atomic-merges the ledger: decided items appended to
-`state.json facts.decisions[]` marked `(auto-decided)`, resolved entries dropped from
-`facts.open_questions[]` — that merge is what makes the decisions visible to AR/TL/DV, which read
-those two fields on stage entry (`skills/shared/stage-contracts.md`). Audit rows:
+On the delegate's return the ORCHESTRATOR atomic-merges the ledger: each answered
+`facts.open_questions[]` item marked `status: "resolved"` with its `resolution` — never dropped —
+and decided items also appended to `state.json facts.decisions[]` marked `(auto-decided)`, which is
+what makes them visible to AR/TL/DV, which read those two fields on stage entry
+(`skills/shared/stage-contracts.md`). Audit rows:
 `auto_decision_dispatched` → `auto_decision_resolved` (`subject:"PL<N>"`), the latter carrying each
 question's rationale in `metadata.decisions[]` (`{question, answer, rationale}` one-liners).
+
+### Sweep items at the FN gate
+
+The same delegate — one auto-answer authority, not a second — answers `class: decision` closing-sweep
+items at loop step 4.9(a2), after the raise-only guard has reclassified them. Audit vocabulary is
+reused with an FN subject: `auto_decision_dispatched` → `auto_decision_resolved`, `subject:"FN<N>"`.
 
 ### Escalation class
 
@@ -1284,7 +1419,7 @@ The **pre-finalization human checkpoint**, carried by `PL0.metadata.fn_gate` (de
 
 ### FN gate paths
 
-- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), and calls `AskUserQuestion`. Approve → `approval_received subject:"FN<N>"`, then delegate FN (commit/push/PR). Reject → `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN), then resume per § FN gate rejection — resume path.
+- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), renders the batched closing sweep — the items NOT marked `blocks_next_stage`, which were answered at their own boundary in loop step 6.6 — in calls of ≤4 questions (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), and then calls `AskUserQuestion` for approve/reject — the sweep precedes that call and never merges into it. Approve → `approval_received subject:"FN<N>"`, then delegate FN (commit/push/PR). Reject → `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN), then resume per § FN gate rejection — resume path.
 
 #### FN gate paths — bypass
 
