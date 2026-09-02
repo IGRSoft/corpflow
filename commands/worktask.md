@@ -520,20 +520,14 @@ answers, then the bypass path resumes. Auto-decision never widens what runs unat
 
 ##### Escalation guard — raise-only self-labels
 
-A closing-sweep item arrives carrying its emitting stage's own `class`. The orchestrator computes
-`effective = max(agent_label, orchestrator_label)` over the ordered lattice `decision < escalate`.
-Because that join is monotone, raising is honoured and lowering is refused **by construction**, not
-by a rule someone must remember: agent `decision` + orchestrator `escalate` → `escalate`; agent
-`escalate` + orchestrator `decision` → `escalate`. The classes are the four enumerated directly
-above — this sub-heading adds no second copy of them. It runs at § Step C.2, strictly before any
-auto-answer, so no item reaches the delegate un-reclassified.
+A closing-sweep item arrives carrying its emitting stage's own `class`. At § Step C.2, strictly
+before any auto-answer, join it with the orchestrator's own label on both axes — `class` and
+`blocks_next_stage` — and carry the joined value forward, so no item reaches the delegate
+un-reclassified. The escalation classes are the four enumerated directly above; this sub-heading
+adds no second copy of them.
 
-###### Escalation guard — the blocking axis
-
-`blocks_next_stage` joins by the same rule on the 2-element lattice `false < true`: `effective =
-agent_flag OR orchestrator_flag`. The orchestrator may raise an item to blocking; it may never clear
-the emitting agent's flag. The two axes are orthogonal and are evaluated independently — an
-`escalate` item may or may not block, and a blocking item may be an ordinary `decision`.
+The join itself, both axes, and why raise-only holds by construction rather than by a remembered
+rule: `skills/shared/stage-contracts.md § Self-labels raise, never lower`.
 
 ##### Escalation guard — unattended `/megatask` per-issue runs (PARK)
 
@@ -930,8 +924,8 @@ approval carrier, and the gate's own `AskUserQuestion` still fires last and unmo
    plus a `sweep_resolved` audit row whose subject is the boundary that rendered it — `FN<N>` from
    C.1–C.5, `<CODE><N>` from C.0. The union refuses a later downgrade of either field, so recording
    once is enough. Answers do **not** go to
-   `facts.decisions[]`: that array clamps to the newest 8, and a 13-stage run's sweep answers would
-   evict the architectural decisions the ring exists to keep.
+   `facts.decisions[]` — see `skills/shared/stage-contracts.md § Closing Elicitation Sweep` for why
+   that destination is refused.
 
 ##### Step C.5 — the write-back is a whole stub
 

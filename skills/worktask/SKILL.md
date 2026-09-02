@@ -816,7 +816,8 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
         //      Question text comes from the resolved ref anchor body, not the stub (which
         //      carries no summary). Record each answer into the item itself — status =
         //      "resolved" plus resolution = "<answer>" — and append a sweep_resolved audit
-        //      row (subject: `FN<N>`). NOT facts.decisions[]: that ring clamps to newest-8.
+        //      row (subject: `FN<N>`). NOT facts.decisions[] — stage-contracts.md
+        //      § Closing Elicitation Sweep states why that destination is refused.
 ```
 
 ##### Step 4.9 — the approve/reject STOP (d), unmoved
