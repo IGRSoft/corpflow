@@ -19,6 +19,30 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/request-plan/scripts/capability-registry.sh"
 
+# The registry is a pure function of the tree and every inventory case below asks a
+# different question of the SAME output, so it is executed once per file rather than
+# once per case. The enumeration walks six globs, a find over benchmark/harness and a
+# Python interpreter, so re-running it per case was most of this suite's wall time and
+# bought no coverage: ten identical executions can only agree.
+#
+# Cases that vary the INVOCATION (a different cwd, a mutated tree) still run their own.
+setup_file() {
+  load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+  REGISTRY_OUT="$BATS_FILE_TMPDIR/registry.out"
+  bash "$PLUGIN_ROOT/skills/request-plan/scripts/capability-registry.sh" > "$REGISTRY_OUT"
+  export REGISTRY_OUT
+}
+
+# Populates $output/$lines/$status from the one capture, in the shape bats' own `run`
+# would leave them, so the assertions below are unchanged by the caching.
+use_registry() {
+  status=0
+  output="$(cat "$REGISTRY_OUT")"
+  lines=()
+  local _l
+  while IFS= read -r _l; do lines+=("$_l"); done < "$REGISTRY_OUT"
+}
+
 # stdout closes with a fixed trailer naming the excluded CLASSES (never a file).
 # It is not an inventory line, so every inventory assertion below is scoped past
 # it — otherwise the honesty marker reads as a malformed capability.
@@ -31,8 +55,7 @@ is_trailer() {
 # --- inventory ---------------------------------------------------------------
 
 @test "inventory: emits every asset class, one line each" {
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   # Every class must contribute. A single class silently dropping out is the failure
   # that matters here: the skill reads this list INSTEAD of searching, so a missing
   # class is a capability the planner can no longer find at all. A line count alone
@@ -50,8 +73,7 @@ is_trailer() {
 }
 
 @test "inventory: every line carries a path and an em-dash separated description" {
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local bad=0
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
@@ -65,8 +87,7 @@ is_trailer() {
 }
 
 @test "inventory: every listed path resolves in the tree" {
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local missing=0 p
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
@@ -81,8 +102,7 @@ is_trailer() {
   # skills/*/scripts/ is a flat glob and skills/shared/milestone-helpers/ is not flat,
   # so this class was silently absent. It is shared CODE, which the shared-canon
   # exclusion below does not cover.
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   printf '%s\n' "${lines[@]}" | grep -qE '^skills/[^/]+/[^/]+/scripts/[^/]+\.sh — .' \
     || fail "no nested skills/*/*/scripts/*.sh line"
 }
@@ -92,8 +112,7 @@ is_trailer() {
   # these directories, so an over-broad glob here destroys the search signal the
   # registry extension already spent most of. Note the exclusion is skills/shared/*.md
   # — shared CANON — and not shared code, which is a capability like any other.
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local leaked=0 p
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
@@ -114,8 +133,7 @@ is_trailer() {
   # The list is complete by construction for the six classes it covers, and silent
   # about the rest — which reads as "complete, full stop". The trailer is the only
   # marker in stdout that anything was left out.
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local trailer="${lines[$((${#lines[@]} - 1))]}"
   is_trailer "$trailer" \
     || fail "last stdout line is not the excluded-classes trailer: $trailer"
@@ -146,8 +164,7 @@ non_class_tokens() {
   # The whole point of not enumerating these directories is that eval cases ground
   # there; a trailer naming one FILE hands back exactly the lookup the exclusion
   # prevents. Class-level globs and bare directories only.
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local trailer="${lines[$((${#lines[@]} - 1))]}"
   local toks bad
   toks="$(printf '%s\n' "${trailer#*: }" | tr ',' '\n' | tr -d ' ')"
@@ -173,8 +190,7 @@ $bad"
 @test "description: stops at the next frontmatter key, never folding one in" {
   # The awk collects until the next `key:` or the closing fence. Without that
   # guard a description absorbs `model:`/`tools:` and the registry reads as noise.
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   local leaked=0 l
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
@@ -189,8 +205,7 @@ $bad"
 }
 
 @test "description: no body heading leaks past the frontmatter fence" {
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   # A leaked body would drag a markdown heading onto the line; frontmatter has none.
   # Asserted per line, not over $output: `.` matches a newline inside `[[ =~ ]]`, so a
   # whole-output regex pairs an em-dash on one line with the trailer's `##` on another.
@@ -205,8 +220,7 @@ $bad"
 }
 
 @test "description: a multi-line folded description collapses to one line" {
-  run_script "$SCRIPT"
-  assert_success
+  use_registry
   # One line per asset: the count of emitted lines must equal the count of paths.
   # Scoped past the trailer, which carries no path by design.
   local paths inventory

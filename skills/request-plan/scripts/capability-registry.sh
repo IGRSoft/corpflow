@@ -88,20 +88,38 @@ desc_shell() {
   ' "$1"
 }
 
-desc_python() {
-  # The module docstring's summary paragraph — its first blank-line-delimited block,
-  # folded. A one-line docstring is that block; a wrapped opening sentence would be cut
-  # mid-clause by taking the first physical line only.
-  python3 - "$1" <<'PY'
+# desc_python_bulk <file>... -> one `path<TAB>summary` line per file that HAS a
+# module docstring; files without one emit nothing, which is what makes them omitted
+# from the registry rather than listed half-formed.
+#
+# One interpreter for the whole tree, not one per file. Every path here needs a full
+# ast.parse, and the parse is microseconds against ~40ms of interpreter startup — so
+# the old shape spent almost all of its time starting Python up, once per file, inside
+# two loops. The summary is folded to a single line here so the caller's normalize()
+# sees the same shape it does for every other class.
+desc_python_bulk() {
+  [ "$#" -gt 0 ] || return 0
+  python3 - "$@" <<'PY'
 import ast, sys
-try:
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        doc = ast.get_docstring(ast.parse(fh.read()))
-except (OSError, SyntaxError, ValueError):
-    doc = None
-if doc:
-    print(doc.strip().split("\n\n", 1)[0])
+for path in sys.argv[1:]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = ast.get_docstring(ast.parse(fh.read()))
+    except (OSError, SyntaxError, ValueError):
+        doc = None
+    if not doc:
+        continue
+    summary = " ".join(doc.strip().split("\n\n", 1)[0].split())
+    if summary:
+        print(path + "\t" + summary)
 PY
+}
+
+# The single-file view, kept so one file can be asked about directly. It carries no
+# extraction logic of its own — a second copy of the docstring rule is the drift this
+# consolidation removes.
+desc_python() {
+  desc_python_bulk "$1" | cut -f2-
 }
 
 main() {
@@ -119,15 +137,26 @@ main() {
     [ -f "$f" ] && emit_line "$f" "$(desc_shell "$f")"
   done
 
-  for f in skills/*/scripts/*.py; do
-    [ -f "$f" ] && emit_line "$f" "$(desc_python "$f")"
-  done
-
+  # Both Python classes are collected first and extracted in ONE interpreter run.
+  # Emission order is argv order, so the skill scripts still precede the harness
+  # modules and the harness modules stay sorted.
+  #
   # Harness modules only — benchmark/harness/**/tests/ is test scaffolding, and it is also
   # where eval cases ground, so enumerating it would answer the cases it is meant to test.
+  local py_files=() desc
+  for f in skills/*/scripts/*.py; do
+    [ -f "$f" ] && py_files+=("$f")
+  done
   while IFS= read -r f; do
-    emit_line "$f" "$(desc_python "$f")"
+    [ -n "$f" ] && py_files+=("$f")
   done < <(find benchmark/harness -type f -name '*.py' -not -path '*/tests/*' | sort)
+
+  # bash 3.2 aborts on "${arr[@]}" for an empty array under set -u.
+  if [ "${#py_files[@]}" -gt 0 ]; then
+    while IFS=$'\t' read -r f desc; do
+      emit_line "$f" "$desc"
+    done < <(desc_python_bulk "${py_files[@]}")
+  fi
 
   # Without this line the output is complete-by-construction AND indistinguishable from a
   # complete inventory of the repo, which it is not. Naming the excluded CLASSES keeps the
