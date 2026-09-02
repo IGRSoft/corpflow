@@ -133,9 +133,9 @@ def main(argv) -> int:
     p.add_argument("--grades", default="/tmp/allgrades.json", help="eval-grade --json output")
     p.add_argument("--split", default=None)
     p.add_argument("--min-id", type=int, default=None,
-                   help="restrict to case ids >= N. The held-out tranche is ids 122+; "
-                        "every lower id predates the reset and has been read, so the "
-                        "split manifest calls its own `test` membership nominal")
+                   help="restrict to case ids >= N. The current tranche floor is the "
+                        "held_out_from recorded in evals/splits/request-plan.json; "
+                        "below it the manifest calls its own `test` membership nominal")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
 

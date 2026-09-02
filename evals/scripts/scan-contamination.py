@@ -34,7 +34,13 @@ import os
 import re
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import importlib.util
+
+_ENGINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval-engine.py")
+_spec = importlib.util.spec_from_file_location("eval_engine", _ENGINE_PATH)
+engine = importlib.util.module_from_spec(_spec)
+sys.modules["eval_engine"] = engine
+_spec.loader.exec_module(engine)
 
 # Every pattern is deictic or bound to a value, because the loose version of each
 # one fires on correct work. This repo's plans routinely propose ADDING an eval case
@@ -53,7 +59,7 @@ CHANNELS = {
         r"currently showing as deleted|showing as deleted|housekeeping deletion"
         r"|deletions? (?:in|of) `?evals|deleted and uncommitted"
         r"|uncommitted (?:eval )?deletions?"
-        r"|(?:evals?[^.\n]{0,40})?(?:files?|set|taxonomy)[^.\n]{0,60}deleted",
+        r"|evals?[^.\n]{0,40}(?:files?|set|taxonomy)[^.\n]{0,60}deleted",
         "saw the answer key removed, via git status",
     ),
     "harness-log": (
@@ -107,19 +113,17 @@ def scan(eval_set: dict, responses_dir: str) -> dict:
 def main(argv) -> int:
     p = argparse.ArgumentParser(prog="scan-contamination")
     p.add_argument("--eval-set", default=os.path.join(
-        REPO, "skills", "request-plan", "evals", "evals.json"))
+        engine.REPO, "skills", "request-plan", "evals", "evals.json"))
     p.add_argument("--responses", default=None)
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
 
     try:
-        with open(args.eval_set, encoding="utf-8") as f:
-            eval_set = json.load(f)
+        eval_set = engine.load_eval_set(args.eval_set)
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"scan-contamination: cannot read eval set: {exc}\n")
         return 64
-    responses = args.responses or os.path.join(
-        os.path.dirname(os.path.abspath(args.eval_set)), "responses")
+    responses = engine.responses_dir(args.eval_set, args.responses)
     if not os.path.isdir(responses):
         sys.stderr.write(f"scan-contamination: no responses at {responses}\n")
         return 2

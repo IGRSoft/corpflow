@@ -15,7 +15,31 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def load_eval_set(path: str) -> dict:
+    """Reads and parses only. Each caller keeps its own exit code and prog-prefixed
+    message, because one shared verdict makes eval-grade's usage error and
+    build-review-page's crash indistinguishable to whoever is reading stderr."""
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def responses_dir(eval_set_path: str, override: str | None = None) -> str:
+    """Where a capture wrote its answers: beside the eval set that produced them.
+
+    Existence is the caller's question — the three consumers disagree on whether an
+    absent directory is a decline, a hard error, or an empty page, and that
+    disagreement is deliberate.
+    """
+    if override:
+        return override
+    return os.path.join(os.path.dirname(os.path.abspath(eval_set_path)), "responses")
+
 
 ASSERTION_TYPES = frozenset({"contains_all", "contains_none", "regex_all", "regex_any",
                              "regex_none", "paths_resolve"})

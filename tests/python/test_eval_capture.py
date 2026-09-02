@@ -342,6 +342,46 @@ class CaptureCli(unittest.TestCase):
         rc = capture.main(["--eval-set", _EVAL_SET, "--dry-run"])
         self.assertEqual(rc, 0)
 
+    def _dry_run_argv(self, *extra):
+        """The argv the dry run advertises, for the single case in a throwaway set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            es = os.path.join(tmp, "evals.json")
+            with open(es, "w", encoding="utf-8") as f:
+                json.dump({"skill_name": "request-plan", "shared_assertions": [],
+                           "evals": [{"id": 1, "prompt": "plan a fix", "assertions": [],
+                                      "expected_outcome": "plan"}]}, f)
+            settings = os.path.join(tmp, "settings.json")
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump({"permissions": {"defaultMode": "bypassPermissions"}}, f)
+            held, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                rc = capture.main(["--eval-set", es, "--dry-run",
+                                   "--settings", settings, *extra])
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = held
+            self.assertEqual(rc, 0)
+            plan = json.loads(out[out.rindex("{\n  \"case_id\""):])
+            return plan["argv"], settings
+
+    def test_an_uisolated_dry_run_prints_the_settings_it_would_dispatch_with(self):
+        # The printed argv is the only description of a run nobody watches happen. An
+        # argv missing --settings describes a dispatch against the ambient plugin,
+        # which is a different measurement than the one that would actually be taken.
+        argv, settings = self._dry_run_argv("--no-isolate")
+        self.assertIn("--settings", argv)
+        self.assertEqual(argv[argv.index("--settings") + 1], settings)
+
+    def test_an_isolated_dry_run_advertises_the_generated_settings_instead(self):
+        argv, given = self._dry_run_argv()
+        self.assertIn("--settings", argv)
+        self.assertNotEqual(argv[argv.index("--settings") + 1], given)
+
+    def test_a_settings_path_that_does_not_exist_is_refused_before_any_work(self):
+        self.assertEqual(
+            capture.main(["--eval-set", _EVAL_SET, "--dry-run", "--no-isolate",
+                          "--settings", "/nonexistent/settings.json"]), 2)
+
     def test_unknown_case_id_is_a_usage_error(self):
         # Out of range on purpose. A plausible-looking id silently stops testing
         # anything the day the eval set grows past it.
@@ -642,15 +682,18 @@ class StratifiedSampling(unittest.TestCase):
 
     def _run(self, tmp, *extra):
         out = os.path.join(tmp, "ids.json")
-        rc = sampler.main(["--grades", self._grades(tmp), "--out", out, *extra])
+        # Floor pinned, never inherited: the live manifest's floor moves every cycle,
+        # and a fixture tracking it would change what these assertions mean.
+        rc = sampler.main(["--grades", self._grades(tmp), "--out", out,
+                           "--held-out-from", "122", *extra])
         self.assertEqual(rc, 0)
         with open(out, encoding="utf-8") as f:
             return json.load(f)
 
     def test_the_held_out_tranche_is_taken_whole_and_train_is_never_touched(self):
-        # Ids below the batch-4 boundary predate the reset and have been read, so the
-        # split manifest calls its own `test` membership nominal for them. Sampling
-        # the few genuinely-unseen cases would leave nothing to measure.
+        # Ids below the floor have been read, so the manifest calls its own `test`
+        # membership nominal there. Sampling the few genuinely-unseen cases would
+        # leave nothing to measure.
         with tempfile.TemporaryDirectory() as tmp:
             ids = self._run(tmp)
             self.assertTrue(set(range(122, 140)).issubset(ids))   # held out, entire
@@ -665,6 +708,135 @@ class StratifiedSampling(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertLessEqual(len(self._run(tmp, "--budget", "60")), 60)
             self.assertLessEqual(len(self._run(tmp, "--budget", "30")), 30)
+
+    def test_a_budget_the_tranche_alone_exceeds_is_refused(self):
+        # The fixture's tranche is 18. Clamping it instead would still report the draw
+        # at a sampling fraction of 1.0, and label-align divides that back out — so an
+        # over-budget run would silently understate the held-out population.
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "ids.json")
+            rc = sampler.main(["--grades", self._grades(tmp), "--out", out,
+                               "--held-out-from", "122", "--budget", "3"])
+            self.assertEqual(rc, 64)
+            self.assertFalse(os.path.exists(out))
+
+    def test_a_budget_equal_to_the_tranche_is_allowed_and_spends_it_all(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ids = self._run(tmp, "--budget", "18")
+            self.assertEqual(sorted(ids), list(range(122, 140)))
+
+    def test_the_ceiling_holds_at_every_budget_the_tranche_fits_under(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for budget in (18, 19, 25, 40, 60):
+                self.assertLessEqual(len(self._run(tmp, "--budget", str(budget))), budget)
+
+
+class TheFloorComesFromTheManifest(unittest.TestCase):
+    """One recorded floor governs. A second copy goes stale against the first and
+    re-samples a spent tranche while still calling the rate held-out.
+
+    Absent is the manifest's other lawful state, and the one it holds between the
+    pass that spends a tranche and the batch that replaces it. Every assertion here
+    is written to hold in both states, because a floor is pinned for only part of
+    each cycle and a suite that assumed one state would go quiet during the other.
+    """
+
+    @staticmethod
+    def _recorded_floor():
+        with open(sampler.SPLIT_MANIFEST, encoding="utf-8") as f:
+            return json.load(f).get("held_out_from")
+
+    @staticmethod
+    def _highest_spent_id():
+        """Highest id any labelling pass has already drawn. Every `*-sample.json` is
+        a completed draw, so its ids are read whatever the split manifest calls them."""
+        highest = 0
+        for path in glob.glob(os.path.join(_REPO, "evals", "labels", "*-sample.json")):
+            with open(path, encoding="utf-8") as f:
+                highest = max(highest, max(json.load(f)["case_ids"]))
+        return highest
+
+    def test_the_manifest_never_vouches_for_a_tranche_already_read(self):
+        # The key's entire contract, and the one assertion that would have caught
+        # `held_out_from: 168`: it named batch 5, which the 0.3.0 cut spent whole.
+        # A floor at or below a drawn id re-samples read cases and still reports the
+        # rate as held-out, which is the one error no output reveals.
+        floor, spent = self._recorded_floor(), self._highest_spent_id()
+        self.assertTrue(spent, "no sample files found; the check would be vacuous")
+        self.assertTrue(
+            floor is None or floor > spent,
+            f"held_out_from {floor} is at or below id {spent}, already labelled")
+
+    def test_a_pinned_floor_is_the_value_the_manifest_records(self):
+        # On a fixture rather than the live manifest, which carries no floor between
+        # batches; keying this to the live file would silence it for half of each cycle.
+        with tempfile.TemporaryDirectory() as tmp:
+            pinned = os.path.join(tmp, "request-plan.json")
+            with open(pinned, "w", encoding="utf-8") as f:
+                json.dump({"note": "batch 6", "held_out_from": 213, "splits": {}}, f)
+            self.assertEqual(sampler.held_out_floor(pinned), 213)
+
+    def test_the_committed_manifest_declines_rather_than_inventing_a_floor(self):
+        # The default path an operator actually hits today. It has to reach exit 64 --
+        # not a traceback, and above all not a floor guessed from the split data.
+        if self._recorded_floor() is not None:
+            self.skipTest("a floor is pinned; absence is covered on fixtures below")
+        with self.assertRaises(LookupError):
+            sampler.held_out_floor(sampler.SPLIT_MANIFEST)
+        with tempfile.TemporaryDirectory() as tmp:
+            grades = os.path.join(tmp, "grades.json")
+            with open(grades, "w", encoding="utf-8") as f:
+                json.dump({"results": [{"case_id": 1, "split": "dev",
+                                        "status": "pass"}]}, f)
+            err = io.StringIO()
+            real_err, sys.stderr = sys.stderr, err
+            try:
+                rc = sampler.main(["--grades", grades])
+            finally:
+                sys.stderr = real_err
+        self.assertEqual(rc, 64)
+        self.assertIn("--held-out-from", err.getvalue())
+        self.assertIn("no successor has been appended", err.getvalue())
+
+    def test_an_absent_key_and_an_unreadable_manifest_ask_for_different_things(self):
+        # Absent is routine -- a pass spent the tranche. Unreadable is damage. Told to
+        # "name the current tranche", an operator whose tranche is spent has only the
+        # spent id to name, which is the defect the deletion exists to prevent.
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = os.path.join(tmp, "request-plan.json")
+            with open(bare, "w", encoding="utf-8") as f:
+                json.dump({"note": "restratified", "splits": {}}, f)
+            with self.assertRaises(LookupError) as absent:
+                sampler.held_out_floor(bare)
+            with self.assertRaises(LookupError) as unreadable:
+                sampler.held_out_floor(os.path.join(tmp, "not-there.json"))
+        self.assertIn("Append a batch", str(absent.exception))
+        self.assertNotIn("Append a batch", str(unreadable.exception))
+
+    def test_a_manifest_with_no_floor_is_refused_rather_than_defaulted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = os.path.join(tmp, "request-plan.json")
+            with open(bare, "w", encoding="utf-8") as f:
+                json.dump({"note": "restratified", "splits": {}}, f)
+            with self.assertRaises(LookupError):
+                sampler.held_out_floor(bare)
+
+    def test_the_cli_declines_when_the_manifest_carries_no_floor(self):
+        original = sampler.SPLIT_MANIFEST
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = os.path.join(tmp, "request-plan.json")
+            with open(bare, "w", encoding="utf-8") as f:
+                json.dump({"note": "restratified", "splits": {}}, f)
+            grades = os.path.join(tmp, "grades.json")
+            with open(grades, "w", encoding="utf-8") as f:
+                json.dump({"results": [{"case_id": 1, "split": "dev", "status": "pass"}]}, f)
+            sampler.SPLIT_MANIFEST = bare
+            try:
+                self.assertEqual(sampler.main(["--grades", grades]), 64)
+                self.assertEqual(
+                    sampler.main(["--grades", grades, "--held-out-from", "168"]), 0)
+            finally:
+                sampler.SPLIT_MANIFEST = original
 
 
 class GradesAreSelfDescribing(unittest.TestCase):
@@ -839,6 +1011,25 @@ class ScanPatternsDoNotFireOnCorrectWork(unittest.TestCase):
         # commits, not knowing the file exists.
         self.assertEqual(self._scan("modify `eval-capture.py` to add a flag"), [])
         self.assertEqual(self._scan("recent commits (#333) are all eval work"), [1])
+
+    def test_housekeeping_prose_about_deleting_a_file_is_not_the_strip(self):
+        # The strip channel's deletion alternative has to stay bound to `eval`. Without
+        # that prefix it is a generic "file(s)...deleted" matcher, and ordinary cleanup
+        # prose — which this repo's plans propose constantly — inflates the rate.
+        self.assertEqual(
+            self._scan("the stale lock file should be deleted before the next run"), [])
+        self.assertEqual(
+            self._scan("plan: have the job delete its set of temp files when it exits"), [])
+        self.assertEqual(
+            self._scan("orphaned worktrees and their taxonomy files can be deleted"), [])
+
+    def test_the_prefix_requirement_does_not_disarm_the_channel(self):
+        # Reached only by the deletion alternative: no other pattern in the channel
+        # matches this phrasing, so a green here proves the narrowing kept its teeth.
+        self.assertEqual(
+            self._scan("git status shows the eval taxonomy was deleted in this tree"), [1])
+        self.assertEqual(
+            self._scan("six evals files are showing up deleted under evals/"), [1])
 
     def test_saying_this_prompt_is_an_eval_case_still_trips(self):
         self.assertEqual(self._scan("this exact prompt is even a tracked eval case"), [1])
