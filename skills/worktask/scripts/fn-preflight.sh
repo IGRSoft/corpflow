@@ -16,6 +16,10 @@
 #                    the sanitised body (warn-only; never changes this verdict).
 #     continuity     the worktree HEAD is an ancestor of the integration branch, else
 #                    log a diverged→cherry-pick diagnostic + audit row (never blocks).
+#                    It does NOT discriminate a wrong base: `diverged` is the normal state
+#                    of every feature branch about to merge, so the signal reads the same
+#                    whether the base is right or wrong. `base-sanity` is the check that
+#                    discriminates a wrong base, and it blocks.
 #     branch-divergence
 #                    has anything outside the pipeline renamed the local branch since the
 #                    naming step? Compares the local name against the `to` of the last
@@ -28,11 +32,20 @@
 #                    default? If so the `Closes #N` merge trailer will never fire, so
 #                    print the explicit `gh issue close` command FN must run post-merge.
 #                    Read-only, exit 0 always; unresolved inputs report, never guess.
-#     all            attachments → pr-body → validate-pr → continuity.
+#     base-sanity    does the diff a PR against the resolved base would carry resemble
+#                    what this run recorded changing? Fails when the PR file count is
+#                    over 3x the ledger's AND over 20 files larger — the signature of a
+#                    base this work never forked from. Warns when HEAD is >25 commits
+#                    ahead. Every unresolvable input degrades to a warning + exit 0.
+#     all            attachments → pr-body → validate-pr → continuity → base-sanity.
 #
 #   `branch-divergence` and `issue-close-required` are deliberately NOT in `all`: each is a
 #   separate subcommand so it is independently testable and cannot perturb `continuity`'s
 #   existing rows. `issue-close-required` additionally runs POST-merge, not pre-`pr create`.
+#
+#   `base-sanity` runs LAST in `all`: the `&&` chain aborts at the first failure, and
+#   `continuity`'s non-blocking `diverged` row is directly useful when diagnosing a
+#   base-sanity block. Blocking earlier would suppress that evidence.
 #
 #   `pr-body` runs BEFORE `validate-pr` because it rewrites the body in place: the
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
@@ -58,6 +71,11 @@
 # @arg -h | --help        Show this header.
 #
 # @env FN_BASE_REF        Highest-priority integration-branch override (see resolve_base_ref).
+# @env FN_BASE_SANITY_OVERRIDE
+#                         The one sanctioned downgrade: any value other than unset/empty/
+#                         `0`/`false`/`no` turns `base-sanity`'s hard fail into a warning and
+#                         writes a `base_sanity` / `override` audit row naming both counts.
+#                         Affects the fail arm only; there is no second bypass path.
 # @env MILESTONE_MODE     1 => batch routing; `pr-body` sanitises but stops blocking.
 # @env INCIDENT_MODE      1 => incident routing; same non-blocking mode.
 #
@@ -65,7 +83,8 @@
 #               scope-disabled).
 # @exitcode 1   Blocking failure (missing attachment; body missing the closing keyword;
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
-#               visual-evidence evidence, or an unreachable sanitiser library).
+#               visual-evidence evidence, or an unreachable sanitiser library;
+#               `base-sanity`: the PR diff dwarfs this run's own record of it).
 # @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body).
 # @exitcode 3   branch-lib.sh unreachable — no dispatch runs (plugin install broken).
 #
@@ -162,7 +181,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help) usage ;;
-    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | all)
+    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | base-sanity | all)
       COMMAND="$1"
       shift
       ;;
@@ -186,7 +205,8 @@ case "$COMMAND" in
   continuity) cmd_continuity ;;
   branch-divergence) cmd_branch_divergence ;;
   issue-close-required) cmd_issue_close_required ;;
+  base-sanity) cmd_base_sanity ;;
   all)
-    cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity
+    cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity && cmd_base_sanity
     ;;
 esac

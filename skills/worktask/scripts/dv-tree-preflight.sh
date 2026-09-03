@@ -74,8 +74,11 @@ resolve_assigned() {
   printf '%s' "$v"
 }
 
-# Integration branch, same ranked order as branch-lib.sh resolve_base_ref(): no hardcoded
-# literal, unresolved reported rather than guessed.
+# Integration branch. A REDUCED copy of branch-lib.sh resolve_base_ref(): it omits rank 3
+# (workspace.json .git.base_branch) and rank 0 (fork-point evidence), so a megatask
+# per-issue base resolves here only via state.json. Shared invariants hold — no hardcoded
+# literal, unresolved reported rather than guessed. Collapsing the three ladders onto the
+# shared one is tracked as a follow-up; do not widen the divergence here.
 resolve_base_ref() {
   local v="${FN_BASE_REF:-}"
   if [[ -z "$v" && -f "$STATE_PATH" ]] && command -v jq > /dev/null 2>&1; then

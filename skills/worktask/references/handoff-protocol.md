@@ -745,10 +745,42 @@ ledger disables the whole assigned-tree guard set at once. Rationale and the mot
 
 The integration branch, mirrored by PL0 from `task.metadata.base_ref` so shell helpers (which
 cannot read Task-System metadata) can reach it. Reader resolution order, highest first:
-`$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`,
-`git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved** — there is no literal fallback;
-readers report unresolved and degrade non-blocking. Implemented in
-`skills/worktask/scripts/fn-preflight.sh` `resolve_base_ref`.
+
+| Rank | Source | Note |
+|---|---|---|
+| 0 | `fork_base()` fork point | Evidence, **opt-in** — see below. |
+| 1 | `$FN_BASE_REF` | Explicit operator/test override. |
+| 2 | `state.json .metadata.base_ref` | Stamped by PL0; **where a host-declared target branch enters the order** — see below. |
+| 3 | `workspace.json .git.base_branch` | `/megatask` per-issue record. |
+| 4 | `git symbolic-ref refs/remotes/origin/HEAD` | Repository default branch. |
+| — | **unresolved** | Reported, never guessed. |
+
+##### Rank 0 is evidence, and opt-in
+
+Rank 0 is consulted and reported, but it supplies the value only when ranks 1-4 are all empty
+**and** the caller passed `--with-fork-point`. A fork point that disagrees with a value ranks 1-4
+supplied is surfaced (PL0 sweep item, `fn-preflight base-sanity` candidate line) and **never**
+applied — a branch deliberately rebased onto a release line must not be silently retargeted.
+
+The opt-in exists because every other consumer reads an empty return as *decline, do not guess* and
+gates on it (`refine-branch-target.sh`'s `base_unresolved` no-op, `branch-name.sh`, `continuity`,
+`issue-close-required`). Filling that silence with an inferred branch would make those gates act on
+a guess. `base-sanity` opts in because it alone distinguishes an inferred base from a configured one
+(its `base_guessed` degrade rung).
+
+##### Rank 2 and the host-declared target branch
+
+A host telling the session "the target branch for this workspace is `origin/develop`" is the
+*provenance* of rank 2, not a separate probe. It is outranked by `$FN_BASE_REF` alone, and it
+outranks both the megatask record and the repository default.
+
+##### Implementation
+
+`skills/worktask/scripts/branch-lib.sh` — `resolve_base_ref` returns the value, `base_ref_source`
+returns which rank answered (`env`, `state`, `workspace`, `origin_head`, `fork_point`,
+`unresolved`), both over one shared internal ladder and both accepting `--with-fork-point`. There is
+no literal fallback; readers report unresolved and degrade non-blocking. The same ranks, identically
+ordered, are restated in `pl0-procedure.md § Integration-branch detection`.
 
 #### tasks
 
