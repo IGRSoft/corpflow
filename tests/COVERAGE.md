@@ -190,10 +190,10 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
-| `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` | — | — | — |
+| `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` (incl. `fork_base` rank-0 evidence) | — | — | — |
 | `skills/worktask/scripts/refine-branch-target.sh` | `tests/shell/worktask/refine-branch-target.bats` | — | — | — |
 | `skills/worktask/scripts/preflight-issue-scan.sh` | `tests/shell/worktask/preflight-issue-scan.bats` | — | — | — |
-| `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`) | — | — | — |
+| `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`, `base-sanity`) | — | — | — |
 | `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
 

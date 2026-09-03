@@ -122,7 +122,7 @@ When the merge target is not the worktask default (e.g. `origin/release/v2` inst
 
 ##### Base-ref resolution order
 
-PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref`, `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. No hardcoded literal ends that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical: `handoff-protocol.md § metadata.base_ref`.
+PL0 also mirrors the detected branch to `state.json .metadata.base_ref` unconditionally, because shell helpers cannot read Task-System metadata. Every reader — DV, `fn-preflight.sh continuity`, `branch-name.sh` (via `branch-lib.sh resolve_base_ref`) — resolves through one order, highest first: `$FN_BASE_REF`, `state.json .metadata.base_ref` (the rank a host-declared target branch enters at), `workspace.json .git.base_branch`, `git symbolic-ref refs/remotes/origin/HEAD`, then **unresolved**. Ahead of them sits rank 0, the `fork_base()` fork point — opt-in evidence: it supplies a value only when those four are empty **and** the caller passed `--with-fork-point` (only `fn-preflight base-sanity` does); otherwise it reconciles through a PL0 sweep item instead of overriding. No hardcoded literal ends that chain; an unresolved base is reported and the caller degrades non-blocking. Canonical: `handoff-protocol.md § metadata.base_ref`.
 
 ##### Background & shared-checkout rules
 

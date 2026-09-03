@@ -15,7 +15,8 @@
 #
 #   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result, resolve_git_ref,
 #   cmd_attachments, cmd_pr_body, cmd_validate_pr, cmd_continuity,
-#   cmd_branch_divergence, cmd_issue_close_required.
+#   cmd_branch_divergence, cmd_issue_close_required, _bs_override_on,
+#   _bs_fork_candidate, cmd_base_sanity.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -405,5 +406,170 @@ cmd_issue_close_required() {
     "$(meta_json base "$base" default_branch "$default_branch" issue "$issue")"
   printf 'issue-close-required: yes — %s is not the repository default (%s), so the merge trailer will NOT fire.\nRun after the merge:\n  gh issue close %s --comment "Merged into %s."\n' \
     "$base" "$default_branch" "$issue" "$base"
+  return 0
+}
+
+# ---------- base-sanity ----------
+# The magnitude question no other check asks: does the diff a PR against the
+# resolved base would carry resemble what this run says it changed? A branch
+# stacked on another feature branch, opened against the shared integration
+# branch, silently carries the whole intervening branch — 1008 files where the
+# run itself recorded 27. Ancestry (`continuity`) cannot see that: divergence is
+# the normal state of every feature branch about to merge. Magnitude can.
+#
+# The thresholds are WRONG-BASE heuristics, not diff-quality rules. The
+# multiplier alone would trip a 3-file run that legitimately touched 9; the
+# 20-file floor alone would trip any large-but-correct run. Only the conjunction
+# describes the shape of a wrong base, which is why neither half may be tuned or
+# relaxed on its own.
+
+# Forgiving on purpose: an escape hatch that silently fails to engage on
+# `=true` is a worse footgun than a loose parse. bash 3.2 has no ${v,,}.
+_bs_override_on() {
+  case "${FN_BASE_SANITY_OVERRIDE:-}" in
+    '' | 0 | [Ff][Aa][Ll][Ss][Ee] | [Nn][Oo]) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Fork-point evidence is optional here BY DESIGN: base-sanity blocks correctly
+# without it, so an install lacking the Change-B helper degrades the candidate
+# line to `unavailable` rather than losing the block.
+_bs_fork_candidate() {
+  local configured="$1" f=""
+  command -v fork_base > /dev/null 2>&1 || {
+    printf 'unavailable'
+    return 0
+  }
+  f=$(fork_base "$configured" 2> /dev/null || printf '')
+  [ -n "$f" ] || f="unavailable"
+  printf '%s' "$f"
+}
+
+cmd_base_sanity() {
+  local base ref src ahead pr_files ledger_files fork fork_ahead meta
+
+  # Degrade ladder, evaluated BEFORE the rule and ordered most-fundamental first.
+  # Each rung warns and exits 0: a blocking gate that fires on its own inability
+  # to introspect is worse than the wrong base it guards against, and every rung
+  # carries its own result token so a wrong-rung regression stays visible.
+  if ! command -v jq > /dev/null 2>&1; then
+    printf 'base-sanity: jq unavailable — check skipped\n'
+    audit_fn base_sanity jq_unavailable "$(meta_json reason jq_unavailable)"
+    return 0
+  fi
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    printf 'base-sanity: not inside a git work tree — check skipped\n'
+    audit_fn base_sanity no_git "$(meta_json reason no_git)"
+    return 0
+  fi
+
+  # --with-fork-point: this is the one caller that can tell an inferred base from a
+  # configured one (rung 5 below), so it is the one caller that may accept one.
+  base=$(resolve_base_ref --with-fork-point)
+  if [[ -z "$base" ]]; then
+    printf 'base-sanity: integration branch unresolved — reporting, not guessing; verify the PR base manually\n'
+    audit_fn base_sanity base_ref_unresolved "$(meta_json reason unresolved)"
+    return 0
+  fi
+
+  # Via resolve_git_ref, never a literal `origin/$base`: the stored value may
+  # already be remote-qualified, and a local-only clone has no remote at all.
+  ref=$(resolve_git_ref "$base" 2> /dev/null || printf '')
+  if [[ -z "$ref" ]]; then
+    printf 'base-sanity: integration branch %s not present locally — magnitude comparison skipped\n' "$base"
+    audit_fn base_sanity base_ref_unresolvable "$(meta_json base "$base")"
+    return 0
+  fi
+
+  src=""
+  if command -v base_ref_source > /dev/null 2>&1; then
+    src=$(base_ref_source --with-fork-point 2> /dev/null || printf '')
+  fi
+  if [[ "$src" == "fork_point" ]]; then
+    printf 'base-sanity: base %s is itself fork-point evidence rather than a configured target — blocking on a guess would be a false block; skipped\n' "$base"
+    audit_fn base_sanity base_guessed "$(meta_json base "$base" base_source "$src")"
+    return 0
+  fi
+
+  ledger_files=$(jq -r 'if (.facts.files_modified | type) == "array"
+                        then (.facts.files_modified | length) else 0 end' \
+    "$STATE_PATH" 2> /dev/null || printf '0')
+  case "$ledger_files" in '' | *[!0-9]*) ledger_files=0 ;; esac
+  # Cannot be folded into the rule: at ledger_files == 0 the multiplier clause is
+  # satisfied by any non-empty diff, so the rule would degenerate to "every PR
+  # touching 21+ files fails".
+  if [[ "$ledger_files" -eq 0 ]]; then
+    printf 'base-sanity: this run records no modified files — nothing to compare the PR diff against; skipped\n'
+    audit_fn base_sanity ledger_unavailable "$(meta_json base "$base")"
+    return 0
+  fi
+
+  pr_files=$(git diff --name-only "${ref}...HEAD" 2> /dev/null | wc -l | tr -d ' ' || printf '')
+  case "$pr_files" in
+    '' | *[!0-9]*)
+      printf 'base-sanity: the diff against %s is unreadable — magnitude comparison skipped\n' "$base"
+      audit_fn base_sanity diff_unreadable "$(meta_json base "$base" ledger_files "$ledger_files")"
+      return 0
+      ;;
+  esac
+
+  ahead=$(git rev-list --count "${ref}..HEAD" 2> /dev/null || printf '0')
+  case "$ahead" in '' | *[!0-9]*) ahead=0 ;; esac
+
+  fork=$(_bs_fork_candidate "$base")
+  fork_ahead=""
+  if [[ "$fork" != "unavailable" ]]; then
+    # Through resolve_git_ref, exactly like $base above: fork_base returns a BARE
+    # branch name, and a remote-only branch does not resolve bare under git's
+    # disambiguation ladder. That is the incident's own topology, so counting on
+    # the bare name would blank the candidate precisely when it matters most.
+    local fork_ref
+    fork_ref=$(resolve_git_ref "$fork" 2> /dev/null || printf '')
+    if [[ -n "$fork_ref" ]]; then
+      fork_ahead=$(git rev-list --count "${fork_ref}..HEAD" 2> /dev/null || printf '')
+    fi
+  fi
+
+  meta=$(meta_json base "$base" pr_files "$pr_files" ledger_files "$ledger_files" \
+    ahead "$ahead" fork_candidate "$fork" base_source "${src:-unknown}")
+
+  if [[ "$pr_files" -gt $((ledger_files * 3)) ]] && [[ $((pr_files - ledger_files)) -gt 20 ]]; then
+    local candidate_line
+    if [[ -n "$fork_ahead" ]]; then
+      candidate_line=$(printf 'Closest fork-point candidate by commits-ahead: %s (%s ahead) vs %s (%s ahead).' \
+        "$fork" "$fork_ahead" "$base" "$ahead")
+    else
+      candidate_line=$(printf 'Closest fork-point candidate by commits-ahead: unavailable vs %s (%s ahead).' \
+        "$base" "$ahead")
+    fi
+
+    if _bs_override_on; then
+      printf >&2 'WARNING: base-sanity: a PR against %s would carry %s files; this run'"'"'s ledger records %s.\n%s\nDowngraded to a warning by FN_BASE_SANITY_OVERRIDE — the bypass is audited.\n' \
+        "$base" "$pr_files" "$ledger_files" "$candidate_line"
+      audit_fn base_sanity override \
+        "$(meta_json base "$base" pr_files "$pr_files" ledger_files "$ledger_files" \
+          ahead "$ahead" fork_candidate "$fork" base_source "${src:-unknown}" \
+          override "${FN_BASE_SANITY_OVERRIDE:-}")"
+      return 0
+    fi
+
+    printf >&2 'BLOCKED: base-sanity: a PR against %s would carry %s files; this run'"'"'s ledger records %s.\nThat gap (over 3x and over 20 files) is the signature of a base branch this work never forked from.\n%s\nThese are WRONG-BASE heuristics, not diff-quality rules — do not tune them into a style gate.\nSet FN_BASE_SANITY_OVERRIDE=1 to downgrade this to a warning (audited).\n' \
+      "$base" "$pr_files" "$ledger_files" "$candidate_line"
+    audit_fn base_sanity blocked "$meta"
+    return 1
+  fi
+
+  if [[ "$ahead" -gt 25 ]]; then
+    printf 'base-sanity: WARNING — HEAD is %s commits ahead of %s (%s files vs %s recorded); unusual for one worktask, verify the base is right\n' \
+      "$ahead" "$base" "$pr_files" "$ledger_files"
+    audit_fn base_sanity warn_ahead "$meta"
+    return 0
+  fi
+
+  printf 'base-sanity: pass — a PR against %s would carry %s files; this run'"'"'s ledger records %s\n' \
+    "$base" "$pr_files" "$ledger_files"
+  audit_fn base_sanity ok "$meta"
   return 0
 }

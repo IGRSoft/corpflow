@@ -212,20 +212,55 @@ Full argv/env/exit-code contract: the script's own `--help`.
 
 #### Integration-branch detection
 
-Run once, at PL0. Detection order — the remote's default-branch pointer, then the batch workspace record, then `master`:
+Run once, at PL0, through the shared resolver rather than a private ladder — every reader must
+agree on the ranks (canonical: `handoff-protocol.md § metadata.base_ref`):
+
+| Rank | Source |
+|---|---|
+| 0 | `fork_base()` fork point — evidence, **opt-in**; reconciles by sweep item rather than overriding |
+| 1 | `$FN_BASE_REF` — explicit operator/test override |
+| 2 | `state.json .metadata.base_ref` — **where a host-declared target branch enters the order** |
+| 3 | `workspace.json .git.base_branch` — `/megatask` per-issue record |
+| 4 | `git symbolic-ref refs/remotes/origin/HEAD` — repository default branch |
+| — | **unresolved** — reported, never guessed |
+
+##### Calling the resolver
 
 ```bash
-BASE=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
-[ -z "$BASE" ] && BASE=$(jq -r '.git.base_branch // ""' workspace.json 2>/dev/null)
-[ -z "$BASE" ] && BASE=master
+. skills/worktask/scripts/branch-lib.sh
+BASE=$(resolve_base_ref); BASE="${BASE#origin/}"
 ```
+
+There is **no literal fallback**: an unresolved base is reported and the caller degrades
+non-blocking. A hardcoded `master` silently compares against a branch that may not exist, which is
+the failure the ranked order exists to remove. PL0 does **not** pass `--with-fork-point`: an empty
+answer here is a fact to report, and rank 0 reaches the plan through the reconcile stub below.
+
+##### Reconcile a disagreeing fork point — never override it
+
+With `$BASE` known, compute `fork_base "$BASE"` (its argument is the tie-break, and it is what keeps
+rank 0 from recursing). When the answer is non-empty and differs from `$BASE` after stripping
+`origin/`, emit **one** sweep stub — `class: decision`, `blocks_next_stage: false` — carrying both
+branch names and both ahead-counts, fork point recommended:
+
+> Base branch: `<configured>` (configured, source `<rank>`) vs `<fork>` (fork point). HEAD is `<n>`
+> commits ahead of the first, `<m>` ahead of the second. Recommended: `<fork>`. A fork point is
+> evidence, not intent — a branch deliberately rebased onto a release line is a legitimate reason
+> to keep the configured value.
+
+###### When no item is emitted
+
+Agreement, an empty fork point, no remotes or a detached HEAD ⇒ **no item**. PL0 never rewrites
+`metadata.base_ref` from the fork point; only a user answer at the plan gate does, and under
+`--auto=[decision]` the default is to **keep the configured base** — an auto-adopted fork point
+would be exactly the silent retarget this reconcile exists to prevent.
 
 ##### Where to stamp the detected branch
 
 Stamp the result in **two** places:
 
 - `task.metadata.base_ref` on PL0 and every downstream task — **only when `$BASE` is not `master`**. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
-- `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `fn-preflight.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader.
+- `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `branch-lib.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader.
 
 Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.
 
