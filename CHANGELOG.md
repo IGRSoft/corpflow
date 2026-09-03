@@ -2,12 +2,28 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [4.0.28] — 2026-09-03
 
 Twenty-six fixes from a six-angle code review of `develop 6e09ea8..0dd3d6d`, banded by the priority
-the review assigned them.
+the review assigned them, plus the closing-sweep transport-divergence fix found during OV-183.
 
 ### Fixed
+
+- **A sweep item's two copies could disagree, and nothing looked** (OV-183). `sw-DV0-1` carried
+  `blocks_next_stage: false` in its own artifact and `true` in its ledger stub;
+  `--validate-frontmatter` passed, the orchestrator read the ledger, applied the raise-only join and
+  held a boundary gate before DR for a QA-scoping question its author had already marked
+  non-blocking. Three defects, fixed together:
+  - `state-patch.sh` `_sweep_join` ORed the flag, so once `true` reached the ledger nothing could
+    clear it — not even the author's own explicit `false`. Stickiness now fires only when the
+    incoming stub omits the key, which is the case the comment above it always described.
+  - `handoff-harness.sh check_sweep_ledger` compared ids and nothing else, so field divergence was
+    invisible permanently, not just at the boundary where it fired. It now compares `class` and
+    `blocks_next_stage` for every id present in both transports and refuses — it never reconciles,
+    because picking a winner would be guessing which copy the author meant.
+  - `stage-contracts.md § Self-labels raise, never lower` had no arm for transport divergence, so
+    the orchestrator reached for the nearest rule. The lattice is now explicitly scoped to
+    *labellers*; two copies with one author are a defect, not a lattice.
 
 - **Contradictory escalation-under-bypass rules** (P1a). `skills/shared/stage-contracts.md`
   commanded opposite behaviour for the same escalation item across four surfaces depending on
@@ -27,6 +43,10 @@ the review assigned them.
 
 ### Changed
 
+- **`blocks_next_stage` is now a required sweep-stub field** on both transports, enforced by the
+  frontmatter shape gate and by `--facts`. Absent-vs-`false` was exactly the ambiguity that let the
+  two copies disagree, so the author states the value rather than having it inferred from its own
+  omission. Every per-stage template, agent payload example and schema `required[]` set carries it.
 - **Consolidated duplicated logic** (P3/P4): hook-side model-switch checks now share
   `model-switch-lib.sh`; eval loaders now share `eval-engine.py`. Hot paths were cut along the way —
   capability-registry load measured 2.38s → 0.69s with byte-identical output.
