@@ -15,7 +15,7 @@ GATE_HOOK="$PLUGIN_ROOT/hooks/test-execution-gate.sh"
 # Canonical runner tokens as spelled in the hook's RUNNERS variable — each
 # MUST also be discoverable (as itself, or as the named runner it aliases)
 # in testing-strategy.md's § Test-Execution Authority section.
-CANONICAL_TOKENS=(bats swift pytest ctest cargo jest vitest playwright rspec gradle python python3 go make xcodebuild dotnet npm pnpm yarn)
+CANONICAL_TOKENS=(bats swift pytest ctest cargo jest vitest playwright rspec gradle python python3 go make xcodebuild dotnet npm pnpm yarn node)
 # npx/uvx/bunx are launcher-wrapper tokens the hook strips before matching,
 # not runners named in the canonical prose enumeration — excluded here.
 
@@ -46,9 +46,12 @@ ALLOWLIST_PATTERNS=(
   local section
   section="$(awk '/^## Test-Execution Authority$/,/^## Test Selection Gate$/' "$TESTING_STRATEGY")"
 
+  # -w, not a bare substring: the section's only occurrence of "node" was inside
+  # "a pytest nodeid", so an unbounded match would have accepted prose about a
+  # different runner as proof this one is documented.
   for tok in "${CANONICAL_TOKENS[@]}"; do
-    echo "$runners_line" | grep -q -- "$tok" || fail "RUNNERS is missing token: $tok"
-    printf '%s' "$section" | grep -qi -- "$tok" || fail "canonical section does not mention: $tok"
+    echo "$runners_line" | grep -qw -- "$tok" || fail "RUNNERS is missing token: $tok"
+    printf '%s' "$section" | grep -qiw -- "$tok" || fail "canonical section does not mention: $tok"
   done
 }
 

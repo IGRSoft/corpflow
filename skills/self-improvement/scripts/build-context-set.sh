@@ -6,22 +6,61 @@
 #                    When absent, falls back to scanning .context/*.md for agent trailers.
 #   CONTEXT_DIR      Defaults to ".context"
 #   BASELINE_SHA     If present, scan `git log $BASELINE_SHA..HEAD` for `Agent:` trailers.
+#   AUDIT_LOG        Audit log scanned for hook/script participation.
+#                    Defaults to "$CONTEXT_DIR/logs/audit.jsonl".
+#   CLAUDE_PLUGIN_ROOT
+#                    Plugin root candidates are resolved against. Auto-discovered when
+#                    unset (skills/shared/plugin-root-resolution.md).
 #
-# Output to stdout: newline-delimited, deduped, sorted list of file paths present on disk.
-# Paths follow these patterns:
+# Output to stdout: newline-delimited, deduped, sorted list of PLUGIN-ROOT-relative file
+# paths that exist on disk. Paths follow these patterns:
 #   agents/<name>.md
 #   skills/<path>/SKILL.md
 #   commands/<name>.md
+#   hooks/<name>.sh
+#   skills/<path>/scripts/<name>.sh
 #
-# Any path that does not exist on disk is dropped.
+# Existence is tested against the plugin root, NOT the process cwd. Every corpflow asset
+# lives under the plugin root while this script runs from the worktask's repo, so a
+# cwd-relative test dropped every candidate and returned the empty set — which
+# SKILL.md § Step 5b calls indistinguishable from "the user made no edits".
 
 set -euo pipefail
 
 CONTEXT_DIR="${CONTEXT_DIR:-.context}"
+AUDIT_LOG="${AUDIT_LOG:-$CONTEXT_DIR/logs/audit.jsonl}"
+
+# Rungs 1 and 3 of skills/shared/plugin-root-resolution.md. Rung 2 (the skill base
+# directory) is not available to a script — it is announced to the model, not exported —
+# and rung 4 (the Claude Code cache) is deliberately omitted: this script always ships
+# INSIDE the root it is looking for, so walking up from its own location cannot miss a
+# root that exists, and guessing at a cache entry could silently profile a DIFFERENT
+# installed version than the one being edited. Every candidate is validated.
+find_plugin_root() {
+  local candidate
+  for candidate in \
+    "${CLAUDE_PLUGIN_ROOT:-}" \
+    "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)" \
+    "$PWD"; do
+    [ -n "$candidate" ] || continue
+    if [ -f "$candidate/.claude-plugin/plugin.json" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  # Unresolvable: fall back to cwd, which reproduces the previous behaviour rather than
+  # aborting the retrospective. Reported so an empty set is never mistaken for "no edits".
+  printf >&2 'build-context-set: plugin root unresolved — falling back to cwd (%s)\n' "$PWD"
+  printf '%s' "$PWD"
+}
+PLUGIN_ROOT="$(find_plugin_root)"
 
 # Collect raw qualified agent / command names into a temp buffer.
 raw="$(mktemp)"
-trap 'rm -f "$raw"' EXIT
+# Source 4 emits FILE PATHS, not `<plugin>:<name>` refs, so it bypasses normalize() —
+# which would classify a path with no colon as CROSS_PLUGIN and discard it.
+rawpaths="$(mktemp)"
+trap 'rm -f "$raw" "$rawpaths"' EXIT
 
 # Source 1 — the state ledger (preferred).
 if [ -n "${LEDGER_JSON:-}" ] && [ -f "$LEDGER_JSON" ]; then
@@ -84,8 +123,10 @@ fi
 # The manifest name is read so a future rename cannot reintroduce that.
 local_plugin_names() {
   local current=""
-  if [ -f .claude-plugin/plugin.json ] && command -v jq >/dev/null 2>&1; then
-    current="$(jq -r '.name // empty' .claude-plugin/plugin.json 2>/dev/null || true)"
+  # Root-relative, like every other path here: read from cwd this returned empty in the
+  # production invocation, silently dropping the manifest name from the local-plugin list.
+  if [ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ] && command -v jq >/dev/null 2>&1; then
+    current="$(jq -r '.name // empty' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
   fi
   printf '%s %s %s' "${current:-corpflow}" corpflow igrsoft \
     | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' '
@@ -117,15 +158,62 @@ normalize() {
   '
 }
 
-normalize "$(local_plugin_names)" < "$raw" \
-  | awk '!seen[$0]++' \
+# Source 4 — the audit log. `tasks.*.metadata.agent` names AGENTS only, so every hook and
+# every bundled script that participated is invisible to sources 1-3 no matter how much of
+# the run it drove. Four row shapes carry that participation:
+#   actor "hook:<n>" / "<plugin>:hook:<n>"  -> hooks/<n>.sh   (the plugin prefix is stripped;
+#                                              a sibling plugin's hook has no local path, and
+#                                              the existence test below drops it)
+#   metadata.tool "<n>.sh"                  -> resolved by basename
+#   metadata.via  "<n>.sh"                  -> same; this is the key the orchestrator's own
+#                                              helper invocations actually use
+#   subject on a metadata.kind == "tool" row -> a bare helper name, `.sh` implied
+# Basenames are resolved rather than assumed: a helper's directory is not derivable from
+# its name, and hardcoding one would silently stop finding it after any move.
+resolve_script_path() {
+  local base="$1" p
+  case "$base" in */*|"") return 0 ;; esac   # already a path, or empty — nothing to resolve
+  for p in "hooks/$base" "scripts/$base"; do
+    [ -f "$PLUGIN_ROOT/$p" ] && { printf '%s\n' "$p"; return 0; }
+  done
+  # Bounded to the two nesting levels corpflow actually uses, so this never walks the tree.
+  for p in "$PLUGIN_ROOT"/skills/*/scripts/"$base" "$PLUGIN_ROOT"/hooks/lib/"$base"; do
+    [ -f "$p" ] && { printf '%s\n' "${p#"$PLUGIN_ROOT"/}"; return 0; }
+  done
+  return 0
+}
+
+if [ -f "$AUDIT_LOG" ] && command -v jq >/dev/null 2>&1; then
+  # `fromjson? | objects` for the same reason branch-name.sh's already_named uses it: a
+  # well-formed non-object line parses and then dies on `.metadata`, aborting the scan.
+  jq -rs -R '
+    [ split("\n")[] | fromjson? | objects ] | .[]
+    | ( (.actor // "") | select(test("(^|:)hook:")) | sub(".*hook:"; "") | "HOOK\t" + . ),
+      ( (.metadata.tool // "") | select(endswith(".sh")) | "SCRIPT\t" + . ),
+      ( (.metadata.via // "") | select(endswith(".sh")) | "SCRIPT\t" + . ),
+      ( select((.metadata.kind // "") == "tool") | (.subject // "")
+        | select(. != "" and (test("^[A-Za-z][A-Za-z0-9._-]*$")))
+        | "SCRIPT\t" + (if endswith(".sh") then . else . + ".sh" end) )
+  ' "$AUDIT_LOG" 2>/dev/null \
+    | sort -u \
+    | while IFS="$(printf '\t')" read -r kind name; do
+        case "$kind" in
+          HOOK)   printf 'hooks/%s.sh\n' "$name" ;;
+          SCRIPT) resolve_script_path "$name" ;;
+        esac
+      done >> "$rawpaths" || true
+fi
+
+{
+  normalize "$(local_plugin_names)" < "$raw" | grep -v '^CROSS_PLUGIN:' || true
+  cat "$rawpaths"
+} \
+  | awk 'NF && !seen[$0]++' \
   | while read -r path; do
-      case "$path" in
-        CROSS_PLUGIN:*) continue ;;
-        # `|| true`: a non-existent candidate is normal (each qualified ref probes
-        # agent/command/skill paths), and under `set -e` its non-zero status would
-        # otherwise become the loop's — and the script's — exit code.
-        *) [ -f "$path" ] && echo "$path" || true ;;
-      esac
+      # Existence is tested against PLUGIN_ROOT; the emitted path stays root-relative so
+      # Step 4's mapper compares like with like. `|| true`: a non-existent candidate is
+      # normal (each qualified ref probes agent/command/skill paths), and under `set -e`
+      # its non-zero status would otherwise become the script's exit code.
+      [ -f "$PLUGIN_ROOT/$path" ] && echo "$path" || true
     done \
   | sort -u

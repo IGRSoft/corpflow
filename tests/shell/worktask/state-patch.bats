@@ -1040,3 +1040,106 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
   [ "$doc" = "$script_list" ] \
     || fail "side-effect list drift: stage-codes.md=[$doc] state-patch.sh=[$script_list]"
 }
+
+# ---------------------------------------------------------------------------
+# Split-stage slot resolution: --artifact disambiguates, ambiguity fails closed.
+# The pre-existing coverage only ever had ONE open instance, which is the shape
+# under which the mis-slotting defect is invisible.
+# ---------------------------------------------------------------------------
+
+# Two DV instances, both in_progress, with the planned artifact names PL0 seeds.
+two_open_dv() {
+  jq '.tasks = {"DV0": {"status":"in_progress","metadata":{"artifact":".context/development-0-gate.md"}},
+                "DV1": {"status":"in_progress","metadata":{"artifact":".context/development-0-ledger.md"}}}' \
+    "$WD/.context/state.json" > "$WD/.context/s.tmp" && mv "$WD/.context/s.tmp" "$WD/.context/state.json"
+}
+
+@test "slot: --artifact picks the matching instance out of two in_progress DVs" {
+  cd "$WD"
+  two_open_dv
+  run bash "$PLUGIN_ROOT/$SCRIPT" --resolve-task-id DV --artifact .context/development-0-ledger.md
+  assert_success
+  assert_output "DV1"
+}
+
+@test "slot: an absolute --artifact resolves like the stored relative path" {
+  cd "$WD"
+  two_open_dv
+  run bash "$PLUGIN_ROOT/$SCRIPT" --resolve-task-id DV --artifact "$WD/.context/development-0-ledger.md"
+  assert_success
+  assert_output "DV1"
+}
+
+@test "slot: a RECORDED artifact outranks another instance's stale planned one" {
+  # PL0 seeds metadata.artifact from the plan, and a split stage routinely writes a
+  # different file than the plan guessed. Reading metadata first would slot the patch
+  # by the plan's guess — the same mis-slot, reintroduced through the fix.
+  cd "$WD"
+  two_open_dv
+  jq '.tasks.DV0.artifact = ".context/development-1.md"
+      | .tasks.DV1.metadata.artifact = ".context/development-1.md"' \
+    .context/state.json > .context/s.tmp && mv .context/s.tmp .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --resolve-task-id DV --artifact .context/development-1.md
+  assert_success
+  assert_output "DV0"
+}
+
+@test "slot: two open instances with no discriminator refuse, naming both, before any write" {
+  cd "$WD"
+  two_open_dv
+  local before
+  before="$(shasum .context/state.json | cut -d' ' -f1)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via step6_5
+  assert_failure 4
+  assert_output --partial "DV0,DV1"
+  [ "$(shasum .context/state.json | cut -d' ' -f1)" = "$before" ] \
+    || fail "a refused resolution must leave state.json byte-identical"
+}
+
+@test "slot: one open instance with a bare --stage is unchanged (agent-stop.sh path)" {
+  cd "$WD"
+  jq '.tasks = {"DV0": {"status":"in_progress"}, "DV1": {"status":"pending"}}' \
+    .context/state.json > .context/s.tmp && mv .context/s.tmp .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --resolve-task-id DV
+  assert_success
+  assert_output "DV0"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --via step6_5
+  assert_success
+  run jq -r '.tasks.DV0.status + "/" + .tasks.DV1.status' .context/state.json
+  assert_output "completed/pending"
+}
+
+# ---------------------------------------------------------------------------
+# facts.verdicts mirror and sweep-stub defaults.
+# ---------------------------------------------------------------------------
+
+@test "verdicts: a completion mirrors the stage verdict into facts.verdicts[CODE]" {
+  # The schema has carried facts.verdicts since v2 with no writer at all, so every
+  # consumer reading it saw an empty object no matter how many stages completed.
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  assert_success
+  run jq -r '.facts.verdicts.DV' .context/state.json
+  assert_output "ok"
+}
+
+@test "sweep: a stub is stored with stage and status filled, never null" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV0 --facts \
+    '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
+  assert_success
+  run jq -r '.facts.open_questions[-1] | .stage + "/" + .status' .context/state.json
+  assert_output "DV/open"
+}
+
+@test "sweep: an incumbent carrying nulls is backfilled on the next write" {
+  cd "$WD"
+  jq '.facts.open_questions = [{"id":"sw-PL0-1","class":"decision",
+       "ref":"planning-0.md#elicitation-sweep","stage":null,"status":null}]' \
+    .context/state.json > .context/s.tmp && mv .context/s.tmp .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV0 --facts \
+    '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
+  assert_success
+  run jq -r '.facts.open_questions[0] | .stage + "/" + .status' .context/state.json
+  assert_output "PL/open"
+}

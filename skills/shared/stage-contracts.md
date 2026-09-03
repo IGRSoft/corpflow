@@ -1,6 +1,6 @@
 ---
 name: stage-contracts
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Stage Contracts Reference
@@ -221,6 +221,21 @@ splitting). `state-patch.sh` clamps `facts.open_questions[]` to the **newest 12*
 unresolved item is still owed a render at the FN gate while a resolved one is already eviction bait
 under eviction-order rule 2. Same single-chokepoint idiom as `facts.decisions` (newest 8) and
 `facts.dispatched_agents` (6, launched-survive-first).
+
+##### Ledger bounds — the overflow spill
+
+Past 12 **unresolved** items the clamp has nothing eviction-bait left to drop, so it evicts a live
+question. Those — and only those — are appended to `.context/open-questions-<run_index>.jsonl`, one
+JSON object per line: the full stub plus `spilled_at` and `spilled_from_stage`. The file is
+append-only, written inside the merge lock and **before** the ledger rename, so a crash can leave a
+spill line whose eviction never committed (a duplicate the union collapses) but never an eviction
+whose spill line is missing.
+
+**Both transports are the record.** `handoff-harness.sh` checks frontmatter/ledger parity against
+ledger ∪ spill, and the FN gate reads both, unioned by `.id` with **the ledger winning on conflict**
+— a spill line is a snapshot taken at eviction time and is necessarily staler than an item the
+ledger later resolved. A missing spill file is the empty set; a spill file that exists but cannot be
+parsed is a failure, never an empty set.
 
 ##### Ledger bounds — why 12
 

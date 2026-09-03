@@ -40,6 +40,18 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 LIB_DEGRADED=0
 command -v corpflow_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
 
+# Same guarded-source idiom for the suppression library. Its absence degrades
+# suppression alone — no classifier arm calls into it, so authority enforcement
+# is unaffected — and so this one does not raise LIB_DEGRADED. Two guards keep
+# that claim true: dedupe_decide checks the symbol and returns (allow), and its
+# single call site checks before evaluating the library-valued arguments.
+_DEDUPE_LIB="$(dirname "$0")/lib/dedupe-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/lib/dedupe-lib.sh
+[ -f "$_DEDUPE_LIB" ] && . "$_DEDUPE_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
 # ---------------------------------------------------------------------------
 # RUNNERS — parity counterpart of testing-strategy.md's canonical list;
 # test-authority-matrix.bats asserts the two agree. Matched against the head
@@ -49,8 +61,8 @@ command -v corpflow_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
 # `go build`), where the subcommand must name "test" — for gradle, a task
 # containing "test" — before anything classifies as test execution.
 # ---------------------------------------------------------------------------
-RUNNERS="bats swift pytest ctest cargo jest vitest playwright rspec gradle gradlew python python3 go make npx uvx pnpm yarn bunx xcodebuild dotnet npm"
-MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gradlew"
+RUNNERS="bats swift pytest ctest cargo jest vitest playwright rspec gradle gradlew python python3 go make npx uvx pnpm yarn bunx xcodebuild dotnet npm node"
+MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gradlew node make"
 
 # Known bypasses, all allow-direction: $(...)/backticks/here-docs are not
 # segment-split; `find -exec`, `xargs`, and a renamed or written-then-executed
@@ -172,6 +184,38 @@ _xcodebuild_subcmd() {
   return 0
 }
 
+_make_subcmd() {
+  local _rest="$1" _tok
+  # `make` is a project's general task runner, so only a target that NAMES test
+  # or coverage work is test execution — the same task-name rule gradle gets.
+  # `make testdata` therefore classifies as a test run: a false deny is the safe
+  # direction for a backstop, and the alternative is parsing the Makefile.
+  for _tok in $_rest; do
+    case "$_tok" in
+      -*) : ;;
+      *[Tt]est*|*overage*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+_node_subcmd() {
+  local _rest="$1" _found=0 _tok
+  # `node script.js` executes a script, not a test suite; only the built-in
+  # runner's `--test` switch makes it test execution. Word-exact, and
+  # `--test-name-pattern` alone does NOT qualify — it narrows a run it cannot
+  # start, so accepting it would deny ordinary script execution.
+  _rest_effective=""
+  for _tok in $_rest; do
+    if [ "$_found" -eq 0 ] && [ "$_tok" = "--test" ]; then
+      _found=1; continue
+    fi
+    _rest_effective="$_rest_effective $_tok"
+  done
+  [ "$_found" -eq 1 ] || return 1
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # tokenize_quoted <string> -> fills TOKENIZED_ARGV, splitting on UNQUOTED
 # whitespace only, so a quoted multi-word value stays one token. Surrounding
@@ -260,6 +304,17 @@ strip_nonselecting_flags() {
         # `--` is the script/args separator, not an argument.
         case "$_tok" in
           --|--ci|--run|--silent|--watch|--watch=*) continue ;;
+        esac
+        ;;
+      node)
+        # How a Node test run is CONFIGURED, never which tests it selects.
+        # `--test-name-pattern` and `--test-only` are genuine selectors and
+        # deliberately survive this arm.
+        case "$_tok" in
+          --test-reporter|--test-reporter-destination|--test-concurrency)
+            _skip=1; continue ;;
+          --test-reporter=*|--test-reporter-destination=*|--test-concurrency=*)
+            continue ;;
         esac
         ;;
       rspec)
@@ -472,6 +527,12 @@ classify_segment() {
         xcodebuild)
           _xcodebuild_subcmd "$_rest" || { printf 'not_test'; return; }
           ;;
+        node)
+          _node_subcmd "$_rest" || { printf 'not_test'; return; }
+          ;;
+        make)
+          _make_subcmd "$_rest" || { printf 'not_test'; return; }
+          ;;
         *)
           _trim "$_rest"; _subcmd="${TRIMMED%% *}"
           case "$_subcmd" in
@@ -600,6 +661,41 @@ ledger_settled() {
 }
 
 # ---------------------------------------------------------------------------
+# ledger_remediation_stage <ctx> -> the stage code of the one settled stage
+# carrying an unresolved `no-go` verdict, or empty.
+#
+# Authority reserved to an in_progress stage leaves NOBODY holding it between a
+# verification stage's two passes: the pipeline can fix a QA blocker but not
+# verify the fix, and the only working remedy was to misreport the ledger. A
+# recorded `no-go` IS that stage's open blocker, so its authority persists until
+# the verdict flips. Deliberately not a dedicated ledger field: a field for this
+# is one any agent could set to grant itself authority, whereas a `no-go` costs
+# the stage its own passing verdict.
+#
+# Ambiguity resolves to empty and the settled deny stands. This arm widens what
+# the gate permits, so unlike the fail-open classification path its unresolvable
+# direction is the closed one.
+# ---------------------------------------------------------------------------
+ledger_remediation_stage() {
+  local _ctx="$1" _state _codes
+  _state="$_ctx/state.json"
+  [ -f "$_state" ] || { printf ''; return; }
+  command -v jq >/dev/null 2>&1 || { printf ''; return; }
+  _codes=$(jq -r '
+    if (.tasks|type=="object")
+    then [ .tasks | to_entries[]
+           | select(.value.verdict == "no-go")
+           | (.key | sub("[0-9]+$"; "")) ] | unique | .[]
+    else empty end
+  ' "$_state" 2>/dev/null) || { printf ''; return; }
+  case "$_codes" in
+    [A-Z][A-Z]) printf '%s' "$_codes" ;;
+    *) printf '' ;;
+  esac
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Redundant-run suppression. Keyed on the TREE, never on an outcome: PreToolUse
 # fires before the command, so a pass is unknowable here. Any edit changes the
 # fingerprint and re-enables the run — protect that property in any change here.
@@ -609,66 +705,27 @@ ledger_settled() {
 # empty answer anywhere means "cannot tell", and the caller allows.
 # ---------------------------------------------------------------------------
 
-# tree_fingerprint -> digest of HEAD plus the uncommitted delta, or empty.
-tree_fingerprint() {
-  local _head _delta
-  command -v git >/dev/null 2>&1 || return 0
-  command -v shasum >/dev/null 2>&1 || return 0
-  _head=$(git rev-parse HEAD 2>/dev/null) || return 0
-  [ -n "$_head" ] || return 0
-  # `git diff HEAD` as well as `--porcelain`: porcelain reports only NAMES and
-  # status letters, so editing one file twice leaves it `M` both times and the
-  # digests would match — the second retest would be denied after a real fix.
-  # Diff content is what makes the fingerprint track edits rather than filenames.
-  # Gap, deliberately accepted: content edits to a never-added untracked file
-  # move neither output. Its creation does, and CORPFLOW_TEST_DEDUPE=off covers
-  # the rest; hashing untracked contents costs an unbounded walk on every call.
-  _delta=$({ git status --porcelain 2>/dev/null; git diff HEAD 2>/dev/null; } \
-    | shasum 2>/dev/null | cut -d' ' -f1) || return 0
-  printf '%s' "$_head$_delta" | shasum 2>/dev/null | cut -d' ' -f1
-}
+# tree_fingerprint, run_index_of, dedupe_key, dedupe_pending_key, dedupe_lookup,
+# dedupe_invocation and the marker lifecycle live in hooks/lib/dedupe-lib.sh,
+# sourced above and shared verbatim with the PostToolUse companion. See that
+# file for why.
 
-# run_index_of <ctx> -> the ledger's run_index, or empty on any other shape.
-run_index_of() {
-  local _state="$1/state.json"
-  [ -f "$_state" ] || return 0
-  jq -r 'if (.run_index | type) == "number" then (.run_index | tostring) else empty end' \
-    "$_state" 2>/dev/null
-}
-
-# dedupe_key <class> <invocation> <fingerprint> <run_index> -> digest, or empty.
-# The invocation is hashed, never stored: a full command can carry a secret, and
-# only the digest reaches the filesystem.
-dedupe_key() {
-  command -v shasum >/dev/null 2>&1 || return 0
-  printf '%s\n%s\n%s\n%s' "$1" "$2" "$3" "$4" | shasum 2>/dev/null | cut -d' ' -f1
-}
-
-# dedupe_lookup <ctx> <key> -> "<stage> <ts>" of the recorded run, or empty.
-dedupe_lookup() {
-  local _f="$1/logs/.test-runs/$2"
-  [ -f "$_f" ] || return 0
-  [ ! -L "$_f" ] || return 0
-  head -c 200 "$_f" 2>/dev/null
-}
-
-# dedupe_record <ctx> <key> <stage> — best-effort; a failure just means the next
-# identical run is allowed, which is the safe direction.
-dedupe_record() {
-  local _d="$1/logs/.test-runs" _ts
-  mkdir -p "$_d" 2>/dev/null || return 0
-  [ ! -L "$_d/$2" ] || return 0
-  _ts=$(date -u +%FT%TZ 2>/dev/null) || _ts="unknown"
-  printf '%s %s\n' "$3" "$_ts" > "$_d/$2" 2>/dev/null || return 0
-}
-
-# dedupe_decide <ctx> <stage> <class> <invocation> <cmd_head> <tool>
-# Echoes a deny for a run already recorded against this tree; otherwise records
-# it and echoes nothing. Always returns 0 — the decision travels in stdout, and
-# every unresolvable input allows.
+# dedupe_decide <ctx> <stage> <class> <invocation> <cmd_head> <tool> <root>
+# Echoes a deny for a run already RECORDED against this tree; otherwise marks
+# this one pending and echoes nothing. Always returns 0 — the decision travels
+# in stdout, and every unresolvable input allows.
+#
+# Marking pending rather than recording is the correction: PreToolUse fires
+# before any result exists, so a run that aborted having executed nothing used to
+# claim its fingerprint permanently. hooks/test-execution-promote.sh promotes the
+# marker only once the tool actually produced a result.
 dedupe_decide() {
-  local _ctx="$1" _stage="$2" _class="$3" _inv="$4" _head="$5" _tool="$6"
-  local _fp _n _key _prior _sentinel _reason _deny
+  local _ctx="$1" _stage="$2" _class="$3" _inv="$4" _head="$5" _tool="$6" _root="${7:-.}"
+  local _fp _n _key _pkey _prior _sentinel _reason _deny
+
+  # Suppression library absent, stubbed or truncated: enforce authority, skip
+  # suppression. Same fail-open direction as an unresolvable fingerprint.
+  command -v dedupe_key > /dev/null 2>&1 || return 0
 
   # Same shape as the CORPFLOW_TEST_GATE hatch above, and the same reason for
   # it: a control switching off must not be silent, but the note is written
@@ -684,7 +741,7 @@ dedupe_decide() {
     return 0
   fi
 
-  _fp=$(tree_fingerprint)
+  _fp=$(tree_fingerprint "$_root")
   [ -n "$_fp" ] || return 0          # no git, no repo, no shasum — cannot tell
   _n=$(run_index_of "$_ctx")
   [ -n "$_n" ] || return 0           # no resolvable run — nothing to key on
@@ -693,7 +750,9 @@ dedupe_decide() {
 
   _prior=$(dedupe_lookup "$_ctx" "$_key")
   if [ -z "$_prior" ]; then
-    dedupe_record "$_ctx" "$_key" "$_stage"
+    _pkey=$(dedupe_pending_key "$_class" "$_inv" "$_n")
+    [ -n "$_pkey" ] || return 0
+    dedupe_mark_pending "$_ctx" "$_pkey" "$_key" "$_stage"
     return 0
   fi
 
@@ -715,6 +774,211 @@ dedupe_decide() {
 }
 
 # ---------------------------------------------------------------------------
+# gate_head_tokens <command> -> sets HEAD_TOKENS to the head token of every
+# unquoted segment, space-joined.
+#
+# Structure, not raw text. A substring scan of the whole command denied a file
+# write whose PAYLOAD merely named runners: JSON and prose carrying `;` or `|`
+# read exactly like a second command, and a here-doc body reads like a script.
+# Nothing that only *mentions* a runner can reach head position here.
+#
+# Fork-free single pass, so the fast path stays in the same cost class as the
+# glob match it replaces. Assignments, `env` and launcher wrappers do not end the
+# search, mirroring classify_segment's own stripping; a token carrying a quoted
+# space is folded to underscores rather than dropped, since no runner name has
+# one and the join must stay word-splittable.
+#
+# Fail direction: an unparsed shape yields no gateable head and ALLOWS, matching
+# every other unresolvable input in this hook.
+# ---------------------------------------------------------------------------
+gate_head_tokens() {
+  local _s="$1" _n=${#1} _i=0 _ch _q="" _cur="" _want=1 _hd="" _inhd=0 _line="" _pend="" _lnch=""
+  HEAD_TOKENS=""
+  while [ "$_i" -lt "$_n" ]; do
+    _ch="${_s:$_i:1}"
+    _i=$((_i + 1))
+    if [ "$_inhd" -eq 1 ]; then
+      if [ "$_ch" = $'\n' ]; then
+        _trim "$_line"
+        [ "$TRIMMED" = "$_hd" ] && { _inhd=0; _hd=""; _want=1; _lnch=""; }
+        _line=""
+      else
+        _line="$_line$_ch"
+      fi
+      continue
+    fi
+    if [ -n "$_q" ]; then
+      if [ "$_ch" = "$_q" ]; then _q=""; else _cur="$_cur$_ch"; fi
+      continue
+    fi
+    case "$_ch" in
+      \\)
+        [ "$_i" -lt "$_n" ] && { _cur="$_cur${_s:$_i:1}"; _i=$((_i + 1)); }
+        ;;
+      \'|\") _q="$_ch" ;;
+      ' '|$'\t')
+        _gate_emit_head
+        ;;
+      ';'|'|'|'&'|$'\n')
+        _gate_emit_head
+        _want=1
+        _lnch=""
+        if [ "$_ch" = $'\n' ] && [ -n "$_pend" ]; then
+          _hd="$_pend"; _pend=""; _inhd=1; _line=""
+        fi
+        ;;
+      '<')
+        # `<<[-][quote]DELIM` opens a here-doc whose body is data, never commands.
+        if [ "${_s:$_i:1}" = '<' ]; then
+          _i=$((_i + 1))
+          [ "${_s:$_i:1}" = '-' ] && _i=$((_i + 1))
+          case "${_s:$_i:1}" in \'|\") _i=$((_i + 1)) ;; esac
+          _pend=""
+          while [ "$_i" -lt "$_n" ]; do
+            case "${_s:$_i:1}" in
+              [A-Za-z0-9_]) _pend="$_pend${_s:$_i:1}"; _i=$((_i + 1)) ;;
+              *) break ;;
+            esac
+          done
+          case "${_s:$_i:1}" in \'|\") _i=$((_i + 1)) ;; esac
+        fi
+        _gate_emit_head
+        ;;
+      *) _cur="$_cur$_ch" ;;
+    esac
+  done
+  _gate_emit_head
+  return 0
+}
+
+# _gate_emit_head — gate_head_tokens' accumulator flush. A separate function only
+# because the scanner reaches it from five arms; it reads and writes the
+# scanner's locals by dynamic scope (_cur, _want, _lnch).
+#
+# The skip set must mirror classify_segment's launcher list, TWO-token entries
+# included: that function strips `uv run ` whole and heads on the real runner, so
+# a first-token-only skip here heads on `run`, finds nothing gateable, and lets
+# the fast path allow what the classifier would deny. `_lnch` remembers the
+# launcher just skipped so the wrapper's second word is skipped with it.
+#
+# `pnpm` and `yarn` are RUNNERS in their own right and end the search before
+# their second word is read; they are listed anyway so the two lists stay
+# comparable by eye, which is the only thing keeping them in sync.
+_gate_emit_head() {
+  [ -n "$_cur" ] || return 0
+  if [ "$_want" -eq 1 ]; then
+    case "$_lnch $_cur" in
+      "uv run"|"pnpm exec"|"yarn dlx") _lnch="" ;;
+      *)
+        case "$_cur" in
+          env|npx|uvx|bunx|uv|time|nohup|command|exec) _lnch="$_cur" ;;
+          [A-Za-z_]*=*) ;;
+          *) HEAD_TOKENS="$HEAD_TOKENS ${_cur// /_}"; _want=0; _lnch="" ;;
+        esac
+        ;;
+    esac
+  fi
+  _cur=""
+  return 0
+}
+
+# gate_head_is_gateable <token> -> 0 when this head could classify as test
+# execution. Shell heads are members because classify_segment recurses into
+# `bash -c '...'`; dropping them would silently retire that arm.
+gate_head_is_gateable() {
+  local _t="${1##*/}"
+  case "$_t" in
+    build-test|*:build-test|run-tests.sh|*:run-tests.sh) return 0 ;;
+  esac
+  case " $RUNNERS bash sh zsh dash " in
+    *" $_t "*) return 0 ;;
+  esac
+  return 1
+}
+
+# gate_classify_payload <payload> <tool> -> "<class><TAB><command_head>", or
+# returns 1 when the payload is out of scope (the caller allows).
+#
+# One definition, called by run_gate and by the PostToolUse companion: the two
+# hooks must derive the same class for the same payload or every pending marker
+# is orphaned and suppression stops working, silently.
+# ---------------------------------------------------------------------------
+gate_classify_payload() {
+  local _payload="$1" _tool="$2" _class _cmd _cmd_head _stripped _skill_cmd _tok _gateable
+
+  case "$_tool" in
+    mcp__*test*)
+      # Classifying on tool *name* alone is deny-direction only: a
+      # read-only tool like `mcp__*__list_tests` also matches and would be
+      # denied at a banned stage even though it never executes anything.
+      # Acceptable because the failure mode is "an extra deny", never a
+      # missed one, and the alternative (parsing MCP tool semantics) isn't
+      # worth the cost for what is already a narrow, rare tool surface.
+      _class="scoped_test_run"
+      _cmd_head="$_tool"
+      ;;
+    Bash)
+      _cmd=$(printf '%s' "$_payload" | jq -r '.tool_input.command // empty' 2>/dev/null)
+      [ -n "$_cmd" ] || return 1
+      # Prefilter (fast path): a command none of whose segment heads is a runner
+      # cannot classify as test execution, so it never enters classify_cmd.
+      gate_head_tokens "$_cmd"
+      _gateable=0
+      for _tok in $HEAD_TOKENS; do
+        gate_head_is_gateable "$_tok" && { _gateable=1; break; }
+      done
+      [ "$_gateable" -eq 1 ] || return 1
+      _class=$(classify_cmd "$_cmd")
+      # command_head is telemetry, not classification input, and is derived from
+      # the WHOLE command while classify_cmd works per segment — so a secret can
+      # sit in an early segment while a later one classifies (`SECRET="a b";
+      # pytest tests/`), which stripping VAR=value does not cover. Bounded
+      # structurally instead: _cmd_head may only ever be a token already
+      # recognized as a runner name; anything else is redacted.
+      _trim "$_cmd"
+      _stripped="$(strip_assignments "$TRIMMED")"
+      _cmd_head="${_stripped%% *}"
+      _cmd_head="${_cmd_head##*/}"
+      _cmd_head="$(redact_unless_known_head "$_cmd_head")"
+      ;;
+    Skill)
+      # The Skill payload carries its flags in a SEPARATE `args` field
+      # ({skill, args}), not appended to the skill name — reading the name
+      # alone loses `--no-test` and denies DR its sanctioned compile-check.
+      # Recombined into one string so the build-only carve-out below matches
+      # the same way it does for the command-string form.
+      #
+      # Recombined HERE rather than by calling dedupe_invocation: authority must
+      # not depend on the suppression library, whose absence would otherwise make
+      # this arm return 1 and allow a full-suite Skill at a banned stage. The
+      # duplicated expression cannot orphan a marker — the key stays whatever
+      # dedupe_invocation derives, and both hooks derive it from that one copy.
+      _skill_cmd=$(printf '%s' "$_payload" | jq -r '
+        [(.tool_input.command // .tool_input.skill // empty), (.tool_input.args // empty)]
+        | map(if type == "array" then (map(tostring) | join(" ")) else tostring end)
+        | map(select(length > 0)) | join(" ") | select(length > 0)
+      ' 2>/dev/null)
+      case "$_skill_cmd" in
+        *build-test*--no-test*|*build-test*--count*|*build-test*--dry-run*) return 1 ;;
+        *build-test*) _class="full_test_run" ;;
+        *) return 1 ;;  # deterministic build-test rule only — never a prose scan
+      esac
+      # Same allow-list as the Bash branch (SR2-M1): the whole skill command can
+      # carry a secret-bearing flag, so _cmd_head must be bounded to a known
+      # token on every branch, not just one.
+      _cmd_head="${_skill_cmd%% *}"
+      _cmd_head="${_cmd_head##*/}"
+      _cmd_head="$(redact_unless_known_head "$_cmd_head")"
+      ;;
+    *) return 1 ;;
+  esac
+
+  [ -n "${_class:-}" ] || return 1  # classification indeterminate — allow
+  printf '%s\t%s' "$_class" "$_cmd_head"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # run_gate <payload json> <ctx dir> -> echoes decision JSON (deny) or nothing
 # (allow/observe). Appends an audit row for a deny or a Task observation.
 # Parameterized over .context/ so every branch is fixture-reachable, per the
@@ -722,8 +986,8 @@ dedupe_decide() {
 # ---------------------------------------------------------------------------
 run_gate() {
   local _payload="$1" _ctx="$2"
-  local _tool _stage _subagent _prompt _matched _class _cmd _cmd_head _stripped
-  local _skill_cmd _reason _deny _sentinel
+  local _tool _stage _settled _subagent _prompt _matched _class _cmd_head _ident
+  local _reason _deny _sentinel
 
   # Process-env hatch, checked first: cheapest check, and a control switching
   # off must not be silent. The [ -f ] sentinel notes it once per .context/ so
@@ -783,77 +1047,11 @@ run_gate() {
       ;;
   esac
 
-  case "$_tool" in
-    mcp__*test*)
-      # Classifying on tool *name* alone is deny-direction only: a
-      # read-only tool like `mcp__*__list_tests` also matches and would be
-      # denied at a banned stage even though it never executes anything.
-      # Acceptable because the failure mode is "an extra deny", never a
-      # missed one, and the alternative (parsing MCP tool semantics) isn't
-      # worth the cost for what is already a narrow, rare tool surface.
-      _class="scoped_test_run"
-      _cmd_head="$_tool"
-      ;;
-    Bash)
-      _cmd=$(printf '%s' "$_payload" | jq -r '.tool_input.command // empty' 2>/dev/null)
-      [ -n "$_cmd" ] || return 0
-      # Zero-fork prefilter (fast path): a case match on the raw string
-      # before any classification work, so `git status`/`ls`/`cat` calls
-      # never enter classify_cmd.
-      case "$_cmd" in
-        # `make test` also covers `make test-ios` by substring — both are
-        # named full runners in classify_segment, yet without a prefilter
-        # pattern neither ever reached it. The same substring admits
-        # `make test*` targets that are NOT tests (`make testdata`), which
-        # then classify scoped and deny at a banned stage — the safe
-        # direction for a backstop, and the trade `make coverage*` already
-        # makes via the *coverage* pattern below.
-        *bats*|*pytest*|*unittest*|*"swift test"*|*ctest*|*"cargo test"*|*"go test"*|*jest*|*vitest*|*playwright*|*rspec*|*"dotnet test"*|*gradle*|*xcodebuild*|*"make test"*|*"pnpm test"*|*"npm test"*|*"yarn test"*|*"pnpm run test"*|*"npm run test"*|*"yarn run test"*|*run-tests*|*build-test*|*coverage*) ;;
-        *) return 0 ;;
-      esac
-      _class=$(classify_cmd "$_cmd")
-      # command_head is telemetry, not classification input, and is derived from
-      # the WHOLE command while classify_cmd works per segment — so a secret can
-      # sit in an early segment while a later one classifies (`SECRET="a b";
-      # pytest tests/`), which stripping VAR=value does not cover. Bounded
-      # structurally instead: _cmd_head may only ever be a token already
-      # recognized as a runner name; anything else is redacted.
-      _trim "$_cmd"
-      _stripped="$(strip_assignments "$TRIMMED")"
-      _cmd_head="${_stripped%% *}"
-      _cmd_head="${_cmd_head##*/}"
-      _cmd_head="$(redact_unless_known_head "$_cmd_head")"
-      ;;
-    Skill)
-      # The Skill payload carries its flags in a SEPARATE `args` field
-      # ({skill, args}), not appended to the skill name — reading the name
-      # alone loses `--no-test` and denies DR its sanctioned compile-check.
-      # Recombined into one string so the build-only carve-out below matches
-      # the same way it does for the command-string form. An all-empty
-      # result emits nothing (`select`), preserving "empty -> allow".
-      _skill_cmd=$(printf '%s' "$_payload" | jq -r '
-        [(.tool_input.command // .tool_input.skill // empty), (.tool_input.args // empty)]
-        | map(if type == "array" then (map(tostring) | join(" ")) else tostring end)
-        | map(select(length > 0)) | join(" ") | select(length > 0)
-      ' 2>/dev/null)
-      case "$_skill_cmd" in
-        *build-test*--no-test*|*build-test*--count*|*build-test*--dry-run*) return 0 ;;
-        *build-test*) _class="full_test_run" ;;
-        *) return 0 ;;  # deterministic build-test rule only — never a prose scan
-      esac
-      # Same allow-list as the Bash branch (SR2-M1): this arm previously
-      # logged the WHOLE skill command unfiltered, so a build-test invocation
-      # carrying a secret-bearing flag (`--token sk-...`) would leak it —
-      # the exact channel the Bash-side redaction exists to close, left open
-      # here. `_cmd_head` must be bounded to a known token everywhere, not
-      # just on one branch.
-      _cmd_head="${_skill_cmd%% *}"
-      _cmd_head="${_cmd_head##*/}"
-      _cmd_head="$(redact_unless_known_head "$_cmd_head")"
-      ;;
-  esac
-
-  [ -n "${_class:-}" ] || return 0  # classification indeterminate — allow
+  # Class and command_head come from the shared classifier so the PostToolUse
+  # companion cannot derive a different key for the same payload.
+  _ident="$(gate_classify_payload "$_payload" "$_tool")" || return 0
+  _class="${_ident%%$'\t'*}"
+  _cmd_head="${_ident#*$'\t'}"
   case "$_class" in
     not_test|build_only) return 0 ;;
   esac
@@ -870,8 +1068,11 @@ run_gate() {
   _settled=""
   if [ -z "$_stage" ]; then
     [ "$(ledger_settled "$_ctx")" = "settled" ] || return 0  # cannot tell — allow
-    _settled=1
-    _stage="(none in progress)"
+    _stage=$(ledger_remediation_stage "$_ctx")
+    if [ -z "$_stage" ]; then
+      _settled=1
+      _stage="(none in progress)"
+    fi
   fi
 
   # DV is allowed scoped test execution but denied a full-suite run — this
@@ -885,8 +1086,16 @@ run_gate() {
       # Authority said yes. The only remaining question is whether this exact
       # run already happened against this exact tree — asked here, on the allow
       # path alone, so suppression can never widen what the gate permits.
-      dedupe_decide "$_ctx" "$_stage" "$_class" \
-        "${_cmd:-${_skill_cmd:-$_cmd_head}}" "$_cmd_head" "$_tool"
+      #
+      # Guarded again at the call site: the arguments are command substitutions
+      # of library functions, which shells evaluate before dedupe_decide's own
+      # guard can run, so a missing library would print `command not found` onto
+      # the hook's stderr on every allowed run.
+      if command -v dedupe_key > /dev/null 2>&1; then
+        dedupe_decide "$_ctx" "$_stage" "$_class" \
+          "$(dedupe_invocation "$_payload" "$_tool" "$_cmd_head")" \
+          "$_cmd_head" "$_tool" "$(dedupe_root "$_payload")"
+      fi
       return 0
     fi
   fi
@@ -901,7 +1110,7 @@ run_gate() {
     # Naming the real condition matters: reusing the per-stage text here would
     # print "Stage '(none in progress)' has no authority", which reads as a bug
     # and tells the caller nothing about why now is the wrong time.
-    _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, or (2) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+    _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched, and no verification stage has recorded an open no-go. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, (2) if a verification stage is remediating its own failure, record that stage's verdict as \"no-go\" in the ledger — its authority persists until the verdict flips, so re-opening the stage to lie about its status is never required; or (3) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
   else
   # The --no-test remedy is named FIRST and explicitly: it is the one option
   # that lets the caller get what it usually actually wants (a compile/build
@@ -976,6 +1185,16 @@ write_audit_row() {
   corpflow_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
     --action "${2:-}" --result ok --meta "${3:-}"
 }
+
+# ---------------------------------------------------------------------------
+# --lib-only: define everything, dispatch nothing. hooks/test-execution-promote.sh
+# sources this file so the two hooks share ONE classifier and one key derivation
+# rather than two that can drift apart. `return` outside a sourced file is an
+# error, so the exit is the fallback for a direct invocation.
+# ---------------------------------------------------------------------------
+case "${1:-}" in
+  --lib-only) return 0 2>/dev/null || exit 0 ;;
+esac
 
 # ---------------------------------------------------------------------------
 # --self-test

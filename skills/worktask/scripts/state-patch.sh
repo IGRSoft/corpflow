@@ -34,8 +34,11 @@
 #                           layer that fired.  Omit for agent self-patch (Layer 1);
 #                           F3 stamps "f3" via its own patch.  Absence encodes Layer 1.
 # @arg --task-id <ID>       Explicit ledger key (e.g. DV1).  When omitted the id is resolved
-#                           from the stage code: the open instance of a split stage, else
-#                           the highest existing, else <CODE>0.
+#                           from the stage code: the instance whose recorded (else planned)
+#                           artifact matches --artifact, else the open instance of a split
+#                           stage, else the highest existing, else <CODE>0.  Two open
+#                           instances of one stage with nothing to disambiguate them exit 4
+#                           before any write.
 # @arg --allow-missing-artifact
 #                           Suppress the exit-3 assertion and restore the exit-0 no-op for a
 #                           caller that knows the artifact is absent.  It does NOT patch:
@@ -90,9 +93,10 @@
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
 #               An agent patching the artifact it just wrote and finding nothing on disk is a
 #               real failure; every other unresolved case keeps the exit-0 no-op contract.
-# @exitcode 4   Replay refused by a pre-mutation guard (target live/parked, liveness
-#               indeterminate, planning incomplete, or a blocked cascade member).
-#               state.json is untouched.  Unknown ids stay 1 and malformed ids stay 2.
+# @exitcode 4   Write refused by a pre-mutation guard, state.json untouched: a replay whose
+#               target is live/parked, of indeterminate liveness, whose planning is
+#               incomplete or whose cascade includes a blocked member; or a stage code that
+#               resolves to more than one open instance with nothing to disambiguate it.  Unknown ids stay 1 and malformed ids stay 2.
 #
 # Note: --task-replay's liveness guard shells out to stale-check.sh, which needs python3.
 # The dependency is out-of-process and fail-closed — without it the replay refuses (exit 4)
@@ -319,24 +323,84 @@ is_valid_prev() {
 # never reused and `skipped` is never resurrected: both were settled deliberately.
 # Falls back to the highest existing instance, then to <CODE>0 for a never-seeded stage.
 # Callers must have already established that $STATE_PATH exists.
+#
+# Precedence is explicit id > explicit artifact > the status ladder.  The artifact tier
+# reads ARTIFACT_ARG — what the CALLER passed — never the stage-resolved $ART, which is not
+# assigned until ~1500 lines below this definition and is a basename guess rather than a
+# caller assertion.  A bare `--stage` (hooks/agent-stop.sh passes no artifact) leaves
+# ARTIFACT_ARG empty and falls through to the ladder byte-identically.
+#
+# Within the artifact tier the RECORDED `.artifact` is consulted before the PLANNED
+# `.metadata.artifact`: PL0 seeds the metadata name from the plan, and a split stage
+# routinely writes a different file than the plan guessed (this run: planned
+# development-0-ledger.md, written development-1.md).  Reading metadata first would slot the
+# patch by the plan's stale guess instead of the file the caller just named — the very
+# mis-slotting this resolution exists to prevent.  Metadata stays as the fallback because it
+# is the only artifact key a stage that has not completed yet carries.
+#
+# Ambiguity inside the winning ladder tier is fatal rather than arbitrary: two `in_progress`
+# instances with nothing to tell them apart means the caller's patch would land on a coin
+# flip.  Ambiguity ACROSS tiers is not — the ladder orders those deliberately, so the
+# ordinary split-stage shape (DV0 in_progress, DV1..DV3 pending) keeps resolving to DV0.
+# Returns 1 on ambiguity, before any lock is taken, leaving state.json untouched.
 resolve_task_id() {
-  local code="$1" resolved=""
+  local code="$1" resolved="" raw base
   if [[ -n "${TASK_ID_ARG:-}" ]]; then
     printf '%s' "$TASK_ID_ARG"
     return 0
   fi
-  if command -v jq > /dev/null 2>&1; then
-    resolved=$(jq -r --arg c "$code" '
-      ( [ (.tasks // {}) | to_entries[]
-          | select(.key | test("^" + $c + "[0-9]+$")) ]
-        | sort_by(.key | ltrimstr($c) | tonumber) ) as $all
-      | ( [ $all[] | select(.value.status == "in_progress") ] | first )
-        // ( [ $all[] | select(.value.status == "pending")  ] | first )
-        // ( [ $all[] | select(.value.status == "blocked")  ] | first )
-        // ( $all | last )
-      | if . == null then "" else .key end' \
+  command -v jq > /dev/null 2>&1 || { printf '%s' "${code}0"; return 0; }
+
+  # Ledger paths are `.context/...`-relative; callers pass absolute or `./`-prefixed ones.
+  # Compare normalised full paths OR basenames, and require exactly one hit — a basename
+  # collision across two instances is an ambiguity, not a match.
+  if [[ -n "${ARTIFACT_ARG:-}" ]]; then
+    raw="${ARTIFACT_ARG#./}"
+    base="${raw##*/}"
+    resolved=$(jq -r --arg c "$code" --arg raw "$raw" --arg base "$base" '
+      def norm: (. // "") | tostring | sub("^\\./"; "");
+      def hit($p): ($p | norm) as $n
+        | $n != "" and ($n == $raw or ($n | split("/") | last) == $base);
+      [ (.tasks // {}) | to_entries[]
+        | select(.key | test("^" + $c + "[0-9]+$")) ] as $all
+      | [ $all[] | select(hit(.value.artifact))          ] as $actual
+      | [ $all[] | select(hit(.value.metadata.artifact)) ] as $planned
+      | if   ($actual  | length) == 1 then $actual[0].key
+        elif ($planned | length) == 1 then $planned[0].key
+        else "" end' \
       "$STATE_PATH" 2> /dev/null || printf '')
+    if [[ -n "$resolved" ]]; then
+      printf '%s' "$resolved"
+      return 0
+    fi
   fi
+
+  # Ladder tier + its size in one read: the size is what makes the abort arm possible.
+  local tier
+  tier=$(jq -r --arg c "$code" '
+    ( [ (.tasks // {}) | to_entries[]
+        | select(.key | test("^" + $c + "[0-9]+$")) ]
+      | sort_by(.key | ltrimstr($c) | tonumber) ) as $all
+    | ( [ $all[] | select(.value.status == "in_progress") ]
+        | select(length > 0) )
+      // ( [ $all[] | select(.value.status == "pending") ]
+           | select(length > 0) )
+      // ( [ $all[] | select(.value.status == "blocked") ]
+           | select(length > 0) )
+      // ( [ $all | last | select(. != null) ] )
+    | (length | tostring) + " " + ([ .[].key ] | join(","))' \
+    "$STATE_PATH" 2> /dev/null || printf '')
+
+  local n keys
+  n="${tier%% *}"
+  keys="${tier#* }"
+  if [[ "${n:-0}" =~ ^[0-9]+$ ]] && [[ "$n" -gt 1 ]]; then
+    printf >&2 'ERROR: stage %s is ambiguous — %s open instances share status: %s\n  Pass --task-id <ID>, or --artifact <path> matching exactly one instance.\n  state.json is unchanged.\n' \
+      "$code" "$n" "$keys"
+    log_msg ERROR "ambiguous stage ${code}: candidates ${keys} — refusing to guess"
+    return 1
+  fi
+  [[ "${n:-0}" == "1" ]] && resolved="$keys"
   printf '%s' "${resolved:-${code}0}"
 }
 
@@ -610,6 +674,13 @@ _STATE_BOUNDS_FILTER='
             + [ .[] | select(.status != "launched") ])[0:6])
        else . end)'
 
+# `stage` and `status` are defaulted, never left null: the FN gate groups unresolved items by
+# stage and treats a missing status as unanswered, so a null in either field renders an item
+# nobody can attribute or act on. `stage` comes from the item's own id (`sw-<TASK_ID>-<n>` is
+# the mandated shape, so the id IS the slot), falling back to the writing stage's code for a
+# legacy id that predates it. Applied to incumbents as well as incoming items, so an array
+# already carrying nulls is backfilled on the next write rather than staying broken forever.
+#
 # open_questions unions through _union_sweep, not _union_keyed: last-writer-wins would let a
 # re-emitted stub carrying `status: open` destroy an answer already recorded against that id, and
 # since sw-DR0-3 moved sweep answers out of facts.decisions[] that element is the ONLY record of it.
@@ -641,8 +712,14 @@ _FACTS_UNION_FILTER='
            then { resolution: $prev.resolution } else {} end)
         + (if ($prev.blocks_next_stage // false) == true and ($new.blocks_next_stage // false) != true
            then { blocks_next_stage: true } else {} end);
+      def _sweep_defaults:
+        ( ([ (.id // "") | scan("^sw-([A-Za-z]+)[0-9]*-") ] | first | first)
+          // (if $sweep_stage == "" then null else $sweep_stage end) ) as $slot
+        | . + { status: (.status // "open") }
+            + (if (.stage // null) == null and $slot != null
+               then { stage: $slot } else {} end);
       def _union_sweep:
-        reduce .[] as $e ([];
+        reduce (.[] | _sweep_defaults) as $e ([];
           ((map(select(.id == $e.id)) | first) // null) as $prev
           | map(select(.id != $e.id)) + [ _sweep_join($prev; $e) ]);
       .facts = ((.facts // {})
@@ -728,6 +805,62 @@ _FACTS_VALIDATE_FILTER='
           else "" end
       end'
 
+# Sweep items the open_questions clamp evicted while still UNRESOLVED are appended to
+# `.context/open-questions-<run_index>.jsonl` before the rename, so the FN gate can still
+# render a question the ledger no longer has room for.  Nothing else recovers them: the
+# clamp keeps unresolved items ahead of resolved ones, but past 12 unresolved it starts
+# dropping live questions and the eviction is the only record that they existed.
+#
+# ADDITIVE around _STATE_BOUNDS_FILTER, which is deliberately NOT edited: the spill is the
+# set difference (pre-clamp unresolved − post-clamp), computed by re-evaluating the caller's
+# filter without the bounds tail.  The ordering jq is untouched, so it cannot regress, and
+# output is byte-identical for any array of 12 or fewer and for any overflow whose evictions
+# are all resolved.
+#
+# Ordered before the rename on purpose: a crash can then leave a spill line whose eviction
+# never committed — a duplicate the union collapses — but never an eviction whose spill line
+# is missing, which would be loss.  Append-only, never rewritten, never deduped on write.
+# Every failure here is swallowed: a spill that cannot be written must not undo a merge.
+#
+# _spill_evicted_questions <state> <tmp> <filter> [jq-args...]
+_spill_evicted_questions() {
+  local state="$1" tmp="$2" filter="$3"
+  shift 3
+
+  # The clamp fires only above 12, so a post-clamp length below it means nothing was
+  # evicted — and this is the common case, which must not pay for a second filter pass.
+  local post_len
+  post_len=$(jq -r '(.facts.open_questions? // []) | length' "$tmp" 2> /dev/null || printf '0')
+  [[ "$post_len" == "12" ]] || return 0
+
+  # Attribution, in the order the writer's own identity becomes known: parsed frontmatter,
+  # then --stage, then the code behind --task-id (the only identity a --facts-only call has).
+  local from_stage
+  from_stage="${PARSED_STAGE:-${STAGE_ARG:-${SWEEP_STAGE_FALLBACK:-}}}"
+  [[ -n "$from_stage" ]] || from_stage="unknown"
+
+  local run_idx spill_dir spill_path spilled
+  run_idx=$(jq -r '.run_index // 0' "$tmp" 2> /dev/null || printf '0')
+  spill_dir="${state%/*}"
+  [[ "$spill_dir" == "$state" ]] && spill_dir="."
+  spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
+
+  spilled=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null \
+    | jq -c --slurpfile post "$tmp" \
+           --arg ts "$(date -u +%FT%TZ)" \
+           --arg from "$from_stage" '
+        (($post[0].facts.open_questions // []) | map(.id)) as $keep
+        | (.facts.open_questions // [])
+        | map(select((.status // "open") != "resolved"))
+        | map(select(([.id] - $keep) | length > 0))
+        | .[] + {spilled_at: $ts, spilled_from_stage: $from}' 2> /dev/null) || return 0
+
+  [[ -n "$spilled" ]] || return 0
+  printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null \
+    || log_msg WARN "open_questions spill append failed for ${spill_path} (merge unaffected)"
+  log_msg INFO "spilled $(printf '%s' "$spilled" | grep -c '^') evicted open_question(s) to ${spill_path}"
+}
+
 # Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
 # mkdir-spinlock so concurrent sibling writers cannot drop a patch.
 #
@@ -746,6 +879,7 @@ atomic_apply() {
 
   local rc=0
   if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then
+    _spill_evicted_questions "$state" "$tmp" "$filter" "$@"
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -1291,6 +1425,79 @@ EOSPLIT
     exit 1
   fi
 
+  # ---- T15b/c/d/e: artifact-first resolution for a genuinely ambiguous split stage ----
+  # T15 above only ever has ONE open instance, so it passes with or without the artifact
+  # tier — which is how the mis-slotting defect stayed invisible.  These four put two
+  # `in_progress` instances in the ledger, the shape a fanned-out DV run actually has.
+  cat > .context/state.json << 'EOSTATE'
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress","metadata":{"artifact":".context/development-0-gate.md"}},"DV1":{"status":"in_progress","metadata":{"artifact":".context/development-0-ledger.md"}}},"facts":{},"handoffs":{}}
+EOSTATE
+  t15b_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-0-ledger.md)
+  if [[ "$t15b_id" == "DV1" ]]; then
+    printf 'T15b: --artifact picks the matching instance out of two in_progress: ok\n'
+  else
+    printf 'T15b: artifact-first resolution (got %s, want DV1): FAIL\n' "$t15b_id" >&2
+    exit 1
+  fi
+
+  # Absolute and ./-prefixed callers must land on the same key as the stored relative path.
+  t15e_id=$(bash "$SELF" --resolve-task-id DV --artifact "$PWD/.context/development-0-ledger.md")
+  t15e_id2=$(bash "$SELF" --resolve-task-id DV --artifact ./.context/development-0-ledger.md)
+  if [[ "$t15e_id" == "DV1" && "$t15e_id2" == "DV1" ]]; then
+    printf 'T15e: absolute and ./-prefixed artifacts resolve like the relative one: ok\n'
+  else
+    printf 'T15e: path normalisation (abs=%s dot=%s, want DV1): FAIL\n' "$t15e_id" "$t15e_id2" >&2
+    exit 1
+  fi
+
+  # The recorded artifact beats another instance's PLANNED one: PL0 seeds metadata from the
+  # plan, and a split stage routinely writes a file the plan did not predict.
+  jq '.tasks.DV0.artifact = ".context/development-1.md"
+      | .tasks.DV1.metadata.artifact = ".context/development-1.md"' \
+    .context/state.json > .context/state.json.t15f && mv .context/state.json.t15f .context/state.json
+  t15f_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-1.md)
+  if [[ "$t15f_id" == "DV0" ]]; then
+    printf 'T15f: recorded artifact outranks a stale planned one: ok\n'
+  else
+    printf 'T15f: recorded-before-planned precedence (got %s, want DV0): FAIL\n' "$t15f_id" >&2
+    exit 1
+  fi
+
+  # No discriminator: refuse, name both candidates, and leave the ledger byte-identical.
+  cat > .context/state.json << 'EOSTATE'
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"in_progress"}},"facts":{},"handoffs":{}}
+EOSTATE
+  cp .context/state.json .context/state.json.snap15c
+  t15c_rc=0
+  t15c_err=$(bash "$SELF" --stage DV --artifact .context/development-0.md --via step6_5 2>&1 > /dev/null) \
+    || t15c_rc=$?
+  if [[ "$t15c_rc" == "4" ]] \
+    && printf '%s' "$t15c_err" | grep -q 'DV0,DV1' \
+    && diff -q .context/state.json .context/state.json.snap15c > /dev/null; then
+    printf 'T15c: ambiguous stage refuses with exit 4, both named, state byte-unchanged: ok\n'
+  else
+    printf 'T15c: ambiguity must fail closed (rc=%s err=%s): FAIL\n' "$t15c_rc" "$t15c_err" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap15c
+
+  # T15d is the hooks/agent-stop.sh regression guard: one open instance, no --artifact,
+  # behaviour identical to before the artifact tier existed.
+  cat > .context/state.json << 'EOSTATE'
+{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"pending"}},"facts":{},"handoffs":{}}
+EOSTATE
+  t15d_id=$(bash "$SELF" --resolve-task-id DV)
+  t15d_rc=0
+  bash "$SELF" --stage DV --via step6_5 > /dev/null 2>&1 || t15d_rc=$?
+  if [[ "$t15d_id" == "DV0" && "$t15d_rc" == "0" ]] \
+    && jq -e '.tasks.DV0.status == "completed" and .tasks.DV1.status == "pending"' \
+      .context/state.json > /dev/null; then
+    printf 'T15d: bare --stage with one open instance is unchanged: ok\n'
+  else
+    printf 'T15d: bare --stage regression (id=%s rc=%s): FAIL\n' "$t15d_id" "$t15d_rc" >&2
+    exit 1
+  fi
+
   # ---- T16: unsupported ledger version halts before any write ----
   cat > .context/state.json << 'EOSTATE'
 {"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{},"handoffs":{}}
@@ -1433,6 +1640,71 @@ EOSTATE
     printf 'T20: blocks_next_stage survives a bare re-emit: ok\n'
   else
     printf 'T20: blocks_next_stage was cleared by a bare re-emit: FAIL\n' >&2
+    exit 1
+  fi
+
+  # ---- T21/T22/T23: the open_questions clamp spills unresolved evictions (AD-4) ----
+  # Fixture builder: N open_questions, the first $2 of them resolved, run_index 3.
+  t21_seed() {
+    jq -n --argjson n "$1" --argjson res "$2" '
+      { version: 2, worktask_id: "selftest", plan_file: ".context/planning-0.md",
+        platform: "all", run_index: 3,
+        tasks: { DV1: { status: "in_progress" } },
+        facts: { open_questions:
+          [ range(1; $n + 1) as $i
+            | { id: ("sw-PL0-" + ($i | tostring)), class: "decision",
+                ref: "planning-0.md#elicitation-sweep", stage: "PL",
+                status: (if $i <= $res then "resolved" else "open" end) }
+            + (if $i <= $res then { resolution: "answered" } else {} end) ] },
+        handoffs: {} }' > .context/state.json
+    rm -f .context/open-questions-3.jsonl
+  }
+  t21_add() {
+    bash "$SELF" --task-id DV1 --facts \
+      "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\"}]}" \
+      > /dev/null
+  }
+
+  # An array that stays at or below the bound must behave exactly as it did before the spill
+  # existed: no file, and a ledger byte-identical to the unspilled merge.
+  t21_seed 5 0
+  t21_add sw-DV1-1
+  cp .context/state.json .context/state.json.t21
+  if [[ ! -e .context/open-questions-3.jsonl ]]; then
+    printf 'T21: no spill file while the array is within bounds: ok\n'
+  else
+    printf 'T21: spilled without an eviction: FAIL\n' >&2
+    exit 1
+  fi
+
+  # 12 open + 1 more evicts the OLDEST UNRESOLVED item — the loss #3 reports.
+  t21_seed 12 0
+  t21_add sw-DV1-1
+  if [[ "$(jq -r '.id' .context/open-questions-3.jsonl 2> /dev/null)" == "sw-PL0-1" ]] \
+    && [[ "$(grep -c '^' .context/open-questions-3.jsonl)" == "1" ]] \
+    && jq -e '.spilled_at and .spilled_from_stage and .class and .ref and .stage and .status' \
+      .context/open-questions-3.jsonl > /dev/null \
+    && jq -e '(.facts.open_questions | map(.id)) == ["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-PL0-7","sw-PL0-8","sw-PL0-9","sw-PL0-10","sw-PL0-11","sw-PL0-12","sw-DV1-1"]' \
+      .context/state.json > /dev/null; then
+    printf 'T22: unresolved eviction spills the full stub, ledger order unchanged: ok\n'
+  else
+    printf 'T22: unresolved eviction was not spilled: FAIL\n' >&2
+    cat .context/open-questions-3.jsonl >&2 2> /dev/null
+    jq -c '.facts.open_questions | map(.id)' .context/state.json >&2
+    exit 1
+  fi
+
+  # Resolved-first ordering means an overflow whose evictions are ALL resolved loses
+  # nothing — and must not write a spill line for an item that was already answered.
+  t21_seed 12 2
+  t21_add sw-DV1-1
+  if [[ ! -e .context/open-questions-3.jsonl ]] \
+    && jq -e '(.facts.open_questions | map(select(.status != "resolved") | .id) | length) == 11' \
+      .context/state.json > /dev/null; then
+    printf 'T23: an all-resolved eviction writes no spill line: ok\n'
+  else
+    printf 'T23: resolved eviction leaked into the spill: FAIL\n' >&2
+    cat .context/open-questions-3.jsonl >&2 2> /dev/null
     exit 1
   fi
 
@@ -1624,7 +1896,12 @@ if [[ -n "$RESOLVE_CODE_ARG" ]]; then
     printf >&2 'no state.json at %s — cannot resolve a task id\n' "$STATE_PATH"
     exit 1
   fi
-  printf '%s\n' "$(resolve_task_id "$RESOLVE_CODE_ARG")"
+  # Ambiguity is exit 4 here too: --resolve-code is what the orchestrator asks before it
+  # patches, so answering with a guess would only move the mis-slot one call later.
+  if ! _RESOLVED=$(resolve_task_id "$RESOLVE_CODE_ARG"); then
+    exit 4
+  fi
+  printf '%s\n' "$_RESOLVED"
   exit 0
 fi
 
@@ -1846,9 +2123,14 @@ if [[ -n "$FACTS_ARG" ]]; then
     usage
   fi
 
+  # Fallback slot for a stub whose id predates the `sw-<TASK_ID>-<n>` shape: the stage this
+  # invocation is patching, by the same explicit-then-inferred order the id resolution uses.
+  SWEEP_STAGE_FALLBACK="${STAGE_ARG:-$(printf '%s' "${TASK_ID_ARG:-}" | sed 's/[0-9]*$//')}"
+
   if [[ ! -f "$STATE_PATH" ]]; then
     log_msg INFO "state.json absent — --facts is a no-op"
-  elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" --argjson f "$FACTS_ARG"; then
+  elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
+    --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK"; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
   else
     printf >&2 'facts union failed; state.json unchanged (see %s)\n' "$LOG_FILE"
@@ -1909,7 +2191,9 @@ if [[ -z "$PARSED_STAGE" ]]; then
 fi
 
 # ---------- Resolve the ledger key ----------
-TASK_ID=$(resolve_task_id "$PARSED_STAGE")
+if ! TASK_ID=$(resolve_task_id "$PARSED_STAGE"); then
+  exit 4
+fi
 
 # ---------- Idempotency check ----------
 # One @tsv read for all three fields: this runs on every hook-driven stage completion, so
@@ -1950,7 +2234,11 @@ fi
 
 # ---------- Build patch + atomic write ----------
 # Additive keys (completed_via, worktree) fold in only when present, so absence stays
-# absence. --prev additionally emits handoffs["<PREV>→<CODE>"] (maxLength 300, must
+# absence.  facts.verdicts[<CODE>] is mirrored here because this is the only writer a
+# completed stage passes through: the schema has carried the field since v2 and nothing ever
+# filled it, so every consumer reading it saw an empty object.  Keyed by CODE, not task id,
+# because the handoff edges it pairs with are bare codes; a split stage's last instance to
+# complete owns the entry, which matches how the edge behaves. --prev additionally emits handoffs["<PREV>→<CODE>"] (maxLength 300, must
 # contain "ref:"); absent --prev ⇒ no handoffs key at all.
 ART_BASE=$(basename "$ART")
 PATCH=$(jq -cn \
@@ -1974,6 +2262,7 @@ PATCH=$(jq -cn \
        else {} end)
   ) as $stageObj
   | {tasks: {($taskid): $stageObj}}
+  + {facts: {verdicts: {($stage): $verdict}}}
   + (if $prev != ""
      then {handoffs: {($prev + "→" + $stage): ((($summary) + " ref:" + $ref) | .[0:300])}}
      else {} end)')

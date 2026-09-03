@@ -25,17 +25,31 @@ setup() {
  {"number":7,"title":"Add dark mode to settings","url":"https://github.com/o/r/issues/7"}]
 JSON
 
+  # The scan fetches open and closed as two separate pools, so the fake serves
+  # ISSUES_JSON filtered by the requested --state; entries without a state are
+  # open. GH_CLOSED_EXIT fails only the closed call.
   cat > "$WD/bin/gh" <<'EOS'
 #!/usr/bin/env bash
+state=open
+prev=""
+for a in "$@"; do
+  [ "$prev" = "--state" ] && state="$a"
+  prev="$a"
+done
 case "$1" in
   auth)  exit "${GH_AUTH_EXIT:-0}" ;;
   issue)
     case "$2" in
       list)
         if [ -n "${GH_LIST_SLEEP:-}" ]; then sleep "$GH_LIST_SLEEP"; fi
+        if [ "$state" = "closed" ] && [ -n "${GH_CLOSED_EXIT:-}" ]; then
+          exit "$GH_CLOSED_EXIT"
+        fi
         if [ -n "${GH_LIST_STDOUT:-}" ]; then printf '%s\n' "$GH_LIST_STDOUT"; fi
         if [ -z "${GH_LIST_STDOUT:-}" ] && [ "${GH_LIST_EXIT:-0}" = "0" ]; then
-          cat "${ISSUES_JSON:?}"
+          jq -c --arg s "$state" \
+            '[ .[] | select(((.state // "open") | ascii_downcase) == $s) ]' \
+            "${ISSUES_JSON:?}"
         fi
         exit "${GH_LIST_EXIT:-0}" ;;
     esac ;;
@@ -219,4 +233,100 @@ EOS
 
   RUN -- --bogus
   [ "$status" -eq 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# R11/#10 — a closed match is a prior-run signal, not a comment candidate.
+# The open-only pool made the most valuable hit this scan can produce ("this
+# task already ran") structurally invisible.
+# ---------------------------------------------------------------------------
+
+@test "R11: open and closed are fetched as two pools, each with the state field" {
+  # One `--state all` pool is newest-first across both classes, so a busy closed
+  # backlog evicts every open issue and the open-duplicate check goes blind.
+  cd "$WD"
+  cat > "$WD/bin/gh" <<'EOS'
+#!/usr/bin/env bash
+[ "$1" = "auth" ] && exit 0
+printf '%s\n' "$*" >> "$FLAGLOG"
+printf '[]\n'
+EOS
+  chmod +x "$WD/bin/gh"
+  FLAGLOG="$WD/flags" PATH="$WD/bin:$PATH" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --goal "$GOAL" > /dev/null 2>&1 || true
+  run cat "$WD/flags"
+  assert_output --partial "--state open"
+  assert_output --partial "--state closed"
+  refute_output --partial "--state all"
+  assert_output --partial "number,title,url,state"
+  [ "$(grep -c -- '--limit 100' "$WD/flags")" = "2" ]
+}
+
+@test "R11: a failed closed pool degrades to empty instead of skipping the scan" {
+  # The closed pool only ADDS the prior-run hint; dropping the whole scan with it
+  # would also lose the open-duplicate check the open pool already answered.
+  RUN GH_CLOSED_EXIT=1 -- --goal "$GOAL"
+  assert_success
+  [ "$(KV result)" = "shown" ]
+  [ "$(KV candidates)" = "2" ]
+  [ "$(KV priors)" = "0" ]
+}
+
+@test "R11: a closed-only match takes the prior-run branch, not the comment branch" {
+  cd "$WD"
+  cat > "$WD/closed.json" <<'JSON'
+[{"number":1,"title":"Duplicate GitHub issues opened by overlapping worktasks",
+  "url":"https://github.com/o/r/issues/1","state":"CLOSED"}]
+JSON
+  ISSUES_JSON="$WD/closed.json" PATH="$WD/bin:$PATH" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --goal "$GOAL"
+  assert_success
+  assert_output --partial "result=prior-run"
+  assert_output --partial "reason=closed_match"
+  assert_output --partial "candidates=0"
+  assert_output --partial "priors=1"
+  # A closed issue must NEVER reach the caller's "use one of the existing issues"
+  # arm: binding a context to it would anchor the run to an issue this run can
+  # neither comment on nor close.
+  refute_output --partial "candidate="
+}
+
+@test "R11: an open match keeps the result=shown contract byte-for-byte" {
+  cd "$WD"
+  cat > "$WD/mixed.json" <<'JSON'
+[{"number":1,"title":"Duplicate GitHub issues opened by overlapping worktasks",
+  "url":"https://github.com/o/r/issues/1","state":"CLOSED"},
+ {"number":2,"title":"Prevent duplicate issues when a worktask starts",
+  "url":"https://github.com/o/r/issues/2","state":"OPEN"}]
+JSON
+  ISSUES_JSON="$WD/mixed.json" PATH="$WD/bin:$PATH" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --goal "$GOAL"
+  assert_success
+  assert_output --partial "result=shown"
+  assert_output --partial "candidates=1"
+  assert_output --partial '"number":2'
+  assert_output --partial "priors=1"
+  assert_output --partial '"number":1'
+}
+
+@test "R11: lowercase state spellings are classified identically" {
+  cd "$WD"
+  cat > "$WD/lower.json" <<'JSON'
+[{"number":1,"title":"Duplicate GitHub issues opened by overlapping worktasks",
+  "url":"https://github.com/o/r/issues/1","state":"closed"}]
+JSON
+  ISSUES_JSON="$WD/lower.json" PATH="$WD/bin:$PATH" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --goal "$GOAL"
+  assert_success
+  assert_output --partial "result=prior-run"
+}
+
+@test "R11: zero matches still print result=none — the arm order is unchanged" {
+  cd "$WD"
+  printf '[]\n' > "$WD/empty.json"
+  ISSUES_JSON="$WD/empty.json" PATH="$WD/bin:$PATH" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --goal "$GOAL"
+  assert_success
+  assert_output --partial "result=none"
+  assert_output --partial "reason=no_candidates"
 }

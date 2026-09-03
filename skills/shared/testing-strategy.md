@@ -1,7 +1,7 @@
 ---
 name: testing-strategy
 effort: low
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Testing Strategy
@@ -139,7 +139,8 @@ authority of its own.
 **Test execution** — invoking a runner that evaluates test cases: `bats`, `swift test`, `pytest`,
 `python3 -m unittest`, `ctest`, `go test`, `cargo test`, `jest`, `vitest`, `playwright`, `rspec`,
 `dotnet test`, `gradle test` / `./gradlew test`, `npm`/`pnpm`/`yarn test`, `xcodebuild test`,
-`mcp__*__test_*`; plus `./run-tests.sh`, `make test`, `make coverage`, `make test-ios` in this
+`node --test`, `python -m pytest`, `mcp__*__test_*`; plus `./run-tests.sh`, `make test`,
+`make coverage`, `make test-ios` in this
 repo; plus `/<plugin>:build-test` invoked *without* `--no-test`; plus delegating any of the above
 to another agent.
 
@@ -177,6 +178,15 @@ Fail-open by construction: a future unstripped flag degrades to an allow, never 
 - **Scoped** — a genuine selector: `-only-testing:`, `--filter`, `-k`, `-t`, `-run`, or a real
   positional (`cargo test --release foo`); see `skills/shared/test-selection-syntax.md`. `-c` is a
   build-only carve-out for `bats` (`--count`), `go test` (compile-only) and `rspec` (`--colour`).
+
+##### The Node runner
+
+`node` is a runner **only with `--test`**. A bare `node <script>` is script execution and classifies
+as not a test run, the same discrimination `gradle`/`./gradlew` get from their task name — without it
+every `node` invocation in a Node project would deny at a banned stage. `--test-reporter` and
+`--test-concurrency` are configuration, not selection; `--test-name-pattern` and `--test-only` are
+genuine selectors and classify scoped. **This gates Node suites that previously ran ungated at every
+stage**, which is a behaviour change for every Node project, not a no-op hardening.
 
 ##### Known limits
 

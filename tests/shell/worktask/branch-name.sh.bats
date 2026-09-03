@@ -1234,3 +1234,59 @@ mk_r6_worktree() {
   run git rev-parse --abbrev-ref HEAD
   assert_output "bugfix/fix-pr-composition-and-branch-naming"
 }
+
+# ---------------------------------------------------------------------------
+# R10/#9 — a preview must not spend the once-per-run naming window.
+# The header has documented "no audit row" for BRANCH_NAME_PRINT since the flag
+# existed; the ladder audited unconditionally, so any no-op arm firing during a
+# preview wrote a real branch_renamed row that then tripped already_named.
+# ---------------------------------------------------------------------------
+
+@test "R10a: a preview whose arm fires writes NO audit row" {
+  cd "$WD"
+  mk_branch_repo
+  # upstream_tracked is the arm observed doing this in production.
+  UP="$(mktemp -d)/up.git"
+  git init -q --bare "$UP"
+  git -C "$WD" remote add origin "$UP"
+  git -C "$WD" push -q -u origin HEAD
+  BRANCH_NAME_PRINT=1 run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -s "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "R10b: the naming window survives a preview" {
+  cd "$WD"
+  mk_branch_repo
+  UP="$(mktemp -d)/up2.git"
+  git init -q --bare "$UP"
+  git -C "$WD" remote add origin "$UP"
+  git -C "$WD" push -q -u origin HEAD
+  BRANCH_NAME_PRINT=1 bash "$PLUGIN_ROOT/$SCRIPT" > /dev/null 2>&1 || true
+  # The real run must reach its OWN arm, not already_named, and so must still
+  # report the target the remote should carry.
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  refute_output --partial "already named this run"
+  assert_output --partial "target_branch=bugfix/fix-pr-composition-and-branch-naming"
+}
+
+@test "R10c: a query mode still writes no audit row" {
+  cd "$WD"
+  mk_branch_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" --print-target --goal "fix a thing"
+  assert_success
+  [ ! -s "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "R10d: already_named re-emits the target the FIRST run recorded" {
+  cd "$WD"
+  mk_branch_repo
+  bash "$PLUGIN_ROOT/$SCRIPT" > /dev/null 2>&1
+  # A host renames the branch back mid-run — the scenario already_named exists for.
+  git -C "$WD" branch -m wt-abc123
+  run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial "already named this run"
+  assert_output --partial "target_branch=bugfix/fix-pr-composition-and-branch-naming"
+}

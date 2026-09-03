@@ -279,3 +279,139 @@ state_with_ar() {
   assert_success
   refute_output --partial "fail:"
 }
+
+# ---------------------------------------------------------------------------
+# Sweep-ledger parity across the open_questions spill (AD-4).
+# The newest-12 clamp evicts unresolved items to
+# `open-questions-<run_index>.jsonl`; parity reads ledger UNION spill, so an item
+# that reached the FN gate through the spill is not reported as dropped.
+# ---------------------------------------------------------------------------
+
+# A ledger carrying run_index and an explicit open_questions array.
+spill_state() {  # <path> <run_index> <ids-json>
+  jq -n --argjson r "$2" --argjson ids "$3" \
+    '{version: 2, worktask_id: "t", plan_file: ".context/planning-0.md",
+      platform: "all", run_index: $r,
+      tasks: {DV0: {status: "in_progress"}},
+      facts: {files_modified: [], tests_added: [], decisions: [],
+              open_questions: [$ids[] | {id: ., class: "decision",
+                                         ref: "#elicitation-sweep"}]},
+      handoffs: {}}' > "$1"
+}
+
+@test "spill: an item present only in the spill file satisfies ledger parity" {
+  sweep_artifact "$WD/dv-spill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  spill_state "$WD/state-spill.json" 4 '[]'
+  printf '%s\n' '{"id":"sw-DV0-1","class":"decision","ref":"#elicitation-sweep","stage":"DV","status":"open","spilled_at":"2026-01-01T00:00:00Z","spilled_from_stage":"DV"}' \
+    > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-spill.md" --state "$WD/state-spill.json"
+  assert_success
+}
+
+@test "spill: the same item with NO spill file still fails — parity is not weakened" {
+  sweep_artifact "$WD/dv-nospill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  spill_state "$WD/state-nospill.json" 4 '[]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-nospill.md" --state "$WD/state-nospill.json"
+  assert_failure 1
+  assert_output --partial "not in facts.open_questions[]"
+}
+
+@test "spill: a malformed spill file fails rather than reading as the empty set" {
+  # Treating a corrupt overflow file as "no items" would restore the exact loss the
+  # parity check exists to catch, and only in the runs that actually overflowed.
+  sweep_artifact "$WD/dv-badspill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  spill_state "$WD/state-badspill.json" 4 '["sw-DV0-1"]'
+  printf 'not json at all\n' > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-badspill.md" --state "$WD/state-badspill.json"
+  assert_failure 1
+  assert_output --partial "not readable as JSON lines"
+}
+
+@test "spill: the path derives from the ledger's run_index, never a guess" {
+  sweep_artifact "$WD/dv-idx.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  spill_state "$WD/state-idx.json" 7 '[]'
+  printf '%s\n' '{"id":"sw-DV0-1"}' > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-idx.md" --state "$WD/state-idx.json"
+  assert_failure 1
+  mv "$WD/open-questions-4.jsonl" "$WD/open-questions-7.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-idx.md" --state "$WD/state-idx.json"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------
+# Frontmatter token budget (AD-2): discretionary = total - min(stub block, 64),
+# fail > 200, advisory warn > 264. Sweep stubs are mandatory and fixed-shape, so
+# excluding them stops the budget from penalising a stage for asking questions.
+# ---------------------------------------------------------------------------
+
+# A DV artifact padded to an approximate total token count, with <stubs> sweep stubs.
+budget_artifact() {  # <path> <filler-words> <stubs>
+  local path="$1" fill="$2" stubs="$3" i pad=""
+  for ((i = 0; i < fill; i++)); do pad="$pad w"; done
+  {
+    printf -- '---\n'
+    printf 'handoff:\n'
+    printf '  stage: DV\n'
+    printf '  verdict: ok\n'
+    printf '  summary: "budget fixture%s"\n' "$pad"
+    printf '  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions:\n'
+    for ((i = 1; i <= stubs; i++)); do
+      printf '    - { id: sw-DV0-%s, class: decision, ref: "#elicitation-sweep" }\n' "$i"
+    done
+    printf '  refs:\n'
+    printf '    dev: development.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nbody\n'
+  } > "$path"
+}
+
+@test "budget: a frontmatter over 200 discretionary tokens now FAILS, not warns" {
+  budget_artifact "$WD/dv-fat.md" 200 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-fat.md"
+  assert_failure 1
+  assert_output --partial "discretionary tokens > 200 budget"
+}
+
+@test "budget: the four permitted sweep stubs cannot push a compliant artifact over" {
+  # Same prose in both files; the only difference is the mandatory stub block. If the
+  # stubs were counted, the second call would fail — which is the AC-8 incentive.
+  budget_artifact "$WD/dv-lean.md" 120 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-lean.md"
+  assert_success
+  budget_artifact "$WD/dv-lean4.md" 120 4
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-lean4.md"
+  assert_success
+  # The 4-stub file is over the old flat 200 in TOTAL tokens — the case the old check
+  # flagged and the new one deliberately releases.
+  assert_output --partial "tokens=2"
+}
+
+@test "budget: the exclusion is capped, so extra stubs cannot buy prose room" {
+  # Twelve stubs is three times the per-stage cap; the exclusion still stops at 64
+  # tokens, so an artifact this size fails on its prose exactly as it would at four.
+  budget_artifact "$WD/dv-gamed.md" 200 12
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-gamed.md"
+  assert_failure 1
+  assert_output --partial "discretionary tokens > 200 budget"
+  # The excluded amount is the cap, not the measured 12-stub block.
+  assert_output --partial "- 64 sweep-stub tokens excluded"
+}
+
+@test "budget: the 264 absolute ceiling is reported alongside the failure" {
+  budget_artifact "$WD/dv-huge.md" 260 4
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-huge.md"
+  assert_failure 1
+  assert_output --partial "> 264 absolute ceiling"
+}
+
+@test "budget: every stage artifact this repo ships passes the promoted gate" {
+  # R8 is deliberately breaking; the claim that no in-tree artifact fails it is
+  # verified here rather than asserted in prose.
+  local f
+  for f in "$PLUGIN_ROOT"/.context/*-[0-9].md; do
+    [ -e "$f" ] || continue
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$f"
+    assert_success
+  done
+}

@@ -98,6 +98,26 @@ toks() {
   awk -v w="$words" 'BEGIN { printf "%d", w * 1.33 }'
 }
 
+# Tokens spent on the open_questions block alone, for the AD-2 discretionary budget.
+# Measured over the SAME source text `toks` counts — the frontmatter as written, not a
+# re-emitted copy — so the subtraction is exact rather than an estimate of a re-render.
+# The block runs from the `open_questions:` key to the next line indented no deeper, which
+# is how YAML already delimits it; a file without the key yields 0.
+toks_open_questions_block() {
+  local f="$1" words
+  words=$(awk '
+    /^[[:space:]]*open_questions:/ && !inblock {
+      match($0, /^[[:space:]]*/); indent = RLENGTH; inblock = 1; print; next
+    }
+    inblock {
+      if ($0 ~ /^[[:space:]]*$/) { print; next }
+      match($0, /^[[:space:]]*/)
+      if (RLENGTH <= indent) { inblock = 0; next }
+      print
+    }' "$f" | wc -w | tr -d ' ')
+  awk -v w="$words" 'BEGIN { printf "%d", w * 1.33 }'
+}
+
 toks_str() {
   local s="$1"
   local words
@@ -343,8 +363,25 @@ check_sweep_ledger() {
   # 2>&1 into the same capture, like _sweep_yq: a ledger whose open_questions is a string
   # or a list of non-objects aborts jq mid-filter, and treating that exit as "nothing
   # missing" would pass the gate on exactly the shapes it exists to catch.
-  if ! missing=$(printf '%s\n' "$ids" | jq -r -R -s --slurpfile st "$STATE_ARG" '
-      (($st[0].facts.open_questions? // []) | map(.id)) as $have
+  # The ledger is not the whole record: the newest-12 clamp spills unresolved evictions to
+  # `open-questions-<run_index>.jsonl` (AD-4), and an item that legitimately reached the FN
+  # gate through the spill must not read here as a dropped stub.  The path derives from the
+  # ledger's own run_index — never guessed — and a MISSING spill contributes the empty set,
+  # which is exactly today's behaviour for every run whose sweep never overflowed.
+  local spill
+  spill="$(dirname "$STATE_ARG")/open-questions-$(jq -r '.run_index // 0' "$STATE_ARG" 2> /dev/null || printf '0').jsonl"
+  if [[ -e "$spill" ]] && ! jq -e -s 'type == "array"' "$spill" > /dev/null 2>&1; then
+    # A spill that exists but cannot be parsed is a FAILURE, not an empty set: silently
+    # treating a corrupt overflow file as "no items" restores the precise loss this check
+    # exists to catch, and does it only in the runs that overflowed.
+    echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— spill file $spill is not readable as JSON lines" >&2
+    return 1
+  fi
+  [[ -e "$spill" ]] || spill="/dev/null"
+
+  if ! missing=$(printf '%s\n' "$ids" | jq -r -R -s --slurpfile st "$STATE_ARG" --rawfile sp "$spill" '
+      ( ( ($st[0].facts.open_questions? // []) | map(.id) )
+        + ( $sp | split("\n") | map(select(length > 0) | fromjson.id) ) ) as $have
       | split("\n") | map(select(length > 0 and . != "null"))
       | . - $have | .[]' 2>&1); then
     echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— facts.open_questions in $STATE_ARG could not be read as an array of stubs: ${missing%%$'\n'*}" >&2
@@ -490,12 +527,35 @@ validate_frontmatter() {
     fi
   fi
 
-  # Token budget check (≤200 cl100k_base proxy)
-  local tcount
+  # Token budget (AD-2). The budget constrains DISCRETIONARY prose — summary,
+  # next_stage_focus, decision bodies — so the mandatory open_questions stubs are excluded
+  # from it: counting them made the check measure the wrong thing and rewarded a stage for
+  # asking fewer questions, which is the incentive AC-8 names.
+  #
+  #   discretionary = toks(frontmatter) - min( toks(stub block), 4 x 16 )
+  #   fail  when discretionary > 200
+  #   warn  when total        > 264      # advisory; keeps the real absolute cost visible
+  #
+  # The exclusion caps at four stubs' worth (12 measured tokens plus a third of headroom),
+  # so it cannot be gamed by inflating `ref` strings or emitting extra stubs: 264 is a
+  # deterministic ceiling. check_sweep_stub_shape has already run above, so only
+  # shape-valid stubs are ever excluded — that ordering is what makes the cap safe.
+  local tcount stubtoks discretionary
   tcount=$(toks "$fmfile")
+  stubtoks=$(toks_open_questions_block "$fmfile")
+  [[ "$stubtoks" -le 64 ]] || stubtoks=64
+  discretionary=$((tcount - stubtoks))
   rm -f "$fmfile"
-  if [[ "$tcount" -gt 200 ]]; then
-    echo "warn: stage=$stage frontmatter ${tcount} tokens > 200 budget" >&2
+  # The advisory line is emitted BEFORE the failure, not after: 264 is exactly 200 plus the
+  # 64-token exclusion cap, so every artifact over the ceiling is already over the budget and
+  # a warn placed after the `return 1` could never print. Ordering it first is what keeps the
+  # absolute cost visible on the report that matters — the failing one.
+  if [[ "$tcount" -gt 264 ]]; then
+    echo "warn: stage=$stage frontmatter ${tcount} tokens > 264 absolute ceiling" >&2
+  fi
+  if [[ "$discretionary" -gt 200 ]]; then
+    echo "fail: stage=$stage frontmatter ${discretionary} discretionary tokens > 200 budget (${tcount} total - ${stubtoks} sweep-stub tokens excluded)" >&2
+    return 1
   fi
 
   echo "ok: $f stage=$stage tokens=$tcount"
