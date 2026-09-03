@@ -53,7 +53,8 @@
 #                           facts a stage recorded; standalone it exits 0 after the merge.
 #                           Union, never replace — identity rule at § Facts union below.
 #                           open_questions items must be FULL sweep stubs (string .id, .class
-#                           and .ref); a partial one exits 2 with state.json untouched.
+#                           and .ref, boolean .blocks_next_stage); a partial one exits 2 with
+#                           state.json untouched.
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -688,8 +689,12 @@ _STATE_BOUNDS_FILTER='
 # lattice shape this feature already ships for `decision < escalate`. The fields are guarded
 # INDEPENDENTLY: an incoming stub that omits `resolution` inherits the incumbent's even when both
 # sides say `resolved`, because dropping the answer body is a downgrade too, and
-# `blocks_next_stage` joins by OR (`false < true`) so a rework round that re-emits the bare stub
-# cannot silently demote a boundary-blocking item to an FN-batched one. Scoped to
+# `blocks_next_stage` is sticky ONLY when the incoming stub re-emits WITHOUT the key, so a rework
+# round that drops it cannot silently demote a boundary-blocking item to an FN-batched one. An
+# explicit `false` is the author speaking and CLEARS the flag: the two cases are distinguished by
+# `has`, never by truthiness, because conflating them made `true` unclearable and turned a
+# bookkeeping divergence into a real gate. `--facts` now requires the key, so the sticky arm covers
+# only legacy payloads written before that. Scoped to
 # open_questions alone: _union_keyed stays untouched for facts.decisions, whose semantics do not
 # change.
 #
@@ -710,11 +715,14 @@ _FACTS_UNION_FILTER='
            then { status: "resolved" } else {} end)
         + (if ($new.resolution // null) == null and ($prev.resolution // null) != null
            then { resolution: $prev.resolution } else {} end)
-        + (if ($prev.blocks_next_stage // false) == true and ($new.blocks_next_stage // false) != true
+        + (if ($prev.blocks_next_stage // false) == true and (($new | has("blocks_next_stage")) | not)
            then { blocks_next_stage: true } else {} end);
       def _sweep_defaults:
+        # $ARGS.named, not a bare $sweep_stage: a hard reference makes the whole
+        # filter fail to COMPILE for any caller that does not pass --arg, which
+        # every test extracting this text is.
         ( ([ (.id // "") | scan("^sw-([A-Za-z]+)[0-9]*-") ] | first | first)
-          // (if $sweep_stage == "" then null else $sweep_stage end) ) as $slot
+          // (($ARGS.named.sweep_stage // "") | if . == "" then null else . end) ) as $slot
         | . + { status: (.status // "open") }
             + (if (.stage // null) == null and $slot != null
                then { stage: $slot } else {} end);
@@ -739,7 +747,8 @@ _FACTS_UNION_FILTER='
 
 # Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
 # union filter would otherwise persist an array no downstream reader can parse.
-# open_questions is held to the FULL sweep stub (.id, .class, .ref), not just .id: a partial
+# open_questions is held to the FULL sweep stub (.id, .class, .ref, .blocks_next_stage), not just
+# .id: a partial
 # item reaches the FN render with no anchor to resolve its options[] from, and the union would
 # have already replaced the incumbent object that did carry one. decisions stays id-only.
 # The three predicates come from sweep-stub-lib.sh and are passed in as jq arguments, never
@@ -763,7 +772,8 @@ _FACTS_VALIDATE_FILTER='
                      or ((.value | map(select((type != "object")
                                               or ((.id | type) != "string")
                                               or ((.class | type) != "string")
-                                              or ((.ref | type) != "string")))) | length) > 0)
+                                              or ((.ref | type) != "string")
+                                              or ((.blocks_next_stage | type) != "boolean")))) | length) > 0)
             | .key ] as $badstub
         | [ (.open_questions // [])[]
             | select(type == "object")
@@ -790,7 +800,7 @@ _FACTS_VALIDATE_FILTER='
           then "bad shape for " + ($badkeyed | join(", "))
                + " (expected an array of objects each with a string .id)"
           elif ($badstub | length) > 0
-          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref)"
+          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref and boolean .blocks_next_stage)"
           elif ($badid | length) > 0
           then "open_questions id " + ($badid | join(", ")) + " is not sw-<TASK_ID>-<n>"
           elif ($badclass | length) > 0
@@ -1609,7 +1619,7 @@ EOSTATE
   # The union REPLACES the incumbent object for that id, so admitting {id} alone would
   # silently drop the class/ref the FN render resolves options[] through.
   make_state
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}' \
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
     > /dev/null || {
       printf 'T19: a full sweep stub was rejected\n' >&2
       exit 1
@@ -1624,6 +1634,19 @@ EOSTATE
     printf 'T19: partial-stub guard (rc=%s): FAIL\n' "$st19_rc" >&2
     exit 1
   fi
+  # blocks_next_stage is required too: a stub that omits it is the demotion-by-omission the
+  # union's sticky arm used to absorb, refused here instead — at the door, before any merge.
+  cp .context/state.json .context/state.json.snap19b
+  st19b_rc=0
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}' \
+    > /dev/null 2>&1 || st19b_rc=$?
+  if [[ "$st19b_rc" -eq 2 ]] \
+    && diff -q .context/state.json .context/state.json.snap19b > /dev/null; then
+    printf 'T19: a stub omitting blocks_next_stage exits 2, state byte-unchanged: ok\n'
+  else
+    printf 'T19: missing-blocks_next_stage guard (rc=%s): FAIL\n' "$st19b_rc" >&2
+    exit 1
+  fi
   # decisions keeps the id-only contract: the tightening is scoped to open_questions.
   bash "$SELF" --facts '{"decisions":[{"id":"d1","summary":"s","ref":"planning-0.md#stages"}]}' \
     > /dev/null || {
@@ -1631,15 +1654,33 @@ EOSTATE
       exit 1
     }
 
-  # ---- T20: blocks_next_stage is raise-only across the union ----
-  # A rework round re-emits the bare stub; the flag the agent set earlier must survive it.
+  # ---- T20: raising blocks_next_stage is honoured ----
+  # The lattice's live half: an item written non-blocking can be raised to blocking later.
+  # Its other half — a stub that OMITS the key cannot demote — is now enforced one layer
+  # earlier by the T19 shape gate, so it can no longer be reached through --facts at all;
+  # the union's sticky arm survives for legacy payloads and is covered directly against the
+  # filter in tests/shell/skills/elicitation-sweep-contracts.bats.
+  make_state
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
+  if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
+    printf 'T20: raising blocks_next_stage is honoured: ok\n'
+  else
+    printf 'T20: a raise to blocking was refused: FAIL\n' >&2
+    exit 1
+  fi
+
+  # ---- T20b: an EXPLICIT false clears an incumbent true ----
+  # The OV-183 defect: the join ORed the flag, so once `true` landed no payload could clear
+  # it — not even the author's own artifact value — and the ledger permanently outvoted the
+  # stub it was derived from. Absent still sticks (T19 refuses it); explicit false does not.
   make_state
   bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}' > /dev/null
-  if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
-    printf 'T20: blocks_next_stage survives a bare re-emit: ok\n'
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
+  if jq -e '.facts.open_questions[0].blocks_next_stage == false' .context/state.json > /dev/null; then
+    printf 'T20b: an explicit false clears an incumbent true: ok\n'
   else
-    printf 'T20: blocks_next_stage was cleared by a bare re-emit: FAIL\n' >&2
+    printf 'T20b: explicit false could not clear the flag: FAIL\n' >&2
     exit 1
   fi
 
@@ -1661,7 +1702,7 @@ EOSTATE
   }
   t21_add() {
     bash "$SELF" --task-id DV1 --facts \
-      "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\"}]}" \
+      "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\",\"blocks_next_stage\":false}]}" \
       > /dev/null
   }
 

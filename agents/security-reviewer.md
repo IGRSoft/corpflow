@@ -249,7 +249,7 @@ Pass `--facts` in the **same call** — `state.json → facts.*` is the channel 
 ```bash
 state-patch.sh --stage SR --prev DR --facts '{
   "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}],
-  "open_questions": [{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at tail): it never clobbers DR's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.

@@ -504,8 +504,8 @@ Paste at the top of `.context/development-N.md`; N per `stage-contracts.md#run-i
 handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
-  summary: "<N files modified, M tests added>"
-  worktree: true               # MUST be true — see the worktree field notes below
+  summary: "<N files changed, M tests added>"
+  worktree: true               # MUST be true — see the worktree notes below
   worktree_path: <abs path>    # OPTIONAL — see field notes
   worktree_branch: <branch>    # OPTIONAL — see field notes
   files_touched:
@@ -513,9 +513,9 @@ handoff:
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   open_questions:
-    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep" }
+    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    decisions: architecture-N.md#decisions     # ONLY when AR ran; omit
+    decisions: architecture-N.md#decisions    # ONLY when AR ran; omit
     coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
     tests: development-N.md#tests-added
   architecture:                # ONLY when AR ran; omit the object otherwise
@@ -548,7 +548,7 @@ state-patch.sh --stage DV --prev <PREV> --facts '{
   "files_modified": ["Sources/Foo.swift"],
   "tests_added": ["Tests/FooTests.swift"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
-  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.

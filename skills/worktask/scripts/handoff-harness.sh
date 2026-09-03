@@ -185,7 +185,10 @@ _sweep_yq() {  # <expr> <fmfile>
 # interpolated here and passed as jq arguments there, never re-stated in either place.
 #
 # The trailing STUB rows are the id/ref inventory the anchor and ledger-parity checks walk;
-# they cover map items only, so those two never have to re-ask what shape an item was.
+# they cover map items only, so those two never have to re-ask what shape an item was. FLAGS
+# is a SECOND inventory rather than three more fields on STUB: check_sweep_ref_anchor splits a
+# STUB row on its first space and takes the rest as the ref, so a widened row would silently
+# hand it a ref with trailing junk.
 _sweep_scan() {  # <fmfile> -> tagged rows on stdout
   local base='[.handoff.open_questions[]?] | to_entries | .[]'
   local classexpr="" cls
@@ -200,7 +203,9 @@ _sweep_scan() {  # <fmfile> -> tagged rows on stdout
     + [$base | $ismap | select(((.value.id // \"\") | tostring) | test(\"$SWEEP_ID_RE\") | not) | \"BADID \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
     + [$base | $ismap | select($classexpr) | \"BADCLASS \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
     + [$base | $ismap | select(((.value.ref // \"\") | tostring) | test(\"$SWEEP_REF_RE\") | not) | \"NOREF \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
+    + [$base | $ismap | select((.value.blocks_next_stage | tag) != \"!!bool\") | \"NOFLAG \" + (.key | tostring) + \" \" + ((.value.id // \"\") | tostring)]
     + [$base | $ismap | \"STUB \" + ((.value.id // \"\") | tostring) + \" \" + ((.value.ref // \"\") | tostring)]
+    + [$base | $ismap | \"FLAGS \" + ((.value.id // \"\") | tostring) + \" \" + ((.value.class // \"\") | tostring) + \" \" + ((.value.blocks_next_stage // false) | tostring)]
   ) | .[]" "$1"
 }
 
@@ -226,7 +231,7 @@ _sweep_rows() {  # <TAG>
 # own sentence. Offenders are addressed by index, the only identity a non-map item has.
 check_sweep_stub_shape() {
   local fmfile="$1" rc=0 line
-  local oqtype nonmap badid badclass noref
+  local oqtype nonmap badid badclass noref noflag
 
   _sweep_load "$fmfile" || return 1
 
@@ -244,10 +249,11 @@ check_sweep_stub_shape() {
   badid=$(_sweep_rows BADID)
   badclass=$(_sweep_rows BADCLASS)
   noref=$(_sweep_rows NOREF)
+  noflag=$(_sweep_rows NOFLAG)
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    echo "fail: open_questions[$line] is not a sweep stub — every item is { id: sw-<TASK_ID>-<n>, class: decision|escalate, ref: \"<artifact>-N.md#elicitation-sweep\" }" >&2
+    echo "fail: open_questions[$line] is not a sweep stub — every item is { id: sw-<TASK_ID>-<n>, class: decision|escalate, ref: \"<artifact>-N.md#elicitation-sweep\", blocks_next_stage: false }" >&2
     rc=1
   done <<< "$nonmap"
   while IFS= read -r line; do
@@ -265,6 +271,11 @@ check_sweep_stub_shape() {
     echo "fail: sweep stub $(_sweep_label "$line") carries no ref anchor — add ref: \"<artifact>-N.md#elicitation-sweep\" (an optional .md path plus one non-empty #anchor)" >&2
     rc=1
   done <<< "$noref"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    echo "fail: sweep stub $(_sweep_label "$line") carries no blocks_next_stage — add blocks_next_stage: false (or true only if the next stage would build on a guess)" >&2
+    rc=1
+  done <<< "$noflag"
   return $rc
 }
 
@@ -345,8 +356,9 @@ state_unreadable_reason() {
 # would otherwise pass parity by never running it. An empty open_questions array leaves
 # nothing to compare, so the check is silent.
 check_sweep_ledger() {
-  local fmfile="$1"
-  local ids id missing unreadable
+  local fmfile="$1" artifact="${2:-}"
+  local ids id missing unreadable divergent artname
+  artname=$(basename "${artifact:-the artifact}")
   _sweep_load "$fmfile" || return 1
   ids=$(_sweep_rows STUB | sed 's/ .*//')
   [[ -n "$ids" ]] || return 0
@@ -387,11 +399,63 @@ check_sweep_ledger() {
     echo "fail: sweep ledger parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— facts.open_questions in $STATE_ARG could not be read as an array of stubs: ${missing%%$'\n'*}" >&2
     return 1
   fi
-  [[ -n "$missing" ]] || return 0
-  while IFS= read -r id; do
-    [[ -n "$id" ]] || continue
-    echo "fail: sweep stub $id is in the frontmatter but not in facts.open_questions[] — pass it in the state-patch.sh --facts payload, or the FN gate never sees it" >&2
-  done <<< "$missing"
+  if [[ -n "$missing" ]]; then
+    while IFS= read -r id; do
+      [[ -n "$id" ]] || continue
+      echo "fail: sweep stub $id is in the frontmatter but not in facts.open_questions[] — pass it in the state-patch.sh --facts payload, or the FN gate never sees it" >&2
+    done <<< "$missing"
+    return 1
+  fi
+
+  # Stub parity, not just id parity. The arm above catches an item that never reached the
+  # ledger; this one catches an item that reached it carrying DIFFERENT values. Same two
+  # transports, same absence of any derivation between them, and until this existed the only
+  # cross-check was on id — so a stub saying `blocks_next_stage: false` beside a ledger entry
+  # saying `true` validated clean, and the orchestrator read the ledger, joined raise-only and
+  # held a boundary gate for an item its own author had marked non-blocking (OV-183).
+  #
+  # This is deliberately NOT a join: the two copies have ONE author, so a disagreement is a
+  # defect and not a lattice (`skills/shared/stage-contracts.md § Self-labels raise, never
+  # lower`). The harness refuses and names both values; reconciling is the agent's job, because
+  # a harness that picked a winner would be guessing which copy the author meant.
+  #
+  # An absent flag normalises to `false` on BOTH sides, its documented default, so a legacy
+  # ledger entry written before the field was required does not read as divergence.
+  #
+  # The LIVE ledger only — deliberately not the spill, which the id arm above does read. The
+  # spill is an append-only record of what was evicted, never rewritten, so a re-emitted stub
+  # legitimately disagrees with its own older eviction line; comparing against it would fail
+  # rework rounds for doing exactly what the carry-forward contract asks. An item that exists
+  # only in the spill has no live row to diverge from, so nothing is lost by skipping it.
+  divergent=$(_sweep_rows FLAGS)
+  [[ -n "$divergent" ]] || return 0
+  # Every emitted field is non-empty — an absent ledger class prints as "(absent)" rather
+  # than "" — because tab is IFS whitespace, so `read` would collapse an empty column and
+  # silently shift every value after it into the wrong variable.
+  if ! divergent=$(printf '%s\n' "$divergent" | jq -r -R -s --slurpfile st "$STATE_ARG" '
+      def _norm: { class: (if (.class // "") == "" then "(absent)" else .class end),
+                   flag: ((.blocks_next_stage // false) | tostring) };
+      ( ( ($st[0].facts.open_questions? // []) | map({ key: .id, value: _norm }) )
+        | from_entries ) as $have
+      | split("\n") | map(select(length > 0))
+      | map((. / " ") as $c | { id: $c[0], class: $c[1], flag: $c[2] })
+      | map(select($have[.id] != null))
+      | map(select(.class != $have[.id].class or .flag != $have[.id].flag))
+      | .[] | [.id, .class, .flag, $have[.id].class, $have[.id].flag] | @tsv' 2>&1); then
+    echo "fail: sweep stub parity cannot be verified for $(echo "$ids" | tr '\n' ' ')— facts.open_questions in $STATE_ARG could not be read as an array of stubs: ${divergent%%$'\n'*}" >&2
+    return 1
+  fi
+  [[ -n "$divergent" ]] || return 0
+  local fid fclass fflag lclass lflag
+  while IFS=$'\t' read -r fid fclass fflag lclass lflag; do
+    [[ -n "$fid" ]] || continue
+    if [[ "$fflag" != "$lflag" ]]; then
+      echo "fail: sweep stub $fid disagrees across transports — blocks_next_stage is $fflag in $artname but $lflag in facts.open_questions[]. Reconcile both to the intended value (the artifact is the author's copy); do not leave them divergent" >&2
+    fi
+    if [[ "$fclass" != "$lclass" ]]; then
+      echo "fail: sweep stub $fid disagrees across transports — class is $fclass in $artname but $lclass in facts.open_questions[]. Reconcile both to the intended value (the artifact is the author's copy); do not leave them divergent" >&2
+    fi
+  done <<< "$divergent"
   return 1
 }
 
@@ -521,7 +585,7 @@ validate_frontmatter() {
   fi
 
   if [[ -n "$STATE_ARG" ]]; then
-    if ! check_sweep_ledger "$fmfile"; then
+    if ! check_sweep_ledger "$fmfile" "$f"; then
       rm -f "$fmfile"
       return 1
     fi
@@ -689,7 +753,7 @@ handoff:
     - { id: ad1, summary: "Atomic write", anchor: "architecture.md#decisions" }
   next_stage_focus: "TL fans out edits"
   open_questions:
-    - { id: sw-AR0-1, class: decision, ref: "architecture.md#elicitation-sweep" }
+    - { id: sw-AR0-1, class: decision, ref: "architecture.md#elicitation-sweep", blocks_next_stage: false }
   refs: { plan: planning-0.md#requirements }
 ---
 
@@ -944,17 +1008,40 @@ self_test_ar_gate() {
     echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'
-    echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep" }'
+    echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
     echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
   } > "$ctx/dv-stub.md"
-  jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep"}]' \
+  jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
      "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
   _ar_case "sweep/stub+ledger"        "$ctx/state-stub.json"    0 0 -                                              "$ctx/dv-stub.md"
   _ar_case "sweep/stub+not-in-ledger" "$ctx/state-no-ar.json"   0 1 "fail: sweep stub sw-DV0-1 is in the frontmatter" "$ctx/dv-stub.md"
   _ar_case "sweep/stub+missing-state" "$ctx/nope.json"          0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
   _ar_case "sweep/stub+corrupt-state" "$ctx/state-corrupt.json" 0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
   _ar_case "sweep/nostub+missing-state" "$ctx/nope.json"        0 0 "warn: AR-ref check skipped"                    "$ctx/dv-no-ref.md"
+
+  # Stub parity: id agreement is not agreement. Each ledger below carries the SAME id as
+  # dv-stub.md and differs in exactly one field, so a pass here could only come from a check
+  # that never looked. The agreeing case is the anti-vacuity arm — normalising an absent flag
+  # to false must not manufacture a divergence out of a legacy ledger entry.
+  jq '.facts.open_questions[0].blocks_next_stage = true' \
+     "$ctx/state-stub.json" > "$ctx/state-stub-flag.json"
+  jq '.facts.open_questions[0].class = "escalate"' \
+     "$ctx/state-stub.json" > "$ctx/state-stub-class.json"
+  jq 'del(.facts.open_questions[0].blocks_next_stage)' \
+     "$ctx/state-stub.json" > "$ctx/state-stub-noflag.json"
+  _ar_case "sweep/stub+flag-divergence"  "$ctx/state-stub-flag.json"   0 1 \
+    "fail: sweep stub sw-DV0-1 disagrees across transports — blocks_next_stage is false in dv-stub.md but true" "$ctx/dv-stub.md"
+  _ar_case "sweep/stub+class-divergence" "$ctx/state-stub-class.json"  0 1 \
+    "fail: sweep stub sw-DV0-1 disagrees across transports — class is decision in dv-stub.md but escalate" "$ctx/dv-stub.md"
+  _ar_case "sweep/stub+flag-absent-in-ledger" "$ctx/state-stub-noflag.json" 0 0 - "$ctx/dv-stub.md"
+
+  # F4: the flag is required on the frontmatter side too, so the divergence check can never be
+  # dodged by simply omitting the field the ledger disagrees with.
+  _dv_artifact "$ctx/dv-noflag.md" '    dev: development.md#files-changed' \
+    '  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: "dv-noflag.md#elicitation-sweep" }'
+  _ar_case "sweep/stub+no-flag" - 0 1 "fail: sweep stub sw-DV0-1 carries no blocks_next_stage" "$ctx/dv-noflag.md"
 
   # The stub is the ONLY item shape: the two pre-sweep forms and a mistyped class are
   # rejected by name, so the diagnostic tells the agent what to write instead.
@@ -966,7 +1053,7 @@ self_test_ar_gate() {
     - { id: q2, summary: "bare object" }'
   _dv_artifact "$ctx/dv-bad-class.md" '    dev: development.md#files-changed' \
     '  open_questions:
-    - { id: sw-DV0-9, class: advisory, ref: "dv-bad-class.md#elicitation-sweep" }'
+    - { id: sw-DV0-9, class: advisory, ref: "dv-bad-class.md#elicitation-sweep", blocks_next_stage: false }'
   _ar_case "sweep/legacy-string" - 0 1 "fail: open_questions\[0\] is not a sweep stub" "$ctx/dv-legacy-string.md"
   _ar_case "sweep/legacy-bare"   - 0 1 'fail: open_questions\[0\] id "q2" is not sw-'   "$ctx/dv-legacy-bare.md"
   _ar_case "sweep/bad-class"     - 0 1 "fail: sweep stub sw-DV0-9 class is not decision|escalate" "$ctx/dv-bad-class.md"
@@ -975,7 +1062,7 @@ self_test_ar_gate() {
   # (invisible to `[]?`) must both fail by name rather than pass on the read error.
   _dv_artifact "$ctx/dv-int-id.md" '    dev: development.md#files-changed' \
     '  open_questions:
-    - { id: 5, class: decision, ref: "dv-int-id.md#elicitation-sweep" }'
+    - { id: 5, class: decision, ref: "dv-int-id.md#elicitation-sweep", blocks_next_stage: false }'
   _dv_artifact "$ctx/dv-scalar.md" '    dev: development.md#files-changed' \
     '  open_questions: "none"'
   _ar_case "sweep/int-id"  - 0 1 'fail: open_questions\[0\] id "5" is not sw-'        "$ctx/dv-int-id.md"
@@ -985,7 +1072,7 @@ self_test_ar_gate() {
   # same file: it resolves rather than failing as missing.
   _dv_artifact "$ctx/dv-ctx-ref.md" '    dev: development.md#files-changed' \
     "  open_questions:
-    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\" }"
+    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }"
   _ar_case "sweep/dir-prefixed-ref" - 0 0 - "$ctx/dv-ctx-ref.md"
 }
 

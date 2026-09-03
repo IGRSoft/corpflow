@@ -178,7 +178,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage IR --prev USER --facts '{
   "decisions": [{"id":"ir-root-cause","summary":"≤160 chars","ref":"incident-0.md#root-cause"}],
-  "open_questions": [{"id":"sw-IR0-1","class":"decision","ref":"incident-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-IR0-1","class":"decision","ref":"incident-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Canonical rule: `handoff-protocol.md#facts-union`.

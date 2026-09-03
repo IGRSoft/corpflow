@@ -213,7 +213,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 state-patch.sh --stage RE --prev <PREV> --facts '{
   "decisions": [{"id":"re-version","summary":"v4.1.0 (minor: facts-union op)","ref":"release-0.md#version"}],
   "files_modified": ["CHANGELOG.md"],
-  "open_questions": [{"id":"sw-RE0-1","class":"decision","ref":"release-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-RE0-1","class":"decision","ref":"release-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
