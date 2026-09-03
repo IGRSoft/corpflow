@@ -249,13 +249,18 @@ JSON
 }
 
 @test "R9a: the root is discovered from the script's own location when unset" {
-  # No CLAUDE_PLUGIN_ROOT: rung 3 of plugin-root-resolution.md must find the real
-  # root by walking up from skills/self-improvement/scripts/.
-  cd "$WD"
+  # Rung 3 of plugin-root-resolution.md, in isolation: CLAUDE_PLUGIN_ROOT is
+  # emptied and the cwd is a directory that is NOT a plugin root, so the
+  # BASH_SOURCE walk-up is the only rung that can resolve anything — and it
+  # resolves to the REAL repo, whose agents/developer.md is what gets asserted.
+  mkdir -p "$WD/elsewhere"
+  cd "$WD/elsewhere"
   cat > "$WD/tasks.json" <<'JSON'
 {"tasks":{"DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}}}}
 JSON
-  LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" run bash "$PLUGIN_ROOT/$SCRIPT"
+  [ -f "$PLUGIN_ROOT/agents/developer.md" ]
+  CLAUDE_PLUGIN_ROOT= LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
+    run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output --partial "agents/developer.md"
 }
