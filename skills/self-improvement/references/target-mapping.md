@@ -79,8 +79,29 @@ Cross-plugin target skipped: <qualified-agent> lives in <plugin>, not editable f
   ```
 
 - **Git trailers:** where project policy uses them, scan `git log <agent_sha>..HEAD --format=%B` for `Agent:` / `Stage:` lines.
+- **Audit log** (`.context/logs/audit.jsonl`) — the only source that sees non-agent
+  participants. Row shapes and the path each maps to: § Audit-log row shapes below.
 
-All sources produce file paths: deduplicate, then drop paths that don't exist on disk.
+### Audit-log row shapes
+
+One JSON object per line; four shapes carry participation, each mapping to one path:
+
+| Row field | Value shape | Path |
+|---|---|---|
+| `actor` | `hook:<n>` or `<plugin>:hook:<n>` | `hooks/<n>.sh` |
+| `metadata.tool` | `<n>.sh` | resolved by basename |
+| `metadata.via` | `<n>.sh` | resolved by basename |
+| `subject`, on a row with `metadata.kind == "tool"` | bare helper name, `.sh` implied | resolved by basename |
+
+Basenames resolve against `hooks/`, `hooks/lib/`, `scripts/` and `skills/*/scripts/` under the
+plugin root — a helper's directory is not derivable from its name.
+
+### Resolving the emitted paths
+
+All sources produce file paths: deduplicate, then drop paths that don't exist **relative to the
+plugin root** (`skills/shared/plugin-root-resolution.md`). Testing against the process cwd is what
+made the production invocation return the empty set: the pipeline runs from the worktask's repo
+while every candidate lives under the plugin root.
 
 ## Cross References
 

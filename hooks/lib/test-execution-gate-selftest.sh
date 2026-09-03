@@ -356,13 +356,45 @@ EOF
       && echo seed > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
     printf '{"run_index":0,"tasks":{"QA0":{"status":"in_progress"}}}' > "$_ctxd/.context/state.json"
     _pd='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}'
+    _pdok='{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"},"tool_response":{"stdout":"7 tests, 0 failures"}}'
+    _promote="$(dirname "$0")/test-execution-promote.sh"
     _od1=$( cd "$_ctxd" && run_gate "$_pd" "$_ctxd/.context" )
+    # The PreToolUse marker denies nothing until the companion promotes it: a
+    # deny here would mean an invocation that produced nothing had claimed the
+    # tree, which is the whole defect this handshake removes.
+    _od1b=$( cd "$_ctxd" && run_gate "$_pd" "$_ctxd/.context" )
+    printf '%s' "$_pdok" | CLAUDE_PROJECT_DIR="$_ctxd" bash "$_promote" >/dev/null 2>&1
     _od2=$( cd "$_ctxd" && run_gate "$_pd" "$_ctxd/.context" )
     [ -z "$_od1" ] \
       || { echo "test-execution-gate: self-test FAIL (first run should allow)"; _fail=1; }
+    [ -z "$_od1b" ] \
+      || { echo "test-execution-gate: self-test FAIL (unpromoted marker must not deny)"; _fail=1; }
     printf '%s' "$_od2" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
-      || { echo "test-execution-gate: self-test FAIL (repeat run should dedupe)"; _fail=1; }
+      || { echo "test-execution-gate: self-test FAIL (promoted run should dedupe)"; _fail=1; }
   fi
+
+  # node is a runner only with --test; a bare script run is not test execution.
+  _ctxn="$_tmp/node/.context"; mkdir -p "$_ctxn"
+  printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctxn/state.json"
+  _on1=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"node --test test/"}}' "$_ctxn")
+  printf '%s' "$_on1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (node --test must deny at DR)"; _fail=1; }
+  _on2=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"node scripts/build.js"}}' "$_ctxn")
+  [ -z "$_on2" ] || { echo "test-execution-gate: self-test FAIL (bare node must allow)"; _fail=1; }
+
+  # A command that only NAMES runners in its payload executes nothing.
+  _op1=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"jq -cn --arg m \"ran bats; pytest tests/\" \"{note:$m}\""}}' "$_ctxn")
+  [ -z "$_op1" ] || { echo "test-execution-gate: self-test FAIL (prose naming runners must allow)"; _fail=1; }
+
+  # A settled ledger whose verification stage recorded a no-go keeps authority.
+  _ctxr="$_tmp/remediate/.context"; mkdir -p "$_ctxr"
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"ok"},"QA0":{"status":"completed","verdict":"no-go"}}}' > "$_ctxr/state.json"
+  _or1=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctxr")
+  [ -z "$_or1" ] || { echo "test-execution-gate: self-test FAIL (open no-go must retain QA authority)"; _fail=1; }
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"ok"},"QA0":{"status":"completed","verdict":"go"}}}' > "$_ctxr/state.json"
+  _or2=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"./run-tests.sh"}}' "$_ctxr")
+  printf '%s' "$_or2" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+    || { echo "test-execution-gate: self-test FAIL (flipped verdict must close the window)"; _fail=1; }
 
   if [ "$_fail" -ne 0 ]; then
     echo "test-execution-gate: self-test FAIL"

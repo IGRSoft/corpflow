@@ -46,8 +46,18 @@
 #      Flags non-canonical names (e.g. arch-0.md instead of
 #      architecture-0.md). Exits 1 on any violation.
 #
-#   5. Self-test:
-#        cache-lint.sh --self-test
+#   5. Agent-section cross-check:
+#        cache-lint.sh --agent-section-lint [<repo-root>]
+#      For every stage, resolves that stage's agent file and asserts each `## X`
+#      section its prose instructs it to write into the stage artifact is already
+#      accepted by this lint (stage allow-list row, UNIVERSAL_ANCHORS, or
+#      OPTIONAL_ANCHOR_RE). Catches contradiction shape (iv): an agent mandating a
+#      heading anchor_lint rejects, which no artifact can satisfy. Names both files.
+#      Extraction under-matches by design — see agent_mandated_sections.
+#      Exits 1 on any unaccepted mandate.
+#
+#   6. Self-test:
+#        cache-lint.sh --self-test   (alias: --selftest)
 #      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
 # Reference: skills/worktask/references/handoff-protocol.md#cache-prefix
@@ -103,7 +113,13 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 #                      the two H2s agents/software-architector.md mandates in every AR artifact,
 #                      the first named for the detected platform. Title-case by that agent's own
 #                      template, so they are matched literally rather than as kebab anchors.
-OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture)$'
+#   Blockers, DV Completion Checklist, Incident Report, Release Preparation Summary,
+#   Self-Improvement    the same class as the two above: an H2 its stage agent's prose MANDATES
+#                      into the stage artifact while anchors_for_stage never listed it. Each is
+#                      ACCEPTED, never required, so no existing artifact retroactively fails —
+#                      agent_section_lint below is what stops the next one from being added
+#                      silently.
+OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture|Blockers|DV Completion Checklist|Incident Report|Release Preparation Summary|Self-Improvement)$'
 
 # ---------- Frontmatter stage extractor ----------
 # Prints stage code on stdout; empty if not found.
@@ -180,6 +196,93 @@ anchor_lint() {
   fi
 
   echo "anchor-lint: $artifact (stage=$stage) ok"
+}
+
+# ---------- Agent-section cross-check (#16 letter b) ----------
+# Reverse of agent_basename_to_stage. Kept as its own case rather than derived by
+# scanning, so the two directions can never disagree about a stage code.
+stage_to_agent_basename() {
+  case "$1" in
+    PL) echo product-manager ;;
+    AR) echo software-architector ;;
+    TL) echo team-lead ;;
+    DV) echo developer ;;
+    DR) echo technical-lead ;;
+    SR) echo security-reviewer ;;
+    QA) echo qa-engineer ;;
+    DC) echo technical-writer ;;
+    RE) echo release-engineer ;;
+    FN) echo project-manager ;;
+    ST) echo stakeholder ;;
+    IR) echo incident-responder ;;
+    ET) echo ethics-reviewer ;;
+    *) echo "" ;;
+  esac
+}
+
+# The H2 names an agent's prose INSTRUCTS it to write into its own stage artifact.
+#
+# Deliberately under-matching (AD-6): a false negative leaves today's behaviour, while a
+# false positive would block correct work by rejecting a section no agent ever mandated.
+# Three filters, all conservative:
+#   1. The name must sit in its own code span opening with `## ` — `development-N.md ## decisions`
+#      is one span starting with a filename and is not a mandate this check can read.
+#   2. The SAME line must name a stage-artifact file (`<name>-N.md`, `-0.md`, `release-*.md`).
+#      That is what separates "write this into your artifact" from a cross-reference to another
+#      document's heading, and it is why `.context/errors/developer.md` — no run-index segment —
+#      never reaches the check.
+#   3. A placement word must be ADJACENT to the span — introducing it (`under \x60## X\x60`) or
+#      following it (`\x60## X\x60 section`). Same-line proximity is not enough: developer.md
+#      L475 cites `## decisions` in prose on a line that separately names `development-N.md`,
+#      and security-reviewer.md L65 reaches "read as \x60git diff\x60" and "\x60## anchor\x60" on
+#      one line ending in `security-review-N.md`. Adjacency rejects both; a loose same-line
+#      word test accepted both.
+#   4. Placeholder names are dropped: anything holding `<`, `[`, or a bare trailing ` N`/`-N`
+#      segment cannot be compared literally against an allow-list entry.
+agent_mandated_sections() {
+  local agent="$1"
+  grep -E '`## ' "$agent" 2>/dev/null \
+    | grep -E '[a-z][a-z-]*-(N|\*|[0-9]+)\.md' \
+    | grep -E '(under|over|as|into|H2)[[:space:]]+`##[[:space:]]|`##[[:space:]][^`]+`[[:space:]]+(sections?|H2|headings?)' \
+    | grep -oE '`## [^`]+`' \
+    | sed -e 's/^`## //' -e 's/`$//' -e 's/[[:space:]]*$//' \
+    | grep -vE '[<>[]' \
+    | grep -vE '(^|[ -])N$' \
+    | sort -u
+}
+
+# For each stage: every section its agent mandates must already be accepted by the lint
+# (stage row ∪ UNIVERSAL_ANCHORS ∪ OPTIONAL_ANCHOR_RE). The failure this catches is
+# contradiction shape (iv) — an agent told to write an H2 that anchor_lint then rejects,
+# which no artifact author can satisfy. Both files are named because the fix is a choice
+# between them, not a mechanical edit to one.
+agent_section_lint() {
+  local root="${1:-.}" rc=0 checked=0
+  local stage agent_base agent expected sect
+  for stage in PL AR TL DV DR SR QA DC RE FN ST IR ET; do
+    agent_base=$(stage_to_agent_basename "$stage")
+    agent="$root/agents/$agent_base.md"
+    [[ -f "$agent" ]] || continue
+    checked=$((checked + 1))
+    expected="$(anchors_for_stage "$stage") $UNIVERSAL_ANCHORS"
+    while IFS= read -r sect; do
+      [[ -n "$sect" ]] || continue
+      if grep -qE "$OPTIONAL_ANCHOR_RE" <<< "$sect"; then continue; fi
+      if grep -qx -- "$sect" <<< "$(printf '%s\n' $expected)"; then continue; fi
+      echo "agent-section-lint: FAIL stage=$stage" >&2
+      echo "  agents/$agent_base.md mandates '## $sect' into its artifact" >&2
+      echo "  skills/worktask/scripts/cache-lint.sh accepts neither anchors_for_stage $stage" \
+        "nor UNIVERSAL_ANCHORS nor OPTIONAL_ANCHOR_RE" >&2
+      rc=1
+    done <<< "$(agent_mandated_sections "$agent")"
+  done
+
+  if [[ $checked -eq 0 ]]; then
+    echo "agent-section-lint: no stage agents found under $root/agents/" >&2
+    return 1
+  fi
+  [[ $rc -eq 0 ]] && echo "agent-section-lint: $checked stage agents checked, all mandated sections accepted"
+  return $rc
 }
 
 # ---------- Prefix lint ----------
@@ -569,6 +672,11 @@ filename_lint() {
 
 # ---------- Self-test ----------
 self_test() {
+  # Three levels up from skills/worktask/scripts/ is the plugin root. Resolved from
+  # BASH_SOURCE, never $PWD: the self-test is run from arbitrary cwds (bats tempdirs,
+  # CI checkouts) and a cwd-relative root silently checks the wrong agents/ or none.
+  local SELF_REPO_ROOT
+  SELF_REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd) || SELF_REPO_ROOT="."
   local td
   td=$(mktemp -d -t cache-lint-XXXXXX)
   trap "rm -rf '$td'" EXIT
@@ -962,6 +1070,40 @@ EOF
     echo "self-test: filename-lint reject non-canonical: ok"
   fi
 
+  # Agent-section cross-check: a fixture agent mandating an UNLISTED section fails and
+  # names both files; one mandating a listed section passes; a backticked `## X` with no
+  # artifact filename on the line is not matched (the under-match constraint, AD-6).
+  mkdir -p "$td/repo/agents"
+  cat > "$td/repo/agents/developer.md" <<'EOF'
+Write the summary to `development-N.md` under `## totally-unlisted-section` now.
+EOF
+  local sect_out=""
+  sect_out=$("$0" --agent-section-lint "$td/repo" 2>&1) || true
+  if grep -q "totally-unlisted-section" <<< "$sect_out" \
+    && grep -q 'agents/developer.md' <<< "$sect_out" \
+    && grep -q 'cache-lint.sh' <<< "$sect_out"; then
+    echo "self-test: agent-section-lint reject unlisted: ok"
+  else
+    echo "self-test: agent-section-lint reject unlisted: FAIL (unlisted section accepted)" >&2; exit 1
+  fi
+
+  cat > "$td/repo/agents/developer.md" <<'EOF'
+Write the summary to `development-N.md` under `## files-changed`.
+A bare mention of `## another-unlisted` with no artifact filename is not a mandate.
+EOF
+  if "$0" --agent-section-lint "$td/repo" >/dev/null 2>&1; then
+    echo "self-test: agent-section-lint accept listed + under-match: ok"
+  else
+    echo "self-test: agent-section-lint accept listed + under-match: FAIL" >&2; exit 1
+  fi
+
+  # The real tree must satisfy the same invariant — this is the #16 gate DV3 re-runs.
+  if "$0" --agent-section-lint "$SELF_REPO_ROOT" >/dev/null 2>&1; then
+    echo "self-test: agent-section-lint against this repo: ok"
+  else
+    echo "self-test: agent-section-lint against this repo: FAIL" >&2; exit 1
+  fi
+
   echo "self-test: ALL PASS"
 }
 
@@ -976,7 +1118,15 @@ case "${1:-}" in
     shift; [[ $# -ge 1 ]] || usage
     filename_lint "$1"; exit $?
     ;;
-  --self-test)   self_test ;;
+  --agent-section-lint)
+    shift
+    agent_section_lint "${1:-.}"; exit $?
+    ;;
+  # `--selftest` is accepted alongside `--self-test`: the unhyphenated spelling is what
+  # coordination-0.md and the DV2->DV3 #16 contract name, and without the alias it falls
+  # through to the prefix-lint arm and reports "log not found" — a green contract command
+  # that ran no test at all.
+  --self-test|--selftest)   self_test ;;
   "") usage ;;
   *) prefix_lint "$1"; exit $? ;;
 esac

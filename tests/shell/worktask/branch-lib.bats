@@ -548,3 +548,33 @@ TABLE
   run bash -c "STATE_PATH=.context/state.json; . '$PLUGIN_ROOT/$LIB'; fn_batch_scope"
   assert_failure 1
 }
+
+# ---------------------------------------------------------------------------
+# R10/#9 — the dry-run guard lives inside audit_fn, not at the call sites.
+# branch-name.sh's ladder has nine auditing arms; a per-arm check is nine
+# chances to forget, and the arm that forgets spends the naming window.
+# ---------------------------------------------------------------------------
+
+@test "R10: AUDIT_DRY_RUN=1 suppresses the row and still returns success" {
+  cd "$WD"
+  mkdir -p .context/logs
+  printf '{"worktask_id":"wt","run_index":0,"tasks":{}}' > .context/state.json
+  run bash -c "set -e; . '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'
+    AUDIT_DRY_RUN=1 audit_fn branch_renamed noop '{}'
+    echo rc=\$?"
+  assert_success
+  assert_output --partial "rc=0"
+  [ ! -s "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "R10: without the flag the row is still written (the guard is not a mute switch)" {
+  cd "$WD"
+  mkdir -p .context/logs
+  printf '{"worktask_id":"wt","run_index":0,"tasks":{}}' > .context/state.json
+  run bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'
+    audit_fn branch_renamed noop '{}'"
+  assert_success
+  [ -s "$WD/.context/logs/audit.jsonl" ]
+  run jq -r '.action' "$WD/.context/logs/audit.jsonl"
+  assert_output "branch_renamed"
+}

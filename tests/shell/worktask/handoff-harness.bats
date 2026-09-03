@@ -125,43 +125,105 @@ sweep_artifact() {  # <path> <stub-yaml>
 }
 
 @test "sweep: an empty ref fails the shape gate" {
-  sweep_artifact "$WD/dv-empty-ref.md" '{ id: sw-DV0-1, class: decision, ref: "" }'
+  sweep_artifact "$WD/dv-empty-ref.md" '{ id: sw-DV0-1, class: decision, ref: "", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-empty-ref.md"
   assert_failure 1
   assert_output --partial "sw-DV0-1 carries no ref anchor"
 }
 
 @test "sweep: a ref naming no anchor fails the shape gate" {
-  sweep_artifact "$WD/dv-no-anchor.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md" }'
+  sweep_artifact "$WD/dv-no-anchor.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-no-anchor.md"
   assert_failure 1
   assert_output --partial "sw-DV0-1 carries no ref anchor"
 }
 
 @test "sweep: an uppercase anchor fails — anchors are lowercase-kebab" {
-  sweep_artifact "$WD/dv-caps.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md#Elicitation_Sweep" }'
+  sweep_artifact "$WD/dv-caps.md" '{ id: sw-DV0-1, class: decision, ref: "planning-0.md#Elicitation_Sweep", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-caps.md"
   assert_failure 1
   assert_output --partial "sw-DV0-1 carries no ref anchor"
 }
 
 @test "sweep: an anchor-only ref resolves to the emitting artifact and passes" {
-  sweep_artifact "$WD/dv-anchor-only.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  sweep_artifact "$WD/dv-anchor-only.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-anchor-only.md"
   assert_success
 }
 
 @test "sweep: the class vocabulary is the library's, not a re-spelling" {
-  sweep_artifact "$WD/dv-class.md" '{ id: sw-DV0-1, class: question, ref: "#elicitation-sweep" }'
+  sweep_artifact "$WD/dv-class.md" '{ id: sw-DV0-1, class: question, ref: "#elicitation-sweep", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-class.md"
   assert_failure 1
   assert_output --partial "class is not decision|escalate"
 }
 
+@test "sweep: a stub omitting blocks_next_stage fails the shape gate" {
+  # The field is required, not optional-with-a-default: an absent flag is indistinguishable
+  # from an explicit false, and that ambiguity is what let the two transports disagree.
+  sweep_artifact "$WD/dv-noflag.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-noflag.md"
+  assert_failure 1
+  assert_output --partial "sw-DV0-1 carries no blocks_next_stage"
+}
+
+# --- stub parity: id agreement is not agreement -------------------------------
+#
+# The frontmatter stub and facts.open_questions[] have two writers and no derivation
+# between them. Until these cases existed the only cross-check was on id, so an item whose
+# ledger copy said `blocks_next_stage: true` beside an artifact saying `false` validated
+# clean and the orchestrator held a boundary gate its own author had waived.
+
+parity_state() {  # <path> <class> <blocks|omit>
+  local flag="{}"
+  [ "$3" = "omit" ] || flag="{\"blocks_next_stage\": $3}"
+  jq -n --arg cls "$2" --argjson flag "$flag" \
+    '{version: 2, worktask_id: "t", plan_file: ".context/planning-0.md", platform: "all",
+      run_index: 0, tasks: {DV0: {status: "in_progress"}},
+      facts: {files_modified: [], tests_added: [], decisions: [],
+              open_questions: [({id: "sw-DV0-1", class: $cls, ref: "#elicitation-sweep"} + $flag)]},
+      handoffs: {}}' > "$1"
+}
+
+@test "parity: a blocks_next_stage divergence fails and names both transports" {
+  sweep_artifact "$WD/dv-parity-flag.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  parity_state "$WD/state-parity-flag.json" decision true
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-parity-flag.md" --state "$WD/state-parity-flag.json"
+  assert_failure 1
+  assert_output --partial "blocks_next_stage is false in dv-parity-flag.md but true in facts.open_questions[]"
+}
+
+@test "parity: a class divergence fails too — the check is not flag-only" {
+  sweep_artifact "$WD/dv-parity-class.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  parity_state "$WD/state-parity-class.json" escalate false
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-parity-class.md" --state "$WD/state-parity-class.json"
+  assert_failure 1
+  assert_output --partial "class is decision in dv-parity-class.md but escalate in facts.open_questions[]"
+}
+
+@test "parity: agreeing transports pass — and an absent ledger flag normalises to false" {
+  # Anti-vacuity for the two cases above: the check must fire on divergence and ONLY on
+  # divergence, or a legacy ledger row written before the field was required reads as a defect.
+  sweep_artifact "$WD/dv-parity-ok.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  parity_state "$WD/state-parity-ok.json" decision omit
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-parity-ok.md" --state "$WD/state-parity-ok.json"
+  assert_success
+}
+
+@test "parity: the harness refuses, it never reconciles — state.json is untouched" {
+  sweep_artifact "$WD/dv-parity-ro.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  parity_state "$WD/state-parity-ro.json" decision true
+  cp "$WD/state-parity-ro.json" "$WD/state-parity-ro.snap"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-parity-ro.md" --state "$WD/state-parity-ro.json"
+  assert_failure 1
+  run diff -q "$WD/state-parity-ro.json" "$WD/state-parity-ro.snap"
+  assert_success
+}
+
 @test "sweep: a ledger whose facts.open_questions is a string fails, never silently passes" {
   # jq aborts on a scalar there, and an aborted parity read is not evidence of parity:
   # the shapes that break the read are exactly the ones the gate exists to reject.
-  sweep_artifact "$WD/dv-scalar-ledger.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep" }'
+  sweep_artifact "$WD/dv-scalar-ledger.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
   printf '{"facts":{"open_questions":"none"}}\n' > "$WD/state-scalar.json"
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-scalar-ledger.md" --state "$WD/state-scalar.json"
   assert_failure 1
@@ -278,4 +340,140 @@ state_with_ar() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv.md" --strict
   assert_success
   refute_output --partial "fail:"
+}
+
+# ---------------------------------------------------------------------------
+# Sweep-ledger parity across the open_questions spill (AD-4).
+# The newest-12 clamp evicts unresolved items to
+# `open-questions-<run_index>.jsonl`; parity reads ledger UNION spill, so an item
+# that reached the FN gate through the spill is not reported as dropped.
+# ---------------------------------------------------------------------------
+
+# A ledger carrying run_index and an explicit open_questions array.
+spill_state() {  # <path> <run_index> <ids-json>
+  jq -n --argjson r "$2" --argjson ids "$3" \
+    '{version: 2, worktask_id: "t", plan_file: ".context/planning-0.md",
+      platform: "all", run_index: $r,
+      tasks: {DV0: {status: "in_progress"}},
+      facts: {files_modified: [], tests_added: [], decisions: [],
+              open_questions: [$ids[] | {id: ., class: "decision",
+                                         ref: "#elicitation-sweep"}]},
+      handoffs: {}}' > "$1"
+}
+
+@test "spill: an item present only in the spill file satisfies ledger parity" {
+  sweep_artifact "$WD/dv-spill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  spill_state "$WD/state-spill.json" 4 '[]'
+  printf '%s\n' '{"id":"sw-DV0-1","class":"decision","ref":"#elicitation-sweep","stage":"DV","status":"open","spilled_at":"2026-01-01T00:00:00Z","spilled_from_stage":"DV"}' \
+    > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-spill.md" --state "$WD/state-spill.json"
+  assert_success
+}
+
+@test "spill: the same item with NO spill file still fails — parity is not weakened" {
+  sweep_artifact "$WD/dv-nospill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  spill_state "$WD/state-nospill.json" 4 '[]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-nospill.md" --state "$WD/state-nospill.json"
+  assert_failure 1
+  assert_output --partial "not in facts.open_questions[]"
+}
+
+@test "spill: a malformed spill file fails rather than reading as the empty set" {
+  # Treating a corrupt overflow file as "no items" would restore the exact loss the
+  # parity check exists to catch, and only in the runs that actually overflowed.
+  sweep_artifact "$WD/dv-badspill.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  spill_state "$WD/state-badspill.json" 4 '["sw-DV0-1"]'
+  printf 'not json at all\n' > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-badspill.md" --state "$WD/state-badspill.json"
+  assert_failure 1
+  assert_output --partial "not readable as JSON lines"
+}
+
+@test "spill: the path derives from the ledger's run_index, never a guess" {
+  sweep_artifact "$WD/dv-idx.md" '{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  spill_state "$WD/state-idx.json" 7 '[]'
+  printf '%s\n' '{"id":"sw-DV0-1"}' > "$WD/open-questions-4.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-idx.md" --state "$WD/state-idx.json"
+  assert_failure 1
+  mv "$WD/open-questions-4.jsonl" "$WD/open-questions-7.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-idx.md" --state "$WD/state-idx.json"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------
+# Frontmatter token budget (AD-2): discretionary = total - min(stub block, 64),
+# fail > 200, advisory warn > 264. Sweep stubs are mandatory and fixed-shape, so
+# excluding them stops the budget from penalising a stage for asking questions.
+# ---------------------------------------------------------------------------
+
+# A DV artifact padded to an approximate total token count, with <stubs> sweep stubs.
+budget_artifact() {  # <path> <filler-words> <stubs>
+  local path="$1" fill="$2" stubs="$3" i pad=""
+  for ((i = 0; i < fill; i++)); do pad="$pad w"; done
+  {
+    printf -- '---\n'
+    printf 'handoff:\n'
+    printf '  stage: DV\n'
+    printf '  verdict: ok\n'
+    printf '  summary: "budget fixture%s"\n' "$pad"
+    printf '  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions:\n'
+    for ((i = 1; i <= stubs; i++)); do
+      printf '    - { id: sw-DV0-%s, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }\n' "$i"
+    done
+    printf '  refs:\n'
+    printf '    dev: development.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nbody\n'
+  } > "$path"
+}
+
+@test "budget: a frontmatter over 200 discretionary tokens now FAILS, not warns" {
+  budget_artifact "$WD/dv-fat.md" 200 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-fat.md"
+  assert_failure 1
+  assert_output --partial "discretionary tokens > 200 budget"
+}
+
+@test "budget: the four permitted sweep stubs cannot push a compliant artifact over" {
+  # Same prose in both files; the only difference is the mandatory stub block. If the
+  # stubs were counted, the second call would fail — which is the AC-8 incentive.
+  budget_artifact "$WD/dv-lean.md" 120 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-lean.md"
+  assert_success
+  budget_artifact "$WD/dv-lean4.md" 120 4
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-lean4.md"
+  assert_success
+  # The 4-stub file is over the old flat 200 in TOTAL tokens — the case the old check
+  # flagged and the new one deliberately releases.
+  assert_output --partial "tokens=2"
+}
+
+@test "budget: the exclusion is capped, so extra stubs cannot buy prose room" {
+  # Twelve stubs is three times the per-stage cap; the exclusion still stops at 64
+  # tokens, so an artifact this size fails on its prose exactly as it would at four.
+  budget_artifact "$WD/dv-gamed.md" 200 12
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-gamed.md"
+  assert_failure 1
+  assert_output --partial "discretionary tokens > 200 budget"
+  # The excluded amount is the cap, not the measured 12-stub block.
+  assert_output --partial "- 64 sweep-stub tokens excluded"
+}
+
+@test "budget: the 264 absolute ceiling is reported alongside the failure" {
+  budget_artifact "$WD/dv-huge.md" 260 4
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-huge.md"
+  assert_failure 1
+  assert_output --partial "> 264 absolute ceiling"
+}
+
+@test "budget: every stage artifact this repo ships passes the promoted gate" {
+  # R8 is deliberately breaking; the claim that no in-tree artifact fails it is
+  # verified here rather than asserted in prose.
+  local f
+  for f in "$PLUGIN_ROOT"/.context/*-[0-9].md; do
+    [ -e "$f" ] || continue
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$f"
+    assert_success
+  done
 }

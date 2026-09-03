@@ -195,7 +195,7 @@ composed_token_check() {
   assert_output ""
 }
 
-@test "contract: scripts reading the env var are the 4 known env-first fallbacks" {
+@test "contract: scripts reading the env var are the 5 known env-first fallbacks" {
   # The benchmark runner is excluded because it sets the variable for dispatched
   # stages rather than resolving from it; the test below pins that role.
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.sh" \
@@ -204,6 +204,7 @@ composed_token_check() {
   assert_output "hooks/anchor-preflight.sh
 hooks/state-merge.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
+skills/self-improvement/scripts/build-context-set.sh
 skills/worktask/scripts/hook-install.sh"
 }
 

@@ -357,7 +357,12 @@ is_host_workspace() {
 #
 # Without jq the scan cannot run and this returns false — safe rather than a hole, because
 # the jq_unavailable arm below refuses to mutate anyway.
+# Set together with FIRST_RUN_TS by already_named. The recorded target is what the FIRST
+# run decided the remote should carry; re-emitting it is the difference between "we already
+# named this" and handing the caller two empty carriers, which reads as "no name was ever
+# derived" and leaves the PR head wrong.
 FIRST_RUN_TS=""
+FIRST_RUN_TARGET=""
 already_named() {
   local log="${CONTEXT_DIR}/logs/audit.jsonl" wid ri
   command -v jq > /dev/null 2>&1 || return 1
@@ -373,6 +378,14 @@ already_named() {
     '[ split("\n")[] | fromjson? | objects
        | select(.metadata.dedupe_key == $dk) | .ts ] | (.[0] // "")' \
     "$log" 2> /dev/null) || FIRST_RUN_TS=""
+  # `to` before `target`: a row that actually renamed records the achieved name, which
+  # outranks a no-op arm's proposal. Scanned across ALL matching rows rather than the
+  # first, because the first row may be a `skipped` arm that carries neither key.
+  FIRST_RUN_TARGET=$(jq -rs -R --arg dk "${wid}:${ri}:branch_renamed" \
+    '[ split("\n")[] | fromjson? | objects
+       | select(.metadata.dedupe_key == $dk)
+       | (.metadata.to // .metadata.target // "") | select(. != "") ] | (.[0] // "")' \
+    "$log" 2> /dev/null) || FIRST_RUN_TARGET=""
   [ -n "$FIRST_RUN_TS" ]
 }
 
@@ -381,6 +394,11 @@ already_named() {
 cmd_rename() {
   local apply=1
   [ "${BRANCH_NAME_PRINT:-0}" = "1" ] && apply=0
+  # Set once, from `apply`, so every arm below inherits the suppression — the header has
+  # documented "no audit row" for BRANCH_NAME_PRINT since this flag existed, while the
+  # ladder audited unconditionally. audit_fn holds the guard; this is the only site that
+  # decides a run is a preview.
+  AUDIT_DRY_RUN=$((1 - apply))
 
   # Identity for audit_fn's call-time read — this is the PL-stage row, distinct
   # from the FN-stage defaults audit_fn falls back to when unset.
@@ -427,8 +445,13 @@ cmd_rename() {
   if already_named; then
     printf 'branch-name: already named this run (%s) — no-op\n' "$cur"
     audit_fn branch_renamed noop \
-      "$(meta_json reason already_named branch "$cur" first_run_ts "$FIRST_RUN_TS")"
-    emit_names "" "$cur"
+      "$(meta_json reason already_named branch "$cur" \
+        first_run_ts "$FIRST_RUN_TS" target "$FIRST_RUN_TARGET")"
+    # The RECORDED target, never a freshly derived one: re-deriving here would re-stamp
+    # facts.branch from a name computed at the wrong time, which is exactly what this arm
+    # exists to prevent. Empty when the first run recorded none — honest, and no worse
+    # than the two empty carriers this arm used to emit unconditionally.
+    emit_names "$FIRST_RUN_TARGET" "$cur"
     return 0
   fi
 

@@ -277,7 +277,7 @@ state-patch.sh --stage DV --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
-  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Omitting it silently loses the change set — DR and QA read it from here. Canonical rule: `handoff-protocol.md#facts-union`.

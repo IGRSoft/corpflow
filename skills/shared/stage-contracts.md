@@ -1,6 +1,6 @@
 ---
 name: stage-contracts
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Stage Contracts Reference
@@ -222,6 +222,21 @@ unresolved item is still owed a render at the FN gate while a resolved one is al
 under eviction-order rule 2. Same single-chokepoint idiom as `facts.decisions` (newest 8) and
 `facts.dispatched_agents` (6, launched-survive-first).
 
+##### Ledger bounds — the overflow spill
+
+Past 12 **unresolved** items the clamp has nothing eviction-bait left to drop, so it evicts a live
+question. Those — and only those — are appended to `.context/open-questions-<run_index>.jsonl`, one
+JSON object per line: the full stub plus `spilled_at` and `spilled_from_stage`. The file is
+append-only, written inside the merge lock and **before** the ledger rename, so a crash can leave a
+spill line whose eviction never committed (a duplicate the union collapses) but never an eviction
+whose spill line is missing.
+
+**Both transports are the record.** `handoff-harness.sh` checks frontmatter/ledger parity against
+ledger ∪ spill, and the FN gate reads both, unioned by `.id` with **the ledger winning on conflict**
+— a spill line is a snapshot taken at eviction time and is necessarily staler than an item the
+ledger later resolved. A missing spill file is the empty set; a spill file that exists but cannot be
+parsed is a failure, never an empty set.
+
 ##### Ledger bounds — why 12
 
 12 is a **deliberate bound, not a default**: it is three stages' worth at the per-stage cap, chosen
@@ -280,6 +295,10 @@ There is exactly one auto-answer authority — the existing Fable decision deleg
 
 `class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)` — computed before any auto-answer, so raising is honoured and lowering is refused by construction. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. One idiom, two axes, and they are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class behaviour under a bypassed gate or an unattended lane is per carrier — one row each in § Unattended fallbacks.
 
+##### The join is over labellers, never transports
+
+The lattice above resolves a disagreement between two *parties* labelling one item. It does **not** apply when one agent's artifact stub and its own ledger stub disagree: that is a single author with two copies, so a divergence is a **defect, not a lattice**. Never join them — the harness fails the stage (`handoff-harness.sh check_sweep_ledger`, which compares `class` and `blocks_next_stage`, not just `id`) and the agent reconciles both copies. Joining instead converts a bookkeeping slip into a real gate, which is how a non-blocking QA-scoping question once stopped a run before DR. The corollary binds the orchestrator too: a value it raises at Step C.2 is written to **both** transports at C.5, because a one-sided write manufactures exactly the divergence the harness refuses.
+
 ### Not the sweep
 
 The sweep carries decisions a person would want to make. Four cases already own a channel; routing them through the sweep duplicates a contract instead of reusing it. Never where a channel already exists.
@@ -336,7 +355,7 @@ handoff:
     - { id: pd1, summary: "<decision>", anchor: "planning-N.md#scope" }
   next_stage_focus: "<imperative: what AR must grep/design>"
   open_questions:
-    - { id: sw-PL0-1, class: decision, ref: "planning-N.md#elicitation-sweep" }
+    - { id: sw-PL0-1, class: decision, ref: "planning-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     spec: .context/attachments/<spec-file>
     plan: .context/planning-N.md#requirements
@@ -361,7 +380,7 @@ handoff:
     - { id: ad1, summary: "<decision>", anchor: "architecture-N.md#decisions" }
   next_stage_focus: "<imperative — addressed to TL when TL is in the plan, else to DV>"
   open_questions:
-    - { id: sw-AR0-1, class: decision, ref: "architecture-N.md#elicitation-sweep" }
+    - { id: sw-AR0-1, class: decision, ref: "architecture-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     plan: .context/planning-N.md#requirements
     decisions: architecture-N.md#decisions
@@ -382,7 +401,7 @@ handoff:
   summary: "<one-line coordination summary ≤200 chars>"
   next_stage_focus: "<imperative: DV batch order + parallelization>"
   open_questions:
-    - { id: sw-TL0-1, class: decision, ref: "coordination-N.md#elicitation-sweep" }
+    - { id: sw-TL0-1, class: decision, ref: "coordination-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     plan: .context/planning-N.md#requirements
     arch: .context/architecture-N.md#decisions   # ONLY when AR ran; omit otherwise
@@ -405,7 +424,7 @@ handoff:
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   open_questions:
-    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep" }
+    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     decisions: architecture-N.md#decisions     # ONLY when AR ran; omit
     coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
@@ -449,7 +468,7 @@ handoff:
   key_decisions:
     - { id: dr1, summary: "<finding or approval>", anchor: "developer-review-N.md#findings" }
   open_questions:
-    - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep" }
+    - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     dev: development-N.md#files-changed
     findings: developer-review-N.md#findings
@@ -469,7 +488,7 @@ handoff:
   key_decisions:
     - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
   open_questions:
-    - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep" }
+    - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     dev: development-N.md#files-changed
     findings: security-review-N.md#findings
@@ -491,7 +510,7 @@ handoff:
   key_decisions:
     - { id: qa1, summary: "Coverage X%, target met", anchor: "testing-N.md#coverage" }
   open_questions:
-    - { id: sw-QA0-1, class: decision, ref: "testing-N.md#elicitation-sweep" }
+    - { id: sw-QA0-1, class: decision, ref: "testing-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     dev: development-N.md#files-changed
     results: testing-N.md#results
@@ -511,7 +530,7 @@ handoff:
   files_touched:
     - docs/file1.md
   open_questions:
-    - { id: sw-DC0-1, class: decision, ref: "documentation-N.md#elicitation-sweep" }
+    - { id: sw-DC0-1, class: decision, ref: "documentation-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     dev: development-N.md#files-changed
     docs: documentation-N.md#files-changed
@@ -534,7 +553,7 @@ handoff:
   key_decisions:
     - { id: re1, summary: "Version X.Y.Z", anchor: "release-N.md#version" }
   open_questions:
-    - { id: sw-RE0-1, class: decision, ref: "release-N.md#elicitation-sweep" }
+    - { id: sw-RE0-1, class: decision, ref: "release-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     artifacts: release-N.md#artifacts
     version: release-N.md#version
@@ -555,7 +574,7 @@ handoff:
     - .context/complete-summary-N.md
   next_stage_focus: "ST approves merge and confirms MEMORY.md version bump"
   open_questions:
-    - { id: sw-FN0-1, class: decision, ref: "complete-summary-N.md#elicitation-sweep" }
+    - { id: sw-FN0-1, class: decision, ref: "complete-summary-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     summary: .context/complete-summary-N.md
     ledger: .context/state.json
@@ -575,7 +594,7 @@ handoff:
   key_decisions:
     - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
   open_questions:
-    - { id: sw-ST0-1, class: decision, ref: "retrospective-N.md#elicitation-sweep" }
+    - { id: sw-ST0-1, class: decision, ref: "retrospective-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     summary: .context/complete-summary-N.md
 ---
@@ -595,7 +614,7 @@ handoff:
     - { id: ir1, summary: "Root cause identified", anchor: "incident-N.md#root-cause" }
   next_stage_focus: "DV implements fix; QA runs regression"
   open_questions:
-    - { id: sw-IR0-1, class: decision, ref: "incident-N.md#elicitation-sweep" }
+    - { id: sw-IR0-1, class: decision, ref: "incident-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     root_cause: incident-N.md#root-cause
     fix_plan: incident-N.md#fix-plan
@@ -616,7 +635,7 @@ handoff:
     - { id: et1, summary: "Compliance verdict", anchor: "ethics-review-N.md#findings" }
   next_stage_focus: "Invoking stage resumes after ET verdict"
   open_questions:
-    - { id: sw-ET0-1, class: decision, ref: "ethics-review-N.md#elicitation-sweep" }
+    - { id: sw-ET0-1, class: decision, ref: "ethics-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     review: .context/ethics-review-N.md
     ledger: .context/state.json

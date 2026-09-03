@@ -4,6 +4,7 @@
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="hooks/test-execution-gate.sh"
+PROMOTE="hooks/test-execution-promote.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"
@@ -521,6 +522,34 @@ teardown() {
   assert_failure
 }
 
+@test "R3-4: a MISSING dedupe library degrades suppression only — the Skill arm still denies at DR" {
+  # The claim the gate's header makes. If the classifier reached into the
+  # suppression library, its absence would allow a full-suite Skill outright.
+  state_with DR
+  mkdir -p "$WD/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
+  cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+  [ ! -e "$WD/hooks/lib/dedupe-lib.sh" ]
+
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  refute_output --partial "command not found"
+}
+
+@test "R3-4: a MISSING dedupe library leaves an allowed run silent (no unbound-symbol noise)" {
+  state_with QA
+  mkdir -p "$WD/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
+  cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" \
+    <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  [ -z "$output" ]
+}
+
 @test "R3-2: 'make test' and 'make test-ios' deny at DR (both were dropped by the zero-fork prefilter)" {
   state_with DR
   for cmd in 'make test' 'make test-ios'; do
@@ -897,12 +926,25 @@ git_ctx() {
     > "$WD/.context/state.json"
 }
 
+promote() {
+  # promote <command> — the PostToolUse half of the handshake, with a payload
+  # that carries a result. The gate only marks a run pending, so without this
+  # nothing is ever suppressed; every case below that expects a deny must say
+  # explicitly that the run produced something.
+  local payload
+  payload="$(jq -cn --arg c "$1" \
+    '{tool_name:"Bash", tool_input:{command:$c}, tool_response:{stdout:"7 tests, 0 failures"}}')"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$payload" "$PROMOTE"
+}
+
 @test "D1: QA repeats an identical full run on an unchanged tree -> deny + audit row" {
   git_ctx QA
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
   assert_success
   [ -z "$output" ]
+  promote './run-tests.sh'
 
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
@@ -946,6 +988,7 @@ git_ctx() {
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/foo.bats')" \
     "$SCRIPT"
+  promote 'tests/vendor/bats-core/bin/bats tests/shell/foo.bats'
 
   printf '{"run_index":0,"tasks":{"QA0":{"status":"in_progress"}}}' > "$WD/.context/state.json"
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
@@ -1036,4 +1079,256 @@ git_ctx() {
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
   assert_success
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("has no test-execution authority")'
+}
+
+# --- #1a: a run that produced no result claims nothing ----------------------
+# The arm the previous suite could not reach at all: PreToolUse recorded on the
+# allow path, so there was no state in which a run existed but had produced
+# nothing.
+
+@test "D12: an unpromoted run does NOT suppress the next identical one (PreToolUse alone claims nothing)" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D13: a tool call that errored discards the marker instead of promoting it" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  [ "$(find "$WD/.context/logs/.test-runs" -name '*.pending' | wc -l | tr -d ' ')" = "1" ]
+
+  local payload
+  payload="$(jq -cn '{tool_name:"Bash", tool_input:{command:"./run-tests.sh"},
+                      tool_response:{error:"scheme not found"}}')"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$payload" "$PROMOTE"
+  assert_success
+  [ "$(find "$WD/.context/logs/.test-runs" -type f | wc -l | tr -d ' ')" = "0" ]
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D14: an orphaned pending marker can never wedge the gate (lookup ignores .pending)" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+
+  # No promotion ever arrives — the crash case. Ten further attempts must all
+  # allow, because an inert marker is the design, not a cleanup obligation.
+  local i
+  for i in 1 2 3; do
+    run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+      --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+    assert_success
+    [ -z "$output" ]
+  done
+}
+
+@test "D15: b' — a staged edit inside a LINKED WORKTREE re-enables the command (the arm rooted at the hook cwd could not see)" {
+  git_ctx QA
+  local wt="$WD/wt"
+  git -C "$WD" worktree add -q -b feat "$wt"
+  mkdir -p "$wt/.context"
+  cp "$WD/.context/state.json" "$wt/.context/state.json"
+
+  # The payload names the worktree as its cwd; the hook process stays in $WD,
+  # exactly as the orchestrator checkout does for a worktree-isolated stage.
+  local p1
+  p1="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d}}')"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$p1" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+
+  local p2
+  p2="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d},
+                               tool_response:{stdout:"ok"}}')"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$p2" "$PROMOTE"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$p1" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+
+  # The remedy the deny text promises, performed where the stage actually works.
+  echo 'fix' >> "$wt/src.txt"
+  git -C "$wt" add -A
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$p1" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "D16: an edit in the MAIN tree does not re-enable a run fingerprinted in the worktree" {
+  # The converse of D15, and the reason b' is a fix rather than a widening: the
+  # two trees are genuinely different keys, not one key resolved loosely.
+  git_ctx QA
+  local wt="$WD/wt"
+  git -C "$WD" worktree add -q -b feat "$wt"
+  mkdir -p "$wt/.context"
+  cp "$WD/.context/state.json" "$wt/.context/state.json"
+
+  local p1 p2
+  p1="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d}}')"
+  p2="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d},
+                               tool_response:{stdout:"ok"}}')"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" --stdin-string "$p1" "$SCRIPT"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" --stdin-string "$p2" "$PROMOTE"
+
+  echo 'unrelated' >> "$WD/src.txt"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" --stdin-string "$p1" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+# --- #8: the Node standard-library runner -----------------------------------
+
+@test "N-node-1: 'node --test' denies at a banned stage (the suite that ran ungated at every stage)" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'node --test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "N-node-2: bare 'node script.js' still ALLOWS at a banned stage (script execution is not test execution)" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'node scripts/seed.js')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "N-node-3: 'node --test' at DV hits the full-suite deny; a name pattern keeps it scoped" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'node --test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'node --test --test-name-pattern=parses')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "N-node-4: a reporter flag is configuration, not selection — 'node --test --test-reporter=spec' still denies at DV" {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'node --test --test-reporter=spec')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+# --- #12: the prefilter classifies structure, not text ----------------------
+
+@test "P-pre-1: a jq call whose ARGUMENT names runners executes nothing -> allow at a banned stage" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'jq -cn --arg m "ran bats; pytest tests/; go test ./..." "{note:\$m}" >> log.json')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "P-pre-2: a here-doc body naming runners is data, not commands -> allow at a banned stage" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$(printf '%s\n' \
+    "cat > notes.md <<'EOF'" \
+    'pytest tests/unit' \
+    'bats tests/shell' \
+    'EOF')")"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "P-pre-3: the narrowing keeps every real deny — a runner after a non-runner segment still denies" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'cd sub && FOO=1 npx jest src/a.test.js')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "P-pre-4: text after the here-doc terminator is code again (the skip has an end)" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$(printf '%s\n' \
+    "cat > notes.md <<'EOF'" \
+    'nothing to see' \
+    'EOF' \
+    'pytest tests/unit')")"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "P-pre-5: the prefilter skips BOTH words of 'uv run', so the runner behind it still denies" {
+  # A first-token-only skip heads on `run` — not gateable — and the fast path
+  # allows a real runner at a banned stage.
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'uv run pytest tests/')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "P-pre-6: 'uv run python -m pytest' reaches the python -m collapse behind the launcher" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'uv run python -m pytest tests/')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "P-pre-7: 'uv run <script>' is script execution, not a runner -> allow at a banned stage" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'uv run scripts/seed.py')"
+  assert_success
+  [ -z "$output" ]
+}
+
+# --- #7: authority during post-completion remediation ------------------------
+
+@test "V-rem-1: a settled ledger whose QA carries an unresolved no-go keeps full-suite authority" {
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"ok"},
+                    "QA0":{"status":"completed","verdict":"no-go"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "V-rem-2: the window closes the moment the verdict flips" {
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"ok"},
+                    "QA0":{"status":"completed","verdict":"go"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No stage is in progress")'
+}
+
+@test "V-rem-3: a no-go carried by DV grants DV's authority, not QA's (the full-suite deny survives)" {
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"no-go"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("Stage .DV. has no test-execution authority")'
+
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(bash_payload 'tests/vendor/bats-core/bin/bats tests/shell/foo.bats')"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "V-rem-4: two stages carrying a no-go is ambiguous -> the settled deny stands" {
+  printf '{"tasks":{"DV0":{"status":"completed","verdict":"no-go"},
+                    "QA0":{"status":"completed","verdict":"no-go"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No stage is in progress")'
 }

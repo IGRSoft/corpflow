@@ -230,7 +230,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage AR --prev PL --facts '{
   "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}],
-  "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers PL's entries, and a re-run is byte-identical. Omitting it loses the decision silently — the orchestrator does not digest it for you. Canonical rule: `handoff-protocol.md#facts-union`.

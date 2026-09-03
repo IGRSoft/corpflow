@@ -33,15 +33,21 @@
 # @env CORPFLOW_NONINTERACTIVE 1 => `skipped/non_interactive` (nothing can answer the gate).
 # @env MILESTONE_MODE         1 => `skipped/milestone_mode` (/megatask owns issue identity).
 # @env INCIDENT_MODE          1 => `skipped/incident_mode` (no PL stage, no plan issue).
-# @env PREFLIGHT_SCAN_POOL    Open issues fetched before scoring (default: 100).
-# @env PREFLIGHT_SCAN_TIMEOUT Seconds bounding the `gh` call (default: 20).
+# @env PREFLIGHT_SCAN_POOL    Issues fetched PER STATE before scoring (default: 100).
+# @env PREFLIGHT_SCAN_TIMEOUT Seconds bounding each `gh` call (default: 20).
 # @env GH_BIN                 `gh` binary (default: gh).
 # @env WORKSPACE_ROOT         Root probed for a megatask `workspace.json`.
 #
-# @stdout `result=shown|none|skipped`, `reason=<closed set>` when not `shown`,
-#         `candidates=<n>`, and one `candidate=<compact-json>` line per hit
-#         (`{number,url,title,score}`). JSON per line because issue titles contain
-#         every plausible field separator.
+# @stdout `result=shown|prior-run|none|skipped`, `reason=<closed set>` when not `shown`,
+#         `candidates=<n>` (OPEN hits only), and one `candidate=<compact-json>` line per
+#         open hit (`{number,url,title,state,score}`). JSON per line because issue titles
+#         contain every plausible field separator.
+#
+#         CLOSED hits are reported separately as `priors=<n>` plus one `prior=<json>` line
+#         each, and never as `candidate=`: a closed issue is a "this task ran before"
+#         signal, not something to comment on or bind a fresh context to. `result=prior-run`
+#         means closed matches only — callers keying on `result=shown` proceed unprompted,
+#         which is the correct disposition.
 #
 # @exitcode 0   Every runtime outcome, candidates or not.
 # @exitcode 2   Usage error or -h.
@@ -209,40 +215,102 @@ git remote get-url origin 2> /dev/null | grep -q . || finish_skipped no_remote
 # read would then outlive the timeout it exists to enforce.
 SCAN_TMP=$(mktemp "${TMPDIR:-/tmp}/preflight-issue-scan.XXXXXX" 2> /dev/null) \
   || finish_skipped search_failed
-trap 'rm -f "$SCAN_TMP" 2>/dev/null || true' EXIT
-
-run_with_timeout "$SCAN_TIMEOUT" "$GH_BIN" issue list --state open \
-  --json number,title,url --limit "$POOL" > "$SCAN_TMP" 2> /dev/null \
+SCAN_TMP_CLOSED=$(mktemp "${TMPDIR:-/tmp}/preflight-issue-scan.XXXXXX" 2> /dev/null) \
   || finish_skipped search_failed
-RAW=$(cat "$SCAN_TMP" 2> /dev/null || true)
+trap 'rm -f "$SCAN_TMP" "$SCAN_TMP_CLOSED" 2>/dev/null || true' EXIT
+
+# Two calls rather than one `--state all`: `gh` returns the newest $POOL issues of
+# whatever it was asked for, so on a repo with an active closed backlog an `all` pool
+# fills with closed issues and pushes every open one out — hiding exactly the open
+# duplicate this scan exists to find. A per-state pool gives each class its own budget.
+# `state` joins the field list because the disposition below treats the two classes
+# differently and cannot infer the class from number/title/url.
+run_with_timeout "$SCAN_TIMEOUT" "$GH_BIN" issue list --state open \
+  --json number,title,url,state --limit "$POOL" > "$SCAN_TMP" 2> /dev/null \
+  || finish_skipped search_failed
+RAW_OPEN=$(cat "$SCAN_TMP" 2> /dev/null || true)
+[ -n "$RAW_OPEN" ] || finish_skipped search_failed
+printf '%s' "$RAW_OPEN" | jq -e 'type == "array"' > /dev/null 2>&1 || finish_skipped search_failed
+
+# The closed pool only ever ADDS the "this task already ran" hint, so its failure
+# degrades to empty instead of skipping: losing that hint is strictly better than
+# also losing the open-duplicate check the open pool already fetched.
+RAW_CLOSED='[]'
+if run_with_timeout "$SCAN_TIMEOUT" "$GH_BIN" issue list --state closed \
+  --json number,title,url,state --limit "$POOL" > "$SCAN_TMP_CLOSED" 2> /dev/null; then
+  CLOSED_BODY=$(cat "$SCAN_TMP_CLOSED" 2> /dev/null || true)
+  if printf '%s' "$CLOSED_BODY" | jq -e 'type == "array"' > /dev/null 2>&1; then
+    RAW_CLOSED="$CLOSED_BODY"
+  fi
+fi
+
+RAW=$(jq -cn --argjson o "$RAW_OPEN" --argjson c "$RAW_CLOSED" '$o + $c' 2> /dev/null) \
+  || finish_skipped search_failed
 [ -n "$RAW" ] || finish_skipped search_failed
-printf '%s' "$RAW" | jq -e 'type == "array"' > /dev/null 2>&1 || finish_skipped search_failed
 
 # Keywords are `[a-z0-9]+` by construction above, so interpolating them into the
 # regex below cannot inject alternation or anchors. `$k` is bound before the pipe
 # because `$t | test(...)` rebinds `.` to the title.
-MATCHED=$(printf '%s' "$RAW" | jq -c \
-  --argjson kws "$KEYWORDS_JSON" --argjson min "$EFFECTIVE_MIN" --argjson lim "$LIMIT" '
+# `state` is normalised to lowercase here so the two dispositions below split on one
+# spelling. `gh` emits "OPEN"/"CLOSED"; the GraphQL surface has used lowercase, and a
+# case-sensitive split would silently route every closed hit into the open list.
+SCORED=$(printf '%s' "$RAW" | jq -c \
+  --argjson kws "$KEYWORDS_JSON" --argjson min "$EFFECTIVE_MIN" '
   [ .[]
     | select((.title // "") != "")
     | . as $i
     | (($i.title | ascii_downcase)) as $t
     | { number: $i.number, url: $i.url, title: $i.title,
+        state: ((($i.state // "open") | ascii_downcase)),
         score: ([ $kws[] | . as $k
                   | select($t | test("(^|[^a-z0-9])" + $k)) ] | length) }
   ]
   | map(select(.score >= $min))
-  | sort_by(-.score, -.number)
-  | .[0:$lim]' 2> /dev/null) || finish_skipped search_failed
-[ -n "$MATCHED" ] || finish_skipped search_failed
+  | sort_by(-.score, -.number)' 2> /dev/null) || finish_skipped search_failed
+[ -n "$SCORED" ] || finish_skipped search_failed
+
+MATCHED=$(printf '%s' "$SCORED" | jq -c --argjson lim "$LIMIT" \
+  '[ .[] | select(.state != "closed") ] | .[0:$lim]' 2> /dev/null || printf '[]')
+PRIORS=$(printf '%s' "$SCORED" | jq -c --argjson lim "$LIMIT" \
+  '[ .[] | select(.state == "closed") ] | .[0:$lim]' 2> /dev/null || printf '[]')
 
 COUNT=$(printf '%s' "$MATCHED" | jq 'length' 2> /dev/null || printf '0')
-[ "$COUNT" = "0" ] && finish_none no_candidates
+PRIOR_COUNT=$(printf '%s' "$PRIORS" | jq 'length' 2> /dev/null || printf '0')
 
-printf 'result=shown\n'
-printf 'candidates=%s\n' "$COUNT"
-printf '%s' "$MATCHED" | jq -c '.[]' | while IFS= read -r line; do
-  printf 'candidate=%s\n' "$line"
-done
-printf >&2 'preflight-issue-scan: %s open issue(s) may already cover this request\n' "$COUNT"
-exit 0
+emit_priors() {
+  printf 'priors=%s\n' "$PRIOR_COUNT"
+  [ "$PRIOR_COUNT" = "0" ] && return 0
+  # A DIFFERENT key from `candidate=`. A closed issue must never reach the caller's
+  # "use one of the existing issues" arm: binding a context to it would write a dedup
+  # anchor pointing at an issue nothing can be commented onto or closed by this run.
+  printf '%s' "$PRIORS" | jq -c '.[]' | while IFS= read -r line; do
+    printf 'prior=%s\n' "$line"
+  done
+  printf >&2 'preflight-issue-scan: %s closed issue(s) match — this task may have run before\n' \
+    "$PRIOR_COUNT"
+}
+
+# Disposition ladder. Open matches keep today's `result=shown` contract exactly, so no
+# existing caller changes behaviour. Closed-only matches are the new arm: `prior-run` is
+# not a "comment on it" candidate but a "here is the previous run" signal, and every
+# caller that keys on `result=shown` correctly proceeds unprompted.
+if [ "$COUNT" != "0" ]; then
+  printf 'result=shown\n'
+  printf 'candidates=%s\n' "$COUNT"
+  printf '%s' "$MATCHED" | jq -c '.[]' | while IFS= read -r line; do
+    printf 'candidate=%s\n' "$line"
+  done
+  emit_priors
+  printf >&2 'preflight-issue-scan: %s open issue(s) may already cover this request\n' "$COUNT"
+  exit 0
+fi
+
+if [ "$PRIOR_COUNT" != "0" ]; then
+  printf 'result=prior-run\n'
+  printf 'reason=closed_match\n'
+  printf 'candidates=0\n'
+  emit_priors
+  exit 0
+fi
+
+finish_none no_candidates

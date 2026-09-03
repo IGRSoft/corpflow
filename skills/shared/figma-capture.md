@@ -43,7 +43,7 @@ Error string matches (case-insensitive) any of `authenticate` / `OAuth` / `unaut
 
 Same contract as every other stage's (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`): the full `SweepItem` under `planning-<N>.md#elicitation-sweep`, and its stub in BOTH `handoff.open_questions[]` and the PL `--facts` payload — the two transports have no derivation between them, so a stub written to only one never reaches the gate.
 
-- `id: sw-PL<N>-<n>`, `class: decision`, `ref: "planning-<N>.md#elicitation-sweep"`, no `blocks_next_stage` — PL's boundary already is the plan gate.
+- `id: sw-PL<N>-<n>`, `class: decision`, `ref: "planning-<N>.md#elicitation-sweep"`, `blocks_next_stage: false` — the field is required on every stub, and `false` is right here because PL's boundary already is the plan gate.
 - `summary`: `Figma MCP auth pending; proceed without screenshot capture? (URLs: <comma-separated list>)`
 - `options[]`: `Proceed without screenshots` (`recommended: true`; the QA design gate is skipped for this run) / `Authorize and re-run capture`.
 - `rationale`: one line on why proceeding is the default here.
