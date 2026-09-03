@@ -2,6 +2,80 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.29] — 2026-09-03
+
+A pull request opened against a branch the work never forked from silently carries every commit of
+the intervening integration branch. The motivating incident: a run whose own ledger recorded 27
+changed files opened a PR carrying 156 commits and 1008 files into `develop`, and every existing
+finalization check passed — none of them compares the would-be PR diff against what the run itself
+claims to have changed. This release adds that comparison as a blocking check, surfaces fork-point
+evidence for reconciliation rather than silent retargeting, and corrects two documentation claims
+that made the gap look covered.
+
+### Added
+
+- **`fn-preflight base-sanity` — a blocking wrong-base check.** It compares the would-be pull-request
+  diff against the run's own `facts.files_modified` ledger record and fails when the PR is
+  disproportionately larger (`pr_files > ledger_files * 3` **and** `pr_files - ledger_files > 20`);
+  the second clause is a floor that keeps small runs out of the rule. The failure names both counts
+  and the smallest-ahead candidate base, and states that the thresholds are wrong-base heuristics
+  rather than diff-quality rules. It joins the composite `all` run in last position, so a block never
+  suppresses `continuity`'s own `diverged` row. Seven degrade rungs — missing `jq`, no git,
+  unresolved/unresolvable base ref, a guessed base, an unreadable ledger, an unreadable diff — each
+  warn and exit 0, because a check that cannot see its inputs must not block a finalization. Six of
+  the seven also write their own audit token. The `jq`-unavailable rung writes **no** audit row at
+  all — the audit writer reads `worktask_id` and `run_index` through `jq` itself, so on a host
+  without `jq` the row cannot be produced and the printed warning is the only evidence. Do not go
+  looking in `audit.jsonl` for that one.
+- **A documented, audited override.** `FN_BASE_SANITY_OVERRIDE` converts the fail arm into a warning
+  carrying both counts and writes an `override` audit row with the raw value. The check is
+  deliberately blocking, so the escape hatch is explicit and leaves a trace rather than being a
+  `--no-verify` improvised at the moment of frustration.
+- **`fork_base()` and `base_ref_source()` in `branch-lib.sh`.** `fork_base()` ranks remote branches
+  that contain `HEAD` by commit distance and returns the nearest parent — the branch the work
+  actually forked from, which is not always the branch it is configured to target. It returns empty
+  rather than a sentinel on every failure path, so `v=$(fork_base)` cannot kill a `set -e` caller,
+  and it is safe on a detached HEAD and in a repo with no remotes. `base_ref_source()` reports which
+  rank of the resolution ladder produced a base, which is what lets a caller tell a confident answer
+  from a fallback.
+
+### Changed
+
+- **`fn-preflight base-sanity` resolves its base with fork-point fill enabled; every other reader's
+  base resolution is unchanged.** Fork-point fill is opt-in — `resolve_base_ref` consults
+  `fork_base()` only when passed `--with-fork-point`, only after ranks 1–4 have all come back empty,
+  and only to replace the terminal `unresolved` result. `base-sanity` is the sole opt-in caller.
+  Every other reader of the ladder — branch naming, continuity, tree preflight — sees byte-identical
+  output to 4.0.28. The default is deliberately the fail-safe one: extra evidence reaches the check
+  built to reconcile it, and nothing else silently changes which branch it thinks it is working from.
+- **Fork-point disagreement is reconciled at the plan gate, never applied silently.** When PL0's
+  configured base and the detected fork point differ, the run raises a non-blocking sweep item
+  carrying both, for a human to settle. `--auto=[decision]` keeps the configured base. A resolver
+  that retargeted a branch on its own authority would trade a visible wrong base for an invisible one.
+- **The host-declared target branch is now a documented rank in the base-ref resolution order.** It
+  always participated; it was simply absent from the written ladder, so readers of
+  `handoff-protocol.md`, `pl0-procedure.md` and `workspace-modes.md` could not account for a base the
+  code had actually chosen. All three now list the same ranks in the same sequence.
+
+### Fixed
+
+- **`fn-preflight continuity` claimed a guarantee it does not provide.** Its description implied it
+  would catch a wrong base; it checks that the branch has not diverged from *its recorded* base and
+  cannot discriminate whether that base was right in the first place. The description now says so and
+  names `base-sanity` as the check that does discriminate.
+- **Three stale "Implemented in `fn-preflight.sh`" attributions** for `resolve_base_ref`, which lives
+  in `branch-lib.sh`.
+- **`dv-tree-preflight.sh` no longer claims parity with the canonical ladder.** Its comment now admits
+  the reduced ladder it actually implements.
+
+### Known follow-ups
+
+- Two private base-ref ladders remain divergent from the canonical one in `branch-lib.sh` —
+  `dv-tree-preflight.sh` (now documented as reduced, not unified) and `attachments-preseed.sh`.
+  Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
+  path and each additional caller changes the cost profile. They are correct for their own callers
+  today; they are a consolidation debt, not a live defect.
+
 ## [4.0.28] — 2026-09-03
 
 Twenty-six fixes from a six-angle code review of `develop 6e09ea8..0dd3d6d`, banded by the priority
