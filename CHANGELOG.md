@@ -70,8 +70,11 @@ that made the gap look covered.
 
 ### Known follow-ups
 
-- Two private base-ref ladders remain divergent from the canonical one in `branch-lib.sh` —
-  `dv-tree-preflight.sh` (now documented as reduced, not unified) and `attachments-preseed.sh`.
+- Three private base-ref ladders remain divergent from the canonical one in `branch-lib.sh` —
+  `dv-tree-preflight.sh` (now documented as reduced, not unified), `attachments-preseed.sh`, and
+  `adhoc-visual-evidence.sh`. The adhoc one diverges further than the other two: its own
+  `resolve_base_ref` falls back through the literals `origin/main`, `origin/master`, `main` and
+  `master`, which is the hardcoded-literal shape the canonical ladder documents as forbidden.
   Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
   path and each additional caller changes the cost profile. They are correct for their own callers
   today; they are a consolidation debt, not a live defect.

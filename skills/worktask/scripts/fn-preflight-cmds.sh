@@ -447,7 +447,7 @@ _bs_fork_candidate() {
 }
 
 cmd_base_sanity() {
-  local base ref src ahead pr_files ledger_files fork fork_ahead meta
+  local base ref src ahead pr_files ledger_files fork fork_ahead meta diff_out
 
   # Degrade ladder, evaluated BEFORE the rule and ordered most-fundamental first.
   # Each rung warns and exits 0: a blocking gate that fires on its own inability
@@ -506,14 +506,21 @@ cmd_base_sanity() {
     return 0
   fi
 
-  pr_files=$(git diff --name-only "${ref}...HEAD" 2> /dev/null | wc -l | tr -d ' ' || printf '')
-  case "$pr_files" in
-    '' | *[!0-9]*)
-      printf 'base-sanity: the diff against %s is unreadable — magnitude comparison skipped\n' "$base"
-      audit_fn base_sanity diff_unreadable "$(meta_json base "$base" ledger_files "$ledger_files")"
-      return 0
-      ;;
-  esac
+  # Captured, then counted — never `git diff | wc -l`: `wc` has already written `0`
+  # by the time git fails, so the pipeline yields a plausible zero-file count and the
+  # only trace of the failure is an exit status the pipeline then hides. A base sharing
+  # no merge base with HEAD (git exit 128) is exactly that case, and it is the wrong-base
+  # topology this check exists to catch.
+  if ! diff_out=$(git diff --name-only "${ref}...HEAD" 2> /dev/null); then
+    printf 'base-sanity: the diff against %s is unreadable — magnitude comparison skipped\n' "$base"
+    audit_fn base_sanity diff_unreadable "$(meta_json base "$base" ledger_files "$ledger_files")"
+    return 0
+  fi
+  # Guarded because an empty diff is one empty line to `wc`, not zero lines.
+  pr_files=0
+  if [[ -n "$diff_out" ]]; then
+    pr_files=$(printf '%s\n' "$diff_out" | wc -l | tr -d ' ')
+  fi
 
   ahead=$(git rev-list --count "${ref}..HEAD" 2> /dev/null || printf '0')
   case "$ahead" in '' | *[!0-9]*) ahead=0 ;; esac

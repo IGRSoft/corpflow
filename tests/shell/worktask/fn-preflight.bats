@@ -1146,7 +1146,25 @@ _bs_no_jq_path() {
   assert_output --partial '"base_source":"fork_point"'
 }
 
-# Rung 7 (`diff_unreadable`) has no case: see testing-0.md#rung-7-untestable. Both
-# realistic triggers for a failing `git diff` — a base with no merge base, and a ref
-# that resolves but is not a commit — return 0 files with status 0 under the harness
-# git, so no fixture reaches the rung without corrupting the object store.
+# An orphan base shares no merge base with HEAD, so `git diff base...HEAD` exits 128.
+# The count must come from git's own status: piping it through `wc -l` yields `0` and
+# reads as a legitimately empty diff, which is a false pass on the exact topology this
+# check exists to catch.
+@test "base-sanity rung 7: a base with no merge base is diff_unreadable, not a 0-file pass" {
+  cd "$WD"
+  git init -q -b master .
+  _bs_commit --allow-empty -m base
+  git checkout -q --orphan unrelated
+  _bs_commit --allow-empty -m unrelated
+  git checkout -q master
+  git checkout -q -b feature/work
+  _bs_files run 2
+  jq '.metadata.base_ref="unrelated"' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt","run2.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "is unreadable"
+  refute_output --partial "base-sanity: pass"
+  run _bs_row
+  assert_output --partial '"diff_unreadable"'
+}
