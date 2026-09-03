@@ -5,19 +5,23 @@
 #   trailers, (c) `git log $BASELINE_SHA..HEAD` `Agent:` trailers.
 #   Normalizes corpflow:<name> to agents/<name>.md (also probing the
 #   commands/ and skills/ spellings). CROSS_PLUGIN:* refs are dropped.
-#   Only emits paths that EXIST on disk, relative to the CWD; output is sorted
-#   and deduplicated. No --self-test flag; the tests drive it via env vars.
+#   Only emits paths that EXIST on disk RELATIVE TO THE PLUGIN ROOT; output is
+#   sorted and deduplicated. No --self-test flag; the tests drive it via env vars.
 #
-# Every case runs with --cwd on a scratch tree that owns its own agents/, so the
-# expected output is an exact, fixture-determined file list rather than whatever
-# the real repo happens to contain.
+# Every case runs with --cwd on a scratch tree that owns its own agents/, and
+# setup() points CLAUDE_PLUGIN_ROOT at that same tree. Both are needed: since R9
+# the existence test resolves against the plugin root, so a scratch cwd alone
+# would leave every candidate probed against the REAL repo and make the expected
+# output depend on whatever it happens to contain.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/self-improvement/scripts/build-context-set.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"
-  mkdir -p "$WD/agents"
+  mkdir -p "$WD/agents" "$WD/.claude-plugin"
+  printf '{"name":"corpflow"}\n' > "$WD/.claude-plugin/plugin.json"
+  export CLAUDE_PLUGIN_ROOT="$WD"
   : > "$WD/agents/developer.md"
   : > "$WD/agents/qa-engineer.md"
   : > "$WD/agents/product-manager.md"
@@ -210,4 +214,118 @@ JSON
     -- "$SCRIPT"
   assert_success
   assert_output ""
+}
+
+# ---------------------------------------------------------------------------
+# R9/#6 — two independent defects.
+#   (a) Existence was tested against the process cwd. Every corpflow asset lives
+#       under the plugin root while the pipeline runs from the worktask's repo,
+#       so the production invocation returned the EMPTY set — which SKILL.md
+#       § Step 5b itself calls indistinguishable from "the user made no edits".
+#   (b) The set derived from tasks.*.metadata.agent only, so every hook and every
+#       bundled script that participated was invisible.
+# ---------------------------------------------------------------------------
+
+mk_plugin_root() {   # a scratch plugin root, deliberately NOT the cwd
+  ROOT="$WD/root"
+  mkdir -p "$ROOT/.claude-plugin" "$ROOT/agents" "$ROOT/hooks" \
+           "$ROOT/skills/worktask/scripts" "$WD/elsewhere"
+  printf '{"name":"corpflow"}' > "$ROOT/.claude-plugin/plugin.json"
+  : > "$ROOT/agents/developer.md"
+  : > "$ROOT/hooks/audit-tooluse.sh"
+  : > "$ROOT/skills/worktask/scripts/state-patch.sh"
+}
+
+@test "R9a: a plugin-root-relative candidate survives an invocation from another cwd" {
+  mk_plugin_root
+  cat > "$WD/tasks.json" <<'JSON'
+{"tasks":{"DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}}}}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
+    run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "agents/developer.md"
+}
+
+@test "R9a: the root is discovered from the script's own location when unset" {
+  # Rung 3 of plugin-root-resolution.md, in isolation: CLAUDE_PLUGIN_ROOT is
+  # emptied and the cwd is a directory that is NOT a plugin root, so the
+  # BASH_SOURCE walk-up is the only rung that can resolve anything — and it
+  # resolves to the REAL repo, whose agents/developer.md is what gets asserted.
+  mkdir -p "$WD/elsewhere"
+  cd "$WD/elsewhere"
+  cat > "$WD/tasks.json" <<'JSON'
+{"tasks":{"DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}}}}
+JSON
+  [ -f "$PLUGIN_ROOT/agents/developer.md" ]
+  CLAUDE_PLUGIN_ROOT= LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
+    run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial "agents/developer.md"
+}
+
+@test "R9b: a hook actor in the audit log becomes hooks/<n>.sh" {
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+{"actor":"hook:audit-tooluse","action":"tool_invoked","subject":"Edit"}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "hooks/audit-tooluse.sh"
+}
+
+@test "R9b: a plugin-qualified hook actor is stripped to the same local path" {
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+{"actor":"android-developer:hook:audit-tooluse","action":"tool_invoked"}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "hooks/audit-tooluse.sh"
+}
+
+@test "R9b: a script basename is RESOLVED, not assumed to live in one directory" {
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+{"actor":"orchestrator","action":"github_issue_created","metadata":{"via":"state-patch.sh"}}
+{"actor":"hook:audit-tooluse","action":"tool_invoked","subject":"state-patch","metadata":{"kind":"tool"}}
+{"actor":"x","action":"y","metadata":{"tool":"state-patch.sh"}}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_line "skills/worktask/scripts/state-patch.sh"
+}
+
+@test "R9b: an audit path that does not exist under the root is dropped" {
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+{"actor":"hook:not-a-real-hook","action":"tool_invoked"}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output ""
+}
+
+@test "R9b: a malformed audit line cannot abort the scan" {
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+not json at all
+123
+[1,2]
+{"actor":"hook:audit-tooluse","action":"tool_invoked"}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output "hooks/audit-tooluse.sh"
 }

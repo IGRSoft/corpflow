@@ -2,6 +2,7 @@
 name: self-improvement
 description: Use when the ST stage runs or post-delivery user edits need classifying. Capture user edits at ST stage, classify them, propose scoped updates to agents/skills/commands that participated in the worktask; human-in-the-loop, never auto-applies.
 effort: medium
+version: 0.1.0
 ---
 
 # Self-Improvement Skill
@@ -27,9 +28,15 @@ Execute the five steps in order. If any step fails, write the failure to `.conte
 
 **Goal:** a deduped list of agents/skills/commands that actually participated in this worktask; Step 4 **filters** proposals against it.
 
-**Sources, in precedence order:** (1) `.context/state.json` `tasks{}` — `metadata.agent` + `metadata.embedded_commands` of every `status: completed` entry; (2) `.context/*.md` artifact metadata (`metadata.agent`, `Agent:` trailers, authorship blocks); (3) commit trailers (`Agent:`, `Stage:`) in `<first-stage-commit>..HEAD`. Exact query shapes: `references/target-mapping.md § Data Sources for "Used-in-Context Set"`.
+**Sources, in precedence order:** (1) `.context/state.json` `tasks{}` — `metadata.agent` + `metadata.embedded_commands` of every `status: completed` entry; (2) `.context/*.md` artifact metadata (`metadata.agent`, `Agent:` trailers, authorship blocks); (3) commit trailers (`Agent:`, `Stage:`) in `<first-stage-commit>..HEAD`; (4) `.context/logs/audit.jsonl` — hook and helper-script participation. Exact query shapes: `references/target-mapping.md § Data Sources for "Used-in-Context Set"`.
 
-**Output:** one repo-relative path per line under section `## Context Set` of `.context/logs/self-improve-<ts>.log`. Deduplicate on path; skip paths not present on disk.
+**Output:** one plugin-root-relative path per line under section `## Context Set` of `.context/logs/self-improve-<ts>.log`. Deduplicate on path; skip paths not present on disk.
+
+#### Step 1 — two rules the set depends on
+
+**Source 4 is not optional.** Sources 1–3 name *agents*, so a hook or a bundled script can drive most of a run and still be invisible to the retrospective — the class of participant that most often needs correcting after delivery.
+
+**Paths resolve against the plugin root, never the process cwd.** Every corpflow asset lives under `$CLAUDE_PLUGIN_ROOT` while the pipeline runs from the worktask's own repo, so a cwd-relative existence test drops every candidate and yields the empty set Step 5b warns about. `scripts/build-context-set.sh` resolves the root per `skills/shared/plugin-root-resolution.md` and reports on stderr when it cannot.
 
 ### Step 2 — Detect User Changes
 

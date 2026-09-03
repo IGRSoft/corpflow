@@ -116,7 +116,7 @@ handoff:
     - <path>
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   open_questions:              # REQUIRED — [] when nothing to elicit, never omitted
-    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep" }
+    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
     decisions: architecture-N.md#decisions    # ONLY when AR ran; omit otherwise
     tests: development-N.md#tests-added
@@ -178,8 +178,9 @@ yours to resolve, not the user's — cost is not an exemption.
 - `id` is `sw-<TASK_ID>-<n>` — the ledger unions on `.id`, so an unscoped `q1` overwrites another
   stage's question. Max 4 per stage; more is handing the user your triage.
 - `escalate` is never auto-answered, `decision` may be; the orchestrator raises your label, never
-  lowers it. `blocks_next_stage: true` costs a round trip at your own boundary, absent/`false`
-  batches at the final gate.
+  lowers it. `blocks_next_stage` is REQUIRED on every
+  stub and on both transports, and the two copies must agree — `true` costs a round trip at your
+  own boundary, `false` batches at the final gate.
 - Re-emitting after a rework or retry carries `status` and `resolution` forward.
 - You never ask — no plugin agent holds an ask tool; the orchestrator renders every item.
 - Not the sweep, each already has a channel: runtime evidence (`requests_test_evidence:`), a skipped

@@ -167,7 +167,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage DC --prev QA --facts '{
   "files_modified": ["README.md"],
-  "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 `files_modified` unions on the path string, first-seen order kept, so it never clobbers DV's entries and a re-run is byte-identical. Omitting it loses the file silently. Canonical rule: `handoff-protocol.md#facts-union`.

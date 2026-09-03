@@ -440,7 +440,7 @@ ledger_oq_required() {  # <handoff>
 @test "AC-3b twin: a ledger that reverts to required: [id] fails the comparison" {
   local planted ledger stub
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
-    's/^          required: \[id, class, ref\]$/          required: [id]/')"
+    's/^          required: \[id, class, ref, blocks_next_stage\]$/          required: [id]/')"
   ledger="$(ledger_oq_required "$planted" | sed 's/^ *//')"
   stub="$(sweep_stub_defs "$planted" | grep -m1 'required:' | sed 's/^ *//')"
   [ "$ledger" != "$stub" ] || fail "the planted divergence was not observable: '$ledger' vs '$stub'"
@@ -638,7 +638,7 @@ A missing sweep is warn-only until the next minor.')"
 @test "P2-6 twin: gating a check_sweep_* call site behind STRICT fails the wide check" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" \
-    's/if ! check_sweep_ledger "\$fmfile"; then/if [[ "\$STRICT" == "1" ]] \&\& ! check_sweep_ledger "\$fmfile"; then/')"
+    's/if ! check_sweep_ledger "\$fmfile" "\$f"; then/if [[ "\$STRICT" == "1" ]] \&\& ! check_sweep_ledger "\$fmfile" "\$f"; then/')"
   run check_no_sweep_escape_hatch_wide "$planted"
   assert_failure
 }
@@ -714,9 +714,9 @@ check_facts_examples() {  # <agents-dir>
 sweep_fixture() {  # sweep_fixture <dir> <ref-or-empty> [with-anchor|no-anchor]
   local d="$1" ref="$2"
   if [ -n "$ref" ]; then
-    sweep_fixture_items "$d" "$(printf '    - { id: sw-DC0-1, summary: "q", class: decision, ref: "%s" }' "$ref")" "${3:-with-anchor}"
+    sweep_fixture_items "$d" "$(printf '    - { id: sw-DC0-1, summary: "q", class: decision, ref: "%s", blocks_next_stage: false }' "$ref")" "${3:-with-anchor}"
   else
-    sweep_fixture_items "$d" '    - { id: sw-DC0-1, summary: "q", class: decision }' "${3:-with-anchor}"
+    sweep_fixture_items "$d" '    - { id: sw-DC0-1, summary: "q", class: decision, blocks_next_stage: false }' "${3:-with-anchor}"
   fi
 }
 
@@ -751,7 +751,7 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture "$d" "documentation-0.md#elicitation-sweep"
-  printf '{"facts":{"open_questions":[{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep"}]}}\n' > "$d/state.json"
+  printf '{"facts":{"open_questions":[{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep","blocks_next_stage":false}]}}\n' > "$d/state.json"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/state.json"
   assert_success
 }
@@ -777,7 +777,7 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
   # The schema must keep `stage` optional, or the derivation is pointless.
   local defs
   defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
-  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref\]' \
+  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref, blocks_next_stage\]' \
     || fail "SweepStub's required set changed; stage may have become mandatory"
 }
 
@@ -949,7 +949,7 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture_items "$d" \
-    '    - { id: sw-DC0-1, class: advisory, ref: "documentation-0.md#elicitation-sweep" }'
+    '    - { id: sw-DC0-1, class: advisory, ref: "documentation-0.md#elicitation-sweep", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_failure
   assert_output --partial "class is not decision|escalate"
@@ -988,7 +988,7 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   local d
   d="$(mk_tmpworkdir)/.context"
   sweep_fixture_items "$d" \
-    '    - { id: sw-DC0-1, class: decision, ref: ".context/documentation-0.md#elicitation-sweep" }'
+    '    - { id: sw-DC0-1, class: decision, ref: ".context/documentation-0.md#elicitation-sweep", blocks_next_stage: false }'
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_success
 }
@@ -997,8 +997,8 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   local d
   d="$(mk_tmpworkdir)"
   sweep_fixture_items "$d" \
-    '    - { id: sw-DC0-1, class: decision, ref: "documentation-0.md#elicitation-sweep" }
-    - { id: sw-DC0-2, summary: "optional", class: escalate, ref: "documentation-0.md#elicitation-sweep" }'
+    '    - { id: sw-DC0-1, class: decision, ref: "documentation-0.md#elicitation-sweep", blocks_next_stage: false }
+    - { id: sw-DC0-2, summary: "optional", class: escalate, ref: "documentation-0.md#elicitation-sweep", blocks_next_stage: true }'
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_success
 }
@@ -1055,14 +1055,16 @@ sweep_stub_defs() {
   awk '/^#### \$defs — SweepStub/{f=1;next} f && /^#{2,4} /{f=0} f' "$1"
 }
 
-@test "q10: SweepStub requires only [id, class, ref]" {
+@test "q10: SweepStub requires [id, class, ref, blocks_next_stage] and no more" {
   local defs
   defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
   [ -n "$defs" ] || fail "non-vacuity: SweepStub not extracted"
-  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref\]' \
-    || fail "SweepStub's required set is not [id, class, ref]: $defs"
+  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref, blocks_next_stage\]' \
+    || fail "SweepStub's required set is not [id, class, ref, blocks_next_stage]: $defs"
   printf '%s\n' "$defs" | grep -q 'summary:' \
     || fail "summary was removed entirely; it must stay legal-but-optional"
+  ! printf '%s\n' "$defs" | grep -qE '^ *required: \[[^]]*(status|resolution)' \
+    || fail "the answer fields leaked into the frontmatter stub's required set"
 }
 
 @test "q10 TRAP: no disjointness guard remains, and summary is still legal-optional" {
@@ -1076,7 +1078,7 @@ sweep_stub_defs() {
   defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
   printf '%s\n' "$defs" | grep -q 'summary:' \
     || fail "summary was removed entirely; it must stay legal-but-optional"
-  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref\]' \
+  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref, blocks_next_stage\]' \
     || fail "summary was made mandatory again"
 }
 
@@ -1091,8 +1093,8 @@ sweep_stub_defs() {
 
 @test "q10 twin: a stub schema that keeps summary required fails the check" {
   local planted
-  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" 's/required: \[id, class, ref\]/required: [id, summary, class, ref]/')"
-  run bash -c "awk '/^  SweepStub:\$/{f=1} f{print} f&&/^\`\`\`\$/{exit}' '$planted' | grep -q 'required: \[id, class, ref\]'"
+  planted="$(plant "$PLUGIN_ROOT/$HANDOFF" 's/required: \[id, class, ref, blocks_next_stage\]/required: [id, summary, class, ref, blocks_next_stage]/')"
+  run bash -c "awk '/^  SweepStub:\$/{f=1} f{print} f&&/^\`\`\`\$/{exit}' '$planted' | grep -q 'required: \[id, class, ref, blocks_next_stage\]'"
   assert_failure
 }
 
@@ -1122,7 +1124,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
   filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
   [ -n "$filter" ] || fail "non-vacuity: union filter not extracted"
   out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","status":"resolved","resolution":"answered"}]}}' \
-        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}' "$filter")"
+        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
   printf '%s' "$out" | jq -e '.facts.open_questions[0].status == "resolved"' > /dev/null \
     || fail "the downgrade was accepted: $out"
   printf '%s' "$out" | jq -e '.facts.open_questions[0].resolution == "answered"' > /dev/null \
@@ -1169,27 +1171,88 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     || fail "decisions no longer take the last writer: $out"
 }
 
-@test "q8 union: a stub with no status/resolution merges byte-identically (no null keys added)" {
+@test "q8 union: a stub with no status/resolution gains only the two defaults (no null keys added)" {
+  # `resolution` absent must stay absent: a null answer body renders as an answered
+  # question with nothing in it. `status` and `stage` are the two keys _sweep_defaults
+  # is allowed to synthesize, and the slot comes from the id when it carries one.
   local filter out stub
-  stub='{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}'
+  stub='{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}'
   filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
   out="$(printf '%s' "{\"facts\":{\"open_questions\":[$stub]}}" \
-        | jq -c --argjson f "{\"open_questions\":[$stub]}" "$filter")"
-  [ "$out" = "{\"facts\":{\"open_questions\":[$stub]}}" ] \
-    || fail "the union mutated an unanswered stub: $out"
+        | jq -c --arg sweep_stage "" --argjson f "{\"open_questions\":[$stub]}" "$filter")"
+  printf '%s' "$out" | jq -e '
+    .facts.open_questions | length == 1
+    and (.[0] | has("resolution") | not)
+    and (.[0] | [to_entries[] | select(.value == null)] | length == 0)
+    and (.[0] | .id == "sw-PL0-1" and .class == "decision"
+                and .ref == "planning-0.md#elicitation-sweep"
+                and .blocks_next_stage == false
+                and .status == "open" and .stage == "PL")
+  ' > /dev/null || fail "the union mutated an unanswered stub: $out"
+}
+
+@test "q8 union: an EXPLICIT false clears the flag — sticky means absent, never falsy" {
+  # The OV-183 defect lived in this one filter: the join ORed the flag, so once `true` reached
+  # the ledger nothing could clear it, and an agent whose artifact said `false` was outvoted by
+  # its own ledger stub. Absent still sticks (the test below); explicit false does not.
+  local filter out
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0].blocks_next_stage == false' > /dev/null \
+    || fail "an explicit false could not clear an incumbent true: $out"
 }
 
 @test "q8 union: blocks_next_stage is raise-only — a bare re-emit keeps the flag, a raise is honoured" {
   local filter out
   filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  # A BARE re-emit — the key absent, not false. --facts refuses this shape at the door now,
+  # so the arm survives for legacy payloads only and is exercised here against the filter.
   out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}}' \
-        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}' "$filter")"
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}' "$filter")"
   printf '%s' "$out" | jq -e '.facts.open_questions[0].blocks_next_stage == true' > /dev/null \
     || fail "a bare re-emit cleared blocks_next_stage: $out"
-  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x"}]}}' \
-        | jq -c --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}' "$filter")"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":true}]}' "$filter")"
   printf '%s' "$out" | jq -e '.facts.open_questions[0].blocks_next_stage == true' > /dev/null \
     || fail "raising to blocking was refused: $out"
+}
+
+@test "q9: the raise-only lattice is scoped to labellers, and transports are named a defect" {
+  # Without this scope the orchestrator reaches for the nearest rule when an agent's artifact
+  # and its own ledger stub disagree, ORs them, and manufactures a gate out of a bookkeeping slip.
+  local body
+  body="$(awk '/^#### Self-labels raise, never lower/{f=1;next} f && /^#{2,4} /{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
+  [ -n "$body" ] || fail "non-vacuity: § Self-labels raise, never lower is absent"
+  printf '%s\n' "$body" | grep -qi 'never transports' \
+    || fail "the lattice is not scoped away from transports"
+  printf '%s\n' "$body" | grep -qi 'defect, not a lattice' \
+    || fail "a transport divergence is not named a defect"
+  printf '%s\n' "$body" | grep -q 'check_sweep_ledger' \
+    || fail "the enforcing check is unnamed, so the rule has no mechanism"
+}
+
+@test "q9: the transport rule is mirrored where the orchestrator actually reads the join" {
+  # A rule stated only in stage-contracts.md is a rule the orchestrator may never reach.
+  local body
+  body="$(awk '/^##### Escalation guard — raise-only self-labels/{f=1;next} f && /^#{2,5} /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+  [ -n "$body" ] || fail "non-vacuity: § Escalation guard — raise-only self-labels is absent"
+  printf '%s\n' "$body" | grep -qi 'never transports' \
+    || fail "the orchestrator's own copy does not scope the join away from transports"
+  printf '%s\n' "$body" | grep -q 'check_sweep_ledger' \
+    || fail "the orchestrator's copy names no enforcing check"
+}
+
+@test "q9: a raise recorded at C.5 is written to BOTH transports" {
+  # The corollary of the harness refusing a divergence: a ledger-only write-back would fail the
+  # next --validate-frontmatter on a value this very step created.
+  local body
+  body="$(awk '/^##### Step C.5 — the write-back is a whole stub/{f=1;next} f && /^#{2,5} /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+  [ -n "$body" ] || fail "non-vacuity: § Step C.5 — the write-back is a whole stub is absent"
+  printf '%s\n' "$body" | grep -q 'blocks_next_stage' \
+    || fail "the complete item does not name blocks_next_stage"
+  printf '%s\n' "$body" | grep -qi 'both.*transports' \
+    || fail "a raise is not bound to both transports"
 }
 
 @test "q8 artifact side: § Item shape requires a re-emitted stub to carry its answer forward" {
@@ -1205,12 +1268,16 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 
 # --- q9 / sw-DR0-5: blocking items surface at their own boundary --------------
 
-@test "q9: blocks_next_stage exists on the stub and is optional (class stays the discriminator)" {
+@test "q9: blocks_next_stage is a REQUIRED stub field (class stays the discriminator)" {
+  # It was additive once. Absent and explicit `false` are different claims, and treating them
+  # alike is what let one item's two transports disagree undetected, so the author states it.
   local defs
   defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
   printf '%s\n' "$defs" | grep -q 'blocks_next_stage' || fail "the q9 carrier is absent from SweepStub"
-  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref\]' \
-    || fail "blocks_next_stage leaked into required[]; it must be additive"
+  printf '%s\n' "$defs" | grep -q 'required: \[id, class, ref, blocks_next_stage\]' \
+    || fail "blocks_next_stage is not in required[]: $defs"
+  printf '%s\n' "$defs" | grep -q 'class:.*enum: \[decision, escalate\]' \
+    || fail "class stopped being the render discriminator"
 }
 
 @test "q9: the canonical section no longer claims no stage boundary gains a round-trip" {

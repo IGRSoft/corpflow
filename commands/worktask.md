@@ -526,6 +526,10 @@ before any auto-answer, join it with the orchestrator's own label on both axes �
 un-reclassified. The escalation classes are the four enumerated directly above; this sub-heading
 adds no second copy of them.
 
+The join is over **labellers, never transports**: never an agent's artifact stub against its own
+ledger stub. Those two copies have one author, so a disagreement is a defect —
+`handoff-harness.sh check_sweep_ledger` fails the stage and the agent reconciles both.
+
 The join itself, both axes, and why raise-only holds by construction rather than by a remembered
 rule: `skills/shared/stage-contracts.md § Self-labels raise, never lower`.
 
@@ -929,10 +933,15 @@ approval carrier, and the gate's own `AskUserQuestion` still fires last and unmo
 
 ##### Step C.5 — the write-back is a whole stub
 
-The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class` and `ref`
-alongside `status` and `resolution` — never as `{id, status, resolution}`. The union REPLACES the
-incumbent object for that id, so a partial item would drop the very anchor C.4 resolves its
-question text from; `--facts` now rejects one by name rather than persisting it.
+The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class`, `ref` and
+`blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
+union REPLACES the incumbent object for that id, so a partial item would drop the very anchor C.4
+resolves its question text from; `--facts` now rejects one by name rather than persisting it.
+
+Where C.2 **raised** either axis, write the raised value to **both** transports — the ledger stub
+here, and the emitting stage's artifact frontmatter stub. The two copies have one author and
+`check_sweep_ledger` refuses a divergence between them, so a ledger-only write leaves the next
+`--validate-frontmatter` failing on a value this step itself created.
 
 ##### Step C.5 — the unattended lanes
 

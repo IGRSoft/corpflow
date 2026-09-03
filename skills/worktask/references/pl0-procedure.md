@@ -713,7 +713,7 @@ Pass `--facts` in the **same call** to union this stage's compressed facts into 
 ```bash
 state-patch.sh --stage PL --prev USER --facts '{
   "decisions": [{"id":"pl-1","summary":"≤160 chars","ref":"planning-0.md#stages"}],
-  "open_questions": [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}'
+  "open_questions": [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers an upstream stage's entries, and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.

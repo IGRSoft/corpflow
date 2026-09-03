@@ -341,3 +341,90 @@ EOF
   assert_failure 1
   assert_output --partial "expected 'planning-N.md'"
 }
+
+# ---------------------------------------------------------------------------
+# --agent-section-lint — the #16 letter-(b) cross-check.
+# Guards the contradiction shape "an agent mandates an H2 that anchor_lint rejects",
+# which no artifact author can satisfy. The extraction UNDER-matches by design (AD-6):
+# a false negative is today's state, a false positive would block correct work.
+# ---------------------------------------------------------------------------
+
+mk_agent_repo() {   # $1 = agent basename, $2… = file body lines
+  local base="$1"; shift
+  mkdir -p "$WD/repo/agents"
+  printf '%s\n' "$@" > "$WD/repo/agents/$base.md"
+}
+
+@test "agent-section-lint: an unlisted mandated section fails and names BOTH files" {
+  mk_agent_repo developer \
+    'Write the summary to `development-N.md` under `## not-an-anchor` please.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_failure 1
+  assert_output --partial "not-an-anchor"
+  assert_output --partial "agents/developer.md"
+  assert_output --partial "cache-lint.sh"
+}
+
+@test "agent-section-lint: a section on the stage's allow-list row passes" {
+  mk_agent_repo developer \
+    'Write the summary to `development-N.md` under `## files-changed` please.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+  assert_output --partial "all mandated sections accepted"
+}
+
+@test "agent-section-lint: an OPTIONAL_ANCHOR_RE section passes (the ST/#16 case)" {
+  mk_agent_repo stakeholder \
+    'In retrospective-N.md, add a short `## Self-Improvement` section referencing it.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+}
+
+@test "agent-section-lint: a backticked H2 with no artifact filename is NOT matched" {
+  mk_agent_repo developer \
+    'Read one `## made-up-heading` section when the diff is insufficient.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+}
+
+@test "agent-section-lint: a placement word must be ADJACENT, not merely same-line" {
+  # The exact shape of security-reviewer.md L65: an artifact filename, a stray ` as `,
+  # and a `## X` span that is a cross-reference rather than a mandate.
+  mk_agent_repo developer \
+    'A path is read as `git diff` output; anchor-scoped `## anchor` reads, see `development-N.md`.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+}
+
+@test "agent-section-lint: a placeholder section name is dropped, never compared" {
+  mk_agent_repo technical-lead \
+    'A `## rework-N` section appearing in `development-N.md` re-opens the surface.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+}
+
+@test "agent-section-lint: sections written to a NON-artifact file are out of scope" {
+  mk_agent_repo developer \
+    'Append a `## Retry log` block to `.context/errors/developer.md` under the schema.'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_success
+}
+
+@test "agent-section-lint: the real tree satisfies the invariant (the DV2->DV3 gate)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$PLUGIN_ROOT"
+  assert_success
+  assert_output --partial "13 stage agents checked"
+}
+
+@test "agent-section-lint: an empty agents/ dir is reported, never silently green" {
+  mkdir -p "$WD/repo/agents"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --agent-section-lint "$WD/repo"
+  assert_failure 1
+  assert_output --partial "no stage agents found"
+}
+
+@test "--selftest is accepted as an alias for --self-test (the #16 contract command)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --selftest
+  assert_success
+  assert_output --partial "ALL PASS"
+}

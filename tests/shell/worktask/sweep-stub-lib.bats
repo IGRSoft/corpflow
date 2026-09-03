@@ -123,15 +123,16 @@ _patch_verdict() {  # <stub-json>
     [ "$hv" = "$want" ] || fail "harness verdict $hv, expected $want, for: $yaml"
     [ "$pv" = "$want" ] || fail "ledger verdict $pv, expected $want, for: $json"
   done <<'ROWS'
-pass|{ id: sw-PL0-1, class: decision, ref: "planning-0.md#elicitation-sweep" }|{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}
-fail|{ id: sw-PL0-1, class: decision, ref: "" }|{"id":"sw-PL0-1","class":"decision","ref":""}
-fail|{ id: sw-PL0-1, class: decision, ref: "planning-0.md" }|{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md"}
-fail|{ id: sw-PL0-1, class: question, ref: "planning-0.md#elicitation-sweep" }|{"id":"sw-PL0-1","class":"question","ref":"planning-0.md#elicitation-sweep"}
-fail|{ id: sw-P0-1, class: decision, ref: "planning-0.md#elicitation-sweep" }|{"id":"sw-P0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}
-fail|{ id: swPL0-1, class: decision, ref: "planning-0.md#elicitation-sweep" }|{"id":"swPL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}
-pass|{ id: sw-PL0-1, class: escalate, ref: "#elicitation-sweep" }|{"id":"sw-PL0-1","class":"escalate","ref":"#elicitation-sweep"}
+pass|{ id: sw-PL0-1, class: decision, ref: "planning-0.md#elicitation-sweep", blocks_next_stage: false }|{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}
+fail|{ id: sw-PL0-1, class: decision, ref: "", blocks_next_stage: false }|{"id":"sw-PL0-1","class":"decision","ref":"","blocks_next_stage":false}
+fail|{ id: sw-PL0-1, class: decision, ref: "planning-0.md", blocks_next_stage: false }|{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md","blocks_next_stage":false}
+fail|{ id: sw-PL0-1, class: question, ref: "planning-0.md#elicitation-sweep", blocks_next_stage: false }|{"id":"sw-PL0-1","class":"question","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}
+fail|{ id: sw-P0-1, class: decision, ref: "planning-0.md#elicitation-sweep", blocks_next_stage: false }|{"id":"sw-P0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}
+fail|{ id: swPL0-1, class: decision, ref: "planning-0.md#elicitation-sweep", blocks_next_stage: false }|{"id":"swPL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}
+pass|{ id: sw-PL0-1, class: escalate, ref: "#elicitation-sweep", blocks_next_stage: false }|{"id":"sw-PL0-1","class":"escalate","ref":"#elicitation-sweep","blocks_next_stage":false}
+fail|{ id: sw-PL0-1, class: decision, ref: "planning-0.md#elicitation-sweep" }|{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}
 ROWS
-  [ "$n" -eq 7 ] || fail "non-vacuity: only $n parity rows exercised"
+  [ "$n" -eq 8 ] || fail "non-vacuity: only $n parity rows exercised"
 }
 
 # --- the constants agree with the schema that documents them -----------------

@@ -270,8 +270,15 @@ meta_json() {
 # program construction (rules/security.md). Defaults reproduce the FN-stage rows
 # byte-for-byte; branch-name.sh overrides all three knobs for its PL-stage rows.
 # Never fails the caller: an audit row is evidence, not a gate.
+#
+# AUDIT_DRY_RUN=1 suppresses the row entirely. The guard lives HERE, not at the call
+# sites, because branch-name.sh's ladder has nine arms and each one audits: a per-arm
+# check is nine chances to forget, and the arm that forgets writes a real
+# `branch_renamed` row for a run that renamed nothing — which then trips the once-per-run
+# already_named guard and spends the naming window on a preview.
 audit_fn() {
   local action="$1" result="$2" meta="${3:-}"
+  [ "${AUDIT_DRY_RUN:-0}" = "1" ] && return 0
   local actor="${AUDIT_ACTOR:-project-manager}"
   local subj="${AUDIT_SUBJECT:-FN0}"
   local stage="${AUDIT_STAGE:-FN}"

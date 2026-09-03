@@ -197,8 +197,10 @@ $defs:
   SweepStub:
     type: object
     # `summary` is optional: the question text is read from the `ref` anchor body,
-    # which check_sweep_ref_anchor guarantees exists (q10).
-    required: [id, class, ref]
+    # which check_sweep_ref_anchor guarantees exists (q10). `blocks_next_stage` is
+    # mandatory — absent-vs-`false` is exactly the ambiguity that let the ledger and the
+    # artifact disagree about the same item, so the field is stated, never inferred.
+    required: [id, class, ref, blocks_next_stage]
     properties:
       id:      { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
       summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
@@ -212,8 +214,10 @@ $defs:
 ```yaml
 # …continued: $defs.SweepStub.properties
       # q9 carrier. Orthogonal to `class`: an escalate item may or may not block.
-      # 2-element lattice false < true, joined with OR — the agent self-labels and the
-      # orchestrator may raise false→true, never lower (ad4b's monotone idiom, reused).
+      # 2-element lattice false < true — the agent self-labels and the orchestrator may
+      # raise false→true, never lower (ad4b's monotone idiom, reused). That lattice is over
+      # LABELLERS: this stub and its facts.open_questions[] twin have one author and must
+      # carry the SAME value, which handoff-harness.sh check_sweep_ledger enforces.
       blocks_next_stage: { type: boolean }
       status:            { type: string, enum: [open, resolved] }
       resolution:        { type: string, maxLength: 160 }
@@ -640,7 +644,10 @@ stage passes them in its own `--facts` payload; the two are separate transports 
 no derivation between them, so a stub written to frontmatter alone never reaches the FN gate.
 `handoff-harness.sh --validate-frontmatter --state`, run at each stage completion
 (`commands/worktask.md § Step B.1`), fails the stage when a sweep stub is missing from
-`facts.open_questions[]`, and fails when the ledger is unreadable.
+`facts.open_questions[]`, when a stub present in both transports carries a different `class` or
+`blocks_next_stage` in each, and when the ledger is unreadable. Two writers with no derivation
+between them means id parity is not agreement: the fields are compared too, and a divergence is
+reconciled by the agent rather than joined by the harness.
 
 ###### #facts-union — the merge table
 
@@ -872,7 +879,7 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
           # Mirrors $defs/SweepStub — the sweep stub is the only accepted item shape here
           # too, so the ledger and the frontmatter cannot disagree about what an entry is.
           type: object
-          required: [id, class, ref]
+          required: [id, class, ref, blocks_next_stage]
           properties:
             id: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
             summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
@@ -886,7 +893,8 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
             class: { type: string, enum: [decision, escalate] }
             ref: { type: string }
             # q9 carrier: this item is answered at its own stage boundary, not held
-            # to the FN gate. See $defs/SweepStub for the raise-only rule.
+            # to the FN gate. See $defs/SweepStub for the raise-only rule. This value must
+            # equal the frontmatter stub's — a divergence fails check_sweep_ledger.
             blocks_next_stage: { type: boolean }
 ```
 
