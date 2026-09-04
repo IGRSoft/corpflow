@@ -1381,3 +1381,48 @@ promote() {
   assert_success
   echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q "unset (resolves to scoped)"
 }
+
+# Launcher phrases classify_segment strips off the front of a segment, one per
+# line, quotes and the trailing space removed.
+_classifier_launchers() {
+  grep -m1 '^ *for _launcher in ' "$PLUGIN_ROOT/$SCRIPT" \
+    | grep -o '"[^"]*"' | tr -d '"' | sed 's/ *$//'
+}
+
+# Launcher phrases the fast-path head scanner skips: the two-token `case`
+# alternation plus the one-token one.
+_scanner_launchers() {
+  sed -n 's/^ *case "\$_lnch \$_cur" in//p;s/^ *\("uv run".*\)) *_lnch="" *;;/\1/p' \
+    "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n' | tr -d '"'
+  sed -n 's/^ *\(env|npx[^)]*\)) *_lnch="\$_cur" *;;/\1/p' "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n'
+}
+
+@test "contract: the fast-path scanner skips every launcher the classifier strips" {
+  # These two lists were kept in step by eye — the scanner's own comment said so.
+  # A launcher present in the classifier but missing here makes the fast path
+  # head on the wrapper, find nothing gateable, and ALLOW what the classifier
+  # would deny, so the containment direction is the security-relevant one.
+  local phrase scanner runners missing="" checked=0
+  scanner="$(_scanner_launchers)"
+  runners="$(sed -n 's/^RUNNERS="\(.*\)"$/\1/p' "$PLUGIN_ROOT/$SCRIPT")"
+  [ -n "$runners" ] || fail "RUNNERS list not found in $SCRIPT"
+  [ -n "$scanner" ] || fail "scanner launcher list not found in $SCRIPT"
+  while IFS= read -r phrase; do
+    [ -n "$phrase" ] || continue
+    checked=$((checked + 1))
+    printf '%s\n' "$scanner" | grep -qxF "$phrase" || missing="$missing $phrase"
+    # A two-token phrase needs its first word either in the one-token skip set,
+    # so the scanner can pair the second word with it, or in RUNNERS — `pnpm`
+    # and `yarn` are runners in their own right, so the scanner heads on them
+    # and the classifier gates the invocation anyway. Anything in neither set
+    # is a real hole: the scanner would head on a word that gates nothing.
+    case "$phrase" in
+      *" "*)
+        printf '%s\n' "$scanner" | grep -qxF "${phrase%% *}" \
+          || printf '%s\n' $runners | grep -qxF "${phrase%% *}" \
+          || missing="$missing ${phrase%% *}(head-of:$phrase)" ;;
+    esac
+  done < <(_classifier_launchers)
+  [ "$checked" -ge 8 ] || fail "non-vacuity: only $checked launcher phrases extracted"
+  [ -z "$missing" ] || fail "scanner does not skip:$missing"
+}
