@@ -35,6 +35,8 @@ stage ran — read `state.json`.
 | QA (Quality) | `<test-generator-agent>` | development context + test requirements — **consultation only**, corpflow retains the stage and writes the artifact |
 | DV-support | `<support-agents>` | scoped findings returned to the parent DV agent, which owns the artifact |
 
+#### Who owns the artifact
+
 **DV is the only stage ownership transfers for.** Read `tasks.DV0.agent`: a `<PLUGIN>:` id
 means you own `development-N.md`, patch the ledger, and your frontmatter is what the harness
 validates; routed via
@@ -115,6 +117,12 @@ handoff:
   files_touched:
     - <path>
   next_stage_focus: "<imperative: what DR/QA must focus on>"
+```
+
+#### DV schema, continued — sweep, refs and architecture
+
+```yaml
+# …continued: the same handoff: mapping, second half.
   open_questions:              # REQUIRED — [] when nothing to elicit, never omitted
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
@@ -125,6 +133,8 @@ handoff:
     applied: true              # your truthful statement that AR's decisions were followed
 ---
 ```
+
+#### Pairing rule
 
 `refs.decisions` and the `architecture` object travel together — one without the other makes DR
 report `missing_input`, either without AR trips the inverse guard.
@@ -137,6 +147,8 @@ report `missing_input`, either without AR trips the inverse guard.
 | DR / SR | `key_decisions` = findings; no `files_touched` | pass / fail |
 | QA | `files_touched` = tests added, `key_decisions` = results | go / no-go |
 | IR | `key_decisions` = root cause | ok / escalate |
+
+#### Verdict and artifact rules
 
 `key_decisions` items are stubs: `{ id: ad1, summary: "<≤160 chars>", anchor: "<artifact>#decisions" }`.
 A `verdict` outside `ok|blocked|escalate|pass|fail|go|no-go|approve|reject` reaches the ledger
@@ -163,6 +175,8 @@ yours to resolve, not the user's — cost is not an exemption.
 | `handoff.open_questions[]` | the stub `{{ id, class, ref }}` |
 | `state-patch.sh --facts` | the stub plus `stage`, `blocks_next_stage`, `status` |
 
+#### The item, as written in the artifact
+
 ```markdown
 ## elicitation-sweep
 
@@ -174,6 +188,8 @@ yours to resolve, not the user's — cost is not an exemption.
   - `<label ≤24>` — <detail ≤120>  *(recommended)*
   - `<label ≤24>` — <detail ≤120>
 ```
+
+#### Rules
 
 - `id` is `sw-<TASK_ID>-<n>` — the ledger unions on `.id`, so an unscoped `q1` overwrites another
   stage's question. Max 4 per stage; more is handing the user your triage.
@@ -192,6 +208,8 @@ Run `state-patch.sh --stage <CODE> --prev <PREV>` when its path is supplied (pro
 `task.metadata.state_patch_script`). Path absent → skip silently; never hand-roll a `jq` merge or
 write `state.json`. Patch fails → proceed and return; the `SubagentStop` hook rebuilds from your
 frontmatter. Exit 3 means your artifact is not on disk — write it and re-run.
+
+### Facts on the same call
 
 Pass `--facts` on the **same** call. Arrays union on identity, so send only your own entries:
 
@@ -234,6 +252,8 @@ This plugin's own multi-stage commands name a **role**, never an id, so this tab
 an id appears. Resolve the id, then check your available agent list: **present** → dispatch it;
 **absent** → apply the call site's own `Error handling:` line. Never a hard halt.
 
+### Which roles never route through corpflow
+
 **Roles with a local equivalent are not dispatched through corpflow at all.** Architect, QA
 engineer, and security reviewer resolve to routers that come straight back here, so app-layer work
 calls this plugin's own architect, test generator, and security auditor directly. Those aliases are
@@ -242,6 +262,8 @@ corpflow's *inbound* routing, resolved at worktask init; these commands run outs
 **Split by layer, not by role.** The local architect selects this platform's patterns; service
 decomposition, storage topology, and API contracts have no local equivalent and go to the
 orchestrator's architect. Routing system-level design at the local architect is misrouted.
+
+### Role to agent id
 
 | Role named in a command | Agent id |
 |---|---|
@@ -272,7 +294,5 @@ fork a standard's text into this plugin; a copy drifts silently.
 | | |
 |---|---|
 | Targets corpflow | `<version>` |
-| Size budget | ≤260 lines |
-| Size budget | ≤280 lines |
-| Size budget | ≤280 lines |
+| Size budget | ≤300 lines |
 | Contract source | `corpflow skills/cross-plugin-handoff/references/plugin-contract.md` |

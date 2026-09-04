@@ -354,7 +354,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
 @test "AC-3 twin: re-adding the not:{required:[class]} guard fails (nothing left to discriminate)" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
-    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\$ref: '#/\\$defs/SweepStub' }|")"
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\\$ref: '#/\\\$defs/SweepStub' }|")"
   run check_schema_shape "$planted"
   assert_failure
   assert_output --partial "disjointness guard reappeared"
@@ -363,7 +363,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
 @test "AC-3 twin: re-admitting the legacy string form via a oneOf fails" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
-    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { oneOf: [{ type: string }, { \\$ref: '#/\\$defs/SweepStub' }] }|")"
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { oneOf: [{ type: string }, { \\\$ref: '#/\\\$defs/SweepStub' }] }|")"
   run check_schema_shape "$planted"
   assert_failure
   assert_output --partial "disjunction again"
@@ -1549,8 +1549,12 @@ step_a4_body() {  # <worktask-cmd>
   printf '%s\n' "$body" | grep -q 'Step C.4' \
     || fail "A.4 does not reuse the C.4 resolution rule"
   printf '%s\n' "$body" | grep -q 'sw-PL' || fail "A.4 does not key on sw-PL<N>-* ids"
-  printf '%s\n' "$body" | grep -qi 'numbered' \
-    && fail "A.4 still describes a numbered elicitation list"
+  # `grep && fail` cannot express "must not match": grep's own exit 1 is the last
+  # status and fails the arm on a correct document. `if` returns 0 when the
+  # condition is false, so the absent-match case passes.
+  if printf '%s\n' "$body" | grep -qi 'numbered'; then
+    fail "A.4 still describes a numbered elicitation list"
+  fi
 }
 
 @test "PL-3 twin: restoring the numbered-list wording fails" {
