@@ -52,6 +52,33 @@ set +e
 [ -f "$_DEDUPE_LIB" ] && . "$_DEDUPE_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
+# Remediation prose for the three denial classes lives in references/, not inline: it is
+# operator guidance rather than logic, and every constraint on its wording is recorded beside
+# it. Read on a deny path only, so the allow path stays fork-free. Sections are delimited by
+# `<!-- id -->` markers and joined with single spaces.
+#
+# Degrades, never fails closed: an unreadable document leaves the condition clause alone. A
+# gate that cannot find its help text must still deny — and must not deny harder than it would
+# with the text present.
+_DENY_DOC="$(dirname "$0")/references/test-execution-denials.md"
+
+deny_help() {
+  [ -r "$_DENY_DOC" ] || return 0
+  awk -v id="$1" '
+    $0 == "<!-- " id " -->" { on = 1; next }
+    on && /^<!-- / { exit }
+    on { buf = (buf == "" ? $0 : buf " " $0) }
+    END { gsub(/  +/, " ", buf); sub(/^ +/, "", buf); sub(/ +$/, "", buf); print buf }
+  ' "$_DENY_DOC" 2> /dev/null
+}
+
+# deny_reason <condition-clause> <section-id> -> the clause, plus the section when it loads.
+deny_reason() {
+  local _help
+  _help=$(deny_help "$2")
+  if [ -n "$_help" ]; then printf '%s %s' "$1" "$_help"; else printf '%s' "$1"; fi
+}
+
 # ---------------------------------------------------------------------------
 # RUNNERS — parity counterpart of testing-strategy.md's canonical list;
 # test-authority-matrix.bats asserts the two agree. Matched against the head
@@ -802,10 +829,9 @@ dedupe_decide() {
     return 0
   fi
 
-  # Naming the prior run is what makes this actionable: the caller's next move
-  # is to CITE that run, not to find a way around the gate. Reruns after any
-  # edit are automatic, so the env var is framed as the human-only hatch it is.
-  _reason="This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority). To proceed: (1) cite that run as the evidence for this stage — it covers the same tree and the same selection; (2) if you have since changed something, make the edit and re-run — any modification to tracked content re-enables this command automatically, no flag required; or (3) if you need a repeat run of an unchanged tree to investigate a flake, ask a human to restart with CORPFLOW_TEST_DEDUPE=off in the process environment. An agent cannot self-serve that by retrying the command with a prefix, because this hook reads process env rather than the command string."
+  # Naming the prior run is what makes this actionable: the caller's next move is to CITE that
+  # run, not to find a way around the gate. Remediation: references/test-execution-denials.md.
+  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority)." dedupe)
   emit_deny "$_reason" || return 0
 
   write_audit_row "$_ctx" "test_execution_deduped" \
@@ -1155,28 +1181,13 @@ run_gate() {
     fi
   fi
 
-  # Banned stage (or DV-full): DENY. The relief text is actionable BY AN
-  # AGENT: requests_test_evidence / blocked-escalation are self-serviceable
-  # from inside a stage's own artifact. CORPFLOW_TEST_GATE=off is NOT
-  # agent-serviceable — the hook reads process env, not the command string,
-  # so a retry with a command-string prefix denies identically — so the text
-  # frames it explicitly as a human ask, not a retry an agent can perform.
+  # Banned stage (or DV-full): DENY. Each reason is a condition clause naming what is true
+  # right now, plus the remediation section for its class; the constraints on that wording live
+  # with it in references/test-execution-denials.md.
   if [ -n "$_settled" ]; then
-    # Naming the real condition matters: reusing the per-stage text here would
-    # print "Stage '(none in progress)' has no authority", which reads as a bug
-    # and tells the caller nothing about why now is the wrong time.
-    _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched, and no verification stage has recorded an open no-go. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, (2) if a verification stage is remediating its own failure, record that stage's verdict as \"no-go\" in the ledger — its authority persists until the verdict flips, so re-opening the stage to lie about its status is never required; or (3) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+    _reason=$(deny_reason "No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority)." settled)
   else
-  # The --no-test remedy is named FIRST and explicitly: it is the one option
-  # that lets the caller get what it usually actually wants (a compile/build
-  # check) without any authority change, and it is spelled identically across
-  # every platform plugin's build-test command. Omitting it cost a real run two
-  # streams: both were denied, neither discovered the flag, both invented
-  # `--build-only` (which no build-test command accepts and the classifier
-  # therefore reads as a full test run), and both then fell back to raw
-  # toolchain calls — precisely what agents/developer.md forbids. A denial that
-  # does not name the supported escape hatch manufactures that workaround.
-  _reason="Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode. DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) if you only need to BUILD, re-run the same build-test command with --no-test — build-only verification is permitted at every stage and is allowed by this gate (note: --build-only is not a real flag and will be denied again); (2) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it; or (3) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. Do NOT fall back to invoking the toolchain directly — agents/developer.md requires build/test to go through the platform's build-test command. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  _reason=$(deny_reason "Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode." authority)
   fi
   emit_deny "$_reason" || return 0
 

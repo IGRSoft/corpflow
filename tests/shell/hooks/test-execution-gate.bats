@@ -1374,6 +1374,33 @@ promote() {
   [[ "$reason" == *"resolved test mode is 'full'"* ]]
 }
 
+@test "DH1: the remediation half of a denial comes from references/test-execution-denials.md" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  # A phrase that exists only in the document, so this fails if the section stops loading.
+  [[ "$reason" == *"--build-only is not a real flag"* ]] || fail "remediation section absent: $reason"
+  # Joined into one line: a wrapped paragraph must not reach the caller as multiple lines.
+  [ "$(printf '%s' "$reason" | wc -l | tr -d ' ')" = "0" ] || fail "reason is multi-line"
+}
+
+@test "DH2: an unreadable denial document degrades to the condition clause, never to an allow" {
+  cp -R "$PLUGIN_ROOT/hooks" "$WD/hooks"
+  rm -rf "$WD/hooks/references"
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"has no test-execution authority"* ]] || fail "condition clause lost: $reason"
+  [[ "$reason" != *"--build-only is not a real flag"* ]] || fail "help text loaded from nowhere"
+}
+
 @test "R3-1s: an absent test_mode is reported as unset, never guessed as full" {
   state_with DR
   local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
