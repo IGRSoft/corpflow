@@ -22,8 +22,9 @@
 #        cache-lint.sh --anchor-lint <artifact.md>
 #      Verifies the artifact's H2 headings match the per-stage allow-list
 #      from skills/worktask/references/handoff-protocol.md#anchor-allow-list.
-#      Stage is read from the artifact's `handoff:` frontmatter (yq if
-#      available; awk subset fallback). Exits 1 on missing/extra anchors.
+#      Stage is read from the artifact's `handoff:` frontmatter block (yq when
+#      it parses it; awk subset fallback when yq is absent OR errors).
+#      Exits 1 on missing/extra anchors.
 #
 #   3. Frontmatter template lint:
 #        cache-lint.sh --frontmatter-template-lint <agent.md> [<agent.md> ...]
@@ -178,23 +179,47 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture|Blockers|DV Completion Checklist|Incident Report|Release Preparation Summary|Self-Improvement)$'
 
 # ---------- Frontmatter stage extractor ----------
-# Prints stage code on stdout; empty if not found.
+# The frontmatter block alone (between the first two `---` lines), empty if absent.
+# Everything downstream parses THIS, never the whole file: an artifact body is markdown,
+# and a table cell or a `**Bold**:` line makes a whole-file YAML parse abort on a document
+# whose frontmatter is perfectly well-formed.
+frontmatter_block() {
+  awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$1"
+}
+
+# The awk subset parser — the fallback whenever yq cannot answer. Reads a `stage:` line
+# out of an already-isolated frontmatter block.
+_stage_via_awk() {
+  awk '
+    /^[[:space:]]*stage:[[:space:]]*/ {
+      sub(/^[[:space:]]*stage:[[:space:]]*/, "")
+      gsub(/[[:space:]"]+/, "")
+      print
+      exit
+    }'
+}
+
+# Prints stage code on stdout; empty if genuinely absent.
+#
+# Two failure modes that look identical from the outside must NOT be conflated:
+#   - yq ran and reported no stage  -> a REAL absence; report it, do not paper over it
+#     with a second parser that might disagree.
+#   - yq errored (or is missing)    -> NO answer; fall back to awk.
+# Treating the second as the first is how this lint failed OPEN: --anchor-lint reported
+# "no stage in handoff frontmatter" for artifacts that carry one, and every anchor of
+# every such artifact went unchecked on any host where yq is installed.
 extract_stage() {
-  local f="$1"
+  local fm out
+  fm=$(frontmatter_block "$1")
+  [ -n "$fm" ] || return 0
   if command -v yq >/dev/null 2>&1; then
-    yq eval '.handoff.stage // ""' "$f" 2>/dev/null || true
-  else
-    awk '
-      BEGIN { in_fm = 0; depth = 0 }
-      /^---$/ { depth++; in_fm = (depth == 1); next }
-      in_fm && /^[[:space:]]*stage:[[:space:]]*/ {
-        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
-        gsub(/[[:space:]"]+/, "")
-        print
-        exit
-      }
-    ' "$f"
+    if out=$(printf '%s\n' "$fm" | yq eval '.handoff.stage // ""' - 2>/dev/null); then
+      [ "$out" = "null" ] && out=""
+      printf '%s\n' "$out"
+      return 0
+    fi
   fi
+  printf '%s\n' "$fm" | _stage_via_awk
 }
 
 # ---------- Anchor lint ----------
@@ -621,28 +646,6 @@ frontmatter_template_lint() {
 }
 
 # ---------- Filename lint ----------
-# extract_stage() yq-parses the whole file, which aborts on any real artifact
-# body ("mapping values are not allowed in this context") and made filename-lint
-# skip every artifact it was meant to check. Scoped to the filename path on
-# purpose: this compares basenames only, so tightening it cannot surface new
-# assertions the way repairing extract_stage() for --anchor-lint would.
-extract_stage_from_frontmatter() {
-  local f="$1" fm
-  fm=$(awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f")
-  [[ -n "$fm" ]] || return 0
-  if command -v yq >/dev/null 2>&1; then
-    printf '%s\n' "$fm" | yq eval '.handoff.stage // ""' - 2>/dev/null || true
-  else
-    printf '%s\n' "$fm" | awk '
-      /^[[:space:]]*stage:[[:space:]]*/ {
-        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
-        gsub(/[[:space:]"]+/, "")
-        print
-        exit
-      }'
-  fi
-}
-
 filename_lint() {
   local ctx_dir="$1"
   [[ -d "$ctx_dir" ]] || { echo "filename-lint: directory not found: $ctx_dir" >&2; exit 2; }
@@ -652,7 +655,7 @@ filename_lint() {
     [[ -f "$artifact" ]] || continue
 
     local stage
-    stage=$(extract_stage_from_frontmatter "$artifact")
+    stage=$(extract_stage "$artifact")
     [[ -z "$stage" || "$stage" == "null" ]] && continue
 
     count=$((count + 1))

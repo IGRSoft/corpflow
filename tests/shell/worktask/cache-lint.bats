@@ -366,6 +366,107 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# --anchor-lint against a body yq cannot parse (P2-2 / sw-DR0-2).
+#
+# extract_stage() used to fall back to awk only when yq was ABSENT, never when yq
+# RAN AND FAILED. On any host with yq installed, an artifact whose body is ordinary
+# markdown (a table, a `key: value` line) aborted the whole-file parse, the stage came
+# back empty, and --anchor-lint reported "no stage in handoff frontmatter" and linted
+# NOTHING — it failed OPEN. It cost QA0 all anchor coverage on this run.
+#
+# Mutation-verified: both arms below go red against that implementation (the first on
+# exit code, the second on the diagnostic it prints). On a host with no yq the premise
+# is vacuous and both arms pass either way, which is the correct behaviour, not coverage.
+# ---------------------------------------------------------------------------
+
+# A DV artifact carrying every required anchor under a body yq refuses to parse.
+unparsable_dv_artifact() {
+  local path="$1"
+  cat > "$path" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "anchors complete; body is markdown yq cannot read as YAML"
+  refs: { dev: development.md#files-changed }
+---
+
+# Development
+
+| Column | Meaning |
+|--------|---------|
+| `key` | value: a colon that aborts a whole-file YAML parse |
+
+## files-changed
+
+x
+
+## tests-added
+
+x
+
+## deviations
+
+none
+
+## follow-ups
+
+none
+
+## elicitation-sweep
+
+No items.
+EOF
+}
+
+@test "anchor-lint: a body yq cannot parse still resolves its stage and passes on merit" {
+  unparsable_dv_artifact "$WD/unparsable-ok.md"
+  # Premise check: the whole-file parse the old extract_stage() used really does fail here.
+  if command -v yq >/dev/null 2>&1; then
+    run yq eval '.handoff.stage // ""' "$WD/unparsable-ok.md"
+    assert_failure
+  fi
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/unparsable-ok.md"
+  assert_success
+  assert_output --partial "stage=DV"
+  assert_output --partial "ok"
+  [[ "$stderr" != *"no stage in handoff frontmatter"* ]]
+}
+
+@test "anchor-lint: the same unparsable body is LINTED, not waved through (fail-open guard)" {
+  unparsable_dv_artifact "$WD/unparsable-gap.md"
+  # Remove one required anchor. A vacuous pass and a "no stage" bail both look like
+  # "not ok"; only the anchor-level diagnostic proves the anchors were actually compared.
+  grep -v '^## tests-added$' "$WD/unparsable-gap.md" > "$WD/unparsable-gap2.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/unparsable-gap2.md"
+  assert_failure 1
+  [[ "$stderr" == *"(stage=DV) FAIL"* ]]
+  [[ "$stderr" == *"missing: tests-added"* ]]
+  [[ "$stderr" != *"no stage in handoff frontmatter"* ]]
+}
+
+@test "anchor-lint: a REAL absent stage is still reported as absent, not guessed at" {
+  # The other half of the absent-vs-failed distinction: yq parses this frontmatter
+  # cleanly and finds no stage. That is a genuine absence and must not be papered over
+  # by the awk fallback, which would happily read the unrelated `stage:` line below.
+  cat > "$WD/no-stage.md" <<'EOF'
+---
+handoff:
+  verdict: ok
+  summary: "no stage key under handoff"
+  notes:
+    stage: DV
+---
+# Development
+
+## files-changed
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/no-stage.md"
+  assert_failure 1
+  [[ "$stderr" == *"no stage in handoff frontmatter"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # --agent-section-lint — the #16 letter-(b) cross-check.
 # Guards the contradiction shape "an agent mandates an H2 that anchor_lint rejects",
 # which no artifact author can satisfy. The extraction UNDER-matches by design (AD-6):
