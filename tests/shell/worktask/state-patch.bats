@@ -1572,3 +1572,26 @@ exit 0'
   run diff -u with-yq.json without-yq.json
   assert_success
 }
+
+# --state with no directory component. `${state%/*}` is a no-op on a bare filename,
+# so atomic_apply derived "<file>/.state.json….tmp" — ENOTDIR — and every ledger op
+# failed leaving the file untouched. The mirrored derivation in the spill path always
+# carried the guard, which is why the two disagreed. Regression for that split.
+@test "regression: a --state with no directory component still writes (atomic_apply)" {
+  cd "$WD/.context"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state state.json --task-create ET0 --metadata '{"agent":"x"}'
+  assert_success
+  refute_output --partial "Not a directory"
+  run jq -r '.tasks.ET0.status' state.json
+  assert_output "pending"
+}
+
+@test "regression: bare and ./-prefixed --state produce the same ledger" {
+  cd "$WD/.context"
+  cp state.json bare.json
+  cp state.json dotted.json
+  bash "$PLUGIN_ROOT/$SCRIPT" --state bare.json     --task-create ET0 --metadata '{"agent":"x"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --state ./dotted.json --task-create ET0 --metadata '{"agent":"x"}'
+  run diff <(jq -S . bare.json) <(jq -S . dotted.json)
+  assert_success
+}

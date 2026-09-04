@@ -917,7 +917,13 @@ _spill_evicted_questions() {
 atomic_apply() {
   local state="$1" filter="$2"
   shift 2
-  local tmp="${state%/*}/.state.json.$$.${RANDOM}.tmp"
+  # `${state%/*}` returns $state unchanged when the path has no directory component,
+  # so a bare `--state state.json` derived `state.json/.state.json….tmp` — ENOTDIR,
+  # and every ledger op failed with the file untouched. Same guard the spill path
+  # below already carries; the two derivations must agree.
+  local dir="${state%/*}"
+  [ "$dir" = "$state" ] && dir="."
+  local tmp="${dir}/.state.json.$$.${RANDOM}.tmp"
 
   # Acquire the lock around the whole read-apply-rename window (timeout ⇒ unlocked+WARN).
   _lock_acquire "$state" || true
