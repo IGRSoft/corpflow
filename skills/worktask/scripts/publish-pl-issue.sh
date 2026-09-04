@@ -1,164 +1,61 @@
 #!/usr/bin/env bash
 # publish-pl-issue.sh — auto-publish a sanitised GitHub issue after PL approval.
 #
-# Invoked by the orchestrator at Step 6.5 of skills/worktask/SKILL.md between
-# `approval_received` audit-write and stage-loop entry. NEVER blocks the worktask:
-# operational outcomes are encoded in audit.jsonl rows (result + reason), helper
-# exits 0 unless catastrophic (jq missing, audit dir unwritable, state corrupt).
+# Invoked by the orchestrator at Step 6.5 of skills/worktask/SKILL.md. NEVER blocks the
+# worktask: operational outcomes are audit.jsonl rows (result + reason) and exit 0; only a
+# catastrophe (jq missing, audit dir unwritable, state corrupt) exits 1, and --self-test
+# failure exits 2. An unreachable sibling folds into those two: publish-pl-issue-lib.sh
+# missing is catastrophic, publish-pl-issue-selftest.sh missing is a self-test that cannot
+# run. The lib is sourced eagerly (PUBLISH_LIB_ONLY consumers need it); the harness only on
+# the --self-test arm, so the publish path never loads test code.
 #
-# Contracts (analyzing-0.md):
-#   - Two-pass sanitiser (sanitise_body): Pass 1 awk line-strip L1–L9, Pass 2
-#     token-strip with allow-list A1–A5.
-#   - Strip-ratio >50% aborts publish; aborted body persisted to
-#     .context/logs/issue-body-<run_index>.aborted.tmp.
-#   - Idempotency + cross-run dedup: one .context/ ↔ one GitHub issue. The issue
-#     ref is persisted to the run-independent .context/gh-issue.json anchor (state.json
-#     is re-seeded per run, so it cannot hold this). Same-run resolve → short-circuit
-#     (already_published). A LATER worktask run in the same .context/ resolves the
-#     anchor (or, if lost, an exact-title single-hit GitHub search) and posts a
-#     marker-deduped follow-up COMMENT instead of opening a duplicate issue. See
-#     skills/gh-issue-dedup. Env: GH_ISSUE_ANCHOR (path), GH_ISSUE_SEARCH (0 disables).
-#   - Milestone-mode: state.json:metadata.milestone OR workspace.json present →
-#     exit 0 immediately with reason=milestone_mode. No gh API call of any kind
-#     (no create, no comment). The parent milestone issue is the canonical record.
-#   - Atomic state.json write: tmp.$$ → fsync → mv -f.
-#   - Audit row: actor=orchestrator, action=github_issue_created, via=publish-pl-issue.sh,
-#     dedupe_key=<worktask_id>:<run_index>:gh_issue.
-#   - Exit codes: 0 all operational paths, 1 catastrophic, 2 --self-test failure.
-#     An unreachable sibling library folds into those two: publish-pl-issue-lib.sh
-#     missing is catastrophic (1), publish-pl-issue-selftest.sh missing is a
-#     self-test that cannot run (2).
+# Contracts owned elsewhere, implemented here — read the owner before changing behaviour:
+#   - Cross-run dedup, the .context/gh-issue.json anchor, the marker-deduped follow-up
+#     comment and milestone-mode: skills/gh-issue-dedup. Env: GH_ISSUE_ANCHOR (anchor path),
+#     GH_ISSUE_SEARCH=0 (disable the title search).
+#   - plan_file shape boundary (path in state.json, bare basename in task metadata; readers
+#     MUST accept either): handoff-protocol.md § state.json schema. The PLAN_FILE block below
+#     tries the value as given, then its basename against the state directory, and names both
+#     candidates on the fatal path.
+#   - {{asset:<basename>}} placeholder grammar and the .context/designs/-only lookup:
+#     pl0-procedure.md § Asset-placeholder grammar. Tokens carry no path, so they survive
+#     sanitiser Pass-1 L1; resolve_design_assets() rewrites them to hosted image lines AFTER
+#     sanitisation, so no local path ever reaches the issue body.
 #
-# Sibling libraries (same directory, same commit — resolved via SCRIPT_DIR):
-#   publish-pl-issue-lib.sh       sanitiser, plan extraction, state/anchor writes,
-#                                 label provisioning. Sourced eagerly; the
-#                                 PUBLISH_LIB_ONLY consumers below need it.
-#   publish-pl-issue-selftest.sh  the --self-test harness. Sourced ONLY on that
-#                                 flag, so the publish path never loads it.
+# Sanitiser: two passes (awk line-strip L1-L9, then token-strip with allow-list A1-A5). A
+# strip ratio over 50% aborts the publish and persists the body to
+# .context/logs/issue-body-<run_index>.aborted.tmp rather than posting a gutted issue.
 #
-# **`plan_file` shape boundary** — `state.json.plan_file` holds a **workspace-relative
-# path** (`.context/planning-N.md`); `task.metadata.plan_file` holds a **bare
-# basename** (`planning-N.md`). Both shapes are legal. Every reader MUST accept
-# either: try the value as given, then its basename resolved against the directory
-# holding `state.json`. Canonical statement: skills/worktask/references/handoff-protocol.md
-# § state.json schema. This script implements exactly that two-candidate resolution
-# at the PLAN_FILE block below, and names both candidates on the fatal path.
+# Asset hosting — tier order, highest first. Each downgrade appends a non-blocking audit row
+# under a distinct dedupe-key suffix (:asset_hosting) so it cannot mask the result row, and
+# no tier ever emits a broken `![]()`:
+#   0. user-attachments — the only tier that satisfies private-repo rendering, binary
+#      payloads and no repo commit at once. Needs the `drogers0/gh-image` gh extension for
+#      the browser session token; a PAT cannot drive the upload-policy flow (it is
+#      web-session-oriented and rejects a Bearer token). Probed with `gh image check-token`.
+#   1. raw.githubusercontent.com — REFUSED for a PRIVATE/INTERNAL repo and verified with an
+#      anonymous `curl -fsIL` otherwise, because GitHub's camo proxy fetches ANONYMOUSLY: an
+#      authenticated `gh api contents` check passes on a URL that renders broken.
+#   2. gist — a public-or-secret gist raw URL is anonymously fetchable, so camo renders it
+#      even inside a private repo. Render-verified by anonymous HEAD before it is emitted.
+#   3. none — Figma URL plus one note line; bullets, never an embed.
 #
-# Asset host-and-rewrite contract (Figma image embed — REQ-1..REQ-6):
-#   The PM authors the `## design-preview` anchor with placeholder tokens of the
-#   shape `{{asset:<basename>}}` on their own line (basename only — NO `.context/`
-#   path), each followed by a `- <description>` bullet, with the Figma source URL
-#   preserved above (see skills/worktask/references/pl0-procedure.md § Asset-placeholder grammar).
-#   Because the tokens carry no `.context/` token, they survive sanitise_body
-#   Pass-1 L1. AFTER sanitisation, resolve_design_assets() rewrites each token to
-#   a hosted markdown image line `![<basename>](<url>)` — so the image line never
-#   faces L1 and no local path ever reaches the issue body.
+#   Privacy: NEITHER gist kind preserves confidentiality — both are anonymously readable by
+#   URL, which is exactly what makes them render. They differ in DISCOVERABILITY only, so the
+#   default is auto (PRIVATE/INTERNAL → secret, PUBLIC/unknown → public). Material that must
+#   not leave the org needs ASSET_HOST_MODE=none, not an unlisted URL.
 #
-#   Tier order (REQ-3, highest priority first):
-#     0. user-attachments (PREFERRED, live) — GitHub's native
-#        github.com/user-attachments/assets/<uuid> store the web composer uses.
-#        GitHub rewrites these to private-user-images.githubusercontent.com with a
-#        short-lived scoped JWT, so they render for authenticated viewers of
-#        PRIVATE/INTERNAL repos. This is the ONLY tier that satisfies all three
-#        constraints at once: private-repo rendering, BINARY payloads, and no
-#        commit to the repository. Selected automatically whenever usable.
-#        Requires the `drogers0/gh-image` gh extension (`gh extension install
-#        drogers0/gh-image`), which supplies the browser session token the
-#        upload-policy flow needs — see "q1 spike outcome" below for why a PAT
-#        cannot. Availability is probed via `gh image check-token`; pin it with
-#        ASSET_GH_IMAGE=1/0 in tests. Still NEVER a hard runtime dependency —
-#        when the extension is absent or its token is stale, selection falls
-#        through to the tiers below and ultimately degrades silently.
-#     1. raw (verified to RENDER, not merely to exist) — raw.githubusercontent.com.
-#        REQ-1: the gate now approximates GitHub's camo image proxy, which fetches
-#        the URL ANONYMOUSLY. A private/internal repo's raw URL 404s for an
-#        anonymous fetch even though an authenticated `gh api contents` check
-#        passes — that false positive is exactly what broke private-repo embeds.
-#        So: if `gh repo view --json visibility` reports PRIVATE or INTERNAL, the
-#        raw tier is REFUSED (it would render broken) and we degrade. For PUBLIC
-#        repos we additionally require an anonymous `curl -fsIL` HEAD to succeed.
-#     2. gist (`gh gist create --public`) — render-verified raw gist asset URL.
-#        AC1 PRIMARY for PRIVATE/INTERNAL repos: a PUBLIC gist raw URL is
-#        anonymously fetchable, so camo renders it inline even when the
-#        surrounding repo is private (the repo's privacy does not gate camo's
-#        outbound fetch of a public origin). The URL is render-verified by an
-#        anonymous HEAD (gist_raw_url_reachable) BEFORE it is emitted; a verify
-#        miss degrades to tier-3 (never a broken/non-rendering embed). The
-#        ASSET_GIST_PUBLIC=0 opt-out (q2/policy) creates a secret/unlisted gist
-#        instead — also anonymously fetchable, so it still renders; only
-#        discoverability differs. `gh gist create` already has `gist` scope.
-#     3. none — URL-only note (Figma URL + exactly one note line "Screenshots
-#        persisted on disk; inline hosting unavailable — see designs registry.").
-#   No broken `![]()` at any tier. Each downgrade appends a non-blocking audit row
-#   with reason=image_hosting_unavailable under a distinct dedupe-key suffix
-#   (`:asset_hosting`) so it cannot mask the final github_issue_created result row.
+#   raw path: the PNG is copied to .worktask-assets/<worktask_id>/<basename> on the worktask
+#   branch. The helper does NOT commit or push — no surprising git side effects at Step 6.5 —
+#   so it verifies the ref is reachable with `git ls-remote --exit-code origin <ref>` first
+#   and degrades when it is not.
 #
-#   q1 spike outcome (DV0, recorded per REQ-2): the user-attachments upload-policy
-#   endpoint is web-session-oriented. `gh api -X POST upload/policies/assets`
-#   returns HTTP 404 (the endpoint is on github.com, not api.github.com); a direct
-#   `curl -X POST -H "Authorization: Bearer <gh-token>"
-#   https://github.com/upload/policies/assets` returns HTTP 422 (malformed) rather
-#   than 401/403 — i.e. the Bearer token is NOT accepted as an authenticated web
-#   session; the flow needs the browser `_gh_sess` cookie + CSRF token. VERDICT:
-#   NOT viable with gh auth ALONE. SUPERSEDED: the `drogers0/gh-image` extension
-#   supplies exactly that browser session token (it extracts `_gh_sess` from the
-#   local browser, or takes GH_SESSION_TOKEN) and drives the same upload-policy
-#   flow, printing `![base](url)`. Tier-0 is therefore LIVE whenever that
-#   extension is installed and its token is valid. The spike's finding stands as
-#   written — a PAT still cannot do this; what changed is that the session token
-#   is now obtainable from the CLI. REQ-1
-#   render-verification is the shipped cure (it fixes the broken-image symptom by
-#   degrading instead of emitting a dead raw URL).
-#
-#   Disk lookup: <basename> resolves ONLY to .context/designs/<basename> (canonical
-#   per skills/task-folder-organization/SKILL.md). {{asset:...}} tokens carry Figma
-#   design-preview frames, which live exclusively in .context/designs/. .context/images/
-#   is reserved for DV implementation screenshots and is NEVER a Figma asset source.
-#   raw path: the PNG is copied to ASSET_DIR_REL =
-#     ".worktask-assets/<worktask_id>/<basename>" on the worktask branch, referenced
-#     via https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>.
-#     <owner>/<repo> parsed from `git remote get-url origin` (git@ + https forms);
-#     <ref> from `git rev-parse --abbrev-ref HEAD`.
-#   push contract: the helper does NOT push or commit (no surprising git side
-#     effects at Step 6.5). It copies the file into the worktree path so a later
-#     human-gated commit (FN) picks it up, and verifies the ref is reachable on the
-#     remote with `git ls-remote --exit-code origin <ref>` before emitting raw URLs.
-#     If the branch/asset is not yet pushed, it degrades — non-blocking, exit 0.
-#
-# Env vars for injection (test/dev): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN,
-# GH_TIMEOUT (default 30). Asset-hosting test hooks: ASSET_HOST_MODE
-# (user-attachments|raw|gist|none — forces a tier for self-tests, bypassing live
-# git/gh probes), ASSET_OWNER_REPO (mock "owner/repo"), ASSET_REF (mock ref),
-# GIST_RAW_URL_BASE (mock gist raw base), USER_ATTACH_URL_BASE (mock
-# user-attachments asset base, mirrors GIST_RAW_URL_BASE), ASSET_REPO_VISIBILITY
-# (mock `gh repo view` visibility: PUBLIC|PRIVATE|INTERNAL — drives REQ-1
-# render-verification offline). ASSET_UA_ENABLE=1 + USER_ATTACH_URL_BASE is the
-# OFFLINE MOCK for tier-0; the LIVE tier-0 path needs no opt-in and is probed via
-# `gh image check-token` (pin with ASSET_GH_IMAGE=1/0).
-# ASSET_GIST_PUBLIC (tri-state: 1 forces public, 0 forces
-# secret/unlisted, empty/unset = auto-derive from repo visibility) controls
-# gist-tier visibility (AC1).
-# GIST_VERIFY_FORCE (pass|fail) short-circuits the gist render-verify HEAD for
-# offline self-tests. When unset, real git/gh probes drive tier selection.
-#
-# AC1 Privacy posture (C2 operator guidance):
-#   The gist tier uploads screenshot bytes to a URL that GitHub's camo image proxy
-#   can fetch ANONYMOUSLY — that is what makes an embed render inside a PRIVATE
-#   repo's issue/PR body at all. NEITHER gist kind preserves confidentiality:
-#   public and secret/unlisted gists are both anonymously readable by URL. Do not
-#   capture screenshots containing secrets, tokens, or PII (C3 capture policy).
-#
-#   What the two kinds actually differ on is DISCOVERABILITY, not access:
-#   a public gist is search-indexed and listed on the authoring account's gist
-#   profile; a secret one is neither. Since rendering works either way, `--public`
-#   has no upside on a closed repo — so the default is auto (see ASSET_GIST_PUBLIC
-#   below): PRIVATE/INTERNAL → secret, PUBLIC/unknown → public. Set the variable
-#   explicitly to override in either direction.
-#
-#   Auto narrows exposure; it does not remove it. Operators handling material that
-#   must not leave the org should skip hosting entirely (ASSET_HOST_MODE=none,
-#   which emits bullets instead of embeds) rather than rely on unlisted URLs.
-#   The FN gate provides human disclosure before merge (C1 gate condition).
+# Env seams (test/dev injection): STATE_FILE, WORKSPACE_ROOT, GH_BIN, DRY_RUN, GH_TIMEOUT
+# (30). Asset hosting: ASSET_HOST_MODE (user-attachments|raw|gist|none, forces a tier and
+# bypasses live probes), ASSET_OWNER_REPO, ASSET_REF, ASSET_REPO_VISIBILITY, GIST_RAW_URL_BASE,
+# USER_ATTACH_URL_BASE, GIST_VERIFY_FORCE (pass|fail), ASSET_GH_IMAGE (pin tier-0 probe),
+# ASSET_UA_ENABLE=1 (offline tier-0 mock), ASSET_GIST_PUBLIC (1 public / 0 secret / unset
+# auto).
 
 set -u
 
