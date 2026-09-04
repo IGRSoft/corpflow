@@ -80,11 +80,14 @@ error.
   `.claude-plugin/plugin.json`, `hooks:` entries in agent frontmatter, and verbatim
   documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
 
-### Prose and shell-script paths
+### Prose paths
 
 - **Prose instructions** write helper paths plugin-root-relative (e.g.
   `hooks/megatask-monitor.sh`) followed by: "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if
   available, else resolve per `skills/shared/plugin-root-resolution.md`)".
+
+### Shell-script paths
+
 - **Shell scripts** (never load-substituted, only executed) use env-first with a
   self-location fallback validated against the `.claude-plugin/plugin.json` marker. There is
   now **one** resolver, not a family of reference implementations: `corpflow_script_dir()`

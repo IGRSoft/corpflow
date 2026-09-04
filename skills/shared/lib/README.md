@@ -21,10 +21,12 @@ precedent. **Edit one copy, edit both, in the same commit**, or the parity test 
 ## The source-block idiom
 
 Every caller sources a library with a guard block, and the guard's failure mode differs by
-tree:
+tree.
 
-**Skills tree — fail closed (`exit 2`).** A missing library under `skills/` is a broken
-install, not a runtime condition a script should degrade around:
+### Skills tree — fail closed (`exit 2`)
+
+A missing library under `skills/` is a broken install, not a runtime condition a script
+should degrade around:
 
 ```bash
 _AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
@@ -41,13 +43,14 @@ Six adapters under `skills/dv-screenshot-capture/scripts/` plus worktask consume
 `publish-pl-issue.sh`) follow this exact shape for `audit-lib.sh` and/or
 `state-read-lib.sh`.
 
-**Hooks tree — stricter still.** A hook gate runs on every tool call in a live session, so
-its fail-closed exit code (`exit 1`) is load-bearing: a hook that silently no-ops on a
-broken install would let the exact class of defect the gate exists to catch through
-unnoticed. Where a hook's own contract is instead to *degrade* (e.g.
-`hooks/anchor-preflight.sh`, whose job is advisory linting, not a hard block), the source
-block drops `-e` around the source, probes for the resulting symbol, and falls back to a
-no-op rather than aborting the host tool call:
+### Hooks tree — stricter still
+
+A hook gate runs on every tool call in a live session, so its fail-closed exit code
+(`exit 1`) is load-bearing: a hook that silently no-ops on a broken install would let the
+exact class of defect the gate exists to catch through unnoticed. Where a hook's own
+contract is instead to *degrade* (e.g. `hooks/anchor-preflight.sh`, whose job is advisory
+linting, not a hard block), the source block drops `-e` around the source, probes for the
+resulting symbol, and falls back to a no-op rather than aborting the host tool call:
 
 ```bash
 _LIB="$(dirname -- "$0")/lib/corpflow-base.sh"
@@ -60,6 +63,8 @@ if command -v corpflow_plugin_root > /dev/null 2>&1; then
   PLUGIN_ROOT="$(corpflow_plugin_root)" || PLUGIN_ROOT=""
 fi
 ```
+
+### Choosing the right shape
 
 Do not conflate the two: **a script that must fail closed uses the skills-tree shape; a
 script whose own contract is to degrade uses the probe-and-fall-back shape** — picking the
