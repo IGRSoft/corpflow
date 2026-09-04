@@ -73,29 +73,28 @@ done
 
 # ---------------------------------------------------------------- audit ----
 
-# The row is built by jq, not printf: this was the only one of the plugin's audit
-# emitters assembling JSON by hand, so a quote or backslash reaching $reason emitted
-# a line jq could not parse and every later reader of audit.jsonl stopped at it.
-# Key order is pinned by construction. Without jq the reason is reduced to the
-# identifier alphabet the closed reason set already uses, which cannot break the
-# literal — degrading the value beats emitting a corrupt row.
+# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
+# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
+# shell immediately, bypassing an `if !` guard.
+_AUDIT_LIB="$SELF_DIR/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'attachments-preseed: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
+# The row gains a `ts` and carries `reason` under `metadata`, which is where every other
+# emitter in the plugin puts it. This was the one row in the plugin with no timestamp —
+# an audit row with no time is evidence that cannot be ordered against any other.
+#
+# `--meta-kv`, not `--meta`: the library drops an arbitrary JSON literal on a jq-less host
+# (it cannot be made injection-safe without a parser) but renders a flat pair under the
+# same sanitiser, so the reason survives the degradation that the FN refusal path needs.
 audit_failed() {
-  local reason="$1" dir="$WORKDIR/.context/logs" row
-  mkdir -p "$dir"
-  # A symlinked audit.jsonl turns this append into a write primitive against an
-  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
-  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
-  [ ! -L "$dir/audit.jsonl" ] || return 0
-  if command -v jq >/dev/null 2>&1; then
-    row=$(jq -cn --arg s "FN${RUN_INDEX:-0}" --arg r "$reason" \
-      '{actor:"orchestrator", action:"fn_attachments_preseed_failed",
-        subject:$s, result:"error", reason:$r}') || return 0
-  else
-    local safe="${reason//[^A-Za-z0-9_.-]/_}"
-    row=$(printf '{"actor":"orchestrator","action":"fn_attachments_preseed_failed","subject":"FN%s","result":"error","reason":"%s"}' \
-      "${RUN_INDEX:-0}" "$safe")
-  fi
-  printf '%s\n' "$row" >> "$dir/audit.jsonl"
+  corpflow_audit_row --file "$WORKDIR/.context/logs/audit.jsonl" --actor orchestrator \
+    --action fn_attachments_preseed_failed --subject "FN${RUN_INDEX:-0}" \
+    --result error --meta-kv "reason=$1"
 }
 
 # ------------------------------------------------------------ resolvers ----

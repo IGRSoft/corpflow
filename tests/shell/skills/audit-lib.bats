@@ -161,3 +161,68 @@ withlib() {
   run bash -c "printf '%s' '$output' | jq -e .actor"
   assert_success
 }
+
+# ---------------------------------------------------------------------------
+# task_id and the write-status out-parameter
+# ---------------------------------------------------------------------------
+@test "R14: --task-id lands between result and metadata, and is omitted without it" {
+  withlib "corpflow_audit_row --file '$LOG' --actor a --action act --subject s \
+    --result ok --task-id FN3"
+  run jq -rc 'keys_unsorted | join(",")' "$LOG"
+  assert_output 'ts,actor,action,subject,result,task_id,metadata'
+}
+
+@test "R15: a lost row is reported through CORPFLOW_AUDIT_LAST_RC, not the return code" {
+  mkdir -p "$WD/logs"
+  printf 'untouched\n' > "$WD/victim"
+  ln -s "$WD/victim" "$LOG"
+  withlib "corpflow_audit_row --file '$LOG' --actor a --action act --result ok; \
+    echo rc=\$? last=\$CORPFLOW_AUDIT_LAST_RC"
+  assert_success
+  assert_output 'rc=0 last=1'
+}
+
+@test "R16: a written row sets CORPFLOW_AUDIT_LAST_RC to 0" {
+  withlib "corpflow_audit_row --file '$LOG' --actor a --action act --result ok; \
+    echo last=\$CORPFLOW_AUDIT_LAST_RC"
+  assert_success
+  assert_output 'last=0'
+}
+
+# ---------------------------------------------------------------------------
+# --meta-kv — the flat pairs that survive a jq-less host
+# ---------------------------------------------------------------------------
+@test "R17: --meta-kv pairs merge over --meta and win on a key collision" {
+  withlib "corpflow_audit_row --file '$LOG' --actor a --action act --result ok \
+    --meta '{\"keep\":1,\"reason\":\"old\"}' --meta-kv reason=new --meta-kv extra=two"
+  run jq -rc '.metadata' "$LOG"
+  assert_output '{"keep":1,"reason":"new","extra":"two"}'
+}
+
+@test "R18: without jq a --meta-kv pair still reaches the row" {
+  run_script_env --hide jq --source "$LIB" corpflow_audit_row \
+    --file "$LOG" --actor orchestrator --action fn_attachments_preseed_failed \
+    --subject FN0 --result error --meta-kv reason=base_branch_unresolved
+  assert_success
+  run jq -r '.metadata.reason' "$LOG"
+  assert_output 'base_branch_unresolved'
+}
+
+@test "R19: without jq a quoting-hostile --meta-kv value cannot inject a key" {
+  run_script_env --hide jq --source "$LIB" corpflow_audit_row \
+    --file "$LOG" --actor a --action act --result error \
+    --meta-kv 'reason=x" ,"injected":"y'
+  assert_success
+  run jq -e . "$LOG"
+  assert_success
+  run jq -r '.injected // .metadata.injected // "absent"' "$LOG"
+  assert_output 'absent'
+}
+
+@test "R20: without jq and without --meta-kv there is no metadata key at all" {
+  run_script_env --hide jq --source "$LIB" corpflow_audit_row \
+    --file "$LOG" --actor a --action act --result ok --meta '{"dropped":1}'
+  assert_success
+  run jq -e 'has("metadata") | not' "$LOG"
+  assert_success
+}

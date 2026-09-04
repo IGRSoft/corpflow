@@ -91,23 +91,24 @@ MAX_EMBED="${MAX_EMBED:-5}"   # PR/issue embed cap (mirrors capture skill's 5-pe
 _LIB="$(dirname "$0")/publish-pl-issue.sh"
 
 # ---------- audit -----------------------------------------------------------
+# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
+# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
+# shell immediately, bypassing an `if !` guard.
+_AUDIT_LIB="$(dirname "$0")/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'attach-visual-evidence: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
 audit_av() {
   # $1=action, $2=result, $3=metadata-json (compact). Never fatal on its own.
-  local action="$1" result="$2" meta="$3"
+  # jq-absent stays a silent no-row rather than the library's degraded row: this
+  # emitter has never written one on a jq-less host and nothing downstream expects it.
   command -v jq >/dev/null 2>&1 || return 0
-  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
-  # A symlinked audit.jsonl turns this append into a write primitive against an
-  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
-  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
-  [ ! -L "$AUDIT_FILE" ] || return 0
-  jq -cn \
-    --arg ts "$(date -u +%FT%TZ)" \
-    --arg actor "orchestrator" \
-    --arg action "$action" \
-    --arg result "$result" \
-    --argjson meta "$meta" \
-    '{ts:$ts, actor:$actor, action:$action, result:$result, metadata:$meta}' \
-    >> "$AUDIT_FILE" 2>/dev/null || true
+  corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
+    --action "$1" --result "$2" --meta "$3"
 }
 
 # ---------- state accessors -------------------------------------------------

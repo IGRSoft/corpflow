@@ -185,7 +185,7 @@ EOF
   [ ! -e "$WD/$RV_FILE" ]
   assert_audit_row fn_attachments_preseed_failed --file "$WD/.context/logs/audit.jsonl" \
     --actor orchestrator --subject FN0 --result error \
-    --jq '.reason == "base_branch_unresolved"'
+    --jq '.metadata.reason == "base_branch_unresolved" and (.ts | length) > 0'
 }
 
 @test "P10: base-branch resolution order — FN_BASE_REF beats state.json metadata.base_ref" {

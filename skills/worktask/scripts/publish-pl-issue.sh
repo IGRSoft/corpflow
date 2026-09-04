@@ -298,27 +298,27 @@ run_with_timeout() {
   return $?
 }
 
+# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
+# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
+# shell immediately, bypassing an `if !` guard.
+_AUDIT_LIB="$SCRIPT_DIR/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'publish-pl-issue: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
 audit_row() {
   # $1=result, $2=metadata-json (compact). Always appends one row.
-  local result="$1" meta_json="$2"
+  # Returns non-zero when the row was NOT written — the callers' `|| true` decides what
+  # that costs. jq-absent keeps its historical hard refusal rather than the library's
+  # degraded row: this emitter's metadata is the only record of what was published.
   command -v jq >/dev/null 2>&1 || return 1
-  mkdir -p "$LOG_DIR" || return 1
-  # A symlinked audit.jsonl turns this append into a write primitive against an
-  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
-  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
-  [ ! -L "$AUDIT_FILE" ] || return 1
-  local row
-  row=$(jq -cn \
-    --arg ts "$(date -u +%FT%TZ)" \
-    --arg actor "orchestrator" \
-    --arg action "github_issue_created" \
-    --arg subject "PL0" \
-    --arg result "$result" \
-    --arg task_id "${PL0_TASK_ID:-1}" \
-    --argjson meta "$meta_json" \
-    '{ts:$ts, actor:$actor, action:$action, subject:$subject, result:$result, task_id:$task_id, metadata:$meta}'
-  )
-  printf '%s\n' "$row" >> "$AUDIT_FILE"
+  corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
+    --action github_issue_created --subject PL0 --result "$1" \
+    --task-id "${PL0_TASK_ID:-1}" --meta "$2"
+  return "$CORPFLOW_AUDIT_LAST_RC"
 }
 
 defer() {

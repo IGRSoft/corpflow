@@ -61,23 +61,26 @@ BASE_REF="${BASE_REF:-}"
 FORCE=0
 
 # ---------- audit -----------------------------------------------------------
+# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
+# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
+# shell immediately, bypassing an `if !` guard.
+_AUDIT_LIB="$SCRIPT_DIR/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'adhoc-visual-evidence: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
 audit_adhoc() {
   # $1=result, $2=reason, $3=extra-json-object. Never fatal on its own.
+  # jq-absent stays a silent no-row: the reason/extra merge below needs jq anyway.
   command -v jq >/dev/null 2>&1 || return 0
-  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
-  # A symlinked audit.jsonl turns this append into a write primitive against an
-  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
-  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
-  [ ! -L "$AUDIT_FILE" ] || return 0
-  jq -cn \
-    --arg ts "$(date -u +%FT%TZ)" \
-    --arg actor "orchestrator" \
-    --arg result "$1" \
-    --arg reason "$2" \
-    --argjson extra "${3:-\{\}}" \
-    '{ts:$ts, actor:$actor, action:"adhoc_visual_evidence", result:$result,
-      metadata:($extra + {reason:$reason})}' \
-    >> "$AUDIT_FILE" 2>/dev/null || true
+  local meta
+  meta=$(jq -cn --arg reason "$2" --argjson extra "${3:-\{\}}" \
+    '$extra + {reason:$reason}' 2>/dev/null) || meta='{}'
+  corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
+    --action adhoc_visual_evidence --result "$1" --meta "$meta"
 }
 
 # ---------- gating ----------------------------------------------------------

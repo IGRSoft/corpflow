@@ -25,24 +25,35 @@ _CORPFLOW_AUDIT_LIB=1
 # readonly assignment is rc 1, which kills a `set -e` caller.
 
 # corpflow_audit_row --file <path> --actor <a> --action <x> --result <r>
-#                    [--subject <s>] [--meta <compact-json>]
+#                    [--subject <s>] [--task-id <t>] [--meta <compact-json>]
+#                    [--meta-kv <key>=<value>]...
 #
 # Appends exactly one row and always returns 0: an audit row is evidence, never a gate, so
-# no failure here may abort the caller that is mid-way through a real action.
+# no failure here may abort the caller that is mid-way through a real action. A caller that
+# must NOTICE a lost row reads CORPFLOW_AUDIT_LAST_RC (0 written, 1 not) instead of the
+# return code — returning non-zero would abort the `set -e` caller this contract protects.
 #
 # Flags, not positions: `actor`, `action`, `result` and `subject` are all bare strings, so a
 # positional signature lets a transposition emit a VALID ROW THAT LIES — the worst failure an
 # audit log has. Same reasoning as hooks/model-switch-lib.sh.
 #
-# `subject` is emitted only when --subject was passed, so a caller with no subject produces
-# no `subject` key rather than an empty one that reads as "blank" instead of "absent".
+# `subject` and `task_id` are emitted only when their flag was passed, so a caller with no
+# subject produces no `subject` key rather than an empty one that reads as "blank" instead
+# of "absent".
 #
-# Without jq the row degrades to a minimal form with no `metadata` key, built by printf over
-# values reduced to an alphabet that cannot break the literal. Degrading the value beats
-# emitting a line that stops every later reader of audit.jsonl at the parse error.
+# Without jq the row degrades to a minimal form built by printf over values reduced to an
+# alphabet that cannot break the literal. Degrading the value beats emitting a line that
+# stops every later reader of audit.jsonl at the parse error. `--meta` is dropped on that
+# path (an arbitrary JSON literal cannot be made injection-safe without a parser), so a
+# caller whose metadata must survive a jq-less host passes it as `--meta-kv key=value`
+# pairs instead: those are flat scalars the sanitiser can guarantee.
 corpflow_audit_row() {
   local _file="" _actor="" _action="" _result="" _subject="" _meta="" _has_subject=0
+  local _task_id="" _has_task_id=0 _pair _k _v
+  local _kv=()
   local _dir _ts _row
+  # shellcheck disable=SC2034  # out-parameter; read by publish-pl-issue.sh audit_row
+  CORPFLOW_AUDIT_LAST_RC=1
   while [ "$#" -gt 0 ]; do
     case "${1:-}" in
       --file) _file="${2:-}" ;;
@@ -50,7 +61,9 @@ corpflow_audit_row() {
       --action) _action="${2:-}" ;;
       --result) _result="${2:-}" ;;
       --subject) _subject="${2:-}"; _has_subject=1 ;;
+      --task-id) _task_id="${2:-}"; _has_task_id=1 ;;
       --meta) _meta="${2:-}" ;;
+      --meta-kv) _kv[${#_kv[@]}]="${2:-}" ;;
       *) shift; continue ;;
     esac
     # Never `shift 2` blind: a flag given with no value would shift past $# and abort a
@@ -78,34 +91,58 @@ corpflow_audit_row() {
     # Malformed metadata degrades rather than dropping the row: losing metadata beats
     # losing the row that says what happened.
     printf '%s' "$_meta" | jq -e . > /dev/null 2>&1 || _meta='{"_meta_invalid":true}'
+    for _pair in ${_kv[@]+"${_kv[@]}"}; do
+      _k="${_pair%%=*}"
+      _v="${_pair#*=}"
+      _meta=$(printf '%s' "$_meta" \
+        | jq -c --arg k "$_k" --arg v "$_v" '. + {($k): $v}' 2> /dev/null) || _meta='{}'
+    done
     # Key order is pinned by construction, not by jq's sort: assert with keys_unsorted.
     _row=$(jq -cn --arg ts "$_ts" --arg actor "$_actor" --arg action "$_action" \
       --arg subject "$_subject" --arg result "$_result" --argjson meta "$_meta" \
-      --argjson has_subject "$_has_subject" '
+      --arg task_id "$_task_id" --argjson has_subject "$_has_subject" \
+      --argjson has_task_id "$_has_task_id" '
       {ts: $ts, actor: $actor, action: $action}
       + (if $has_subject == 1 then {subject: $subject} else {} end)
-      + {result: $result, metadata: $meta}
+      + {result: $result}
+      + (if $has_task_id == 1 then {task_id: $task_id} else {} end)
+      + {metadata: $meta}
     ' 2> /dev/null) || return 0
   else
     _row=$(_corpflow_audit_row_nojq "$_ts" "$_actor" "$_action" "$_result" \
-      "$_has_subject" "$_subject") || return 0
+      "$_has_subject" "$_subject" ${_kv[@]+"${_kv[@]}"}) || return 0
   fi
 
+  # The `2>/dev/null` on the jq pipeline above silences jq alone; this append is the
+  # calling shell's redirection and its failure is invisible to that guard. Capture it
+  # explicitly so a caller that must not complete un-audited can see the loss.
   { printf '%s\n' "$_row" >> "$_file"; } 2> /dev/null || return 0
+  # shellcheck disable=SC2034  # out-parameter; read by publish-pl-issue.sh audit_row
+  CORPFLOW_AUDIT_LAST_RC=0
   return 0
 }
 
 # The jq-absent row. Every value is reduced to `[A-Za-z0-9_.:/@+-]`, so no quote, backslash
-# or newline can reach the literal this printf builds.
+# or newline can reach the literal this printf builds. Trailing arguments are the
+# --meta-kv pairs, rendered as a flat metadata object under the same reduction.
 _corpflow_audit_row_nojq() {
   local ts="${1//[^A-Za-z0-9_.:\/@+-]/_}" actor="${2//[^A-Za-z0-9_.:\/@+-]/_}"
   local action="${3//[^A-Za-z0-9_.:\/@+-]/_}" result="${4//[^A-Za-z0-9_.:\/@+-]/_}"
   local has_subject="$5" subject="${6//[^A-Za-z0-9_.:\/@+-]/_}"
+  shift 6
+  local head meta="" pair k v
   if [ "$has_subject" = "1" ]; then
-    printf '{"ts":"%s","actor":"%s","action":"%s","subject":"%s","result":"%s"}' \
-      "$ts" "$actor" "$action" "$subject" "$result"
+    head=$(printf '{"ts":"%s","actor":"%s","action":"%s","subject":"%s","result":"%s"' \
+      "$ts" "$actor" "$action" "$subject" "$result")
   else
-    printf '{"ts":"%s","actor":"%s","action":"%s","result":"%s"}' \
-      "$ts" "$actor" "$action" "$result"
+    head=$(printf '{"ts":"%s","actor":"%s","action":"%s","result":"%s"' \
+      "$ts" "$actor" "$action" "$result")
   fi
+  for pair in "$@"; do
+    k="${pair%%=*}"; k="${k//[^A-Za-z0-9_]/_}"
+    v="${pair#*=}"; v="${v//[^A-Za-z0-9_.:\/@+-]/_}"
+    meta="$meta${meta:+,}$(printf '"%s":"%s"' "$k" "$v")"
+  done
+  [ -z "$meta" ] || head="$head$(printf ',"metadata":{%s}' "$meta")"
+  printf '%s}' "$head"
 }
