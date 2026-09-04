@@ -110,9 +110,44 @@ ve_row_result() {
 # A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
 # — the form workspace-modes.md documents). Map either onto something git resolves,
 # which is what lets both stored shapes work without normalising the stored value.
+#
+# The REMOTE-TRACKING ref is preferred over a same-named local branch. Trying the bare
+# name first resolved a stale local copy whenever one existed, and a stale base makes
+# the diff measured against it wrong in the blocking direction: base-sanity reported a
+# 70-file diff against a ledger claiming 18 and refused a finalization that was in fact
+# correct, while the only escape it signposts is the override that would also mask a
+# REAL wrong-base finding. Third patch to this resolution logic, so reordering alone
+# was rejected: it trades one silent wrong answer for another. Divergence is announced
+# on stderr with both names and both ahead-counts, and callers must not swallow it.
 resolve_git_ref() {
-  local name="$1" bare="${1#origin/}" c
-  for c in "$name" "origin/$bare" "refs/remotes/origin/$bare" "refs/heads/$bare"; do
+  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead
+
+  for c in "origin/$bare" "refs/remotes/origin/$bare"; do
+    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
+  done
+  git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"
+
+  if [[ -n "$remote" ]]; then
+    if [[ -n "$local_ref" ]] &&
+       [[ "$(git rev-parse "$remote" 2> /dev/null)" != "$(git rev-parse "$local_ref" 2> /dev/null)" ]]; then
+      # --left-right --count on a symmetric range: left = remote-only, right = local-only.
+      counts=$(git rev-list --left-right --count "${remote}...${local_ref}" 2> /dev/null || printf '')
+      behind=${counts%%[!0-9]*}; ahead=${counts##*[!0-9-]}
+      printf >&2 'WARNING: base ref %s is ambiguous — %s and %s have diverged.\n' \
+        "$name" "$remote" "$local_ref"
+      printf >&2 '  %s is ahead by %s commit(s); %s is ahead by %s commit(s).\n' \
+        "$remote" "${behind:-?}" "$local_ref" "${ahead:-?}"
+      printf >&2 '  Resolving to %s. Pass FN_BASE_REF=%s to force the local branch.\n' \
+        "$remote" "$local_ref"
+    fi
+    printf '%s' "$remote"
+    return 0
+  fi
+
+  # No remote-tracking ref: fall back exactly as before, so a purely local base,
+  # a tag or a raw revision still resolves.
+  for c in "$name" "$local_ref"; do
+    [[ -n "$c" ]] || continue
     if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then
       printf '%s' "$c"
       return 0
@@ -310,7 +345,7 @@ cmd_continuity() {
     audit_fn branch_continuity base_ref_unresolved "$(meta_json worktree_head "$wt_head")"
     return 0
   fi
-  ref=$(resolve_git_ref "$int_branch" 2> /dev/null || printf '')
+  ref=$(resolve_git_ref "$int_branch" || printf '')
   if [[ -z "$ref" ]]; then
     printf >&2 'continuity: integration branch %s not present locally — ancestor check skipped\n' "$int_branch"
     audit_fn branch_continuity base_ref_unresolvable "$(meta_json integration_branch "$int_branch")"
@@ -511,7 +546,7 @@ cmd_base_sanity() {
 
   # Via resolve_git_ref, never a literal `origin/$base`: the stored value may
   # already be remote-qualified, and a local-only clone has no remote at all.
-  ref=$(resolve_git_ref "$base" 2> /dev/null || printf '')
+  ref=$(resolve_git_ref "$base" || printf '')
   if [[ -z "$ref" ]]; then
     printf 'base-sanity: integration branch %s not present locally — magnitude comparison skipped\n' "$base"
     audit_fn base_sanity base_ref_unresolvable "$(meta_json base "$base")"
@@ -568,7 +603,7 @@ cmd_base_sanity() {
     # disambiguation ladder. That is the incident's own topology, so counting on
     # the bare name would blank the candidate precisely when it matters most.
     local fork_ref
-    fork_ref=$(resolve_git_ref "$fork" 2> /dev/null || printf '')
+    fork_ref=$(resolve_git_ref "$fork" || printf '')
     if [[ -n "$fork_ref" ]]; then
       fork_ahead=$(git rev-list --count "${fork_ref}..HEAD" 2> /dev/null || printf '')
     fi

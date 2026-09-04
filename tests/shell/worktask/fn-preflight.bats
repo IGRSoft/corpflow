@@ -1220,3 +1220,84 @@ seed_repo() {
   assert_failure
   assert_output --partial "staged then modified again"
 }
+
+# ---------------------------------------------------------------------------
+# resolve_git_ref divergence (AC-4a). The resolver used to try the bare name
+# first, so a base branch name resolved to a STALE LOCAL branch whenever one
+# existed — and a stale base makes base-sanity's diff wrong in the blocking
+# direction. Unlike the arms above these fixtures need a real remote, because
+# the whole defect is local-vs-remote-tracking preference.
+# ---------------------------------------------------------------------------
+
+# A repo whose local master and origin/master have genuinely diverged:
+# remote ahead by $1, local ahead by $2.
+_rgr_diverged_repo() { # $1=remote-ahead $2=local-ahead
+  local d i; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" init -q --bare "$d/remote.git"
+  git -C "$d" remote add origin "$d/remote.git"
+  git -C "$d" push -q origin master
+  git -C "$d" checkout -q -b tmp
+  # C-style, not `seq 1 $n`: BSD seq counts DOWN when the limit is below the start,
+  # so `seq 1 0` yields "1 0" here and silently made the zero-ahead fixture diverge.
+  for ((i = 0; i < $1; i++)); do printf 'r%s\n' "$i" >> "$d/f"; git -C "$d" commit -qam "r$i"; done
+  git -C "$d" push -q origin tmp:master
+  git -C "$d" checkout -q master
+  for ((i = 0; i < $2; i++)); do printf 'l%s\n' "$i" >> "$d/f"; git -C "$d" commit -qam "l$i"; done
+  git -C "$d" fetch -q origin
+  printf '%s' "$d"
+}
+
+# Sourcing the library directly: resolve_git_ref is a pure function of the cwd
+# repository, and every subcommand that reaches it needs a full FN fixture around it.
+_rgr() { # $1=repo $2=name
+  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh' > '$1/rgr.sh'
+           cd '$1' && . ./rgr.sh && resolve_git_ref '$2'"
+}
+
+@test "AC-4a: a diverged base resolves to the remote-tracking ref, not the stale local" {
+  local d; d="$(_rgr_diverged_repo 2 1)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "origin/master"
+}
+
+@test "AC-4a: divergence is reported with both names and both ahead-counts" {
+  local d; d="$(_rgr_diverged_repo 2 1)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  [[ "$stderr" == *"origin/master"* ]] || { echo "no remote name: $stderr"; return 1; }
+  [[ "$stderr" == *"refs/heads/master"* ]] || { echo "no local name: $stderr"; return 1; }
+  [[ "$stderr" == *"ahead by 2 commit(s)"* ]] || { echo "no remote count: $stderr"; return 1; }
+  [[ "$stderr" == *"ahead by 1 commit(s)"* ]] || { echo "no local count: $stderr"; return 1; }
+}
+
+@test "AC-4a: an in-sync base resolves without a divergence warning" {
+  local d; d="$(_rgr_diverged_repo 0 0)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "origin/master"
+  # Not "stderr is empty" — git chatter is not this function's contract; the
+  # contract is that an in-sync pair raises no ambiguity.
+  [[ "$stderr" != *"diverged"* ]] || { echo "unexpected warning: $stderr"; return 1; }
+}
+
+@test "AC-4a: a purely local base with no remote-tracking ref still resolves" {
+  local d; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" checkout -q -b local-only
+  run _rgr "$d" local-only
+  assert_success
+  assert_output "local-only"
+}
+
+@test "AC-4a: an origin-qualified stored value still resolves to the remote ref" {
+  local d; d="$(_rgr_diverged_repo 1 1)"
+  run --separate-stderr _rgr "$d" origin/master
+  assert_success
+  assert_output "origin/master"
+}
