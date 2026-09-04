@@ -126,14 +126,21 @@ EOF
 }
 
 # Per-stage anchor rows come from the script itself, so a new stage cannot be added
-# without this loop covering it.
+# without this loop covering it. The rows live in one `_STAGE_TABLE` — code, agent
+# basename, artifact basename, then the anchors — so the anchors are fields 4..NF.
 _anchors_for_stage() {  # <stage>
+  # \047 is the single quote: the table is a single-quoted shell string, and
+  # writing that quote literally inside this awk program is not possible.
   awk -v s="$1" '
-    /^anchors_for_stage\(\) \{/ { f = 1; next }
-    f && /^\}/ { exit }
-    f && $0 ~ "^    " s "\\) echo " {
-      sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit
+    /^_STAGE_TABLE=/ { intbl = 1; sub(/^_STAGE_TABLE=\047/, "") }
+    !intbl { next }
+    { last = ($0 ~ /\047$/); sub(/\047$/, "") }
+    $1 == s {
+      out = ""
+      for (i = 4; i <= NF; i++) out = out (i > 4 ? " " : "") $i
+      print out; exit
     }
+    last { exit }
   ' "$PLUGIN_ROOT/$SCRIPT"
 }
 

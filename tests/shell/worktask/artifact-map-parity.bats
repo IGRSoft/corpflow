@@ -13,7 +13,7 @@
 # per stage; the alias tests assert that separation rather than relaxing it.
 #
 # Sources:
-#   1. skills/worktask/scripts/cache-lint.sh   canonical_basename_for_stage()
+#   1. skills/worktask/scripts/cache-lint.sh   _STAGE_TABLE (field 3)
 #   2. skills/worktask/scripts/state-patch.sh  basename_for_stage()
 #   3. hooks/state-merge.sh                    _basename_for_stage()
 #   4. skills/worktask/SKILL.md                ARTIFACT_BASE (orchestrator executes it)
@@ -55,8 +55,24 @@ ET=ethics-review
 EOF
 }
 
-@test "parity: cache-lint.sh canonical_basename_for_stage matches the canonical map" {
-  run map_from_case "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" canonical_basename_for_stage
+# cache-lint.sh holds all four of its per-stage facts in one `_STAGE_TABLE` row
+# set rather than in four parallel case tables, so its canonical basename is
+# field 3 of the row rather than a case arm. Extracted here, not read by
+# sourcing the script: sourcing it would run its argument dispatch.
+map_from_stage_table() { # <abs-file>
+  awk "
+    /^_STAGE_TABLE='/ { sub(/^_STAGE_TABLE='/, \"\"); intbl = 1 }
+    intbl {
+      last = (\$0 ~ /'\$/)
+      sub(/'\$/, \"\")
+      if (NF >= 3) print \$1 \"=\" \$3
+      if (last) exit
+    }
+  " "$1"
+}
+
+@test "parity: cache-lint.sh _STAGE_TABLE matches the canonical map" {
+  run map_from_stage_table "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh"
   assert_success
   [ "$output" = "$(expected_map)" ]
 }

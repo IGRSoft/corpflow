@@ -76,23 +76,84 @@ usage() {
 
 # ---------- Anchor allow-list (mirrors handoff-protocol.md#anchor-allow-list) ----------
 # POSIX-compatible lookup (bash 3.2 has no associative arrays).
+# One row per stage: <code> <agent-basename> <canonical-artifact-basename> <anchors…>.
+#
+# These four facts were four parallel 13-arm `case` tables, two of them exact inverses of
+# each other, so a new stage stayed half-added until all four were edited and nothing could
+# say which one was missed. The anchors are the per-stage allow-list from
+# handoff-protocol.md#anchor-allow-list; UNIVERSAL_ANCHORS and OPTIONAL_ANCHOR_RE below add
+# the stage-independent obligations on top of the row. The artifact basenames mirror
+# handoff-protocol.md#stage-artifact-map and the agent basenames mirror
+# stage-contracts.md § Per-Stage Frontmatter Templates.
+_STAGE_TABLE='PL product-manager planning requirements acceptance-criteria scope out-of-scope risks complexity stages summary
+AR software-architector architecture decisions trade-offs patterns integration-points schemas open-questions risks
+TL team-lead coordination fan-out shared-snippets sequence risks
+DV developer development files-changed tests-added deviations follow-ups
+DR technical-lead developer-review findings verdict blockers follow-ups
+SR security-reviewer security-review findings verdict blockers threat-model
+QA qa-engineer testing results coverage regressions verdict
+DC technical-writer documentation files-changed cross-references follow-ups
+RE release-engineer release artifacts version rollback-plan
+FN project-manager complete-summary summary artifacts followups metrics
+ST stakeholder retrospective decision learnings followups
+IR incident-responder incident root-cause fix-plan blast-radius
+ET ethics-reviewer ethics-review findings verdict mitigations'
+
+# Out-parameter of _stage_row, holding the matched row minus its stage code. Not a return
+# value: a command substitution would fork once per lookup per artifact.
+_STAGE_ROW=""
+
+# _stage_row <stage> — rc 1 with _STAGE_ROW empty when the stage is unknown.
+_stage_row() {
+  local row
+  _STAGE_ROW=""
+  [ -n "${1:-}" ] || return 1
+  while IFS= read -r row; do
+    case "$row" in
+      "$1 "*) _STAGE_ROW="${row#* }"; return 0 ;;
+    esac
+  done <<< "$_STAGE_TABLE"
+  return 1
+}
+
+# The anchors an artifact of <stage> must carry, space-separated. Empty for an unknown
+# stage, which every caller reads as "not a stage artifact".
 anchors_for_stage() {
-  case "$1" in
-    PL) echo "requirements acceptance-criteria scope out-of-scope risks complexity stages summary" ;;
-    AR) echo "decisions trade-offs patterns integration-points schemas open-questions risks" ;;
-    TL) echo "fan-out shared-snippets sequence risks" ;;
-    DV) echo "files-changed tests-added deviations follow-ups" ;;
-    DR) echo "findings verdict blockers follow-ups" ;;
-    SR) echo "findings verdict blockers threat-model" ;;
-    QA) echo "results coverage regressions verdict" ;;
-    DC) echo "files-changed cross-references follow-ups" ;;
-    RE) echo "artifacts version rollback-plan" ;;
-    FN) echo "summary artifacts followups metrics" ;;
-    ST) echo "decision learnings followups" ;;
-    IR) echo "root-cause fix-plan blast-radius" ;;
-    ET) echo "findings verdict mitigations" ;;
-    *) echo "" ;;
-  esac
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+  set -- $_STAGE_ROW
+  shift 2
+  echo "$*"
+}
+
+# The agent basename that owns <stage> — DV -> developer.
+stage_to_agent_basename() {
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split
+  set -- $_STAGE_ROW
+  echo "$1"
+}
+
+# The canonical artifact basename for <stage> — DV -> development. Pinned against six other
+# spellings of the same map by artifact-map-parity.bats.
+canonical_basename_for_stage() {
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split
+  set -- $_STAGE_ROW
+  echo "$2"
+}
+
+# The inverse of stage_to_agent_basename, read off the same rows rather than out of a
+# second table that could disagree with it.
+agent_basename_to_stage() {
+  local row key="${1:-}"
+  [ -n "$key" ] || { echo ""; return 0; }
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split
+    set -- $row
+    if [ "$2" = "$key" ]; then echo "$1"; return 0; fi
+  done <<< "$_STAGE_TABLE"
+  echo ""
 }
 
 # Anchors REQUIRED in every stage artifact, on top of that stage's own row. Stage-independent
@@ -199,27 +260,6 @@ anchor_lint() {
 }
 
 # ---------- Agent-section cross-check (#16 letter b) ----------
-# Reverse of agent_basename_to_stage. Kept as its own case rather than derived by
-# scanning, so the two directions can never disagree about a stage code.
-stage_to_agent_basename() {
-  case "$1" in
-    PL) echo product-manager ;;
-    AR) echo software-architector ;;
-    TL) echo team-lead ;;
-    DV) echo developer ;;
-    DR) echo technical-lead ;;
-    SR) echo security-reviewer ;;
-    QA) echo qa-engineer ;;
-    DC) echo technical-writer ;;
-    RE) echo release-engineer ;;
-    FN) echo project-manager ;;
-    ST) echo stakeholder ;;
-    IR) echo incident-responder ;;
-    ET) echo ethics-reviewer ;;
-    *) echo "" ;;
-  esac
-}
-
 # The H2 names an agent's prose INSTRUCTS it to write into its own stage artifact.
 #
 # Deliberately under-matching (AD-6): a false negative leaves today's behaviour, while a
@@ -436,27 +476,6 @@ prefix_lint() {
 }
 
 # ---------- Frontmatter template lint ----------
-# Canonical agent-basename → stage code mapping. Mirrors the §
-# Per-Stage Frontmatter Templates section in stage-contracts.md.
-agent_basename_to_stage() {
-  case "$1" in
-    product-manager) echo PL ;;
-    software-architector) echo AR ;;
-    team-lead) echo TL ;;
-    developer) echo DV ;;
-    technical-lead) echo DR ;;
-    security-reviewer) echo SR ;;
-    qa-engineer) echo QA ;;
-    technical-writer) echo DC ;;
-    release-engineer) echo RE ;;
-    project-manager) echo FN ;;
-    stakeholder) echo ST ;;
-    incident-responder) echo IR ;;
-    ethics-reviewer) echo ET ;;
-    *) echo "" ;;
-  esac
-}
-
 # Extract the contents of the first ```yaml fenced block that appears
 # AFTER the `## Handoff Protocol` H2 and BEFORE the next H2 heading.
 # Returns the YAML body (without the fence markers). Empty if not found.
@@ -585,26 +604,6 @@ frontmatter_template_lint() {
 }
 
 # ---------- Filename lint ----------
-# Canonical stage → artifact basename mapping (mirrors handoff-protocol.md#stage-artifact-map).
-canonical_basename_for_stage() {
-  case "$1" in
-    PL) echo "planning" ;;
-    AR) echo "architecture" ;;
-    TL) echo "coordination" ;;
-    DV) echo "development" ;;
-    DR) echo "developer-review" ;;
-    SR) echo "security-review" ;;
-    QA) echo "testing" ;;
-    DC) echo "documentation" ;;
-    RE) echo "release" ;;
-    FN) echo "complete-summary" ;;
-    ST) echo "retrospective" ;;
-    IR) echo "incident" ;;
-    ET) echo "ethics-review" ;;
-    *) echo "" ;;
-  esac
-}
-
 # extract_stage() yq-parses the whole file, which aborts on any real artifact
 # body ("mapping values are not allowed in this context") and made filename-lint
 # skip every artifact it was meant to check. Scoped to the filename path on
