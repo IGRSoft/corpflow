@@ -240,7 +240,12 @@ _repair_corrupt_state() {
         result: "repaired",
         metadata: { reason: "corrupt_state_json", backup: $backup, run_index: $n,
                     stage: $stage, artifact: $art } }' 2> /dev/null); then
-    printf '%s\n' "$row" >> "$LOG_DIR/audit.jsonl"
+    # A symlinked audit.jsonl turns this append into a write primitive against an
+    # arbitrary target. Refuse rather than follow — the same guard the hook appender in
+    # model-switch-lib.sh carries. A lost row never blocks a repair that already landed.
+    if [ ! -L "$LOG_DIR/audit.jsonl" ]; then
+      printf '%s\n' "$row" >> "$LOG_DIR/audit.jsonl"
+    fi
   fi
   log INFO "corrupt state.json rebuilt from $art (backup=$backup run_index=$n) — delegating merge"
   return 0
