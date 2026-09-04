@@ -1270,3 +1270,305 @@ two_open_dv() {
   run jq -r '[.facts.decisions[].id] | index("d-ok") != null' .context/state.json
   assert_output "true"
 }
+
+# --- Ledger-op positive paths -------------------------------------------------
+# Direct coverage for --task-create/--task-block/--task-unblock/--task-status.
+# Until this block existed the only guard was the script's own inline self-test,
+# so a regression here could only be caught by the instrument it would break.
+
+@test "ledger ops: create seeds pending, block unions edges, status transitions" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}'
+  # Twice on purpose: blocked_by is a union, so the repeat must not duplicate DV0.
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0,DV1
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV0 in_progress
+  assert_success
+  run jq -c '[.tasks.DR0.blocked_by, .tasks.DV0.status, .tasks.DV1.status]' .context/state.json
+  assert_output '[["DV0","DV1"],"in_progress","pending"]'
+}
+
+@test "ledger ops: a duplicate --task-create is a no-op that never clobbers metadata" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"clobbered":true}'
+  assert_success
+  run jq -c '[.tasks.DV0.metadata.agent, (.tasks.DV0.metadata | has("clobbered"))]' .context/state.json
+  assert_output '["corpflow:developer",false]'
+}
+
+@test "ledger ops: --task-create without --metadata defaults to an empty object" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create QA0
+  assert_success
+  run jq -c '[.tasks.QA0.status, .tasks.QA0.metadata]' .context/state.json
+  assert_output '["pending",{}]'
+}
+
+@test "ledger ops: --task-unblock subtracts exactly the named edge" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata '{"stage":"DV"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0,DV1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-unblock DR0 --off DV1
+  assert_success
+  run jq -c '.tasks.DR0.blocked_by' .context/state.json
+  assert_output '["DV0"]'
+}
+
+@test "ledger ops: --task-unblock of an edge that was never set is a no-op success" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-unblock DR0 --off ST0
+  assert_success
+  run jq -c '.tasks.DR0.blocked_by' .context/state.json
+  assert_output '["DV0"]'
+}
+
+@test "ledger ops: a malformed task id is refused before any write" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status ZZ0 pending
+  assert_failure
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "ledger ops: status/block/unblock/meta on an unknown id hit the existence guard" {
+  # Only --task-create may introduce a key. Every other op must refuse rather than
+  # autovivify a ghost through its .tasks[\$id] assignment. The stderr match pins WHICH
+  # guard fired — a bare non-zero exit would also be satisfied by a parse error.
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
+  cp .context/state.json snap
+  local op
+  for op in "--task-status FN0 pending" "--task-block FN0 --on DV0" \
+            "--task-unblock FN0 --off DV0" "--task-meta FN0 --set {}"; do
+    # shellcheck disable=SC2086
+    run bash "$PLUGIN_ROOT/$SCRIPT" $op
+    assert_failure
+    assert_output --partial "unknown task id"
+    run diff -q .context/state.json snap
+    assert_success
+  done
+}
+
+# --- Ledger version guard -----------------------------------------------------
+
+@test "version guard: an unsupported ledger version halts the ledger-op path before any write" {
+  cd "$WD"
+  jq '.version = 1' .context/state.json > v1.json && mv v1.json .context/state.json
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status PL0 in_progress
+  assert_failure
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "version guard: an unsupported ledger version halts the --stage path before any write" {
+  cd "$WD"
+  jq '.version = 1' .context/state.json > v1.json && mv v1.json .context/state.json
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via hook
+  assert_failure
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+# --- Hook audit row -----------------------------------------------------------
+
+@test "audit: --via hook appends exactly one stage_transition row for the patched task" {
+  cd "$WD"
+  rm -f .context/logs/audit.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via hook
+  assert_success
+  assert_audit_row stage_transition --actor "hook:state-merge" --count 1 \
+    --jq '.task_id == "DV0" and .metadata.via == "hook"'
+}
+
+@test "audit: --via step6_5 appends no row (the orchestrator scrape owns that record)" {
+  cd "$WD"
+  rm -f .context/logs/audit.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via step6_5
+  assert_success
+  [ ! -s .context/logs/audit.jsonl ]
+}
+
+# --- open_questions eviction spill --------------------------------------------
+# _spill_evicted_questions is the heaviest function on the --facts hot path and had
+# no coverage outside the script's own self-test. run_index 3 puts the spill file at
+# a fixed, non-zero name so a stray run-0 file cannot satisfy these assertions.
+
+# seed_questions <total> <resolved-prefix-count>
+seed_questions() {
+  jq -n --argjson n "$1" --argjson res "$2" '
+    { version: 2, worktask_id: "spill-fixture", plan_file: ".context/planning-0.md",
+      platform: "all", run_index: 3,
+      tasks: { DV1: { status: "in_progress" } },
+      facts: { open_questions:
+        [ range(1; $n + 1) as $i
+          | { id: ("sw-PL0-" + ($i | tostring)), class: "decision",
+              ref: "planning-0.md#elicitation-sweep", stage: "PL",
+              status: (if $i <= $res then "resolved" else "open" end) }
+          + (if $i <= $res then { resolution: "answered" } else {} end) ] },
+      handoffs: {} }' > .context/state.json
+  rm -f .context/open-questions-3.jsonl
+}
+
+add_question() {
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\",\"blocks_next_stage\":false}]}"
+}
+
+@test "spill: an array inside the bound writes no spill file" {
+  cd "$WD"
+  seed_questions 5 0
+  run add_question sw-DV1-1
+  assert_success
+  [ ! -e .context/open-questions-3.jsonl ]
+}
+
+@test "spill: an unresolved eviction spills the full stub and leaves ledger order intact" {
+  cd "$WD"
+  seed_questions 12 0
+  run add_question sw-DV1-1
+  assert_success
+  run jq -r '.id' .context/open-questions-3.jsonl
+  assert_output "sw-PL0-1"
+  run grep -c '^' .context/open-questions-3.jsonl
+  assert_output "1"
+  run jq -e '.spilled_at and .spilled_from_stage and .class and .ref and .stage and .status' \
+    .context/open-questions-3.jsonl
+  assert_success
+  run jq -c '.facts.open_questions | map(.id)' .context/state.json
+  assert_output '["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-PL0-7","sw-PL0-8","sw-PL0-9","sw-PL0-10","sw-PL0-11","sw-PL0-12","sw-DV1-1"]'
+}
+
+@test "spill: a RESOLVED eviction spills too, flagged was_resolved, answer intact" {
+  # Spilling only unresolved items inverted the incentive: answering a question was
+  # what made it vanish without a trace.
+  cd "$WD"
+  seed_questions 12 2
+  run add_question sw-DV1-1
+  assert_success
+  run jq -c '[.id, .was_resolved, .resolution]' .context/open-questions-3.jsonl
+  assert_output '["sw-PL0-1",true,"answered"]'
+}
+
+@test "spill: the trigger is bound-free — a union that evicts nothing writes no line" {
+  # It once fired only on a post-clamp length of exactly 12, so the spill died silently
+  # the moment the bound moved.
+  cd "$WD"
+  seed_questions 12 0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  assert_success
+  [ ! -e .context/open-questions-3.jsonl ]
+  run jq -r '.facts.open_questions | length' .context/state.json
+  assert_output "12"
+}
+
+@test "spill: an append that FAILS warns on stderr and claims no success" {
+  # Root can write through mode 0444, which would make the unwritable-path recipe assert
+  # nothing; skip rather than pass vacuously.
+  [ "$(id -u)" -ne 0 ] || skip "runs as root: a 0444 spill path stays writable"
+  cd "$WD"
+  seed_questions 12 0
+  : > .context/open-questions-3.jsonl
+  chmod 0444 .context/open-questions-3.jsonl
+  : > .context/spill.log
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --log .context/spill.log --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-DV1-1","class":"decision","ref":"development-1.md#elicitation-sweep","blocks_next_stage":false}]}'
+  chmod 0644 .context/open-questions-3.jsonl
+  assert_success
+  [ ! -s .context/open-questions-3.jsonl ]
+  # Captured to a file first: `run` clobbers $stderr, and a bare [[ ]] mid-body is not
+  # an assertion in bats — only the body's LAST status decides the verdict.
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'spill append to ' stderr.cap
+  assert_success
+  run grep -F 'evicted item(s) unrecorded' stderr.cap
+  assert_success
+  # The merge itself is unaffected, and the log must not claim a spill that never landed.
+  run jq -e '(.facts.open_questions | map(.id) | index("sw-DV1-1")) != null' .context/state.json
+  assert_success
+  run grep -q 'spill append failed for' .context/spill.log
+  assert_success
+  run grep -q 'spilled 1 evicted' .context/spill.log
+  assert_failure
+}
+
+# --- post-write clamp-eviction detector ---------------------------------------
+
+@test "clamp detector: an id evicted by the clamp on its own write is named on stderr" {
+  # facts.decisions[] clamps to the newest 8 and has no spill, so an id can land and be
+  # evicted by the same write. The post-write assertion is the only signal that happened.
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --facts "$(jq -nc '{decisions: [range(1;9) | {id: ("old-" + (.|tostring))}]}')"
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --facts "$(jq -nc '{decisions: [range(1;10) | {id: ("new-" + (.|tostring))}]}')"
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'not in the ledger (clamp eviction)' stderr.cap
+  assert_success
+  run grep -F 'new-1' stderr.cap
+  assert_success
+}
+
+# --- parse_frontmatter: both branches ------------------------------------------
+# The yq branch was unexercised anywhere: every CI host lacks yq and takes the awk
+# fallback, so the two parsers could disagree indefinitely without a red test.
+
+@test "frontmatter: the yq branch is taken when yq is on PATH and its answers land" {
+  cd "$WD"
+  stub_cmd yq --body '
+expr="${2:-}"
+case "$expr" in
+  *".handoff.stage"*)           printf "DV\n" ;;
+  *".handoff.verdict"*)         printf "ok\n" ;;
+  *".handoff.summary"*)         printf "summary parsed by the yq branch\n" ;;
+  *".handoff.worktree_path"*)   printf "null\n" ;;
+  *".handoff.worktree_branch"*) printf "null\n" ;;
+  *".handoff"*)                 printf "stage: DV\n" ;;
+esac
+exit 0'
+  run_script_env --cwd "$WD" --stub-path "$SCRIPT" \
+    --stage DV --prev PL --artifact .context/development-0.md
+  assert_success
+  [ "$(stub_log --count yq)" -gt 0 ]
+  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  assert_output --partial "summary parsed by the yq branch"
+  # `null` from yq must not reach the ledger as a worktree record.
+  run jq -r '.tasks.DV0 | has("worktree")' .context/state.json
+  assert_output "false"
+}
+
+@test "frontmatter: the awk fallback parses the same artifact when yq is absent" {
+  cd "$WD"
+  run_script_env --cwd "$WD" --hide yq "$SCRIPT" \
+    --stage DV --prev PL --artifact .context/development-0.md
+  assert_success
+  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  assert_output --partial "DV0a fixture development artifact"
+}
+
+@test "frontmatter: the yq and awk branches agree on the same artifact" {
+  # The parity that matters: two parsers, one contract. Uses the REAL yq, so it pins
+  # agreement rather than agreement-with-a-stub.
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev PL --artifact .context/development-0.md
+  jq -c '[.tasks.DV0, .handoffs]' .context/state.json > with-yq.json
+  cp "$FIXTURES/worktask/state.sample.json" .context/state.json
+  run_script_env --cwd "$WD" --hide yq "$SCRIPT" \
+    --stage DV --prev PL --artifact .context/development-0.md
+  assert_success
+  jq -c '[.tasks.DV0, .handoffs]' .context/state.json > without-yq.json
+  run diff -u with-yq.json without-yq.json
+  assert_success
+}
