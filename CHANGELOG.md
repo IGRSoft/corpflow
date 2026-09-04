@@ -159,6 +159,11 @@ reduced the number of *implementations*, not the number of lines.
   exited 2, aborting the paired stage patch — exactly the payload shape the closing-sweep contract
   tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
   kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
+- **`cache-lint.sh`'s `extract_stage` failed open, not closed, on a yq failure.** It fell back to an
+  `awk` extraction only when `yq` was *absent*; when `yq` was present but failed on a given input,
+  the function returned whatever `yq` produced rather than falling back, and QA's own run this cycle
+  produced zero anchor coverage from exactly this path. Deferred earlier in this release, then fixed
+  before shipping: the fallback is now keyed on `yq`'s exit code, not its presence.
 
 ### Known follow-ups
 
@@ -200,19 +205,21 @@ reduced the number of *implementations*, not the number of lines.
 - **Refuted, for the record: no change was made to the screenshot capture scripts.** They were
   reported as interpolating malformed JSON into `audit.jsonl`; on inspection they already build
   every audit row with `jq -nc --argjson`, so there was nothing to fix.
-- **`cache-lint.sh`'s `extract_stage` fails open, not closed, on a yq failure.** It falls back to an
-  `awk` extraction only when `yq` is *absent*; when `yq` is present but fails on a given input, the
-  function returns whatever `yq` produced rather than falling back, and QA's own run this cycle
-  produced zero anchor coverage from exactly this path. Left unfixed — the correct fix is a fallback
-  keyed on `yq`'s exit code, not its presence, and that is a hot-path change to a script every
-  anchor-carrying artifact write runs through, which was judged too risky to land alongside the
-  library extraction. Tracked as a follow-up.
 - **`scan-secrets.sh` exits 133 on a repo-root scan.** Pre-existing, reproduced during this run, not
   fixed here.
 - **49 mid-body bare `[[ ]]` assertions are vacuous on bash 3.2** (macOS's default shell) but binding
   on bash 5.2 (CI). They pass silently on a contributor's Mac and only actually assert in CI. Left
   as-is; a fix needs either a bash-version floor bump or per-assertion conversion, both out of scope
   here. Tracked as a follow-up alongside the two above.
+- **`cache-lint.sh anchor_lint` does not yet recognize `development-N-<stream>.md` fan-out
+  artifacts.** `hooks/anchor-preflight.sh` already routes the stream form into the lint
+  (`ARTIFACT_RE='...|development-[0-9]+(-[a-z0-9]+)*)\.md$'`), but `anchor_lint` in
+  `skills/worktask/scripts/cache-lint.sh` has no anchor set for it, so every stream artifact with
+  legitimate extra sections (`commits`, `verification`, `deferrals`, `defects-fixed`, `inherited
+  failures`, `sr0-remediation`, etc.) now fails `--anchor-lint`. The fix needs a relaxed rule per
+  `handoff-protocol.md#anchor-allow-list` — required DV anchors plus `elicitation-sweep` stay
+  enforced, extra H2s are allowed — not a full exemption, since the ledger already points at
+  `development-0-<stream>.md#elicitation-sweep` from `sw-DV0-1`, `sw-DV3-1`, and `sw-DV4-1`.
 
 ### Notes (shell-script simplification)
 
