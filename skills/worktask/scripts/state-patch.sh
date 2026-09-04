@@ -160,7 +160,6 @@ FACTS_EMPTY_NOOP=0
 # the rejection from all of them.
 FACTS_REJECTED=0
 
-# ---------- Usage ----------
 usage() {
   # Stop at the first non-comment line rather than a hardcoded count: the header block ends
   # where the code begins, and a line count silently truncates help text whenever it grows.
@@ -168,7 +167,6 @@ usage() {
   exit 2
 }
 
-# ---------- Helpers ----------
 log_msg() {
   # log_msg <LEVEL> <message>
   local level="${1:-INFO}" msg="${2:-}"
@@ -337,33 +335,23 @@ is_valid_prev() {
   [[ -n "$(basename_for_stage "$1")" ]]
 }
 
-# Ledger keys are numbered ids (DV0, DV1); handoff edges stay bare codes (PL→AR).
-# Frontmatter carries only the code, so pick the instance the caller most plausibly means:
-# the one actually running, else the next one queued, else one that is parked — lowest N
-# within each tier, because a split stage is worked in order.  A `completed` instance is
-# never reused and `skipped` is never resurrected: both were settled deliberately.
-# Falls back to the highest existing instance, then to <CODE>0 for a never-seeded stage.
-# Callers must have already established that $STATE_PATH exists.
+# Bare stage CODE → ledger key. Precedence: explicit --task-id, then the artifact match,
+# then the status ladder the jq below spells (lowest N first — a split stage is worked in
+# order). `completed` is never reused and `skipped` never resurrected: both were settled
+# deliberately. Caller must have already established that $STATE_PATH exists.
 #
-# Precedence is explicit id > explicit artifact > the status ladder.  The artifact tier
-# reads ARTIFACT_ARG — what the CALLER passed — never the stage-resolved $ART, which is not
-# assigned until ~1500 lines below this definition and is a basename guess rather than a
-# caller assertion.  A bare `--stage` (hooks/agent-stop.sh passes no artifact) leaves
-# ARTIFACT_ARG empty and falls through to the ladder byte-identically.
+# The artifact tier reads ARTIFACT_ARG — what the CALLER passed — never the stage-resolved
+# $ART, which is a basename guess rather than a caller assertion and is not assigned until
+# ~1100 lines below. Within it the RECORDED `.artifact` beats the PLANNED
+# `.metadata.artifact`: PL0 seeds the planned name and a split stage routinely writes a
+# different file (planned development-0-ledger.md, written development-1.md), so reading
+# metadata first slots the patch by a stale guess — the mis-slotting this resolution exists
+# to prevent. Metadata stays the fallback: it is the only artifact key a stage that has not
+# completed yet carries.
 #
-# Within the artifact tier the RECORDED `.artifact` is consulted before the PLANNED
-# `.metadata.artifact`: PL0 seeds the metadata name from the plan, and a split stage
-# routinely writes a different file than the plan guessed (this run: planned
-# development-0-ledger.md, written development-1.md).  Reading metadata first would slot the
-# patch by the plan's stale guess instead of the file the caller just named — the very
-# mis-slotting this resolution exists to prevent.  Metadata stays as the fallback because it
-# is the only artifact key a stage that has not completed yet carries.
-#
-# Ambiguity inside the winning ladder tier is fatal rather than arbitrary: two `in_progress`
-# instances with nothing to tell them apart means the caller's patch would land on a coin
-# flip.  Ambiguity ACROSS tiers is not — the ladder orders those deliberately, so the
-# ordinary split-stage shape (DV0 in_progress, DV1..DV3 pending) keeps resolving to DV0.
-# Returns 1 on ambiguity, before any lock is taken, leaving state.json untouched.
+# Ambiguity INSIDE the winning tier is fatal rather than arbitrary — two indistinguishable
+# `in_progress` instances would land the patch on a coin flip. Ambiguity ACROSS tiers is not:
+# the ladder orders those deliberately. Returns 1 before any lock is taken.
 resolve_task_id() {
   local code="$1" resolved="" raw base
   if [[ -n "${TASK_ID_ARG:-}" ]]; then
@@ -695,35 +683,27 @@ _STATE_BOUNDS_FILTER='
             + [ .[] | select(.status != "launched") ])[0:6])
        else . end)'
 
-# `stage` and `status` are defaulted, never left null: the FN gate groups unresolved items by
-# stage and treats a missing status as unanswered, so a null in either field renders an item
-# nobody can attribute or act on. `stage` comes from the item's own id (`sw-<TASK_ID>-<n>` is
-# the mandated shape, so the id IS the slot), falling back to the writing stage's code for a
-# legacy id that predates it. Applied to incumbents as well as incoming items, so an array
-# already carrying nulls is backfilled on the next write rather than staying broken forever.
+# `stage` and `status` are defaulted, never left null, on incumbents as well as incoming
+# items: the FN gate groups unresolved items by stage and reads a missing status as
+# unanswered, so a null in either renders an item nobody can attribute or act on. `stage`
+# comes from the item's own id — `sw-<TASK_ID>-<n>` is the mandated shape, so the id IS the
+# slot — falling back to the writing stage's code for a legacy id that predates it.
 #
 # open_questions unions through _union_sweep, not _union_keyed: last-writer-wins would let a
-# re-emitted stub carrying `status: open` destroy an answer already recorded against that id, and
-# since sw-DR0-3 moved sweep answers out of facts.decisions[] that element is the ONLY record of it.
-# `open < resolved` is joined monotonically — a later write may raise, never downgrade — the same
-# lattice shape this feature already ships for `decision < escalate`. The fields are guarded
-# INDEPENDENTLY: an incoming stub that omits `resolution` inherits the incumbent's even when both
-# sides say `resolved`, because dropping the answer body is a downgrade too, and
-# `blocks_next_stage` is sticky ONLY when the incoming stub re-emits WITHOUT the key, so a rework
-# round that drops it cannot silently demote a boundary-blocking item to an FN-batched one. An
-# explicit `false` is the author speaking and CLEARS the flag: the two cases are distinguished by
-# `has`, never by truthiness, because conflating them made `true` unclearable and turned a
-# bookkeeping divergence into a real gate. `--facts` now requires the key, so the sticky arm covers
-# only legacy payloads written before that. Scoped to
-# open_questions alone: _union_keyed stays untouched for facts.decisions, whose semantics do not
-# change.
+# re-emitted stub carrying `status: open` destroy an answer recorded against that id, and the
+# element is the ONLY record of a sweep answer. `open < resolved` joins monotonically — a
+# later write may raise, never downgrade — and the fields are guarded INDEPENDENTLY, because
+# dropping the answer body is a downgrade too. `blocks_next_stage` is sticky only when the
+# stub re-emits WITHOUT the key, so a rework round that drops it cannot demote a
+# boundary-blocking item; an explicit `false` is the author speaking and CLEARS it. `has`,
+# never truthiness, tells those apart — conflating them made `true` unclearable. Legacy
+# payloads only: `--facts` requires the key. facts.decisions keeps _union_keyed.
 #
-# Union semantics for the facts.* arrays. Object-merge (`. * $patch`) REPLACES arrays, so
-# a downstream stage's patch would silently drop every entry an upstream stage recorded.
-# Identity is `.id` for the keyed arrays and the string itself for the scalar ones.
-# Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps `.[-8:]` — appending
-# is what makes "newest 8 survive" true after a union; sorting (unique_by) would hand the
-# clamp an arbitrary 8. Scalars keep first-seen order: no clamp reads them.
+# Object-merge (`. * $patch`) REPLACES arrays, so without this a downstream patch would drop
+# every entry an upstream stage recorded. Identity is `.id`, or the string itself for the
+# scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps
+# `.[-8:]`: appending is what makes "newest 8 survive" true, where unique_by would hand the
+# clamp an arbitrary 8. Scalars keep first-seen order — no clamp reads them.
 _FACTS_UNION_FILTER='
       def _union_keyed(k):
         reduce .[] as $e ([]; map(select((. | k) != ($e | k))) + [$e]);
@@ -1438,7 +1418,6 @@ if [[ -n "$FACTS_ARG" ]]; then
   fi
 fi
 
-# ---------- Resolve artifact ----------
 ART="$ARTIFACT_ARG"
 
 if [[ -z "$ART" && -n "$STAGE_ARG" ]]; then
@@ -1476,7 +1455,6 @@ if [[ ! -f "$STATE_PATH" ]]; then
   exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
-# ---------- Parse frontmatter ----------
 parse_frontmatter "$ART"
 
 if [[ -z "$PARSED_STAGE" ]]; then
@@ -1484,7 +1462,6 @@ if [[ -z "$PARSED_STAGE" ]]; then
   exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
-# ---------- Resolve the ledger key ----------
 if ! TASK_ID=$(resolve_task_id "$PARSED_STAGE"); then
   exit 4
 fi
