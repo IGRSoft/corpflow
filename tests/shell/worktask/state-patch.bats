@@ -1595,3 +1595,63 @@ exit 0'
   run diff <(jq -S . bare.json) <(jq -S . dotted.json)
   assert_success
 }
+
+# ---------------------------------------------------------------------------
+# --ledger-meta — the top-level metadata writer. Before it existed the only way
+# to set .metadata.base_ref was to hand-edit state.json around the single writer,
+# and an unresolved base_ref falls through to origin/HEAD — the wrong-base PR the
+# base-sanity check exists to catch.
+# ---------------------------------------------------------------------------
+@test "ledger meta: --set merges into top-level metadata without dropping siblings" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta --set '{"milestone":"7"}'
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta --set '{"base_ref":"refs/heads/parent"}'
+  assert_success
+  run jq -r '.metadata.milestone + "|" + .metadata.base_ref' .context/state.json
+  assert_output "7|refs/heads/parent"
+}
+
+@test "ledger meta: resolve_base_ref reads what --ledger-meta wrote" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta --set '{"base_ref":"develop"}'
+  assert_success
+  run bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; \
+    STATE_PATH=.context/state.json resolve_base_ref"
+  assert_success
+  assert_output --partial "develop"
+}
+
+@test "ledger meta: a non-object --set is refused and state.json is byte-identical" {
+  cd "$WD"
+  local before; before="$(md5 -q .context/state.json 2>/dev/null || md5sum .context/state.json)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta --set '"develop"'
+  assert_failure 1
+  assert_output --partial "must be a JSON object"
+  local after; after="$(md5 -q .context/state.json 2>/dev/null || md5sum .context/state.json)"
+  [ "$before" = "$after" ]
+}
+
+@test "ledger meta: --set is required" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta
+  assert_failure 2
+  assert_output --partial "requires --set"
+}
+
+@test "ledger meta: combining it with a task op is refused, not silently half-applied" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ledger-meta --set '{"a":"1"}' --task-status DV0 completed
+  assert_failure 2
+  assert_output --partial "separate writes"
+  run jq -r '.metadata.a // "absent"' .context/state.json
+  assert_output "absent"
+}
+
+@test "ledger meta: no ledger at --state writes nothing and says so" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/absent.json --ledger-meta --set '{"a":"1"}'
+  assert_failure 1
+  assert_output --partial "existing ledger only"
+  [ ! -e .context/absent.json ]
+}

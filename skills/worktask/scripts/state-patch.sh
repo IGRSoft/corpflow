@@ -66,6 +66,12 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+# @arg --ledger-meta  --set <json>            Merge into the ledger's TOP-LEVEL metadata{}.
+#                                             The only op that writes outside tasks{} and
+#                                             facts{}: base_ref, milestone and the other
+#                                             run-wide keys readers resolve from there had
+#                                             no scripted writer, so they were hand-edited
+#                                             into state.json around this script.
 # @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
 #                                             stage loop dispatches it again.  Clears
 #                                             metadata.retry_count, metadata.error_escalated_to
@@ -960,6 +966,7 @@ VIA_ARG=""
 ALLOW_MISSING_ARTIFACT=""
 TASK_ID_ARG=""
 TASK_OP=""
+LEDGER_META_OP=""
 TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
@@ -1054,6 +1061,10 @@ while [[ $# -gt 0 ]]; do
       TASK_OP="meta"
       TASK_OP_ID="${1:-}"
       shift
+      ;;
+    --ledger-meta)
+      shift
+      LEDGER_META_OP="1"
       ;;
     --task-replay)
       shift
@@ -1156,6 +1167,53 @@ if [[ -n "$RESOLVE_CODE_ARG" ]]; then
   fi
   printf '%s\n' "$_RESOLVED"
   exit 0
+fi
+
+# ---------- Top-level metadata ----------
+# The ledger's metadata{} is run-wide, not per-task: base_ref, milestone, the gate flags.
+# resolve_base_ref (branch-lib.sh) reads .metadata.base_ref and nothing else, but until this
+# op the writer had only --task-meta, so the key had to be hand-edited into state.json
+# beside the single writer that exists to keep hand edits out. An unresolved base_ref falls
+# through to origin/HEAD — the repository default branch — which is exactly the wrong-base
+# finalization the base-sanity check exists to catch.
+#
+# Merge, not assign: a partial --set updates the named keys and leaves the rest, matching
+# --task-meta. One level deep only (jq `*` is recursive, which is what --task-meta uses and
+# what a caller updating one nested flag expects).
+if [[ -n "$LEDGER_META_OP" ]]; then
+  if [[ -n "$TASK_OP" ]]; then
+    printf >&2 -- '--ledger-meta and --task-%s are separate writes; issue them separately\n' "$TASK_OP"
+    usage
+  fi
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 -- '--ledger-meta needs jq; state.json unchanged\n'
+    log_msg ERROR "--ledger-meta needs jq; state.json unchanged"
+    exit 1
+  }
+  [[ -n "$TASK_OP_VALUE" ]] || {
+    printf >&2 -- 'missing value: --ledger-meta requires --set <json>\n'
+    usage
+  }
+  # An object, not merely valid JSON: `--set '"develop"'` parses, and `. * "develop"` would
+  # replace the whole metadata block with a string.
+  if ! printf '%s' "$TASK_OP_VALUE" | jq -e 'type == "object"' > /dev/null 2>&1; then
+    printf >&2 -- 'invalid --ledger-meta: --set must be a JSON object; state.json unchanged\n'
+    log_msg ERROR "invalid --ledger-meta (--set is not a JSON object); state.json unchanged"
+    exit 1
+  fi
+  if [[ ! -f "$STATE_PATH" ]]; then
+    printf >&2 -- 'no state.json at %s; --ledger-meta writes into an existing ledger only\n' "$STATE_PATH"
+    log_msg ERROR "--ledger-meta: no state.json at ${STATE_PATH}; nothing written"
+    exit 1
+  fi
+  if atomic_apply "$STATE_PATH" '.metadata = ((.metadata // {}) * $meta)' \
+    --argjson meta "$TASK_OP_VALUE"; then
+    log_msg INFO "ledger meta: metadata merged"
+    exit 0
+  fi
+  printf >&2 -- 'ledger meta failed; state.json unchanged (see %s)\n' "$LOG_FILE"
+  log_msg ERROR "jq apply failed for --ledger-meta; state.json unchanged"
+  exit 1
 fi
 
 # ---------- Ledger ops ----------

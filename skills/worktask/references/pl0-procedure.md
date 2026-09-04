@@ -260,7 +260,7 @@ would be exactly the silent retarget this reconcile exists to prevent.
 Stamp the result in **two** places:
 
 - `task.metadata.base_ref` on PL0 and every downstream task — **only when `$BASE` is not `master`**. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
-- `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `branch-lib.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader.
+- `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `branch-lib.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader. On a turn that skips the step-4 reset (`plan_revision`), write it with `state-patch.sh --ledger-meta --set '{"base_ref":"<branch>"}'` rather than editing `state.json` by hand — a hand edit bypasses the lock and the bounds filter the single writer applies.
 
 Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.
 
