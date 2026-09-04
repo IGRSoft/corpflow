@@ -382,109 +382,23 @@ EOART
     exit 1
   fi
 
-  # ---- T14: ledger ops (create / block union / status) ----
+  # ---- Fixture for T15: the ledger shape the split-stage cases resolve against ----
+  # The ledger-op ASSERTIONS that used to live here (create / duplicate-create /
+  # bare create / block union / unblock / unblock no-op / malformed id / unknown
+  # id) moved to state-patch.bats — the seven "ledger ops:" arms. Only the state
+  # they left behind is kept, because T15 reads it and never seeds its own.
   make_state
   bash "$SELF" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
     && bash "$SELF" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
     && bash "$SELF" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}' \
     && bash "$SELF" --task-block DR0 --on DV0,DV1 \
-    && bash "$SELF" --task-block DR0 --on DV0 \
+    && bash "$SELF" --task-create QA0 \
+    && bash "$SELF" --task-unblock DR0 --off DV1 \
     && bash "$SELF" --task-status DV0 in_progress \
     || {
-      printf 'T14: ledger op returned non-zero\n' >&2
+      printf 'T15 fixture: ledger op returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '(.tasks.DR0.blocked_by == ["DV0","DV1"]) and .tasks.DV0.status == "in_progress"
-            and .tasks.DV1.status == "pending"' .context/state.json > /dev/null; then
-    printf 'T14: ledger create/status + blocked_by union: ok\n'
-  else
-    printf 'T14: ledger ops: FAIL\n' >&2
-    jq '.tasks' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-create DV0 --metadata '{"clobbered":true}' > /dev/null
-  if jq -e '.tasks.DV0.metadata.agent == "corpflow:developer"
-            and (.tasks.DV0.metadata | has("clobbered") | not)' \
-    .context/state.json > /dev/null; then
-    printf 'T14: duplicate --task-create is a no-op: ok\n'
-  else
-    printf 'T14: duplicate create clobbered metadata: FAIL\n' >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-create QA0 \
-    || {
-      printf 'T14: --task-create without --metadata returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.QA0.status == "pending" and .tasks.QA0.metadata == {}' \
-    .context/state.json > /dev/null; then
-    printf 'T14: --task-create without --metadata defaults to {}: ok\n'
-  else
-    printf 'T14: bare --task-create: FAIL\n' >&2
-    jq '.tasks.QA0' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-unblock DR0 --off DV1 \
-    || {
-      printf 'T14: --task-unblock returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
-    printf 'T14: --task-unblock subtracts the edge: ok\n'
-  else
-    printf 'T14: unblock subtraction: FAIL\n' >&2
-    jq '.tasks.DR0' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-unblock DR0 --off ST0 \
-    || {
-      printf 'T14: --task-unblock of an absent edge returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
-    printf 'T14: --task-unblock of an absent edge is a no-op: ok\n'
-  else
-    printf 'T14: unblock no-op: FAIL\n' >&2
-    exit 1
-  fi
-
-  st14_rc=0
-  bash "$SELF" --task-status ZZ0 pending > /dev/null 2>&1 || st14_rc=$?
-  if [[ "$st14_rc" != "0" ]]; then
-    printf 'T14: --task-status on a malformed id fails loudly: ok\n'
-  else
-    printf 'T14: malformed id must not be accepted: FAIL\n' >&2
-    exit 1
-  fi
-
-  # Only --task-create may introduce a key, so every other op must reject an unknown id
-  # rather than autovivify a ghost through its .tasks[$id] assignment.  The stderr match
-  # pins WHICH guard fired: a plain non-zero exit would also be satisfied by a parse error,
-  # which would leave the real behaviour untested.
-  cp .context/state.json .context/state.json.snap14
-  assert_ghost_rejected() {
-    local label="$1"
-    shift
-    local rc=0 err=""
-    err=$(bash "$SELF" "$@" 2>&1 > /dev/null) || rc=$?
-    if [[ "$rc" == "0" ]] || [[ "$err" != *"unknown task id"* ]] \
-      || ! diff -q .context/state.json .context/state.json.snap14 > /dev/null; then
-      printf 'T14: %s on an unknown id must hit the existence guard (rc=%s err=%s): FAIL\n' \
-        "$label" "$rc" "$err" >&2
-      jq '.tasks | keys' .context/state.json >&2
-      exit 1
-    fi
-  }
-  assert_ghost_rejected status --task-status FN0 pending
-  assert_ghost_rejected block --task-block FN0 --on DV0
-  assert_ghost_rejected unblock --task-unblock FN0 --off DV0
-  assert_ghost_rejected meta --task-meta FN0 --set '{}'
-  printf 'T14: status/block/unblock/meta on an unknown id all fail, state untouched: ok\n'
-
   # ---- T15: split-stage id resolution (the case bare stage codes could not express) ----
   # DV0 in_progress + DV1 pending: the running instance outranks the queued one, so a
   # bare --stage DV cannot stamp the higher-numbered track that has not started.
@@ -606,57 +520,6 @@ EOSTATE
     printf 'T15d: bare --stage with one open instance is unchanged: ok\n'
   else
     printf 'T15d: bare --stage regression (id=%s rc=%s): FAIL\n' "$t15d_id" "$t15d_rc" >&2
-    exit 1
-  fi
-
-  # ---- T16: unsupported ledger version halts before any write ----
-  cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{},"handoffs":{}}
-EOSTATE
-  cp .context/state.json .context/state.json.snap16
-  st16_rc=0
-  bash "$SELF" --task-status PL0 in_progress > /dev/null 2>&1 || st16_rc=$?
-  if [[ "$st16_rc" != "0" ]] \
-    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
-    printf 'T16: v1 ledger rejected on the ledger-op path, file untouched: ok\n'
-  else
-    printf 'T16: ledger-op version guard (rc=%s): FAIL\n' "$st16_rc" >&2
-    exit 1
-  fi
-
-  st16b_rc=0
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null 2>&1 \
-    || st16b_rc=$?
-  if [[ "$st16b_rc" != "0" ]] \
-    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
-    printf 'T16: v1 ledger rejected on the --stage path, file untouched: ok\n'
-  else
-    printf 'T16: --stage version guard (rc=%s): FAIL\n' "$st16b_rc" >&2
-    exit 1
-  fi
-
-  # ---- T17: --via hook appends exactly one audit row; other paths stay silent ----
-  make_state
-  rm -f .context/logs/audit.jsonl
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null
-  if [[ -f .context/logs/audit.jsonl ]] \
-    && jq -e 'select(.action == "stage_transition" and .actor == "hook:state-merge")
-              | .task_id == "DV0" and .metadata.via == "hook"' \
-      .context/logs/audit.jsonl > /dev/null; then
-    printf 'T17: hook completion writes its stage_transition row: ok\n'
-  else
-    printf 'T17: hook audit row missing: FAIL\n' >&2
-    cat .context/logs/audit.jsonl >&2 2> /dev/null || true
-    exit 1
-  fi
-
-  make_state
-  rm -f .context/logs/audit.jsonl
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via step6_5 > /dev/null
-  if [[ ! -s .context/logs/audit.jsonl ]]; then
-    printf 'T17: step6_5 completion writes no row (Bash scrape owns it): ok\n'
-  else
-    printf 'T17: non-hook path must not append: FAIL\n' >&2
     exit 1
   fi
 
@@ -785,117 +648,6 @@ EOSTATE
     exit 1
   fi
 
-  # ---- T21/T22/T23: the open_questions clamp spills unresolved evictions (AD-4) ----
-  # Fixture builder: N open_questions, the first $2 of them resolved, run_index 3.
-  t21_seed() {
-    jq -n --argjson n "$1" --argjson res "$2" '
-      { version: 2, worktask_id: "selftest", plan_file: ".context/planning-0.md",
-        platform: "all", run_index: 3,
-        tasks: { DV1: { status: "in_progress" } },
-        facts: { open_questions:
-          [ range(1; $n + 1) as $i
-            | { id: ("sw-PL0-" + ($i | tostring)), class: "decision",
-                ref: "planning-0.md#elicitation-sweep", stage: "PL",
-                status: (if $i <= $res then "resolved" else "open" end) }
-            + (if $i <= $res then { resolution: "answered" } else {} end) ] },
-        handoffs: {} }' > .context/state.json
-    rm -f .context/open-questions-3.jsonl
-  }
-  t21_add() {
-    bash "$SELF" --task-id DV1 --facts \
-      "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\",\"blocks_next_stage\":false}]}" \
-      > /dev/null
-  }
-
-  # An array that stays at or below the bound must behave exactly as it did before the spill
-  # existed: no file, and a ledger byte-identical to the unspilled merge.
-  t21_seed 5 0
-  t21_add sw-DV1-1
-  cp .context/state.json .context/state.json.t21
-  if [[ ! -e .context/open-questions-3.jsonl ]]; then
-    printf 'T21: no spill file while the array is within bounds: ok\n'
-  else
-    printf 'T21: spilled without an eviction: FAIL\n' >&2
-    exit 1
-  fi
-
-  # 12 open + 1 more evicts the OLDEST UNRESOLVED item — the loss #3 reports.
-  t21_seed 12 0
-  t21_add sw-DV1-1
-  if [[ "$(jq -r '.id' .context/open-questions-3.jsonl 2> /dev/null)" == "sw-PL0-1" ]] \
-    && [[ "$(grep -c '^' .context/open-questions-3.jsonl)" == "1" ]] \
-    && jq -e '.spilled_at and .spilled_from_stage and .class and .ref and .stage and .status' \
-      .context/open-questions-3.jsonl > /dev/null \
-    && jq -e '(.facts.open_questions | map(.id)) == ["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-PL0-7","sw-PL0-8","sw-PL0-9","sw-PL0-10","sw-PL0-11","sw-PL0-12","sw-DV1-1"]' \
-      .context/state.json > /dev/null; then
-    printf 'T22: unresolved eviction spills the full stub, ledger order unchanged: ok\n'
-  else
-    printf 'T22: unresolved eviction was not spilled: FAIL\n' >&2
-    cat .context/open-questions-3.jsonl >&2 2> /dev/null
-    jq -c '.facts.open_questions | map(.id)' .context/state.json >&2
-    exit 1
-  fi
-
-  # A resolved eviction is the one the sweep worked hardest for: it carries the answer.
-  # Spilling only unresolved items meant answering a question was what made it vanish.
-  t21_seed 12 2
-  t21_add sw-DV1-1
-  if [[ -e .context/open-questions-3.jsonl ]] \
-    && [[ "$(jq -r '.id' .context/open-questions-3.jsonl 2> /dev/null)" == "sw-PL0-1" ]] \
-    && jq -e '.was_resolved == true and .resolution == "answered" and .spilled_at' \
-      .context/open-questions-3.jsonl > /dev/null; then
-    printf 'T23: a resolved eviction spills, flagged was_resolved, answer intact: ok\n'
-  else
-    printf 'T23: resolved eviction was discarded: FAIL\n' >&2
-    cat .context/open-questions-3.jsonl >&2 2> /dev/null
-    exit 1
-  fi
-
-  # ---- T23b: the spill trigger is bound-free ----
-  # It used to fire only on a post-clamp length of exactly 12, so the spill died silently
-  # whenever the bound moved. An unevicted merge must still write nothing.
-  t21_seed 12 0
-  cp .context/state.json .context/state.json.t23b
-  bash "$SELF" --task-id DV1 --facts \
-    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
-    > /dev/null
-  if [[ ! -e .context/open-questions-3.jsonl ]] \
-    && [[ "$(jq -r '.facts.open_questions | length' .context/state.json)" == "12" ]]; then
-    printf 'T23b: a union that evicts nothing writes no spill line: ok\n'
-  else
-    printf 'T23b: spilled without an eviction: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T23c: a spill whose append FAILS says so, and claims no success ----
-  # Reachable without a test seam (QA-1's recipe): make the spill path unwritable. The INFO
-  # line used to be unconditional, so the log recorded a spill that never reached the file
-  # while the WARN two lines above said the opposite — and the WARN was log-only, so the call
-  # site saw nothing at all.
-  t21_seed 12 0
-  : > .context/open-questions-3.jsonl
-  chmod 0444 .context/open-questions-3.jsonl
-  st23c_rc=0
-  : > .context/t23c.log
-  LOG_FILE=.context/t23c.log bash "$SELF" --log .context/t23c.log --task-id DV1 --facts \
-    '{"open_questions":[{"id":"sw-DV1-1","class":"decision","ref":"development-1.md#elicitation-sweep","blocks_next_stage":false}]}' \
-    > /dev/null 2> .context/t23c.err || st23c_rc=$?
-  chmod 0644 .context/open-questions-3.jsonl
-  if [[ "$st23c_rc" -eq 0 ]] \
-    && [[ ! -s .context/open-questions-3.jsonl ]] \
-    && grep -q 'spill append to .* failed' .context/t23c.err \
-    && grep -q 'evicted item(s) unrecorded' .context/t23c.err \
-    && jq -e '(.facts.open_questions | map(.id) | index("sw-DV1-1")) != null' \
-      .context/state.json > /dev/null \
-    && grep -q 'spill append failed for' .context/t23c.log \
-    && ! grep -q 'spilled 1 evicted' .context/t23c.log; then
-    printf 'T23c: a failed spill append warns on stderr and claims no success: ok\n'
-  else
-    printf 'T23c: failed spill append was silent or claimed success (rc=%s): FAIL\n' "$st23c_rc" >&2
-    cat .context/t23c.err >&2
-    exit 1
-  fi
-
   # ---- T24: --facts rejects per item, persisting the valid remainder ----
   # One bad class value used to discard the whole write — decisions, changed files and
   # every valid sweep stub in the same object.
@@ -987,23 +739,6 @@ EOSTATE
     printf 'T24f: a partial --facts beside --stage completes the merge and still exits 2: ok\n'
   else
     printf 'T24f: combined partial-facts exit wrong (rc=%s): FAIL\n' "$st24f_rc" >&2
-    exit 1
-  fi
-
-  # ---- T27: the post-write assertion names ids a clamp evicted ----
-  # facts.decisions[] clamps to the newest 8 and has no spill (gh#316), so an id can land and
-  # be evicted by the same write. The detector is the only signal that happened.
-  make_state
-  bash "$SELF" --facts "$(jq -nc '{decisions: [range(1;9) | {id: ("old-" + (.|tostring))}]}')" \
-    > /dev/null
-  bash "$SELF" --facts "$(jq -nc '{decisions: [range(1;10) | {id: ("new-" + (.|tostring))}]}')" \
-    > /dev/null 2> .context/t27.err || true
-  if grep -q 'not in the ledger (clamp eviction)' .context/t27.err \
-    && grep -q 'new-1' .context/t27.err; then
-    printf 'T27: an id evicted by the clamp on its own write is named on stderr: ok\n'
-  else
-    printf 'T27: clamp eviction of a just-written id was silent: FAIL\n' >&2
-    cat .context/t27.err >&2
     exit 1
   fi
 
