@@ -679,72 +679,59 @@ validate_frontmatter() {
   # so yq can parse it as pure YAML (the rest of the markdown is not YAML).
   local fmfile
   fmfile=$(mktemp -t handoff-fm-XXXXXX)
+  # One cleanup for fourteen exits. Every failure arm below used to carry its own
+  # `rm -f`, so a new arm leaked the temp file unless its author noticed. RETURN
+  # traps are not inherited by called functions without `set -T`, which this
+  # script does not set, so the checks invoked below cannot fire it early.
+  #
+  # The path is baked in at trap-set time, exactly as validate_state's sibling
+  # trap does it, because a RETURN trap stays installed after the function
+  # returns and fires again when a sourced file completes — by which time the
+  # local is gone and `"$fmfile"` would be an unbound-variable error under
+  # `set -u`. Baked, that late firing is a no-op on an already-removed path.
+  # shellcheck disable=SC2064  # expansion at set time is the point, see above
+  trap "rm -f '$fmfile'" RETURN
   awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f" > "$fmfile"
   if [[ ! -s "$fmfile" ]]; then
-    rm -f "$fmfile"
     echo "fail: missing frontmatter block in $f" >&2
     return 1
   fi
 
   command -v yq >/dev/null 2>&1 || {
     echo "frontmatter: yq required for full validation; running grep-only fallback" >&2
-    head -1 "$f" | grep -q '^---$' || { rm -f "$fmfile"; echo "fail: missing leading ---" >&2; return 1; }
-    grep -q '^handoff:' "$fmfile" || { rm -f "$fmfile"; echo "fail: no handoff: block" >&2; return 1; }
-    rm -f "$fmfile"
+    head -1 "$f" | grep -q '^---$' || { echo "fail: missing leading ---" >&2; return 1; }
+    grep -q '^handoff:' "$fmfile" || { echo "fail: no handoff: block" >&2; return 1; }
     return 0
   }
 
   local stage
   stage=$(yq eval '.handoff.stage // ""' "$fmfile")
-  [[ -n "$stage" && "$stage" != "null" ]] || { rm -f "$fmfile"; echo "fail: no stage" >&2; return 1; }
+  [[ -n "$stage" && "$stage" != "null" ]] || { echo "fail: no stage" >&2; return 1; }
 
   local req
   req=$(required_for "$stage")
-  [[ -n "$req" ]] || { rm -f "$fmfile"; echo "fail: unknown stage $stage" >&2; return 1; }
+  [[ -n "$req" ]] || { echo "fail: unknown stage $stage" >&2; return 1; }
 
   local field
   for field in $req; do
     local val
     val=$(yq eval ".handoff.${field} // \"\"" "$fmfile")
     if [[ -z "$val" || "$val" == "null" ]]; then
-      rm -f "$fmfile"
       echo "fail: stage=$stage missing required field: $field" >&2
       return 1
     fi
   done
 
   if [[ "$stage" == "DV" && -n "$STATE_ARG" ]]; then
-    if ! check_ar_ref "$f" "$fmfile"; then
-      rm -f "$fmfile"
-      return 1
-    fi
+    check_ar_ref "$f" "$fmfile" || return 1
   fi
 
-  if ! check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_decision_divergence "$f" "$fmfile" "$stage"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_sweep_stub_shape "$fmfile"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_sweep_ref_anchor "$f" "$fmfile"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
+  check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || return 1
+  check_decision_divergence "$f" "$fmfile" "$stage" || return 1
+  check_sweep_stub_shape "$fmfile" || return 1
+  check_sweep_ref_anchor "$f" "$fmfile" || return 1
   if [[ -n "$STATE_ARG" ]]; then
-    if ! check_sweep_ledger "$fmfile" "$f"; then
-      rm -f "$fmfile"
-      return 1
-    fi
+    check_sweep_ledger "$fmfile" "$f" || return 1
   fi
 
   # Token budget (AD-2). The budget constrains DISCRETIONARY prose — summary,
@@ -765,7 +752,6 @@ validate_frontmatter() {
   stubtoks=$(toks_open_questions_block "$fmfile")
   [[ "$stubtoks" -le 64 ]] || stubtoks=64
   discretionary=$((tcount - stubtoks))
-  rm -f "$fmfile"
   # The advisory line is emitted BEFORE the failure, not after: 264 is exactly 200 plus the
   # 64-token exclusion cap, so every artifact over the ceiling is already over the budget and
   # a warn placed after the `return 1` could never print. Ordering it first is what keeps the
