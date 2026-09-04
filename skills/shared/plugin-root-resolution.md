@@ -86,11 +86,15 @@ error.
   `hooks/megatask-monitor.sh`) followed by: "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if
   available, else resolve per `skills/shared/plugin-root-resolution.md`)".
 - **Shell scripts** (never load-substituted, only executed) use env-first with a
-  self-location fallback validated against the `.claude-plugin/plugin.json` marker.
-  Reference implementations: `find_plugin_root()` in
-  `skills/worktask/scripts/hook-install.sh` (gold standard),
-  `skills/dv-screenshot-capture/scripts/apple-canvas.sh` (one-liner form),
-  `hooks/anchor-preflight.sh` (hook variant).
+  self-location fallback validated against the `.claude-plugin/plugin.json` marker. There is
+  now **one** resolver, not a family of reference implementations: `corpflow_script_dir()`
+  and `corpflow_plugin_root()` in `skills/shared/lib/corpflow-base.sh` (mirrored
+  byte-identically into `hooks/lib/corpflow-base.sh` — see that file's `MIRRORED, NOT
+  SHARED` header and the parity test `tests/shell/skills/corpflow-base.bats`). Source it and
+  call `corpflow_plugin_root` rather than reimplementing the walk; the previous doc named
+  three "reference implementations" that were three *different*, disagreeing
+  implementations, and only 4 of 69 scripts in the repo actually followed this rule before
+  the library existed.
 
 ### Tests
 
