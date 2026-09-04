@@ -34,7 +34,7 @@
 #
 # Platform: Linux + macOS (Darwin). No GNU-only flags used.
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR

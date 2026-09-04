@@ -19,7 +19,7 @@
 # @requires    bash >=3.2, jq
 # @min_shell   bash 3.2 (macOS system bash compatible)
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR

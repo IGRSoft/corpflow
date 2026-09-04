@@ -23,7 +23,7 @@
 #
 # Minimum shell: Bash 4.x
 
-set -euo pipefail
+set -Eeuo pipefail
 shopt -s inherit_errexit 2> /dev/null || true
 IFS=$'\n\t'
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR

@@ -37,7 +37,7 @@
 # Platform: Linux + macOS (Darwin). No GNU-only flags used.
 # NOTE: uses grep for in-context lookup to avoid bash 4.0+ associative arrays.
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
