@@ -34,7 +34,9 @@ fi
 
 if [ ! -f "$STATE_FILE" ]; then
   # No active worktask state — nothing to checkpoint, but record the event.
-  if command -v jq >/dev/null 2>&1; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if command -v jq >/dev/null 2>&1 && [ ! -L "$LOG_DIR/audit.jsonl" ]; then
     jq -cn --arg ts "$(date -u +%FT%TZ)" '{
       ts: $ts,
       actor: "hook:precompact",
@@ -58,7 +60,9 @@ if command -v jq >/dev/null 2>&1; then
   RUN_INDEX=$(jq -r '.run_index // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
 fi
 
-if command -v jq >/dev/null 2>&1; then
+# Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+# against an arbitrary target. A lost row never blocks the caller.
+if command -v jq >/dev/null 2>&1 && [ ! -L "$LOG_DIR/audit.jsonl" ]; then
   jq -cn \
     --arg ts "$(date -u +%FT%TZ)" \
     --arg state_file "${CHECKPOINT#$PROJECT_DIR/}" \

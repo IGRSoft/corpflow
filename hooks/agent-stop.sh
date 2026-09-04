@@ -75,5 +75,8 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
+# Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+# against an arbitrary target. A lost row never blocks the caller.
+[ ! -L "$LOG_DIR/audit.jsonl" ] || exit 0
 printf '%s\n' "$ROW" >> "$LOG_DIR/audit.jsonl"
 exit 0

@@ -157,3 +157,24 @@ _canonical_row() {
   assert_success
   assert_output --partial "self-test OK"
 }
+
+@test "SR: a symlinked audit.jsonl is refused on the block path" {
+  printf '%s' '{"version":1,"worktask_id":"wt-sym","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  # The block itself must still travel: refusing the row never weakens the gate.
+  echo "$output" | jq -e '.decision == "block"'
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+@test "SR: a symlinked audit.jsonl is refused on the pass path" {
+  printf '%s' '{"version":1,"worktask_id":"wt-sym2","metadata":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/images/wt-sym2" "$WD/.context/logs" "$WD/target-dir"
+  printf '# screenshots\n' > "$WD/.context/images/wt-sym2/screenshots.md"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

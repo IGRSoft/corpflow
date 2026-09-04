@@ -1301,3 +1301,20 @@ _rgr() { # $1=repo $2=name
   assert_success
   assert_output "origin/master"
 }
+
+@test "SR: the diverged continuity row refuses a symlinked audit.jsonl" {
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q integration
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq '.metadata.base_ref="integration"' .context/state.json > s && mv s .context/state.json
+  mkdir -p target-dir .context/logs
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  # The fallback itself must still be announced: refusing the row never changes
+  # the merge strategy FN0 is told to use.
+  assert_success
+  [[ "$stderr" == *"cherry-pick"* ]]
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

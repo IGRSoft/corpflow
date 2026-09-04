@@ -122,12 +122,16 @@ run() { # $1 = root dir
     while IFS='|' read -r grp num status ready_now remaining; do
       [ -n "$grp" ] || continue
       mkdir -p "$log_dir" 2>/dev/null || true
-      jq -cn --arg ts "$(ts)" --arg grp "$grp" --argjson num "$num" \
-             --arg status "$status" --argjson ready "$ready_now" --argjson rem "$remaining" '
-        { ts:$ts, actor:"hook:megatask-monitor", action:"megatask_progress",
-          subject:("#"+($num|tostring)), result:$status,
-          metadata:{ group:$grp, completed_issue:$num, newly_ready:$ready, remaining:$rem } }' \
-        >> "$log_dir/audit.jsonl" 2>/dev/null || true
+      # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+      # against an arbitrary target. A lost row never blocks the caller.
+      if [ ! -L "$log_dir/audit.jsonl" ]; then
+        jq -cn --arg ts "$(ts)" --arg grp "$grp" --argjson num "$num" \
+               --arg status "$status" --argjson ready "$ready_now" --argjson rem "$remaining" '
+          { ts:$ts, actor:"hook:megatask-monitor", action:"megatask_progress",
+            subject:("#"+($num|tostring)), result:$status,
+            metadata:{ group:$grp, completed_issue:$num, newly_ready:$ready, remaining:$rem } }' \
+          >> "$log_dir/audit.jsonl" 2>/dev/null || true
+      fi
       # Terminal notification (safe additive stdout field on Stop/SubagentStop).
       [ "$SELF_TEST" -eq 0 ] && printf '{"hookSpecificOutput":{"terminalSequence":"\033]9;Megatask %s: #%s %s — %s left\007"}}\n' \
         "$grp" "$num" "$status" "$remaining" 2>/dev/null || true

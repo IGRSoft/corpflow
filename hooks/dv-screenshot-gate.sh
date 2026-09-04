@@ -128,7 +128,11 @@ ${_img_count} image file(s) sit beside it, so the captures exist but no canonica
           dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
         }
       }') || { echo "dv-screenshot-gate: jq parse failed" >&2; return 0; }
-    printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
+    # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+    # against an arbitrary target. A lost row never blocks the caller.
+    if [ ! -L "$_log_dir/audit.jsonl" ]; then
+      printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
+    fi
     return 0
   fi
 
@@ -178,7 +182,11 @@ Rewrite the offending rows in $_manifest to the canonical 9-column schema with a
         dedupe_key: ((.session_id // "nosession") + ":" + (.agent_id // "noagent") + ":screenshot-gate")
       }
     }') || { echo "dv-screenshot-gate: jq parse failed" >&2; return 0; }
-  printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if [ ! -L "$_log_dir/audit.jsonl" ]; then
+    printf '%s\n' "$_row" >> "$_log_dir/audit.jsonl"
+  fi
   return 0
 }
 

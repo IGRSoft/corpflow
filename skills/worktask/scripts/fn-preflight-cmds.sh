@@ -364,8 +364,12 @@ cmd_continuity() {
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   n=$(git rev-list --count "${ref}..${wt_head}" 2> /dev/null || printf '0')
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  printf '{"ts":"%s","actor":"project-manager","action":"branch_continuity","subject":"FN0","result":"diverged_cherry_pick","metadata":{"worktree_head":"%s","integration_branch":"%s","commit_count":%s}}\n' \
-    "$ts" "$wt_head" "$int_branch" "$n" >> "${CONTEXT_DIR}/logs/audit.jsonl"
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if [ ! -L "${CONTEXT_DIR}/logs/audit.jsonl" ]; then
+    printf '{"ts":"%s","actor":"project-manager","action":"branch_continuity","subject":"FN0","result":"diverged_cherry_pick","metadata":{"worktree_head":"%s","integration_branch":"%s","commit_count":%s}}\n' \
+      "$ts" "$wt_head" "$int_branch" "$n" >> "${CONTEXT_DIR}/logs/audit.jsonl"
+  fi
   return 0 # diverged is a documented fallback, not a hard block
 }
 

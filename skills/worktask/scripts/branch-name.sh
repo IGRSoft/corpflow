@@ -189,7 +189,10 @@ else
     cur=""
   fi
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  if command -v jq > /dev/null 2>&1; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if command -v jq > /dev/null 2>&1 \
+    && [ ! -L "${CONTEXT_DIR}/logs/audit.jsonl" ]; then
     # Self-contained audit row: the library that would supply audit_fn is exactly
     # what is missing, so this one path cannot delegate to it.
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)

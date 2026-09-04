@@ -537,7 +537,10 @@ replay_liveness_payload() {
 replay_audit() {
   local dir="${CONTEXT_DIR:-.context}/logs" ts
   ts=$(date -u +%FT%TZ)
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the write that already landed.
   mkdir -p "$dir" 2> /dev/null || return 0
+  [[ ! -L "$dir/audit.jsonl" ]] || return 0
   jq -c --arg ts "$ts" --arg root "$TASK_OP_ID" --argjson cascade "$REPLAY_CASCADE" '
     (.worktask_id + ":" + (.run_index | tostring)) as $pfx
     | (if $cascade then $pfx + ":" + $root + ":cascade:" + $ts else null end) as $cid
@@ -1557,7 +1560,9 @@ fi
 # Best-effort: an unwritable log must never undo a merge that already landed.
 if [[ "$VIA_ARG" == "hook" ]]; then
   AUDIT_DIR="${CONTEXT_DIR:-.context}/logs"
-  if mkdir -p "$AUDIT_DIR" 2> /dev/null; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the write that already landed.
+  if mkdir -p "$AUDIT_DIR" 2> /dev/null && [[ ! -L "${AUDIT_DIR}/audit.jsonl" ]]; then
     AUDIT_WT_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
     AUDIT_RUN_IDX=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
     jq -cn \

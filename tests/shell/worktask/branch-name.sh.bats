@@ -1290,3 +1290,16 @@ mk_r6_worktree() {
   assert_output --partial "already named this run"
   assert_output --partial "target_branch=bugfix/fix-pr-composition-and-branch-naming"
 }
+
+@test "SR: the lib-unreachable audit row refuses a symlinked audit.jsonl" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p lonely target-dir
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  run bash lonely/branch-name.sh
+  # The degrade contract still holds: exit 0 and the same stdout, row or no row.
+  assert_success
+  assert_output --partial "library unreachable — skipped"
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

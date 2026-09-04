@@ -671,3 +671,16 @@ no_plan_title|candidate_unusable|candidate_unchanged|candidate_not_better|write_
   run ledger_branch
   assert_output "bugfix/product-list-images-are-blinking-before"
 }
+
+@test "SR: the lib-unreachable audit row refuses a symlinked audit.jsonl" {
+  cd "$WD"
+  mk_clean_repo
+  mk_plan "Add a new login flow"
+  mkdir -p lonely target-dir
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/refine-branch-target.sh
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  run bash lonely/refine-branch-target.sh --state .context/state.json --context .context
+  assert_success
+  assert_output --partial "lib_unreachable"
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

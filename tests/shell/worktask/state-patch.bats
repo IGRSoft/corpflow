@@ -1668,3 +1668,33 @@ exit 0'
   assert_output --partial "existing ledger only"
   [ ! -e .context/absent.json ]
 }
+
+# --- Symlink refusal on the two direct audit appends ---------------------------
+#
+# state-patch.sh writes audit.jsonl directly at two sites — the --via hook
+# stage_transition row and replay_audit's stage_replay row — rather than through
+# audit-lib.sh. Both must refuse a symlinked log, and neither refusal may undo
+# the ledger write it accompanies: the row is best-effort, the patch is not.
+
+@test "SR: --via hook refuses a symlinked audit.jsonl and still patches the ledger" {
+  cd "$WD"
+  rm -f .context/logs/audit.jsonl
+  mkdir -p target-dir .context/logs
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md --via hook
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+  run jq -r '.tasks.DV0.completed_via' .context/state.json
+  assert_output "hook"
+}
+
+@test "SR: --task-replay refuses a symlinked audit.jsonl and still applies the reset" {
+  local w; w="$(mk_replay_wd)"; cd "$w"
+  mkdir -p "$w/target-dir"
+  ln -s "$w/target-dir/escaped.txt" "$w/.context/logs/audit.jsonl"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
+  assert_success
+  [ ! -e "$w/target-dir/escaped.txt" ]
+  run jq -r '.tasks.DV1.status' "$w/.context/state.json"
+  assert_output "pending"
+}
