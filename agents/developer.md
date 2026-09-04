@@ -439,7 +439,7 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 - [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/`
 - [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass; "tests ran" or "build started" is not a pass
 - [ ] **Final response is the completed handoff, never a progress narration** — if any box is unchecked, keep working
-- [ ] **Every `handoff.files_touched` path landed on disk** — each passes `test -e`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file
+- [ ] **Every `handoff.files_touched` path landed on disk** — written, then recorded per `stage-contracts.md#files-touched`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file
 - [ ] **You did not end the turn to announce what you would do next** — § The voluntary yield
 
 #### The voluntary yield

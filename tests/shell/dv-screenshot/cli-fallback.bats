@@ -2,7 +2,7 @@
 # tests/shell/dv-screenshot/cli-fallback.bats — DV0c
 # Target: skills/dv-screenshot-capture/scripts/cli-fallback.sh
 # Covers: missing required args → exit 1, invalid slug → exit 1,
-#         tool_missing floor → exit 2 + .txt placeholder + ok=false error=tool_missing.
+#         floor → exit 2 (tool_missing) / exit 3 (render_failed), never a .txt placeholder.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/dv-screenshot-capture/scripts/cli-fallback.sh"
@@ -30,18 +30,40 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
-@test "tool_missing floor: silicon+magick absent -> exit 2, .txt placeholder, ok=false error=tool_missing" {
-  # Strip PATH to ensure neither silicon nor magick is found; also not a real git repo.
-  # The script should fall through to the .txt placeholder floor.
+@test "floor: no image tool and no repo -> exit 2, error=tool_missing, no .txt written" {
+  # Strip PATH so neither silicon nor magick resolves; $WD is not a git repo either,
+  # so no render is attempted and the floor must report absence, not failure.
   run bash -c "cd '$WD' && PATH='/usr/bin:/bin' bash '$PLUGIN_ROOT/$SCRIPT' \
     --worktask-id wt-test --slug my-feature --run-index 0"
   [ "$status" -eq 2 ]
-  # stdout must contain ok=false error=tool_missing
   [[ "$output" == *"ok=false"* ]]
   [[ "$output" == *"error=tool_missing"* ]]
-  # .txt placeholder must exist
+  # The floor must not write a placeholder that an existence check would accept.
   run bash -c "ls '$WD/.context/images/wt-test'/dv-01-my-feature.txt"
-  assert_success
+  assert_failure
+}
+
+@test "floor: a present tool that fails to render -> exit 3, error=render_failed" {
+  mkdir -p "$WD/fakebin"
+  printf '#!/bin/sh\nexit 1\n' > "$WD/fakebin/silicon"
+  chmod +x "$WD/fakebin/silicon"
+  git -C "$WD" init -q
+  git -C "$WD" commit -q --allow-empty -m init
+  run bash -c "cd '$WD' && PATH='$WD/fakebin:/usr/bin:/bin' bash '$PLUGIN_ROOT/$SCRIPT' \
+    --worktask-id wt-test --slug my-feature --run-index 0 --base-ref HEAD"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"error=render_failed"* ]]
+  run bash -c "ls '$WD/.context/images/wt-test'/dv-01-my-feature.txt"
+  assert_failure
+}
+
+@test "audit row construction is guarded: a jq failure never aborts the capture" {
+  # R-1.1a: the two screenshot_captured rows tail their jq with a fallback and
+  # their audit call with `|| true`, matching the sibling capture adapters.
+  run grep -c "2> /dev/null || printf '{}'" "$PLUGIN_ROOT/$SCRIPT"
+  [ "$output" -ge 2 ]
+  run grep -c ')" 2> /dev/null || true' "$PLUGIN_ROOT/$SCRIPT"
+  [ "$output" -ge 2 ]
 }
 
 @test "self-test smoke: --self-test exits 0 with pass count (NON-counting)" {

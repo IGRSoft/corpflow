@@ -254,12 +254,19 @@ def classify_row(row):
     return "liveness-unknown"
 
 
-def had_stage_failure(context_dir):
-    """True when the audit log records a real per-stage failure.
+_AUDIT_CACHE = {}
 
-    Its ABSENCE is what separates a simultaneous multi-agent disappearance
-    (external budget halt) from independent stage crashes."""
+
+def audit_rows(context_dir):
+    """Parsed audit rows, with the count of unparseable lines named on stderr.
+
+    Skipping malformed lines silently makes a corrupt log read exactly like a log
+    with no matching rows — the same silent-failure shape this checker reports on.
+    Warned once per path; the parsed rows are still returned."""
     path = os.path.join(context_dir, "logs", "audit.jsonl")
+    if path in _AUDIT_CACHE:
+        return _AUDIT_CACHE[path]
+    rows, bad = [], 0
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
@@ -269,11 +276,32 @@ def had_stage_failure(context_dir):
                 try:
                     row = json.loads(line)
                 except ValueError:
+                    bad += 1
                     continue
-                if isinstance(row, dict) and row.get("result") == "error":
-                    return True
+                if isinstance(row, dict):
+                    rows.append(row)
+                else:
+                    bad += 1
     except OSError:
-        return False
+        _AUDIT_CACHE[path] = []
+        return []
+    if bad:
+        print(
+            f"stale-check: {path}: {bad} unparseable audit row(s) skipped",
+            file=sys.stderr,
+        )
+    _AUDIT_CACHE[path] = rows
+    return rows
+
+
+def had_stage_failure(context_dir):
+    """True when the audit log records a real per-stage failure.
+
+    Its ABSENCE is what separates a simultaneous multi-agent disappearance
+    (external budget halt) from independent stage crashes."""
+    for row in audit_rows(context_dir):
+        if row.get("result") == "error":
+            return True
     return False
 
 
@@ -282,27 +310,13 @@ def undelivered_reattach(context_dir):
 
     A parked stage whose nudge never landed looks identical to one that was
     nudged and is still working; only the audit trail separates them."""
-    path = os.path.join(context_dir, "logs", "audit.jsonl")
     latest = {}
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                if row.get("action") != "reattach_send_result":
-                    continue
-                tid = row.get("task_id") or row.get("subject")
-                if tid:
-                    latest[tid] = row.get("result")
-    except OSError:
-        return set()
+    for row in audit_rows(context_dir):
+        if row.get("action") != "reattach_send_result":
+            continue
+        tid = row.get("task_id") or row.get("subject")
+        if tid:
+            latest[tid] = row.get("result")
     return {tid for tid, result in latest.items() if result not in ("ok", None)}
 
 

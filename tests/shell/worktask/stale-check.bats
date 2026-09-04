@@ -408,3 +408,20 @@ $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)"
   run grep -nE '(bash|sh|source|exec) +[^ ]*state-patch\.sh|(^|[;&|] *)gh +(pr|issue)|> *"?\$(STATE|OUT)|open\([^)]*["'"'"'][wa]|\.write_text|subprocess|os\.system' "$probe"
   assert_success   # a real invocation still trips it
 }
+
+# --- tolerant audit read (R-1.1b) --------------------------------------------
+
+@test "a malformed audit row is skipped, counted on stderr, and never blinds the scan" {
+  local w; w="$(mk_tmpworkdir)"
+  mk_ledger "$w" "$(in_progress DV0 DV)" "$(dispatch DV0 DV sess-dv0)"
+  agents_file "$w/agents.json" '[{"id":"sess-dv0","kind":"background","state":"active"}]'
+  {
+    printf '{ not json at all\n'
+    printf '{"ts":"2026-09-03T00:00:00Z","actor":"hook","action":"tool_invoked","result":"ok"}\n'
+  } > "$w/.context/logs/audit.jsonl"
+
+  run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
+  assert_success
+  assert_output --partial "1 unparseable audit row"
+  assert_output --partial "[alive-busy]"
+}

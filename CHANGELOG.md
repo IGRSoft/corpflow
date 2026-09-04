@@ -4,13 +4,20 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [4.0.29] — 2026-09-03
 
-A pull request opened against a branch the work never forked from silently carries every commit of
-the intervening integration branch. The motivating incident: a run whose own ledger recorded 27
-changed files opened a PR carrying 156 commits and 1008 files into `develop`, and every existing
-finalization check passed — none of them compares the would-be PR diff against what the run itself
-claims to have changed. This release adds that comparison as a blocking check, surfaces fork-point
-evidence for reconciliation rather than silent retargeting, and corrects two documentation claims
-that made the gap look covered.
+Two problems, one release. A pull request opened against a branch the work never forked from
+silently carries every commit of the intervening integration branch: a run whose own ledger
+recorded 27 changed files opened a PR carrying 156 commits and 1008 files into `develop`, and every
+existing finalization check passed — none compared the would-be PR diff against what the run itself
+claims to have changed. Separately, thirteen remediation items from that same run's own findings
+target a narrower theme underneath it: silent failure, writes that land nothing being
+indistinguishable at the call site from writes that landed, and checks that pass vacuously. This
+release adds the PR-diff comparison as a blocking check, surfaces fork-point evidence for
+reconciliation rather than silent retargeting, corrects two documentation claims that made the gap
+look covered, and closes out the remediation items — one of which was refuted on verification, three
+of which shipped amended from how they were originally planned, and one of which was a fail-closed
+false positive introduced by the fix itself and caught before it shipped. Dogfooding the new
+base-sanity check during the remediation work itself turned up two more issues in the check, folded
+in below as follow-ups rather than fixed here.
 
 ### Added
 
@@ -38,6 +45,19 @@ that made the gap look covered.
   and it is safe on a detached HEAD and in a repo with no remotes. `base_ref_source()` reports which
   rank of the resolution ladder produced a base, which is what lets a caller tell a confident answer
   from a fallback.
+- **`fn-preflight` gains a `staging` check.** Catches unstaged-on-staged content that could
+  otherwise reach a finalization silently. Built to this run's architecture-stage-amended
+  predicate — the set intersection of `git diff --cached --name-only` and `git diff --name-only` —
+  rather than the original plan's bare ` M` match, which would have fired on every normal FN run,
+  since DC's own writes sit unstaged before FN's `git add`.
+- **`hooks/test-execution-gate.sh` gains a `scoped_test_run` arm on the Skill branch.** There was
+  none, so any scoped `build-test` invoked as a Skill was classified `full_test_run` and denied
+  regardless of its own `--only`/`--filter` scoping. The denial message now also names the resolved
+  `test_mode`, rather than leaving the caller to guess what the gate thought it saw.
+- **`state-patch.sh` regains a spill path with real teeth.** The `facts.decisions[]` eviction spill
+  now covers resolved items, warns loudly on failure instead of failing silently, and its trigger is
+  a length comparison against the live clamp rather than a hard-coded `12` that could drift out of
+  sync with the actual bound.
 
 ### Changed
 
@@ -56,6 +76,43 @@ that made the gap look covered.
   always participated; it was simply absent from the written ladder, so readers of
   `handoff-protocol.md`, `pl0-procedure.md` and `workspace-modes.md` could not account for a base the
   code had actually chosen. All three now list the same ranks in the same sequence.
+- **`state-patch.sh --facts` rejects per item, not per payload.** A mixed submission — some valid
+  sweep resolutions alongside some malformed entries — now persists the valid remainder and exits 2,
+  rather than discarding the whole payload because part of it was bad. Structural problems (a
+  non-object payload, an empty object, an unknown key, a non-array value) remain whole-payload
+  refusals; only item-shaped content gets per-item treatment. This was reproduced live against the
+  pre-fix script during this run's own ledger writes before the fix landed.
+- **`metadata.description` is capped at 240 characters on the two ledger write paths**
+  (`--task-create --metadata` and `--task-meta --set`) — truncated with an ellipsis, never rejected,
+  since a refused `--task-create` would break stage creation outright. The cap deliberately does
+  **not** apply to the orchestrator's own dispatch-site description appends: those are transient
+  and never persisted, and capping them would strip the test-scope, ban, and FN banners they carry.
+- **`handoff-harness.sh` gains a reverse sweep-parity arm.** Previously the parity check only caught
+  an id present in an artifact's frontmatter but missing from the ledger; an id sitting in the
+  ledger with no matching artifact stub was invisible. The arm is scoped by **task**, not stage:
+  a split DV (DV0/DV1) shares one `.stage` slice, so a stage-scoped version charged each stream
+  with the other's stubs. An artifact carrying stubs is charged only ledger ids under its own
+  `sw-<TASK_ID>-` prefixes; a stub-less artifact is charged the stage slice only when the ledger
+  holds at most one task of that stage. It also gains a `files_touched` structural
+  cap (`FILES_TOUCHED_MAX = 10`: first ten paths plus one `"+ N more"` marker) and a check that a
+  frontmatter `key_decisions[]` entry does not diverge from its artifact-body counterpart — narrowly
+  scoped to fire only when the two share no significant vocabulary or disagree on a quoted number,
+  since an artifact's frontmatter summary is a paraphrase of its body by design.
+- **`cli-fallback.sh` drops its `.txt` placeholder floor.** A placeholder file that satisfies an
+  existence check proves nothing about whether a capture actually happened; the floor is replaced by
+  loud failure, and downstream consumers (`adhoc-visual-evidence.sh`) now accept only exit 0 plus a
+  non-empty file on disk as evidence of a real capture.
+- **`attach-visual-evidence.sh` reports a distinct `embed_cap` reason.** A cap-truncated evidence set
+  was previously reported as `reason: "ok"`, indistinguishable from an uncapped run. The body's
+  cap note says "hosting is healthy" only when no row failed to host, since both can fire in one
+  run and the reason already reports that as `embed_cap+<host reason>`.
+- **`state-patch.sh` carries a `--facts` partial rejection out of every paired-`--stage` exit.**
+  The idempotent re-completion, absent-ledger, unresolved-artifact and unparseable-stage no-op
+  returns all exited 0 and hid the exit 2 the caller was told to branch on; a rework round takes
+  the idempotent path by design.
+- **Four audit-log readers made tolerant of malformed lines.** `stale-check.sh`,
+  `post-compact-recovery.sh`, `audit-dedup.sh`, and `build-context-set.sh` now skip an unparseable
+  audit row, count it, and warn on stderr, rather than aborting the whole scan on the first bad line.
 
 ### Fixed
 
@@ -67,6 +124,11 @@ that made the gap look covered.
   in `branch-lib.sh`.
 - **`dv-tree-preflight.sh` no longer claims parity with the canonical ladder.** Its comment now admits
   the reduced ladder it actually implements.
+- **A round-1 fail-closed false positive, caught mid-run and fixed before shipping.** The first pass
+  at the per-item `--facts` fix rejected an all-empty `--facts` payload as "no valid items" and
+  exited 2, aborting the paired stage patch — exactly the payload shape the closing-sweep contract
+  tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
+  kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
 
 ### Known follow-ups
 
@@ -78,6 +140,36 @@ that made the gap look covered.
   Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
   path and each additional caller changes the cost profile. They are correct for their own callers
   today; they are a consolidation debt, not a live defect.
+- **`base-sanity` resolved its base to a stale local `develop` ref rather than its remote-tracking
+  counterpart, found by dogfooding it in this run.** `refs/heads/develop` sat nine commits behind
+  `refs/remotes/origin/develop`, and `HEAD` was exactly equal to `origin/develop`. Against the stale
+  local ref the check reported "a PR against develop would carry 55 files" and blocked; against
+  `origin/develop` the diff is 0 files. The check built to catch a wrong base picked the wrong base
+  ref itself.
+- **`facts.files_modified` under-recorded 15 files this run** — the ledger listed 18 while 33 files
+  were dirty in the working tree. That field is `base-sanity`'s other input; it did not trip the
+  thresholds here (they need both `>3x` and `>20`), but it leaves the check's second input
+  unreliable, and a larger gap on a smaller ledger could.
+- **gh#316 remains open.** The `facts.decisions[]` clamp still evicts an entry with no spill file
+  recorded — reproduced four times during this run's own ledger writes, most recently by the
+  developer-review stage's own write, which evicted three of the architecture decisions its own
+  confirmations rested on. A second spill path was judged out of scope here: it is a new eviction
+  mechanism with no analogue to the existing "resolved-first" rule, and adding it inside the
+  highest-risk edit of this run's sequence was the wrong trade.
+- **The reverse sweep-parity arm may false-fail on a rework round**, accepted as a follow-up rather
+  than fixed this round.
+- **Two seam-dependent spill-failure WARN arms in `state-patch.sh` remain untested.** Reaching either
+  requires the caller's own merge filter to fail inside the spill function while succeeding in the
+  atomic apply, which no external invocation can currently arrange; adding a test-only seam to the
+  ledger's single write chokepoint was judged a larger risk than the untested branches themselves.
+- **The decision-id divergence extractor does not match the `- **id — title.**` bullet form** used
+  by this repository's own architecture artifacts, so it is near-inert against that style today.
+- **Two P3s on the new spill-append regression test**: its stderr assertion matches wording but not
+  the exact unrecorded count, and it relies on `chmod 0444` denying a write, which would not hold on
+  a CI image running as root.
+- **Refuted, for the record: no change was made to the screenshot capture scripts.** They were
+  reported as interpolating malformed JSON into `audit.jsonl`; on inspection they already build
+  every audit row with `jq -nc --argjson`, so there was nothing to fix.
 
 ## [4.0.28] — 2026-09-03
 

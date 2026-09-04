@@ -184,6 +184,14 @@ resolve_script_path() {
 }
 
 if [ -f "$AUDIT_LOG" ] && command -v jq >/dev/null 2>&1; then
+  # The tolerant read below drops malformed rows silently, so a corrupt log looks
+  # identical to one with no matching rows. Name the drops on stderr; stdout keeps
+  # carrying only the path set.
+  _bcs_total=$(grep -c '[^[:space:]]' "$AUDIT_LOG" || true)
+  _bcs_parsed=$(jq -ncR '[ inputs | select(length > 0) | fromjson? | objects ] | length' "$AUDIT_LOG" 2>/dev/null || echo 0)
+  if [ "$_bcs_total" -gt "$_bcs_parsed" ]; then
+    printf >&2 'warn: %s: %d unparseable audit row(s) skipped\n' "$AUDIT_LOG" "$((_bcs_total - _bcs_parsed))"
+  fi
   # `fromjson? | objects` for the same reason branch-name.sh's already_named uses it: a
   # well-formed non-object line parses and then dies on `.metadata`, aborting the scan.
   jq -rs -R '

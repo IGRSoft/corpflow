@@ -1332,3 +1332,52 @@ promote() {
   assert_success
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No stage is in progress")'
 }
+
+# --- R-3.1: the Skill branch's missing scoped arm ----------------------------
+
+@test "R3-1s: a DV build-test Skill carrying a selection flag classifies scoped and is ALLOWED" {
+  state_with DV
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--only tests/shell/worktask"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R3-1s: --filter and -only-testing: are selections too" {
+  state_with DV
+  for args in "--filter StatePatchTests" "-only-testing:AppTests/LoginTests"; do
+    local payload
+    payload="$(jq -cn --arg a "$args" '{tool_name:"Skill",tool_input:{skill:"apple-developer:build-test",args:$a}}')"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+    assert_success
+    [ -z "$output" ] || fail "scoped selection '$args' was denied"
+  done
+}
+
+@test "R3-1s: a bare DV build-test Skill is still a full run and still denied" {
+  state_with DV
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-1s: the denial names BOTH the stage authority and the resolved test mode" {
+  printf '{"metadata":{"test_mode":"full"},"tasks":{"DV0":{"status":"in_progress"}}}' \
+    > "$WD/.context/state.json"
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"has no test-execution authority"* ]]
+  [[ "$reason" == *"resolved test mode is 'full'"* ]]
+}
+
+@test "R3-1s: an absent test_mode is reported as unset, never guessed as full" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q "unset (resolves to scoped)"
+}

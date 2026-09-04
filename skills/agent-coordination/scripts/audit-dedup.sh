@@ -71,6 +71,25 @@ JSONL
     echo "audit-dedup self-test FAIL: expected canonical row for sessA:agZ, got subject=$actor3" >&2
     return 1
   fi
+  # A malformed row must not silently vanish: the parseable rows still dedupe and
+  # the drop is named on stderr.
+  local tmp2; tmp2=$(mktemp)
+  {
+    printf '{ not json at all\n'
+    printf '{"ts":"2026-05-15T00:00:01Z","actor":"orchestrator","action":"approval_received","subject":"PL0","result":"ok"}\n'
+  } > "$tmp2"
+  local err2; err2=$(mktemp)
+  local out2; out2=$("$0" "$tmp2" 2> "$err2")
+  local n2; n2=$(printf '%s\n' "$out2" | grep -c '[^[:space:]]' || true)
+  if [ "$n2" != "1" ]; then
+    echo "audit-dedup self-test FAIL: expected the 1 parseable row to survive, got $n2" >&2
+    rm -f "$tmp2" "$err2"; return 1
+  fi
+  if ! grep -q '1 unparseable row' "$err2"; then
+    echo "audit-dedup self-test FAIL: unparseable row was dropped silently" >&2
+    rm -f "$tmp2" "$err2"; return 1
+  fi
+  rm -f "$tmp2" "$err2"
   echo "audit-dedup: self-test OK"
 }
 
@@ -95,6 +114,15 @@ fi
 #   3. For grouped rows, keep the authoritative hook row (canonical before
 #      advisory mirror), else the first by index.
 #   4. Re-merge with ungrouped rows and sort by original index.
+# `fromjson?` below drops malformed rows silently, so a corrupt log reads exactly
+# like a clean one with nothing to dedupe. Count the drops and name them on stderr;
+# stdout stays the deduped stream so callers are unaffected.
+_ad_total=$(printf '%s\n' "$INPUT" | grep -c '[^[:space:]]' || true)
+_ad_parsed=$(printf '%s\n' "$INPUT" | jq -ncR '[ inputs | select(length > 0) | fromjson? | objects ] | length' 2> /dev/null || echo 0)
+if [ "$_ad_total" -gt "$_ad_parsed" ]; then
+  echo "audit-dedup: $((_ad_total - _ad_parsed)) unparseable row(s) skipped in $SRC" >&2
+fi
+
 printf '%s' "$INPUT" | jq -ncR '
   def is_hook: (.actor // "") | (startswith("hook:") or contains(":hook:"));
   def is_advisory: (.metadata.advisory // false) == true;

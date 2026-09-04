@@ -14,7 +14,7 @@
 #   source that library FIRST — fn-preflight.sh's exit-3 guard is what enforces it.
 #
 #   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result, resolve_git_ref,
-#   cmd_attachments, cmd_pr_body, cmd_validate_pr, cmd_continuity,
+#   cmd_attachments, cmd_staging, cmd_pr_body, cmd_validate_pr, cmd_continuity,
 #   cmd_branch_divergence, cmd_issue_close_required, _bs_override_on,
 #   _bs_fork_candidate, cmd_base_sanity.
 #
@@ -122,6 +122,41 @@ resolve_git_ref() {
 }
 
 # ---------- Commands ----------
+# A file staged by an earlier stage and then edited again by a later one ships the STAGED
+# bytes while every report describes the worktree: QA and DC routinely edit files FN already
+# has in the index, and two of two observed runs hit it.
+#
+# The predicate is a set INTERSECTION of two name lists — index-vs-HEAD and worktree-vs-index
+# — i.e. porcelain `XY` with X in [MARC] and Y in [MD]. A bare ` M` (unstaged only) is the
+# NORMAL state of every run before FN's own `git add` and must never fire; matching it would
+# block every finalization. Name lists also sidestep porcelain's rename and quoting grammar.
+#
+# Scoped to the cwd repository. Enumerating `git worktree list` would reach the sibling
+# worktrees of a Conductor multi-workspace checkout and block this run on another worktask's
+# dirt; that enumeration is a follow-up, not this check.
+cmd_staging() {
+  if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    printf 'staging: not a git repository — nothing to check\n'
+    return 0
+  fi
+  local staged unstaged both
+  staged=$(git diff --cached --name-only 2> /dev/null || printf '')
+  unstaged=$(git diff --name-only 2> /dev/null || printf '')
+  if [[ -z "$staged" || -z "$unstaged" ]]; then
+    printf 'staging: no file is both staged and modified again\n'
+    return 0
+  fi
+  both=$(printf '%s\n' "$staged" | grep -Fxf <(printf '%s\n' "$unstaged") 2> /dev/null || true)
+  if [[ -n "$both" ]]; then
+    printf >&2 'BLOCKED: staged then modified again — the PR would ship the staged bytes, not these:\n'
+    printf >&2 '  %s\n' $both
+    audit_fn staging blocked "$(meta_json files "$(printf '%s' "$both" | tr '\n' ' ')")"
+    return 1
+  fi
+  printf 'staging: no file is both staged and modified again\n'
+  return 0
+}
+
 cmd_attachments() {
   local pr="${CONTEXT_DIR}/attachments/PR instructions.md"
   local rr="${CONTEXT_DIR}/attachments/Review request.md"

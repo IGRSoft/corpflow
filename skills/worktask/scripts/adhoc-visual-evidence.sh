@@ -131,22 +131,25 @@ adhoc_id() {
 
 # ---------- capture ---------------------------------------------------------
 # Echoes "<path>\t<bytes>\t<adapter>" for the produced file, or nothing.
-# cli-fallback.sh writes relative to CWD and exits 2 on its .txt floor, which is
-# a successful capture here — only its hard-error exit 1 means no file.
+# ONLY exit 0 is a capture. cli-fallback.sh's floor writes no file: exit 2 is
+# tool_missing and exit 3 is render_failed, and both print the intended .png path
+# on the contract line. Treating either as success manifests a row naming a file
+# that is not on disk, which is the "placeholder counted as evidence" defect with
+# nothing behind it at all. The path is verified against the filesystem too, so a
+# future adapter cannot reintroduce the claim by exiting 0 without writing.
 capture_one() {
   local id="$1" base="$2" files="$3"
-  local out rc path bytes err
+  local out rc path bytes
   out=$(cd "$WORKSPACE_ROOT" && bash "$CAPTURER" \
           --worktask-id "$id" --slug pr-diff --base-ref "$base" \
           --platform all --run-index 0 --files "$files" 2>/dev/null)
   rc=$?
-  [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || return 1
+  [ "$rc" -eq 0 ] || return 1
   path=$(printf '%s' "$out" | sed -n 's/.*path=\([^ ]*\).*/\1/p')
   bytes=$(printf '%s' "$out" | sed -n 's/.*bytes=\([0-9]*\).*/\1/p')
-  err=$(printf '%s' "$out" | sed -n 's/.*error=\([^ ]*\).*/\1/p')
   [ -n "$path" ] || return 1
-  printf '%s\t%s\t%s' "$path" "${bytes:-0}" \
-    "$([ "$err" = "tool_missing" ] && printf 'cli_fallback (.txt)' || printf 'cli_fallback')"
+  [ -s "${WORKSPACE_ROOT}/${path}" ] || [ -s "$path" ] || return 1
+  printf '%s\t%s\t%s' "$path" "${bytes:-0}" 'cli_fallback'
 }
 
 # ---------- manifest --------------------------------------------------------
@@ -308,37 +311,67 @@ run_self_tests() {
   fi
   rm -rf "$d1"
 
-  # ---- t2: a UI diff yields a Visual evidence block with no broken embeds
+  # ---- t2/t3/t4: capture-dependent arms.
+  # cli-fallback's floor no longer writes a .txt placeholder, so on a host with no image
+  # tool there is NOTHING to manifest and these arms have no capture to assert against.
+  # Splitting them this way is the point of the fix: the un-migrated version read the
+  # floor's exit 2 as a capture and manifested a .png that was never written.
+  _has_image_tool() {
+    command -v silicon > /dev/null 2>&1 || command -v magick > /dev/null 2>&1 \
+      || command -v convert > /dev/null 2>&1
+  }
+
   local d2; d2=$(_mk_repo)
   printf 'body { color: red }\n' > "$d2/Views/app.css"
   git -C "$d2" add -A >/dev/null 2>&1; git -C "$d2" commit -qm ui >/dev/null 2>&1
   local o2
   o2=$(WORKSPACE_ROOT="$d2" BASE_REF="master" ASSET_HOST_MODE=none DRY_RUN=1 \
        bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$o2" | grep -q '^## Visual evidence' \
-     && ! printf '%s' "$o2" | grep -qE '\]\(\)|\]\(\.context/'; then
-    _ok "t2-ui-emits-block"
-  else
-    _fail "t2-ui-emits-block" "$(printf '%s' "$o2" | head -6 | tr '\n' '~')"
-  fi
 
-  # ---- t3: rerun replays the cache instead of stacking a second capture
-  local o3 caps
-  o3=$(WORKSPACE_ROOT="$d2" BASE_REF="master" ASSET_HOST_MODE=none DRY_RUN=1 \
-       bash "$self" --emit pr 2>/dev/null)
-  caps=$(find "$d2/.context/images" -type f -name 'dv-*' 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$o3" = "$o2" ] && [ "$caps" = "1" ]; then
-    _ok "t3-idempotent"
-  else
-    _fail "t3-idempotent" "caps=$caps same=$([ "$o3" = "$o2" ] && echo y || echo n)"
-  fi
+  if _has_image_tool; then
+    if printf '%s' "$o2" | grep -q '^## Visual evidence' \
+       && ! printf '%s' "$o2" | grep -qE '\]\(\)|\]\(\.context/'; then
+      _ok "t2-ui-emits-block"
+    else
+      _fail "t2-ui-emits-block" "$(printf '%s' "$o2" | head -6 | tr '\n' '~')"
+    fi
 
-  # ---- t4: manifest satisfies the attacher's own schema check
-  local mf; mf=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
-  if bash "$ATTACHER" --validate-manifest "$mf" >/dev/null 2>&1; then
-    _ok "t4-manifest-schema"
+    # ---- t3: rerun replays the cache instead of stacking a second capture
+    local o3 caps
+    o3=$(WORKSPACE_ROOT="$d2" BASE_REF="master" ASSET_HOST_MODE=none DRY_RUN=1 \
+         bash "$self" --emit pr 2>/dev/null)
+    caps=$(find "$d2/.context/images" -type f -name 'dv-*' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$o3" = "$o2" ] && [ "$caps" = "1" ]; then
+      _ok "t3-idempotent"
+    else
+      _fail "t3-idempotent" "caps=$caps same=$([ "$o3" = "$o2" ] && echo y || echo n)"
+    fi
+
+    # ---- t4: manifest satisfies the attacher's own schema check
+    local mf; mf=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
+    if bash "$ATTACHER" --validate-manifest "$mf" >/dev/null 2>&1; then
+      _ok "t4-manifest-schema"
+    else
+      _fail "t4-manifest-schema" "$(bash "$ATTACHER" --validate-manifest "$mf" 2>&1 | head -2 | tr '\n' '~')"
+    fi
   else
-    _fail "t4-manifest-schema" "$(bash "$ATTACHER" --validate-manifest "$mf" 2>&1 | head -2 | tr '\n' '~')"
+    # ---- t2b: no image tool → no capture is CLAIMED. The regression this replaces:
+    # exit 2 was read as success, so a manifest row named a .png that does not exist.
+    local ghost=0 mf2
+    mf2=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
+    if [ -n "$mf2" ]; then
+      while IFS='|' read -r _ _ _ pth _; do
+        pth=$(printf '%s' "$pth" | tr -d ' ')
+        case "$pth" in
+          dv-*) [ -e "$(dirname "$mf2")/$pth" ] || ghost=1 ;;
+        esac
+      done < "$mf2"
+    fi
+    if [ "$ghost" -eq 0 ] && ! printf '%s' "$o2" | grep -qE '\]\(\)|\.txt'; then
+      _ok "t2b-no-tool-manifests-no-ghost-row"
+    else
+      _fail "t2b-no-tool-manifests-no-ghost-row" "ghost=$ghost out='$(printf '%s' "$o2" | head -3 | tr '\n' '~')'"
+    fi
   fi
   rm -rf "$d2"
 

@@ -85,7 +85,7 @@ GH_BIN="${GH_BIN:-gh}"
 DRY_RUN="${DRY_RUN:-0}"
 LOG_DIR="${WORKSPACE_ROOT}/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
-MAX_EMBED=5   # PR/issue embed cap (mirrors capture skill's 5-per-run cap)
+MAX_EMBED="${MAX_EMBED:-5}"   # PR/issue embed cap (mirrors capture skill's 5-per-run cap)
 
 # Source publish-pl-issue.sh for tier logic (library mode — returns before main).
 _LIB="$(dirname "$0")/publish-pl-issue.sh"
@@ -252,6 +252,10 @@ build_block() {
   # Per-bullet text stays short; the WHY is emitted once below (host_fail_note) so
   # a 5-capture run does not repeat a paragraph five times.
   local HOST_FAIL_HINT="not embeddable; see note below." host_fail=0
+  # The embed cap and a hosting failure are different degradations with different
+  # remedies, and only the second is fixed by a token. Tracked separately so the reason,
+  # the body note and the operator advice can each name the one that actually fired.
+  local cap_hit=0
   local host_fail_note
   case "$(repo_visibility 2>/dev/null || printf '')" in
     PRIVATE|INTERNAL)
@@ -267,6 +271,7 @@ build_block() {
         hostable=$((hostable+1))
         if [ "$embed_count" -ge "$MAX_EMBED" ]; then
           bullets="${bullets}- ${path} — omitted (embed cap ${MAX_EMBED}); see manifest."$'\n'
+          cap_hit=1
           continue
         fi
         # none-tier: never embed an image; list as bullet instead (no broken ![]()).
@@ -312,6 +317,14 @@ EOF
     # Explain the degradation once, in terms an operator can act on.
     printf '\n%s\n' "$host_fail_note"
   fi
+  # State the cap in the body itself. The per-row bullets already said "omitted", but the
+  # summary read as a healthy run: a reader had no way to tell a capped run from one that
+  # captured only what is shown.
+  if [ "$cap_hit" = "1" ]; then
+    # "hosting is healthy" only when no row failed to host; both can fire in one run.
+    printf '\nOnly the first %d capture(s) are embedded inline (embed cap %d). The rest are listed above and on disk at the manifest path%s\n' \
+      "$MAX_EMBED" "$MAX_EMBED" "$([ "$host_fail" = "1" ] && printf '.' || printf '; hosting is healthy.')"
+  fi
   # Manifest reference, deliberately PATH-FREE. Two independent reasons: relative
   # links never resolve in PR/issue bodies (ad7), and the working-folder path is
   # local + gitignored, so it is meaningless to a reviewer. It used to be emitted
@@ -330,7 +343,16 @@ EOF
   # partial loss (e.g. the MAX_EMBED cap silently dropping the 6th capture) is
   # caught too, not just total failure.
   if [ "$hostable" -gt 0 ] && [ "$embed_count" -lt "$hostable" ]; then
-    local reason="${GH_IMAGE_FAIL_REASON:-unknown}" seen
+    # The reason used to come from the hosting probe ALONE, so a capped-but-healthy run
+    # reported a hosting reason (often `unknown`) on a row nothing was wrong with.
+    local reason seen
+    if [ "$cap_hit" = "1" ] && [ "$host_fail" = "1" ]; then
+      reason="embed_cap+${GH_IMAGE_FAIL_REASON:-unknown}"
+    elif [ "$cap_hit" = "1" ]; then
+      reason="embed_cap"
+    else
+      reason="${GH_IMAGE_FAIL_REASON:-unknown}"
+    fi
     if [ "$embed_count" -eq 0 ]; then
       seen="no images"
     else
@@ -338,7 +360,14 @@ EOF
     fi
     printf >&2 'attach-visual-evidence: NOTICE — %d capture(s) on disk, %d embedded (reason=%s).\n' \
       "$hostable" "$embed_count" "$reason"
-    printf >&2 '  Reviewers will see %s. Set GH_SESSION_TOKEN to make tier-0 non-interactive.\n' "$seen"
+    # A token fixes hosting; it does not raise the cap. Telling a capped run to supply one
+    # sends the operator after a credential that changes nothing.
+    if [ "$cap_hit" = "1" ] && [ "$host_fail" != "1" ]; then
+      printf >&2 '  Reviewers will see %s. This is the embed cap (%d), not a hosting failure — the remaining captures are on disk and listed in the body; a session token would not change it.\n' \
+        "$seen" "$MAX_EMBED"
+    else
+      printf >&2 '  Reviewers will see %s. Set GH_SESSION_TOKEN to make tier-0 non-interactive.\n' "$seen"
+    fi
     audit_av visual_evidence_degraded degraded \
       "$(jq -cn --argjson c "$hostable" --argjson e "$embed_count" \
               --arg r "$reason" --arg t "${HOST_TIER:-unknown}" \
