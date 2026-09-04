@@ -215,14 +215,8 @@ existing_count=$(find "$IMAGES_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev
 NN=$(printf '%02d' $((existing_count + 1)))
 OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
 
-# ---------------------------------------------------------------------------
-# Audit helper (mirrors apple-canvas.sh idiom exactly)
-# ---------------------------------------------------------------------------
-# Shared audit-row appender — one writer, one key order, one symlink refusal for every
-# audit.jsonl in the plugin. Resolved from this file's own directory: the capture adapters
-# are invoked by path from the skill, never through $PATH. A missing library is a broken
-# install rather than a runtime condition, so this fails closed instead of capturing
-# without evidence.
+# Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
+# Fails closed: a missing library is a broken install, not a runtime condition.
 _AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
 if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'cli-fallback: plugin install broken — audit-lib.sh not found\n'

@@ -91,10 +91,8 @@ MAX_EMBED="${MAX_EMBED:-5}"   # PR/issue embed cap (mirrors capture skill's 5-pe
 _LIB="$(dirname "$0")/publish-pl-issue.sh"
 
 # ---------- audit -----------------------------------------------------------
-# The ledger read helpers (skills/shared/lib/state-read-lib.sh) — one spelling of the
-# worktask_id / run_index read, with the fallback default as an explicit argument.
-# `[ -r ]` before the `.`: a bare `.` on a missing file is a special-builtin error that
-# exits the shell immediately, bypassing an `if !` guard.
+# Shared ledger reads; the fallback default is an explicit argument, never unified —
+# some call sites probe for absence rather than read a value. `[ -r ]` guard as above.
 _STATE_READ_LIB="$(dirname "$0")/../../shared/lib/state-read-lib.sh"
 if [ ! -r "$_STATE_READ_LIB" ]; then
   printf >&2 'attach-visual-evidence: plugin install broken — state-read-lib.sh not found\n'
@@ -103,9 +101,8 @@ fi
 # shellcheck source=../../shared/lib/state-read-lib.sh
 . "$_STATE_READ_LIB"
 
-# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
-# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
-# shell immediately, bypassing an `if !` guard.
+# Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
+# special-builtin error that exits the shell, bypassing an `if !` guard.
 _AUDIT_LIB="$(dirname "$0")/../../shared/lib/audit-lib.sh"
 if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'attach-visual-evidence: plugin install broken — audit-lib.sh not found\n'

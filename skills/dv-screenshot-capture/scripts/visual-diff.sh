@@ -64,11 +64,8 @@ IMAGES_DIR=".context/images/${WORKTASK_ID}"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
 mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
 
-# Shared audit-row appender — one writer, one key order, one symlink refusal for every
-# audit.jsonl in the plugin. Resolved from this file's own directory: the capture adapters
-# are invoked by path from the skill, never through $PATH. A missing library is a broken
-# install rather than a runtime condition, so this fails closed instead of capturing
-# without evidence.
+# Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
+# Fails closed: a missing library is a broken install, not a runtime condition.
 _AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
 if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'visual-diff: plugin install broken — audit-lib.sh not found\n'

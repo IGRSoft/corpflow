@@ -74,9 +74,8 @@ done
 
 # ---------------------------------------------------------------- audit ----
 
-# The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
-# before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
-# shell immediately, bypassing an `if !` guard.
+# Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
+# special-builtin error that exits the shell, bypassing an `if !` guard.
 _AUDIT_LIB="$SELF_DIR/../../shared/lib/audit-lib.sh"
 if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'attachments-preseed: plugin install broken — audit-lib.sh not found\n'
