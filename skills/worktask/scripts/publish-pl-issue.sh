@@ -200,6 +200,7 @@ AUDIT_FILE="$LOG_DIR/audit.jsonl"
 # canonical issue reference is persisted HERE instead, surviving run_index increments.
 # A second worktask in the same .context/ then comments on the existing issue rather
 # than opening a duplicate. See skills/gh-issue-dedup. Sits next to state.json.
+# shellcheck disable=SC2034  # read by publish-pl-issue-lib.sh (anchor read/write) at call time
 ISSUE_ANCHOR="${GH_ISSUE_ANCHOR:-$(dirname "$STATE_FILE")/gh-issue.json}"
 # GitHub-side recovery search when no local anchor resolves (fresh clone / lost
 # .context/). Default on; exact-title single-hit only (guarded against false matches).
@@ -214,6 +215,7 @@ FATAL_DETAIL=""
 # helper works both in-worktree and in self-test sandboxes.
 ASSET_ROOT="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
 ASSET_DESIGNS_DIR="$ASSET_ROOT/.context/designs"     # canonical (and only) Figma asset source
+# shellcheck disable=SC2034  # save/restore target of the self-test sandbox; no production reader
 ASSET_IMAGES_DIR="$ASSET_ROOT/.context/images"        # DV implementation screenshots — NEVER a Figma {{asset:...}} source
 # Test hooks (unset in production → real git/gh probes drive tier selection):
 ASSET_HOST_MODE="${ASSET_HOST_MODE:-}"                # user-attachments|raw|gist|none force
@@ -1017,7 +1019,6 @@ fi
 if [ -z "$TIER" ]; then
   TIER="moderate"
   printf 'publish-pl-issue: no complexity tier found in the plan; defaulting to "moderate"\n' >&2
-  TIER_DEFAULTED=1
 fi
 
 # Render body via heredoc.

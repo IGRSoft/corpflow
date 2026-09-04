@@ -67,7 +67,6 @@ reconcile_group() { # $1 = path to orchestrator.json
   done
   [ -n "${settled# }" ] || return 0
 
-  updated="$orch"
   for entry in $settled; do
     num="${entry%%:*}"; rest="${entry#*:}"; status="${rest%%:*}"; pr="${rest#*:}"
     [ "$pr" = "$status" ] && pr=""   # no pr field present

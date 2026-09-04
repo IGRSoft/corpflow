@@ -36,6 +36,7 @@ WORKTASK_ID=""
 SLUG=""
 BASE_REF="origin/master"
 PLATFORM="all"
+# shellcheck disable=SC2034  # see the --run-index arm below
 RUN_INDEX="0"
 FILES_PATH=""
 SELF_TEST=0
@@ -73,6 +74,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --run-index)
+      # shellcheck disable=SC2034  # accepted for argv parity with the sibling capture
+      # scripts, which DO name their output by run index; nothing here reads it yet.
       RUN_INDEX="${2:-}"
       shift 2
       ;;

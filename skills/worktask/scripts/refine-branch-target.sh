@@ -136,7 +136,9 @@ else
   exit 0
 fi
 
+# shellcheck disable=SC2034  # both read by branch-lib.sh audit_fn through dynamic scope
 AUDIT_ACTOR="orchestrator"
+# shellcheck disable=SC2034
 AUDIT_STAGE="PL"
 RUN_INDEX="0"
 AUDIT_SUBJECT="PL0"

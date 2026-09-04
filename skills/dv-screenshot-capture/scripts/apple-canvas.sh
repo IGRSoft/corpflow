@@ -40,7 +40,6 @@ DESTINATION="macos-host"
 SIZE="393x852"
 SCHEME="light"
 SLUG="canvas-preview"
-THRESHOLD_PERCENT=""   # forwarded to visual-diff if QA runs it
 PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 PROJECT_ROOT="$(pwd)"
 

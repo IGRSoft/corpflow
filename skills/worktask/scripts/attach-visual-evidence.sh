@@ -226,8 +226,8 @@ validate_manifest() {
 # ---------- block builder ---------------------------------------------------
 # Build the "## Visual evidence" block from a parsed manifest.
 #   stdout: the block (may be empty)
-#   Globs read: BLOCK_HEADING, BLOCK_MANIFEST_REF (test-only override; callers
-#   deliberately leave it unset so the single path-free default below applies)
+#   Heading arrives as $2. BLOCK_MANIFEST_REF is the one global read here, a
+#   test-only override callers leave unset so the path-free default applies.
 # Hosting decisions go through the sourced select_host_tier/host_one_asset.
 # Returns the chosen host tier via the HOST_TIER global (set by select_host_tier).
 build_block() {
@@ -725,9 +725,6 @@ run_self_tests() {
 | 02 | diff | dv-02-diff.txt | 0 | all | cli_fallback | tool_missing | 2026-01-01T00:00:00Z | — |
 MD
     printf 'x' > "$d/dv-01-home.png"
-  }
-  _check() { # $1=label $2=cond(0/1 in $?) -- uses prior exit
-    if [ "$1" = ok ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
   }
   _ok()   { echo "attach-visual-evidence: $1 PASS"; pass=$((pass+1)); }
   _fail() { echo "attach-visual-evidence: $1 FAIL${2:+ — $2}"; fail=$((fail+1)); }

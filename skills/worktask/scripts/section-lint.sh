@@ -23,8 +23,6 @@
 
 set -euo pipefail
 
-CAP=1000
-
 lint() {
   python3 - "$@" <<'PYEOF'
 import re, sys

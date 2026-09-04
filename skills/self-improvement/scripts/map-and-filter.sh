@@ -291,7 +291,7 @@ map_path() {
       printf '16\t%s\n' "$dv_agent"
       return 0
       ;;
-    setup.py | setup.cfg | requirements.txt | requirements-*.txt)
+    setup.py | requirements.txt | requirements-*.txt)
       printf '16\t%s\n' "$dv_agent"
       return 0
       ;;
