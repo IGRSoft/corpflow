@@ -18,21 +18,29 @@
 set -euo pipefail
 
 # ---------- Plugin root discovery ----------
-find_plugin_root() {
+# Located from $(dirname "$0") like every sibling resolution this script already does.
+# `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
+# special-builtin error that exits a `set -e` shell immediately, bypassing an
+# `if ! . …; then` guard entirely.
+_CORPFLOW_BASE="$(dirname "$0")/../../shared/lib/corpflow-base.sh"
+if [[ -r "$_CORPFLOW_BASE" ]]; then
+  # shellcheck source=skills/shared/lib/corpflow-base.sh
+  . "$_CORPFLOW_BASE"
+else
+  printf >&2 'hook-install.sh: corpflow-base.sh unreachable at %s — plugin install broken\n' \
+    "$_CORPFLOW_BASE"
+  exit 3
+fi
+
+# The env rung stays at the call sites, deliberately unvalidated: an explicit override
+# must win whether or not the tree it names carries the marker, and the allowlist that
+# pins which files may read the variable can only see it here.
+_plugin_root() {
   if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
     echo "$CLAUDE_PLUGIN_ROOT"
     return 0
   fi
-  local candidate
-  for candidate in \
-    "$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)" \
-    "$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)"; do
-    if [[ -f "$candidate/.claude-plugin/plugin.json" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-  return 1
+  corpflow_plugin_root
 }
 
 # ---------- Check mode ----------
@@ -46,7 +54,7 @@ check_installation() {
   fi
 
   local plugin_root
-  if plugin_root=$(find_plugin_root); then
+  if plugin_root=$(_plugin_root); then
     if grep -q 'state-merge\.sh' "$plugin_root/.claude-plugin/plugin.json" 2>/dev/null; then
       echo "check: plugin.json registers state-merge.sh SubagentStop hook ✓"
     else
@@ -63,7 +71,7 @@ check_installation() {
 # ---------- Install ----------
 install_hook() {
   local plugin_root
-  if ! plugin_root=$(find_plugin_root); then
+  if ! plugin_root=$(_plugin_root); then
     echo "install: ERROR — cannot locate plugin root. Set CLAUDE_PLUGIN_ROOT." >&2
     return 1
   fi
