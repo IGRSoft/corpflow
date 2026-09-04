@@ -261,7 +261,9 @@ bump_anchor_commented() {
 }
 
 # Return 0 if the issue already carries $2 among its comment bodies (network guard
-# for comment idempotency; mirrors attach-visual-evidence.sh:issue_has_marker).
+# for comment idempotency). Two consumers reach it through the PUBLISH_LIB_ONLY
+# source: publish-pl-issue.sh and attach-visual-evidence.sh, which kept a
+# byte-identical private copy until the copy was deleted in favour of this one.
 pl_issue_has_marker() {
   local url="$1" marker="$2" body
   body=$("$GH_BIN" issue view "$url" --json comments --jq '.comments[].body' 2>/dev/null || true)

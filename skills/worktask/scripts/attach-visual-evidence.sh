@@ -508,7 +508,7 @@ post_issue() {
   local caps; caps=$(printf '%s' "$block" | grep -c '^!\[' || true)
 
   # Gate 4: idempotency — marker already present on the issue → skip.
-  if issue_has_marker "$issue_url" "$marker"; then
+  if pl_issue_has_marker "$issue_url" "$marker"; then
     audit_av "visual_evidence_issue_commented" "skipped" \
       "$(_issue_meta "${caps:-0}" "$_tier" already_published "$issue_url" "$dk")"
     return 0
@@ -535,13 +535,6 @@ _issue_meta() {
   jq -cn --arg w "$WORKTASK_ID" --argjson r "$RUN_INDEX" --argjson c "${1:-0}" \
     --arg t "$2" --arg reason "$3" --arg url "$4" --arg dk "$5" \
     '{worktask_id:$w, run_index:$r, issue_url:$url, captures:$c, host_tier:$t, reason:$reason, dedupe_key:$dk}'
-}
-
-# Return 0 if the issue already carries the marker (idempotency grep).
-issue_has_marker() {
-  local url="$1" marker="$2" body
-  body=$("$GH_BIN" issue view "$url" --json comments --jq '.comments[].body' 2>/dev/null || true)
-  printf '%s' "$body" | grep -qF "$marker"
 }
 
 # ---------- context bootstrap ----------------------------------------------
@@ -693,7 +686,7 @@ post_completion() {
     dk="$WORKTASK_ID:$RUN_INDEX:completion:$n"
     marker=$(_completion_marker "$n")
     # Gate 2: idempotency — per-issue marker already present → skip.
-    if issue_has_marker "$n" "$marker"; then
+    if pl_issue_has_marker "$n" "$marker"; then
       audit_av "$action" "skipped" "$(_completion_meta "$n" already_published "$dk")"
       continue
     fi
