@@ -192,6 +192,34 @@ no_screenshots() {
   assert_output --partial '1'
 }
 
+@test "SR-M1: a double quote in the branch name still yields a parseable audit row" {
+  # `git check-ref-format 'refs/heads/foo"bar'` accepts, so a refname reaches the row
+  # with a JSON metacharacter in it. The old printf template emitted an unparseable
+  # line, which stops EVERY later reader of audit.jsonl at the parse error — not just
+  # this row. Mutation check: revert the emitter to printf and this arm fails.
+  cd "$WD"
+  local hostile='int"egration'
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q "$hostile"
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq --arg b "$hostile" '.metadata.base_ref=$b' .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  [[ "$stderr" == *"cherry-pick"* ]]
+  # Whole-file parse, not a per-row one: the failure mode is a corrupted log stream.
+  run jq -se '.' .context/logs/audit.jsonl
+  assert_success
+  run jq -sr 'map(select(.action=="branch_continuity"))[-1]
+              | .metadata.integration_branch' .context/logs/audit.jsonl
+  assert_success
+  assert_output "$hostile"
+  # commit_count stays a JSON number: readers compare it numerically.
+  run jq -sr 'map(select(.action=="branch_continuity"))[-1]
+              | .metadata.commit_count | type' .context/logs/audit.jsonl
+  assert_output "number"
+}
+
 # ---------------------------------------------------------------------------
 # pr-body — body-composition gate (REQ-4/REQ-5/REQ-6)
 # ---------------------------------------------------------------------------

@@ -363,12 +363,30 @@ cmd_continuity() {
   local ts n
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   n=$(git rev-list --count "${ref}..${wt_head}" 2> /dev/null || printf '0')
+  # --argjson below refuses anything that is not a JSON literal, and losing the whole
+  # row to an unexpected count would be worse than reporting an honest zero.
+  case "$n" in '' | *[!0-9]*) n=0 ;; esac
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
   # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
   # against an arbitrary target. A lost row never blocks the caller.
   if [ ! -L "${CONTEXT_DIR}/logs/audit.jsonl" ]; then
-    printf '{"ts":"%s","actor":"project-manager","action":"branch_continuity","subject":"FN0","result":"diverged_cherry_pick","metadata":{"worktree_head":"%s","integration_branch":"%s","commit_count":%s}}\n' \
-      "$ts" "$wt_head" "$int_branch" "$n" >> "${CONTEXT_DIR}/logs/audit.jsonl"
+    # Built with jq, not printf: `git check-ref-format` accepts a double quote in a
+    # refname, so a printf template interpolating $int_branch emits a line that no
+    # later reader of audit.jsonl can parse. The row shape stays hand-written rather
+    # than routed through audit_fn/meta_json because this row's contract is a bare
+    # key set (no task_id/origin_stage/dedupe_key) and a NUMERIC commit_count.
+    if command -v jq > /dev/null 2>&1; then
+      if ! jq -cn --arg ts "$ts" --arg head "$wt_head" --arg branch "$int_branch" \
+        --argjson n "$n" \
+        '{ts: $ts, actor: "project-manager", action: "branch_continuity",
+          subject: "FN0", result: "diverged_cherry_pick",
+          metadata: {worktree_head: $head, integration_branch: $branch, commit_count: $n}}' \
+        >> "${CONTEXT_DIR}/logs/audit.jsonl" 2> /dev/null; then
+        printf >&2 'continuity: audit row NOT recorded (sink unwritable) — divergence still reported above\n'
+      fi
+    else
+      printf >&2 'continuity: jq unavailable — divergence audit row skipped (diagnostic above stands)\n'
+    fi
   fi
   return 0 # diverged is a documented fallback, not a hard block
 }
