@@ -82,6 +82,10 @@ done
 audit_failed() {
   local reason="$1" dir="$WORKDIR/.context/logs" row
   mkdir -p "$dir"
+  # A symlinked audit.jsonl turns this append into a write primitive against an
+  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
+  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
+  [ ! -L "$dir/audit.jsonl" ] || return 0
   if command -v jq >/dev/null 2>&1; then
     row=$(jq -cn --arg s "FN${RUN_INDEX:-0}" --arg r "$reason" \
       '{actor:"orchestrator", action:"fn_attachments_preseed_failed",

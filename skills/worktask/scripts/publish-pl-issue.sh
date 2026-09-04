@@ -303,6 +303,10 @@ audit_row() {
   local result="$1" meta_json="$2"
   command -v jq >/dev/null 2>&1 || return 1
   mkdir -p "$LOG_DIR" || return 1
+  # A symlinked audit.jsonl turns this append into a write primitive against an
+  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
+  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
+  [ ! -L "$AUDIT_FILE" ] || return 1
   local row
   row=$(jq -cn \
     --arg ts "$(date -u +%FT%TZ)" \

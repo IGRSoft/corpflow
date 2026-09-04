@@ -452,3 +452,16 @@ EOS
   refute_output --partial "Set GH_SESSION_TOKEN"
   assert_output --partial "not a hosting failure"
 }
+
+# Mirrors the hook-side guard tests/shell/hooks/test-execution-gate.bats pins for
+# corpflow_audit_row. Nothing pinned it for the worktask emitters, and all four
+# appended through a symlink — a write primitive against an arbitrary target.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  mkdir -p "$WD/target-dir"
+  rm -f "$WD/.context/logs/audit.jsonl"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env STATE_FILE="$WD/state-false.json" WORKSPACE_ROOT="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

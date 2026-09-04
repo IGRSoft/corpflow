@@ -96,6 +96,10 @@ audit_av() {
   local action="$1" result="$2" meta="$3"
   command -v jq >/dev/null 2>&1 || return 0
   mkdir -p "$LOG_DIR" 2>/dev/null || return 0
+  # A symlinked audit.jsonl turns this append into a write primitive against an
+  # arbitrary target. Refuse rather than follow — the same guard hooks/model-switch-lib.sh
+  # carries and tests/shell/hooks/test-execution-gate.bats pins for the hook side.
+  [ ! -L "$AUDIT_FILE" ] || return 0
   jq -cn \
     --arg ts "$(date -u +%FT%TZ)" \
     --arg actor "orchestrator" \

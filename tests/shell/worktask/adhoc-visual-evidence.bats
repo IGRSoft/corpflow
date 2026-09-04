@@ -171,3 +171,14 @@ seed_capture() { # $1=repo dir
   assert_success
   assert_output --partial "fail=0"
 }
+
+# Companion to the attach-visual-evidence arm of the same name: nothing pinned the
+# symlink refusal for any worktask emitter, only for the hook-side one.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  local d; d="$(mk_tmpworkdir)"
+  mkdir -p "$d/.context/logs" "$d/target-dir"
+  ln -s "$d/target-dir/escaped.txt" "$d/.context/logs/audit.jsonl"
+  run env WORKSPACE_ROOT="$d" ADHOC_SKIP=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  [ ! -e "$d/target-dir/escaped.txt" ]
+}

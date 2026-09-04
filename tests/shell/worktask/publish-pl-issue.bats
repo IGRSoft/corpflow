@@ -304,3 +304,18 @@ script output: $output"
   assert_audit_row github_issue_created --file "$WD/.context/logs/audit.jsonl" \
     --jq '.metadata.url == "https://github.com/o/r/issues/42"'
 }
+
+# Companion to the attach-visual-evidence arm of the same name: the symlink refusal
+# was pinned only for the hook-side emitter, and all four worktask emitters appended
+# through a symlink. audit_row returns 1 here, which every call site already tolerates.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  cd "$WD"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  rm -f "$WD/.context/logs/audit.jsonl"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  jq '.metadata.github_issue_url = "https://github.com/o/r/issues/7"' \
+    .context/state.json > s2 && mv s2 .context/state.json
+  run env WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

@@ -284,3 +284,14 @@ EOF
   run jq -r '.injected // "absent"' "$WD/.context/logs/audit.jsonl"
   assert_output "absent"
 }
+
+# Companion to the attach-visual-evidence arm of the same name: nothing pinned the
+# symlink refusal for any worktask emitter, only for the hook-side one.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run_script_env --cwd "$WD" --unset FN_BASE_REF --separate-stderr \
+    "$SCRIPT" --workdir "$WD" --worktask-id wt-1 --branch feature/x --run-index 0
+  assert_failure 3
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}
