@@ -1231,6 +1231,19 @@ two_open_dv() {
   assert_output --partial "landed nothing"
 }
 
+@test "facts: the no-ledger log line says the same thing as the stderr line" {
+  # The two were written by hand and had drifted: stderr said "no ledger at",
+  # the log said "state.json absent at". Anyone grepping the log for the text
+  # the caller saw found nothing.
+  cd "$WD"
+  rm -f .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"d-1"}]}'
+  assert_failure
+  [[ "$stderr" == *"no ledger at"* ]] || fail "unexpected stderr: $stderr"
+  run grep -c "no ledger at .*--facts landed nothing" .context/logs/state-merge.log
+  assert_output "1"
+}
+
 # --- metadata.description cap (R-4.4) ----------------------------------------
 
 @test "task description: over-long values are truncated, never rejected, on create and meta" {

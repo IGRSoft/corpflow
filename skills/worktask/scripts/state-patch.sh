@@ -975,32 +975,16 @@ REPLAY_CASCADE="false"
 AGENTS_JSON_ARG=""
 
 while [[ $# -gt 0 ]]; do
+  # One line per flag. Every value-taking arm was the same five lines —
+  # `shift`, assign `${1:-}`, `shift` — repeated eleven times, which made the
+  # two arms that are NOT that shape (--disk-check's optional value and
+  # --self-test's guarded source) invisible in the scroll.
   case "$1" in
-    --stage)
-      shift
-      STAGE_ARG="${1:-}"
-      shift
-      ;;
-    --artifact)
-      shift
-      ARTIFACT_ARG="${1:-}"
-      shift
-      ;;
-    --prev)
-      shift
-      PREV_ARG="${1:-}"
-      shift
-      ;;
-    --state)
-      shift
-      STATE_PATH="${1:-}"
-      shift
-      ;;
-    --log)
-      shift
-      LOG_FILE="${1:-}"
-      shift
-      ;;
+    --stage) shift; STAGE_ARG="${1:-}"; shift ;;
+    --artifact) shift; ARTIFACT_ARG="${1:-}"; shift ;;
+    --prev) shift; PREV_ARG="${1:-}"; shift ;;
+    --state) shift; STATE_PATH="${1:-}"; shift ;;
+    --log) shift; LOG_FILE="${1:-}"; shift ;;
     --disk-check)
       shift
       # Optional root value: consume the next token only when it is NOT another flag.
@@ -1011,86 +995,21 @@ while [[ $# -gt 0 ]]; do
         DISK_CHECK_ROOT="."
       fi
       ;;
-    --via)
-      shift
-      VIA_ARG="${1:-}"
-      shift
-      ;;
-    --allow-missing-artifact)
-      ALLOW_MISSING_ARTIFACT="1"
-      shift
-      ;;
-    --facts)
-      shift
-      FACTS_ARG="${1:-}"
-      shift
-      ;;
-    --task-id)
-      shift
-      TASK_ID_ARG="${1:-}"
-      shift
-      ;;
-    --task-create)
-      shift
-      TASK_OP="create"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-status)
-      shift
-      TASK_OP="status"
-      TASK_OP_ID="${1:-}"
-      shift
-      TASK_OP_VALUE="${1:-}"
-      shift
-      ;;
-    --task-block)
-      shift
-      TASK_OP="block"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-unblock)
-      shift
-      TASK_OP="unblock"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-meta)
-      shift
-      TASK_OP="meta"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --ledger-meta)
-      shift
-      LEDGER_META_OP="1"
-      ;;
-    --task-replay)
-      shift
-      TASK_OP="replay"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --cascade)
-      REPLAY_CASCADE="true"
-      shift
-      ;;
-    --agents-json)
-      shift
-      AGENTS_JSON_ARG="${1:-}"
-      shift
-      ;;
-    --on | --off | --metadata | --set)
-      shift
-      TASK_OP_VALUE="${1:-}"
-      shift
-      ;;
-    --resolve-task-id)
-      shift
-      RESOLVE_CODE_ARG="${1:-}"
-      shift
-      ;;
+    --via) shift; VIA_ARG="${1:-}"; shift ;;
+    --allow-missing-artifact) ALLOW_MISSING_ARTIFACT="1"; shift ;;
+    --facts) shift; FACTS_ARG="${1:-}"; shift ;;
+    --task-id) shift; TASK_ID_ARG="${1:-}"; shift ;;
+    --task-create) shift; TASK_OP="create"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-status) shift; TASK_OP="status"; TASK_OP_ID="${1:-}"; shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --task-block) shift; TASK_OP="block"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-unblock) shift; TASK_OP="unblock"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
+    --ledger-meta) shift; LEDGER_META_OP="1" ;;
+    --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
+    --cascade) REPLAY_CASCADE="true"; shift ;;
+    --agents-json) shift; AGENTS_JSON_ARG="${1:-}"; shift ;;
+    --on | --off | --metadata | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --resolve-task-id) shift; RESOLVE_CODE_ARG="${1:-}"; shift ;;
     --self-test)
       # Sourced HERE, not at the top: the harness is ~1k lines the ledger-write
       # path never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file
@@ -1490,7 +1409,7 @@ if [[ -n "$FACTS_ARG" ]]; then
     # log_msg writes only to $LOG_FILE, so this used to be an INFO line and exit 0 — a write
     # that landed nothing, indistinguishable at the call site from one that landed.
     printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
-    log_msg ERROR "state.json absent at ${STATE_PATH}; --facts landed nothing"
+    log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
     exit 1
   elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
     --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK"; then
