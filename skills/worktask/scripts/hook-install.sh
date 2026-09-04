@@ -55,6 +55,17 @@ check_installation() {
 
   local plugin_root
   if plugin_root=$(_plugin_root); then
+    # Presence is not currency. The installed copy is a snapshot taken whenever the
+    # installer last ran, so a security fix shipped into hooks/state-merge.sh keeps
+    # running the old code with no signal anywhere until someone compares the bytes.
+    if [[ -e ".claude/hooks/state-merge.sh" && -f "$plugin_root/hooks/state-merge.sh" ]]; then
+      if cmp -s "$plugin_root/hooks/state-merge.sh" ".claude/hooks/state-merge.sh"; then
+        echo "check: installed hook matches $plugin_root/hooks/state-merge.sh ✓"
+      else
+        echo "check: installed hook DIFFERS from $plugin_root/hooks/state-merge.sh — re-run hook-install.sh to refresh" >&2
+        rc=1
+      fi
+    fi
     if grep -q 'state-merge\.sh' "$plugin_root/.claude-plugin/plugin.json" 2>/dev/null; then
       echo "check: plugin.json registers state-merge.sh SubagentStop hook ✓"
     else
@@ -84,8 +95,15 @@ install_hook() {
     return 1
   fi
 
-  if [[ -x "$dst" ]]; then
+  if [[ -x "$dst" ]] && cmp -s "$src" "$dst"; then
     echo "install: $dst already installed (idempotent — no-op)"
+  elif [[ -x "$dst" ]]; then
+    # Idempotence used to key on existence alone, which made re-running the installer
+    # — the documented remedy for drift — a no-op precisely when it was needed.
+    cp "$dst" "$dst.bak"
+    cp "$src" "$dst"
+    chmod +x "$dst"
+    echo "install: refreshed stale $dst (previous copy → $dst.bak)"
   else
     mkdir -p .claude/hooks
     # A non-executable $dst is typically a hand-customized copy or a partial write; the
