@@ -219,14 +219,28 @@ is_milestone_mode() {
   return 1
 }
 
+# ---------- atomic JSON write ------------------------------------------------
+# _atomic_json <target> — reads the finished document from stdin and replaces <target>
+# with it through tmp → fsync → mv. rc 1 when the replacement did not land.
+#
+# The emptiness check is what makes it safe to feed from a pipeline: a jq that dies
+# part-way leaves a truncated or empty temp file, and the four hand-rolled copies this
+# replaces would leave that file behind on disk beside the ledger. Nothing partial is
+# ever renamed over the target.
+_atomic_json() {
+  local target="$1" tmp="${1}.tmp.$$"
+  cat > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
+  [ -s "$tmp" ] || { rm -f "$tmp" 2>/dev/null; return 1; }
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$target" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
+}
+
 # ---------- atomic state.json write -----------------------------------------
 write_state_url() {
   # $1=url. Atomically sets state.json:metadata.github_issue_url.
   local url="$1"
-  local tmp="${STATE_FILE}.tmp.$$"
-  jq --arg url "$url" '.metadata = (.metadata // {}) | .metadata.github_issue_url = $url' "$STATE_FILE" > "$tmp" || return 1
-  sync "$tmp" 2>/dev/null || true
-  mv -f "$tmp" "$STATE_FILE" || return 1
+  jq --arg url "$url" '.metadata = (.metadata // {}) | .metadata.github_issue_url = $url' \
+    "$STATE_FILE" | _atomic_json "$STATE_FILE" || return 1
 }
 
 # ---------- run-independent GitHub-issue anchor -----------------------------
@@ -240,24 +254,19 @@ write_context_issue() {
   local url="$1" number="$2"
   [ -z "$url" ] && return 0
   [ -n "$ISSUE_ANCHOR" ] || return 0
-  local tmp="${ISSUE_ANCHOR}.tmp.$$"
   jq -cn --arg url "$url" --argjson num "${number:-0}" \
      --arg wid "${WORKTASK_ID:-unknown}" --argjson ri "${RUN_INDEX:-0}" \
      --arg ts "$(date -u +%FT%TZ)" \
      '{version:1, url:$url, number:$num, created_run_index:$ri, created_worktask_id:$wid, created_at:$ts, last_commented_run_index:$ri}' \
-     > "$tmp" 2>/dev/null || return 1
-  sync "$tmp" 2>/dev/null || true
-  mv -f "$tmp" "$ISSUE_ANCHOR" || return 1
+     2>/dev/null | _atomic_json "$ISSUE_ANCHOR" || return 1
 }
 
 bump_anchor_commented() {
   # $1=run_index. Record a follow-up comment for this run (anchor-source path).
   local ri="$1"
   [ -n "$ISSUE_ANCHOR" ] && [ -f "$ISSUE_ANCHOR" ] || return 0
-  local tmp="${ISSUE_ANCHOR}.tmp.$$"
-  jq --argjson ri "${ri:-0}" '.last_commented_run_index = $ri' "$ISSUE_ANCHOR" > "$tmp" 2>/dev/null || return 1
-  sync "$tmp" 2>/dev/null || true
-  mv -f "$tmp" "$ISSUE_ANCHOR" || return 1
+  jq --argjson ri "${ri:-0}" '.last_commented_run_index = $ri' "$ISSUE_ANCHOR" 2>/dev/null \
+    | _atomic_json "$ISSUE_ANCHOR" || return 1
 }
 
 # Return 0 if the issue already carries $2 among its comment bodies (network guard
@@ -447,8 +456,6 @@ extract_external_ticket() {
 write_state_external_ticket() {
   local tkt="$1"
   [ -z "$tkt" ] && return 0
-  local tmp="${STATE_FILE}.tmp.$$"
-  jq --arg t "$tkt" '.metadata = (.metadata // {}) | .metadata.external_ticket = $t' "$STATE_FILE" > "$tmp" || return 1
-  sync "$tmp" 2>/dev/null || true
-  mv -f "$tmp" "$STATE_FILE" || return 1
+  jq --arg t "$tkt" '.metadata = (.metadata // {}) | .metadata.external_ticket = $t' \
+    "$STATE_FILE" | _atomic_json "$STATE_FILE" || return 1
 }
