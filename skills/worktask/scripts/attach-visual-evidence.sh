@@ -91,6 +91,18 @@ MAX_EMBED="${MAX_EMBED:-5}"   # PR/issue embed cap (mirrors capture skill's 5-pe
 _LIB="$(dirname "$0")/publish-pl-issue.sh"
 
 # ---------- audit -----------------------------------------------------------
+# The ledger read helpers (skills/shared/lib/state-read-lib.sh) — one spelling of the
+# worktask_id / run_index read, with the fallback default as an explicit argument.
+# `[ -r ]` before the `.`: a bare `.` on a missing file is a special-builtin error that
+# exits the shell immediately, bypassing an `if !` guard.
+_STATE_READ_LIB="$(dirname "$0")/../../shared/lib/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'attach-visual-evidence: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
 # The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
 # before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
 # shell immediately, bypassing an `if !` guard.
@@ -547,8 +559,8 @@ load_context() {
   command -v jq >/dev/null 2>&1 || { echo "attach-visual-evidence: jq not found" >&2; exit 1; }
   [ -r "$STATE_FILE" ] || { echo "attach-visual-evidence: state unreadable: $STATE_FILE" >&2; exit 1; }
   jq -e . "$STATE_FILE" >/dev/null 2>&1 || { echo "attach-visual-evidence: state corrupt" >&2; exit 1; }
-  WORKTASK_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE")
-  RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
+  WORKTASK_ID=$(corpflow_worktask_id "$STATE_FILE")
+  RUN_INDEX=$(corpflow_run_index "$STATE_FILE")
 }
 
 # ---------- mode: --post completion (AC2) -----------------------------------

@@ -298,6 +298,18 @@ run_with_timeout() {
   return $?
 }
 
+# The ledger read helpers (skills/shared/lib/state-read-lib.sh) — one spelling of the
+# worktask_id / run_index read, with the fallback default as an explicit argument.
+# `[ -r ]` before the `.`: a bare `.` on a missing file is a special-builtin error that
+# exits the shell immediately, bypassing an `if !` guard.
+_STATE_READ_LIB="$SCRIPT_DIR/../../shared/lib/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'publish-pl-issue: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
 # The one audit-row appender for the plugin (skills/shared/lib/audit-lib.sh). `[ -r ]`
 # before the `.`: a bare `.` on a missing file is a special-builtin error that exits the
 # shell immediately, bypassing an `if !` guard.
@@ -325,8 +337,8 @@ defer() {
   # $1=reason; appends audit row with result=deferred, exits 0.
   local reason="$1"
   local wid run_index dk
-  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
-  run_index=$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo "0")
+  wid=$(corpflow_worktask_id "$STATE_FILE")
+  run_index=$(corpflow_run_index "$STATE_FILE")
   dk="$wid:$run_index:gh_issue"
   audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$reason" --arg dk "$dk" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
   exit 0
@@ -340,8 +352,8 @@ fatal() {
   # nothing at all when this path fires. Emit the reason (plus any FATAL_DETAIL the
   # caller staged) on stderr before exiting.
   printf >&2 'publish-pl-issue: FATAL %s%s\n' "$reason" "${FATAL_DETAIL:+ — $FATAL_DETAIL}"
-  wid=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
-  run_index=$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo "0")
+  wid=$(corpflow_worktask_id "$STATE_FILE")
+  run_index=$(corpflow_run_index "$STATE_FILE")
   dk="$wid:$run_index:gh_issue"
   audit_row "error" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$reason" --arg dk "$dk" '{via:$v, reason:$r, dedupe_key:$dk}')" 2>/dev/null || true
   exit 1
@@ -809,8 +821,8 @@ mkdir -p "$LOG_DIR" 2>/dev/null || fatal "audit_dir_unwritable"
 jq -e . "$STATE_FILE" >/dev/null 2>&1 || fatal "state_corrupt"
 
 # Pull worktask context.
-WORKTASK_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE")
-RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
+WORKTASK_ID=$(corpflow_worktask_id "$STATE_FILE")
+RUN_INDEX=$(corpflow_run_index "$STATE_FILE")
 PLAN_FILE=$(jq -r '.plan_file // ""' "$STATE_FILE")
 # Two legal shapes reach this field (see the plan_file shape boundary in the header):
 # a workspace-relative path, or a bare basename written from the task-metadata
