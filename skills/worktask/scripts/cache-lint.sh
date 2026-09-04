@@ -62,8 +62,6 @@
 #
 # Reference: skills/worktask/references/handoff-protocol.md#cache-prefix
 #            skills/shared/stage-contracts.md#per-stage-frontmatter-templates
-# AR decisions implemented: AD-4 (cache-prefix invariants), AD-5 (anchors).
-# AC satisfied: AC-3 (anchor convention), AC-14 (cache stability).
 
 set -euo pipefail
 
@@ -78,13 +76,10 @@ usage() {
 # POSIX-compatible lookup (bash 3.2 has no associative arrays).
 # One row per stage: <code> <agent-basename> <canonical-artifact-basename> <anchors…>.
 #
-# These four facts were four parallel 13-arm `case` tables, two of them exact inverses of
-# each other, so a new stage stayed half-added until all four were edited and nothing could
-# say which one was missed. The anchors are the per-stage allow-list from
-# handoff-protocol.md#anchor-allow-list; UNIVERSAL_ANCHORS and OPTIONAL_ANCHOR_RE below add
-# the stage-independent obligations on top of the row. The artifact basenames mirror
-# handoff-protocol.md#stage-artifact-map and the agent basenames mirror
-# stage-contracts.md § Per-Stage Frontmatter Templates.
+# One row, not four parallel case tables: a new stage otherwise stayed half-added and nothing
+# could report which table was missed. Anchors mirror handoff-protocol.md#anchor-allow-list,
+# basenames its #stage-artifact-map, agents stage-contracts.md § Per-Stage Frontmatter
+# Templates; UNIVERSAL_ANCHORS and OPTIONAL_ANCHOR_RE add the stage-independent obligations.
 _STAGE_TABLE='PL product-manager planning requirements acceptance-criteria scope out-of-scope risks complexity stages summary
 AR software-architector architecture decisions trade-offs patterns integration-points schemas open-questions risks
 TL team-lead coordination fan-out shared-snippets sequence risks
@@ -262,7 +257,7 @@ anchor_lint() {
 # ---------- Agent-section cross-check (#16 letter b) ----------
 # The H2 names an agent's prose INSTRUCTS it to write into its own stage artifact.
 #
-# Deliberately under-matching (AD-6): a false negative leaves today's behaviour, while a
+# Deliberately under-matching: a false negative leaves today's behaviour, while a
 # false positive would block correct work by rejecting a section no agent ever mandated.
 # Three filters, all conservative:
 #   1. The name must sit in its own code span opening with `## ` — `development-N.md ## decisions`
@@ -337,7 +332,7 @@ extract_section() {
   ' <<< "$body"
 }
 
-# ---------- Forbidden-token scanner (L1, REQ-3/AC-4) ----------
+# ---------- Forbidden-token scanner ----------
 # Scans ONE section's text for the seven forbidden-token classes named in
 # handoff-protocol.md#cache-prefix (mirrored verbatim in
 # coordination-0.md#shared-snippets so no second taxonomy is ever invented):

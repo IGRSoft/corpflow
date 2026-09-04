@@ -190,10 +190,8 @@ _gradle_subcmd() {
 # _consume_action <rest> <word>... -> 0 when one of <word> appears as a WHOLE
 # token in <rest>, with _rest_effective set to <rest> minus that first match.
 # Word-exact by construction: a substring match would fire on `-scheme MyTests`.
-#
-# Three detectors ran this same scan over three different word sets. Return code
-# plus a global, not an echoed value: `x=$(f)` forks, and this is on the hot path
-# of every classified command.
+# Return code plus a global, never an echoed value: `x=$(f)` forks, and this is on
+# the hot path of every classified command.
 _consume_action() {
   local _rest="$1" _found=0 _tok _word
   shift
@@ -656,15 +654,6 @@ classify_segment() {
 # ctx-parameterised stage lookup is shared.
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# ledger_settled <ctx> -> "settled" when the ledger positively says NOBODY is
-# acting: state.json parses, .tasks is a non-empty object, zero in_progress.
-# Empty for every other shape.
-#
-# Split from corpflow_active_stage's single empty answer: "cannot tell" (no state.json,
-# no jq, unparseable, >1 in_progress) must fail open, while "nobody is acting"
-# is not an ambiguity — no stage holds test authority then. Reads the SESSION's
-# ledger under CLAUDE_PROJECT_DIR, so cd'ing elsewhere does not evade it.
 # emit_deny <reason> — the PreToolUse deny document, written once. rc 1 when jq
 # could not build it, which every caller must treat as "say nothing and allow":
 # a hook that prints a half-formed document is worse than a hook that abstains.
@@ -680,11 +669,10 @@ emit_deny() {
 # _ledger_read <ctx> <fallback> -> 0 with _LEDGER_FILE set when the session
 # ledger is readable AND jq is present; otherwise prints <fallback> and returns 1.
 #
-# Three ledger readers opened with the same four lines and three different
-# fallbacks. The fallback stays each caller's argument: "cannot tell" is the
-# empty string for the two authority reads (which must fail open) and the literal
-# `unknown` for the mode read (which is denial text), and unifying those would
-# have changed what a caller says when the ledger is unreadable.
+# The fallback stays each caller's argument: "cannot tell" is the empty string for
+# the two authority reads (which must fail open) and the literal `unknown` for the
+# mode read (which is denial text). Unifying them would change what a caller says
+# when the ledger is unreadable.
 _ledger_read() {
   _LEDGER_FILE="$1/state.json"
   [ -f "$_LEDGER_FILE" ] && command -v jq > /dev/null 2>&1 && return 0
@@ -692,6 +680,15 @@ _ledger_read() {
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# ledger_settled <ctx> -> "settled" when the ledger positively says NOBODY is
+# acting: state.json parses, .tasks is a non-empty object, zero in_progress.
+# Empty for every other shape.
+#
+# Split from corpflow_active_stage's single empty answer: "cannot tell" (no state.json,
+# no jq, unparseable, >1 in_progress) must fail open, while "nobody is acting"
+# is not an ambiguity — no stage holds test authority then. Reads the SESSION's
+# ledger under CLAUDE_PROJECT_DIR, so cd'ing elsewhere does not evade it.
 # ---------------------------------------------------------------------------
 ledger_settled() {
   local _ctx="$1" _state _counts _n_stages _n_active
