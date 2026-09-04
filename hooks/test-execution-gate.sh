@@ -1252,6 +1252,7 @@ write_audit_row() {
 # rather than two that can drift apart. `return` outside a sourced file is an
 # error, so the exit is the fallback for a direct invocation.
 # ---------------------------------------------------------------------------
+# shellcheck disable=SC2317 # `return` outside a function fails when executed directly, so the exit IS reached
 case "${1:-}" in
   --lib-only) return 0 2>/dev/null || exit 0 ;;
 esac

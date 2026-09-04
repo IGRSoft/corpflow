@@ -77,6 +77,10 @@ log() {
   printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "${1:-INFO}" "${2:-}" >> "$LOG" 2> /dev/null || true
 }
 
+# Never invoked: state-merge delegates every resolution to state-patch.sh. It survives as
+# source 3 of the seven-way map that artifact-map-parity.bats guards, which exists because
+# that map has already drifted once and stranded a basename for 34 releases.
+# shellcheck disable=SC2329 # parity fixture; deleting it deletes a drift guard
 _basename_for_stage() {
   case "$1" in
     PL) printf 'planning' ;;

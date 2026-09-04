@@ -234,21 +234,25 @@ resolve_artifact() {
     return 0
   fi
 
-  # 2. Highest-N numbered artifact — sort numerically on trailing -N suffix.
-  #    ls is required here: find output is unordered and we need numeric sort
-  #    on the -N suffix. Artifact basenames are controlled (no special chars).
-  local newest=""
-  # shellcheck disable=SC2012  # ls needed for numeric-sort pipeline on controlled names
+  # 2. Highest-N numbered artifact. A glob walk rather than `ls | sort -n`: it survives a
+  #    filename the shell would word-split, and it costs no forks on a path taken once per
+  #    stage completion.
+  #
   #    The stem must be EXACTLY <base>: the glob alone accepts any trailing -<digits>, so
   #    `qa-notes-3.md` would answer for basename `qa`. Harmless while every basename was a
   #    long canonical word; the short aliases make it reachable.
-  newest=$(ls -1 "${ctx}/${base}-"*.md 2> /dev/null \
-    | grep -E "/${base}-[0-9]+\.md$" \
-    | sed -E 's/.*-([0-9]+)\.md$/\1 &/' \
-    | grep -E '^[0-9]+ ' \
-    | sort -k1,1 -n \
-    | tail -1 \
-    | sed -E 's/^[0-9]+ //')
+  local newest="" newest_n=-1 cand cand_base cand_n
+  for cand in "${ctx}/${base}-"*.md; do
+    [[ -f "$cand" ]] || continue
+    cand_base="${cand##*/}"
+    [[ "$cand_base" =~ ^${base}-([0-9]+)\.md$ ]] || continue
+    # 10# forces base 10: a `-08` suffix is an octal literal to bash arithmetic and aborts.
+    cand_n=$((10#${BASH_REMATCH[1]}))
+    if [[ "$cand_n" -gt "$newest_n" ]]; then
+      newest_n="$cand_n"
+      newest="$cand"
+    fi
+  done
   if [[ -n "$newest" && -f "$newest" ]]; then
     printf '%s' "$newest"
     return 0

@@ -86,13 +86,14 @@ run_self_tests() {
   else
     # ---- t2b: no image tool → no capture is CLAIMED. The regression this replaces:
     # exit 2 was read as success, so a manifest row named a .png that does not exist.
-    local ghost=0 mf2
+    local ghost=0 mf2 mfdir
     mf2=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
     if [ -n "$mf2" ]; then
+      mfdir=$(dirname "$mf2")
       while IFS='|' read -r _ _ _ pth _; do
         pth=$(printf '%s' "$pth" | tr -d ' ')
         case "$pth" in
-          dv-*) [ -e "$(dirname "$mf2")/$pth" ] || ghost=1 ;;
+          dv-*) [ -e "$mfdir/$pth" ] || ghost=1 ;;
         esac
       done < "$mf2"
     fi
