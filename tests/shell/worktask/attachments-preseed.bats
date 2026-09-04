@@ -2,11 +2,11 @@
 # Behavioural tests for skills/worktask/scripts/attachments-preseed.sh — the FN
 # pre-gate Conductor-attachments writer.
 #
-# The load-bearing test in this file is P12: it re-derives the expected content
-# from the canonical template document (conductor-attachments.md) rather than
-# from a copy held here, so a doc edit that the script does not follow turns
-# this file red. That is the guard the deleted-mock class of defect needs; the
-# rest pin field resolution, the documented defaults, and the failure paths.
+# The script reads both templates from conductor-attachments.md at run time, so
+# there is no copy left to drift. P12/P12b pin the refusal that replaces the old
+# drift guard — a broken install must not emit a half-rendered attachment — and
+# P12c pins the emission rule itself against a fixture document. The rest pin
+# field resolution, the documented defaults, and the failure paths.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/attachments-preseed.sh"
@@ -219,44 +219,108 @@ EOF
   assert_success
 }
 
-@test "P12: rendered output still matches conductor-attachments.md's template parts" {
-  _seed_dr
-  _seed_qa
-  _render
+# Builds a minimal plugin fixture holding the script, the siblings it sources,
+# and whatever template document $1 puts in place — nothing else. Prints the
+# path of the script copy so the arm can invoke it out of tree.
+_fixture_with_doc() {
+  local doc_content="$1" fx="$BATS_TEST_TMPDIR/fx"
+  mkdir -p "$fx/skills/worktask/scripts" "$fx/skills/worktask/references" \
+           "$fx/skills/shared/lib"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$fx/skills/worktask/scripts/"
+  cp "$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh" "$fx/skills/worktask/scripts/"
+  cp "$PLUGIN_ROOT/skills/shared/lib/audit-lib.sh" "$fx/skills/shared/lib/"
+  [ "$doc_content" = "__omit__" ] \
+    || printf '%s' "$doc_content" > "$fx/skills/worktask/references/conductor-attachments.md"
+  printf '%s\n' "$fx/skills/worktask/scripts/attachments-preseed.sh"
+}
+
+# Replaces the former drift test: the templates are no longer copied into the
+# script, so there is nothing left to drift. What has to hold instead is that a
+# broken install refuses loudly rather than emitting a half-rendered attachment.
+@test "P12: a missing template document is refused, and nothing is written" {
+  local script
+  script="$(_fixture_with_doc __omit__)"
+  run bash "$script" --workdir "$WD" --worktask-id wt-1 --branch feature/x \
+    --base-branch main --run-index 0 --no-upstream --uncommitted 0 \
+    --ts 2026-01-01T00:00:00Z
+  assert_failure 2
+  assert_output --partial "plugin install broken"
+  [ ! -e "$WD/$PR_FILE" ]
+  [ ! -e "$WD/$RV_FILE" ]
+  assert_audit_row fn_attachments_preseed_failed --file "$WD/.context/logs/audit.jsonl" \
+    --actor orchestrator --result error \
+    --jq '.metadata.reason == "template_unreadable"'
+}
+
+@test "P12b: a present-but-empty template section is refused the same way" {
+  # The document exists and carries both headings, but one section has no
+  # fenced body — the shape a bad merge or a truncated file produces. An empty
+  # attachment is as useless to the FN agent as a missing one.
+  local script doc
+  doc='# Conductor Attachments
+
+## Template — `PR instructions.md`
+
+~~~markdown
+Body.
+~~~
+
+## Template — `Review request.md`
+
+Nothing fenced here.
+'
+  script="$(_fixture_with_doc "$doc")"
+  run bash "$script" --workdir "$WD" --worktask-id wt-1 --branch feature/x \
+    --base-branch main --run-index 0 --no-upstream --uncommitted 0 \
+    --ts 2026-01-01T00:00:00Z
+  assert_failure 2
+  assert_output --partial "Review request.md"
+  [ ! -e "$WD/$PR_FILE" ]
+  [ ! -e "$WD/$RV_FILE" ]
+}
+
+@test "P12c: the rendered attachment is the document's template parts, verbatim" {
+  # The runtime read has to reproduce the emission rule the document states for
+  # itself — concatenate the fenced bodies in order, adding and dropping
+  # nothing. A dropped blank line between two parts is invisible to a
+  # line-membership check, so this compares the whole body.
+  local script doc
+  doc='# Fixture
+
+## Template — `PR instructions.md`
+
+~~~markdown
+alpha <BRANCH>
+
+~~~
+
+#### Template part 2
+
+~~~markdown
+## beta
+
+gamma
+~~~
+
+## Template — `Review request.md`
+
+~~~markdown
+delta
+~~~
+'
+  script="$(_fixture_with_doc "$doc")"
+  run bash "$script" --workdir "$WD" --worktask-id wt-1 --branch feature/x \
+    --base-branch main --run-index 0 --no-upstream --uncommitted 0 \
+    --ts 2026-01-01T00:00:00Z
   assert_success
+  run cat "$WD/$PR_FILE"
+  assert_output "alpha feature/x
 
-  # Extract the fenced bodies of every `Template part N` block under each
-  # `## Template — ...` heading, in document order — the emission rule in the
-  # doc itself. Placeholder-bearing lines are dropped (their rendered form is
-  # asserted by P2/P3/P6/P7); every remaining line must appear verbatim.
-  local which missing=0 checked=0 line
-  for which in "PR instructions" "Review request"; do
-    local target="$WD/$PR_FILE"
-    [ "$which" = "Review request" ] && target="$WD/$RV_FILE"
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      checked=$((checked + 1))
-      if ! grep -qxF -- "$line" "$target"; then
-        echo "MISSING from $which: $line" >&3
-        missing=$((missing + 1))
-      fi
-    done < <(awk -v want="## Template — \`$which.md\`" '
-      $0 == want {inblk=1; next}
-      # The template bodies contain their own `## ` headings, so the
-      # end-of-section test only applies outside a fence.
-      inblk && !fence && /^## / {inblk=0}
-      inblk && /^~~~markdown$/ {fence=1; next}
-      inblk && fence && /^~~~$/ {fence=0; next}
-      inblk && fence && !/<[A-Z_]+>/ {print}
-    ' "$PLUGIN_ROOT/$DOC")
-  done
+## beta
 
-  # Non-vacuity: an awk that matched nothing would report zero misses.
-  [ "$checked" -ge 60 ] || {
-    echo "template extraction collected only $checked lines" >&3
-    return 1
-  }
-  [ "$missing" -eq 0 ]
+gamma"
+  run cat "$WD/$RV_FILE"
+  assert_output "delta"
 }
 
 @test "P13: --self-test passes and unknown args exit 2 with usage" {
