@@ -122,45 +122,21 @@ append_rows() {
   printf >&2 'append-labels: %d new label(s) -> %s\n' "$written" "$dataset"
 }
 
-self_test() {
-  local tmp rc=0
-  tmp=$(mktemp -d)
-  # Expand tmp now, not at trap time.
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" EXIT
-
-  local ds="$tmp/labels.jsonl"
-  printf 'agents/developer.md\tagents/developer.md\tcompleteness\thigh\t4\t1\tadded Sendable constraint\n' \
-    | append_rows "$ds" "wt-1" "0" "ST" 2>/dev/null
-
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "1" ] || { printf >&2 'FAIL: expected 1 row\n'; rc=1; }
-  jq -e '.category == "completeness" and .target == "agents/developer.md" and .lines_added == 4' \
-    "$ds" >/dev/null || { printf >&2 'FAIL: row fields\n'; rc=1; }
-
-  # Same observation again → still one row (idempotence).
-  printf 'agents/developer.md\tagents/developer.md\tcompleteness\thigh\t4\t1\tadded Sendable constraint\n' \
-    | append_rows "$ds" "wt-1" "0" "ST" 2>/dev/null
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "1" ] || { printf >&2 'FAIL: not idempotent\n'; rc=1; }
-
-  # A different observation appends.
-  printf 'skills/worktask/SKILL.md\tskills/worktask/SKILL.md\tstructure\tmedium\t2\t0\treordered sections\n' \
-    | append_rows "$ds" "wt-1" "0" "ST" 2>/dev/null
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "2" ] || { printf >&2 'FAIL: second row not appended\n'; rc=1; }
-
-  # The same observation in a DIFFERENT worktask is a recurrence, not a duplicate.
-  printf 'agents/developer.md\tagents/developer.md\tcompleteness\thigh\t4\t1\tadded Sendable constraint\n' \
-    | append_rows "$ds" "wt-2" "0" "ST" 2>/dev/null
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "3" ] || { printf >&2 'FAIL: cross-worktask recurrence deduped\n'; rc=1; }
-
-  # Opt-out is honoured by the caller-visible env gate.
-  ( SELF_IMPROVE_LABELS=0 "$0" --worktask-id=wt-3 --dataset="$ds" </dev/null ) >/dev/null 2>&1
-  [ "$(wc -l < "$ds" | tr -d ' ')" = "3" ] || { printf >&2 'FAIL: opt-out wrote rows\n'; rc=1; }
-
-  [ "$rc" -eq 0 ] && printf >&2 'append-labels: self-test OK\n'
-  return "$rc"
-}
-
 if [ "$SELF_TEST" -eq 1 ]; then
+  # Sourced HERE, not at the top: the harness is test code the production path
+  # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/append-labels-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=append-labels-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'append-labels: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
   self_test || exit 2
   exit 0
 fi

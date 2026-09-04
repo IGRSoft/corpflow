@@ -256,66 +256,26 @@ gitleaks_scan() {
 }
 
 # ---------------------------------------------------------------------------
-# run_self_test
-# Creates a temp dir, plants a fake secret and a clean file, then verifies:
-#   - exit code is 1 (findings present)
-#   - the planted file appears in output
-#   - the clean file does NOT appear in output
-#   - every output line has at least 4 colon-delimited fields (no code excerpts)
-# ---------------------------------------------------------------------------
-run_self_test() {
-  local tmp
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-
-  # Happy path: planted fake AWS key (Critical hit expected).
-  printf 'export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n' > "$tmp/secrets.env"
-  # Edge case: clean file (must produce zero findings).
-  printf 'greeting=hello\nname=world\n' > "$tmp/clean.env"
-  # Additional Critical: fake private key header.
-  # Use %s to avoid printf treating leading dashes as a flag on macOS.
-  printf '%s\n' '-----BEGIN RSA PRIVATE KEY-----' 'MIIEowIBAAK...' '-----END RSA PRIVATE KEY-----' > "$tmp/id_rsa.conf"
-
-  # Suppress ERR trap: exit 1 from the subprocess means findings found (expected).
-  trap - ERR
-  local output exit_code
-  exit_code=0
-  output="$(bash "${BASH_SOURCE[0]}" --path "$tmp" 2> /dev/null)" || exit_code=$?
-
-  if [[ $exit_code -ne 1 ]]; then
-    printf >&2 'self-test FAIL: expected exit 1, got %d\noutput:\n%s\n' "$exit_code" "$output"
-    exit 1
-  fi
-
-  if ! printf '%s\n' "$output" | grep -q 'secrets.env'; then
-    printf >&2 'self-test FAIL: secrets.env not in findings\noutput:\n%s\n' "$output"
-    exit 1
-  fi
-
-  if printf '%s\n' "$output" | grep -q 'clean.env'; then
-    printf >&2 'self-test FAIL: clean.env appeared in findings\noutput:\n%s\n' "$output"
-    exit 1
-  fi
-
-  # Every non-empty output line must have >= 4 colon-separated fields.
-  local line field_count
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    field_count="$(printf '%s' "$line" | awk -F: '{print NF}')"
-    if [[ "$field_count" -lt 4 ]]; then
-      printf >&2 'self-test FAIL: malformed line (< 4 fields): %s\n' "$line"
-      exit 1
-    fi
-  done <<< "$output"
-
-  printf 'scan-secrets: self-test OK\n'
-  exit 0
-}
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-[[ $SELF_TEST -eq 1 ]] && run_self_test
+if [[ $SELF_TEST -eq 1 ]]; then
+  # Sourced HERE, not at the top and only on this branch: the harness is test
+  # code the scan path never runs, and a production run must not fail on its
+  # absence. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/scan-secrets-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=scan-secrets-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'scan-secrets: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
+  run_self_test
+fi
 
 if [[ ! -d "$SCAN_PATH" ]]; then
   printf >&2 'scan-secrets: path not a directory: %s\n' "$SCAN_PATH"

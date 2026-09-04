@@ -316,21 +316,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Sourced HERE, not at the top: the harness is test code the production path
-# never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
-# `.` builtin is a special-builtin error that exits the shell immediately,
-# bypassing an `if ! . …` guard entirely.
-SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/validate-export-selftest.sh"
-if [ -r "$SELFTEST_LIB_PATH" ]; then
-  # shellcheck source=validate-export-selftest.sh
-  # shellcheck disable=SC1090
-  . "$SELFTEST_LIB_PATH"
-else
-  printf >&2 'validate-export: self-test harness unreachable at %s — plugin install broken\n' \
-    "$SELFTEST_LIB_PATH"
-  exit 2
+if [[ "${SELF_TEST_MODE}" -eq 1 ]]; then
+  # Sourced HERE, not at the top and only on this branch: the harness is test
+  # code the scan path never runs, and a production run must not fail on its
+  # absence. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/validate-export-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=validate-export-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'validate-export: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
+  _self_test
 fi
-[[ "${SELF_TEST_MODE}" -eq 1 ]] && _self_test
 
 [[ -d "${DIR}" ]] || {
   printf >&2 'error: directory not found: %s\n' "${DIR}"
