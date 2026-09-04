@@ -106,82 +106,26 @@ install_hook() {
   fi
 }
 
-# ---------- Self-test ----------
-self_test() {
-  local self_path
-  self_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-  local td
-  td=$(mktemp -d -t hook-install-XXXXXX)
-  trap "rm -rf '$td'" EXIT
-
-  mkdir -p "$td/plugin/hooks" "$td/plugin/.claude-plugin"
-  cat > "$td/plugin/hooks/state-merge.sh" <<'HOOK'
-#!/usr/bin/env bash
-echo "state-merge stub"
-HOOK
-  chmod +x "$td/plugin/hooks/state-merge.sh"
-
-  cat > "$td/plugin/.claude-plugin/plugin.json" <<'JSON'
-{"name":"test","hooks":{"SubagentStop":[{"hooks":[{"type":"command","command":"state-merge.sh"}]}]}}
-JSON
-
-  local project="$td/project"
-  mkdir -p "$project"
-  cd "$project"
-
-  # Test 1: fresh install
-  CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1
-  if [[ -x ".claude/hooks/state-merge.sh" ]]; then
-    echo "self-test: fresh install: ok"
-  else
-    echo "self-test: fresh install: FAIL" >&2; exit 1
-  fi
-
-  # Test 2: idempotent re-run
-  local out
-  out=$(CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1)
-  if echo "$out" | grep -q "idempotent"; then
-    echo "self-test: idempotent re-run: ok"
-  else
-    echo "self-test: idempotent re-run: FAIL" >&2; exit 1
-  fi
-
-  # Test 3: check mode
-  if CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" --check >/dev/null 2>&1; then
-    echo "self-test: check mode (installed): ok"
-  else
-    echo "self-test: check mode (installed): FAIL" >&2; exit 1
-  fi
-
-  # Test 4: check mode detects missing
-  rm -f .claude/hooks/state-merge.sh
-  if CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" --check >/dev/null 2>&1; then
-    echo "self-test: check mode (missing): FAIL (should have failed)" >&2; exit 1
-  else
-    echo "self-test: check mode (missing): ok"
-  fi
-
-  # Test 5: a non-executable dst is backed up, not silently destroyed
-  if [[ -e ".claude/hooks/state-merge.sh.bak" ]]; then
-    echo "self-test: backup on overwrite: FAIL (fresh install left a stray .bak)" >&2; exit 1
-  fi
-  printf 'CUSTOMIZED\n' > .claude/hooks/state-merge.sh
-  chmod -x .claude/hooks/state-merge.sh
-  CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" >/dev/null 2>&1
-  if [[ -f ".claude/hooks/state-merge.sh.bak" ]] \
-     && [[ "$(cat .claude/hooks/state-merge.sh.bak)" == "CUSTOMIZED" ]]; then
-    echo "self-test: backup on overwrite: ok"
-  else
-    echo "self-test: backup on overwrite: FAIL" >&2; exit 1
-  fi
-
-  echo "self-test: ALL PASS"
-}
-
 # ---------- main ----------
 case "${1:-}" in
   --check)     check_installation ;;
-  --self-test) self_test ;;
+  --self-test)
+    # Sourced HERE, not at the top: the harness is test code the production path
+    # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+    # `.` builtin is a special-builtin error that exits the shell immediately,
+    # bypassing an `if ! . …` guard entirely.
+    SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/hook-install-selftest.sh"
+    if [ -r "$SELFTEST_LIB_PATH" ]; then
+      # shellcheck source=hook-install-selftest.sh
+      # shellcheck disable=SC1090
+      . "$SELFTEST_LIB_PATH"
+    else
+      printf >&2 'hook-install: self-test harness unreachable at %s — plugin install broken\n' \
+        "$SELFTEST_LIB_PATH"
+      exit 2
+    fi
+    self_test
+    ;;
   -h|--help)
     sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
     exit 0
