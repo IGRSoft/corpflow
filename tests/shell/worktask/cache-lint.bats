@@ -248,6 +248,22 @@ _pl_artifact() {  # _pl_artifact <path> <extra-headings...>
   assert_output ""
 }
 
+@test "failure: the ENV-expansion report names the variables, never their values" {
+  # The message was in double quotes, so a report about per-call values leaked
+  # the running shell's own $USER, $PWD and hostname into the lint output.
+  cat > "$WD/forbidden-env.jsonl" <<'EOF'
+{"worktask_id":"wt5","stage":"PL","prompt":"<<<contract-reminder>>>\nrun as $USER\n<<<contract-reminder>>>\n<<<worktask-header>>>\nworktask_id=wt5\n<<<worktask-header>>>\n<<<stage-contract>>>\nPL contract\n<<<stage-contract>>>"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-env.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *'ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found'* ]] \
+    || fail "expected the literal variable names, got: $stderr"
+  local me
+  me="$(id -un)"
+  [[ "$stderr" != *"$me"* ]] || fail "the report leaked the invoking user: $stderr"
+  [[ "$stderr" != *"$PWD"* ]] || fail "the report leaked the working directory: $stderr"
+}
+
 @test "happy: prefix-lint with no forbidden tokens still reports no drift (REQ-3/AC-4)" {
   run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-clean.jsonl"
   assert_success

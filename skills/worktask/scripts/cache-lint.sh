@@ -354,39 +354,53 @@ forbidden_token_scan() {
   local section_text="$1" label="$2"
   local rc=0
 
+  # Six `grep` forks per section used to run here, three sections per log line —
+  # eighteen of the ~29 forks this lint spent on every line. The shell's own
+  # regex engine answers the same questions with none. `nocasematch` covers the
+  # two classes that were `grep -i`, saved and restored because it also changes
+  # how every `case` in this shell matches.
+  local _cf_ci=0
+  shopt -q nocasematch && _cf_ci=1
+  shopt -s nocasematch
+
   # 1. ISO-8601 timestamp (date/now render), e.g. 2026-07-05T15:15:39Z
-  if grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$section_text"; then
+  if [[ "$section_text" =~ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
     echo "forbidden-token-lint: $label: ISO-8601 timestamp found" >&2
     rc=1
   fi
 
   # 2. ENV expansions that vary per call (unresolved $VAR / ${VAR} literals,
   #    or a shell already substituted a per-user path under one of these).
-  if grep -qE '\$(HOSTNAME|USER|PWD|RANDOM)\b|\$\{(HOSTNAME|USER|PWD|RANDOM)\}' <<< "$section_text"; then
-    echo "forbidden-token-lint: $label: ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found" >&2
+  if [[ "$section_text" =~ \$(HOSTNAME|USER|PWD|RANDOM)([^A-Za-z0-9_]|$) \
+     || "$section_text" =~ \$\{(HOSTNAME|USER|PWD|RANDOM)\} ]]; then
+    # Single-quoted: this message names the four variables, and double quotes
+    # made it print the running shell's own $USER and $PWD into a lint report
+    # about leaked per-call values.
+    echo "forbidden-token-lint: $label:"' ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found' >&2
     rc=1
   fi
 
   # 3. Random / request IDs — UUID v4 shape.
-  if grep -qiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' <<< "$section_text"; then
+  if [[ "$section_text" =~ [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} ]]; then
     echo "forbidden-token-lint: $label: UUID found" >&2
     rc=1
   fi
 
   # 4. $RANDOM literal (bash builtin) appearing unresolved in the text.
-  if grep -qE '\$RANDOM\b' <<< "$section_text"; then
+  if [[ "$section_text" =~ \$RANDOM([^A-Za-z0-9_]|$) ]]; then
     echo "forbidden-token-lint: $label: literal \$RANDOM found" >&2
     rc=1
   fi
 
   # 5. Retry counters (belong in section [6], never [1]/[2]/[4]).
-  if grep -qiE 'retry[_-]?count[[:space:]]*[:=][[:space:]]*[0-9]+|attempt[[:space:]]*#?[0-9]+' <<< "$section_text"; then
+  if [[ "$section_text" =~ retry[_-]?count[[:space:]]*[:=][[:space:]]*[0-9]+ \
+     || "$section_text" =~ attempt[[:space:]]*#?[0-9]+ ]]; then
     echo "forbidden-token-lint: $label: retry/attempt counter found (belongs in section [6])" >&2
     rc=1
   fi
 
   # 6. File mtime-shaped values (epoch seconds/millis label or "mtime:").
-  if grep -qiE 'mtime[[:space:]]*[:=][[:space:]]*[0-9]{9,13}\b' <<< "$section_text"; then
+  if [[ "$section_text" =~ mtime[[:space:]]*[:=][[:space:]]*[0-9]{9,13}([^0-9]|$) ]]; then
     echo "forbidden-token-lint: $label: file mtime found" >&2
     rc=1
   fi
@@ -397,6 +411,7 @@ forbidden_token_scan() {
   #    when scanning [1]/[2] (see prefix_lint call site) — a name appearing in
   #    its OWN [4] is expected and not scanned here.
 
+  [ "$_cf_ci" -eq 1 ] || shopt -u nocasematch
   return $rc
 }
 
@@ -414,10 +429,18 @@ prefix_lint() {
   local rc=0
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    local wid stage prompt
-    wid=$(jq -r '.worktask_id' <<< "$line")
-    stage=$(jq -r '.stage' <<< "$line")
-    prompt=$(jq -r '.prompt' <<< "$line")
+    # One jq per line, not three: the fields come out in a fixed order, and the
+    # prompt — the only multi-line one — is whatever follows the first two lines.
+    # The `X` sentinel keeps command substitution from eating the separator that
+    # an EMPTY prompt is reduced to, which would shift `stage` into `prompt`.
+    local fields wid stage prompt
+    fields=$(jq -r '.worktask_id, .stage, .prompt' <<< "$line"; printf 'X')
+    fields="${fields%X}"
+    wid="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    stage="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
+    # Three separate substitutions stripped every trailing newline from each
+    # field; keep that, so a prompt is compared the same way it always was.
+    while [ "${prompt%$'\n'}" != "$prompt" ]; do prompt="${prompt%$'\n'}"; done
 
     local s1 s2 s4
     s1=$(extract_section "$prompt" "contract-reminder")
@@ -436,10 +459,9 @@ prefix_lint() {
       rc=1
     fi
 
-    # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]).
-    local widsafe stagesafe
-    widsafe=$(printf '%s' "$wid" | tr -c 'a-zA-Z0-9._-' '_')
-    stagesafe=$(printf '%s' "$stage" | tr -c 'a-zA-Z0-9._-' '_')
+    # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]). Pattern
+    # substitution rather than `tr`, which cost two forks on every line.
+    local widsafe="${wid//[!a-zA-Z0-9._-]/_}" stagesafe="${stage//[!a-zA-Z0-9._-]/_}"
 
     local f1="$td/wf-${widsafe}-s1"
     local f2="$td/wf-${widsafe}-s2"
@@ -449,11 +471,11 @@ prefix_lint() {
       printf '%s' "$s1" > "$f1"
       printf '%s' "$s2" > "$f2"
     else
-      if [[ "$s1" != "$(cat "$f1")" ]]; then
+      if [[ "$s1" != "$(<"$f1")" ]]; then
         echo "prefix-lint: worktask_id=$wid stage=$stage: section [1] contract-reminder DRIFT" >&2
         rc=1
       fi
-      if [[ "$s2" != "$(cat "$f2")" ]]; then
+      if [[ "$s2" != "$(<"$f2")" ]]; then
         echo "prefix-lint: worktask_id=$wid stage=$stage: section [2] worktask-header DRIFT" >&2
         rc=1
       fi
@@ -461,7 +483,7 @@ prefix_lint() {
 
     if [[ ! -f "$f4" ]]; then
       printf '%s' "$s4" > "$f4"
-    elif [[ "$s4" != "$(cat "$f4")" ]]; then
+    elif [[ "$s4" != "$(<"$f4")" ]]; then
       echo "prefix-lint: worktask_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
       rc=1
     fi
