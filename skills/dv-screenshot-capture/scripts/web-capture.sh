@@ -333,27 +333,24 @@ OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
 # ---------------------------------------------------------------------------
 # Audit helper (mirrors cli-fallback.sh idiom exactly)
 # ---------------------------------------------------------------------------
+# Shared audit-row appender — one writer, one key order, one symlink refusal for every
+# audit.jsonl in the plugin. Resolved from this file's own directory: the capture adapters
+# are invoked by path from the skill, never through $PATH. A missing library is a broken
+# install rather than a runtime condition, so this fails closed instead of capturing
+# without evidence.
+_AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'web-capture: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
+# audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
+# the shared appender.
 audit() {
-  local action="$1"
-  local result="$2"
-  local metadata="$3"
-  local ts
-  ts="$(date -u +%FT%TZ)"
-  if command -v jq > /dev/null 2>&1; then
-    jq -nc \
-      --arg ts "$ts" \
-      --arg actor "web-capture-adapter" \
-      --arg action "$action" \
-      --arg subject "${WORKTASK_ID}/${SLUG}" \
-      --arg result "$result" \
-      --argjson metadata "$metadata" \
-      '{ts:$ts, actor:$actor, action:$action, subject:$subject, result:$result, metadata:$metadata}' \
-      >> "$AUDIT_LOG"
-  else
-    # jq absent — emit minimal JSON manually (safe: all values are controlled)
-    printf '{"ts":"%s","actor":"web-capture-adapter","action":"%s","subject":"%s/%s","result":"%s"}\n' \
-      "$ts" "$action" "$WORKTASK_ID" "$SLUG" "$result" >> "$AUDIT_LOG"
-  fi
+  corpflow_audit_row --file "$AUDIT_LOG" --actor "web-capture-adapter" \
+    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
 }
 
 # Emit the platform-fallback audit row + the contract line, then hand the
