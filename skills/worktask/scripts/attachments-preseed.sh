@@ -73,11 +73,25 @@ done
 
 # ---------------------------------------------------------------- audit ----
 
+# The row is built by jq, not printf: this was the only one of the plugin's audit
+# emitters assembling JSON by hand, so a quote or backslash reaching $reason emitted
+# a line jq could not parse and every later reader of audit.jsonl stopped at it.
+# Key order is pinned by construction. Without jq the reason is reduced to the
+# identifier alphabet the closed reason set already uses, which cannot break the
+# literal — degrading the value beats emitting a corrupt row.
 audit_failed() {
-  local reason="$1" dir="$WORKDIR/.context/logs"
+  local reason="$1" dir="$WORKDIR/.context/logs" row
   mkdir -p "$dir"
-  printf '{"actor":"orchestrator","action":"fn_attachments_preseed_failed","subject":"FN%s","result":"error","reason":"%s"}\n' \
-    "${RUN_INDEX:-0}" "$reason" >> "$dir/audit.jsonl"
+  if command -v jq >/dev/null 2>&1; then
+    row=$(jq -cn --arg s "FN${RUN_INDEX:-0}" --arg r "$reason" \
+      '{actor:"orchestrator", action:"fn_attachments_preseed_failed",
+        subject:$s, result:"error", reason:$r}') || return 0
+  else
+    local safe="${reason//[^A-Za-z0-9_.-]/_}"
+    row=$(printf '{"actor":"orchestrator","action":"fn_attachments_preseed_failed","subject":"FN%s","result":"error","reason":"%s"}' \
+      "${RUN_INDEX:-0}" "$safe")
+  fi
+  printf '%s\n' "$row" >> "$dir/audit.jsonl"
 }
 
 # ------------------------------------------------------------ resolvers ----

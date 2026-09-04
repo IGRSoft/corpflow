@@ -269,3 +269,18 @@ EOF
   [[ "$stderr" == *"unknown arg: --bogus"* ]]
   [[ "$stderr" == *"usage:"* ]]
 }
+
+# The emitter was the only one in the plugin building JSON with printf, so a quote
+# in $reason emitted a line jq cannot parse — and one corrupt line stops every later
+# reader of audit.jsonl. The reason is driven through the exit-3 path, which is the
+# only caller, with a quoting-hostile --run-index standing in for a hostile reason.
+@test "P-audit: the failure row is valid JSON even when its fields carry quotes" {
+  run_script_env --cwd "$WD" --unset FN_BASE_REF --separate-stderr \
+    "$SCRIPT" --workdir "$WD" --worktask-id wt-1 --branch feature/x \
+    --run-index '0" ,"injected":"x'
+  assert_failure 3
+  run jq -e . "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run jq -r '.injected // "absent"' "$WD/.context/logs/audit.jsonl"
+  assert_output "absent"
+}
