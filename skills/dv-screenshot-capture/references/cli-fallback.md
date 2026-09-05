@@ -2,7 +2,7 @@
 
 Spec for `platform = "all"` and for the final fallback of the `apple`, `web`, and `android` adapters when their backing tools are unavailable. `scripts/cli-fallback.sh` is the executable implementation — read this file when debugging it or reproducing a step by hand.
 
-Tool chain, in priority order: `silicon` (annotated diff PNG) → `magick`/ImageMagick (plain text-card PNG) → `.txt` placeholder (no visual, but evidence-of-attempt).
+Tool chain, in priority order: `silicon` (annotated diff PNG) → `magick`/ImageMagick (plain text-card PNG) → loud failure with no file written (see § Floor).
 
 ## silicon
 
@@ -48,23 +48,23 @@ magick \
 - `caption:` auto-wraps to the canvas; `-size 1200x800` keeps typical diffs under 200 KB.
 - ImageMagick 6.x ships `convert` instead of `magick`. Install where absent: `brew install imagemagick` / `apt-get install imagemagick`.
 
-## .txt placeholder (floor)
+## Floor — loud failure, no placeholder
 
-Written when both `silicon` and `magick` are absent. The file IS the evidence artifact and is committed; the return shape is `ok: false`, `error: "tool_missing"`, and screenshots.md records it so DV completion counts it as evidence-of-attempt. `scripts/cli-fallback.sh` writes it; the schema is:
+When no image tool produced a usable PNG, `scripts/cli-fallback.sh` writes **no file**. It emits the
+adapter contract line with `ok=false` and exits non-zero, distinguishing two conditions that have
+different remedies:
 
-```
-# Screenshot placeholder — <slug>
-# Worktask: <worktask_id>
-# Run index: <N>
-# Captured: <ISO-8601 UTC>
-# Platform: <platform>
-# Reason: tool_missing — silicon and magick both absent on PATH
-# Tools checked: silicon, magick
+| Condition | `error` | Exit | Remedy |
+|---|---|---|---|
+| No image tool on PATH (or not a git repository) | `tool_missing` | 2 | Install `silicon` or ImageMagick |
+| A tool ran but produced no usable PNG | `render_failed` | 3 | Read the stderr warning from that tool's step |
 
-git diff origin/master...HEAD (first 100 lines):
----
-<raw diff text, 100 line max>
-```
+The audit row is `screenshot_capture_failed` (result `fail`) carrying `reason` and a
+`tools_checked` string that names each tool as present or `(absent)`.
+
+An earlier revision wrote a `.txt` diff dump here. It was removed because it satisfies an existence
+check without being visual evidence: `attach-visual-evidence.sh` classified it as a `placeholder`
+capture and DV completion counted it as evidence-of-attempt.
 
 ## Redaction before capture
 

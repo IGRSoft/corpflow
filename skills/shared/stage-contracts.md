@@ -78,7 +78,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command — plus actual code changes | git diff non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command — plus actual code changes | git diff non-empty + `handoff.files_touched` obeys `#files-touched` (post-merge repo-relative, capped at `FILES_TOUCHED_MAX`) + `.context/logs/build-*.log` shows success |
 | **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
 | **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
@@ -171,6 +171,8 @@ Canonical contract for the pipeline's end-of-stage asking logic. Every other fil
 
 Before it hands off, every stage runs one closing pass over its own output and asks what it decided on the user's behalf that the user would rather decide. Each surviving question becomes a typed `open_questions[]` item (§ Item shape).
 
+**Every template that shows `open_questions[]` inherits this rule, including its vocabulary:** an observation with nothing to answer is not a sweep item and goes to `follow-ups` (§ A risk-shaped observation is not a sweep item).
+
 **Mandatory for every stage.** A stage with nothing to ask emits an explicit `open_questions: []` plus a one-line "nothing to elicit" statement under its `## elicitation-sweep` heading — a mandatory H2 anchor in every artifact (`handoff-protocol.md#anchor-allow-list`). Silence is a contract violation, because an omitted sweep and an empty one are otherwise indistinguishable.
 
 #### Agents emit; the orchestrator asks
@@ -208,6 +210,17 @@ Schemas: `handoff-protocol.md#frontmatter-schema` `$defs/SweepItem` (full) and `
 `summary` is **optional** on the stub and canonical in the artifact body: the render reads the question text from the `ref` anchor, whose existence `handoff-harness.sh` verifies. Optional, not forbidden — the stub is the only accepted item shape, so an optional field needs no discriminator to keep it apart from anything else.
 
 The driver is the **200-token budget on the whole `handoff:` block**, enforced by `handoff-harness.sh` over the extracted frontmatter. It is a property of the block, not of the sweep: on a review stage `key_decisions` dominates, and shortening the stub alone will not bring an over-budget block back under.
+
+#### A risk-shaped observation is not a sweep item
+
+The class enum is exactly `decision | escalate` and stays that way. An observation that records a
+risk without asking anything — no options, nothing to answer, nothing to gate — belongs in the
+artifact's mandatory `follow-ups` anchor, which every development and review artifact already
+carries. **Neither sweep class is a home for it.** Filing one as `escalate` to make it visible is
+the mis-file that once nearly triggered a destructive action against a sibling's live stack; filing
+one as `decision` puts an unanswerable question in front of the gate. If it has options and a
+recommendation, it is a sweep item; if it is something the next run should look at, it is a
+follow-up.
 
 #### A re-emitted stub carries its answer forward
 
@@ -411,6 +424,46 @@ handoff:
 
 Prev→this label: `AR→TL` (or `PL→TL` when AR was excluded). Skip-exploration short-circuit applies.
 
+### #files-touched — the changed-file list
+
+Every stage that emits `handoff.files_touched` emits it in **one** shape. Seven of nine budgeted
+stages once failed the token budget on this field alone and each invented its own truncation, so
+the shape is fixed here rather than left to the emitter.
+
+#### Semantics — post-merge repo-relative
+
+A path is written as it will read **after** this work
+merges: relative to the repository root, never to a worktree, and never absolute. During a run the
+file physically lives under the emitting task's `metadata.workspace_path`, so any consumer that
+wants to open it resolves `<workspace_path>/<path>`. That resolution base is the answer to "where
+is this file right now"; the recorded value is the answer to "what did this run change", and the
+two differ for the whole life of a worktree. No script enforces existence today — enforcement waits
+until the convention has run a full pipeline (see the DV artifact's `follow-ups`).
+
+#### Cap — `FILES_TOUCHED_MAX = 10`
+
+Emit the first ten repo-relative paths, then, when the full set
+is larger, exactly one final entry of the literal form `+ <count> more`:
+
+```yaml
+  files_touched:
+    - skills/worktask/scripts/state-patch.sh
+    - skills/worktask/scripts/handoff-harness.sh
+    - "+ 7 more"
+```
+
+Ten paths plus the marker cost 33 proxy tokens of the 200-token discretionary budget. The constant
+lives here and in `handoff-harness.sh`; the budget checker gains no second block extractor and no
+second cap constant, because the list stays inside the discretionary count rather than being
+excluded from it. `handoff-harness.sh --validate-frontmatter` fails a list longer than the cap
+without a marker, a marker that is not last, and more than one marker.
+
+#### The marker obliges the body
+
+**Whenever the marker is present**, the artifact's own changed-files body section carries the FULL
+set and is marked authoritative **in the same edit** — the frontmatter is an excerpt, and an
+excerpt nobody can complete is the ad-hoc truncation this convention replaces.
+
 ### #tpl-dv — Development (developer)
 
 ```yaml
@@ -419,7 +472,7 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
-  files_touched:
+  files_touched:              # see #files-touched
     - path/to/file1.md
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"

@@ -1168,3 +1168,55 @@ _bs_no_jq_path() {
   run _bs_row
   assert_output --partial '"diff_unreadable"'
 }
+
+# --- staging (R-3.2) ---------------------------------------------------------
+
+# seed_repo — a repo with one committed file, ready to dirty.
+seed_repo() {
+  git init -q .
+  printf 'a\n' > a.txt
+  printf 'x\n' > b.txt
+  git add a.txt b.txt
+  git -c user.email=a@b.c -c user.name=t commit -q -m base
+}
+
+@test "staging: a clean worktree passes" {
+  cd "$WD"
+  seed_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output --partial "no file is both staged and modified again"
+}
+
+@test "staging: a merely unstaged modification passes — it is the normal pre-git-add state" {
+  cd "$WD"
+  seed_repo
+  printf 'edit\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+}
+
+@test "staging: a file staged and then edited again blocks and names the file" {
+  cd "$WD"
+  seed_repo
+  printf 'edit\n' >> b.txt
+  git add b.txt
+  printf 'again\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "b.txt"
+  refute_output --partial "a.txt"
+}
+
+@test "staging: the composite command fails on the same condition" {
+  cd "$WD"
+  seed_repo
+  mk_attachments
+  mk_body
+  printf 'edit\n' >> b.txt
+  git add b.txt
+  printf 'again\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  assert_failure
+  assert_output --partial "staged then modified again"
+}

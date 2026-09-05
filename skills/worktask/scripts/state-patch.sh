@@ -87,10 +87,16 @@
 # @arg --self-test          Run the built-in self-test and exit.
 # @arg -h | --help          Show this header.
 #
-# @exitcode 0   Patch applied (or already idempotent; or artifact absent / state absent).
+# @exitcode 0   Patch applied (or already idempotent; or artifact absent; or state absent on
+#               every path EXCEPT --facts; or a --facts payload that was legitimately empty).
 # @exitcode 1   Internal error (jq merge failed; use --log to inspect), unsupported ledger
-#               version, or a ledger op rejected for an unknown/malformed task id.
-# @exitcode 2   DISK_MIN_GB hard-halt triggered (caller must remediate before retrying).
+#               version, a ledger op rejected for an unknown/malformed task id, or --facts
+#               with no ledger at --state (that write landed nothing and says so).
+# @exitcode 2   DISK_MIN_GB hard-halt (caller must remediate before retrying), OR a --facts
+#               payload that was refused whole (bad JSON, unknown key, non-array value) with
+#               state.json byte-unchanged, OR a --facts payload that PARTIALLY succeeded: the
+#               valid items were persisted and the rejected ones are named on stderr. Read
+#               stderr to tell them apart — a partial success is the only exit 2 that wrote.
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
 #               An agent patching the artifact it just wrote and finding nothing on disk is a
 #               real failure; every other unresolved case keeps the exit-0 no-op contract.
@@ -139,6 +145,14 @@ REPLAY_SIDE_EFFECT_STAGES="FN,RE"
 # Set by _lock_acquire so the EXIT trap and _lock_release know which dir to remove.
 _LOCK_DIR=""
 _LOCK_HELD=""
+
+# Set when a --facts payload carried no items at all — the sanctioned empty sweep.
+FACTS_EMPTY_NOOP=0
+
+# Set when --facts dropped at least one item. A partially accepted payload persists its valid
+# remainder AND exits non-zero: every caller branches on exit status, so a silent 0 would hide
+# the rejection from all of them.
+FACTS_REJECTED=0
 
 # ---------- Usage ----------
 usage() {
@@ -745,74 +759,68 @@ _FACTS_UNION_FILTER='
            then .tests_added = (((.tests_added // []) + $f.tests_added) | _union_scalar)
            else . end))'
 
-# Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
-# union filter would otherwise persist an array no downstream reader can parse.
-# open_questions is held to the FULL sweep stub (.id, .class, .ref, .blocks_next_stage), not just
-# .id: a partial
-# item reaches the FN render with no anchor to resolve its options[] from, and the union would
-# have already replaced the incumbent object that did carry one. decisions stays id-only.
-# The three predicates come from sweep-stub-lib.sh and are passed in as jq arguments, never
-# spliced into the filter text — a spliced regex would make the jq program caller-controlled.
-# Each defect gets its own message: "bad shape" names no cause the caller can act on.
-_FACTS_VALIDATE_FILTER='
+# Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
+# refusal, `clean` carries only the items that passed, `rejects` names each dropped item and
+# why. One bad class value used to discard the entire write — decisions, changed files and
+# every valid sweep stub in the same object — which is how a stage lost work it had done.
+#
+# Structural problems stay whole-payload: a non-object, an empty object, an unknown key, or a
+# key whose value is not an array. In those cases the caller is writing to a slot that does
+# not exist or in a shape nothing can be salvaged from, so no part of it can be trusted to
+# land where it was meant to. Everything item-shaped is per-item.
+#
+# Predicates arrive as jq arguments (never spliced into the program text) for the same reason
+# the shape gate did it: a spliced regex would make the program caller-controlled.
+_FACTS_PARTITION_FILTER='
       def _allowed: ["decisions","files_modified","open_questions","tests_added"];
-      if type != "object" then "must be a JSON object"
-      elif (keys | length) == 0 then "object has no keys"
-      else
-        (keys - _allowed) as $unknown
-        | [ to_entries[]
-            | select(.key == "decisions")
-            | select((.value | type) != "array"
-                     or ((.value | map(select((type != "object")
-                                              or ((.id | type) != "string")))) | length) > 0)
-            | .key ] as $badkeyed
-        | [ to_entries[]
-            | select(.key == "open_questions")
-            | select((.value | type) != "array"
-                     or ((.value | map(select((type != "object")
-                                              or ((.id | type) != "string")
-                                              or ((.class | type) != "string")
-                                              or ((.ref | type) != "string")
-                                              or ((.blocks_next_stage | type) != "boolean")))) | length) > 0)
-            | .key ] as $badstub
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.id | type) == "string") and ((.id | test($idre)) | not))
-            | .id ] as $badid
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.class | type) == "string")
-                     and ((.class as $c | $classes | index($c)) == null))
-            | (.id // "?") ] as $badclass
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.ref | type) == "string") and ((.ref | test($refre)) | not))
-            | (.id // "?") ] as $badref
-        | [ to_entries[]
-            | select(.key == "files_modified" or .key == "tests_added")
-            | select((.value | type) != "array"
-                     or ((.value | map(select(type != "string"))) | length) > 0)
-            | .key ] as $badscalar
-        | if ($unknown | length) > 0
-          then "unknown key(s): " + ($unknown | join(", "))
-               + " (allowed: " + (_allowed | join(", ")) + ")"
-          elif ($badkeyed | length) > 0
-          then "bad shape for " + ($badkeyed | join(", "))
-               + " (expected an array of objects each with a string .id)"
-          elif ($badstub | length) > 0
-          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref and boolean .blocks_next_stage)"
-          elif ($badid | length) > 0
-          then "open_questions id " + ($badid | join(", ")) + " is not sw-<TASK_ID>-<n>"
-          elif ($badclass | length) > 0
-          then "open_questions " + ($badclass | join(", ")) + " class is not "
-               + ($classes | join("|"))
-          elif ($badref | length) > 0
-          then "open_questions " + ($badref | join(", "))
-               + " ref is not an optional <artifact>.md path plus one non-empty #anchor"
-          elif ($badscalar | length) > 0
-          then "bad shape for " + ($badscalar | join(", "))
-               + " (expected an array of strings)"
-          else "" end
+      def _label: if (type == "object") and ((.id | type) == "string")
+                  then .id else (tojson[0:40]) end;
+      def _oq_bad:
+        if type != "object" then "not an object"
+        elif (.id | type) != "string" then "missing string .id"
+        elif (.class | type) != "string" then "missing string .class"
+        elif (.ref | type) != "string" then "missing string .ref"
+        elif (.blocks_next_stage | type) != "boolean" then "missing boolean .blocks_next_stage"
+        elif ((.id | test($idre)) | not) then "id is not sw-<TASK_ID>-<n>"
+        elif ((.class as $c | $classes | index($c)) == null)
+          then "class is not " + ($classes | join("|"))
+        elif ((.ref | test($refre)) | not)
+          then "ref is not an optional <artifact>.md path plus one non-empty #anchor"
+        else "" end;
+      def _dec_bad:
+        if type != "object" then "not an object"
+        elif (.id | type) != "string" then "missing string .id"
+        else "" end;
+      def _fatal($m): {fatal: $m, clean: {}, rejects: []};
+      if type != "object" then _fatal("must be a JSON object")
+      elif (keys | length) == 0 then _fatal("object has no keys")
+      elif ((keys - _allowed) | length) > 0
+        then _fatal("unknown key(s): " + ((keys - _allowed) | join(", "))
+                    + " (allowed: " + (_allowed | join(", ")) + ")")
+      elif ([ to_entries[] | select((.value | type) != "array") | .key ] | length) > 0
+        then _fatal("bad shape for "
+                    + ([ to_entries[] | select((.value | type) != "array") | .key ] | join(", "))
+                    + " (expected an array)")
+      else . as $p
+        | { fatal: "",
+            clean:
+              ( (if $p | has("decisions")
+                 then {decisions: [ $p.decisions[] | select(_dec_bad == "") ]} else {} end)
+              + (if $p | has("open_questions")
+                 then {open_questions: [ $p.open_questions[] | select(_oq_bad == "") ]} else {} end)
+              + (if $p | has("files_modified")
+                 then {files_modified: [ $p.files_modified[] | select(type == "string") ]} else {} end)
+              + (if $p | has("tests_added")
+                 then {tests_added: [ $p.tests_added[] | select(type == "string") ]} else {} end) ),
+            rejects:
+              ( [ ($p.decisions // [])[] | select(_dec_bad != "")
+                  | {key: "decisions", label: _label, reason: _dec_bad} ]
+              + [ ($p.open_questions // [])[] | select(_oq_bad != "")
+                  | {key: "open_questions", label: _label, reason: _oq_bad} ]
+              + [ ($p.files_modified // [])[] | select(type != "string")
+                  | {key: "files_modified", label: (tojson[0:40]), reason: "not a string"} ]
+              + [ ($p.tests_added // [])[] | select(type != "string")
+                  | {key: "tests_added", label: (tojson[0:40]), reason: "not a string"} ] ) }
       end'
 
 # Sweep items the open_questions clamp evicted while still UNRESOLVED are appended to
@@ -837,11 +845,18 @@ _spill_evicted_questions() {
   local state="$1" tmp="$2" filter="$3"
   shift 3
 
-  # The clamp fires only above 12, so a post-clamp length below it means nothing was
-  # evicted — and this is the common case, which must not pay for a second filter pass.
-  local post_len
+  # Trigger on pre > post, never on the clamp's literal bound: hard-coding 12 made the
+  # spill die silently the moment the bound moved. An empty post-clamp array cannot have
+  # evicted anything, which keeps the common path at one cheap length query.
+  local post_len pre_len merged
   post_len=$(jq -r '(.facts.open_questions? // []) | length' "$tmp" 2> /dev/null || printf '0')
-  [[ "$post_len" == "12" ]] || return 0
+  [[ "$post_len" -gt 0 ]] || return 0
+  merged=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null) || {
+    log_msg WARN "open_questions spill: pre-clamp re-evaluation failed; evictions (if any) unrecorded (merge unaffected)"
+    return 0
+  }
+  pre_len=$(printf '%s' "$merged" | jq -r '(.facts.open_questions? // []) | length' 2> /dev/null || printf '0')
+  [[ "$pre_len" -gt "$post_len" ]] || return 0
 
   # Attribution, in the order the writer's own identity becomes known: parsed frontmatter,
   # then --stage, then the code behind --task-id (the only identity a --facts-only call has).
@@ -855,20 +870,40 @@ _spill_evicted_questions() {
   [[ "$spill_dir" == "$state" ]] && spill_dir="."
   spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
 
-  spilled=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null \
+  # EVERY eviction spills, resolved ones included, flagged by `was_resolved`. Filtering
+  # answered items out destroyed the one field the sweep exists to produce and inverted the
+  # incentive: answering a question was what made it disappear without a trace.
+  spilled=$(printf '%s' "$merged" \
     | jq -c --slurpfile post "$tmp" \
            --arg ts "$(date -u +%FT%TZ)" \
            --arg from "$from_stage" '
         (($post[0].facts.open_questions // []) | map(.id)) as $keep
         | (.facts.open_questions // [])
-        | map(select((.status // "open") != "resolved"))
         | map(select(([.id] - $keep) | length > 0))
-        | .[] + {spilled_at: $ts, spilled_from_stage: $from}' 2> /dev/null) || return 0
+        | map(. + {spilled_at: $ts, spilled_from_stage: $from,
+                   was_resolved: ((.status // "open") == "resolved")})
+        | .[]' 2> /dev/null) || {
+    # A failed spill computation used to `return 0`, which read as "nothing was evicted".
+    log_msg WARN "open_questions spill computation failed; up to $((pre_len - post_len)) evicted item(s) may be unrecorded (merge unaffected)"
+    printf >&2 'warn: open_questions spill computation failed; up to %d evicted item(s) unrecorded\n' "$((pre_len - post_len))"
+    return 0
+  }
 
   [[ -n "$spilled" ]] || return 0
-  printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null \
-    || log_msg WARN "open_questions spill append failed for ${spill_path} (merge unaffected)"
-  log_msg INFO "spilled $(printf '%s' "$spilled" | grep -c '^') evicted open_question(s) to ${spill_path}"
+  local spill_n
+  spill_n=$(printf '%s' "$spilled" | grep -c '^')
+  # The INFO line is CONDITIONAL on the append. Logged unconditionally it contradicted the WARN
+  # two lines above and recorded a spill that never reached the file — a write that landed
+  # nothing, indistinguishable from one that landed. Stderr as well as the log, matching the
+  # computation-failure arm above: log_msg writes only to $LOG_FILE, so a log-only warning is
+  # silent at the call site, which is where the loss has to be visible.
+  if printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null; then
+    log_msg INFO "spilled ${spill_n} evicted open_question(s) to ${spill_path}"
+  else
+    log_msg WARN "open_questions spill append failed for ${spill_path}; ${spill_n} evicted item(s) unrecorded (merge unaffected)"
+    printf >&2 'warn: open_questions spill append to %s failed; %d evicted item(s) unrecorded\n' \
+      "$spill_path" "$spill_n"
+  fi
 }
 
 # Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
@@ -1735,17 +1770,202 @@ EOSTATE
     exit 1
   fi
 
-  # Resolved-first ordering means an overflow whose evictions are ALL resolved loses
-  # nothing — and must not write a spill line for an item that was already answered.
+  # A resolved eviction is the one the sweep worked hardest for: it carries the answer.
+  # Spilling only unresolved items meant answering a question was what made it vanish.
   t21_seed 12 2
   t21_add sw-DV1-1
-  if [[ ! -e .context/open-questions-3.jsonl ]] \
-    && jq -e '(.facts.open_questions | map(select(.status != "resolved") | .id) | length) == 11' \
-      .context/state.json > /dev/null; then
-    printf 'T23: an all-resolved eviction writes no spill line: ok\n'
+  if [[ -e .context/open-questions-3.jsonl ]] \
+    && [[ "$(jq -r '.id' .context/open-questions-3.jsonl 2> /dev/null)" == "sw-PL0-1" ]] \
+    && jq -e '.was_resolved == true and .resolution == "answered" and .spilled_at' \
+      .context/open-questions-3.jsonl > /dev/null; then
+    printf 'T23: a resolved eviction spills, flagged was_resolved, answer intact: ok\n'
   else
-    printf 'T23: resolved eviction leaked into the spill: FAIL\n' >&2
+    printf 'T23: resolved eviction was discarded: FAIL\n' >&2
     cat .context/open-questions-3.jsonl >&2 2> /dev/null
+    exit 1
+  fi
+
+  # ---- T23b: the spill trigger is bound-free ----
+  # It used to fire only on a post-clamp length of exactly 12, so the spill died silently
+  # whenever the bound moved. An unevicted merge must still write nothing.
+  t21_seed 12 0
+  cp .context/state.json .context/state.json.t23b
+  bash "$SELF" --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
+    > /dev/null
+  if [[ ! -e .context/open-questions-3.jsonl ]] \
+    && [[ "$(jq -r '.facts.open_questions | length' .context/state.json)" == "12" ]]; then
+    printf 'T23b: a union that evicts nothing writes no spill line: ok\n'
+  else
+    printf 'T23b: spilled without an eviction: FAIL\n' >&2
+    exit 1
+  fi
+
+  # ---- T23c: a spill whose append FAILS says so, and claims no success ----
+  # Reachable without a test seam (QA-1's recipe): make the spill path unwritable. The INFO
+  # line used to be unconditional, so the log recorded a spill that never reached the file
+  # while the WARN two lines above said the opposite — and the WARN was log-only, so the call
+  # site saw nothing at all.
+  t21_seed 12 0
+  : > .context/open-questions-3.jsonl
+  chmod 0444 .context/open-questions-3.jsonl
+  st23c_rc=0
+  : > .context/t23c.log
+  LOG_FILE=.context/t23c.log bash "$SELF" --log .context/t23c.log --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-DV1-1","class":"decision","ref":"development-1.md#elicitation-sweep","blocks_next_stage":false}]}' \
+    > /dev/null 2> .context/t23c.err || st23c_rc=$?
+  chmod 0644 .context/open-questions-3.jsonl
+  if [[ "$st23c_rc" -eq 0 ]] \
+    && [[ ! -s .context/open-questions-3.jsonl ]] \
+    && grep -q 'spill append to .* failed' .context/t23c.err \
+    && grep -q 'evicted item(s) unrecorded' .context/t23c.err \
+    && jq -e '(.facts.open_questions | map(.id) | index("sw-DV1-1")) != null' \
+      .context/state.json > /dev/null \
+    && grep -q 'spill append failed for' .context/t23c.log \
+    && ! grep -q 'spilled 1 evicted' .context/t23c.log; then
+    printf 'T23c: a failed spill append warns on stderr and claims no success: ok\n'
+  else
+    printf 'T23c: failed spill append was silent or claimed success (rc=%s): FAIL\n' "$st23c_rc" >&2
+    cat .context/t23c.err >&2
+    exit 1
+  fi
+
+  # ---- T24: --facts rejects per item, persisting the valid remainder ----
+  # One bad class value used to discard the whole write — decisions, changed files and
+  # every valid sweep stub in the same object.
+  make_state
+  st24_rc=0
+  bash "$SELF" --facts '{
+      "decisions":[{"id":"d-good","summary":"kept"},{"summary":"no id"}],
+      "files_modified":["a.sh", 42],
+      "open_questions":[
+        {"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false},
+        {"id":"sw-DV0-2","class":"risk","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]
+    }' > /dev/null 2> .context/t24.err || st24_rc=$?
+  if [[ "$st24_rc" -eq 2 ]] \
+    && jq -e '(.facts.decisions | map(.id)) == ["d-good"]
+              and (.facts.files_modified) == ["a.sh"]
+              and (.facts.open_questions | map(.id)) == ["sw-DV0-1"]' \
+      .context/state.json > /dev/null \
+    && grep -q 'sw-DV0-2' .context/t24.err; then
+    printf 'T24: --facts persists the valid remainder and names each rejection (rc=2): ok\n'
+  else
+    printf 'T24: per-item rejection did not partition the payload (rc=%s): FAIL\n' "$st24_rc" >&2
+    jq -c '.facts' .context/state.json >&2
+    cat .context/t24.err >&2
+    exit 1
+  fi
+
+  # ---- T24b: an unknown key is still a whole-payload refusal ----
+  # Per-item rejection is about item shape; an unknown key means the caller is writing to a
+  # slot that does not exist, and no part of that payload can be trusted to land where meant.
+  cp .context/state.json .context/state.json.snap24b
+  st24b_rc=0
+  bash "$SELF" --facts '{"decisions":[{"id":"d-x"}],"nope":[]}' > /dev/null 2>&1 || st24b_rc=$?
+  if [[ "$st24b_rc" -eq 2 ]] \
+    && diff -q .context/state.json .context/state.json.snap24b > /dev/null; then
+    printf 'T24b: an unknown key refuses the whole payload, state byte-unchanged: ok\n'
+  else
+    printf 'T24b: unknown-key guard (rc=%s): FAIL\n' "$st24b_rc" >&2
+    exit 1
+  fi
+
+  # ---- T24c: a rejection diagnostic is not buried under the help text ----
+  # The reproduction: the real message scrolled past behind a ~100-line usage dump.
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1"}]}' > /dev/null 2> .context/t24c.err || true
+  if [[ "$(grep -c '^' .context/t24c.err)" -le 6 ]] \
+    && ! grep -q 'state-patch.sh --stage' .context/t24c.err; then
+    printf 'T24c: a rejection prints its diagnostic, not the usage block: ok\n'
+  else
+    printf 'T24c: rejection diagnostic buried under usage (%s lines): FAIL\n' \
+      "$(grep -c '^' .context/t24c.err)" >&2
+    exit 1
+  fi
+
+  # ---- T24d: an EMPTY payload is a no-op success, not a refusal ----
+  # The sweep contract tells a stage with nothing to ask to emit `open_questions: []`. Refusing
+  # that aborted the stage-completion merge the same call was paired with.
+  make_state
+  cp .context/state.json .context/state.json.snap24d
+  st24d_rc=0
+  bash "$SELF" --facts '{"open_questions":[]}' > /dev/null 2>&1 || st24d_rc=$?
+  if [[ "$st24d_rc" -eq 0 ]] \
+    && diff -q .context/state.json .context/state.json.snap24d > /dev/null; then
+    printf 'T24d: an empty --facts payload is a no-op success, state byte-unchanged: ok\n'
+  else
+    printf 'T24d: empty payload refused (rc=%s): FAIL\n' "$st24d_rc" >&2
+    exit 1
+  fi
+  # And it must not abort the stage merge it is paired with — the shape every agent emits.
+  st24e_rc=0
+  bash "$SELF" --stage DV --artifact .context/development-0.md --facts '{"open_questions":[]}' \
+    > /dev/null 2>&1 || st24e_rc=$?
+  if [[ "$st24e_rc" -eq 0 ]] \
+    && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]]; then
+    printf 'T24e: --stage paired with an empty --facts still patches the ledger: ok\n'
+  else
+    printf 'T24e: empty --facts aborted the stage merge (rc=%s): FAIL\n' "$st24e_rc" >&2
+    jq -c '.tasks.DV0' .context/state.json >&2
+    exit 1
+  fi
+
+  # ---- T24f: a partial payload paired with --stage still exits 2 ----
+  # The rejection must survive the fall-through, or a combined call hides it.
+  make_state
+  st24f_rc=0
+  bash "$SELF" --stage DV --artifact .context/development-0.md --facts \
+    '{"decisions":[{"id":"d-ok"},{"summary":"no id"}]}' > /dev/null 2>&1 || st24f_rc=$?
+  if [[ "$st24f_rc" -eq 2 ]] \
+    && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]] \
+    && jq -e '[.facts.decisions[].id] | index("d-ok")' .context/state.json > /dev/null; then
+    printf 'T24f: a partial --facts beside --stage completes the merge and still exits 2: ok\n'
+  else
+    printf 'T24f: combined partial-facts exit wrong (rc=%s): FAIL\n' "$st24f_rc" >&2
+    exit 1
+  fi
+
+  # ---- T27: the post-write assertion names ids a clamp evicted ----
+  # facts.decisions[] clamps to the newest 8 and has no spill (gh#316), so an id can land and
+  # be evicted by the same write. The detector is the only signal that happened.
+  make_state
+  bash "$SELF" --facts "$(jq -nc '{decisions: [range(1;9) | {id: ("old-" + (.|tostring))}]}')" \
+    > /dev/null
+  bash "$SELF" --facts "$(jq -nc '{decisions: [range(1;10) | {id: ("new-" + (.|tostring))}]}')" \
+    > /dev/null 2> .context/t27.err || true
+  if grep -q 'not in the ledger (clamp eviction)' .context/t27.err \
+    && grep -q 'new-1' .context/t27.err; then
+    printf 'T27: an id evicted by the clamp on its own write is named on stderr: ok\n'
+  else
+    printf 'T27: clamp eviction of a just-written id was silent: FAIL\n' >&2
+    cat .context/t27.err >&2
+    exit 1
+  fi
+
+  # ---- T25: a --facts write that lands nothing is loud ----
+  # log_msg writes only to the log file, so an absent ledger exited 0 with nothing on stderr.
+  rm -rf .context
+  mkdir -p .context
+  st25_rc=0
+  bash "$SELF" --facts '{"decisions":[{"id":"d-1"}]}' > /dev/null 2> t25.err || st25_rc=$?
+  if [[ "$st25_rc" -ne 0 ]] && grep -q 'no ledger' t25.err; then
+    printf 'T25: a facts write with no ledger fails loudly on stderr: ok\n'
+  else
+    printf 'T25: absent-ledger facts write was silent (rc=%s): FAIL\n' "$st25_rc" >&2
+    exit 1
+  fi
+
+  # ---- T26: metadata.description is capped on the two ledger write paths ----
+  make_state
+  T26_LONG=$(printf 'x%.0s' $(seq 1 400))
+  bash "$SELF" --task-create DV9 --metadata "$(jq -nc --arg d "$T26_LONG" '{stage:"DV",description:$d}')" > /dev/null
+  bash "$SELF" --task-meta DV9 --set "$(jq -nc --arg d "$T26_LONG" '{description:$d}')" > /dev/null
+  if jq -e '(.tasks.DV9.metadata.description | length) == 240
+            and (.tasks.DV9.metadata.description | endswith("…"))
+            and .tasks.DV9.metadata.stage == "DV"' .context/state.json > /dev/null; then
+    printf 'T26: an over-long description is truncated, not rejected, on create and meta: ok\n'
+  else
+    printf 'T26: description cap did not apply: FAIL\n' >&2
+    jq -c '.tasks.DV9' .context/state.json >&2
     exit 1
   fi
 
@@ -1969,6 +2189,16 @@ if [[ -n "$TASK_OP" ]]; then
     usage
   fi
 
+  # R-4.4 — the ONLY two paths that persist a task description. Dispatch-time appends
+  # (the orchestrator's test-scope, ban and FN banners) mutate an in-memory copy and are
+  # never written back, so capping post-append would strip banners that no ledger holds.
+  # Truncate, never reject: a refused --task-create would break PL0 stage creation.
+  # 240 chars matches the facts.goal precedent in initialization-patterns.md.
+  _DESC_CAP='def _cap_desc:
+      if (type == "object") and ((.description? | type) == "string")
+         and ((.description | length) > 240)
+      then .description = (.description[0:239] + "…") else . end;'
+
   TASK_FILTER=""
   TASK_JQ_ARGS=()
   case "$TASK_OP" in
@@ -1982,7 +2212,7 @@ if [[ -n "$TASK_OP" ]]; then
         exit 0
       fi
       # --metadata is optional; absent ⇒ an empty object, never a parse abort.
-      TASK_FILTER='.tasks[$id] = {status: "pending", metadata: ($meta // {})}'
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
     status)
@@ -2022,7 +2252,7 @@ if [[ -n "$TASK_OP" ]]; then
     meta)
       require_task_exists "$TASK_OP_ID" meta
       # Recursive merge, so a partial --set updates named keys without dropping the rest.
-      TASK_FILTER='.tasks[$id].metadata = ((.tasks[$id].metadata // {}) * ($meta // {}))'
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = (((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
     replay)
@@ -2154,25 +2384,78 @@ if [[ -n "$FACTS_ARG" ]]; then
   fi
   SWEEP_CLASS_JSON=$(printf '%s' "$SWEEP_CLASS_ENUM" | tr ' ' '\n' | jq -R . | jq -s .)
 
-  FACTS_ERR=$(printf '%s' "$FACTS_ARG" \
-    | jq -r --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
-            --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_VALIDATE_FILTER" 2> /dev/null) \
-    || FACTS_ERR="not valid JSON"
-  if [[ -n "$FACTS_ERR" ]]; then
-    printf >&2 'invalid --facts: %s\n' "$FACTS_ERR"
-    log_msg ERROR "invalid --facts (${FACTS_ERR}); state.json unchanged"
-    usage
+  FACTS_PART=$(printf '%s' "$FACTS_ARG" \
+    | jq -c --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
+            --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_PARTITION_FILTER" 2> /dev/null) \
+    || FACTS_PART=""
+  if [[ -z "$FACTS_PART" ]]; then
+    printf >&2 'invalid --facts: not valid JSON; state.json unchanged\n'
+    log_msg ERROR "invalid --facts (not valid JSON); state.json unchanged"
+    exit 2
+  fi
+
+  FACTS_FATAL=$(printf '%s' "$FACTS_PART" | jq -r '.fatal')
+  if [[ -n "$FACTS_FATAL" ]]; then
+    # Plain exit, never usage(): the help block is ~100 lines and scrolls the one line the
+    # caller needs off the top of the transcript.
+    printf >&2 'invalid --facts: %s; state.json unchanged\n' "$FACTS_FATAL"
+    log_msg ERROR "invalid --facts (${FACTS_FATAL}); state.json unchanged"
+    exit 2
+  fi
+
+  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
+  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    FACTS_REJECTED=1
+    printf >&2 'invalid --facts: %s item(s) rejected, the rest still persist:\n' "$FACTS_REJECT_N"
+    printf '%s' "$FACTS_PART" \
+      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason' >&2
+    log_msg ERROR "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
+  fi
+
+  FACTS_ARG=$(printf '%s' "$FACTS_PART" | jq -c '.clean')
+  FACTS_KEPT=$(printf '%s' "$FACTS_ARG" | jq -r '[ .[] | length ] | add // 0')
+  if [[ "$FACTS_KEPT" -eq 0 ]] && [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    # Every item was rejected: nothing to persist, and the caller must see the refusal.
+    printf >&2 'invalid --facts: no valid items in the payload; state.json unchanged\n'
+    log_msg ERROR "--facts: no valid items; state.json unchanged"
+    exit 2
+  fi
+  # Nothing kept AND nothing rejected means the payload was legitimately EMPTY —
+  # `{"open_questions":[]}` is what stage-contracts.md § Closing Elicitation Sweep tells a stage
+  # with nothing to ask to emit. Refusing it turned a no-op into a hard stop that also aborted the
+  # stage-completion merge the same call was paired with. The union is skipped (it would be a
+  # no-op anyway) and execution falls through to that merge.
+  if [[ "$FACTS_KEPT" -eq 0 ]]; then
+    log_msg INFO "--facts: empty payload, nothing to union (no-op)"
+    FACTS_EMPTY_NOOP=1
   fi
 
   # Fallback slot for a stub whose id predates the `sw-<TASK_ID>-<n>` shape: the stage this
   # invocation is patching, by the same explicit-then-inferred order the id resolution uses.
   SWEEP_STAGE_FALLBACK="${STAGE_ARG:-$(printf '%s' "${TASK_ID_ARG:-}" | sed 's/[0-9]*$//')}"
 
-  if [[ ! -f "$STATE_PATH" ]]; then
-    log_msg INFO "state.json absent — --facts is a no-op"
+  if [[ "$FACTS_EMPTY_NOOP" -eq 1 ]]; then
+    : # no-op: nothing to write, and an absent ledger is not an error for an empty payload
+  elif [[ ! -f "$STATE_PATH" ]]; then
+    # log_msg writes only to $LOG_FILE, so this used to be an INFO line and exit 0 — a write
+    # that landed nothing, indistinguishable at the call site from one that landed.
+    printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
+    log_msg ERROR "state.json absent at ${STATE_PATH}; --facts landed nothing"
+    exit 1
   elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
     --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK"; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
+    # Post-write assertion: keys in the log are not evidence the ids landed. An id that went
+    # in and is not there afterwards was evicted by a clamp, which is exactly the silent loss
+    # this stage exists to remove. Loud on stderr; the merge itself stands.
+    FACTS_LOST=$(jq -r --argjson f "$FACTS_ARG" '
+        (([ ($f.decisions // [])[].id ] - [ (.facts.decisions // [])[].id ])
+       + ([ ($f.open_questions // [])[].id ] - [ (.facts.open_questions // [])[].id ]))
+       | join(", ")' "$STATE_PATH" 2> /dev/null || printf '')
+    if [[ -n "$FACTS_LOST" ]]; then
+      printf >&2 'warn: --facts wrote but these ids are not in the ledger (clamp eviction): %s\n' "$FACTS_LOST"
+      log_msg ERROR "--facts ids absent after write: ${FACTS_LOST}"
+    fi
   else
     printf >&2 'facts union failed; state.json unchanged (see %s)\n' "$LOG_FILE"
     log_msg ERROR "jq apply failed for --facts; state.json unchanged"
@@ -2182,7 +2465,7 @@ if [[ -n "$FACTS_ARG" ]]; then
   # Standalone --facts is done here; with --stage/--artifact it falls through to the
   # completion merge, which takes its own lock.
   if [[ -z "$STAGE_ARG" && -z "$ARTIFACT_ARG" ]]; then
-    exit 0
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
 fi
 
@@ -2215,12 +2498,13 @@ if [[ -z "$ART" || ! -f "$ART" ]]; then
     log_msg ERROR "self-patch unresolved (stage=${STAGE_ARG:-} prev=${PREV_ARG}) — exit 3"
     exit 3
   fi
-  exit 0
+  # Every no-op return on the paired path still carries a --facts rejection out.
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
 if [[ ! -f "$STATE_PATH" ]]; then
   log_msg INFO "state.json absent — nothing to merge (artifact=$ART)"
-  exit 0
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
 # ---------- Parse frontmatter ----------
@@ -2228,7 +2512,7 @@ parse_frontmatter "$ART"
 
 if [[ -z "$PARSED_STAGE" ]]; then
   log_msg WARN "could not extract stage from $ART; aborting merge silently"
-  exit 0
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
 # ---------- Resolve the ledger key ----------
@@ -2267,7 +2551,7 @@ if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT
 
   if [[ "$PATCH_IS_NOOP" == "1" ]]; then
     log_msg INFO "idempotent: tasks.${TASK_ID} already completed verdict=${PARSED_VERDICT}"
-    exit 0
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
   log_msg INFO \
     "re-merge: tasks.${TASK_ID} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
@@ -2339,4 +2623,4 @@ if [[ "$VIA_ARG" == "hook" ]]; then
   fi
 fi
 
-exit 0
+exit $((FACTS_REJECTED == 1 ? 2 : 0))

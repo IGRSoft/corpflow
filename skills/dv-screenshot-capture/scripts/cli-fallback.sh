@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @description  CLI fallback adapter for dv-screenshot-capture.
 #               Default for platform="all"/meta-work AND the universal final fallback
-#               for every other adapter (silicon → magick → .txt floor).
+#               for every other adapter (silicon → magick → loud failure).
 #               Applies redaction grep before piping diff to any image tool.
 #
 # @arg  --worktask-id <id>           state.json worktask_id (required)
@@ -14,11 +14,12 @@
 #
 # @exitcode 0  success — path to produced file printed to stdout
 # @exitcode 1  hard error (bad args, write failure)
-# @exitcode 2  tool_missing — .txt placeholder written (ok=false path still on stdout)
+# @exitcode 2  tool_missing — no image tool on PATH; no file is written
+# @exitcode 3  render_failed — a tool was present but produced no usable PNG
 #
 # Contract (uniform adapter shape):
 #   Prints one line to stdout:
-#     path=<file>  bytes=<N>  ok=<true|false>  error=<null|tool_missing>
+#     path=<file>  bytes=<N>  ok=<true|false>  error=<null|tool_missing|render_failed>
 #
 # Minimum shell: Bash 4.x (uses [[ ]], local, command -v; macOS ships Bash 3.2 —
 # call via `bash <path>` from Homebrew Bash 5 if features require it).
@@ -136,35 +137,38 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     _fail "redaction pattern false-positive on safe diff"
   fi
 
-  # --- Test 4: .txt placeholder write (simulates tool_missing floor)
-  TXT_DIR="${TMPDIR_TEST}/images/self-test-wt"
-  mkdir -p "$TXT_DIR"
-  TXT_FILE="${TXT_DIR}/dv-01-self-test.txt"
-  {
-    printf '# Screenshot placeholder — self-test\n'
-    printf '# Worktask: self-test-wt\n'
-    printf '# Run index: 0\n'
-    printf '# Captured: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '# Platform: all\n'
-    printf '# Reason: tool_missing — silicon and magick both absent on PATH\n'
-    printf '# Tools checked: silicon, magick\n'
-    printf '\ngit diff origin/master...HEAD (first 100 lines):\n'
-    printf -- '---\n'
-    printf '(self-test: no git diff)\n'
-  } > "$TXT_FILE"
-  TXT_BYTES=$(stat -f%z "$TXT_FILE" 2> /dev/null || stat -c%s "$TXT_FILE" 2> /dev/null || echo 0)
-  if [[ "$TXT_BYTES" -gt 0 ]] && [[ -f "$TXT_FILE" ]]; then
-    _ok ".txt placeholder written and non-empty"
+  # --- Test 4: the floor writes no placeholder and reports the right reason
+  T4_DIR="${TMPDIR_TEST}/images/self-test-wt"
+  mkdir -p "$T4_DIR"
+  T4_PNG="${T4_DIR}/dv-01-self-test.png"
+  _floor_reason() { [[ "$1" -eq 1 ]] && printf 'render_failed' || printf 'tool_missing'; }
+  if [[ "$(_floor_reason 1)" == "render_failed" ]] && [[ "$(_floor_reason 0)" == "tool_missing" ]]; then
+    _ok "floor reason distinguishes a failed render from an absent tool"
   else
-    _fail ".txt placeholder write failed or empty"
+    _fail "floor reason mapping wrong"
+  fi
+  T4_LINE=$(printf 'path=%s bytes=0 ok=false error=%s\n' "$T4_PNG" "$(_floor_reason 0)")
+  if [[ "$T4_LINE" =~ ^path=[^[:space:]]+\ bytes=[0-9]+\ ok=(true|false)\ error=(null|tool_missing|render_failed)$ ]] \
+    && [[ ! -e "${T4_DIR}/dv-01-self-test.txt" ]]; then
+    _ok "floor emits the adapter contract line and writes no .txt placeholder"
+  else
+    _fail "floor contract line malformed or a .txt placeholder was written"
+  fi
+
+  # --- Test 4b: the tool-state string reports each tool individually
+  _t4_state() { [[ "$2" -eq 1 ]] && printf '%s' "$1" || printf '%s(absent)' "$1"; }
+  if [[ "$(_t4_state silicon 1), $(_t4_state magick 0)" == "silicon, magick(absent)" ]]; then
+    _ok "tools-checked string distinguishes present from absent tools"
+  else
+    _fail "tools-checked string does not distinguish presence"
   fi
 
   # --- Test 5: NN counter picks up existing files
-  PNG1="${TXT_DIR}/dv-01-foo.png"
-  PNG2="${TXT_DIR}/dv-02-bar.png"
+  PNG1="${T4_DIR}/dv-01-foo.png"
+  PNG2="${T4_DIR}/dv-02-bar.png"
   printf 'x' > "$PNG1"
   printf 'x' > "$PNG2"
-  existing_count=$(find "$TXT_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
+  existing_count=$(find "$T4_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
   NN=$(printf '%02d' $((existing_count + 1)))
   if [[ "$NN" == "03" ]]; then
     _ok "NN counter increments correctly (existing=2 → next=03)"
@@ -207,7 +211,6 @@ mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
 existing_count=$(find "$IMAGES_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
 NN=$(printf '%02d' $((existing_count + 1)))
 OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
-OUTPUT_TXT="${IMAGES_DIR}/dv-${NN}-${SLUG}.txt"
 
 # ---------------------------------------------------------------------------
 # Audit helper (mirrors apple-canvas.sh idiom exactly)
@@ -278,10 +281,16 @@ command -v magick > /dev/null 2>&1 && HAS_MAGICK=1
 HAS_CONVERT=0
 command -v convert > /dev/null 2>&1 && HAS_CONVERT=1
 
+# Set to 1 once an image tool has actually been invoked. The floor needs this to
+# tell a render failure (tool present, output unusable) from a genuine absence of
+# every tool — the two have different operator remedies.
+RENDER_ATTEMPTED=0
+
 # ---------------------------------------------------------------------------
 # Step 1 — silicon (preferred): annotated diff PNG
 # ---------------------------------------------------------------------------
 if [[ "$HAS_SILICON" -eq 1 ]] && git rev-parse --git-dir > /dev/null 2>&1; then
+  RENDER_ATTEMPTED=1
   if [[ "$REDACTED" -eq 1 ]]; then
     # Secret detected — render file-tree only
     RENDER_OK=0
@@ -318,8 +327,9 @@ if [[ "$HAS_SILICON" -eq 1 ]] && git rev-parse --git-dir > /dev/null 2>&1; then
         --argjson bytes "$BYTES" \
         --arg platform "$PLATFORM" \
         --arg adapter "cli_fallback/silicon" \
-        '{slug:$slug,path:$path,bytes:$bytes,platform:$platform,adapter:$adapter}'
-    )"
+        '{slug:$slug,path:$path,bytes:$bytes,platform:$platform,adapter:$adapter}' \
+        2> /dev/null || printf '{}'
+    )" 2> /dev/null || true
     printf 'path=%s bytes=%d ok=true error=null\n' "$OUTPUT_PNG" "$BYTES"
     exit 0
   fi
@@ -337,6 +347,7 @@ elif [[ "$HAS_CONVERT" -eq 1 ]]; then
 fi
 
 if [[ -n "$MAGICK_CMD" ]] && git rev-parse --git-dir > /dev/null 2>&1; then
+  RENDER_ATTEMPTED=1
   if [[ "$REDACTED" -eq 1 ]]; then
     DIFF_CONTENT="[redacted: secret pattern detected]\n\nFiles changed:\n$(git diff --name-only "${BASE_REF}...HEAD" 2> /dev/null | head -60 || true)"
   else
@@ -365,52 +376,47 @@ if [[ -n "$MAGICK_CMD" ]] && git rev-parse --git-dir > /dev/null 2>&1; then
         --argjson bytes "$BYTES" \
         --arg platform "$PLATFORM" \
         --arg adapter "cli_fallback/magick" \
-        '{slug:$slug,path:$path,bytes:$bytes,platform:$platform,adapter:$adapter}'
-    )"
+        '{slug:$slug,path:$path,bytes:$bytes,platform:$platform,adapter:$adapter}' \
+        2> /dev/null || printf '{}'
+    )" 2> /dev/null || true
     printf 'path=%s bytes=%d ok=true error=null\n' "$OUTPUT_PNG" "$BYTES"
     exit 0
   fi
-  printf >&2 'warn: magick render failed; writing .txt placeholder\n'
+  printf >&2 'warn: magick render failed\n'
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3 — .txt placeholder (floor — always succeeds)
+# Step 3 — floor: fail loudly. No placeholder file is written; a .txt satisfies an
+# existence check while proving nothing, and downstream evidence attachment would
+# classify it as a captured artifact.
 # ---------------------------------------------------------------------------
-TOOLS_CHECKED="silicon"
-[[ -n "$MAGICK_CMD" ]] && TOOLS_CHECKED="${TOOLS_CHECKED}, magick" || TOOLS_CHECKED="${TOOLS_CHECKED}, magick"
+_tool_state() { # name present-flag -> "name" | "name(absent)"
+  [[ "$2" -eq 1 ]] && printf '%s' "$1" || printf '%s(absent)' "$1"
+}
+TOOLS_CHECKED="$(_tool_state silicon "$HAS_SILICON"), $(_tool_state magick "$HAS_MAGICK"), $(_tool_state convert "$HAS_CONVERT")"
 
-{
-  printf '# Screenshot placeholder — %s\n' "$SLUG"
-  printf '# Worktask: %s\n' "$WORKTASK_ID"
-  printf '# Run index: %s\n' "$RUN_INDEX"
-  printf '# Captured: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '# Platform: %s\n' "$PLATFORM"
-  printf '# Reason: tool_missing — silicon and magick both absent on PATH\n'
-  printf '# Tools checked: silicon, magick\n'
-  printf '\ngit diff %s...HEAD (first 100 lines):\n' "$BASE_REF"
-  printf -- '---\n'
-  if git rev-parse --git-dir > /dev/null 2>&1; then
-    if [[ "$REDACTED" -eq 1 ]]; then
-      printf '[redacted: secret pattern detected; showing file list only]\n'
-      git diff --name-only "${BASE_REF}...HEAD" 2> /dev/null | head -100 || true
-    else
-      git diff "${_diff_args[@]}" 2> /dev/null | head -100 || true
-    fi
-  else
-    printf '(not a git repository)\n'
-  fi
-} > "$OUTPUT_TXT"
+if [[ "$RENDER_ATTEMPTED" -eq 1 ]]; then
+  FAIL_REASON="render_failed"
+  FAIL_DETAIL="an image tool was present but produced no usable PNG"
+  FAIL_EXIT=3
+else
+  FAIL_REASON="tool_missing"
+  FAIL_DETAIL="no image tool available on PATH (or not a git repository)"
+  FAIL_EXIT=2
+fi
 
-TXT_BYTES=$(stat -f%z "$OUTPUT_TXT" 2> /dev/null || stat -c%s "$OUTPUT_TXT" 2> /dev/null || echo 0)
-
-audit screenshot_tool_missing ok "$(
+audit screenshot_capture_failed fail "$(
   jq -nc \
-    --arg tools_checked "silicon, magick" \
+    --arg tools_checked "$TOOLS_CHECKED" \
     --arg slug "$SLUG" \
-    --arg path "$OUTPUT_TXT" \
+    --arg path "$OUTPUT_PNG" \
     --arg platform "$PLATFORM" \
-    '{tools_checked:$tools_checked,slug:$slug,path:$path,platform:$platform}'
+    --arg reason "$FAIL_REASON" \
+    '{tools_checked:$tools_checked,slug:$slug,path:$path,platform:$platform,reason:$reason}' \
+    2> /dev/null || printf '{}'
 )" 2> /dev/null || true
 
-printf 'path=%s bytes=%d ok=false error=tool_missing\n' "$OUTPUT_TXT" "$TXT_BYTES"
-exit 2
+printf >&2 'error: capture failed (%s): %s; tools checked: %s\n' \
+  "$FAIL_REASON" "$FAIL_DETAIL" "$TOOLS_CHECKED"
+printf 'path=%s bytes=0 ok=false error=%s\n' "$OUTPUT_PNG" "$FAIL_REASON"
+exit "$FAIL_EXIT"

@@ -129,6 +129,14 @@ toks_str() {
 PL_REQ="stage verdict summary refs key_decisions next_stage_focus open_questions"
 AR_REQ="stage verdict summary refs key_decisions next_stage_focus open_questions"
 TL_REQ="stage verdict summary refs next_stage_focus open_questions"
+# R-2.1 — the changed-file list is capped structurally, not excluded from the budget: the
+# observed failure was not stages running out of budget, it was each stage inventing its own
+# truncation. One shape everywhere: the first FILES_TOUCHED_MAX repo-relative paths plus a
+# single `+ <count> more` marker. Ten paths plus the marker measure 33 proxy tokens of the
+# 200-token discretionary budget. Defined once here and in stage-contracts.md; the budget
+# checker gains no second extractor and no second cap constant.
+FILES_TOUCHED_MAX=10
+
 DV_REQ="stage verdict summary refs files_touched next_stage_focus open_questions"
 DR_REQ="stage verdict summary refs key_decisions open_questions"
 SR_REQ="stage verdict summary refs key_decisions open_questions"
@@ -361,6 +369,53 @@ check_sweep_ledger() {
   artname=$(basename "${artifact:-the artifact}")
   _sweep_load "$fmfile" || return 1
   ids=$(_sweep_rows STUB | sed 's/ .*//')
+
+  # Reverse direction, scoped to THIS TASK. facts.open_questions[] accumulates across every
+  # stage, and a split stage (DV0/DV1) shares one `.stage` slice, so the slice alone would
+  # charge one stream with the other's stubs. The `sw-<TASK_ID>-` prefix is the task identity:
+  # an artifact carrying stubs is charged only ids under its own prefixes; one with no stubs
+  # is charged the stage slice only when tasks{} holds at most one task of that stage.
+  local stage_code ledger_ids extra artifact_tasks stage_tasks
+  stage_code=$(yq eval '.handoff.stage // ""' "$fmfile" 2> /dev/null || printf '')
+  ledger_ids=""
+  if [[ -n "$stage_code" && "$stage_code" != "null" ]] && [[ -r "$STATE_ARG" ]]; then
+    artifact_tasks=$(printf '%s\n' "$ids" \
+      | sed -n 's/^sw-\([A-Z][A-Z][0-9][0-9]*\)-[0-9][0-9]*$/\1/p' | sort -u)
+    if [[ -n "$artifact_tasks" ]]; then
+      ledger_ids=$(jq -r --arg st "$stage_code" \
+          --argjson tasks "$(printf '%s\n' "$artifact_tasks" | jq -R . | jq -sc .)" '
+          (.facts.open_questions? // []) | map(select((.stage // "") == $st)) | .[].id // empty
+          | select(. as $i | $tasks | any(. as $t | $i | startswith("sw-" + $t + "-")))' \
+        "$STATE_ARG" 2> /dev/null || printf '')
+    else
+      stage_tasks=$(jq -r --arg st "$stage_code" \
+          '(.tasks // {}) | keys[] | select(test("^" + $st + "[0-9]+$"))' \
+        "$STATE_ARG" 2> /dev/null | grep -c . || true)
+      if [[ "${stage_tasks:-0}" -le 1 ]]; then
+        ledger_ids=$(jq -r --arg st "$stage_code" '
+            (.facts.open_questions? // []) | map(select((.stage // "") == $st)) | .[].id // empty' \
+          "$STATE_ARG" 2> /dev/null || printf '')
+      fi
+    fi
+  fi
+
+  # An empty artifact stub block used to be a silent pass — the one shape that hides a whole
+  # stage's sweep. It is only a pass when the ledger holds nothing for this stage either.
+  if [[ -z "$ids" ]] && [[ -z "$ledger_ids" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$ledger_ids" ]]; then
+    extra=$(printf '%s\n' "$ledger_ids" | grep -vxF -f <(printf '%s\n' "$ids") 2> /dev/null || true)
+    if [[ -n "$extra" ]]; then
+      while IFS= read -r id; do
+        [[ -n "$id" ]] || continue
+        echo "fail: sweep stub $id is in ledger, not in frontmatter — facts.open_questions[] carries it for stage $stage_code but $artname does not. Re-emit it in the artifact's open_questions[], or the two transports disagree about what this stage asked" >&2
+      done <<< "$extra"
+      return 1
+    fi
+  fi
+
   [[ -n "$ids" ]] || return 0
 
   unreadable=$(state_unreadable_reason)
@@ -457,6 +512,97 @@ check_sweep_ledger() {
     fi
   done <<< "$divergent"
   return 1
+}
+
+# files_touched shape: at most FILES_TOUCHED_MAX paths, and any overflow declared by exactly
+# one trailing `+ <count> more` marker. A list longer than the cap with no marker is the
+# ad-hoc truncation this convention exists to replace — it reads as a complete set.
+check_files_touched_cap() {  # <fmfile> <stage> <artname>
+  local fmfile="$1" stage="$2" artname="$3"
+  local entries markers paths last
+  entries=$(yq eval '(.handoff.files_touched // []) | .[]' "$fmfile" 2> /dev/null || printf '')
+  [[ -n "$entries" ]] || return 0
+  markers=$(printf '%s\n' "$entries" | grep -cE '^\+ [0-9]+ more$' || true)
+  paths=$(printf '%s\n' "$entries" | grep -vcE '^\+ [0-9]+ more$' || true)
+  last=$(printf '%s\n' "$entries" | tail -1)
+
+  if [[ "$markers" -gt 1 ]]; then
+    echo "fail: stage=$stage files_touched carries ${markers} '+ <count> more' markers in $artname — emit exactly one, last" >&2
+    return 1
+  fi
+  if [[ "$markers" -eq 1 ]] && ! printf '%s' "$last" | grep -qE '^\+ [0-9]+ more$'; then
+    echo "fail: stage=$stage files_touched has a '+ <count> more' marker that is not the last entry in $artname" >&2
+    return 1
+  fi
+  if [[ "$paths" -gt "$FILES_TOUCHED_MAX" ]]; then
+    echo "fail: stage=$stage files_touched lists ${paths} paths > FILES_TOUCHED_MAX=${FILES_TOUCHED_MAX} in $artname — emit the first ${FILES_TOUCHED_MAX} plus one '+ <count> more' marker, and mark the body section carrying the full set authoritative in the same edit" >&2
+    return 1
+  fi
+  return 0
+}
+
+# key_decisions vs the body: the same id must not carry two different summaries. Until this
+# existed the harness read the frontmatter slice alone, so a decision could be restated in the
+# body with a different meaning and every downstream reader picked whichever copy it happened
+# to open. Overlap-based, not equality: the frontmatter summary is a ≤160-char precis of a
+# longer body entry, so a shared-vocabulary test is what distinguishes a precis from a
+# contradiction. Silent when an id has no body entry — not every decision is restated.
+check_decision_divergence() {  # <artifact> <fmfile> <stage>
+  local artifact="$1" fmfile="$2" stage="$3"
+  local rows body id fsum bsum artname
+  artname=$(basename "$artifact")
+  rows=$(yq eval '(.handoff.key_decisions // []) | .[] | ((.id // "") + "\t" + (.summary // ""))' \
+    "$fmfile" 2> /dev/null || printf '')
+  [[ -n "$rows" ]] || return 0
+  body=$(mktemp -t handoff-body-XXXXXX)
+  awk '/^---$/ { c++; next } c >= 2' "$artifact" > "$body"
+
+  local failed=0
+  while IFS=$'\t' read -r id fsum; do
+    [[ -n "$id" && -n "$fsum" ]] || continue
+    # Table row `| id | summary | ...` or bullet `- **id** — summary`; first hit wins.
+    bsum=$(awk -v id="$id" '
+      $0 ~ ("^[[:space:]]*\\|[[:space:]]*(\\*\\*)?" id "(\\*\\*)?[[:space:]]*\\|") {
+        n = split($0, f, "|"); if (n >= 4) { print f[3]; exit }
+      }
+      $0 ~ ("^[[:space:]]*[-*][[:space:]]+\\*\\*" id "\\*\\*") {
+        line = $0; sub(/^[^*]*\*\*[^*]*\*\*[[:space:]]*[-—:]*[[:space:]]*/, "", line)
+        print line; exit
+      }' "$body")
+    [[ -n "$bsum" ]] || continue
+    if ! awk -v a="$fsum" -v b="$bsum" '
+      # Deliberately narrow. A frontmatter summary is a ≤160-char precis of a longer body
+      # entry, so paraphrase is the NORM and an equality or high-overlap test would fail
+      # honest artifacts — a boundary-blocking false failure is worse than the divergence it
+      # would catch. Two shapes are reported, both of which mean the id resolves to two
+      # different statements rather than two phrasings of one:
+      #   1. the two share no significant vocabulary at all;
+      #   2. both quote numbers and no number is common (a restated bound or count).
+      function harvest(x, W, D,   i, n, w) {
+        x = tolower(x)
+        n = split(x, w, /[^a-z0-9]+/)
+        for (i = 1; i <= n; i++) {
+          if (w[i] == "") continue
+          if (w[i] ~ /^[0-9]+$/) D[w[i]] = 1
+          else if (length(w[i]) >= 4) W[w[i]] = 1
+        }
+      }
+      BEGIN {
+        harvest(a, AW, AD); harvest(b, BW, BD)
+        for (k in AW) { ca++; if (k in BW) hit++ }
+        for (k in BW) cb++
+        for (k in AD) { na++; if (k in BD) dhit++ }
+        for (k in BD) nb++
+        if (ca > 0 && cb > 0 && hit == 0) exit 1
+        if (na > 0 && nb > 0 && dhit == 0) exit 1
+        exit 0
+      }'; then
+      echo "fail: decision $id disagrees across transports — frontmatter says \"${fsum}\" but the ${artname} body says \"${bsum}\". Reconcile both to one statement; a reader resolving the id must not get two answers" >&2
+      failed=1
+    fi
+  done <<< "$rows"
+  rm -f "$body"
+  return "$failed"
 }
 
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
@@ -572,6 +718,16 @@ validate_frontmatter() {
       rm -f "$fmfile"
       return 1
     fi
+  fi
+
+  if ! check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")"; then
+    rm -f "$fmfile"
+    return 1
+  fi
+
+  if ! check_decision_divergence "$f" "$fmfile" "$stage"; then
+    rm -f "$fmfile"
+    return 1
   fi
 
   if ! check_sweep_stub_shape "$fmfile"; then

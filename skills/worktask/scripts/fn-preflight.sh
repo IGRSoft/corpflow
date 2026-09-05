@@ -5,6 +5,10 @@
 #
 #   Checks, each also runnable standalone:
 #     attachments    both Conductor attachment files exist (gate trip-wire mirror).
+#     staging        no payload file is BOTH staged and modified again in the worktree;
+#                    such a file ships its staged bytes while every report describes the
+#                    worktree. Names the offending files. A merely-unstaged file is the
+#                    normal pre-`git add` state and never fires.
 #     resolve-issue  print the issue number from ranked sources (first-match-wins).
 #     validate-pr    the composed PR body carries `Closes #<n>` for the resolved issue,
 #                    OR (no issue resolvable) append an audit-defer row and pass.
@@ -37,7 +41,7 @@
 #                    over 3x the ledger's AND over 20 files larger — the signature of a
 #                    base this work never forked from. Warns when HEAD is >25 commits
 #                    ahead. Every unresolvable input degrades to a warning + exit 0.
-#     all            attachments → pr-body → validate-pr → continuity → base-sanity.
+#     all            attachments → staging → pr-body → validate-pr → continuity → base-sanity.
 #
 #   `branch-divergence` and `issue-close-required` are deliberately NOT in `all`: each is a
 #   separate subcommand so it is independently testable and cannot perturb `continuity`'s
@@ -81,7 +85,7 @@
 #
 # @exitcode 0   Check passed (or a non-blocking degrade: no issue resolvable / diverged /
 #               scope-disabled).
-# @exitcode 1   Blocking failure (missing attachment; body missing the closing keyword;
+# @exitcode 1   Blocking failure (missing attachment; a file both staged and re-modified; body missing the closing keyword;
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
 #               visual-evidence evidence, or an unreachable sanitiser library;
 #               `base-sanity`: the PR diff dwarfs this run's own record of it).
@@ -181,7 +185,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help) usage ;;
-    attachments | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | base-sanity | all)
+    attachments | staging | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | base-sanity | all)
       COMMAND="$1"
       shift
       ;;
@@ -199,6 +203,7 @@ done
 
 case "$COMMAND" in
   attachments) cmd_attachments ;;
+  staging) cmd_staging ;;
   resolve-issue) resolve_issue && printf '\n' ;;
   validate-pr) cmd_validate_pr ;;
   pr-body) cmd_pr_body ;;
@@ -207,6 +212,7 @@ case "$COMMAND" in
   issue-close-required) cmd_issue_close_required ;;
   base-sanity) cmd_base_sanity ;;
   all)
-    cmd_attachments && cmd_pr_body && cmd_validate_pr && cmd_continuity && cmd_base_sanity
+    cmd_attachments && cmd_staging && cmd_pr_body && cmd_validate_pr && cmd_continuity \
+      && cmd_base_sanity
     ;;
 esac

@@ -366,19 +366,20 @@ setup() {
   bash "$PLUGIN_ROOT/$SCRIPT" --facts \
     '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
   cp .context/state.json .context/state.json.snap
-  # Each defect names itself: "bad shape" hands the caller nothing to act on.
+  # Each defect names itself AND the item it came from: per-item rejection reports
+  # "<key> <id>: <reason>", so a mixed payload says which stub was refused.
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
     '{"open_questions":[{"id":"sw-P0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
   assert_failure 2
-  assert_output --partial "id sw-P0-1 is not sw-<TASK_ID>-<n>"
+  assert_output --partial "sw-P0-1: id is not sw-<TASK_ID>-<n>"
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
     '{"open_questions":[{"id":"sw-PL0-1","class":"question","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
   assert_failure 2
-  assert_output --partial "class is not decision|escalate"
+  assert_output --partial "sw-PL0-1: class is not decision|escalate"
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts \
     '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"","blocks_next_stage":false}]}'
   assert_failure 2
-  assert_output --partial "ref is not an optional <artifact>.md path plus one non-empty #anchor"
+  assert_output --partial "sw-PL0-1: ref is not an optional <artifact>.md path plus one non-empty #anchor"
   run diff -q .context/state.json .context/state.json.snap
   assert_success
 }
@@ -462,10 +463,15 @@ setup() {
   cp .context/state.json snap
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":["not-an-object"]}'
   assert_failure
-  assert_output --partial "bad shape for decisions"
+  assert_output --partial 'decisions "not-an-object": not an object'
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"files_modified":[7]}'
   assert_failure
-  assert_output --partial "bad shape for files_modified"
+  assert_output --partial "files_modified 7: not a string"
+  # A value that is not an array at all stays a whole-payload refusal: nothing in it is
+  # item-shaped enough to salvage.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":{"id":"d1"}}'
+  assert_failure
+  assert_output --partial "bad shape for decisions (expected an array)"
   run bash "$PLUGIN_ROOT/$SCRIPT" --facts 'not json'
   assert_failure
   assert_output --partial "not valid JSON"
@@ -1176,4 +1182,91 @@ two_open_dv() {
   assert_success
   run jq -r '.facts.open_questions[0] | .stage + "/" + .status' .context/state.json
   assert_output "PL/open"
+}
+
+# --- per-item --facts rejection (R-2.3) --------------------------------------
+
+@test "facts: a mixed payload persists its valid items and rejects only the bad ones" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{
+      "decisions":[{"id":"d-good","summary":"kept"},{"summary":"no id"}],
+      "open_questions":[
+        {"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false},
+        {"id":"sw-DV0-2","class":"risk","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  # Non-zero, because every existing caller branches on exit status to see a rejection.
+  assert_failure 2
+  assert_output --partial "2 item(s) rejected, the rest still persist"
+  assert_output --partial "sw-DV0-2: class is not decision|escalate"
+  run jq -r '[.facts.decisions[].id] | join(",")' .context/state.json
+  assert_output --partial "d-good"
+  run jq -r '[.facts.open_questions[].id] | join(",")' .context/state.json
+  assert_output --partial "sw-DV0-1"
+  refute_output --partial "sw-DV0-2"
+}
+
+@test "facts: a payload whose every item is invalid leaves the ledger byte-unchanged" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"open_questions":[{"id":"sw-DV0-1"}]}'
+  assert_failure 2
+  assert_output --partial "no valid items in the payload"
+  run diff -q .context/state.json snap
+  assert_success
+}
+
+@test "facts: a rejection prints its diagnostic instead of the usage block" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"open_questions":[{"id":"sw-DV0-1"}]}'
+  assert_failure 2
+  # The reproduction this fixes: ~100 lines of help scrolled the real message away.
+  [ "${#lines[@]}" -le 6 ]
+  refute_output --partial "@arg"
+}
+
+@test "facts: a write with no ledger fails loudly rather than exiting 0 in silence" {
+  cd "$WD"
+  rm -f .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"decisions":[{"id":"d-1"}]}'
+  assert_failure
+  assert_output --partial "landed nothing"
+}
+
+# --- metadata.description cap (R-4.4) ----------------------------------------
+
+@test "task description: over-long values are truncated, never rejected, on create and meta" {
+  cd "$WD"
+  local long; long="$(printf 'x%.0s' $(seq 1 400))"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create ET0 \
+    --metadata "$(jq -nc --arg d "$long" '{stage:"ET",agent:"corpflow:ethics-reviewer",description:$d}')"
+  assert_success
+  run jq -r '.tasks.ET0.metadata.description | length' .context/state.json
+  assert_output "240"
+  run jq -r '.tasks.ET0.metadata.agent' .context/state.json
+  assert_output "corpflow:ethics-reviewer"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta ET0 \
+    --set "$(jq -nc --arg d "$long" '{description:$d}')"
+  assert_success
+  run jq -r '.tasks.ET0.metadata.description | endswith("…")' .context/state.json
+  assert_output "true"
+}
+
+@test "task description: a value inside the cap is stored byte-for-byte" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create ET1 \
+    --metadata '{"stage":"ET","description":"short and unchanged"}'
+  assert_success
+  run jq -r '.tasks.ET1.metadata.description' .context/state.json
+  assert_output "short and unchanged"
+}
+
+@test "facts: a partial rejection beside --stage survives the idempotent no-op exit" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md > /dev/null
+  # Second completion is the idempotent path — the one every rework round takes.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
+    --facts '{"decisions":[{"id":"d-ok"},{"summary":"no id"}]}'
+  assert_failure 2
+  run jq -r '[.facts.decisions[].id] | index("d-ok") != null' .context/state.json
+  assert_output "true"
 }

@@ -142,9 +142,19 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     },
     "description": {
       "type": "string",
-      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set."
+      "maxLength": 240,
+      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set. Capped: see below."
     },
 ```
+
+#### `description` is capped at 240 chars
+
+Both writers — `--task-create --metadata` and `--task-meta --set` — truncate a longer value with an
+ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation.
+
+The orchestrator's **dispatch-time appends** (test scope, bans, the FN banner) are a different
+thing. They mutate an in-memory copy that is never written back, so they are transient and
+uncapped; capping post-append would silently strip those banners from the prompt that needs them.
 
 #### Schema — run & context properties
 

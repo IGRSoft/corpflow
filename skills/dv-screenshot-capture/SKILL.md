@@ -24,7 +24,7 @@ Run under any of:
 
 ```
 .context/images/<worktask_id>/
-├── dv-NN-<slug>.png    # captures 01–05 (or .txt placeholder)
+├── dv-NN-<slug>.png    # captures 01–05
 ├── oversize/           # .gitignore'd; oversize PNGs, never committed
 └── screenshots.md      # REQUIRED manifest — single source of truth
 ```
@@ -78,8 +78,8 @@ Uniform contract — every adapter returns the same shape:
 
 ```
 capture(slug: string, platform: string, args: object) → {
-  path:  string,     # .context/images/<worktask_id>/dv-NN-<slug>.png (or .txt)
-  bytes: integer,    # filesystem size (0 if .txt placeholder)
+  path:  string,     # .context/images/<worktask_id>/dv-NN-<slug>.png
+  bytes: integer,    # filesystem size
   ok:    boolean,
   error: string | null   # null on success; values below
 }
@@ -175,9 +175,9 @@ The log scrape reads the most recent xcodebuild log under `.context/logs/` and c
 
 #### cli/fallback adapter
 
-Also serves `platform: "all"`, and is implemented by `scripts/cli-fallback.sh`. Chain: **1)** `git diff` piped to `silicon --language diff`; **2)** silicon absent → an ImageMagick `caption:` text card of the first 60 diff lines; **3)** neither available → a `<path>.txt` placeholder, still recorded in screenshots.md with `ok: false`, `error: "tool_missing"`.
+Also serves `platform: "all"`, and is implemented by `scripts/cli-fallback.sh`. Chain: **1)** `git diff` piped to `silicon --language diff`; **2)** silicon absent → an ImageMagick `caption:` text card of the first 60 diff lines; **3)** neither produced a usable PNG → **no file is written**: `ok: false` with `error: "tool_missing"` (exit 2, nothing on PATH) or `"render_failed"` (exit 3, a tool ran and failed).
 
-This IS the fallback — nothing sits under it; `.txt` is the floor. Exact commands, `.txt` schema, and the redaction recipe: `references/cli-fallback.md`.
+This IS the fallback — nothing sits under it, and its floor is a loud failure rather than an artifact. A placeholder file passes an existence check while proving nothing, so consumers must treat any non-zero exit as "no capture" and never manifest the path from the contract line. Exact commands, the floor's exit codes, and the redaction recipe: `references/cli-fallback.md`.
 
 ## Scripts (canonical executables)
 
@@ -212,7 +212,7 @@ bash scripts/size-budget.sh --path <file> --worktask-id <id> \
 
 | Script | Does | Failure detail |
 |--------|------|----------------|
-| `cli-fallback.sh` | Runs the silicon→magick→`.txt` chain; emits `path=… bytes=… ok=… error=…` | none — it is the floor |
+| `cli-fallback.sh` | Runs the silicon→magick chain; emits `path=… bytes=… ok=… error=…` | exit 2 `tool_missing` / exit 3 `render_failed`; neither writes a file |
 | `size-budget.sh` | Executable form of `§ Size budget`; emits `size_audit: path=… bytes=… verdict=…` | n/a |
 
 #### Tool-resolution notes
@@ -225,7 +225,7 @@ Playwright resolves as a `playwright` binary on PATH, else the local package via
 
 All but `apple-canvas.sh` implement `--self-test` — fixture-driven, needing no network, git, browser, or device. Exit codes and the stdout contract live in each script's shdoc header.
 
-The three capture scripts share one exit-code grammar: **0** success, **1** bad arguments, **2** `tool_missing`, **3** `capture_failed`. Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
+The three capture scripts share one exit-code grammar: **0** success, **1** bad arguments, **2** `tool_missing`, **3** `capture_failed` (`render_failed` in `cli-fallback.sh`, which has no lower rung to route to). Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
 
 ### Adapter maturity
 
@@ -245,7 +245,6 @@ The manifest is the authoritative index, rewritten atomically on every skill inv
 | # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
 |---|------|------|-------|----------|---------|---------|----------|------------|
 | 01 | <slug> | dv-01-<slug>.png | 187234 | apple | apple_adapter | <one-line caption> | <ISO-8601 UTC> | design-002 |
-| 02 | <slug> | dv-02-<slug>.txt | 0      | all   | cli_fallback (.txt) | tool_missing: silicon and magick absent | <ISO-8601 UTC> | — |
 ```
 
 All nine columns are mandatory and `#` is two digits — `attach-visual-evidence.sh --validate-manifest` owns the grammar. Worked example: `references/examples/README.md`.
@@ -260,7 +259,7 @@ The trailing **`Design Ref`** column is the QA join key: the matching `figma-reg
 <!-- …continued: screenshots.md manifest template -->
 ## Fallbacks invoked
 
-- dv-02: silicon and ImageMagick both absent on PATH; .txt placeholder written.
+- dv-02: silicon and ImageMagick both absent on PATH; no capture produced (`tool_missing`).
 
 ## Out-of-budget files (link-only)
 
@@ -294,7 +293,7 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 **Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (camo fetches anonymously; private raw URLs 404; relative links unresolved).
 
-FN instead runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes`. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block of hosted URLs, and prints nothing when `requires_screenshots == false` or no captures exist. `.txt` placeholder and oversize rows become plain bullets, never image embeds. Insertion contract: `skills/worktask/references/conductor-attachments.md`.
+FN instead runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes`. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block of hosted URLs, and prints nothing when `requires_screenshots == false` or no captures exist. Oversize rows and rows past the embed cap become plain bullets, never image embeds. Insertion contract: `skills/worktask/references/conductor-attachments.md`.
 
 #### Attachment consumers
 
@@ -332,7 +331,7 @@ Budget constants: **warn ≥200 KB**, **hard fail ≥500 KB**, **cap 5 files/run
 
 | Failure | Detection | Required Behavior |
 |---------|-----------|-------------------|
-| All adapters fail including `cli_fallback` (no silicon, no magick) | `cli_fallback` returns `ok: false, error: "tool_missing"` | Write `.txt` placeholder. Audit `screenshot_tool_missing`. screenshots.md records it. DV completion counts this as evidence-of-attempt — the gate measures evidence, not visual fidelity. |
+| All adapters fail including `cli_fallback` | `ok: false` with `error: "tool_missing"` (exit 2, nothing on PATH) or `"render_failed"` (exit 3, a tool ran, no usable PNG) | No file is written: a placeholder passes an existence check while proving nothing. Audit `screenshot_capture_failed`; screenshots.md records the reason. DV reports a failed capture. |
 | Size budget exceeded after pngquant | `oversize_unquantizable` | Move to `oversize/`, link-only in screenshots.md. Continue. |
 | 5-cap reached | `screenshot_count_exceeded` | Stop further captures. Audit row. Continue. |
 | `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/worktask.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Do NOT silently treat as success. |
@@ -365,7 +364,7 @@ The `cli/fallback` `git diff` pipe can expose env files, tokens, or secrets pres
 | `screenshot_size_warn` | 200 KB ≤ bytes < 500 KB | `path, bytes` |
 | `screenshot_size_fail` | bytes ≥ 500 KB after pngquant | `path, bytes_before, bytes_after` |
 | `screenshot_count_exceeded` | 6th capture attempted | `attempted_slug` |
-| `screenshot_tool_missing` | cli/fallback: no silicon, no magick | `tools_checked` |
+| `screenshot_capture_failed` | cli/fallback floor: no tool, or a tool that rendered nothing usable | `tools_checked`, `reason` |
 
 #### canvas and visual-diff actions
 

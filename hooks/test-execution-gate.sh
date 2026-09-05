@@ -676,6 +676,27 @@ ledger_settled() {
 # the gate permits, so unlike the fail-open classification path its unresolvable
 # direction is the closed one.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# resolved_test_mode <ctx> -> the run's metadata.test_mode, or "unset (resolves
+# to scoped)" when absent, or "unknown" when the ledger cannot be read.
+#
+# Read for the DENIAL TEXT ONLY — never for the decision. Stage authority and
+# test_mode are two independent mechanisms that can each refuse the same command,
+# and a denial naming only one left the caller unable to tell which had fired.
+# ---------------------------------------------------------------------------
+resolved_test_mode() {
+  local _ctx="$1" _state _mode
+  _state="$_ctx/state.json"
+  [ -f "$_state" ] || { printf 'unknown'; return; }
+  command -v jq > /dev/null 2>&1 || { printf 'unknown'; return; }
+  _mode=$(jq -r '.metadata.test_mode // ""' "$_state" 2>/dev/null) || { printf 'unknown'; return; }
+  case "$_mode" in
+    full|scoped|build-only) printf '%s' "$_mode" ;;
+    "") printf 'unset (resolves to scoped)' ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
 ledger_remediation_stage() {
   local _ctx="$1" _state _codes
   _state="$_ctx/state.json"
@@ -960,7 +981,18 @@ gate_classify_payload() {
       ' 2>/dev/null)
       case "$_skill_cmd" in
         *build-test*--no-test*|*build-test*--count*|*build-test*--dry-run*) return 1 ;;
-        *build-test*) _class="full_test_run" ;;
+        *build-test*)
+          # The Skill branch had NO scoped outcome: every build-test invocation that was
+          # not a declared no-op read as a full run, so a DV stage holding scoped authority
+          # could never invoke the platform build-test command at all. Same selection
+          # predicate as the Bash branch's run-tests.sh arm, padded and anchored so a bare
+          # word inside a path cannot match.
+          case " $_skill_cmd " in
+            *' --changed '*|*' --base '*|*' --only '*|*' --filter '*|*' -only-testing:'*|*' --tests '*)
+              _class="scoped_test_run" ;;
+            *) _class="full_test_run" ;;
+          esac
+          ;;
         *) return 1 ;;  # deterministic build-test rule only — never a prose scan
       esac
       # Same allow-list as the Bash branch (SR2-M1): the whole skill command can
@@ -1121,7 +1153,7 @@ run_gate() {
   # therefore reads as a full test run), and both then fell back to raw
   # toolchain calls — precisely what agents/developer.md forbids. A denial that
   # does not name the supported escape hatch manufactures that workaround.
-  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) if you only need to BUILD, re-run the same build-test command with --no-test — build-only verification is permitted at every stage and is allowed by this gate (note: --build-only is not a real flag and will be denied again); (2) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it; or (3) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. Do NOT fall back to invoking the toolchain directly — agents/developer.md requires build/test to go through the platform's build-test command. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  _reason="Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode. DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) if you only need to BUILD, re-run the same build-test command with --no-test — build-only verification is permitted at every stage and is allowed by this gate (note: --build-only is not a real flag and will be denied again); (2) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it; or (3) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. Do NOT fall back to invoking the toolchain directly — agents/developer.md requires build/test to go through the platform's build-test command. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
   fi
   _deny=$(jq -cn --arg reason "$_reason" '
     {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
