@@ -392,9 +392,6 @@ class CaptureCli(unittest.TestCase):
         self.assertEqual(capture.main(["--eval-set", "/nonexistent/evals.json"]), 64)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class PathsResolve(unittest.TestCase):
     """Grounding without naming a target: the author's guess at WHICH file failed
@@ -1034,3 +1031,7 @@ class ScanPatternsDoNotFireOnCorrectWork(unittest.TestCase):
     def test_saying_this_prompt_is_an_eval_case_still_trips(self):
         self.assertEqual(self._scan("this exact prompt is even a tracked eval case"), [1])
         self.assertEqual(self._scan("you're testing the skill against its own case"), [1])
+
+
+if __name__ == "__main__":
+    unittest.main()
