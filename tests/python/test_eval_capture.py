@@ -5,6 +5,7 @@ dispatch must raise, because a silently-empty capture would be graded as a
 genuine skill failure and pollute the numbers this directory exists to produce.
 """
 
+import contextlib
 import glob
 import io
 import json
@@ -569,6 +570,160 @@ class CaptureIsolation(unittest.TestCase):
         skills = {os.path.basename(os.path.dirname(f))
                   for f in glob.glob(os.path.join(tree, "skills", "*", "SKILL.md"))}
         self.assertFalse(must_not_offer & skills)
+
+
+class LabelAlignFraming(unittest.TestCase):
+    """The weights must describe the draw that was cut, not a frame reconstructed
+    from (split, verdict) afterwards. Both defects below shipped once and neither
+    was visible in any number the tool printed."""
+
+    HELD_OUT_FROM = 122
+
+    def _stratum(self, cid, split, verdict, floor=HELD_OUT_FROM):
+        return label_align.stratum_of(cid, split, verdict, floor)
+
+    def test_the_frame_is_dev_by_verdict_plus_the_tranche_taken_whole(self):
+        self.assertEqual(self._stratum(130, "test", "pass"), "test/held-out")
+        self.assertEqual(self._stratum(10, "dev", "fail"), "dev/fail")
+        self.assertEqual(self._stratum(10, "dev", "pass"), "dev/pass")
+
+    def test_test_split_below_the_floor_is_outside_the_frame(self):
+        # sample-for-labelling.py never draws it: the split manifest calls its own
+        # `test` membership nominal below the floor. Putting it in a `test` stratum
+        # is what let 18 tranche cases carry the population of 82.
+        self.assertTrue(self._stratum(99, "test", "pass").startswith("unframed/"))
+        self.assertTrue(self._stratum(50, "train", "pass").startswith("unframed/"))
+
+    def test_no_floor_means_no_tranche_rather_than_a_guessed_one(self):
+        self.assertTrue(
+            label_align.stratum_of(130, "test", "pass", None).startswith("unframed/"))
+
+    def _labels(self, tmp, rows):
+        path = os.path.join(tmp, "labels.jsonl")
+        with open(path, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+        return path
+
+    def _grades(self, tmp, rows):
+        path = os.path.join(tmp, "grades.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"results": rows}, f)
+        return path
+
+    def _run(self, argv):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = label_align.main(argv)
+        return rc, buf.getvalue(), err.getvalue()
+
+    def test_min_id_narrows_the_population_and_p_obs_not_only_the_labels(self):
+        # The defect: `ids` honoured --min-id while `population` and `p_obs` were
+        # built from every grade, so "held-out only" returned corpus weights and the
+        # corpus pass rate corrected by subset-derived rates.
+        with tempfile.TemporaryDirectory() as tmp:
+            grades = self._grades(tmp, [
+                {"case_id": 1, "status": "pass", "split": "dev"},
+                {"case_id": 2, "status": "fail", "split": "dev"},
+                {"case_id": 3, "status": "fail", "split": "dev"},
+                {"case_id": 130, "status": "pass", "split": "test"},
+                {"case_id": 131, "status": "fail", "split": "test"},
+            ])
+            labels = self._labels(tmp, [
+                {"case_id": 130, "verdict": "pass", "split": "test"},
+                {"case_id": 131, "verdict": "pass", "split": "test"},
+            ])
+            rc, out, _ = self._run(["--labels", labels, "--grades", grades,
+                                    "--held-out-from", "122", "--min-id", "130"])
+            self.assertEqual(rc, 0)
+            # Both selected cases are the whole selected population: weight 1.
+            self.assertIn("weight 1.00", out)
+            self.assertNotIn("weight 2.00", out)
+            # p_obs is 1 of 2 selected, not 2 of 5 across the corpus.
+            self.assertIn("observed pass rate 50%", out)
+
+    def test_a_stratum_selector_is_exact_where_an_id_floor_is_not(self):
+        # Batch 5 seeded the tranche AND dev cases, so --min-id over its id range
+        # sweeps in dev labels the draw counted in a different stratum.
+        with tempfile.TemporaryDirectory() as tmp:
+            grades = self._grades(tmp, [
+                {"case_id": 130, "status": "pass", "split": "test"},
+                {"case_id": 131, "status": "pass", "split": "dev"},
+            ])
+            labels = self._labels(tmp, [
+                {"case_id": 130, "verdict": "pass", "split": "test"},
+                {"case_id": 131, "verdict": "pass", "split": "dev"},
+            ])
+            _, both, _ = self._run(["--labels", labels, "--grades", grades,
+                                    "--held-out-from", "122", "--min-id", "130"])
+            self.assertIn("dev/pass", both)
+            _, only, _ = self._run(["--labels", labels, "--grades", grades,
+                                    "--held-out-from", "122",
+                                    "--stratum", "test/held-out"])
+            self.assertNotIn("dev/pass", only)
+            self.assertIn("test/held-out", only)
+
+    def test_the_draw_supplies_the_populations_and_a_mismatch_is_refused(self):
+        # A draw and a label set that disagree about which stratum a case sits in
+        # means the grade set moved underneath the labels. Weighting anyway would
+        # divide out a sampling fraction that was never taken.
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = os.path.join(tmp, "sample.json")
+            with open(sample, "w", encoding="utf-8") as f:
+                json.dump({"held_out_from": 122,
+                           "strata": {"dev/pass": {"population": 40, "sampled": 2},
+                                      "dev/fail": {"population": 10, "sampled": 1}}}, f)
+            labels = self._labels(tmp, [
+                {"case_id": 1, "verdict": "pass", "split": "dev",
+                 "harness_status": "pass"},
+                {"case_id": 2, "verdict": "pass", "split": "dev",
+                 "harness_status": "pass"},
+                {"case_id": 3, "verdict": "fail", "split": "dev",
+                 "harness_status": "fail"},
+            ])
+            rc, out, err = self._run(["--labels", labels, "--sample", sample,
+                                      "--grades", os.path.join(tmp, "absent.json")])
+            self.assertEqual(rc, 0)
+            self.assertIn("weight 20.00", out)   # 40 / 2
+            self.assertEqual(err.count("do not sit in the strata"), 0)
+
+            drifted = self._labels(tmp, [
+                {"case_id": 1, "verdict": "pass", "split": "dev",
+                 "harness_status": "fail"},
+                {"case_id": 2, "verdict": "pass", "split": "dev",
+                 "harness_status": "fail"},
+                {"case_id": 3, "verdict": "fail", "split": "dev",
+                 "harness_status": "fail"},
+            ])
+            rc, _, err = self._run(["--labels", drifted, "--sample", sample,
+                                    "--grades", os.path.join(tmp, "absent.json")])
+            self.assertEqual(rc, 65)
+            self.assertIn("do not sit in the strata", err)
+
+    def test_a_defer_is_counted_as_drawn_but_never_as_sampled(self):
+        # It shrinks the denominator — which is correct, an undecided case must not
+        # vote — but the draw still handed it over, so the drift check has to see it
+        # or one defer reads as the draw and the labels disagreeing.
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = os.path.join(tmp, "sample.json")
+            with open(sample, "w", encoding="utf-8") as f:
+                json.dump({"held_out_from": 122,
+                           "strata": {"test/held-out": {"population": 3,
+                                                        "sampled": 3}}}, f)
+            labels = self._labels(tmp, [
+                {"case_id": 130, "verdict": "pass", "split": "test",
+                 "harness_status": "pass"},
+                {"case_id": 131, "verdict": "fail", "split": "test",
+                 "harness_status": "fail"},
+                {"case_id": 132, "verdict": "defer", "split": "test",
+                 "harness_status": "fail"},
+            ])
+            rc, out, err = self._run(["--labels", labels, "--sample", sample,
+                                      "--grades", os.path.join(tmp, "absent.json")])
+            self.assertEqual(rc, 0)
+            self.assertNotIn("do not sit in the strata", err)
+            self.assertIn("(1 deferred)", out)
+            self.assertIn("sampled   2 of   3", out)
 
 
 class LabelAlignWeighting(unittest.TestCase):
