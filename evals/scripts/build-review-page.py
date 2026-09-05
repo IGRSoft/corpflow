@@ -29,7 +29,7 @@ _spec.loader.exec_module(engine)
 
 PAGE = """<!doctype html>
 <meta charset="utf-8">
-<title>request-plan trace review</title>
+<title>__SKILL_NAME__ trace review</title>
 <style>
 :root{--bg:#fbfaf8;--fg:#1d1c1a;--mut:#6b6862;--line:#e2ded7;--card:#fff;
 --pass:#1a7f4b;--fail:#b3261e;--defer:#8a6d1f;--accent:#2f5fa8}
@@ -73,7 +73,7 @@ ul{margin:6px 0;padding-left:20px}
 .exp{width:100%;min-height:150px;font-family:ui-monospace,monospace;font-size:12px}
 </style>
 <header>
-  <h1>request-plan review</h1>
+  <h1>__SKILL_NAME__ review</h1>
   <span class="count" id="pos"></span>
   <span class="count" id="tally"></span>
   <select id="filter">
@@ -124,7 +124,12 @@ const TRACES = JSON.parse(document.getElementById('data').textContent);
 // tagged [v050] and 10 named assertions the capture never fired. The verdicts were
 // regenerated and matched; only the free text was stale, which is the hard kind to
 // notice.
-const KEY = 'request-plan-labels-__EVAL_SET_VERSION__';
+// Scoped by SKILL and eval-set version. Browsers keep one localStorage
+// partition across all file:// pages, so a key missing either dimension is a
+// silent cross-store read: a skill-blind key would have merged two eval sets
+// that happened to share a version, and a version-blind one once restored
+// eight notes from an older capture naming assertions it never fired.
+const KEY = '__SKILL_NAME__-labels-__EVAL_SET_VERSION__';
 let labels = JSON.parse(localStorage.getItem(KEY) || '{}');
 let history = [];
 let idx = 0;
@@ -256,6 +261,8 @@ def main(argv) -> int:
     p.add_argument("--grades", default=None, help="eval-grade --json output, for the harness column")
     p.add_argument("--only", default=None,
                    help="JSON list of case ids — the stratified subset worth labelling first")
+    # Default names the only eval set that exists; the storage key inside the page
+    # is derived from the set's own skill_name, so a second set cannot collide here.
     p.add_argument("--out", default=os.path.join(engine.REPO, "evals", "review", "request-plan-review.html"))
     args = p.parse_args(argv)
 
@@ -298,10 +305,12 @@ def main(argv) -> int:
 
     payload = json.dumps(traces, ensure_ascii=False).replace("</script>", "<\\/script>")
     version = str(eval_set.get("eval_set_version") or "unversioned")
+    skill = str(eval_set.get("skill_name") or "unnamed")
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(PAGE.replace("__DATA__", payload)
-                    .replace("__EVAL_SET_VERSION__", version))
+                    .replace("__EVAL_SET_VERSION__", version)
+                    .replace("__SKILL_NAME__", skill))
     print(f"{len(traces)} traces -> {args.out}")
     return 0
 
