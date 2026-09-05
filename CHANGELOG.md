@@ -146,6 +146,41 @@ reduced the number of *implementations*, not the number of lines.
 
 ### Fixed
 
+- **`label-align.py` weighted the held-out tranche against a population it was never drawn
+  from.** Strata were re-derived as `(split, grader_verdict)` rather than taken from the draw
+  `sample-for-labelling.py` actually cut (`dev/<verdict>` over the dev split, plus
+  `test/held-out` taken whole). All 18 labelled tranche cases therefore landed in a stratum
+  whose population was the entire 82-case `test` split and carried a weight near 4.6 — an
+  extrapolation of a deliberately harder tail across cases it does not describe, when weighting
+  assumes a random draw within the stratum. Two faults travelled with it: `--min-id` and
+  `--split` narrowed the labels while `population` and `p_obs` were still built from every
+  grade, so the documented "held-out TPR/TNR only" invocation returned corpus weights and the
+  corpus pass rate; and `--min-id` alone never isolated the tranche, because batch 5 seeded 12
+  dev cases in the same id range. `--sample` now takes the populations from the draw and
+  **refuses (rc 65)** when the labels do not sit in the strata it records, `--stratum` selects a
+  tranche exactly, a `defer` counts as drawn but not as sampled so one deferral no longer reads
+  as a frame mismatch, and `--p-obs` supplies the observed rate when the gitignored responses
+  are gone. Six regression tests. **Published numbers restated:** 0.3.0's corrected rate moves
+  87% [82–92] → **86% [82–90]** and its held-out row 88% [81–88] → **89% [83–100]** on one human
+  negative; 0.2.0's corrected rate is **withdrawn** outright, since its draw records `dev/pass`
+  25 / `dev/fail` 17 against labels carrying 30 / 12. Every label-only quantity — TPR, TNR, the
+  confusion matrices, the paired A/B, the flip and contamination analyses — is unaffected, as is
+  the fully-labelled 0.0.1 baseline.
+- **`build-review-page.py`'s label store was scoped by eval-set version but not by skill.**
+  `localStorage` is one partition across all `file://` pages, so the moment a second eval set
+  shared a version the two label stores would have merged with no symptom. The key now derives
+  from the eval set's own `skill_name`, as do the page title and `<h1>`.
+- **`tests/python/test_eval_capture.py` ran 49 of its 129 tests when executed directly.** An
+  `if __name__ == "__main__": unittest.main()` block sat mid-file, so the 14 classes defined
+  below it did not exist yet when the runner collected. `run-tests.sh` uses discovery and was
+  never affected, which is why it went unnoticed. Moved to EOF.
+- **`evals/README.md` described `failure-labels.jsonl` as a corpus rather than a contract.** The
+  file has never been written: Step 5b is an agent step, not a hook, so the 100-row taxonomy gate
+  stands at 0 of 100. Also corrected two skill ids that resolve to nothing
+  (`evals-skills:error-analysis` → `evals:error-discovery`, `evals-skills:validate-evaluator` →
+  `evals:validate-evaluator`) and a version paragraph still claiming the spec pair reads `0.2.0`
+  — both `SKILL.md` and `eval_set_version` are `0.4.0`, while the last capture is `0.3.0`, so no
+  number in the directory describes the shipping skill.
 - **`fn-preflight continuity` claimed a guarantee it does not provide.** Its description implied it
   would catch a wrong base; it checks that the branch has not diverged from *its recorded* base and
   cannot discriminate whether that base was right in the first place. The description now says so and

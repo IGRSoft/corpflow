@@ -3,12 +3,22 @@
 Evaluation data for the plugin's own output quality — as opposed to `benchmark/`,
 which measures cost and process.
 
-## `failure-labels.jsonl`
+## `failure-labels.jsonl` (specified, and **still empty**)
 
 Append-only, committed dataset of user edits made **after** an agent delivered.
 Written by `skills/self-improvement` Step 5b on every ST completion (and by
 `/improve-yourself`). A user correcting delivered work is a domain-expert failure
 label — the signal most eval systems pay annotators for.
+
+**The file does not exist yet, and nothing below has ever run against real data.**
+The writer (`skills/self-improvement/scripts/append-labels.sh`), its schema, its
+idempotency key and its aggregator are all present and tested; what is absent is a
+single appended row. Step 5b is an agent step in `SKILL.md`, not a hook, so it
+fires only when an ST stage actually reaches it and keeps at least one change — and
+no run in this repo's history has. Read the rest of this section as the contract the
+first row will satisfy, not as a description of a corpus. The 100-row gate below
+therefore stands at **0 of 100**, and `label-stats.sh` on a missing file is the
+expected state rather than a fault.
 
 One row per kept, classified change:
 
@@ -43,13 +53,13 @@ brainstorming category names. Blocked until there is material to read:
 
 Until both exist, writing a taxonomy would mean inventing categories rather than
 observing them, which is the failure this directory exists to avoid. Build it
-with the `evals-skills:error-analysis` skill once the inputs are there, then
+with the `evals:error-discovery` skill once the inputs are there, then
 reconcile it against the six existing self-improvement categories rather than
 forking a second vocabulary.
 
 **Do not build LLM judges before that taxonomy exists.** If it surfaces failure
 modes code cannot check, add judges then — with TPR/TNR measured on a held-out
-split (`evals-skills:validate-evaluator`), never on the few-shot examples.
+split (`evals:validate-evaluator`), never on the few-shot examples.
 
 ## Skill eval sets
 
@@ -99,6 +109,47 @@ evals/scripts/eval-grade.py   --eval-set skills/request-plan/evals/evals.json
 `--mode` picks what is being measured: `command` (default) invokes the skill
 explicitly and grades its output; `natural` sends the bare request and so also
 grades whether the skill triggers at all.
+
+### The weights belong to the draw, not to (split, verdict)
+
+`label-align.py` divides out each stratum's sampling fraction, so a stratum has to
+be the one the sample was actually drawn from. It used to re-derive strata as
+`(split, grader_verdict)` instead, and the two are not the same partition.
+`sample-for-labelling.py` draws from a frame of exactly two kinds of stratum —
+`dev/<verdict>` over the dev split, and `test/held-out`, the newest tranche taken
+whole. Train cases and test cases below the floor are never drawn at all.
+
+Under the old derivation the 18 labelled tranche cases landed in a `('test', ...)`
+stratum whose population was the **whole 82-case test split**, so each carried a
+weight near 4.6. Weighting assumes a random draw within the stratum, and the
+tranche is the opposite of one: `findings/request-plan-0.3.0.md` establishes in the
+same document that batch 5 is *deliberately harder* than the corpus (76% against
+81%, with its `adjacent` cell at 50% against a corpus 81%). The correction was
+extrapolating a hard tail across cases it does not describe.
+
+Two smaller faults travelled with it. `--min-id` and `--split` narrowed the labels
+while `population` and `p_obs` were still built from every grade, so the documented
+"held-out TPR/TNR only" invocation returned corpus weights and the corpus pass rate.
+And `--min-id` alone never isolated the tranche in the first place: batch 5 seeded
+dev cases in the same id range.
+
+What the tool does now:
+
+- `--sample <draw>.json` takes the populations from the draw that was cut. The
+  draw's `held_out_from` assigns each label to its stratum.
+- The per-stratum counts are **checked** against the draw. They disagree only if the
+  grade set moved after the draw was cut, at which point no weight means anything,
+  so it exits 65 rather than printing a number — `--allow-stratum-drift` to override.
+- A `defer` counts as drawn but never as sampled. It still shrinks the denominator;
+  the gap is printed rather than folded away.
+- `--stratum test/held-out` selects a tranche exactly, and `--min-id` / `--split`
+  now narrow the population and `p_obs` by the same predicate they narrow labels by.
+- `--p-obs <rate>` supplies the observed rate when the grade set is not at hand.
+  Captured responses are gitignored and cost a sweep to regenerate, so without it
+  no published corrected rate can be re-derived from what git actually holds.
+
+A labelled case outside the frame is carried at weight 1 and reported, never
+upweighted: it means the draw and the labels disagree about what was sampled.
 
 ### The LLM judge is retired
 
@@ -193,6 +244,18 @@ run that actually produced it. The tradeoff is real: a grade is reproducible onl
 by paying for the capture again (~$1/case), so record the numbers that matter in
 the commit or a findings doc rather than assuming the responses will be there.
 
+**That tradeoff has already been paid.** A sweep of every checkout and worktree on
+the capture host on 2026-09-05 found exactly one surviving responses directory —
+`responses-v0.1.0-baseline`, 96 records at `skill_version` 0.1.0, which the 0.0.1
+reset had already retired. **`responses-0.2.0` and `responses-0.3.0` are gone.**
+Nothing about either capture can be re-graded, re-sampled or re-stratified; what
+survives is what was committed — the labels, the draws in `labels/*-sample.json`,
+and the rates written into the findings docs. 0.3.0's figures were recoverable from
+exactly those three (`label-align.py --sample --p-obs`); 0.2.0's corrected rate was
+not, because the stratum each label was drawn from lived only in the deleted grade
+set. Treat the paragraph above as a hard rule, not a caution: **a number not written
+down before the responses age out does not survive.**
+
 ### Baseline 0.0.1
 
 The corpus was reset to a **0.0.1 baseline** on 2026-08-23. Everything the reset
@@ -200,16 +263,27 @@ deleted — labels, judgements, findings, captured responses — described a cas
 that had since been repaired and a skill at three different versions, so no number
 from it can be compared against a number taken after it. `SKILL.md` `version:` and
 `evals.json` `eval_set_version` both read `0.0.1` **at the baseline**, and the rule is
-that they move together — not that they stay at `0.0.1`. Both are `0.2.0` today: 0.1.0
-shipped in PR #325 and 0.2.0 on 2026-08-26. `0.0.1` names the last **captured** state,
-which is what a number is compared against; the pair names the current **spec**. When
-they disagree, the spec versions are wrong, not this paragraph.
+that they move together — not that they stay at `0.0.1`. **Both are `0.4.0` today**,
+and the last **captured** state is `0.3.0` (2026-08-27). `0.0.1` named the last
+captured state when this paragraph was written; the pair names the current **spec**.
+When they disagree, the spec versions are wrong, not this paragraph — but note that
+the *captured* version is a separate fact from either, and it lags.
 
-**Three spec versions are unmeasured and a capture cannot separate them.** 0.1.0
-shipped with no capture; the 4.0.26 command-surface reorganization then changed the
-tree `eval-capture.py` reads (seven commands removed, five renamed, eight groundings
-repointed); 0.2.0 stacks on both. Any future number is a delta against that whole
-stack.
+**No number in this directory describes the shipping skill.** 0.4.0 reconciles three
+places where `request-plan` stated a rule twice and the copies contradicted each
+other (see `findings/request-plan-0.3.0.md` item 6), and it was shipped
+**deliberately unmeasured**: the `evals.json` `grading` entry argues that a single
+0.4.0 capture would face the 16% run-to-run flip rate the 0.3.0 paired A/B already
+hit against an expected effect of a handful of cases, and instructs that no
+re-capture be commissioned to prove it. That reasoning stands. The consequence is
+presentational and must not be quietly dropped: **87% is a 0.3.0 number**, and any
+rate quoted from here names the version it measured or it is misread.
+
+**Unmeasured spec versions have accumulated, and a capture cannot separate them.**
+0.1.0 shipped with no capture; the 4.0.26 command-surface reorganization then changed
+the tree `eval-capture.py` reads (seven commands removed, five renamed, eight
+groundings repointed); 0.2.0 stacks on both, and 0.4.0 now stacks on 0.3.0. Any
+future number is a delta against that whole stack.
 
 **0.0.1 is retired as a comparison point.** It was captured without `--plugin-dir`,
 so the installed release answered and its records cannot say which skill version
