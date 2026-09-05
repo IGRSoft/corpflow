@@ -86,6 +86,29 @@ setup() {
   assert_output --partial "missing frontmatter"
 }
 
+# Counts the extractor's leftovers in the directory `mktemp -t` actually uses.
+# BSD mktemp's -t ignores TMPDIR, so the count has to be taken where the file
+# really lands rather than in a redirected fixture directory — a redirected one
+# stays empty whether or not the cleanup works, which is a vacuous assertion.
+_fm_temp_count() {
+  ls "${TMPDIR:-/tmp}"/handoff-fm-* 2>/dev/null | wc -l | tr -d ' '
+}
+
+@test "cleanup: no frontmatter temp file survives, on the pass or the fail path" {
+  # Fourteen exits used to carry their own `rm -f`; one RETURN trap now does it,
+  # so this checks the property rather than the arms.
+  local before
+  before="$(_fm_temp_count)"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/development-0.md"
+  assert_success
+  [ "$(_fm_temp_count)" = "$before" ] || fail "pass path leaked a handoff-fm temp file"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/plain.md"
+  assert_failure 1
+  [ "$(_fm_temp_count)" = "$before" ] || fail "fail path leaked a handoff-fm temp file"
+}
+
 @test "failure: --validate-state on corrupt JSON fails (exit 1)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-state "$WD/corrupt.json"
   assert_failure 1

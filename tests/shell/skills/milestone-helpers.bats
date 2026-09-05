@@ -91,17 +91,38 @@ SCRIPT="skills/shared/milestone-helpers/scripts/milestone-helpers.sh"
     run_script "$SCRIPT" branch-name 7 "$title"
     assert_success
     # Strip whatever type was derived — this arm pins the slug body only.
-    [ "${output#*/7-}" = "$body" ]
+    # `|| fail`, not a bare `[ ]`: in a loop only the LAST iteration's status decides the
+    # arm, so a bare test makes every earlier title vacuous.
+    [ "${output#*/7-}" = "$body" ] \
+      || fail "slug body diverged for '$title': got '${output#*/7-}', branch-lib says '$body'"
   done
 }
 
-@test "cross-check: an over-budget title truncates to the same slug as derive_slug" {
-  local title="Fix the reconstruction scan flow blinking before the first frame renders"
+@test "cross-check: the two caps are 50 and 48, and the divergence is deliberate" {
+  # This arm used to assert the two produce the SAME slug, on a title where they happen
+  # to truncate on the same word boundary. They do not share a budget: _slug_cap takes
+  # SLUG_MAX (50) because the issue number sits outside its cap, derive_slug derives 48
+  # from slug_budget. On a title whose 50th character is a word boundary the milestone
+  # helper keeps one word more — which is the contract, not a bug, and is pinned here so
+  # that changing either budget fails loudly instead of passing by coincidence.
+  local title="before before cache frame panel reset panel before scan first scan the fix"
   local derived
   derived="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; derive_slug \"\$1\"" _ "$title")"
+  [ "$derived" = "before-before-cache-frame-panel-reset-panel" ] \
+    || fail "derive_slug's 48-char budget changed: got '$derived'"
+
   run_script "$SCRIPT" branch-name 164 "$title"
   assert_success
-  [ "${output#*/164-}" = "$derived" ]
+  [ "${output#*/164-}" = "before-before-cache-frame-panel-reset-panel-before" ] \
+    || fail "_slug_cap's 50-char budget changed: got '${output#*/164-}'"
+
+  # And the shared half still holds: both cap the SAME body.
+  local body
+  body="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; slug_body \"\$1\"" _ "$title")"
+  case "$body" in
+    "${output#*/164-}"*) ;;
+    *) fail "the milestone slug is not a prefix-cap of branch-lib's body" ;;
+  esac
 }
 
 @test "edge: a single over-budget word survives whole rather than emptying the slug" {

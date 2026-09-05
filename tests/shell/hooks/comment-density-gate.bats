@@ -301,3 +301,23 @@ mk_lean_swift() {
   # 44 of 45 added — the inherited 200 lines are correctly not counted.
   assert_equal "$(jq -r '.reason | test("97% of 45 added")' <<< "$output")" 'true'
 }
+
+@test "SR: a symlinked audit.jsonl is refused on both the block and the pass row" {
+  mk_bloated_swift Bloated.swift
+  mkdir -p "$REPO/target-dir"
+  ln -s "$REPO/target-dir/escaped.txt" "$AUDIT_LOG"
+
+  run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
+    --stdin-string "$WRITER" "$HOOK"
+  assert_success
+  # Refusing the row must not weaken the block the gate exists to travel.
+  assert_equal "$(jq -r '.decision' <<< "$output")" 'block'
+  [ ! -e "$REPO/target-dir/escaped.txt" ]
+
+  rm -f "$REPO/Bloated.swift"
+  mk_lean_swift Lean.swift
+  run_script_env --env "CLAUDE_PROJECT_DIR=$REPO" --cwd "$REPO" \
+    --stdin-string "$WRITER" "$HOOK"
+  assert_success
+  [ ! -e "$REPO/target-dir/escaped.txt" ]
+}

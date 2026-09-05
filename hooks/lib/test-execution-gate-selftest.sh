@@ -339,7 +339,6 @@ EOF
   set +e
   ( run_gate "$_p1" "$_ctx1" >/dev/null 2>&1 )
   _ec=$?
-  set +e
   [ "$_ec" -eq 0 ] || { echo "test-execution-gate: self-test FAIL (non-zero exit on deny path)"; _fail=1; }
 
   # Redundant-run suppression: one smoke case. The eleven behavioural cases

@@ -485,9 +485,15 @@ _degraded_hooks() {
       } > "$lib" ;;
     truncate)
       line="$(grep -n '^corpflow_audit_row() {' "$lib" | cut -d: -f1)"
-      [ -n "$line" ] || fail "_degraded_hooks: no corpflow_audit_row to truncate at"
+      if [ -z "$line" ]; then
+        printf >&2 '_degraded_hooks: no corpflow_audit_row to truncate at\n'
+        return 1
+      fi
       awk -v n="$((line + 6))" 'NR <= n' "$lib" > "$lib.cut" && mv "$lib.cut" "$lib"
-      bash -n "$lib" 2>/dev/null && fail "_degraded_hooks: truncation is not a syntax error"
+      if bash -n "$lib" 2>/dev/null; then
+        printf >&2 '_degraded_hooks: truncation is not a syntax error\n'
+        return 1
+      fi
       ;;
   esac
   printf '%s' "$hd"

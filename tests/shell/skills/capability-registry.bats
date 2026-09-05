@@ -213,8 +213,9 @@ $bad"
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
     is_trailer "$l" && continue
-    printf '%s\n' "$l" | grep -qE -- '— .*#{1,6} ' \
-      && fail "a body heading leaked into a description: $l"
+    if printf '%s\n' "$l" | grep -qE -- '— .*#{1,6} '; then
+      fail "a body heading leaked into a description: $l"
+    fi
   done
   return 0
 }

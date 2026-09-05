@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [4.0.29] — 2026-09-03
 
-Two problems, one release. A pull request opened against a branch the work never forked from
+Three bodies of work, one still-unreleased version. A pull request opened against a branch the work never forked from
 silently carries every commit of the intervening integration branch: a run whose own ledger
 recorded 27 changed files opened a PR carrying 156 commits and 1008 files into `develop`, and every
 existing finalization check passed — none compared the would-be PR diff against what the run itself
@@ -17,7 +17,14 @@ look covered, and closes out the remediation items — one of which was refuted 
 of which shipped amended from how they were originally planned, and one of which was a fail-closed
 false positive introduced by the fix itself and caught before it shipped. Dogfooding the new
 base-sanity check during the remediation work itself turned up two more issues in the check, folded
-in below as follow-ups rather than fixed here.
+in below as follow-ups rather than fixed here. Third: a plugin-wide shell-script simplification pass
+consolidates plugin-root resolution, `.context/logs/audit.jsonl` appending, and `.context/state.json`
+scalar reads behind three small shared libraries, extracts self-test bodies out of production scripts
+into sibling harnesses, and fixes eleven defects found along the way. The honest headline is a shift
+in *where* the code lives, not a bare line-count drop: production-only `.sh` line count fell by 3,448
+(26,132 → 22,684), while harness/self-test files grew by 4,012 (1,949 → 5,961), for a net **+564**
+lines across the corpus (28,081 → 28,645). The library extraction itself is net **+302** lines — it
+reduced the number of *implementations*, not the number of lines.
 
 ### Added
 
@@ -58,6 +65,17 @@ in below as follow-ups rather than fixed here.
   now covers resolved items, warns loudly on failure instead of failing silently, and its trigger is
   a length comparison against the live clamp rather than a hard-coded `12` that could drift out of
   sync with the actual bound.
+- **Three shared shell libraries**: `skills/shared/lib/corpflow-base.sh` (`corpflow_script_dir`,
+  `corpflow_plugin_root` — mirrored byte-identically into `hooks/lib/corpflow-base.sh`, pinned by a
+  parity test), `skills/shared/lib/audit-lib.sh` (`corpflow_audit_row`, the one
+  `.context/logs/audit.jsonl` appender for the skills tree), and `skills/shared/lib/state-read-lib.sh`
+  (`corpflow_state_str`/`corpflow_worktask_id`/`corpflow_run_index`, the read side of
+  `.context/state.json`). All three fail closed under `set -e`, none uses `readonly` (bats sources a
+  library twice per process; a second `readonly` assignment is `rc 1` and kills a `set -e` caller),
+  and each opens with an anti-execution guard plus an include guard. Conventions and the source-block
+  idiom: `skills/shared/lib/README.md`.
+- **28 sibling test harnesses**, extracting self-test bodies out of 22 production scripts so a
+  production script no longer carries its own test runner inline.
 
 ### Changed
 
@@ -113,6 +131,18 @@ in below as follow-ups rather than fixed here.
 - **Four audit-log readers made tolerant of malformed lines.** `stale-check.sh`,
   `post-compact-recovery.sh`, `audit-dedup.sh`, and `build-context-set.sh` now skip an unparseable
   audit row, count it, and warn on stderr, rather than aborting the whole scan on the first bad line.
+- **10 of 11 audit emitters route through `audit-lib.sh`'s single appender**, replacing their own
+  inline `jq -nc` construction with the shared one-writer, one-key-order, symlink-refusing path.
+- **`skills/shared/plugin-root-resolution.md` now names the one resolver that exists.** It previously
+  pointed at three "reference implementations" that were three *different*, disagreeing
+  implementations of the same walk, and measurement during this run found only 4 of 69 scripts in the
+  repository actually followed the rule the doc stated. It now names `corpflow_script_dir()` /
+  `corpflow_plugin_root()` in `corpflow-base.sh` as the single implementation to source.
+- **`prefix_lint` reduced from ~29 subprocess forks per log line to 4** — a 20-line log that took
+  1,139 ms now takes 252 ms.
+- **`publish-pl-issue.sh`'s header shrank from 161 to 58 lines**, moving plugin-root resolution and
+  ledger reads onto the two new shared libraries.
+- **Dead-code shellcheck classes eliminated: 7 → 0.**
 
 ### Fixed
 
@@ -129,6 +159,11 @@ in below as follow-ups rather than fixed here.
   exited 2, aborting the paired stage patch — exactly the payload shape the closing-sweep contract
   tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
   kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
+- **`cache-lint.sh`'s `extract_stage` failed open, not closed, on a yq failure.** It fell back to an
+  `awk` extraction only when `yq` was *absent*; when `yq` was present but failed on a given input,
+  the function returned whatever `yq` produced rather than falling back, and QA's own run this cycle
+  produced zero anchor coverage from exactly this path. Deferred earlier in this release, then fixed
+  before shipping: the fallback is now keyed on `yq`'s exit code, not its presence.
 
 ### Known follow-ups
 
@@ -170,6 +205,39 @@ in below as follow-ups rather than fixed here.
 - **Refuted, for the record: no change was made to the screenshot capture scripts.** They were
   reported as interpolating malformed JSON into `audit.jsonl`; on inspection they already build
   every audit row with `jq -nc --argjson`, so there was nothing to fix.
+- **`scan-secrets.sh` exits 133 on a repo-root scan.** Pre-existing, reproduced during this run, not
+  fixed here.
+- **49 mid-body bare `[[ ]]` assertions are vacuous on bash 3.2** (macOS's default shell) but binding
+  on bash 5.2 (CI). They pass silently on a contributor's Mac and only actually assert in CI. Left
+  as-is; a fix needs either a bash-version floor bump or per-assertion conversion, both out of scope
+  here. Tracked as a follow-up alongside the two above.
+- **`cache-lint.sh anchor_lint` does not yet recognize `development-N-<stream>.md` fan-out
+  artifacts.** `hooks/anchor-preflight.sh` already routes the stream form into the lint
+  (`ARTIFACT_RE='...|development-[0-9]+(-[a-z0-9]+)*)\.md$'`), but `anchor_lint` in
+  `skills/worktask/scripts/cache-lint.sh` has no anchor set for it, so every stream artifact with
+  legitimate extra sections (`commits`, `verification`, `deferrals`, `defects-fixed`, `inherited
+  failures`, `sr0-remediation`, etc.) now fails `--anchor-lint`. The fix needs a relaxed rule per
+  `handoff-protocol.md#anchor-allow-list` — required DV anchors plus `elicitation-sweep` stay
+  enforced, extra H2s are allowed — not a full exemption, since the ledger already points at
+  `development-0-<stream>.md#elicitation-sweep` from `sw-DV0-1`, `sw-DV3-1`, and `sw-DV4-1`.
+
+### Notes (shell-script simplification)
+
+- **`development-0.md` and `development-0-defects.md` each carried the same false claim** —
+  "every one of the 25 [workspace-root ladder] sites is classified" — and each is now retracted at
+  its own site rather than only corrected here: five sites (`publish-pl-issue.sh:85,:93,:113`,
+  `attach-visual-evidence.sh:83`, `adhoc-visual-evidence.sh:53`) were never classified. Raised by
+  developer-review as P1-2's sibling finding; left uncorrected through security-review and QA and
+  fixed in this documentation pass.
+- **17 self-test cases dropped** during the harness extraction, each licensed by a mutation test and
+  confirmed still covered by the surviving suite.
+- **11 defects fixed** along the way; six other reported findings were investigated and refuted with
+  evidence rather than fixed: the `state-merge.sh` "committed duplicate" file does not exist (the
+  installed copy is untracked, not committed), the here-doc test-gate hazard does not reproduce, six
+  apparently-unused variables are live via dynamic scope (not dead code), a standalone
+  `manifest-lib`/`selftest-lib` extraction was measured and judged not worth building, and the
+  reported workspace-root call-site count was itself wrong (measured as 21 files / 25 sites, not the
+  originally reported 14).
 
 ## [4.0.28] — 2026-09-03
 

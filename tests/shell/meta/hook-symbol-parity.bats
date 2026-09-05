@@ -9,16 +9,24 @@
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 LIB="${BATS_TEST_DIRNAME}/../../../hooks/model-switch-lib.sh"
+# The second hook-side library. It is readonly-free by contract — it is mirrored from
+# skills/shared/lib/ and consumer suites source it twice per process — so it supplies
+# symbols to P1/P4 but is outside the readonly -f isolation contract P2/P3 police.
+BASE_LIB="${BATS_TEST_DIRNAME}/../../../hooks/lib/corpflow-base.sh"
 HOOKDIR="${BATS_TEST_DIRNAME}/../../../hooks"
 
-# Every corpflow_* token any hook mentions, library included.
+# Every corpflow_* token any hook mentions, libraries included.
 _referenced() {
   grep -rhoE 'corpflow_[a-z_]+' "$HOOKDIR" | sort -u
 }
 
-# Every corpflow_* the library defines, by definition syntax alone.
+_defined_in() {
+  grep -oE '^corpflow_[a-z_]+\(\)' "$1" | sed 's/()//' | sort -u
+}
+
+# Every corpflow_* any hook library defines, by definition syntax alone.
 _defined() {
-  grep -oE '^corpflow_[a-z_]+\(\)' "$LIB" | sed 's/()//' | sort -u
+  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; } | sort -u
 }
 
 # Every corpflow_* the library freezes with readonly -f.
@@ -29,20 +37,20 @@ _frozen() {
 @test "P1: every corpflow_* referenced under hooks/ is defined by the library" {
   local missing
   missing="$(comm -23 <(_referenced) <(_defined))"
-  [ -z "$missing" ] || fail "referenced but not defined in $LIB: $missing"
+  [ -z "$missing" ] || fail "referenced but defined by neither $LIB nor $BASE_LIB: $missing"
 }
 
 @test "P2: every defined symbol is readonly -f'd" {
   # readonly -f is what makes self-test isolation un-violable rather than merely
   # checkable: a body that tried to redefine a symbol is refused outright.
   local unfrozen
-  unfrozen="$(comm -23 <(_defined) <(_frozen))"
+  unfrozen="$(comm -23 <(_defined_in "$LIB") <(_frozen))"
   [ -z "$unfrozen" ] || fail "defined but not readonly -f'd: $unfrozen"
 }
 
 @test "P3: readonly -f names nothing the library does not define" {
   local phantom
-  phantom="$(comm -13 <(_defined) <(_frozen))"
+  phantom="$(comm -13 <(_defined_in "$LIB") <(_frozen))"
   [ -z "$phantom" ] || fail "readonly -f names an undefined symbol: $phantom"
 }
 

@@ -126,14 +126,21 @@ EOF
 }
 
 # Per-stage anchor rows come from the script itself, so a new stage cannot be added
-# without this loop covering it.
+# without this loop covering it. The rows live in one `_STAGE_TABLE` — code, agent
+# basename, artifact basename, then the anchors — so the anchors are fields 4..NF.
 _anchors_for_stage() {  # <stage>
+  # \047 is the single quote: the table is a single-quoted shell string, and
+  # writing that quote literally inside this awk program is not possible.
   awk -v s="$1" '
-    /^anchors_for_stage\(\) \{/ { f = 1; next }
-    f && /^\}/ { exit }
-    f && $0 ~ "^    " s "\\) echo " {
-      sub(/^[^"]*"/, ""); sub(/".*$/, ""); print; exit
+    /^_STAGE_TABLE=/ { intbl = 1; sub(/^_STAGE_TABLE=\047/, "") }
+    !intbl { next }
+    { last = ($0 ~ /\047$/); sub(/\047$/, "") }
+    $1 == s {
+      out = ""
+      for (i = 4; i <= NF; i++) out = out (i > 4 ? " " : "") $i
+      print out; exit
     }
+    last { exit }
   ' "$PLUGIN_ROOT/$SCRIPT"
 }
 
@@ -241,6 +248,22 @@ _pl_artifact() {  # _pl_artifact <path> <extra-headings...>
   assert_output ""
 }
 
+@test "failure: the ENV-expansion report names the variables, never their values" {
+  # The message was in double quotes, so a report about per-call values leaked
+  # the running shell's own $USER, $PWD and hostname into the lint output.
+  cat > "$WD/forbidden-env.jsonl" <<'EOF'
+{"worktask_id":"wt5","stage":"PL","prompt":"<<<contract-reminder>>>\nrun as $USER\n<<<contract-reminder>>>\n<<<worktask-header>>>\nworktask_id=wt5\n<<<worktask-header>>>\n<<<stage-contract>>>\nPL contract\n<<<stage-contract>>>"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-env.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *'ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found'* ]] \
+    || fail "expected the literal variable names, got: $stderr"
+  local me
+  me="$(id -un)"
+  [[ "$stderr" != *"$me"* ]] || fail "the report leaked the invoking user: $stderr"
+  [[ "$stderr" != *"$PWD"* ]] || fail "the report leaked the working directory: $stderr"
+}
+
 @test "happy: prefix-lint with no forbidden tokens still reports no drift (REQ-3/AC-4)" {
   run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-clean.jsonl"
   assert_success
@@ -340,6 +363,107 @@ EOF
   run bash "$PLUGIN_ROOT/$SCRIPT" --filename-lint "$WD/ctx"
   assert_failure 1
   assert_output --partial "expected 'planning-N.md'"
+}
+
+# ---------------------------------------------------------------------------
+# --anchor-lint against a body yq cannot parse (P2-2 / sw-DR0-2).
+#
+# extract_stage() used to fall back to awk only when yq was ABSENT, never when yq
+# RAN AND FAILED. On any host with yq installed, an artifact whose body is ordinary
+# markdown (a table, a `key: value` line) aborted the whole-file parse, the stage came
+# back empty, and --anchor-lint reported "no stage in handoff frontmatter" and linted
+# NOTHING — it failed OPEN. It cost QA0 all anchor coverage on this run.
+#
+# Mutation-verified: both arms below go red against that implementation (the first on
+# exit code, the second on the diagnostic it prints). On a host with no yq the premise
+# is vacuous and both arms pass either way, which is the correct behaviour, not coverage.
+# ---------------------------------------------------------------------------
+
+# A DV artifact carrying every required anchor under a body yq refuses to parse.
+unparsable_dv_artifact() {
+  local path="$1"
+  cat > "$path" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "anchors complete; body is markdown yq cannot read as YAML"
+  refs: { dev: development.md#files-changed }
+---
+
+# Development
+
+| Column | Meaning |
+|--------|---------|
+| `key` | value: a colon that aborts a whole-file YAML parse |
+
+## files-changed
+
+x
+
+## tests-added
+
+x
+
+## deviations
+
+none
+
+## follow-ups
+
+none
+
+## elicitation-sweep
+
+No items.
+EOF
+}
+
+@test "anchor-lint: a body yq cannot parse still resolves its stage and passes on merit" {
+  unparsable_dv_artifact "$WD/unparsable-ok.md"
+  # Premise check: the whole-file parse the old extract_stage() used really does fail here.
+  if command -v yq >/dev/null 2>&1; then
+    run yq eval '.handoff.stage // ""' "$WD/unparsable-ok.md"
+    assert_failure
+  fi
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/unparsable-ok.md"
+  assert_success
+  assert_output --partial "stage=DV"
+  assert_output --partial "ok"
+  [[ "$stderr" != *"no stage in handoff frontmatter"* ]]
+}
+
+@test "anchor-lint: the same unparsable body is LINTED, not waved through (fail-open guard)" {
+  unparsable_dv_artifact "$WD/unparsable-gap.md"
+  # Remove one required anchor. A vacuous pass and a "no stage" bail both look like
+  # "not ok"; only the anchor-level diagnostic proves the anchors were actually compared.
+  grep -v '^## tests-added$' "$WD/unparsable-gap.md" > "$WD/unparsable-gap2.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/unparsable-gap2.md"
+  assert_failure 1
+  [[ "$stderr" == *"(stage=DV) FAIL"* ]]
+  [[ "$stderr" == *"missing: tests-added"* ]]
+  [[ "$stderr" != *"no stage in handoff frontmatter"* ]]
+}
+
+@test "anchor-lint: a REAL absent stage is still reported as absent, not guessed at" {
+  # The other half of the absent-vs-failed distinction: yq parses this frontmatter
+  # cleanly and finds no stage. That is a genuine absence and must not be papered over
+  # by the awk fallback, which would happily read the unrelated `stage:` line below.
+  cat > "$WD/no-stage.md" <<'EOF'
+---
+handoff:
+  verdict: ok
+  summary: "no stage key under handoff"
+  notes:
+    stage: DV
+---
+# Development
+
+## files-changed
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/no-stage.md"
+  assert_failure 1
+  [[ "$stderr" == *"no stage in handoff frontmatter"* ]]
 }
 
 # ---------------------------------------------------------------------------

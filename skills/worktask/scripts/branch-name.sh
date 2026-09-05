@@ -189,7 +189,10 @@ else
     cur=""
   fi
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  if command -v jq > /dev/null 2>&1; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if command -v jq > /dev/null 2>&1 \
+    && [ ! -L "${CONTEXT_DIR}/logs/audit.jsonl" ]; then
     # Self-contained audit row: the library that would supply audit_fn is exactly
     # what is missing, so this one path cannot delegate to it.
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -398,14 +401,18 @@ cmd_rename() {
   # documented "no audit row" for BRANCH_NAME_PRINT since this flag existed, while the
   # ladder audited unconditionally. audit_fn holds the guard; this is the only site that
   # decides a run is a preview.
+  # shellcheck disable=SC2034  # read by branch-lib.sh audit_fn through dynamic scope
   AUDIT_DRY_RUN=$((1 - apply))
 
   # Identity for audit_fn's call-time read — this is the PL-stage row, distinct
   # from the FN-stage defaults audit_fn falls back to when unset.
+  # shellcheck disable=SC2034  # the three below are read by branch-lib.sh audit_fn
   AUDIT_ACTOR="product-manager"
   local ri
   ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
+  # shellcheck disable=SC2034
   AUDIT_SUBJECT="PL${ri}"
+  # shellcheck disable=SC2034
   AUDIT_STAGE="PL"
 
   # No target on this arm: batch/incident routing owns branch naming end to end, and

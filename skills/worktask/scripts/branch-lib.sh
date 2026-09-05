@@ -306,6 +306,12 @@ audit_fn() {
     "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '%s0' "$stage")
   dk="$wid:$ri:$action"
   mkdir -p "${CONTEXT_DIR:-.context}/logs" 2> /dev/null || true
+  # A symlinked audit.jsonl turns the append below into a write primitive against an
+  # arbitrary target. Refuse rather than follow — the guard skills/shared/lib/audit-lib.sh
+  # and hooks/model-switch-lib.sh both carry. Spelled inline here, and only here, because
+  # this file's header contract is that it sources nothing: the batch-scope guard below
+  # depends on absence being its only failure mode, which a source block would break.
+  [ ! -L "${CONTEXT_DIR:-.context}/logs/audit.jsonl" ] || return 0
   # `2>/dev/null` on the pipeline above only silences jq's own stderr; the
   # `>>` append is the CALLING SHELL's redirection and its failure (e.g. an
   # unwritable log dir) is invisible to that guard. Capture it explicitly so a

@@ -24,7 +24,7 @@
 # Minimum shell: Bash 4.x (uses [[ ]], local, command -v; macOS ships Bash 3.2 —
 # call via `bash <path>` from Homebrew Bash 5 if features require it).
 
-set -euo pipefail
+set -Eeuo pipefail
 shopt -s inherit_errexit 2> /dev/null || true
 IFS=$'\n\t'
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
@@ -36,6 +36,7 @@ WORKTASK_ID=""
 SLUG=""
 BASE_REF="origin/master"
 PLATFORM="all"
+# shellcheck disable=SC2034  # see the --run-index arm below
 RUN_INDEX="0"
 FILES_PATH=""
 SELF_TEST=0
@@ -73,6 +74,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --run-index)
+      # shellcheck disable=SC2034  # accepted for argv parity with the sibling capture
+      # scripts, which DO name their output by run index; nothing here reads it yet.
       RUN_INDEX="${2:-}"
       shift 2
       ;;
@@ -212,30 +215,21 @@ existing_count=$(find "$IMAGES_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev
 NN=$(printf '%02d' $((existing_count + 1)))
 OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
 
-# ---------------------------------------------------------------------------
-# Audit helper (mirrors apple-canvas.sh idiom exactly)
-# ---------------------------------------------------------------------------
+# Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
+# Fails closed: a missing library is a broken install, not a runtime condition.
+_AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'cli-fallback: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
+# audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
+# the shared appender.
 audit() {
-  local action="$1"
-  local result="$2"
-  local metadata="$3"
-  local ts
-  ts="$(date -u +%FT%TZ)"
-  if command -v jq > /dev/null 2>&1; then
-    jq -nc \
-      --arg ts "$ts" \
-      --arg actor "cli-fallback-adapter" \
-      --arg action "$action" \
-      --arg subject "${WORKTASK_ID}/${SLUG}" \
-      --arg result "$result" \
-      --argjson metadata "$metadata" \
-      '{ts:$ts, actor:$actor, action:$action, subject:$subject, result:$result, metadata:$metadata}' \
-      >> "$AUDIT_LOG"
-  else
-    # jq absent — emit minimal JSON manually (safe: all values are controlled)
-    printf '{"ts":"%s","actor":"cli-fallback-adapter","action":"%s","subject":"%s/%s","result":"%s"}\n' \
-      "$ts" "$action" "$WORKTASK_ID" "$SLUG" "$result" >> "$AUDIT_LOG"
-  fi
+  corpflow_audit_row --file "$AUDIT_LOG" --actor "cli-fallback-adapter" \
+    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------

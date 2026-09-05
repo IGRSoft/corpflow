@@ -80,5 +80,9 @@ fi
 
 # Only the write path creates the directory, so a filtered-out call leaves no trace.
 mkdir -p "$LOG_DIR"
+# A symlinked audit.jsonl turns this append into a write primitive against an arbitrary
+# target. Refuse rather than follow — the guard hooks/model-switch-lib.sh carries for the
+# hook rows it writes, and tests/shell/hooks/test-execution-gate.bats pins.
+[ ! -L "$LOG_DIR/audit.jsonl" ] || exit 0
 printf '%s\n' "$ROW" >> "$LOG_DIR/audit.jsonl"
 exit 0

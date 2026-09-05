@@ -679,72 +679,59 @@ validate_frontmatter() {
   # so yq can parse it as pure YAML (the rest of the markdown is not YAML).
   local fmfile
   fmfile=$(mktemp -t handoff-fm-XXXXXX)
+  # One cleanup for fourteen exits. Every failure arm below used to carry its own
+  # `rm -f`, so a new arm leaked the temp file unless its author noticed. RETURN
+  # traps are not inherited by called functions without `set -T`, which this
+  # script does not set, so the checks invoked below cannot fire it early.
+  #
+  # The path is baked in at trap-set time, exactly as validate_state's sibling
+  # trap does it, because a RETURN trap stays installed after the function
+  # returns and fires again when a sourced file completes — by which time the
+  # local is gone and `"$fmfile"` would be an unbound-variable error under
+  # `set -u`. Baked, that late firing is a no-op on an already-removed path.
+  # shellcheck disable=SC2064  # expansion at set time is the point, see above
+  trap "rm -f '$fmfile'" RETURN
   awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f" > "$fmfile"
   if [[ ! -s "$fmfile" ]]; then
-    rm -f "$fmfile"
     echo "fail: missing frontmatter block in $f" >&2
     return 1
   fi
 
   command -v yq >/dev/null 2>&1 || {
     echo "frontmatter: yq required for full validation; running grep-only fallback" >&2
-    head -1 "$f" | grep -q '^---$' || { rm -f "$fmfile"; echo "fail: missing leading ---" >&2; return 1; }
-    grep -q '^handoff:' "$fmfile" || { rm -f "$fmfile"; echo "fail: no handoff: block" >&2; return 1; }
-    rm -f "$fmfile"
+    head -1 "$f" | grep -q '^---$' || { echo "fail: missing leading ---" >&2; return 1; }
+    grep -q '^handoff:' "$fmfile" || { echo "fail: no handoff: block" >&2; return 1; }
     return 0
   }
 
   local stage
   stage=$(yq eval '.handoff.stage // ""' "$fmfile")
-  [[ -n "$stage" && "$stage" != "null" ]] || { rm -f "$fmfile"; echo "fail: no stage" >&2; return 1; }
+  [[ -n "$stage" && "$stage" != "null" ]] || { echo "fail: no stage" >&2; return 1; }
 
   local req
   req=$(required_for "$stage")
-  [[ -n "$req" ]] || { rm -f "$fmfile"; echo "fail: unknown stage $stage" >&2; return 1; }
+  [[ -n "$req" ]] || { echo "fail: unknown stage $stage" >&2; return 1; }
 
   local field
   for field in $req; do
     local val
     val=$(yq eval ".handoff.${field} // \"\"" "$fmfile")
     if [[ -z "$val" || "$val" == "null" ]]; then
-      rm -f "$fmfile"
       echo "fail: stage=$stage missing required field: $field" >&2
       return 1
     fi
   done
 
   if [[ "$stage" == "DV" && -n "$STATE_ARG" ]]; then
-    if ! check_ar_ref "$f" "$fmfile"; then
-      rm -f "$fmfile"
-      return 1
-    fi
+    check_ar_ref "$f" "$fmfile" || return 1
   fi
 
-  if ! check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_decision_divergence "$f" "$fmfile" "$stage"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_sweep_stub_shape "$fmfile"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
-  if ! check_sweep_ref_anchor "$f" "$fmfile"; then
-    rm -f "$fmfile"
-    return 1
-  fi
-
+  check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || return 1
+  check_decision_divergence "$f" "$fmfile" "$stage" || return 1
+  check_sweep_stub_shape "$fmfile" || return 1
+  check_sweep_ref_anchor "$f" "$fmfile" || return 1
   if [[ -n "$STATE_ARG" ]]; then
-    if ! check_sweep_ledger "$fmfile" "$f"; then
-      rm -f "$fmfile"
-      return 1
-    fi
+    check_sweep_ledger "$fmfile" "$f" || return 1
   fi
 
   # Token budget (AD-2). The budget constrains DISCRETIONARY prose — summary,
@@ -765,7 +752,6 @@ validate_frontmatter() {
   stubtoks=$(toks_open_questions_block "$fmfile")
   [[ "$stubtoks" -le 64 ]] || stubtoks=64
   discretionary=$((tcount - stubtoks))
-  rm -f "$fmfile"
   # The advisory line is emitted BEFORE the failure, not after: 264 is exactly 200 plus the
   # 64-token exclusion cap, so every artifact over the ceiling is already over the budget and
   # a warn placed after the `return 1` could never print. Ordering it first is what keeps the
@@ -1052,190 +1038,26 @@ run_token_count() {
   return $rc
 }
 
-# ---------- Self-test ----------
-self_test() {
-  local td
-  td=$(mktemp -d -t handoff-selftest-XXXXXX)
-  trap "rm -rf '$td'" EXIT
-
-  make_fixtures "$td"
-  validate_frontmatter "$td/.context/planning-0.md" >/dev/null
-  validate_frontmatter "$td/.context/architecture.md" >/dev/null
-  validate_frontmatter "$td/.context/development.md" >/dev/null
-  validate_state "$td/.context/state.json" >/dev/null
-
-  if run_token_count "$td" >/dev/null 2>&1; then
-    echo "self-test: token-count ≥30% reduction: ok"
-  else
-    echo "self-test: token-count: FAIL" >&2; exit 1
-  fi
-
-  self_test_ar_gate "$td"
-
-  echo "self-test: ALL PASS"
-}
-
-# Exercises every branch of the AR->DV gate. Each case restores STATE_ARG/STRICT
-# itself, so ordering between cases carries no state.
-self_test_ar_gate() {
-  local ctx="$1/.context"
-
-  if ! command -v yq >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
-    echo "self-test: ar-ref gate: SKIP (yq/jq unavailable)"
-    return 0
-  fi
-
-  jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
-
-  # The shared preamble every gate fixture needs; only refs differ per case.
-  # $3 replaces the default empty sweep array, so a case can plant a rejected item shape.
-  _dv_artifact() {
-    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}"
-    {
-      echo '---'
-      echo 'handoff:'
-      echo '  stage: DV'
-      echo '  verdict: ok'
-      echo '  summary: "Implemented."'
-      echo '  files_touched: [a.md]'
-      echo '  next_stage_focus: "DR reviews"'
-      printf '%s\n' "$oq"
-      echo '  refs:'
-      printf '%s\n' "$refs_block"
-      echo '---'
-      echo
-      echo '# Development'
-      echo
-      echo '## elicitation-sweep'
-      echo
-      echo 'nothing to elicit'
-    } > "$path"
-  }
-
-  _dv_artifact "$ctx/dv-no-ref.md"    '    dev: development.md#files-changed'
-  _dv_artifact "$ctx/dv-dangling.md"  '    decisions: architecture-9.md#decisions'
-  _dv_artifact "$ctx/dv-valid.md"     '    decisions: architecture-0.md#decisions'
-  cp "$ctx/architecture.md" "$ctx/architecture-0.md"
-
-  # <label> <state-file|-> <strict> <want-rc> <want-pattern|-> <artifact>
-  _ar_case() {
-    local label="$1" state="$2" strict="$3" want_rc="$4" want_pat="$5" artifact="$6"
-    STATE_ARG=""; [[ "$state" != "-" ]] && STATE_ARG="$state"
-    STRICT="$strict"
-    local out rc=0
-    out=$(validate_frontmatter "$artifact" 2>&1) || rc=$?
-    STATE_ARG=""; STRICT=0
-    if [[ "$rc" -ne "$want_rc" ]]; then
-      echo "self-test: ar-ref $label: FAIL (rc=$rc want=$want_rc)" >&2; exit 1
-    fi
-    if [[ "$want_pat" == "-" ]]; then
-      if printf '%s' "$out" | grep -qE '^(warn|fail): (AR completed|DV architecture|DV references)'; then
-        echo "self-test: ar-ref $label: FAIL (unexpected gate line)" >&2; exit 1
-      fi
-    elif ! printf '%s' "$out" | grep -q "$want_pat"; then
-      echo "self-test: ar-ref $label: FAIL (pattern not found: $want_pat)" >&2; exit 1
-    fi
-    echo "self-test: ar-ref $label: ok"
-  }
-
-  _ar_case "AR+missing/default"  "$ctx/state.json"       0 0 "warn: AR completed but DV refs.decisions missing" "$ctx/dv-no-ref.md"
-  _ar_case "AR+missing/strict"   "$ctx/state.json"       1 1 "fail: AR completed but DV refs.decisions missing" "$ctx/dv-no-ref.md"
-  _ar_case "AR+dangling/default" "$ctx/state.json"       0 0 "warn: DV architecture ref dangling"               "$ctx/dv-dangling.md"
-  _ar_case "AR+dangling/strict"  "$ctx/state.json"       1 1 "fail: DV architecture ref dangling"               "$ctx/dv-dangling.md"
-  _ar_case "AR+valid/default"    "$ctx/state.json"       0 0 -                                                  "$ctx/dv-valid.md"
-  _ar_case "AR+valid/strict"     "$ctx/state.json"       1 0 -                                                  "$ctx/dv-valid.md"
-  _ar_case "noAR+noref/default"  "$ctx/state-no-ar.json" 0 0 -                                                  "$ctx/dv-no-ref.md"
-  _ar_case "noAR+ref/default"    "$ctx/state-no-ar.json" 0 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
-  _ar_case "noAR+ref/strict"     "$ctx/state-no-ar.json" 1 0 "warn: DV references architecture-0.md"               "$ctx/dv-valid.md"
-  _ar_case "baseline/no-state"   -                       0 0 -                                                  "$ctx/dv-no-ref.md"
-  _ar_case "baseline/no-state+strict" -                    1 0 -                                                  "$ctx/dv-dangling.md"
-
-  # F5: an unreadable --state must be loud, not silently indistinguishable from "no AR".
-  printf 'not json {{' > "$ctx/state-corrupt.json"
-  _ar_case "badstate/missing/default" "$ctx/nope.json"     0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
-  _ar_case "badstate/missing/strict"  "$ctx/nope.json"     1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
-  _ar_case "badstate/corrupt/default" "$ctx/state-corrupt.json" 0 0 "warn: AR-ref check skipped" "$ctx/dv-no-ref.md"
-  _ar_case "badstate/corrupt/strict"  "$ctx/state-corrupt.json" 1 1 "fail: AR-ref check skipped" "$ctx/dv-no-ref.md"
-
-  # Sweep ledger parity rides on the same invocation: every stub must be in the
-  # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
-  {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
-    echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
-    echo '  next_stage_focus: "DR reviews"'
-    echo '  open_questions:'
-    echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
-    echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
-  } > "$ctx/dv-stub.md"
-  jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
-     "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
-  _ar_case "sweep/stub+ledger"        "$ctx/state-stub.json"    0 0 -                                              "$ctx/dv-stub.md"
-  _ar_case "sweep/stub+not-in-ledger" "$ctx/state-no-ar.json"   0 1 "fail: sweep stub sw-DV0-1 is in the frontmatter" "$ctx/dv-stub.md"
-  _ar_case "sweep/stub+missing-state" "$ctx/nope.json"          0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
-  _ar_case "sweep/stub+corrupt-state" "$ctx/state-corrupt.json" 0 1 "fail: sweep ledger parity cannot be verified"  "$ctx/dv-stub.md"
-  _ar_case "sweep/nostub+missing-state" "$ctx/nope.json"        0 0 "warn: AR-ref check skipped"                    "$ctx/dv-no-ref.md"
-
-  # Stub parity: id agreement is not agreement. Each ledger below carries the SAME id as
-  # dv-stub.md and differs in exactly one field, so a pass here could only come from a check
-  # that never looked. The agreeing case is the anti-vacuity arm — normalising an absent flag
-  # to false must not manufacture a divergence out of a legacy ledger entry.
-  jq '.facts.open_questions[0].blocks_next_stage = true' \
-     "$ctx/state-stub.json" > "$ctx/state-stub-flag.json"
-  jq '.facts.open_questions[0].class = "escalate"' \
-     "$ctx/state-stub.json" > "$ctx/state-stub-class.json"
-  jq 'del(.facts.open_questions[0].blocks_next_stage)' \
-     "$ctx/state-stub.json" > "$ctx/state-stub-noflag.json"
-  _ar_case "sweep/stub+flag-divergence"  "$ctx/state-stub-flag.json"   0 1 \
-    "fail: sweep stub sw-DV0-1 disagrees across transports — blocks_next_stage is false in dv-stub.md but true" "$ctx/dv-stub.md"
-  _ar_case "sweep/stub+class-divergence" "$ctx/state-stub-class.json"  0 1 \
-    "fail: sweep stub sw-DV0-1 disagrees across transports — class is decision in dv-stub.md but escalate" "$ctx/dv-stub.md"
-  _ar_case "sweep/stub+flag-absent-in-ledger" "$ctx/state-stub-noflag.json" 0 0 - "$ctx/dv-stub.md"
-
-  # F4: the flag is required on the frontmatter side too, so the divergence check can never be
-  # dodged by simply omitting the field the ledger disagrees with.
-  _dv_artifact "$ctx/dv-noflag.md" '    dev: development.md#files-changed' \
-    '  open_questions:
-    - { id: sw-DV0-1, class: decision, ref: "dv-noflag.md#elicitation-sweep" }'
-  _ar_case "sweep/stub+no-flag" - 0 1 "fail: sweep stub sw-DV0-1 carries no blocks_next_stage" "$ctx/dv-noflag.md"
-
-  # The stub is the ONLY item shape: the two pre-sweep forms and a mistyped class are
-  # rejected by name, so the diagnostic tells the agent what to write instead.
-  _dv_artifact "$ctx/dv-legacy-string.md" '    dev: development.md#files-changed' \
-    '  open_questions:
-    - "q1: hook lang (AR to decide)"'
-  _dv_artifact "$ctx/dv-legacy-bare.md" '    dev: development.md#files-changed' \
-    '  open_questions:
-    - { id: q2, summary: "bare object" }'
-  _dv_artifact "$ctx/dv-bad-class.md" '    dev: development.md#files-changed' \
-    '  open_questions:
-    - { id: sw-DV0-9, class: advisory, ref: "dv-bad-class.md#elicitation-sweep", blocks_next_stage: false }'
-  _ar_case "sweep/legacy-string" - 0 1 "fail: open_questions\[0\] is not a sweep stub" "$ctx/dv-legacy-string.md"
-  _ar_case "sweep/legacy-bare"   - 0 1 'fail: open_questions\[0\] id "q2" is not sw-'   "$ctx/dv-legacy-bare.md"
-  _ar_case "sweep/bad-class"     - 0 1 "fail: sweep stub sw-DV0-9 class is not decision|escalate" "$ctx/dv-bad-class.md"
-
-  # Fail-closed: a non-string id (yq's test() throws on it) and a scalar open_questions
-  # (invisible to `[]?`) must both fail by name rather than pass on the read error.
-  _dv_artifact "$ctx/dv-int-id.md" '    dev: development.md#files-changed' \
-    '  open_questions:
-    - { id: 5, class: decision, ref: "dv-int-id.md#elicitation-sweep", blocks_next_stage: false }'
-  _dv_artifact "$ctx/dv-scalar.md" '    dev: development.md#files-changed' \
-    '  open_questions: "none"'
-  _ar_case "sweep/int-id"  - 0 1 'fail: open_questions\[0\] id "5" is not sw-'        "$ctx/dv-int-id.md"
-  _ar_case "sweep/scalar"  - 0 1 "fail: open_questions is !!str, not a sequence"     "$ctx/dv-scalar.md"
-
-  # A ref spelled with the artifact's own directory (the templates' refs: convention) is the
-  # same file: it resolves rather than failing as missing.
-  _dv_artifact "$ctx/dv-ctx-ref.md" '    dev: development.md#files-changed' \
-    "  open_questions:
-    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }"
-  _ar_case "sweep/dir-prefixed-ref" - 0 0 - "$ctx/dv-ctx-ref.md"
-}
-
 # ---------- main ----------
 case "$MODE" in
   run)              run_token_count "${OUT_DIR:-}" ;;
-  self-test)        self_test ;;
+  self-test)
+    # Sourced HERE, not at the top: the harness is test code the validate paths
+    # never run. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+    # `.` builtin is a special-builtin error that exits the shell immediately,
+    # bypassing an `if ! . …` guard entirely.
+    SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/handoff-harness-selftest.sh"
+    if [ -r "$SELFTEST_LIB_PATH" ]; then
+      # shellcheck source=handoff-harness-selftest.sh
+      # shellcheck disable=SC1090
+      . "$SELFTEST_LIB_PATH"
+    else
+      printf >&2 'handoff-harness: self-test harness unreachable at %s — plugin install broken\n' \
+        "$SELFTEST_LIB_PATH"
+      exit 2
+    fi
+    self_test
+    ;;
   validate-fm)      [[ -n "$ARG" ]] || usage; validate_frontmatter "$ARG" ;;
   validate-state)   [[ -n "$ARG" ]] || usage; validate_state "$ARG" ;;
   *) usage ;;

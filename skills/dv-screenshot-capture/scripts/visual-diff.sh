@@ -64,21 +64,21 @@ IMAGES_DIR=".context/images/${WORKTASK_ID}"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
 mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
 
+# Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
+# Fails closed: a missing library is a broken install, not a runtime condition.
+_AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'visual-diff: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
+# audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
+# the shared appender.
 audit() {
-    local action="$1"
-    local result="$2"
-    local metadata="$3"
-    local ts
-    ts="$(date -u +%FT%TZ)"
-    jq -nc \
-        --arg ts "$ts" \
-        --arg actor "qa-visual-diff" \
-        --arg action "$action" \
-        --arg subject "${WORKTASK_ID}/${SLUG}" \
-        --arg result "$result" \
-        --argjson metadata "$metadata" \
-        '{ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result, metadata: $metadata}' \
-        >> "$AUDIT_LOG"
+    corpflow_audit_row --file "$AUDIT_LOG" --actor "qa-visual-diff" \
+      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
 }
 
 # Graceful-degrade if magick is not on PATH

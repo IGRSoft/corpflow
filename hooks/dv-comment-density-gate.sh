@@ -237,29 +237,37 @@ EOF
     if [ "$_worst_essay" -gt "$DENSITY_WARN" ] || [ "$_worst" -gt "$((DENSITY_HARD - 10))" ]; then
       _res="warn"
     fi
-    jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg res "$_res" \
-      --argjson worst "$_worst" --argjson essay "$_worst_essay" \
-      --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
-      --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
-      {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_pass",
-       subject: $agent, result: $res,
-       metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
-                  threshold: $max, hard_threshold: $hard, block_max: $block}}' \
-      >>"$_log_dir/audit.jsonl" 2>/dev/null || true
+    # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+    # against an arbitrary target. A lost row never blocks the caller.
+    if [ ! -L "$_log_dir/audit.jsonl" ]; then
+      jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg res "$_res" \
+        --argjson worst "$_worst" --argjson essay "$_worst_essay" \
+        --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
+        --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
+        {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_pass",
+         subject: $agent, result: $res,
+         metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
+                    threshold: $max, hard_threshold: $hard, block_max: $block}}' \
+        >>"$_log_dir/audit.jsonl" 2>/dev/null || true
+    fi
     return 0
   fi
 
   _remedy="Comment-density gate: these changed files are over-documented — ${_offenders}. A file trips this when more than ${DENSITY_MAX}% of its added lines sit in comment blocks longer than ${BLOCK_MAX} lines, or when its added lines are over ${DENSITY_HARD}% comment overall. One compliant one-line /// per declaration is fine and does not trip it; multi-line essays and budget-shaped prose repeated down the whole file do. The corpflow standard (skill: corpflow:code-comment-standard) requires comment-to-code density well below 1:1; a file that is ~half prose is over-documented. Remove: multi-paragraph /// essays, defect/ticket history, before/after narration, AC-/REQ- IDs and issue tags as provenance, caller enumeration, QA runbooks and tuning instructions, prose restating the signature, and any justification written to answer a review finding. Keep: a one-line /// summary where the name is not self-evident, ONE terse WHY per non-obvious literal, and one-line invariants that prevent a regression. Rationale, threshold derivations and deviation justifications belong in .context/development-N.md and the PR — not in source. Re-run and return once every changed file is under the ceiling."
 
-  jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg off "$_offenders" \
-    --argjson worst "$_worst" --argjson essay "$_worst_essay" \
-    --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
-    --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
-    {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_block",
-     subject: $agent, result: "blocked",
-     metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
-                threshold: $max, hard_threshold: $hard, block_max: $block, offenders: $off}}' \
-    >>"$_log_dir/audit.jsonl" 2>/dev/null || true
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if [ ! -L "$_log_dir/audit.jsonl" ]; then
+    jq -cn --arg ts "$_ts" --arg agent "$_agent" --arg off "$_offenders" \
+      --argjson worst "$_worst" --argjson essay "$_worst_essay" \
+      --argjson checked "$_checked" --argjson max "$DENSITY_MAX" \
+      --argjson hard "$DENSITY_HARD" --argjson block "$BLOCK_MAX" '
+      {ts: $ts, actor: "hook:dv-comment-density-gate", action: "comment_density_block",
+       subject: $agent, result: "blocked",
+       metadata: {worst_pct: $worst, worst_essay_pct: $essay, files_checked: $checked,
+                  threshold: $max, hard_threshold: $hard, block_max: $block, offenders: $off}}' \
+      >>"$_log_dir/audit.jsonl" 2>/dev/null || true
+  fi
 
   jq -n --arg reason "$_remedy" '
     {decision: "block", reason: $reason,

@@ -735,3 +735,16 @@ _mk_ranks_1_4_empty() {
   assert_success
   assert_output "[develop][workspace]"
 }
+
+# Companion to the attach-visual-evidence and attachments-preseed arms of the same name:
+# audit_fn was the last worktask emitter with no symlink refusal.
+@test "SR: audit_fn refuses a symlinked audit.jsonl, never writes through" {
+  cd "$WD"
+  mkdir -p .context/logs target-dir
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  printf '%s' '{"version":2,"worktask_id":"wt","run_index":0,"tasks":{}}' > .context/state.json
+  run bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; \
+    STATE_PATH=.context/state.json CONTEXT_DIR=.context audit_fn branch_renamed ok '{}'"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

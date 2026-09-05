@@ -19,7 +19,7 @@
 # @requires    bash >=3.2, jq
 # @min_shell   bash 3.2 (macOS system bash compatible)
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
@@ -108,64 +108,21 @@ render() {
      else empty end)'
 }
 
-self_test() {
-  local tmp rc=0
-  tmp=$(mktemp -d)
-  # Expand tmp now, not at trap time.
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp'" EXIT
-
-  local ds="$tmp/labels.jsonl"
-  : > "$ds"
-  render "$ds" table 3 | grep -q "no labels yet" || { printf >&2 'FAIL: empty dataset\n'; rc=1; }
-
-  printf '%s\n' \
-    '{"target":"agents/developer.md","category":"completeness","confidence":"high","worktask_id":"a"}' \
-    '{"target":"agents/developer.md","category":"accuracy","confidence":"high","worktask_id":"a"}' \
-    '{"target":"skills/worktask/SKILL.md","category":"completeness","confidence":"low","worktask_id":"b"}' \
-    > "$ds"
-
-  local out
-  out=$(render "$ds" json 3)
-  [ "$(printf '%s' "$out" | jq -r '.total')" = "3" ] || { printf >&2 'FAIL: total\n'; rc=1; }
-  [ "$(printf '%s' "$out" | jq -r '.worktasks')" = "2" ] || { printf >&2 'FAIL: worktasks\n'; rc=1; }
-  [ "$(printf '%s' "$out" | jq -r '.by_target["agents/developer.md"]')" = "2" ] \
-    || { printf >&2 'FAIL: by_target\n'; rc=1; }
-  [ "$(printf '%s' "$out" | jq -r '.by_category["completeness"]')" = "2" ] \
-    || { printf >&2 'FAIL: by_category\n'; rc=1; }
-
-  render "$ds" table 3 | grep -q "by category:" || { printf >&2 'FAIL: table render\n'; rc=1; }
-
-  # Threshold 2 catches the repeated target and category; threshold 3 catches
-  # neither, so an absent recurrence is a real "none", not a formatting slip.
-  out=$(render "$ds" json 2)
-  [ "$(printf '%s' "$out" | jq -r '.recurring.targets["agents/developer.md"]')" = "2" ] \
-    || { printf >&2 'FAIL: recurring target at min=2\n'; rc=1; }
-  [ "$(printf '%s' "$out" | jq -r '.recurring.categories["completeness"]')" = "2" ] \
-    || { printf >&2 'FAIL: recurring category at min=2\n'; rc=1; }
-  [ "$(render "$ds" json 3 | jq -r '.recurring.targets | length')" = "0" ] \
-    || { printf >&2 'FAIL: recurring target at min=3\n'; rc=1; }
-  [ "$(render "$ds" json 0 | jq -r '.recurring.targets | length')" = "0" ] \
-    || { printf >&2 'FAIL: min=0 did not disable recurrence\n'; rc=1; }
-  if render "$ds" table 0 | grep -q "recurring"; then
-    printf >&2 'FAIL: min=0 rendered section\n'; rc=1
-  fi
-  render "$ds" table 2 | grep -qE '^  target[[:space:]]+2[[:space:]]+agents/developer\.md$' \
-    || { printf >&2 'FAIL: recurring table row\n'; rc=1; }
-  render "$ds" table 3 | grep -q "  none" || { printf >&2 'FAIL: empty recurrence render\n'; rc=1; }
-
-  # The taxonomy gate has to announce itself; 3 rows is far below the 100 the
-  # README blocks failure-taxonomy.md on.
-  [ "$(printf '%s' "$out" | jq -r '.taxonomy.ready')" = "false" ] \
-    || { printf >&2 'FAIL: taxonomy ready\n'; rc=1; }
-  render "$ds" table 3 | grep -q "taxonomy trigger: 3/100 rows — not yet" \
-    || { printf >&2 'FAIL: taxonomy trigger line\n'; rc=1; }
-
-  [ "$rc" -eq 0 ] && printf >&2 'label-stats: self-test OK\n'
-  return "$rc"
-}
-
 if [ "$SELF_TEST" -eq 1 ]; then
+  # Sourced HERE, not at the top: the harness is test code the production path
+  # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/label-stats-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=label-stats-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'label-stats: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
   self_test || exit 2
   exit 0
 fi
