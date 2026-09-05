@@ -376,12 +376,10 @@ forbidden_token_scan() {
 
   # Six `grep` forks per section used to run here, three sections per log line —
   # eighteen of the ~29 forks this lint spent on every line. The shell's own
-  # regex engine answers the same questions with none. `nocasematch` covers the
-  # two classes that were `grep -i`, saved and restored because it also changes
-  # how every `case` in this shell matches.
-  local _cf_ci=0
-  shopt -q nocasematch && _cf_ci=1
-  shopt -s nocasematch
+  # regex engine answers the same questions with none. The three classes that
+  # were `grep -i` (3, 5, 6) spell their case-folding inline rather than via
+  # `nocasematch`: that shopt is function-wide, and it silently turned the
+  # case-SENSITIVE classes 2 and 4 into matches on `$user` / `$random`.
 
   # 1. ISO-8601 timestamp (date/now render), e.g. 2026-07-05T15:15:39Z
   if [[ "$section_text" =~ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
@@ -401,7 +399,7 @@ forbidden_token_scan() {
   fi
 
   # 3. Random / request IDs — UUID v4 shape.
-  if [[ "$section_text" =~ [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} ]]; then
+  if [[ "$section_text" =~ [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12} ]]; then
     echo "forbidden-token-lint: $label: UUID found" >&2
     rc=1
   fi
@@ -413,14 +411,14 @@ forbidden_token_scan() {
   fi
 
   # 5. Retry counters (belong in section [6], never [1]/[2]/[4]).
-  if [[ "$section_text" =~ retry[_-]?count[[:space:]]*[:=][[:space:]]*[0-9]+ \
-     || "$section_text" =~ attempt[[:space:]]*#?[0-9]+ ]]; then
+  if [[ "$section_text" =~ [Rr][Ee][Tt][Rr][Yy][_-]?[Cc][Oo][Uu][Nn][Tt][[:space:]]*[:=][[:space:]]*[0-9]+ \
+     || "$section_text" =~ [Aa][Tt][Tt][Ee][Mm][Pp][Tt][[:space:]]*#?[0-9]+ ]]; then
     echo "forbidden-token-lint: $label: retry/attempt counter found (belongs in section [6])" >&2
     rc=1
   fi
 
   # 6. File mtime-shaped values (epoch seconds/millis label or "mtime:").
-  if [[ "$section_text" =~ mtime[[:space:]]*[:=][[:space:]]*[0-9]{9,13}([^0-9]|$) ]]; then
+  if [[ "$section_text" =~ [Mm][Tt][Ii][Mm][Ee][[:space:]]*[:=][[:space:]]*[0-9]{9,13}([^0-9]|$) ]]; then
     echo "forbidden-token-lint: $label: file mtime found" >&2
     rc=1
   fi
@@ -431,7 +429,6 @@ forbidden_token_scan() {
   #    when scanning [1]/[2] (see prefix_lint call site) — a name appearing in
   #    its OWN [4] is expected and not scanned here.
 
-  [ "$_cf_ci" -eq 1 ] || shopt -u nocasematch
   return $rc
 }
 
