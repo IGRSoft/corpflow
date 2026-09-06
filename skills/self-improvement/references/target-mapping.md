@@ -10,7 +10,7 @@ Row numbers are the `rule_num` emitted by `scripts/map-and-filter.sh`, so a prop
 
 | # | Pattern of changed file | Target | Notes |
 |---|--------------------------|--------|-------|
-| 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md` | The file itself | Direct prompt edit — self-signal. |
+| 1 | `agents/<name>.md`, `skills/**/SKILL.md`, `commands/<name>.md`; `hooks/**/*.sh`, `scripts/*.sh`, `skills/*/scripts/*.sh` | The file itself | Direct edit to a participating asset — self-signal. The executed shapes are exactly those Source 4 resolves, so the in-context join can match them; test-shaped names go to row 15. |
 | 2 | `.context/planning-*.md` | `agents/product-manager.md` | |
 | 3 | `.context/architecture-*.md` | `agents/software-architector.md` | |
 | 4 | `.context/coordination-*.md` | `agents/team-lead.md` | |
@@ -99,9 +99,12 @@ plugin root — a helper's directory is not derivable from its name.
 ### Resolving the emitted paths
 
 All sources produce file paths: deduplicate, then drop paths that don't exist **relative to the
-plugin root** (`skills/shared/plugin-root-resolution.md`). Testing against the process cwd is what
-made the production invocation return the empty set: the pipeline runs from the worktask's repo
-while every candidate lives under the plugin root.
+plugin root** (`skills/shared/plugin-root-resolution.md`) — the pipeline runs from the worktask's
+repo while every candidate lives under the plugin root.
+
+The emitted paths are the join key: a shape no mapping row above can produce as a target is
+unmatchable, so the set holds it and no change ever reaches it. Row 1 covers the four directories
+Source 4 resolves for that reason.
 
 ## Cross References
 
