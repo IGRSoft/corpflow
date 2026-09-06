@@ -3,22 +3,33 @@
 Evaluation data for the plugin's own output quality — as opposed to `benchmark/`,
 which measures cost and process.
 
-## `failure-labels.jsonl` (specified, and **still empty**)
+## `failure-labels.jsonl` (**7 rows**, first written 2026-09-05)
 
 Append-only, committed dataset of user edits made **after** an agent delivered.
 Written by `skills/self-improvement` Step 5b on every ST completion (and by
 `/improve-yourself`). A user correcting delivered work is a domain-expert failure
 label — the signal most eval systems pay annotators for.
 
-**The file does not exist yet, and nothing below has ever run against real data.**
-The writer (`skills/self-improvement/scripts/append-labels.sh`), its schema, its
-idempotency key and its aggregator are all present and tested; what is absent is a
-single appended row. Step 5b is an agent step in `SKILL.md`, not a hook, so it
-fires only when an ST stage actually reaches it and keeps at least one change — and
-no run in this repo's history has. Read the rest of this section as the contract the
-first row will satisfy, not as a description of a corpus. The 100-row gate below
-therefore stands at **0 of 100**, and `label-stats.sh` on a missing file is the
-expected state rather than a fault.
+The gate below stands at **7 of 100**. The seven rows come from a driven run over
+this repo's own `054932c..worktree` range rather than an organic ST completion —
+genuine pipeline output with computed `label_id`s, but not yet user-corrective
+evidence, so weigh them accordingly when the taxonomy is built.
+
+### Why it stayed empty until 4.0.29 — measured, not inferred
+
+The standing explanation — "Step 5b is an agent step, not a hook, so it only fires
+when an ST stage reaches it" — was superseded by a four-stage trace over a real
+change range. The pipeline is `build-context-set.sh` → `detect-user-changes.sh` →
+`map-and-filter.sh` → `append-labels.sh`, and the third stage dropped everything.
+Source 4 enters hooks and bundled scripts into the context set under `hooks/**`,
+`scripts/` and `skills/*/scripts/`, but no mapping row emitted those shapes as a
+target, so that half of the set was unmatchable by any change.
+
+Traced counts were 7 context paths → 273 changed paths → **0** kept → 0 rows, with
+four of the seven context entries unreachable by construction. Widening row 1 of
+`references/target-mapping.md` to the shapes Source 4 resolves takes the same input
+to 7 kept and **7 rows written**. Trigger frequency was a real second-order limit,
+not the cause: the join was empty whenever it did fire.
 
 One row per kept, classified change:
 
