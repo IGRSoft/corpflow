@@ -356,3 +356,98 @@ The 0.0.1 reset re-stratified the whole set once, deliberately, behind
 manifest is now a hard error rather than a silent full reshuffle, which is how the
 rule above was breached the first time. Re-stratifying does not un-read anything: see
 the manifest's own `note`.
+
+## Eval coverage for the other 22 skills
+
+`ls -d skills/*/ | wc -l` returns **23**, re-verified 2026-09-05. Exactly one of them —
+`request-plan` — has an eval set; the other 22 are classified and ranked below.
+
+Classes are read from each `SKILL.md` and the scripts it owns, i.e. from what the skill
+actually emits, not from its `description:`. That is the same rule the taxonomy section
+applies to failure categories, and it applies here for the same reason.
+
+### One of the 23 is not a skill
+
+`skills/shared/` has **no `SKILL.md`**. It is a reference library — `lib/corpflow-base.sh`,
+`state-read-lib.sh`, `audit-lib.sh`, `milestone-helpers/` and a set of prose documents that
+other skills and agents cite by path. Nothing invokes it, so it emits no output and cannot
+carry an eval set at all. It is counted in the 23 because the directory count is what the
+acceptance criterion names, and it is ranked last on that ground rather than on quality.
+
+### What the ranking is on
+
+**Can a binary, code-checked assertion compare the skill's emitted output against an expected
+value derived without a human — and can the capture surface produce that output at all?**
+
+Both halves are load-bearing. `eval-capture.py` dispatches each case into a detached worktree
+at HEAD with the answer key stripped (§ The capture surface), and
+`tests/python/test_skill_evals.py` rejects a case whose `grounding` paths do not resolve. A
+skill whose output needs a GitHub repo, a simulator, an MCP server or a Swift toolchain
+therefore cannot be grounded in a case even when its output shape is perfectly deterministic.
+Capturability ranks beside determinism, not behind it.
+
+Ranking highest is a skill that emits a closed value or structure **and** has an in-repo
+oracle — a script that computes the expected answer independently, so the assertion needs
+neither a human nor a network.
+
+### The 22, ranked
+
+**D** = deterministic, code-checkable output. **J** = judgement-dependent output.
+
+| # | Skill | Class | What it emits | Why here |
+|---|---|---|---|---|
+| 1 | `estimation-methodology` | D | complexity score, tier, SP, hours, buffer, stage set | `scripts/estimate-calc.py` is an in-repo numeric oracle with `--self-test`; every table it implements is closed |
+| 2 | `logging-conventions` | D | a log filename | `<kind>-<scope>-<YYYYMMDD-HHMMSS>.log` is a regex, `kind` is a closed set of 8; pure string check, no state |
+| 3 | `task-folder-organization` | D | `.context/` paths and run-indexed artifact names | closed layout, and `<basename>-N.md` is a pure function of `run_index` |
+| 4 | `csv-export-templates` | D | 13 semicolon-delimited CSVs | `scripts/validate-export.sh` is an oracle with real exit codes (0/1/2) and a fixture self-test |
+| 5 | `release-engineering` | D | version bump + changelog entry | `version-bump-from-git.sh` and `changelog-from-git.sh` compute the expected answer from history the capture worktree already has |
+| 6 | `cross-plugin-handoff` | D | handoff frontmatter | schema is BINDING with a per-stage required-field matrix, and `error_file` derivation is a pure string function |
+| 7 | `context-compression` | D | compressed handoff frontmatter, budget figures | schema-checkable; the budget ceilings are numbers, though what to keep is partly judged |
+| 8 | `cost-optimization` | D | model tier, effort ceiling, budget arithmetic | selection matrix is a closed mapping; fit of task to tier carries some judgement |
+| 9 | `gh-issue-dedup` | D | one of three decisions + the anchor JSON | decision table is exhaustive, but resolution reads `gh` and network state, so a case needs fixtures |
+| 10 | `agent-coordination` | D | handoff and escalation messages, audit rows | message formats are fixed templates and `audit-dedup.sh` is an oracle; agent selection and decomposition are not |
+| 11 | `incident-response` | D | a P0–P3 label, runbook, post-mortem | label set is closed and reached by checklist, but the checklist inputs ("revenue-impacting?") are judgements |
+| 12 | `code-comment-standard` | J | source comments | `hooks/dv-comment-density-gate.sh` checks density and the never-write list is greppable, but "non-obvious WHY" is the actual claim and only a human reads it |
+| 13 | `self-improvement` | J | JSONL label rows | `label_id` is a content hash an oracle can recompute; `category` is one of six chosen by judgement, which is the part that matters |
+| 14 | `security-review-process` | J | findings with severities | `scan-secrets.sh` is an oracle for one narrow class; everything OWASP-shaped is judged |
+| 15 | `worktask` | D | ledger patches, stage sets, gate decisions | contract is heavily code-checked, but the output is stateful pipeline execution a single dispatch cannot produce |
+| 16 | `megatask` | D | `orchestrator.json`, branch names, DAG order | schema and branch grammar are checkable; needs a GitHub milestone and real worktrees |
+| 17 | `dv-screenshot-capture` | D | image files at fixed paths, size budgets | paths and budgets are checkable, but producing them needs a live driven app and a device |
+| 18 | `preview-ensurer` | D | a `#Preview` block, canonical exit codes | deterministic by contract; needs a Swift toolchain and only fires inside one adapter |
+| 19 | `worktask-testing-strategy` | J | a test strategy recommendation | the output is the argument for a strategy; two defensible answers can differ entirely |
+| 20 | `pencil-design-worktask` | J | `.pen` mockups | quality is visual judgement, and Pencil MCP is unreachable from the capture surface |
+| 21 | `claude-constitution` | J | harm and ethics evaluations | judgement by construction; a code-checked assertion here would measure vocabulary, not reasoning |
+| 22 | `skills/shared` | — | nothing; no `SKILL.md` | not invocable — see above |
+
+### Top-ranked candidate
+
+**`estimation-methodology`.** It is the only skill in the tree whose output is a set of
+numbers with an in-repo script that computes those same numbers from the same inputs. A case
+supplies a T-shirt size and five factor scores; the model emits SP, hours, buffer, total,
+tier and stage set; `estimate-calc.py` produces the expected values. No human, no network, no
+device — and `--self-test` means the oracle itself is already under test.
+
+Naming it identifies where to look first. It is not a plan to build anything.
+
+### The commitment
+
+**No second eval set is committed to until the taxonomy gate has material** — the oracle run
+and the roughly 100 label rows named in § `failure-taxonomy.md`. Nothing in this section
+schedules, funds or commits to building an eval set for any skill it names, including the
+top-ranked one. The gate stands exactly as written above; this ranking does not move it.
+
+The reasoning is the directory's own: categories come from reading real output. Committing to
+a second corpus before the first rows of label data exist would repeat the mistake the rule
+was written to prevent — and the first set is not yet a measurement of anything (§ Skill eval
+sets), so there is no evidence that a second one would be either.
+
+### What the ranking does not claim
+
+A high rank is not a claim that the skill is important, weak, or worth measuring. It says only
+that its output could be graded cheaply and honestly.
+
+Script ownership is also not the same as evaluability. Where a skill's canonical path is "run
+the script" — `estimation-methodology`, `csv-export-templates`, `release-engineering` — a case
+risks measuring whether the model invoked the script rather than whether it got the answer
+right. A set built for any of them has to be designed against that, most likely by grading the
+judgement inputs the script cannot supply.
