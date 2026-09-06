@@ -581,6 +581,171 @@ CASES = [
      ["skills/agent-coordination/scripts/audit-dedup.sh"]),
     ("bug", "obvious", "std", "estimate-calc.py stops at hours and cannot turn them into money. plan a fix.",
      ["skills/estimation-methodology/scripts/estimate-calc.py"]),
+
+    # ---- batch 6 (ids 213+): the adjacent cell decontaminated, buried as the engine ----
+    # Two consecutive tranches missed on different cells and neither miss was random, so
+    # this one is sized from the 26-case `adjacent` analysis rather than from a fresh bet.
+    #
+    # What the 0.3.0 LABELS say, per case, not per harness count. Batch 5 nominated
+    # `absent`->`clarify` as its negative engine and it did not fire (all 7 held-out
+    # clarify cases passed). `adjacent` came back 5/10 = 50% against a corpus 81% and was
+    # read as the standout. It is not: of batch 5's three LABELLED adjacent harness
+    # failures, ZERO are genuine -- 191 and 193 are human passes (the grader too strict),
+    # and 187 is the stream-json capture defect, labelled `defer`. The single genuine
+    # adjacent negative in the whole capture is case 33, which is PRE-EXISTING.
+    #
+    # The confound is the surface pool, and it is visible in the manifest. All 10 of batch
+    # 5's `adjacent` cases ground on capability-registry.sh EXCLUSIONS (6 in tests/, 3 in
+    # skills/*/references/, 1 in skills/shared/); 13 of the 16 pre-existing ones ground on
+    # ENUMERATED classes. An `adjacent` case is supposed to test whether the plan NAMES the
+    # near-miss surface. Ground it on a surface the plan cannot look up and the case stops
+    # testing adjacency and starts testing search -- it is a `buried` case wearing the
+    # wrong label, and `finds-the-real-surface` then fails for a discovery reason. So the
+    # 50% is not evidence about `adjacent` at all, and neither is the 73% corpus figure.
+    #
+    # The engine is `buried`, and it is measured rather than nominated: 8 of the 13 human
+    # negatives in the 0.3.0 sample are `buried`, including case 199, the ONLY genuine
+    # held-out negative. Batch 5's own 8 buried cases yielded 2 (199, 203) -- a 25% genuine
+    # yield against `absent` 1/18 = 5.6% and `adjacent` 0/10. `obvious` yielded 0 of 10.
+    #
+    # Hence 58: 30 buried, 18 adjacent, 10 absent, 0 obvious, 0 refute.
+    #   buried   30 on EXCLUDED surfaces -- on-design there, and where the negatives are.
+    #   adjacent 18 on ENUMERATED surfaces (commands/, agents/, SKILL.md, hooks/,
+    #            skills/*/scripts/) -- the configuration case 33 negative came from, and the
+    #            only one that answers the 0.3.0 open question instead of re-asking it.
+    #   absent   10, kept as a control on "are the new absent cases easier?" (p ~ 0.17,
+    #            unresolved). Written in the HARD shape the genuine negatives 36/95/120
+    #            have -- plausible for a repo like this one, ungroundable in this one --
+    #            not batch 5's generic-SaaS template, per the 0.3.0 instruction to sample
+    #            existing prompts for difficulty rather than write fresh ones.
+    #   obvious  0: 92% harness and 0 negatives from 10 labels. It buys no measurement.
+    #   refute   0: `disputes-the-premise` has a MEASURED false-negative floor and every
+    #            repair was rejected, so refute failures are uninterpretable as negatives.
+    # Type weighting follows the same labels (feature 6, incident 3, docs 2; migration 0 of
+    # 6) and the corpus harness table (docs 65%, incident 69%, feature 79%; migration 100%).
+    # Route: 11 emerg of 58 (19%) against the corpus 11% -- emerg is 70% harness and 3 of 9
+    # labelled negatives. `secure` gets none: 90% harness, 0 negatives, 0 of 13.
+    #
+    # Held out by construction, on batch 4 and 5's terms: written after the frozen manifest
+    # and pinned to `test` before any capture reads them. Do not pass --restratify.
+
+    # buried: the measured engine. Surfaces are capability-registry.sh exclusions
+    # (tests/, skills/*/references/, skills/shared/*.md), which is what `buried` is for.
+    ("bug", "buried", "std", "the depth cap that drops a nested specialist is written down in one place and enforced in another, and nobody checks the two still agree. plan a fix.",
+     ["tests/shell/skills/agent-coordination__dispatch-depth.bats"]),
+    ("refactor", "buried", "std", "the header rules every shared shell library owes are spelled out in prose and again in a checker, and the two have drifted before. plan a cleanup.",
+     ["tests/shell/skills/audit-lib.bats"]),
+    ("feature", "buried", "std", "we want a standing check that the two ledger fields every task script reads keep the same fallback default everywhere. plan it.",
+     ["tests/shell/skills/state-read-lib.bats"]),
+    ("docs", "buried", "std", "our closing question sweep is described in the stage contract but nothing records which stages actually owe one. plan the documentation.",
+     ["tests/shell/skills/elicitation-sweep-contracts.bats"]),
+    ("bug", "buried", "std", "our alias-to-target routing table is copied into several stage agents and one copy shipped stale for two releases. plan a fix.",
+     ["tests/shell/skills/routing-matrix.bats"]),
+    ("feature", "buried", "std", "we want the rule about which stage may run a whole suite pinned so the policy document and the gate script cannot disagree. plan it.",
+     ["tests/shell/skills/test-authority-matrix.bats"]),
+    ("refactor", "buried", "std", "the change-to-verification picker has grown a large matrix and nothing proves every glob in it still matches a tracked path. plan a cleanup.",
+     ["tests/shell/meta/test-selection.bats"]),
+    ("bug", "buried", "std", "our branch naming helper defines sixteen symbols and a caller can source it twice; neither contract is pinned anywhere. plan a fix.",
+     ["tests/shell/worktask/branch-lib.bats"]),
+    ("feature", "buried", "std", "we want a guard that the duplicate-suppression key stays one definition shared by the gate and its companion. plan it.",
+     ["tests/shell/hooks/dedupe-lib.bats"]),
+    ("docs", "buried", "std", "reviewers cannot tell which of our advisory checks before a run are allowed to fail softly and which are not. plan the documentation.",
+     ["tests/shell/worktask/preflight-issue-scan.bats"]),
+    ("refactor", "buried", "std", "the description length cap is enforced in one script and restated in three documents. plan a cleanup.",
+     ["tests/shell/worktask/desc-lint.bats"]),
+    ("bug", "buried", "std", "a healthy long-running stage sometimes reads as abandoned and someone restarts it needlessly. plan a fix.",
+     ["tests/shell/worktask/stale-check.bats"]),
+    ("feature", "buried", "std", "we want the stub shape our two frontmatter enforcers share proved identical rather than assumed. plan it.",
+     ["tests/shell/worktask/sweep-stub-lib.bats"]),
+    ("docs", "buried", "std", "nothing written down says how our milestone helper scores priority labels or truncates a slug. plan the documentation.",
+     ["tests/shell/skills/milestone-helpers.bats"]),
+    ("bug", "buried", "std", "our seven shared bats helpers can regress silently and corrupt the evidence of every suite that loads them. plan a fix.",
+     ["tests/shell/lib/test-helper.bats"]),
+    ("refactor", "buried", "std", "our provider-agnostic path grammar is described in prose and enforced nowhere a reader can run. plan a cleanup.",
+     ["tests/shell/skills/plugin-root-refs.bats"]),
+    ("bug", "buried", "std", "we order a skill call in one agent file while the grant that makes it work lives in another, and nothing checks the pair. plan a fix.",
+     ["tests/shell/skills/skill-refs.bats"]),
+    ("feature", "buried", "std", "we want the five files that carry our planning rules checked for contradicting each other. plan it.",
+     ["tests/shell/skills/request-plan-contracts.bats"]),
+    ("docs", "buried", "std", "our contributors have no written account of what the shipped canvas example rewrites when it runs from a copy. plan the documentation.",
+     ["tests/shell/benchmark/canvas-e2e-guards.bats"]),
+    ("refactor", "buried", "std", "we rename the working branch a single time using the title a plan was signed off under, and that rule is spelled out in three separate places. plan a cleanup.",
+     ["tests/shell/worktask/refine-branch-target.bats"]),
+    ("feature", "buried", "std", "our spreadsheet export has thirteen files and no one place shows what each column should hold. plan it.",
+     ["skills/csv-export-templates/references/templates.md"]),
+    ("docs", "buried", "std", "new maintainers have no written account of how the first run record is seeded and how its index is chosen. plan the documentation.",
+     ["skills/worktask/references/initialization-patterns.md"]),
+    ("bug", "buried", "std", "the value ordering our agents are told to obey is stated in one base document and paraphrased differently elsewhere. plan a fix.",
+     ["skills/shared/constitutional-base.md"]),
+    ("feature", "buried", "std", "we want the single-caller rule for our snapshot preview helper stated where its only caller can see it. plan it.",
+     ["skills/dv-screenshot-capture/references/preview-ensurer.md"]),
+    ("incident", "buried", "emerg", "a run is writing into the wrong checkout right now and nothing stopped it before the first edit. plan the response.",
+     ["tests/shell/worktask/dv-tree-preflight.bats"]),
+    ("incident", "buried", "emerg", "our stage completion rows have stopped landing in the audit trail and the pipeline is hanging. plan the response.",
+     ["tests/shell/hooks/agent-stop.bats"]),
+    ("incident", "buried", "emerg", "the ledger merge is dropping one stage's patch when two finish together and a run is failing on every resume. plan the response.",
+     ["tests/shell/hooks/state-merge.bats"]),
+    ("incident", "buried", "emerg", "our comment density gate is blocking every edit right now and we cannot tell which contract it thinks is broken. plan the response.",
+     ["tests/shell/hooks/comment-density-gate.bats"]),
+    ("incident", "buried", "emerg", "a batch is failing and the companion that records a failed runner exit is writing nothing, so our counts are wrong. plan the response.",
+     ["tests/shell/hooks/test-execution-promote.bats"]),
+    ("incident", "buried", "emerg", "our anchor check before a stage starts is rejecting every handoff right now. plan the response.",
+     ["tests/shell/hooks/anchor-preflight.bats"]),
+
+    # adjacent: the near-miss surface exists and the plan must NAME it, so every one of
+    # these grounds on a capability-registry.sh ENUMERATED class. That is the difference
+    # from batch 5, and the whole point of the cell this batch is re-cutting.
+    ("feature", "adjacent", "std", "we want a ranked, dated inventory of the shortcuts we have taken so they stop being rediscovered. plan it.",
+     ["commands/arch-debt.md"]),
+    ("feature", "adjacent", "std", "we want a repeatable structural health check that grades our boundaries and how far they scale. plan it.",
+     ["commands/arch-review.md"]),
+    ("migration", "adjacent", "std", "we are adopting the newest harness features and our packaged agents and skills need bringing into step. plan the migration.",
+     ["commands/cc-update.md"]),
+    ("feature", "adjacent", "std", "adding a new specialist means copying an existing definition and hoping its frontmatter is right. plan it.",
+     ["commands/create-agent.md"]),
+    ("docs", "adjacent", "std", "our README files drift away from the code and someone notices months later. plan the documentation.",
+     ["commands/docs-readme.md"]),
+    ("feature", "adjacent", "std", "we want tickets generated for a release milestone with the right specialist attached to each. plan it.",
+     ["commands/milestone.md"]),
+    ("refactor", "adjacent", "std", "our command definitions have grown inconsistent in shape and in how usable they are. plan a cleanup.",
+     ["commands/optimize-command.md"]),
+    ("feature", "adjacent", "std", "we want a dated delivery plan with its dependencies that a stakeholder can read. plan it.",
+     ["commands/roadmap.md"]),
+    ("feature", "adjacent", "std", "we want capacity-aware iteration planning with the work broken down and allocated. plan it.",
+     ["commands/sprint.md"]),
+    ("docs", "adjacent", "std", "we need a coverage-aware written statement of how a change will be verified before it is built. plan the documentation.",
+     ["commands/test-plan.md"]),
+    ("feature", "adjacent", "std", "nobody reviews our own prompt surfaces for quality and model fit the way we review code. plan it.",
+     ["agents/prompt-engineer.md"]),
+    ("feature", "adjacent", "std", "we want a standing reviewer for harm and value conflicts on our riskiest changes. plan it.",
+     ["agents/ethics-reviewer.md"]),
+    ("refactor", "adjacent", "std", "our API reference and architecture notes come out in whatever voice each stage prefers. plan a cleanup.",
+     ["agents/technical-writer.md"]),
+    ("feature", "adjacent", "std", "we want someone accountable for run-record repair and for debugging a stuck stage transition. plan it.",
+     ["agents/workflow-engineer.md"]),
+    ("bug", "adjacent", "std", "a mid-run re-tier changes what a stage costs and nothing refuses it. plan a fix.",
+     ["hooks/model-switch-gate.sh"]),
+    ("feature", "adjacent", "std", "we want the model a stage actually ran on recorded, not the one it was asked for. plan it.",
+     ["hooks/model-switch-audit.sh"]),
+    ("migration", "adjacent", "std", "we are moving our release version decision out of prose judgement and into something deterministic. plan the migration.",
+     ["skills/release-engineering/scripts/version-bump-from-git.sh"]),
+    ("incident", "adjacent", "emerg", "a batch is failing because two issues initialised the same working tree. plan the response.",
+     ["skills/megatask/scripts/init-worktree.sh"]),
+
+    # absent: nothing here to ground on, so the correct answer is a question. Written in
+    # the shape of the three genuine negatives (36, 95, 120) -- plausible for a repo like
+    # this one, ungroundable in this one -- not batch 5's generic-SaaS shape, which the
+    # 0.3.0 findings flagged as plausibly easier at p ~ 0.17.
+    ("feature", "absent", "std", "we want our stage timings pushed onto the team's Grafana board so leads can watch a run. plan it.", []),
+    ("feature", "absent", "std", "we want reviewers notified in Microsoft Teams when a task reaches its approval gate. plan it.", []),
+    ("docs", "absent", "std", "our onboarding handbook for new reviewers has fallen behind what the pipeline actually does. plan the documentation.", []),
+    ("bug", "absent", "std", "our nightly scheduled run posts its summary twice on Mondays. plan a fix.", []),
+    ("refactor", "absent", "std", "our two mobile clients carry three copies of the same retry helper. plan a cleanup.", []),
+    ("migration", "absent", "std", "we are moving our customer support macros from Zendesk into a self-hosted help centre. plan the migration.", []),
+    ("incident", "absent", "emerg", "our staging cluster is down and nobody can deploy. plan the response.", []),
+    ("incident", "absent", "emerg", "the artifact registry is rejecting every upload right now. plan the response.", []),
+    ("incident", "absent", "emerg", "our on-call paging provider is failing and alerts are not reaching anyone. plan the response.", []),
+    ("incident", "absent", "emerg", "the shared build cache is returning 503 and every run is starting cold. plan the response.", []),
 ]
 
 
