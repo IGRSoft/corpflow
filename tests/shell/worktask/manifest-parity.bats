@@ -12,6 +12,28 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   diff <(printf '%s\n' "$manifest_list") <(printf '%s\n' "$fs_list")
 }
 
+# agents[] and skills[] were unguarded while commands[] was pinned, so a new agent
+# or skill registered correctly on disk and silently missing from the listing broke
+# nothing until a user installed from the marketplace.
+@test "AC-3: marketplace.json agents[] matches agents/*.md filesystem set exactly" {
+  local manifest_list fs_list
+  manifest_list="$(jq -r '.plugins[0].agents[]' "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
+    | sed 's#^\./##' | sort)"
+  fs_list="$(cd "$PLUGIN_ROOT" && ls agents/*.md | sort)"
+  diff <(printf '%s\n' "$manifest_list") <(printf '%s\n' "$fs_list")
+}
+
+@test "AC-3: marketplace.json skills[] matches the SKILL.md-bearing directory set exactly" {
+  local manifest_list fs_list
+  manifest_list="$(jq -r '.plugins[0].skills[]' "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
+    | sed 's#^\./##' | sort)"
+  # Carrying a SKILL.md is what makes a directory a skill, so discovery is by that
+  # file rather than by depth: it admits skills/shared/milestone-helpers and excludes
+  # skills/shared and skills/shared/lib, which are reference material and libraries.
+  fs_list="$(cd "$PLUGIN_ROOT" && find skills -name SKILL.md | sed 's#/SKILL\.md$##' | sort)"
+  diff <(printf '%s\n' "$manifest_list") <(printf '%s\n' "$fs_list")
+}
+
 @test "AC-4: plugin.json / marketplace.json / README.md agree on version" {
   local plugin_ver market_meta_ver market_plugin_ver
   plugin_ver="$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
