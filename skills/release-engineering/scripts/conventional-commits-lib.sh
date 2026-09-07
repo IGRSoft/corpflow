@@ -41,17 +41,21 @@ cc_parse() {
     fi
   fi
 
-  local cc_re='^([a-zA-Z]+)(\([^)]*\))?(!)?: ' # in a var to appease SC2221
+  # The leading `#<issue> ` group is optional but load-bearing: git-conventions.md makes that
+  # prefix mandatory on every subject, so without it the house style parses as non-conventional
+  # and every prefixed `feat`/`feat!` scores `none`. The token must be followed by a space, so
+  # `#comment: x` still falls through rather than parsing `comment` as an issue and `x` as a type.
+  local cc_re='^(#[A-Za-z0-9][A-Za-z0-9_-]* )?([a-zA-Z]+)(\([^)]*\))?(!)?: ' # in a var to appease SC2221
   if [[ "$first" =~ $cc_re ]]; then
     CC_CONVENTIONAL=1
-    CC_TYPE="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+    CC_TYPE="$(printf '%s' "${BASH_REMATCH[2]}" | tr '[:upper:]' '[:lower:]')"
 
-    local raw_scope="${BASH_REMATCH[2]}"
+    local raw_scope="${BASH_REMATCH[3]}"
     if [[ -n "$raw_scope" ]]; then
       CC_SCOPE="${raw_scope:1:${#raw_scope}-2}"
     fi
 
-    if [[ "${BASH_REMATCH[3]}" == "!" ]]; then
+    if [[ "${BASH_REMATCH[4]}" == "!" ]]; then
       CC_BREAKING=1
     fi
 
