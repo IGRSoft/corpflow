@@ -598,6 +598,23 @@ cmd_base_sanity() {
     return 0
   fi
 
+  # Eighth degrade rung. facts.files_modified is this rule's denominator and is known to
+  # under-record — 18 recorded against 33 dirty in this release's own run. When the working
+  # tree shows a gap of the same magnitude the rule itself treats as significant, the
+  # denominator is demonstrably incomplete, and a block computed from it is a false block on a
+  # correct base. Warn instead, like every other rung that cannot trust its inputs. A wrong
+  # base does not dirty the working tree, so this cannot mask the topology being checked.
+  local tree_files
+  tree_files=$(git status --porcelain 2> /dev/null | grep -c . || printf '0')
+  case "$tree_files" in '' | *[!0-9]*) tree_files=0 ;; esac
+  if [[ "$tree_files" -gt $((ledger_files * 3)) ]] && [[ $((tree_files - ledger_files)) -gt 20 ]]; then
+    printf 'base-sanity: the ledger records %s modified files but the working tree shows %s — the denominator is incomplete, so the magnitude comparison is unreliable; skipped\n' \
+      "$ledger_files" "$tree_files"
+    audit_fn base_sanity ledger_under_recording \
+      "$(meta_json base "$base" ledger_files "$ledger_files" tree_files "$tree_files")"
+    return 0
+  fi
+
   # Captured, then counted — never `git diff | wc -l`: `wc` has already written `0`
   # by the time git fails, so the pipeline yields a plausible zero-file count and the
   # only trace of the failure is an exit status the pipeline then hides. A base sharing

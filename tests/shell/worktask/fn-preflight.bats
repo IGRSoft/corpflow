@@ -1032,6 +1032,30 @@ _bs_row() {
   assert_output --partial "BLOCKED: base-sanity"
 }
 
+@test "base-sanity: a demonstrably under-recording ledger warns instead of blocking" {
+  # The blocking topology, but with a working tree that proves the denominator is
+  # incomplete: 2 recorded against 25 dirty. A wrong base does not dirty the tree, so the
+  # gap can only mean the ledger under-recorded — and a block computed from it would be
+  # false. CHANGELOG 4.0.29 records this happening at 18 recorded against 33 dirty.
+  _bs_stacked_repo
+  local i
+  for i in $(seq 1 25); do printf 'x\n' > "dirty$i.txt"; done
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "the denominator is incomplete"
+  refute_output --partial "BLOCKED"
+  run _bs_row
+  assert_output --partial '"ledger_under_recording"'
+}
+
+@test "base-sanity: a clean tree still blocks the wrong-base topology" {
+  # Non-vacuity twin for the rung above: the new skip must not disarm the check.
+  _bs_stacked_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  assert_output --partial "BLOCKED: base-sanity"
+}
+
 @test "base-sanity: a small run legitimately touching more files than recorded still passes" {
   # 10 files against a 3-file ledger trips the multiplier (10 > 9); the 20-file
   # floor is the half that stops it. This case is why the rule is a conjunction.
