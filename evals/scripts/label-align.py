@@ -40,7 +40,10 @@ was actually cut, and `--held-out-from` so a case can be assigned to its stratum
 A SELECTION FILTER APPLIES TO THE POPULATION TOO. `--min-id` and `--split` used to
 narrow `ids` while `population` and `p_obs` were still built from every grade, so
 "held-out TPR/TNR only" returned corpus weights and the corpus pass rate corrected
-by subset-derived rates. Both now honour the same predicate.
+by subset-derived rates. Both now honour the same predicate on the `--grades` path.
+Under `--sample` the populations are the draw's and cannot be narrowed by an id
+floor, so `--min-id` is refused there: it cuts inside a stratum, which the drift
+check would then misreport as a moved grade set. Select with `--stratum` instead.
 
 Usage: label-align.py --labels PATH [--grades PATH] [--sample PATH]
                       [--held-out-from N] [--stratum test/held-out]
@@ -184,7 +187,8 @@ def main(argv) -> int:
     p.add_argument("--min-id", type=int, default=None,
                    help="restrict to case ids >= N. Narrows the POPULATION and p_obs by "
                         "the same predicate, so the rates describe the subset rather "
-                        "than the corpus. The current tranche floor is the held_out_from "
+                        "than the corpus. Refused under --sample, whose populations are "
+                        "whole strata; use --stratum there. The current tranche floor is the held_out_from "
                         "recorded in evals/splits/request-plan.json; below it the "
                         "manifest calls its own `test` membership nominal")
     p.add_argument("--p-obs", type=float, default=None,
@@ -219,6 +223,13 @@ def main(argv) -> int:
 
     draw = None
     if args.sample:
+        if args.min_id is not None:
+            # The draw's populations are per stratum and whole; an id floor cuts inside
+            # them, so the drift check below would refuse with the wrong diagnosis and
+            # --allow-stratum-drift would weight a partial stratum by its full population.
+            sys.stderr.write("label-align: --min-id cannot narrow a draw's populations; "
+                             "select with --stratum (e.g. test/held-out) under --sample\n")
+            return 64
         try:
             with open(args.sample, encoding="utf-8") as f:
                 draw = json.load(f)

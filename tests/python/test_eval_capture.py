@@ -748,6 +748,31 @@ class LabelAlignFraming(unittest.TestCase):
             self.assertNotIn("dev/pass", only)
             self.assertIn("test/held-out", only)
 
+    def test_an_id_floor_is_refused_under_a_draw_rather_than_misread_as_drift(self):
+        # The draw's populations are whole strata. An id floor cuts inside one, which
+        # the drift check reported as a moved grade set, and --allow-stratum-drift then
+        # weighted the partial stratum by its full population.
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = os.path.join(tmp, "sample.json")
+            with open(sample, "w", encoding="utf-8") as f:
+                json.dump({"held_out_from": 122,
+                           "strata": {"test/held-out": {"population": 3,
+                                                        "sampled": 3}}}, f)
+            labels = self._labels(tmp, [
+                {"case_id": cid, "verdict": "pass", "split": "test",
+                 "harness_status": "pass"} for cid in (130, 131, 132)])
+            rc, _, err = self._run(["--labels", labels, "--sample", sample,
+                                    "--grades", os.path.join(tmp, "absent.json"),
+                                    "--min-id", "131"])
+            self.assertEqual(rc, 64)
+            self.assertIn("--stratum", err)
+            self.assertNotIn("do not sit in the strata", err)
+            rc, out, _ = self._run(["--labels", labels, "--sample", sample,
+                                    "--grades", os.path.join(tmp, "absent.json"),
+                                    "--stratum", "test/held-out"])
+            self.assertEqual(rc, 0)
+            self.assertIn("sampled   3 of   3", out)
+
     def test_the_draw_supplies_the_populations_and_a_mismatch_is_refused(self):
         # A draw and a label set that disagree about which stratum a case sits in
         # means the grade set moved underneath the labels. Weighting anyway would

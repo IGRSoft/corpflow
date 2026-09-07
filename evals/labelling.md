@@ -168,7 +168,10 @@ Held-out means *never read*. Once a tranche has been labelled it is spent, and t
 moves to the first id of its successor. One place records it: `held_out_from` in
 `evals/splits/request-plan.json`. `sample-for-labelling.py --held-out-from` defaults to
 that value and refuses to run when the key is missing rather than falling back to a
-literal; `label-align.py --min-id` has no default, so **pass it explicitly**.
+literal; `label-align.py` reads it from `--sample`'s `held_out_from` and otherwise needs an
+explicit `--held-out-from`. Select the tranche with `--stratum test/held-out`, never
+`--min-id`: under `--sample` an id floor is refused, because it cuts inside strata whose
+populations are the draw's and cannot be narrowed.
 
 **The key is absent right now, and that is the correct state.** It was pinned to 213 for the
 two 0.4.0 captures, which ran against it; the 0.4.0 labelling pass then drew batch 6's `test`
