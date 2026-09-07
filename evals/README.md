@@ -275,26 +275,28 @@ that had since been repaired and a skill at three different versions, so no numb
 from it can be compared against a number taken after it. `SKILL.md` `version:` and
 `evals.json` `eval_set_version` both read `0.0.1` **at the baseline**, and the rule is
 that they move together — not that they stay at `0.0.1`. **Both are `0.4.0` today**,
-and the last **captured** state is `0.3.0` (2026-08-27). `0.0.1` named the last
-captured state when this paragraph was written; the pair names the current **spec**.
-When they disagree, the spec versions are wrong, not this paragraph — but note that
-the *captured* version is a separate fact from either, and it lags.
+and so is the last **captured** state: two byte-identical 0.4.0 captures on 2026-09-06
+(`findings/request-plan-0.4.0.md`). `0.0.1` named the last captured state when this
+paragraph was written; the pair names the current **spec**. When they disagree, the
+spec versions are wrong, not this paragraph — and the *captured* version is a
+separate fact from either, which lags whenever a spec ships without a capture.
 
-**No number in this directory describes the shipping skill.** 0.4.0 reconciles three
-places where `request-plan` stated a rule twice and the copies contradicted each
-other (see `findings/request-plan-0.3.0.md` item 6), and it was shipped
-**deliberately unmeasured**: the `evals.json` `grading` entry argues that a single
-0.4.0 capture would face the 16% run-to-run flip rate the 0.3.0 paired A/B already
-hit against an expected effect of a handful of cases, and instructs that no
-re-capture be commissioned to prove it. That reasoning stands. The consequence is
-presentational and must not be quietly dropped: **87% is a 0.3.0 number**, and any
-rate quoted from here names the version it measured or it is misread.
+**The number to quote for the shipping skill is 0.4.0's: corrected 85%, 95% CI
+[81%, 91%]** (TPR 92%, TNR 100% on 18 human negatives; held-out 83% [70%, 100%] on
+four). 0.3.0's restated figure is **86% [82–90]**, not the 87% it was first published
+at — see § The weights belong to the draw. The two are not a before/after: 0.4.0
+reconciled three places where `request-plan` stated a rule twice and the copies
+contradicted each other (`findings/request-plan-0.3.0.md` item 6), and the
+`evals.json` `grading` entry argued that effect was a handful of cases against a 16%
+run-to-run flip rate, so a capture could never resolve it. The 0.4.0 pair confirmed
+the noise band at 17.1% and **attributes no delta to the rule changes**; its rates
+measure the grader against humans on a corpus grown to 259, nothing more.
 
 **Unmeasured spec versions have accumulated, and a capture cannot separate them.**
 0.1.0 shipped with no capture; the 4.0.26 command-surface reorganization then changed
 the tree `eval-capture.py` reads (seven commands removed, five renamed, eight
-groundings repointed); 0.2.0 stacks on both, and 0.4.0 now stacks on 0.3.0. Any
-future number is a delta against that whole stack.
+groundings repointed); 0.2.0 stacks on both, and 0.4.0's rule reconciliations stack
+on 0.3.0 unmeasured. Any future number is a delta against that whole stack.
 
 **0.0.1 is retired as a comparison point.** It was captured without `--plugin-dir`,
 so the installed release answered and its records cannot say which skill version
