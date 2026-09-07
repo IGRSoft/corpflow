@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [4.0.29] — 2026-09-03
+## [4.0.29] — 2026-09-07
 
 Three bodies of work, one still-unreleased version. A pull request opened against a branch the work never forked from
 silently carries every commit of the intervening integration branch: a run whose own ledger
@@ -46,8 +46,9 @@ reduced the number of *implementations*, not the number of lines.
   deliberately blocking, so the escape hatch is explicit and leaves a trace rather than being a
   `--no-verify` improvised at the moment of frustration.
 - **`fork_base()` and `base_ref_source()` in `branch-lib.sh`.** `fork_base()` ranks remote branches
-  that contain `HEAD` by commit distance and returns the nearest parent — the branch the work
-  actually forked from, which is not always the branch it is configured to target. It returns empty
+  by commit distance from `HEAD` and returns the nearest parent — the branch the work
+  actually forked from, which is not always the branch it is configured to target. It ranks every
+  remote ref, with no containment filter, which is its known ranking defect (gh#364). It returns empty
   rather than a sentinel on every failure path, so `v=$(fork_base)` cannot kill a `set -e` caller,
   and it is safe on a detached HEAD and in a repo with no remotes. `base_ref_source()` reports which
   rank of the resolution ladder produced a base, which is what lets a caller tell a confident answer
@@ -250,6 +251,14 @@ reduced the number of *implementations*, not the number of lines.
   exited 2, aborting the paired stage patch — exactly the payload shape the closing-sweep contract
   tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
   kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
+- **`base-sanity` resolved its base to a stale local `develop` ref rather than its remote-tracking
+  counterpart, found by dogfooding it in this run** (`0bd7df5`). `refs/heads/develop` sat nine commits
+  behind `refs/remotes/origin/develop`, and `HEAD` was exactly equal to `origin/develop`. Against the
+  stale local ref the check reported "a PR against develop would carry 55 files" and blocked; against
+  `origin/develop` the diff is 0 files — the check built to catch a wrong base picked the wrong base
+  ref itself. `resolve_git_ref` now prefers `origin/<base>` over a diverged local ref, covered by AC-4a
+  in `tests/shell/worktask/fn-preflight.bats`. The ladder still knows only the `origin` remote, so a
+  fork workflow whose base tracks a different remote is not yet correct (gh#353).
 - **`cache-lint.sh`'s `extract_stage` failed open, not closed, on a yq failure.** It fell back to an
   `awk` extraction only when `yq` was *absent*; when `yq` was present but failed on a given input,
   the function returned whatever `yq` produced rather than falling back, and QA's own run this cycle
@@ -282,12 +291,6 @@ All label-derived quantities carry their denominators explicitly. The 85% and 83
   Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
   path and each additional caller changes the cost profile. They are correct for their own callers
   today; they are a consolidation debt, not a live defect.
-- **`base-sanity` resolved its base to a stale local `develop` ref rather than its remote-tracking
-  counterpart, found by dogfooding it in this run.** `refs/heads/develop` sat nine commits behind
-  `refs/remotes/origin/develop`, and `HEAD` was exactly equal to `origin/develop`. Against the stale
-  local ref the check reported "a PR against develop would carry 55 files" and blocked; against
-  `origin/develop` the diff is 0 files. The check built to catch a wrong base picked the wrong base
-  ref itself.
 - **`facts.files_modified` under-recorded 15 files this run** — the ledger listed 18 while 33 files
   were dirty in the working tree. That field is `base-sanity`'s other input; it did not trip the
   thresholds here (they need both `>3x` and `>20`), but it leaves the check's second input
