@@ -51,7 +51,7 @@ set +e
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
 LIB_DEGRADED=0
-if command -v corpflow_audit_row > /dev/null 2>&1; then
+if command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   WORKSPACE_DIR=$(corpflow_workspace_root write)
 else
   # Library-free last resort. Resolution runs BEFORE $LOG exists, so a degraded

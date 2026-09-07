@@ -29,7 +29,7 @@ set +e
 [ -f "$_LIB" ] && . "$_LIB"
 case "$_cf_opts" in *e*) set -e ;; esac
 
-if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+if ! command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   echo "model-switch-audit: shared library unusable at $_LIB — switch not recorded" >&2
   _cf_ctx="${CLAUDE_PROJECT_DIR:-.}/.context"
   if [ -f "$_cf_ctx/state.json" ]; then
@@ -124,7 +124,7 @@ run_audit() {
   [ -n "$_subject" ] || _subject="$_stage"
   [ -n "$_subject" ] || _subject="unknown"
 
-  corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-audit \
+  corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-audit \
     --action "model_switched" --result ok --subject "$_subject" --meta "$_meta"
 }
 

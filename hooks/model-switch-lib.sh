@@ -16,7 +16,7 @@
 #   Symbols: corpflow_workspace_root, corpflow_context_root, corpflow_active_stage,
 #   corpflow_resolve_pin, corpflow_stage_and_pin, corpflow_model_family,
 #   corpflow_switch_dest, corpflow_switch_origin, corpflow_switch_fields,
-#   corpflow_audit_row.
+#   corpflow_hook_audit_row.
 #
 # Minimum shell: bash 3.2+ (macOS default). Correct under the union of its
 # consumers' option sets, `set -euf -o pipefail`, while setting none of them.
@@ -275,7 +275,14 @@ corpflow_stage_and_pin() {
   return 0
 }
 
-# corpflow_audit_row --ctx C --actor A --action ACT --result R --meta JSON [--subject S]
+# corpflow_hook_audit_row --ctx C --actor A --action ACT --result R --meta JSON [--subject S]
+#
+# Named apart from the row appender in skills/shared/lib/audit-lib.sh on purpose: the two
+# shared one name until 4.0.29. They take incompatible flags (--ctx here, a file path there)
+# and skip unknown ones silently, so a consumer of both got last-loaded-wins, and a call
+# carrying the other's flags wrote nothing and returned 0. `readonly -f` below turns the
+# opposite load order into a hard redefinition error instead. Two names cannot collide; one
+# name with two shapes is the silent-write class this release set out to remove.
 #
 # Appends one row to <ctx>/logs/audit.jsonl. Returns 0 always, including on every
 # refusal — an audit failure must never become a hook's exit code.
@@ -294,7 +301,7 @@ corpflow_stage_and_pin() {
 #
 # Malformed `--meta` degrades to {"_meta_invalid":true} rather than dropping the
 # row: losing metadata beats losing a result:"block" row.
-corpflow_audit_row() {
+corpflow_hook_audit_row() {
   local _cf_ctx="" _cf_actor="" _cf_action="" _cf_result="" _cf_meta="" _cf_subject=""
   local _cf_dir _cf_file _cf_ts _cf_row
   while [ "$#" -gt 0 ]; do
@@ -349,4 +356,4 @@ corpflow_audit_row() {
 readonly -f corpflow_workspace_root corpflow_context_root corpflow_active_stage \
   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-  corpflow_audit_row
+  corpflow_hook_audit_row

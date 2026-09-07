@@ -16,17 +16,20 @@ SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
 # Canonical artifact basenames (mirrors handoff-protocol.md#stage-artifact-map).
-# development alone carries an optional kebab -<stream> suffix: under TL fan-out
-# each DV sub-agent writes development-N-<stream>.md before the entry agent
-# merges the canonical development-N.md.
-ARTIFACT_RE='\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$'
+#
+# The per-stream fan-out files development-N-<stream>.md are deliberately NOT matched.
+# handoff-protocol.md § Per-stream DV artifacts calls them merge inputs, not handoff
+# carriers: the entry agent merges them into the canonical development-N.md, and that
+# merged file is the DR/QA input the anchor contract exists to police. Linting the
+# inputs against the carrier's allow-list only produced `unexpected: commits
+# verification` on every stream write — noise on a non-blocking hook, and noise is how
+# a real anchor failure gets scrolled past.
+ARTIFACT_RE='\.context/(planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$'
 
 if [ "$SELF_TEST" -eq 1 ]; then
   ok=0
   for p in \
     ".context/development-0.md" \
-    ".context/development-0-swift-app.md" \
-    ".context/development-2-backend.md" \
     ".context/developer-review-12.md" \
     "/abs/path/.context/planning-3.md"; do
     printf '%s' "$p" | grep -qE "$ARTIFACT_RE" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
@@ -36,6 +39,8 @@ if [ "$SELF_TEST" -eq 1 ]; then
     ".context/state.json" \
     ".context/development.md" \
     ".context/development-0-.md" \
+    ".context/development-0-swift-app.md" \
+    ".context/development-2-backend.md" \
     ".context/development-0-Stream.md" \
     ".context/planning-0-stream.md" \
     ".context/worktask-comms.md"; do

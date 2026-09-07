@@ -79,6 +79,18 @@ check_installation() {
   return $rc
 }
 
+# True when git tracks <path> and it carries no local modification — i.e. the content about
+# to be overwritten is already recoverable with `git checkout`, so no rescue copy is needed.
+# Every arm is a refusal, never a failure: outside a repo, without git, or on an untracked
+# path the answer is "not recoverable", which keeps the .bak.
+_tracked_and_clean() { # <path>
+  command -v git > /dev/null 2>&1 || return 1
+  git rev-parse --is-inside-work-tree > /dev/null 2>&1 || return 1
+  git ls-files --error-unmatch -- "$1" > /dev/null 2>&1 || return 1
+  git diff --quiet -- "$1" > /dev/null 2>&1 || return 1
+  return 0
+}
+
 # ---------- Install ----------
 install_hook() {
   local plugin_root
@@ -100,10 +112,20 @@ install_hook() {
   elif [[ -x "$dst" ]]; then
     # Idempotence used to key on existence alone, which made re-running the installer
     # — the documented remedy for drift — a no-op precisely when it was needed.
-    cp "$dst" "$dst.bak"
-    cp "$src" "$dst"
-    chmod +x "$dst"
-    echo "install: refreshed stale $dst (previous copy → $dst.bak)"
+    if _tracked_and_clean "$dst"; then
+      # git already holds the copy being replaced, so a .bak would add nothing and would
+      # add plenty: it lands untracked in the project tree, reaches the PR through FN's
+      # `git add`, and trips DR's "no untracked files" re-entry rule. This is the common
+      # case — the first worktask after a plugin upgrade.
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      echo "install: refreshed stale $dst (previous copy recoverable via git)"
+    else
+      cp "$dst" "$dst.bak"
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      echo "install: refreshed stale $dst (previous copy → $dst.bak)"
+    fi
   else
     mkdir -p .claude/hooks
     # A non-executable $dst is typically a hand-customized copy or a partial write; the

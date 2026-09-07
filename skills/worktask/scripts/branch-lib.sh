@@ -9,7 +9,7 @@
 #
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
-#   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base,
+#   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base, _fork_base_uncached,
 #   _base_ref_ranked, resolve_base_ref, base_ref_source.
 #
 # Minimum shell: bash 3.2+ (macOS default).
@@ -409,7 +409,23 @@ fn_batch_scope() {
 # level 2 only; passing it as an argument is what keeps rank 0 from recursing back
 # through resolve_base_ref. Always exits 0 — this library is sourced into
 # `set -euo pipefail` scripts where a non-zero `v=$(fork_base)` kills the caller.
+#
+# Memoised per process and per argument. base-sanity reaches the ladder three times in one
+# run — resolve_base_ref, base_ref_source, then the fork candidate — and each evaluation
+# costs 2 x `git rev-list --count` per remote branch, so a 400-branch remote paid ~2400
+# rev-lists on the blocking FN path. Refs cannot move mid-run, so the later calls reuse the
+# first. The cache is process-local: a new shell, and every bats case is one, recomputes.
 fork_base() {
+  if [ "${_FORK_BASE_KEY-$'\x01unset'}" = "${1:-}" ]; then
+    printf '%s' "${_FORK_BASE_VAL:-}"
+    return 0
+  fi
+  _FORK_BASE_VAL="$(_fork_base_uncached "${1:-}")"
+  _FORK_BASE_KEY="${1:-}"
+  printf '%s' "$_FORK_BASE_VAL"
+}
+
+_fork_base_uncached() {
   local configured="${1:-}" default="" rows="" sorted="" first=""
   local refname symref otype name ahead behind t2 t3
   if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then

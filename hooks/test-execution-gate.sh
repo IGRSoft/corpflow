@@ -38,7 +38,7 @@ set +e
 [ -f "$_LIB" ] && . "$_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 LIB_DEGRADED=0
-command -v corpflow_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
+command -v corpflow_hook_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
 
 # Same guarded-source idiom for the suppression library. Its absence degrades
 # suppression alone — no classifier arm calls into it, so authority enforcement
@@ -1030,9 +1030,15 @@ gate_classify_payload() {
         *build-test*)
           # The Skill branch had NO scoped outcome: every build-test invocation that was
           # not a declared no-op read as a full run, so a DV stage holding scoped authority
-          # could never invoke the platform build-test command at all. Same selection
-          # predicate as the Bash branch's run-tests.sh arm, padded and anchored so a bare
-          # word inside a path cannot match.
+          # could never invoke the platform build-test command at all. Padded and anchored
+          # so a bare word inside a path cannot match.
+          #
+          # Deliberately WIDER than the Bash branch's run-tests.sh arm, which is not the
+          # same subject: that arm classifies this repo's own suite, whose documented flags
+          # are --changed and --base, while /<plugin>:build-test fans out to xcodebuild,
+          # gradle and friends where --filter and -only-testing: are the scoping flags.
+          # Narrowing this list to match would read a genuinely scoped platform run as a
+          # full one and hand it authority it was not granted.
           case " $_skill_cmd " in
             *' --changed '*|*' --base '*|*' --only '*|*' --filter '*|*' -only-testing:'*|*' --tests '*)
               _class="scoped_test_run" ;;
@@ -1242,7 +1248,7 @@ first_runner_token() {
 # committed log file. These rows carry no `subject`, and the appender omits the
 # key entirely rather than emitting an empty one, so the shape is unchanged.
 write_audit_row() {
-  corpflow_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
+  corpflow_hook_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
     --action "${2:-}" --result ok --meta "${3:-}"
 }
 

@@ -76,7 +76,7 @@ _frozen() {
       || fail "$f.sh sources the library without dropping -e first"
     grep -qE 'case "\$_[cC][fF]_[oO][pP][tT][sS]" in \*e\*\) set -e' "$HOOKDIR/$f.sh" \
       || fail "$f.sh does not restore -e from a captured \$-"
-    grep -q 'command -v corpflow_audit_row' "$HOOKDIR/$f.sh" \
+    grep -q 'command -v corpflow_hook_audit_row' "$HOOKDIR/$f.sh" \
       || fail "$f.sh has no symbol probe after the source"
   done
 }

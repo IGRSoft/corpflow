@@ -343,20 +343,20 @@ _ledger() {
   assert_output ""
 }
 
-# --- corpflow_audit_row -------------------------------------------------------
+# --- corpflow_hook_audit_row -------------------------------------------------------
 
 _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
 @test "audit_row: the subject-bearing and subject-less shapes keep their key order" {
   # Pinned with keys_unsorted: three byte-compatible shapes come out of one
   # writer, and jq's default sort would silently renumber every existing row.
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
     --result block --subject DV0 --meta '{"k":1}'
   assert_success
   [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,subject,result,metadata" ]
 
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:test-execution-gate --action test_execution_blocked \
     --result ok --meta '{"k":2}'
   assert_success
@@ -366,7 +366,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 @test "audit_row: an empty subject is ABSENT, never a blank key" {
   # A contract, not an optimisation: it forecloses subject:\"\" ever meaning
   # \"blank\" to a future consumer that meant \"absent\".
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-audit --action model_switched \
     --result ok --subject "" --meta '{}'
   assert_success
@@ -376,7 +376,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 @test "audit_row: a transposed action/result drops the row instead of recording a lie" {
   # The worst failure an audit log has is a valid row that lies. The closed sets
   # turn a transposition into a missing row, which is loud, not plausible.
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action ok \
     --result model_switch_blocked --meta '{}'
   assert_success
@@ -384,7 +384,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 }
 
 @test "audit_row: a non-hook actor is refused" {
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor "attacker" --action x --result ok --meta '{}'
   assert_success
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
@@ -392,7 +392,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
 @test "audit_row: malformed metadata degrades the METADATA, never the row" {
   # Losing metadata beats losing a result:"block" row.
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
     --result block --meta 'not json' --subject DV0
   assert_success
@@ -402,7 +402,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 @test "audit_row: a value-less flag does not shift the parse or abort the caller" {
   # `shift 2` past $# returns non-zero and would kill a set -e consumer from
   # inside the appender.
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok --meta
   assert_success
 }
@@ -411,7 +411,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   mkdir -p "$WD/.context/logs" "$WD/elsewhere"
   : > "$WD/elsewhere/target"
   ln -s "$WD/elsewhere/target" "$WD/.context/logs/audit.jsonl"
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_row \
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok --meta '{}'
   assert_success
   [ ! -s "$WD/elsewhere/target" ]
@@ -426,7 +426,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   local opts fn
   local fns="corpflow_workspace_root corpflow_context_root corpflow_active_stage
     corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family
-    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_audit_row"
+    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_hook_audit_row"
   for opts in 'set -eu' 'set -u; set -f' 'set -euo pipefail'; do
     for fn in $fns; do
       run bash -c "cd '$WD'; $opts; . '$PLUGIN_ROOT/$LIB'; $fn" 
@@ -449,7 +449,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
 @test "authoring: the library survives its dependencies being hidden" {
   local fn
-  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_audit_row; do
+  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_hook_audit_row; do
     run_script_env --cwd "$WD" --hide jq --hide git --hide date \
       --source "$LIB" "$fn" "$WD/.context" ""
     assert_success
@@ -479,14 +479,14 @@ _degraded_hooks() {
         for fn in corpflow_workspace_root corpflow_context_root corpflow_active_stage \
                   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
                   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-                  corpflow_audit_row; do
+                  corpflow_hook_audit_row; do
           printf '%s() { printf ""; return 0; }\n' "$fn"
         done
       } > "$lib" ;;
     truncate)
-      line="$(grep -n '^corpflow_audit_row() {' "$lib" | cut -d: -f1)"
+      line="$(grep -n '^corpflow_hook_audit_row() {' "$lib" | cut -d: -f1)"
       if [ -z "$line" ]; then
-        printf >&2 '_degraded_hooks: no corpflow_audit_row to truncate at\n'
+        printf >&2 '_degraded_hooks: no corpflow_hook_audit_row to truncate at\n'
         return 1
       fi
       awk -v n="$((line + 6))" 'NR <= n' "$lib" > "$lib.cut" && mv "$lib.cut" "$lib"
