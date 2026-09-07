@@ -136,12 +136,19 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 | `metadata.run_index` | `N` (integer) | Resolve `<basename>-${N}.md` artifacts |
 | `metadata.isolation` | `"worktree"` | File-writing stages (DV; megatask per-issue AR/DR/QA) always run in an isolated worktree (consumed by developer § D0.0, technical-lead DR check, workspace-modes.md). |
 
+##### Propagation fields — dispatch pair
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages` | Passed to `Task()`; never inherited from frontmatter. |
+| `metadata.effort` | that table's tier, or the override actually dispatched | **Mandatory, not optional** since Step C.0a began reading it. The resolver bumps it one rung, and frontmatter is the wrong fallback — DV sub-tasks dispatched at `xhigh` run at a tier `developer.md`'s `effort: high` never mentions. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`) and its blocking items go back to asking a human. |
+
 ##### Propagation fields — gates
 
 | Key | Value | Purpose |
 |---|---|---|
 | `metadata.fn_gate` | `"checkpoint"` (default) | Pre-FN human checkpoint; orchestrator STOPs before FN for approval. `"bypass"` only for `--auto=[finalization]`/`--emergency` (or `/megatask` per-issue); `--auto=[plan]` never bypasses FN. Stamp on PL0; read at the mid-loop FN gate. |
-| `metadata.decision_gate` | `"user"` (default) | WHO answers PL0's `open_questions[]`. `"auto"` only for `--auto=[decision]` (or `/megatask` per-issue): orchestrator resolves them via the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching and Step A.4. |
+| `metadata.decision_gate` | `"user"` (default) | WHO answers `open_questions[]`. `"auto"` only for `--auto=[decision]` (or `/megatask` per-issue). PL0's go to the Fable-model decision pass (`commands/worktask.md § Step A.4`) instead of the plan-gate round-trip; every **other** stage's blocking `decision` items go to the Step C.0a resolver at its own boundary, and the FN-gate batch to Step C.3. Bypasses no gate. Stamp on PL0; consumed by § Plan-Gate Open-Question Batching, Step A.4, Step C.0a and Step C.3. |
 
 ##### Propagation fields — exploration & screenshots
 
@@ -159,7 +166,7 @@ Full propagation contract: `skills/agent-coordination/SKILL.md § metadata.skip_
 
 #### Optional dispatch metadata
 
-PL0 MAY populate the optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to `claude agents run` flags (`headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise.
+PL0 MAY populate the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to `claude agents run` flags (`headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` has moved out of this set — it is mandatory above. It stays *advisory as a dispatch flag* (in-process `Task()` has no effort parameter), but it is no longer optional as a *ledger record*, because Step C.0a reads it.
 
 ##### Default writer rules
 
@@ -722,7 +729,7 @@ Before marking PL0 complete, verify:
 - [ ] Test strategy section present with specific test scenarios and file paths
 - [ ] Test effort estimate included (required, not optional)
 - [ ] Complexity score calculated (0-50)
-- [ ] Stage tasks created with `metadata.agent`, `metadata.plan_file`, AND `metadata.run_index = N`
+- [ ] Stage tasks created with `metadata.agent`, `metadata.model`, `metadata.effort`, `metadata.plan_file`, AND `metadata.run_index = N`
 - [ ] Dependency chain set between created tasks
 - [ ] No open questions blocking next stage
 

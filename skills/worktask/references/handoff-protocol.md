@@ -261,6 +261,20 @@ $defs:
             reason: { type: string, enum: [anchor-miss, flagged-verdict, retry, ambiguous] }
 ```
 
+#### deep_reads — the resolver exemption
+
+A **Step C.0a / C.3 resolver** deep-reads by construction: it is handed the emitting stage's own
+artifact and `planning-N.md` in full precisely because the ≤200-token frontmatter cannot carry an
+`options[]` body (`skills/shared/stage-contracts.md § What the resolver is given`). It declares those
+reads here — `reason: "ambiguous"`, which is what a sweep item is — but they are **excluded from the
+B4 tripwire**.
+
+The tripwire means "a producing stage's frontmatter is under-informative". A resolver's list is
+evidence of the sweep item existing, not of the frontmatter failing, so counting it would fire the
+signal on every run that resolves anything and make a real one unreadable. Distinguish them by the
+audit row the reads belong to: a resolver's arrive under `auto_decision_resolved`, a fan-in stage's
+under its own stage id.
+
 ### Per-stage required-field matrix
 
 #### Stages PL–DR

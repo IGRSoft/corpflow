@@ -186,7 +186,61 @@ Two destinations, selected per item by `blocks_next_stage` — never by stage:
 - **`blocks_next_stage: true`** → answered at **its own stage boundary**, before the next stage is dispatched, because the next stage would otherwise build on a guess. PL's sweep is the long-standing instance of this, answered at the plan gate.
 - **absent or `false`** → accumulates in the ledger and renders at the **FN gate**, grouped by originating stage, in batches of ≤4, immediately *before* the existing approve/reject call (`commands/worktask.md § Step C`; `skills/worktask/SKILL.md` loop step 4.9).
 
-**No new gate is created**, and the FN and plan gates keep their existing firing conditions. A blocking item does add a round-trip at its own boundary — that is the point of the flag, and it is why the flag is set per item rather than per stage.
+**No new gate is created**, and the FN and plan gates keep their existing firing conditions. A blocking item does add a round-trip at its own boundary — that is the point of the flag, and it is why the flag is set per item rather than per stage. *Who* takes it depends on the stage (§ Blocking items are resolved, not asked).
+
+#### Blocking items are resolved, not asked
+
+A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`.
+
+The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR are recorded rather than prompted already, so there is nothing for a resolver to unblock.
+
+##### Why a tier up, and why the same model
+
+The item exists because the stage could not settle it at its own tier. Re-asking the same agent at the same effort re-runs the reasoning that already declined; one rung up is the cheapest thing that is actually different. The **model is unchanged** — the stage's assignment already reflects the work's difficulty, and swapping it would change two variables to explain one outcome.
+
+Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium < high < xhigh < max`, saturating at `max`. Executable copy — the one every consumer reads — is `skills/worktask/scripts/effort-ladder.sh`; the bats suite asserts the two agree.
+
+##### The tier is a request, not a guarantee
+
+`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory
+in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own
+frontmatter tier (`agent-coordination/references/headless-dispatch.md § Translation table — model &
+effort`). The bump is therefore computed and recorded on every path and *applied* on one. Every
+resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
+— the tier only reaches some dispatch surfaces` holds the table.
+
+Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
+deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
+a licence to reach the number another way — substituting a higher-frontmatter agent trades the
+domain expertise answering the question for a field value, which is the wrong direction.
+
+##### The tier the model can actually carry
+
+`xhigh` requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather than failing (`model-selection.md § xhigh routing`). A bump that crosses that line on a non-Opus model is therefore **clamped to `high`** and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it has to be enforced in code rather than remembered: nothing in a run would show it if it started happening.
+
+A second silent path is not clampable and must be read from the audit row instead: `xhigh`/`max` requested in a session with thinking turned off is sent as `high`. Resolvers therefore audit `effort_requested` **and** `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
+
+##### What the resolver is given
+
+The stub carries `{id, class, ref, blocks_next_stage}` and nothing else, and § Token budget caps a handoff block at 200 tokens — far too thin to decide on. The resolver gets **paths, not inlined content**, and reads what it needs. Filenames resolve through `handoff-protocol.md #stage-artifact-map`; there is no second mapping.
+
+| Tier | Contents |
+|---|---|
+| in full | the emitting stage's own artifact — it holds the `## elicitation-sweep` body with `options[]`, `recommended` and `rationale` |
+| in full | `planning-N.md` — `## requirements`, `## acceptance-criteria`, `## scope` bound every answer |
+| frontmatter only | every completed stage's artifact — the designed compression form |
+| ledger | `facts.decisions[]`, `facts.verdicts`, and the item's already-`resolved` siblings — prior commitments the answer must not contradict |
+| on demand | `files_touched` from the emitting stage's handoff, and any artifact the item names |
+
+##### What the resolver is given — declaring the full reads
+
+Full reads go in the existing `deep_reads` field (`handoff-protocol.md § Schema — deep_reads`), whose `reason` enum already carries `ambiguous` — a sweep item exists *because* something was ambiguous. **A resolver's `deep_reads` is exempt from the B4 fan-in tripwire**: that signal means "a producing stage's frontmatter is under-informative", and a resolver deep-reads by construction, so counting it turns the tripwire into noise.
+
+##### The escalation guard is untouched
+
+Only `effective_class == "decision"` items reach a resolver, and only after the § Step C.2 raise-only join has run — so an item the orchestrator raises to `escalate` can never arrive. Escalate items stop the run exactly as before. Nothing here widens what runs unattended, which is the invariant `commands/worktask.md § Escalation guard (BINDING)` exists to hold.
+
+This is deliberately a partial remedy. It removes the human round-trip for the blocking items that were only ever a judgement call; it removes none of the ones that were correctly escalated, and it is not a licence to relabel the latter as the former to make a run quieter.
 
 #### Facts are not sweep items
 
