@@ -14,7 +14,7 @@ allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bas
 > | Carrier | Default | Alternate | Meaning |
 > |---|---|---|---|
 > | `plan_gate` | `checkpoint` | `bypass` — `--auto=[plan]`, `--emergency` | Post-PL0 checkpoint: present the plan, wait for explicit `AskUserQuestion` approval before dispatching any implementation stage (AR/DV/…) |
-> | `decision_gate` | `user` | `auto` — `--auto=[decision]` | Who answers PL0 `open_questions[]`: the user at the plan gate, or a Fable decision delegate (§ Step A.4). Escalation-class questions always fall back to the user |
+> | `decision_gate` | `user` | `auto` — `--auto=[decision]` | Who answers `open_questions[]`: the user, or a delegate. PL0's at the plan gate (§ Step A.4); every other stage's blocking items at their own boundary (§ Step C.0a); the FN-gate batch at § Step C.3. Escalation-class questions always fall back to the user |
 > | `fn_gate` | `checkpoint` | `bypass` — `--auto=[finalization]`, `--emergency` | Pre-FN checkpoint: STOP before the FN `Task()`, present a pre-FN summary, approve before any commit/push/PR |
 
 # Worktask Command
@@ -65,7 +65,7 @@ carrier on PL0.
 | Value | Stamps | Effect beyond the carrier table above |
 |-------|--------|---------------------------------------|
 | `plan` | `plan_gate: "bypass"` | Auto-proceeds into the stage loop. FN gate still checkpoints unless `finalization` is also set. |
-| `decision` | `decision_gate: "auto"` | Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Escalation-class questions — irreversible, scope-expanding, security-posture, spend — always fall back to the user. |
+| `decision` | `decision_gate: "auto"` | Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Also what enables the § Step C.0a resolver, so a blocking `decision` item from AR/TL/DV/DR/SR/QA/DC/RE/ET is answered a tier up instead of stopping the run. Escalation-class questions — irreversible, scope-expanding, security-posture, spend — always fall back to the user. |
 | `finalization` | `fn_gate: "bypass"` | Auto commit/push/PR. Plan gate still applies unless `plan` is also set. |
 
 ### Scope and pipeline flags
@@ -865,15 +865,105 @@ nothing, and every path out of it falls through to the gate's own approve/reject
 
 It has **two firing points**, selected per item by `blocks_next_stage`, never by stage:
 
+- **C.0a** runs first at every stage boundary *except* PL/FN/ST/IR, resolving that stage's
+  blocking `decision` items through a sub-agent so the run does not stop for them at all.
 - **C.0** runs at *every* stage boundary, immediately after that stage's `completed` patch and
-  before the next stage is dispatched, over that stage's **blocking** items only.
+  before the next stage is dispatched, over whatever blocking items C.0a did not settle.
 - **C.1–C.5** run once, immediately before the FN `Task()` delegation, over everything else.
+
+#### Step C.0a — resolve blocking items instead of asking (loop step 4.9, first)
+
+Contract: `skills/shared/stage-contracts.md § Blocking items are resolved, not asked`.
+
+After any stage `<CODE><N>` completes, and **before** § Step C.0, collect the items it just wrote
+that satisfy **all four**:
+
+1. `<CODE>` ∉ {PL, FN, ST, IR} — the four exception stages keep their own surfacing
+   (`stage-contracts.md § Exceptions — PL, FN, ST, IR`), so there is nothing here to unblock.
+2. `blocks_next_stage` is true and `status` is not `"resolved"`.
+3. `effective_class == "decision"` **after** the § Step C.2 raise-only join. Run C.2 first, on
+   this set, exactly as C.1–C.5 does — an item the orchestrator raises to `escalate` must never
+   reach a delegate.
+4. `decision_gate == "auto"`.
+
+Empty set ⇒ no-op, fall through to § Step C.0 unchanged.
+
+##### Step C.0a — the resolver dispatch
+
+1. Compute the tier. Read `tasks.<CODE><N>.metadata.effort` and `.model` — the ledger, never the
+   agent's frontmatter, because a stage dispatched at an override runs at a tier its frontmatter
+   never mentions. Source `skills/worktask/scripts/effort-ladder.sh` and call
+   `effort_for_resolver "<effort>" "<model>"`; it bumps one rung and applies the non-Opus clamp.
+   A stage row with no `metadata.effort` is a **contract violation, not a default** — fall through
+   to § Step C.0 and audit `resolver_skipped` with `reason: "effort_unstamped"` rather than
+   guessing a tier.
+2. Append `auto_decision_dispatched` (`subject:"<CODE><N>"`, `metadata: { questions: <count>,
+   effort_requested: <tier>, effort_clamped: <bool> }`).
+3. Dispatch **the emitting stage's own agent** on **its own model** at the computed tier. One
+   dispatch per boundary over the whole set (≤4 by the per-stage cap) — never one per item.
+
+##### Step C.0a — the tier only reaches some dispatch surfaces
+
+`metadata.effort` is **not** honoured in-process — `headless-dispatch.md § Translation table —
+model & effort` marks `model` "Yes (passed to `Task()`)" and `effort` "Advisory". The audit row
+must say which surface it got:
+
+| Surface | Carries the tier by | `effort_transport` |
+|---|---|---|
+| headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
+| in-process `Task()` | nothing — the sub-agent runs at its own frontmatter `effort:` | `frontmatter-only` |
+
+In-process the tier is **recorded, not applied**, and the resolver still runs.
+
+###### Step C.0a — do not reach the tier another way
+
+Never substitute a different agent whose frontmatter sits a rung higher: that trades the domain
+expertise answering the question for a field value. `Task()` gains no `effort` parameter here and
+none is invented; if one lands later, the table above is the only place that changes.
+
+##### Step C.0a — what the prompt carries
+
+Paths, not inlined content — the § Step A.4 convention. Resolve artifact filenames through
+`handoff-protocol.md #stage-artifact-map`; build no second mapping. The context tiers are
+enumerated once, in `stage-contracts.md § What the resolver is given`, and are not restated here.
+
+The delegate answers each item default-biased — deviate from the stage's own `recommended` entry
+only with stated evidence — and returns one entry per item plus any it declines. It declares its
+full reads through `deep_reads` (exempt from the B4 tripwire, per that section) and runs
+`state-patch.sh` **not at all**: the stage is already `completed`, so the orchestrator owns every
+write, exactly as at Step A.4.
+
+##### Step C.0a — record, then fall through
+
+4. The ORCHESTRATOR merges each answer through the § Step C.5 write — the whole stub, resolution
+   marked `(auto-decided)` — and appends one `auto_decision_resolved` row (`subject:"<CODE><N>"`,
+   `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
+   effort_transport, decisions: [{question, answer, rationale}] }`).
+5. Fall through to § Step C.0 with whatever remains: every `escalate` item, everything the
+   delegate declined, and everything C.0a's four conditions excluded.
+
+###### Step C.0a — reading the two effort fields
+
+`effort_requested` != `effort_resolved` means the tier evaporated in transit — thinking disabled
+downgrades `xhigh`/`max` to `high` silently (`model-selection.md § xhigh routing`). Recorded, not
+enforced: the answer stands, it just was not reached at the tier asked for. Read it with
+`effort_transport` — under `frontmatter-only` the request never left the orchestrator, so a
+difference there says nothing about the session.
+
+##### Step C.0a stamps no approval carrier
+
+Same asymmetry as Step A.4 and Step C: resolving an item settles implementation content, it
+approves nothing. Nothing here writes an approval carrier, and both gates keep their existing
+firing conditions.
 
 #### Step C.0 — blocking items, at their own boundary
 
 After any stage `<CODE><N>` completes, read the items it just wrote whose `blocks_next_stage` is
-true and whose `status` is not `"resolved"`. If none — the overwhelmingly common case — Step C.0 is
-a no-op and the loop proceeds unchanged. Otherwise run C.2 through C.5 on exactly those items, with
+true and whose `status` is not `"resolved"` — after § Step C.0a has had its pass, so on the nine
+non-exception stages this set is what a resolver could not or must not settle. If none, Step C.0 is
+a no-op and the loop proceeds unchanged. Do not assume that is the common case: a single observed
+run raised 16 sweep items across four stages, 7 of them blocking, which is what Step C.0a exists
+to absorb. Otherwise run C.2 through C.5 on exactly those items, with
 `subject:"<CODE><N>"` on every audit row, and only then dispatch the next stage. The next stage would
 otherwise build on a guess, which is the whole reason the flag exists.
 
@@ -907,10 +997,21 @@ approval carrier, and the gate's own `AskUserQuestion` still fires last and unmo
 
 #### Step C.3–C.4 — auto-answer, then render
 
-3. **C.3 — Auto-answer.** Only when `decision_gate == "auto"`: re-dispatch the PM decision delegate
-   on `model: "fable"` over the `effective_class == "decision"` items — the same single authority as
-   Step A.4, with the same `facts.capabilities.fable_dispatch == "credit_blocked"` → `"opus"`
-   fallback. Audit `auto_decision_dispatched` → `auto_decision_resolved`, `subject:"FN<N>"`.
+3. **C.3 — Auto-answer.** Only when `decision_gate == "auto"`: resolve the
+   `effective_class == "decision"` items on the § Step C.0a rule — each item's **own emitting
+   stage's** agent and model, at `effort_for_resolver` of that stage's ledger effort — grouping the
+   batch by originating stage and issuing one dispatch per group. This step and C.0a share one
+   resolver contract: the fable-plus-credit-fallback path C.3 used to carry is gone, and with it
+   the `fable_dispatch == "credit_blocked"` branch. Audit `auto_decision_dispatched` →
+   `auto_decision_resolved`, `subject:"FN<N>"`, carrying the same effort fields C.0a records. A
+   stage row with no `metadata.effort` is skipped exactly as at C.0a (`resolver_skipped`,
+   `reason: "effort_unstamped"`) and its items render at C.4.
+##### Step C.3 — why Step A.4 is not folded in
+
+A.4 answers PL's items at the plan gate. PL is an exception stage whose boundary *is* that gate,
+and under `checkpoint` a user is already present, so it keeps its own PM-on-fable dispatch rather
+than joining the resolver contract.
+
 ##### Step C.4 — where the question text comes from
 
 4. **C.4 — Render.** Present the remaining items through `AskUserQuestion`, grouped by originating

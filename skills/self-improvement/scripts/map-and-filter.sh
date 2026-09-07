@@ -103,6 +103,16 @@ map_path() {
       return 0
       ;;
   esac
+  # Source 4 of build-context-set.sh enters hooks and helpers into the context set under
+  # exactly these shapes, so the in-context join needs a rule emitting them as a target.
+  # Test-shaped names fall through to rule 15, which owns them.
+  case "$p" in
+    *_test.sh | *.bats) ;;
+    hooks/*.sh | scripts/*.sh | skills/*/scripts/*.sh)
+      printf '1\t%s\n' "$p"
+      return 0
+      ;;
+  esac
 
   # Rule 2 — planning artifact
   case "$p" in

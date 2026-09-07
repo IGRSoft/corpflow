@@ -1145,6 +1145,42 @@ if [[ -n "$TASK_OP" ]]; then
     usage
   fi
 
+  # `metadata.effort` is a dispatch parameter the ledger carries, not free text: the Step
+  # C.0a resolver bumps it one rung (`skills/shared/stage-contracts.md § Blocking items are
+  # resolved, not asked`), and an off-ladder value would surface there as a failed dispatch
+  # a stage or more later rather than at the write that introduced it. Checked on the two
+  # ops that persist metadata. Absent is fine — the field is optional and older ledgers
+  # predate it; present-but-unknown is not.
+  if [[ "$TASK_OP" == "create" || "$TASK_OP" == "meta" ]] && [[ -n "$TASK_OP_VALUE" ]]; then
+    # `has` + `tostring`, not `//`: the alternative operator reads JSON null and false as
+    # absent, and a required field must not be erasable through its own gate.
+    _TASK_EFFORT=$(printf '%s' "$TASK_OP_VALUE" \
+      | jq -r 'if type == "object" and has("effort") then (.effort | tostring) else empty end' \
+        2> /dev/null) \
+      || _TASK_EFFORT=""
+    if [[ -n "$_TASK_EFFORT" ]]; then
+      _EFFORT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/effort-ladder.sh"
+      if [ -r "$_EFFORT_LIB" ]; then
+        # shellcheck source=/dev/null
+        . "$_EFFORT_LIB"
+      fi
+      # Only the two metadata ops need the ladder, so its absence fails them alone and
+      # leaves --task-status/--task-block/--task-replay untouched.
+      if [[ -z "${EFFORT_ENUM:-}" ]]; then
+        printf >&2 'invalid --task-%s: effort-ladder.sh unreachable at %s; state.json unchanged\n' \
+          "$TASK_OP" "$_EFFORT_LIB"
+        log_msg ERROR "effort-ladder.sh unreachable; --task-${TASK_OP} refused, state.json unchanged"
+        exit 1
+      fi
+      if ! effort_rank "$_TASK_EFFORT" > /dev/null; then
+        printf >&2 'invalid effort: %s (expected one of: %s); state.json unchanged\n' \
+          "$_TASK_EFFORT" "$EFFORT_ENUM"
+        log_msg ERROR "invalid metadata.effort (${_TASK_EFFORT}); state.json unchanged"
+        exit 2
+      fi
+    fi
+  fi
+
   # R-4.4 — the ONLY two paths that persist a task description. Dispatch-time appends
   # (the orchestrator's test-scope, ban and FN banners) mutate an in-memory copy and are
   # never written back, so capping post-append would strip banners that no ledger holds.

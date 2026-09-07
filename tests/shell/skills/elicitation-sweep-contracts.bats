@@ -1608,3 +1608,105 @@ step_a4_body() {  # <worktask-cmd>
   printf '%s\n' "$body" | grep -q 'non-empty' \
     || fail "non-vacuity: the plant did not land in the extracted body"
 }
+
+# --- Step C.0a resolver contract ---------------------------------------------
+#
+# The resolver answers a blocking `decision` item with a sub-agent one effort tier up instead
+# of stopping the run. Its three load-bearing properties are all cross-file, so each assertion
+# extracts both sides rather than restating either.
+
+HEADLESS="skills/agent-coordination/references/headless-dispatch.md"
+LADDER="skills/worktask/scripts/effort-ladder.sh"
+
+# The resolver section's own body, bounded the same way matrix_body is.
+resolver_body() {
+  awk '/^#### Blocking items are resolved, not asked/{f=1;next} /^#### /{f=0} f' "$1"
+}
+
+@test "the resolver contract exists and is canonical in stage-contracts.md" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_success
+  [ -n "$output" ]
+}
+
+@test "the resolver exempts exactly the four stages the obligation matrix exempts" {
+  # Derived on both sides: a fifth exception added to one file alone must fail here.
+  matrix_exceptions=$(grep -o 'Exceptions — PL, FN, ST, IR' "$PLUGIN_ROOT/$CONTRACTS" | head -1)
+  [ -n "$matrix_exceptions" ]
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "PL, FN, ST or IR"
+}
+
+@test "every non-exception stage code is resolver-eligible in the command" {
+  # The nine are derived from the canonical vocabulary minus the four exceptions, never listed.
+  expected=$(left_codes "$PLUGIN_ROOT/$STAGE_CODES" "$PLUGIN_ROOT/$HANDOFF" \
+    | grep -vxE 'PL|FN|ST|IR' | tr '\n' ' ')
+  [ -n "$expected" ]
+  scope=$(grep 'blocking `decision` item from' "$PLUGIN_ROOT/$WORKTASK_CMD")
+  [ -n "$scope" ] || fail "the --auto=[decision] resolver scope line is gone"
+  for code in $expected; do
+    grep -q "\b$code\b" <<< "$scope" \
+      || fail "stage $code missing from the --auto=[decision] resolver scope line"
+  done
+}
+
+@test "Step C.0a is ordered before Step C.0 in the command" {
+  # C.0a must have had its pass before C.0 renders, or C.0 asks about items a resolver owns.
+  a=$(grep -n '^#### Step C.0a' "$PLUGIN_ROOT/$WORKTASK_CMD" | cut -d: -f1)
+  b=$(grep -n '^#### Step C.0 — blocking items' "$PLUGIN_ROOT/$WORKTASK_CMD" | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ]
+  [ "$a" -lt "$b" ]
+}
+
+@test "the escalate carve-out is stated in both the contract and the command" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial 'effective_class == "decision"'
+  grep -q 'must never' <<< "$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+}
+
+@test "the resolver runs strictly after the C.2 raise-only join" {
+  # Ordering is the whole guard: joined before dispatch, an item raised to escalate cannot
+  # reach a delegate. Reversed, the raise happens too late to exclude anything.
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_success
+  assert_output --partial "**after** the § Step C.2"
+  assert_output --partial "Run C.2 first"
+}
+
+@test "the contract cites the executable ladder rather than restating the rungs" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "effort-ladder.sh"
+  [ -f "$PLUGIN_ROOT/$LADDER" ]
+}
+
+@test "the in-process effort caveat matches what headless-dispatch.md actually says" {
+  # The contract claims effort is advisory in-process; that claim is only safe while the
+  # translation table still says so. If the table gains in-process support, this fires and the
+  # caveat becomes wrong rather than merely stale.
+  grep -qE '^\| `effort` \|.*\| Advisory \|' "$PLUGIN_ROOT/$HEADLESS"
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "advisory"
+}
+
+@test "the resolver records effort_transport on every path" {
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_output --partial "effort_transport"
+  assert_output --partial "dispatch-flag"
+  assert_output --partial "frontmatter-only"
+}
+
+@test "an unstamped effort skips the resolver instead of defaulting a tier" {
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_output --partial "effort_unstamped"
+  refute_output --partial "default to"
+}
+
+@test "metadata.effort is mandatory in the PL0 stamp table, not optional" {
+  grep -q '`metadata.effort`' "$PLUGIN_ROOT/$PL0_PROC"
+  # The checklist is the half that actually gets read during a run.
+  grep -q 'metadata.effort' <<< "$(grep 'Stage tasks created with' "$PLUGIN_ROOT/$PL0_PROC")"
+}
+
+@test "the deep_reads resolver exemption is stated where deep_reads is defined" {
+  grep -q 'deep_reads — the resolver exemption' "$PLUGIN_ROOT/$HANDOFF"
+}

@@ -36,7 +36,9 @@ Execute the five steps in order. If any step fails, write the failure to `.conte
 
 **Source 4 is not optional.** Sources 1–3 name *agents*, so a hook or a bundled script can drive most of a run and still be invisible to the retrospective — the class of participant that most often needs correcting after delivery.
 
-**Paths resolve against the plugin root, never the process cwd.** Every corpflow asset lives under `$CLAUDE_PLUGIN_ROOT` while the pipeline runs from the worktask's own repo, so a cwd-relative existence test drops every candidate and yields the empty set Step 5b warns about. `scripts/build-context-set.sh` resolves the root per `skills/shared/plugin-root-resolution.md` and reports on stderr when it cannot.
+**Paths resolve against the plugin root, never the process cwd.** Every corpflow asset lives under `$CLAUDE_PLUGIN_ROOT` while the pipeline runs from the worktask's own repo. `scripts/build-context-set.sh` resolves the root per `skills/shared/plugin-root-resolution.md`, emits root-relative paths, and reports on stderr when it cannot resolve one.
+
+**Source 4's shapes bind Step 4.** Basenames resolve against `hooks/`, `hooks/lib/`, `scripts/` and `skills/*/scripts/`, so those are the paths hooks and helpers enter the set under. Step 4 must be able to emit each shape as a target; a shape it cannot produce makes that part of the set unmatchable and silently drops every edit to it.
 
 ### Step 2 — Detect User Changes
 
@@ -99,9 +101,9 @@ scripts/append-labels.sh --worktask-id=<id> --run-index=<n> --changes=<tsv>
 
 Appends to `evals/failure-labels.jsonl` (repo root, **committed**), idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)`: re-running a worktask never duplicates rows, but the same edit recurring in a later worktask appends a new label — recurrence is the frequency signal. `scripts/label-stats.sh` aggregates per target and category, flags those at or above `--min-count=<n>` (default 3), and reports progress toward the 100-row `failure-taxonomy.md` gate in `evals/README.md`.
 
-##### An empty context set is a silent no-op
+##### An empty join is a silent no-op
 
-**The context set must be non-empty for any of this to happen.** If `scripts/build-context-set.sh` returns zero paths, Step 4 discards every change and Step 5b writes nothing — indistinguishable from "the user made no edits". Report an empty context set rather than treating it as a clean run.
+**A non-empty context set is necessary, not sufficient.** The pipeline is four stages — `build-context-set.sh` → `detect-user-changes.sh` → `map-and-filter.sh` → `append-labels.sh` — and any of three conditions empties the run: zero context paths, zero changed paths, or a join that matches nothing because no mapping rule emits the targets the set actually holds. All three look identical to "the user made no edits". Report the surviving count at each of the four stages rather than reading a zero-row result as a clean run.
 
 #### Step 5b — privacy and opt-out
 

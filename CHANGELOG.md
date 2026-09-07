@@ -76,6 +76,38 @@ reduced the number of *implementations*, not the number of lines.
   idiom: `skills/shared/lib/README.md`.
 - **28 sibling test harnesses**, extracting self-test bodies out of 22 production scripts so a
   production script no longer carries its own test runner inline.
+- **Step C.0a — a blocking `decision` item is resolved, not asked (#360).** A
+  `blocks_next_stage: true` item of `effective_class == "decision"` used to stop the run for a human
+  at every stage boundary; on the nine non-exception stages it is now handed to **the emitting
+  stage's own agent, on its own model**, dispatched one effort tier up, and the loop continues. Same
+  model by design — the stage assignment already reflects the work's difficulty, so moving it would
+  change two variables to explain one outcome; one rung up is the cheapest thing that is actually
+  different from the reasoning that already declined. Four conditions gate it, all required: the
+  stage is not PL/FN/ST/IR (those keep their own surfacing, and PL's boundary *is* the plan gate),
+  the item still blocks and is unresolved, `effective_class == "decision"` **after** the § Step C.2
+  raise-only join, and `decision_gate == "auto"`. The join running first is the escalation guard: an
+  item the orchestrator raises to `escalate` can never reach a delegate, so nothing here widens what
+  a run may do unattended. One dispatch per boundary over the whole set, never one per item.
+- **`effort-ladder.sh` — the effort ladder and the non-Opus clamp, as one executable copy.**
+  `EFFORT_ENUM`, `effort_rank`, `effort_plus_one` and `effort_for_resolver`, sourced by the Step
+  C.0a tier computation, by `state-patch.sh`'s enum gate, and by both bats suites — the same
+  one-definition-several-consumers reason as `sweep-stub-lib.sh`, since a tier one caller accepts
+  and another rejects is exactly the disagreement it exists to make impossible. The bump saturates
+  at `max` rather than erroring, and is **clamped to `high` on a non-Opus model**: `xhigh` needs
+  Opus 5 or Fable 5, and Sonnet silently downgrades the thinking budget rather than failing, so an
+  unclamped bump would run one or two rungs below what its own audit row claims. No current stage
+  hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it is
+  enforced in code rather than remembered: nothing in a run would show it if it started happening.
+  The ladder is canonical in `model-selection.md § Effort Levels`; the bats suite asserts the two
+  agree, and `matrix.tsv` gains R43/R44 so an edit to either side re-runs it.
+- **`effort_transport` on every resolver audit row.** `metadata.effort` becomes `--effort` on the
+  headless dispatch surface and is **advisory in-process** — `Task()` takes no effort argument — so
+  the row says which surface it got: `dispatch-flag` or `frontmatter-only`. In-process the tier is
+  recorded, not applied, and the resolver still runs. Recorded-not-applied is not a licence to reach
+  the number another way: substituting a higher-frontmatter agent would trade the domain expertise
+  answering the question for a field value. Rows also carry `effort_requested` alongside
+  `effort_resolved`, because `xhigh`/`max` requested in a session with thinking disabled is sent as
+  `high` and no clamp can catch that — the same reason `dispatched_agents[].model_resolved` exists.
 
 ### Changed
 
@@ -143,9 +175,68 @@ reduced the number of *implementations*, not the number of lines.
 - **`publish-pl-issue.sh`'s header shrank from 161 to 58 lines**, moving plugin-root resolution and
   ledger reads onto the two new shared libraries.
 - **Dead-code shellcheck classes eliminated: 7 → 0.**
+- **`metadata.effort` is mandatory on a non-PL task row, and validated at the write (#360).** It
+  left the optional dispatch-metadata set when Step C.0a began reading it; the two axes are
+  independent, and only one moved. As a **ledger record** it is now required — the resolver bumps
+  it, and a per-stage override exists nowhere else, so agent frontmatter is the wrong fallback: a DV
+  sub-task dispatched at `xhigh` runs at a tier `developer.md`'s `effort: high` never mentions. As a
+  **dispatch flag** it stays advisory, unchanged. `state-patch.sh` checks it against `EFFORT_ENUM`
+  on `--task-create` and `--task-meta` only, so `--task-status`/`--task-block`/`--task-replay` are
+  untouched; the test is `has("effort")` rather than `.effort // empty`, because the alternative
+  operator reads JSON `null` and `false` as absent and a required field must not be erasable through
+  its own gate. An off-ladder value would otherwise surface as a failed resolver dispatch a stage or
+  more later, rather than at the write that introduced it. Absent still passes — older ledgers
+  predate the field, and Step C.0a skips such a row (`resolver_skipped`, `reason:
+  "effort_unstamped"`) rather than guessing a tier, costing a round-trip instead of the run.
+- **`stage-codes.md` gains an `Effort` column on both tables**, primary and support, as the lookup
+  the orchestrator stamps alongside `model`. Still no third copy.
+- **Step C.3 drops the fable-plus-credit-fallback path.** The FN-gate batch now resolves on the same
+  rule as C.0a — each item's own emitting stage's agent and model, grouped by originating stage, one
+  dispatch per group — and the `facts.capabilities.fable_dispatch == "credit_blocked"` branch goes
+  with it. Step A.4 is deliberately **not** folded in: PL is an exception stage whose boundary is the
+  plan gate, where a user is already present under `checkpoint`.
+- **A resolver's `deep_reads` is exempt from the B4 fan-in tripwire.** It deep-reads by construction
+  — the ≤200-token stub cannot carry an `options[]` body — so counting it would fire the signal on
+  every run that resolves anything and make a real one unreadable. The two are told apart by the
+  audit row the reads belong to.
 
 ### Fixed
 
+- **`label-align.py` weighted the held-out tranche against a population it was never drawn
+  from.** Strata were re-derived as `(split, grader_verdict)` rather than taken from the draw
+  `sample-for-labelling.py` actually cut (`dev/<verdict>` over the dev split, plus
+  `test/held-out` taken whole). All 18 labelled tranche cases therefore landed in a stratum
+  whose population was the entire 82-case `test` split and carried a weight near 4.6 — an
+  extrapolation of a deliberately harder tail across cases it does not describe, when weighting
+  assumes a random draw within the stratum. Two faults travelled with it: `--min-id` and
+  `--split` narrowed the labels while `population` and `p_obs` were still built from every
+  grade, so the documented "held-out TPR/TNR only" invocation returned corpus weights and the
+  corpus pass rate; and `--min-id` alone never isolated the tranche, because batch 5 seeded 12
+  dev cases in the same id range. `--sample` now takes the populations from the draw and
+  **refuses (rc 65)** when the labels do not sit in the strata it records, `--stratum` selects a
+  tranche exactly, a `defer` counts as drawn but not as sampled so one deferral no longer reads
+  as a frame mismatch, and `--p-obs` supplies the observed rate when the gitignored responses
+  are gone. Six regression tests. **Published numbers restated:** 0.3.0's corrected rate moves
+  87% [82–92] → **86% [82–90]** and its held-out row 88% [81–88] → **89% [83–100]** on one human
+  negative; 0.2.0's corrected rate is **withdrawn** outright, since its draw records `dev/pass`
+  25 / `dev/fail` 17 against labels carrying 30 / 12. Every label-only quantity — TPR, TNR, the
+  confusion matrices, the paired A/B, the flip and contamination analyses — is unaffected, as is
+  the fully-labelled 0.0.1 baseline.
+- **`build-review-page.py`'s label store was scoped by eval-set version but not by skill.**
+  `localStorage` is one partition across all `file://` pages, so the moment a second eval set
+  shared a version the two label stores would have merged with no symptom. The key now derives
+  from the eval set's own `skill_name`, as do the page title and `<h1>`.
+- **`tests/python/test_eval_capture.py` ran 49 of its 129 tests when executed directly.** An
+  `if __name__ == "__main__": unittest.main()` block sat mid-file, so the 14 classes defined
+  below it did not exist yet when the runner collected. `run-tests.sh` uses discovery and was
+  never affected, which is why it went unnoticed. Moved to EOF.
+- **`evals/README.md` described `failure-labels.jsonl` as a corpus rather than a contract.** The
+  file has never been written: Step 5b is an agent step, not a hook, so the 100-row taxonomy gate
+  stands at 0 of 100. Also corrected two skill ids that resolve to nothing
+  (`evals-skills:error-analysis` → `evals:error-discovery`, `evals-skills:validate-evaluator` →
+  `evals:validate-evaluator`) and a version paragraph still claiming the spec pair reads `0.2.0`
+  — both `SKILL.md` and `eval_set_version` are `0.4.0`, while the last capture is `0.3.0`, so no
+  number in the directory describes the shipping skill.
 - **`fn-preflight continuity` claimed a guarantee it does not provide.** Its description implied it
   would catch a wrong base; it checks that the branch has not diverged from *its recorded* base and
   cannot discriminate whether that base was right in the first place. The description now says so and
@@ -164,6 +255,22 @@ reduced the number of *implementations*, not the number of lines.
   the function returned whatever `yq` produced rather than falling back, and QA's own run this cycle
   produced zero anchor coverage from exactly this path. Deferred earlier in this release, then fixed
   before shipping: the fallback is now keyed on `yq`'s exit code, not its presence.
+
+### Evals: label pipeline repair, batch-6 captures, and 0.4.0 calibration
+
+- **`map-and-filter.sh` half-closed join dropped every hook and script edit from the label pipeline (#359).** `build-context-set.sh` Source 4 resolves audit-log basenames against four shapes: `hooks/`, `hooks/lib/`, `scripts/`, and `skills/*/scripts/`. Rule 1 only emitted `.md` prompt files as targets, making hooks and bundled scripts unmatchable by construction. Every user edit to a hook or helper script died at rule 17 DISCARD. Rule 1 widened to all four shapes, keeping test-file precedence and anti-recursion precedence intact. The fix is caller-scoped; the shared resolver is untouched. `evals/failure-labels.jsonl` received its first 7 rows (from 0 since 4.0.10); `map-and-filter.bats` expanded 9 → 13 tests (all pass).
+
+- **Batch 6 (ids 213–270) and the first calibrated 0.4.0 rates.** The 26-case `adjacent` analysis (see `evals/findings/request-plan-0.4.0.md`) overturned the 0.3.0 reading: zero of batch 5's three labelled adjacent failures are genuine; the confound is the surface pool. Batch 6 was sized 30 buried / 18 adjacent / 10 absent to ground on the measured-genuine-negative pool (`buried`, registry-excluded surfaces) and the enumerated-registry surfaces (`adjacent`; confound repaired). No obvious or refute cases (the first yields no measurement; the second has a known false-negative floor). Corpus grew 201 → 259 (182 plan / 45 clarify / 32 refute). Two byte-identical captures recorded 259 cases each at imputed cost $207.10 and $209.65 (pair total $416.75, under $500 approved). Human labelling of a 60-case draw produced corrected 0.4.0 rates: **85% CI [81%, 91%]** (TPR 92%, **TNR 100% on 18 human negatives**, full-set); held-out **83% CI [70%, 100%]** (TPR 84%, **TNR 100% on 4 human negatives**). The held-out interval reaches 100% because n=4 — that is what four negatives look like. Corrected rates rest on capture #1 verdicts; the 17.1% run-to-run flip rate (below) means the CI covers sampling error only, not run-to-run variance. The 0.4.0 drifted-rule reconciliations (three copies of rule text, each contradicting the others) predicted a handful of affected cases against this noise band, so they were never measurable by a capture pair. **No delta is attributed to them** and the `evals.json` grading entry stands unamended.
+
+- **The run-to-run flip rate is the headline finding.** Two byte-identical captures agree within 0.8 pp in aggregate (78.7% vs. 79.5%) while disagreeing on 44 of 258 paired-complete cases: 21 shifted pass→fail, 23 fail→pass. Flip rate: **17.1%**. This reproduces 0.3.0's 16% on a larger corpus (201 → 258 cases), elevating it from an observation to a property of this eval. Evidence committed as `evals/findings/request-plan-0.4.0-verdicts.jsonl`. With a noise floor this wide, any single capture verdict is roughly a one-in-six coin flip, and no A/B comparison can resolve an effect smaller than roughly 44 cases.
+
+- **Coverage decision for the other 22 invocable skills.** 23 skill directories exist; 22 carry `SKILL.md` and are invocable. All 22 were ranked on whether a case output can be code-checked against an expected value (without human judgement or network requests) and whether the capture surface can produce that output — ranks 9, 15–18 are depressed by capture constraints (no fixtures, no simulator, no transcript replay), not output determinism. Top candidate: `estimation-methodology`, the only skill with an in-repo numeric oracle (`estimate-calc.py` computes expected story points from size and five factor inputs). No second eval set is committed until the failure-taxonomy gate (oracle run + ~100 label rows) has material; no build, schedule, or funding language appears in the coverage decision.
+
+- **Two grader defects repaired, ground truth only — no spec change and no re-capture (#359).** The 60-case labelling pass measured the harness as over-strict and never lenient (18 human failures, all caught, **zero false negatives**), so both repairs subtract failures at no cost in recall. **Mode A:** nine cases carried `expected_outcome: plan` while being refutations of a false premise (78, 79, 104, 191, 216, 220, 225, 226, 252); they are relabelled in `gen-request-plan-cases.py`'s `REFUTED_PREMISE` table, never in `evals.json`, whose case array is regenerated wholesale — the corpus is now 173 plan / 45 clarify / 41 refute and the held-out tranche 17 plan / 2 refute / 4 clarify, with none of its four genuine negatives (229, 231, 241, 262) affected. Registering case 191 first required word-boundarying the generator's echo lint and its sibling in `test_skill_evals.py`: the character strip set ate the `s` of `\s`, turning `holds?` into `hold`, which a bare substring test then found inside *stakeholders*. Measured: exactly one corpus-wide error dropped, none added. **Mode B:** `classify_outcome` no longer lets a question mark below the section quorum decide the verdict — case 43 landed on both sides of it across two captures of the same response shape. The repair is **one-directional** by construction (`plan` may become `clarify`, never the reverse) and pinned by a property test over every stored response; the reverse form was measured and rejected because it read four genuine questions as plans. Across both captures 36 responses change class, **0 pass→fail**. `eval_set_version` stays 0.4.0, the two captures stay comparable, the recorded `eval_set_sha256` on the verdicts file is deliberately left pre-repair, and no corrected rate is republished — post-repair the harness disagrees with none of the 59 graded labels, so the correction collapses to the corpus observed rate and is in-sample only. The published 85% CI [81%, 91%] still reproduces.
+
+- **`label-align.py --min-id` is refused under `--sample` rather than silently mis-weighting (#359).** A draw's populations are per stratum and whole; an id floor cuts inside one, which the drift check then reported as a moved grade set — the wrong diagnosis — and `--allow-stratum-drift` went on to weight a partial stratum by its full population. The flag now exits 64 with a message naming `--stratum` as the selector to use instead. Unchanged on the `--grades` path, where narrowing the population and `p_obs` by the same predicate is the correct behaviour and stays.
+
+All label-derived quantities carry their denominators explicitly. The 85% and 83% rates measure the grader against humans, not a before-after comparison on the 0.4.0 rule changes.
 
 ### Known follow-ups
 

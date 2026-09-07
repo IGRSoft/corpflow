@@ -1698,3 +1698,92 @@ exit 0'
   run jq -r '.tasks.DV1.status' "$w/.context/state.json"
   assert_output "pending"
 }
+
+# --- metadata.effort enum gate -----------------------------------------------
+#
+# metadata.effort became a mandatory ledger field when the Step C.0a resolver started
+# reading it (commands/worktask.md § Step C.0a). It is validated at the write because an
+# off-ladder value is otherwise invisible until a resolver dispatch fails a stage later.
+# The enum lives in effort-ladder.sh; this suite asserts the gate, not a second copy of it.
+
+@test "task-create accepts every tier on the ladder" {
+  cd "$WD"
+  . "$PLUGIN_ROOT/skills/worktask/scripts/effort-ladder.sh"
+  i=0
+  for tier in $EFFORT_ENUM; do
+    run bash "$PLUGIN_ROOT/$SCRIPT" --task-create "QA$i" \
+      --metadata "{\"stage\":\"QA\",\"model\":\"sonnet\",\"effort\":\"$tier\"}"
+    assert_success
+    run jq -r ".tasks.QA$i.metadata.effort" .context/state.json
+    assert_output "$tier"
+    i=$((i + 1))
+  done
+}
+
+@test "task-create refuses an effort that is not on the ladder" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create AR9 \
+    --metadata '{"stage":"AR","model":"opus","effort":"ultra"}'
+  assert_failure 2
+  assert_output --partial "invalid effort: ultra"
+  # The refusal must leave nothing behind, or a retry hits the idempotent-create short-circuit.
+  run jq -r '.tasks | has("AR9")' .context/state.json
+  assert_output "false"
+}
+
+@test "task-meta refuses an off-ladder effort and leaves the row untouched" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR9 \
+    --metadata '{"stage":"DR","model":"opus","effort":"high"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR9 --set '{"effort":"turbo"}'
+  assert_failure 2
+  assert_output --partial "invalid effort: turbo"
+  run jq -r '.tasks.DR9.metadata.effort' .context/state.json
+  assert_output "high"
+}
+
+@test "task-meta refuses a null or false effort rather than reading it as absent" {
+  # `.effort // empty` treated both as a missing key, which let a required field be erased.
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR8 \
+    --metadata '{"stage":"DR","model":"opus","effort":"high"}'
+  for bad in null false; do
+    run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR8 --set "{\"effort\":$bad}"
+    assert_failure 2
+    assert_output --partial "invalid effort: $bad"
+  done
+  run jq -r '.tasks.DR8.metadata.effort' .context/state.json
+  assert_output "high"
+}
+
+@test "a metadata write without an effort key is unaffected by the gate" {
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create SR9 --metadata '{"stage":"SR","model":"opus"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta SR9 --set '{"model":"sonnet"}'
+  assert_success
+  run jq -r '.tasks.SR9.metadata.model' .context/state.json
+  assert_output "sonnet"
+}
+
+@test "the effort gate does not fire on the non-metadata task ops" {
+  # --task-status/--task-block parse --set globally; the gate must not reach them.
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DC9 \
+    --metadata '{"stage":"DC","model":"haiku","effort":"low"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DC9 completed
+  assert_success
+  run jq -r '.tasks.DC9.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "the resolver's own bump of a stamped effort is a value the gate accepts" {
+  # Closes the loop: whatever effort_for_resolver returns must survive being written back.
+  cd "$WD"
+  . "$PLUGIN_ROOT/skills/worktask/scripts/effort-ladder.sh"
+  bumped=$(effort_for_resolver high opus)
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV9 \
+    --metadata "{\"stage\":\"DV\",\"model\":\"opus\",\"effort\":\"$bumped\"}"
+  assert_success
+  run jq -r '.tasks.DV9.metadata.effort' .context/state.json
+  assert_output "xhigh"
+}

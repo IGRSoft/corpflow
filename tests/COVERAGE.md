@@ -188,6 +188,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
 | `skills/worktask/scripts/attachments-preseed.sh` | `tests/shell/worktask/attachments-preseed.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
+| `skills/worktask/scripts/effort-ladder.sh` | `tests/shell/worktask/effort-ladder.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
 | `skills/worktask/scripts/branch-lib.sh` | `tests/shell/worktask/branch-lib.bats` (incl. `fork_base` rank-0 evidence) | — | — | — |

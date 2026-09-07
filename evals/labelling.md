@@ -70,9 +70,15 @@ names the concrete thing that decided it.
 ### `defer` is a real verdict, and it is dropped downstream
 
 `label-align.py` reads only rows whose verdict is `pass` or `fail`. A `defer` row is
-**silently excluded** from every rate it computes. That is correct — an undecided case should
-not vote — but deferring is not free: it shrinks the denominator. Defer when the *case* is
-ambiguous, not when the call is merely hard.
+excluded from every rate it computes. That is correct — an undecided case should not vote —
+but deferring is not free: it shrinks the denominator, and the survivors are weighted up to
+cover the case that dropped out, which holds only if defers are missing at random.
+
+It is no longer *silent*. The row is still counted as **drawn**, so the draw and the labels
+still reconcile, and the stratum line prints the gap (`sampled 17 of 18 ... (1 deferred)`).
+Before that, one defer in a tranche taken whole looked identical to the draw and the labels
+disagreeing about what was sampled. Defer when the *case* is ambiguous, not when the call is
+merely hard.
 
 ## Judge against the contract, not against taste
 
@@ -116,33 +122,63 @@ column.**
 3. Align, twice:
 
 ```sh
-# held-out TPR/TNR only
+# held-out TPR/TNR only — select the STRATUM, not an id range
 python3 evals/scripts/label-align.py \
   --labels evals/labels/<skill>-<version>-human.jsonl \
-  --grades <grades.json> --min-id <first-held-out-id>
+  --sample evals/labels/<skill>-<version>-sample.json \
+  --grades <grades.json> --stratum test/held-out
 
 # weighted full-set rates and the Rogan-Gladen correction
 python3 evals/scripts/label-align.py \
   --labels evals/labels/<skill>-<version>-human.jsonl \
+  --sample evals/labels/<skill>-<version>-sample.json \
   --grades <grades.json>
 ```
+
+**`--sample` is not optional in practice.** Without it the populations are
+reconstructed from the current grade set, which can only recover the *frame* and
+never the *draw*: any case that flipped since the draw was cut now sits in a
+different stratum than the one it was sampled from. With it, the tool checks its own
+per-stratum counts against the draw and exits 65 on a mismatch rather than dividing
+out a sampling fraction nobody took. `evals/README.md § The weights belong to the
+draw` has the full account of what this replaced.
+
+Pass `--p-obs <rate>` when the responses are gone. They are gitignored, so a clone
+cannot regenerate `<grades.json>` without paying for the capture again — the rate
+recorded in the findings doc is the only thing left, and this flag is how a
+published corrected number stays re-derivable from what git holds.
 
 `<grades.json>` is `eval-grade.py --json` output over the same responses directory —
 regenerate it freely, it is offline and deterministic.
 
-### `--min-id` is load-bearing, and the floor moves
+### `--stratum` selects the tranche; `--min-id` does not
+
+An id floor and the held-out tranche are different sets. A batch seeds `dev`, `test`
+and `train` cases across one id range, so `--min-id 168` over batch 5 also selects
+the 12 labelled **dev** cases the draw counted in `dev/pass` and `dev/fail`.
+`--split test --min-id 168` happens to be exact for that batch; `--stratum
+test/held-out` is exact by construction and needs no floor at the call site, because
+the draw records its own.
+
+The floor itself is still load-bearing for the *sampler*, and it still moves:
+
+### `--min-id` is load-bearing for the sampler, and the floor moves
 
 Held-out means *never read*. Once a tranche has been labelled it is spent, and the floor
 moves to the first id of its successor. One place records it: `held_out_from` in
 `evals/splits/request-plan.json`. `sample-for-labelling.py --held-out-from` defaults to
 that value and refuses to run when the key is missing rather than falling back to a
-literal; `label-align.py --min-id` has no default, so **pass it explicitly**.
+literal; `label-align.py` reads it from `--sample`'s `held_out_from` and otherwise needs an
+explicit `--held-out-from`. Select the tranche with `--stratum test/held-out`, never
+`--min-id`: under `--sample` an id floor is refused, because it cuts inside strata whose
+populations are the draw's and cannot be narrowed.
 
-**The key is absent right now, and that is the correct state.** The 0.3.0 pass spent batch
-5 (ids 168-212) whole, so nothing in the manifest is currently held out and both tools stop
-instead of guessing. A new cut needs a batch 6 appended and its first id pinned as
-`held_out_from` in the same edit -- not 168, and not a `--min-id` read off the newest
-`-sample.json`, which names the tranche that pass just spent.
+**The key is absent right now, and that is the correct state.** It was pinned to 213 for the
+two 0.4.0 captures, which ran against it; the 0.4.0 labelling pass then drew batch 6's `test`
+cases whole (23 of 23) and spent them, so the deleting edit is that pass's own. Nothing in the
+manifest is held out today and both tools stop instead of guessing. A new cut needs a batch 7
+appended and its first id pinned as `held_out_from` in the same edit -- not 213, and not a
+`--min-id` read off the newest `-sample.json`, which names the tranche that pass just spent.
 
 Pin `held_out_from` in the edit that appends a batch and delete it in the pass that spends
 one. A floor left pointing at a spent tranche re-samples read cases and labels the result
@@ -161,6 +197,12 @@ types concentrate. Two consequences:
 - **The raw labelled count is not a corpus rate** and must never be quoted as one. Only the
   stratum-weighted correction from `label-align.py` compares to anything.
 - **Take the held-out tranche whole.** Sampling within it wastes the one-shot measurement.
+- **Quote TNR with the number of human negatives beside it.** TNR is the rate the
+  enrichment exists to protect and it is always the thinner of the two: 0.3.0 reads
+  100% on **13** labelled failures, and its held-out row reads 100% on **one**.
+  `label-align.py` prints its own warning under 20 labels and the matrix it prints
+  above that line carries the counts — a TNR copied out without them reads as the
+  strongest claim in the document when it is the weakest.
 
 ## Rebuilding the page
 
@@ -182,20 +224,23 @@ to page through every captured trace instead of the sample.
 
 Rebuilding **does not touch your labels**: they are keyed in `localStorage`, not in the file.
 
-## The tooling is currently single-skill
+## The tooling reads the eval set's own name
 
-`build-review-page.py` hardcodes `request-plan` in four places — the page title, the `<h1>`,
-the `--eval-set` and `--out` defaults, and, most consequentially, the storage key:
+`build-review-page.py` derives the page title, the `<h1>` and the storage key from the eval
+set's `skill_name`:
 
 ```js
-const KEY = 'request-plan-labels-__EVAL_SET_VERSION__';
+const KEY = '__SKILL_NAME__-labels-__EVAL_SET_VERSION__';
 ```
 
-The key is scoped by **eval-set version but not by skill**. Only one eval set exists today
-(`skills/request-plan/`), so nothing collides. The moment a second one is added, two skills
-sharing an `eval_set_version` would share one label store — and browsers keep a single
-`localStorage` partition across all `file://` pages, so the collision is silent. Fix the key
-before adding a second eval set, not after.
+The key used to be scoped by **eval-set version but not by skill**, which was safe only
+while one eval set existed. Two skills sharing an `eval_set_version` would have shared one
+label store, and because browsers keep a single `localStorage` partition across all `file://`
+pages the collision would have been silent — the same class of failure as the version-blind
+key below, with no symptom to notice. Both dimensions are now in the key.
+
+Only `--eval-set` and `--out` still default to `request-plan` paths. Those are defaults, not
+scoping: a second eval set overrides them and gets its own store.
 
 ### Why the key is versioned at all
 
