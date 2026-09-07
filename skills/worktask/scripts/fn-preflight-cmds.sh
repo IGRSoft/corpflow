@@ -120,9 +120,17 @@ ve_row_result() {
 # was rejected: it trades one silent wrong answer for another. Divergence is announced
 # on stderr with both names and both ahead-counts, and callers must not swallow it.
 resolve_git_ref() {
-  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead
+  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead upstream
 
-  for c in "origin/$bare" "refs/remotes/origin/$bare"; do
+  # The branch's own configured upstream is tried first, because `origin` is not always the
+  # canonical remote. In a fork workflow — origin = fork, upstream = canonical — hardcoding
+  # origin/ picks the stale fork ref, and base-sanity then measures the diff against it and
+  # blocks a correctly-based PR. Falls through to origin/ when no upstream is set, so the
+  # single-remote case resolves exactly as before.
+  # Short branch name, not refs/heads/: `@{upstream}` rejects a full refname outright
+  # ("fatal: no such branch"), which silently yielded no upstream and fell through to origin/.
+  upstream=$(git rev-parse --verify --quiet --abbrev-ref "${bare}@{upstream}" 2> /dev/null || printf '')
+  for c in ${upstream:+"$upstream"} "origin/$bare" "refs/remotes/origin/$bare"; do
     if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
   done
   git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"

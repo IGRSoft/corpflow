@@ -1336,6 +1336,38 @@ _rgr() { # $1=repo $2=name
   [[ "$stderr" != *"diverged"* ]] || { echo "unexpected warning: $stderr"; return 1; }
 }
 
+# The fork topology: origin is the contributor's fork and goes stale, upstream is
+# canonical and moves on, and local master tracks upstream. Preferring origin/ here
+# measures the diff against the stale fork ref and blocks a correctly-based PR.
+_rgr_fork_repo() {
+  local d; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" init -q --bare "$d/fork.git"
+  git -C "$d" init -q --bare "$d/canonical.git"
+  git -C "$d" remote add origin "$d/fork.git"
+  git -C "$d" remote add upstream "$d/canonical.git"
+  git -C "$d" push -q origin master
+  git -C "$d" push -q upstream master
+  # Canonical advances; the fork stays where it was.
+  git -C "$d" checkout -q -b tmp
+  printf 'u\n' >> "$d/f"; git -C "$d" commit -qam upstream-work
+  git -C "$d" push -q upstream tmp:master
+  git -C "$d" checkout -q master
+  git -C "$d" fetch -q --all
+  git -C "$d" branch --set-upstream-to=upstream/master master > /dev/null 2>&1
+  printf '%s' "$d"
+}
+
+@test "AC-4a: a base tracking a non-origin remote resolves through its upstream" {
+  local d; d="$(_rgr_fork_repo)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "upstream/master"
+  refute_output "origin/master"
+}
+
 @test "AC-4a: a purely local base with no remote-tracking ref still resolves" {
   local d; d="$(mk_tmpworkdir)"
   git -C "$d" init -q -b master
