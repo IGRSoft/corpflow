@@ -86,6 +86,29 @@ setup() {
   assert_output --partial "missing frontmatter"
 }
 
+# Counts the extractor's leftovers in the directory `mktemp -t` actually uses.
+# BSD mktemp's -t ignores TMPDIR, so the count has to be taken where the file
+# really lands rather than in a redirected fixture directory — a redirected one
+# stays empty whether or not the cleanup works, which is a vacuous assertion.
+_fm_temp_count() {
+  ls "${TMPDIR:-/tmp}"/handoff-fm-* 2>/dev/null | wc -l | tr -d ' '
+}
+
+@test "cleanup: no frontmatter temp file survives, on the pass or the fail path" {
+  # Fourteen exits used to carry their own `rm -f`; one RETURN trap now does it,
+  # so this checks the property rather than the arms.
+  local before
+  before="$(_fm_temp_count)"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/development-0.md"
+  assert_success
+  [ "$(_fm_temp_count)" = "$before" ] || fail "pass path leaked a handoff-fm temp file"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/plain.md"
+  assert_failure 1
+  [ "$(_fm_temp_count)" = "$before" ] || fail "fail path leaked a handoff-fm temp file"
+}
+
 @test "failure: --validate-state on corrupt JSON fails (exit 1)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-state "$WD/corrupt.json"
   assert_failure 1
@@ -476,4 +499,173 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$f"
     assert_success
   done
+}
+
+# --- files_touched structural cap (R-2.1) ------------------------------------
+
+# mk_dv <file> <files_touched-yaml-flow> [body] — a minimal valid DV artifact.
+mk_dv_ft() {
+  local out="$1" ft="$2"
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: DV'
+    echo '  verdict: ok'
+    echo '  summary: "cap fixture"'
+    echo "  files_touched: $ft"
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions: []'
+    echo '  refs: { dev: development.md#files-changed }'
+    echo '---'
+    echo
+    echo '# Development'
+  } > "$out"
+}
+
+@test "files_touched: ten paths plus one '+ N more' marker passes" {
+  local ft="[a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, \"+ 7 more\"]"
+  mk_dv_ft "$WD/capped.md" "$ft"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/capped.md"
+  assert_success
+}
+
+@test "files_touched: more than FILES_TOUCHED_MAX paths without a marker fails" {
+  local ft="[a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]"
+  mk_dv_ft "$WD/uncapped.md" "$ft"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/uncapped.md"
+  assert_failure
+  assert_output --partial "FILES_TOUCHED_MAX=10"
+}
+
+@test "files_touched: a marker that is not last fails" {
+  local ft="[\"+ 3 more\", a1.sh]"
+  mk_dv_ft "$WD/misplaced.md" "$ft"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/misplaced.md"
+  assert_failure
+  assert_output --partial "not the last entry"
+}
+
+# --- decision divergence (R-4.1) ---------------------------------------------
+
+# mk_qa_dec <file> <fm-summary> <body-summary>
+mk_qa_dec() {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: QA'
+    echo '  verdict: ok'
+    echo '  summary: "divergence fixture"'
+    echo '  files_touched: [a.sh]'
+    echo '  key_decisions:'
+    echo "    - { id: qa-1, summary: \"$2\" }"
+    echo '  open_questions: []'
+    echo '  refs: { qa: testing.md#results }'
+    echo '---'
+    echo
+    echo '## decisions'
+    echo
+    echo "| id | summary |"
+    echo "|----|---------|"
+    echo "| qa-1 | $3 |"
+  } > "$1"
+}
+
+@test "decisions: a body table restating the same decision passes" {
+  mk_qa_dec "$WD/agree.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    "The full suite runs: the harness changed, so a scoped selection proves nothing"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/agree.md"
+  assert_success
+}
+
+@test "decisions: the same id carrying an unrelated body summary fails, naming both" {
+  mk_qa_dec "$WD/diverge.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    "Screenshots are waived for this platform"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/diverge.md"
+  assert_failure
+  assert_output --partial "decision qa-1 disagrees across transports"
+}
+
+@test "decisions: a restated bound with a different number fails" {
+  mk_qa_dec "$WD/numbers.md" \
+    "The retry budget for a failing stage is 3 attempts" \
+    "The retry budget for a failing stage is 5 attempts"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/numbers.md"
+  assert_failure
+  assert_output --partial "disagrees across transports"
+}
+
+# --- reverse sweep parity, stage-scoped (R-1.3) ------------------------------
+
+@test "sweep parity: a ledger stub for this stage that the artifact omits fails" {
+  cd "$WD"
+  jq '.facts.open_questions = [{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"}]' \
+    state.json > state2.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state2.json
+  assert_failure
+  assert_output --partial "in ledger, not in frontmatter"
+}
+
+@test "sweep parity: a resolved ledger stub the artifact omits does not fail a rework round" {
+  cd "$WD"
+  # The rework topology: round 1 raised sw-DV0-9 and it was answered, so the reworked
+  # artifact re-emits only what is still open. Charging it with the answered id fails the
+  # round, and Step B.1 reads that as missing_input and re-dispatches the whole stage.
+  jq '.facts.open_questions = [{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"resolved"}]' \
+    state.json > state_resolved.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state_resolved.json
+  assert_success
+}
+
+@test "sweep parity: an open ledger stub is still charged when a resolved sibling exists" {
+  cd "$WD"
+  # Non-vacuity twin: the status filter must not disable the arm wholesale.
+  jq '.facts.open_questions = [
+        {"id":"sw-DV0-8","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"resolved"},
+        {"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"}]' \
+    state.json > state_mixed.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state_mixed.json
+  assert_failure
+  assert_output --partial "sw-DV0-9"
+  refute_output --partial "sw-DV0-8"
+}
+
+@test "sweep parity: a ledger stub belonging to another stage is not charged to this one" {
+  cd "$WD"
+  jq '.facts.open_questions = [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"PL","status":"open"}]' \
+    state.json > state3.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state3.json
+  assert_success
+}
+
+@test "files_touched: two '+ N more' markers fail — the overflow must be declared once" {
+  local ft="[a1.sh, \"+ 3 more\", \"+ 4 more\"]"
+  mk_dv_ft "$WD/twomarkers.md" "$ft"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/twomarkers.md"
+  assert_failure
+  assert_output --partial "markers"
+}
+
+@test "sweep parity: a split stage charges each stream only its own task's stubs" {
+  cd "$WD"
+  # DV0 and DV1 both live in the ledger; the DV1 artifact re-emits sw-DV1-1 and must not be
+  # charged DV0's sw-DV0-9, which shares the `.stage == "DV"` slice.
+  jq '.tasks.DV0 = {status:"completed"} | .tasks.DV1 = {status:"in_progress"}
+      | .facts.open_questions = [
+          {"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"},
+          {"id":"sw-DV1-1","class":"decision","ref":"#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"}]' \
+    state.json > state4.json
+  sweep_artifact "$WD/dv1.md" '{ id: sw-DV1-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv1.md" --state state4.json
+  assert_success
+}
+
+@test "sweep parity: a stub-less artifact of a split stage is not guessed onto either stream" {
+  cd "$WD"
+  jq '.tasks.DV0 = {status:"completed"} | .tasks.DV1 = {status:"in_progress"}
+      | .facts.open_questions = [{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"}]' \
+    state.json > state5.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state5.json
+  assert_success
 }

@@ -111,6 +111,7 @@ run_promote() {
 
 # Sourced by its own bats suite, which calls run_promote directly against a
 # fixture ctx; the dispatch below runs only when this file is the entry point.
+# shellcheck disable=SC2317 # `return` outside a function fails when executed directly, so the exit IS reached
 case "${1:-}" in
   --lib-only) return 0 2>/dev/null || exit 0 ;;
 esac

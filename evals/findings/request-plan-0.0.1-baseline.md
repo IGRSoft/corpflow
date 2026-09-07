@@ -42,6 +42,12 @@ The correction lands on 81% and the humans independently scored 81%. Two estimat
 different inputs agreeing to the point is the strongest internal check available here, and it
 says the harness's 57% is a measurement artefact.
 
+> **Untouched by the 2026-09-05 weighting retraction.** That defect only reaches captures
+> whose labels were an enriched *sample*; this one labelled 113 of 114 cases, so every
+> sampling fraction is ~1 and no weight was ever divided out. 0.0.1 remains retired for the
+> separate reason in `evals/README.md § Baseline 0.0.1` — it was captured without
+> `--plugin-dir`, so its rates measure an unknown skill version.
+
 It also says the harness is weak. At TPR 63% it fails **34 of the 92 responses a human
 passed** — a 37% false-fail rate. TPR + TNR − 1 = 0.31 clears the "barely beats a coin" floor of
 0.2, but not by much: any pass rate this harness reports unaided should be treated as a lower

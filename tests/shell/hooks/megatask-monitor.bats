@@ -135,3 +135,18 @@ EOF
     done < "$1"' _ "$WD/.context/logs/audit.jsonl"
   assert_success
 }
+
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  _seed_group "$WD"
+  cat > "$WD/.worktrees/milestone-9/41/workspace.json" <<'JSON'
+{ "version":"2.0","isolation":"worktree","execution":{"status":"completed","pr":"https://x/pull/1"} }
+JSON
+  cat > "$WD/.worktrees/milestone-9/42/workspace.json" <<'JSON'
+{ "version":"2.0","isolation":"worktree","execution":{"status":"in_progress"} }
+JSON
+  mkdir -p "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env WORKSPACE_ROOT="$WD" CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < /dev/null
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

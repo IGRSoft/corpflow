@@ -192,6 +192,34 @@ no_screenshots() {
   assert_output --partial '1'
 }
 
+@test "SR-M1: a double quote in the branch name still yields a parseable audit row" {
+  # `git check-ref-format 'refs/heads/foo"bar'` accepts, so a refname reaches the row
+  # with a JSON metacharacter in it. The old printf template emitted an unparseable
+  # line, which stops EVERY later reader of audit.jsonl at the parse error — not just
+  # this row. Mutation check: revert the emitter to printf and this arm fails.
+  cd "$WD"
+  local hostile='int"egration'
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q "$hostile"
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq --arg b "$hostile" '.metadata.base_ref=$b' .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  [[ "$stderr" == *"cherry-pick"* ]]
+  # Whole-file parse, not a per-row one: the failure mode is a corrupted log stream.
+  run jq -se '.' .context/logs/audit.jsonl
+  assert_success
+  run jq -sr 'map(select(.action=="branch_continuity"))[-1]
+              | .metadata.integration_branch' .context/logs/audit.jsonl
+  assert_success
+  assert_output "$hostile"
+  # commit_count stays a JSON number: readers compare it numerically.
+  run jq -sr 'map(select(.action=="branch_continuity"))[-1]
+              | .metadata.commit_count | type' .context/logs/audit.jsonl
+  assert_output "number"
+}
+
 # ---------------------------------------------------------------------------
 # pr-body — body-composition gate (REQ-4/REQ-5/REQ-6)
 # ---------------------------------------------------------------------------
@@ -894,4 +922,483 @@ _mk_repo_with_default() {
   mk_body
   run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/body.md" all
   refute_output --partial "issue-close-required"
+}
+
+# ---------------------------------------------------------------------------
+# base-sanity (REQ-T1 / AC-A1..A7). The magnitude comparison: does the diff a PR
+# against the resolved base would carry resemble what this run recorded changing?
+# Fixtures are local-only on purpose — the check resolves through resolve_git_ref,
+# never a literal `origin/$base`, so no remote is needed.
+# ---------------------------------------------------------------------------
+
+_bs_commit() {
+  git -c user.email=a@b.c -c user.name=t commit -q "$@"
+}
+
+# n files in one commit, named <prefix>N.txt.
+_bs_files() {
+  local prefix="$1" n="$2" i
+  for i in $(seq 1 "$n"); do printf 'x\n' > "${prefix}${i}.txt"; done
+  git add -A
+  _bs_commit -m "$prefix"
+}
+
+# A flat repo: `master` holds the pre-run history, HEAD adds this run's files.
+_bs_flat_repo() {
+  cd "$WD"
+  git init -q -b master .
+  _bs_commit --allow-empty -m base
+  git checkout -q -b feature/work
+  _bs_files run "$1"
+}
+
+# The incident's shape: HEAD stacks on `parent`, which itself stacks on
+# `grandparent`. A PR opened against the grandparent carries the whole
+# intervening branch, not just this run's own commit.
+_bs_stacked_repo() {
+  cd "$WD"
+  git init -q -b grandparent .
+  _bs_commit --allow-empty -m base
+  git checkout -q -b parent
+  _bs_files other 25
+  git checkout -q -b feature/work
+  _bs_files run 2
+  jq '.metadata.base_ref="grandparent" | .facts.files_modified=["run1.txt","run2.txt"]' \
+    .context/state.json > s && mv s .context/state.json
+}
+
+# The candidate branch exists ONLY under refs/remotes/origin/ — a remote-only
+# stacked parent, which is the incident's own topology and what fork_base
+# enumerates. A bare name does not resolve under git's disambiguation ladder.
+_bs_remote_only_parent_repo() {
+  cd "$WD"
+  git init -q -b grandparent .
+  _bs_commit --allow-empty -m base
+  git checkout -q -b parent
+  _bs_files other 25
+  git update-ref refs/remotes/origin/parent HEAD
+  git checkout -q -b feature/work
+  _bs_files run 2
+  git branch -q -D parent
+  jq '.metadata.base_ref="grandparent" | .facts.files_modified=["run1.txt","run2.txt"]' \
+    .context/state.json > s && mv s .context/state.json
+}
+
+_bs_ledger() {
+  jq --argjson f "$1" '.facts.files_modified=$f' .context/state.json > s \
+    && mv s .context/state.json
+}
+
+_bs_row() {
+  jq -sce 'map(select(.action=="base_sanity"))[-1] | [.result, .metadata]' \
+    .context/logs/audit.jsonl
+}
+
+@test "base-sanity: a flat repo whose ledger matches the diff passes, naming both counts" {
+  _bs_flat_repo 4
+  jq '.metadata.base_ref="master"' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt","run2.txt","run3.txt","run4.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "base-sanity: pass"
+  assert_output --partial "would carry 4 files"
+  assert_output --partial "ledger records 4"
+  run _bs_row
+  assert_output --partial '"ok"'
+}
+
+@test "base-sanity: a grandparent base fails, naming both counts, and aborts 'all'" {
+  _bs_stacked_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  assert_output --partial "BLOCKED: base-sanity"
+  assert_output --partial "would carry 27 files"
+  assert_output --partial "ledger records 2"
+  assert_output --partial "Closest fork-point candidate"
+  # The thresholds must stay readable as wrong-base heuristics, or a later
+  # maintainer tunes them into a diff-quality gate.
+  assert_output --partial "WRONG-BASE heuristics"
+  run _bs_row
+  assert_output --partial '"blocked"'
+  assert_output --partial '"pr_files":"27"'
+  assert_output --partial '"ledger_files":"2"'
+
+  # AC-A6: it is a step of the composite battery, and its failure aborts it.
+  mk_attachments
+  no_screenshots
+  mk_body
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  assert_failure 1
+  assert_output --partial "BLOCKED: base-sanity"
+}
+
+@test "base-sanity: a demonstrably under-recording ledger warns instead of blocking" {
+  # The blocking topology, but with a working tree that proves the denominator is
+  # incomplete: 2 recorded against 25 dirty. A wrong base does not dirty the tree, so the
+  # gap can only mean the ledger under-recorded — and a block computed from it would be
+  # false. CHANGELOG 4.0.29 records this happening at 18 recorded against 33 dirty.
+  _bs_stacked_repo
+  local i
+  for i in $(seq 1 25); do printf 'x\n' > "dirty$i.txt"; done
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "the denominator is incomplete"
+  refute_output --partial "BLOCKED"
+  run _bs_row
+  assert_output --partial '"ledger_under_recording"'
+}
+
+@test "base-sanity: a clean tree still blocks the wrong-base topology" {
+  # Non-vacuity twin for the rung above: the new skip must not disarm the check.
+  _bs_stacked_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  assert_output --partial "BLOCKED: base-sanity"
+}
+
+@test "base-sanity: a small run legitimately touching more files than recorded still passes" {
+  # 10 files against a 3-file ledger trips the multiplier (10 > 9); the 20-file
+  # floor is the half that stops it. This case is why the rule is a conjunction.
+  _bs_flat_repo 10
+  jq '.metadata.base_ref="master"' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt","run2.txt","run3.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "base-sanity: pass"
+  refute_output --partial "BLOCKED"
+}
+
+@test "base-sanity: an empty or absent ledger record warns instead of false-blocking" {
+  _bs_stacked_repo
+  _bs_ledger '[]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "records no modified files"
+  run _bs_row
+  assert_output --partial '"ledger_unavailable"'
+
+  # Same verdict when the key is absent entirely — with ledger_files == 0 the
+  # rule would degenerate to "any PR touching 21+ files fails".
+  jq 'del(.facts.files_modified)' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "records no modified files"
+}
+
+@test "base-sanity: an unresolvable base warns, records a row, and exits 0" {
+  _bs_stacked_repo
+  run env FN_BASE_REF=does/not/exist bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "not present locally"
+  run _bs_row
+  assert_output --partial '"base_ref_unresolvable"'
+  assert_output --partial '"does/not/exist"'
+}
+
+@test "base-sanity: FN_BASE_SANITY_OVERRIDE downgrades the fail arm and is audited" {
+  _bs_stacked_repo
+  run env FN_BASE_SANITY_OVERRIDE=true bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "WARNING: base-sanity"
+  assert_output --partial "would carry 27 files"
+  assert_output --partial "ledger records 2"
+  refute_output --partial "BLOCKED"
+  run _bs_row
+  assert_output --partial '"override"'
+  assert_output --partial '"override":"true"'
+
+  # Unset, AC-A2 holds unchanged: the override is the only path that moves the
+  # verdict, and it moves only the fail arm.
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  run env FN_BASE_SANITY_OVERRIDE=0 bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+}
+
+@test "base-sanity: a remote-only fork candidate is still named with its ahead-count" {
+  _bs_remote_only_parent_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  assert_output --partial "Closest fork-point candidate by commits-ahead: parent (1 ahead) vs grandparent (2 ahead)."
+  refute_output --partial "unavailable"
+}
+
+# --- QA additions: the five degrade rungs no REQ-T1 fixture reached -----------
+# AR0 gave every rung its own result token so a wrong-rung regression is visible
+# rather than masked by a generic warn. That only holds if each token is pinned,
+# so each case below asserts the token, not just the exit status.
+
+_bs_no_jq_path() {
+  local dir="$WD/nobin" tool p
+  mkdir -p "$dir"
+  for tool in git grep sed tr cut date mkdir bash sh env printf true false cat wc awk seq \
+    readlink realpath dirname basename pwd rm mv ln; do
+    p=$(command -v "$tool" 2> /dev/null) || continue
+    ln -sf "$p" "$dir/$tool"
+  done
+  printf '%s' "$dir"
+}
+
+@test "base-sanity rung 1: jq unavailable skips the check as jq_unavailable" {
+  _bs_flat_repo 4
+  jq '.metadata.base_ref="master"' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt"]'
+  local nobin
+  nobin=$(_bs_no_jq_path)
+  run env PATH="$nobin" bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "jq unavailable"
+  # No audit row is asserted, and that is the finding rather than an oversight:
+  # audit_fn reads worktask_id and run_index through jq, so in the one condition
+  # this rung fires it cannot write its own token. stdout and exit 0 are the whole
+  # observable contract here; see testing-0.md#rung-1-token.
+  assert [ ! -e "$WD/.context/logs/audit.jsonl" ]
+}
+
+@test "base-sanity rung 2: outside a git work tree the result is no_git" {
+  cd "$WD"
+  # Deliberately no `git init`: $WD is a temp dir outside any repository.
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "not inside a git work tree"
+  run _bs_row
+  assert_output --partial '"no_git"'
+}
+
+@test "base-sanity rung 3: every rank empty reports, never guesses (base_ref_unresolved)" {
+  _bs_flat_repo 4
+  # No configured base at any rank and no refs/remotes/origin/* for rank 0 to
+  # enumerate, so even the opt-in fork point cannot fill it.
+  jq 'del(.metadata.base_ref)' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "reporting, not guessing"
+  run _bs_row
+  assert_output --partial '"base_ref_unresolved"'
+}
+
+@test "base-sanity rung 5: an inferred base is never blocked on (base_guessed)" {
+  cd "$WD"
+  git init -q -b feature/work .
+  _bs_commit --allow-empty -m base
+  git update-ref refs/remotes/origin/parent HEAD
+  _bs_files run 25
+  # Ranks 1-4 empty with one remote branch: rank 0 answers, so the base is
+  # fork-point evidence rather than a configured target. The 25-file diff would
+  # trip the rule outright — the point is that rung 5 returns before it can.
+  jq 'del(.metadata.base_ref)' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  refute_output --partial "BLOCKED"
+  assert_output --partial "fork-point evidence"
+  run _bs_row
+  assert_output --partial '"base_guessed"'
+  assert_output --partial '"base_source":"fork_point"'
+}
+
+# An orphan base shares no merge base with HEAD, so `git diff base...HEAD` exits 128.
+# The count must come from git's own status: piping it through `wc -l` yields `0` and
+# reads as a legitimately empty diff, which is a false pass on the exact topology this
+# check exists to catch.
+@test "base-sanity rung 7: a base with no merge base is diff_unreadable, not a 0-file pass" {
+  cd "$WD"
+  git init -q -b master .
+  _bs_commit --allow-empty -m base
+  git checkout -q --orphan unrelated
+  _bs_commit --allow-empty -m unrelated
+  git checkout -q master
+  git checkout -q -b feature/work
+  _bs_files run 2
+  jq '.metadata.base_ref="unrelated"' .context/state.json > s && mv s .context/state.json
+  _bs_ledger '["run1.txt","run2.txt"]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "is unreadable"
+  refute_output --partial "base-sanity: pass"
+  run _bs_row
+  assert_output --partial '"diff_unreadable"'
+}
+
+# --- staging (R-3.2) ---------------------------------------------------------
+
+# seed_repo — a repo with one committed file, ready to dirty.
+seed_repo() {
+  git init -q .
+  printf 'a\n' > a.txt
+  printf 'x\n' > b.txt
+  git add a.txt b.txt
+  git -c user.email=a@b.c -c user.name=t commit -q -m base
+}
+
+@test "staging: a clean worktree passes" {
+  cd "$WD"
+  seed_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output --partial "no file is both staged and modified again"
+}
+
+@test "staging: a merely unstaged modification passes — it is the normal pre-git-add state" {
+  cd "$WD"
+  seed_repo
+  printf 'edit\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+}
+
+@test "staging: a file staged and then edited again blocks and names the file" {
+  cd "$WD"
+  seed_repo
+  printf 'edit\n' >> b.txt
+  git add b.txt
+  printf 'again\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "b.txt"
+  refute_output --partial "a.txt"
+}
+
+@test "staging: the composite command fails on the same condition" {
+  cd "$WD"
+  seed_repo
+  mk_attachments
+  mk_body
+  printf 'edit\n' >> b.txt
+  git add b.txt
+  printf 'again\n' >> b.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  assert_failure
+  assert_output --partial "staged then modified again"
+}
+
+# ---------------------------------------------------------------------------
+# resolve_git_ref divergence (AC-4a). The resolver used to try the bare name
+# first, so a base branch name resolved to a STALE LOCAL branch whenever one
+# existed — and a stale base makes base-sanity's diff wrong in the blocking
+# direction. Unlike the arms above these fixtures need a real remote, because
+# the whole defect is local-vs-remote-tracking preference.
+# ---------------------------------------------------------------------------
+
+# A repo whose local master and origin/master have genuinely diverged:
+# remote ahead by $1, local ahead by $2.
+_rgr_diverged_repo() { # $1=remote-ahead $2=local-ahead
+  local d i; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" init -q --bare "$d/remote.git"
+  git -C "$d" remote add origin "$d/remote.git"
+  git -C "$d" push -q origin master
+  git -C "$d" checkout -q -b tmp
+  # C-style, not `seq 1 $n`: BSD seq counts DOWN when the limit is below the start,
+  # so `seq 1 0` yields "1 0" here and silently made the zero-ahead fixture diverge.
+  for ((i = 0; i < $1; i++)); do printf 'r%s\n' "$i" >> "$d/f"; git -C "$d" commit -qam "r$i"; done
+  git -C "$d" push -q origin tmp:master
+  git -C "$d" checkout -q master
+  for ((i = 0; i < $2; i++)); do printf 'l%s\n' "$i" >> "$d/f"; git -C "$d" commit -qam "l$i"; done
+  git -C "$d" fetch -q origin
+  printf '%s' "$d"
+}
+
+# Sourcing the library directly: resolve_git_ref is a pure function of the cwd
+# repository, and every subcommand that reaches it needs a full FN fixture around it.
+_rgr() { # $1=repo $2=name
+  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh' > '$1/rgr.sh'
+           cd '$1' && . ./rgr.sh && resolve_git_ref '$2'"
+}
+
+@test "AC-4a: a diverged base resolves to the remote-tracking ref, not the stale local" {
+  local d; d="$(_rgr_diverged_repo 2 1)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "origin/master"
+}
+
+@test "AC-4a: divergence is reported with both names and both ahead-counts" {
+  local d; d="$(_rgr_diverged_repo 2 1)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  [[ "$stderr" == *"origin/master"* ]] || { echo "no remote name: $stderr"; return 1; }
+  [[ "$stderr" == *"refs/heads/master"* ]] || { echo "no local name: $stderr"; return 1; }
+  [[ "$stderr" == *"ahead by 2 commit(s)"* ]] || { echo "no remote count: $stderr"; return 1; }
+  [[ "$stderr" == *"ahead by 1 commit(s)"* ]] || { echo "no local count: $stderr"; return 1; }
+}
+
+@test "AC-4a: an in-sync base resolves without a divergence warning" {
+  local d; d="$(_rgr_diverged_repo 0 0)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "origin/master"
+  # Not "stderr is empty" — git chatter is not this function's contract; the
+  # contract is that an in-sync pair raises no ambiguity.
+  [[ "$stderr" != *"diverged"* ]] || { echo "unexpected warning: $stderr"; return 1; }
+}
+
+# The fork topology: origin is the contributor's fork and goes stale, upstream is
+# canonical and moves on, and local master tracks upstream. Preferring origin/ here
+# measures the diff against the stale fork ref and blocks a correctly-based PR.
+_rgr_fork_repo() {
+  local d; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" init -q --bare "$d/fork.git"
+  git -C "$d" init -q --bare "$d/canonical.git"
+  git -C "$d" remote add origin "$d/fork.git"
+  git -C "$d" remote add upstream "$d/canonical.git"
+  git -C "$d" push -q origin master
+  git -C "$d" push -q upstream master
+  # Canonical advances; the fork stays where it was.
+  git -C "$d" checkout -q -b tmp
+  printf 'u\n' >> "$d/f"; git -C "$d" commit -qam upstream-work
+  git -C "$d" push -q upstream tmp:master
+  git -C "$d" checkout -q master
+  git -C "$d" fetch -q --all
+  git -C "$d" branch --set-upstream-to=upstream/master master > /dev/null 2>&1
+  printf '%s' "$d"
+}
+
+@test "AC-4a: a base tracking a non-origin remote resolves through its upstream" {
+  local d; d="$(_rgr_fork_repo)"
+  run --separate-stderr _rgr "$d" master
+  assert_success
+  assert_output "upstream/master"
+  refute_output "origin/master"
+}
+
+@test "AC-4a: a purely local base with no remote-tracking ref still resolves" {
+  local d; d="$(mk_tmpworkdir)"
+  git -C "$d" init -q -b master
+  git -C "$d" config user.email t@t; git -C "$d" config user.name t
+  printf 'a\n' > "$d/f"; git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" checkout -q -b local-only
+  run _rgr "$d" local-only
+  assert_success
+  assert_output "local-only"
+}
+
+@test "AC-4a: an origin-qualified stored value still resolves to the remote ref" {
+  local d; d="$(_rgr_diverged_repo 1 1)"
+  run --separate-stderr _rgr "$d" origin/master
+  assert_success
+  assert_output "origin/master"
+}
+
+@test "SR: the diverged continuity row refuses a symlinked audit.jsonl" {
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q integration
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq '.metadata.base_ref="integration"' .context/state.json > s && mv s .context/state.json
+  mkdir -p target-dir .context/logs
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  # The fallback itself must still be announced: refusing the row never changes
+  # the merge strategy FN0 is told to use.
+  assert_success
+  [[ "$stderr" == *"cherry-pick"* ]]
+  [ ! -e "$WD/target-dir/escaped.txt" ]
 }

@@ -304,3 +304,52 @@ script output: $output"
   assert_audit_row github_issue_created --file "$WD/.context/logs/audit.jsonl" \
     --jq '.metadata.url == "https://github.com/o/r/issues/42"'
 }
+
+# Companion to the attach-visual-evidence arm of the same name: the symlink refusal
+# was pinned only for the hook-side emitter, and all four worktask emitters appended
+# through a symlink. audit_row returns 1 here, which every call site already tolerates.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  cd "$WD"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  rm -f "$WD/.context/logs/audit.jsonl"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  jq '.metadata.github_issue_url = "https://github.com/o/r/issues/7"' \
+    .context/state.json > s2 && mv s2 .context/state.json
+  run env WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+# ---------------------------------------------------------------------------
+# _atomic_json — the tmp → fsync → mv tail the four JSON writers in
+# publish-pl-issue-lib.sh each spelled out. The four copies left a truncated temp
+# file on disk beside the ledger when jq died part-way; this one never renames a
+# partial document and never leaves the temp behind.
+# ---------------------------------------------------------------------------
+lib_only() {  # lib_only <snippet> — run a snippet with the helper library loaded
+  run bash -c "cd '$WD'; PUBLISH_LIB_ONLY=1 . '$PLUGIN_ROOT/$SCRIPT' > /dev/null 2>&1; $1"
+}
+
+@test "atomic: a complete document replaces the target" {
+  printf '{"a":1}' > "$WD/t.json"
+  lib_only "printf '%s' '{\"a\":2}' | _atomic_json t.json; echo rc=\$?; cat t.json; echo"
+  assert_success
+  assert_line --index 0 'rc=0'
+  assert_line --index 1 '{"a":2}'
+}
+
+@test "atomic: an empty producer leaves the target untouched and rc 1" {
+  printf '{"a":1}' > "$WD/t.json"
+  lib_only "true | _atomic_json t.json; echo rc=\$?; cat t.json; echo"
+  assert_line --index 0 'rc=1'
+  assert_line --index 1 '{"a":1}'
+}
+
+@test "atomic: a failing jq neither replaces the target nor leaves a temp file" {
+  printf '{"a":1}' > "$WD/t.json"
+  lib_only "jq '.a | error(\"boom\")' t.json 2>/dev/null | _atomic_json t.json; echo rc=\$?; \
+    cat t.json; echo; ls t.json.tmp.* 2>/dev/null | wc -l"
+  assert_line --index 0 'rc=1'
+  assert_line --index 1 '{"a":1}'
+  assert_line --index 2 --regexp '^ *0$'
+}

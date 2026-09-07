@@ -1,7 +1,8 @@
 {
   "eval_set_version": "0.3.0",
   "seed": 20260826,
-  "note": "Which cases were labelled and at what sampling fraction. label-align.py recomputes the weights from the grades, so this is provenance rather than input — it records WHICH sample produced a rate, so a later run can tell a different draw from a different skill. Cut with --held-out-from 168: the default is 122, which would have re-sampled the batch-4 tranche that 0.2.0 labelling already spent.",
+  "held_out_from": 168,
+  "note": "The draw: which cases were labelled, out of what population, at what sampling fraction. This is label-align.py --sample's INPUT, not only provenance. It used to be provenance, and re-deriving the strata from (split, verdict) instead weighted the held-out tranche against the whole test split; a grade set that has moved since the draw can no longer reconstruct which stratum a case was sampled from, so the draw has to say. held_out_from is the tranche floor this cut used. Cut with --held-out-from 168: the default was 122, which would have re-sampled the batch-4 tranche that 0.2.0 labelling already spent.",
   "strata": {
     "dev/pass": {
       "population": 69,

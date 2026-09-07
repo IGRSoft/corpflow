@@ -61,7 +61,7 @@ case "$_cf_opts" in *e*) set -e ;; esac
 # Degraded signalling must be library-free — the audit appender is IN the library.
 # Gated on an existing ledger so a degraded hook in an unrelated session cannot
 # materialize .context/logs/ in every directory it fires from.
-if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+if ! command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   echo "model-switch-gate: shared library unusable at $_LIB — switch passed through unchecked" >&2
   _cf_ctx="${CLAUDE_PROJECT_DIR:-.}/.context"
   if [ -f "$_cf_ctx/state.json" ]; then
@@ -99,7 +99,7 @@ run_gate() {
     if [ ! -f "$_sentinel" ]; then
       # `|| :` — under set -e a failed touch here would be a non-zero hook exit.
       { mkdir -p "$_ctx/logs" && : > "$_sentinel"; } 2> /dev/null || :
-      corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+      corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
         --subject "CORPFLOW_MODEL_SWITCH_GATE" --action "model_switch_gate_disabled" \
         --result ok --meta '{"vector":"CORPFLOW_MODEL_SWITCH_GATE"}'
     fi
@@ -145,7 +145,7 @@ run_gate() {
       reason: $r,
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
-    corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+    corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
       --subject "$_task_id" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         '{stage:$s, task_id:$t, pinned:$p, kind:"destination_unresolved"}')"
@@ -169,7 +169,7 @@ run_gate() {
       reason: $r,
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
-    corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+    corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
       --subject "$_task_id" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
@@ -186,7 +186,7 @@ run_gate() {
       reason: $r,
       hookSpecificOutput: {hookEventName: "PreModelSwitch", permissionDecision: "ask", additionalContext: $r}
     }' 2> /dev/null || return 0
-    corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+    corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
       --subject "$_task_id" --action "model_switch_confirm_requested" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
@@ -204,7 +204,7 @@ run_gate() {
       reason: $r,
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
-    corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+    corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
       --subject "$_task_id" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
@@ -221,7 +221,7 @@ run_gate() {
     reason: $r,
     hookSpecificOutput: {hookEventName: "PreModelSwitch", permissionDecision: "deny", additionalContext: $r}
   }' 2> /dev/null || return 0
-  corpflow_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
+  corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
     --subject "$_task_id" --action "model_switch_blocked" --result block \
     --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
       --arg d "$_dest" --arg o "$_origin" --arg tr "$_trigger_raw" \

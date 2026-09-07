@@ -51,7 +51,7 @@ set +e
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
 LIB_DEGRADED=0
-if command -v corpflow_audit_row > /dev/null 2>&1; then
+if command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   WORKSPACE_DIR=$(corpflow_workspace_root write)
 else
   # Library-free last resort. Resolution runs BEFORE $LOG exists, so a degraded
@@ -77,6 +77,10 @@ log() {
   printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "${1:-INFO}" "${2:-}" >> "$LOG" 2> /dev/null || true
 }
 
+# Never invoked: state-merge delegates every resolution to state-patch.sh. It survives as
+# source 3 of the seven-way map that artifact-map-parity.bats guards, which exists because
+# that map has already drifted once and stranded a basename for 34 releases.
+# shellcheck disable=SC2329 # parity fixture; deleting it deletes a drift guard
 _basename_for_stage() {
   case "$1" in
     PL) printf 'planning' ;;
@@ -240,7 +244,12 @@ _repair_corrupt_state() {
         result: "repaired",
         metadata: { reason: "corrupt_state_json", backup: $backup, run_index: $n,
                     stage: $stage, artifact: $art } }' 2> /dev/null); then
-    printf '%s\n' "$row" >> "$LOG_DIR/audit.jsonl"
+    # A symlinked audit.jsonl turns this append into a write primitive against an
+    # arbitrary target. Refuse rather than follow — the same guard the hook appender in
+    # model-switch-lib.sh carries. A lost row never blocks a repair that already landed.
+    if [ ! -L "$LOG_DIR/audit.jsonl" ]; then
+      printf '%s\n' "$row" >> "$LOG_DIR/audit.jsonl"
+    fi
   fi
   log INFO "corrupt state.json rebuilt from $art (backup=$backup run_index=$n) — delegating merge"
   return 0

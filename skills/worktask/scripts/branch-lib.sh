@@ -9,7 +9,8 @@
 #
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
-#   target_branch_name, meta_json, audit_fn, fn_batch_scope, resolve_base_ref.
+#   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base, _fork_base_uncached,
+#   _base_ref_ranked, resolve_base_ref, base_ref_source.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -305,6 +306,12 @@ audit_fn() {
     "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '%s0' "$stage")
   dk="$wid:$ri:$action"
   mkdir -p "${CONTEXT_DIR:-.context}/logs" 2> /dev/null || true
+  # A symlinked audit.jsonl turns the append below into a write primitive against an
+  # arbitrary target. Refuse rather than follow — the guard skills/shared/lib/audit-lib.sh
+  # and hooks/model-switch-lib.sh both carry. Spelled inline here, and only here, because
+  # this file's header contract is that it sources nothing: the batch-scope guard below
+  # depends on absence being its only failure mode, which a source block would break.
+  [ ! -L "${CONTEXT_DIR:-.context}/logs/audit.jsonl" ] || return 0
   # `2>/dev/null` on the pipeline above only silences jq's own stderr; the
   # `>>` append is the CALLING SHELL's redirection and its failure (e.g. an
   # unwritable log dir) is invisible to that guard. Capture it explicitly so a
@@ -370,26 +377,181 @@ fn_batch_scope() {
 
 # ---------- integration-branch resolution -----------------------------------
 # Single source of truth for "what is the integration branch", ranked:
+#   0. fork_base()                           EVIDENCE — OPT-IN (--with-fork-point);
+#                                            supplies a value only when 1-4 are all
+#                                            empty and the caller asked; see below
 #   1. $FN_BASE_REF                          explicit operator/test override
-#   2. state.json .metadata.base_ref         stamped by PL0, mirrors task metadata
+#   2. state.json .metadata.base_ref         stamped by PL0, mirrors task metadata.
+#                                            This rank is where a host-declared
+#                                            target branch enters the order — it is
+#                                            that value's provenance, not a probe
 #   3. workspace.json .git.base_branch       /megatask per-issue record
 #   4. git symbolic-ref refs/remotes/origin/HEAD
 #   -  unresolved                            reported, never guessed
 # There is deliberately NO hardcoded literal. Callers degrade non-blocking.
-resolve_base_ref() {
-  local v="${FN_BASE_REF:-}"
+#
+# Rank 0 reconciles, it never overrides: when the fork point disagrees with the
+# value a lower rank supplied, the disagreement is surfaced by the caller (PL0's
+# sweep item, base-sanity's candidate line) and stdout is unchanged. An overriding
+# rank 0 would defeat base-sanity, which compares the diff against the base the PR
+# will actually target — the resolver would hand it the right base and every
+# wrong-base PR would pass.
+#
+# It is opt-in for the same reason it never overrides. Every other consumer reads an
+# EMPTY return as "decline, do not guess" and gates on it (refine-branch-target's
+# base_unresolved no-op, branch-name, continuity, issue-close-required). Filling that
+# empty with an inferred branch would make those gates act on a guess — the failure
+# base-sanity spends a whole degrade rung (base_guessed) avoiding. Only a caller that
+# can tell an inferred base from a configured one passes --with-fork-point.
+
+# Fork-point evidence: the remote branch HEAD most closely descends from, by
+# smallest ahead-count. $1 (optional) is the configured base, used for tie-break
+# level 2 only; passing it as an argument is what keeps rank 0 from recursing back
+# through resolve_base_ref. Always exits 0 — this library is sourced into
+# `set -euo pipefail` scripts where a non-zero `v=$(fork_base)` kills the caller.
+#
+# Memoised per process and per argument. base-sanity reaches the ladder three times in one
+# run — resolve_base_ref, base_ref_source, then the fork candidate — and each evaluation
+# costs 2 x `git rev-list --count` per remote branch, so a 400-branch remote paid ~2400
+# rev-lists on the blocking FN path. Refs cannot move mid-run, so the later calls reuse the
+# first. The cache is process-local: a new shell, and every bats case is one, recomputes.
+fork_base() {
+  if [ "${_FORK_BASE_KEY-$'\x01unset'}" = "${1:-}" ]; then
+    printf '%s' "${_FORK_BASE_VAL:-}"
+    return 0
+  fi
+  _FORK_BASE_VAL="$(_fork_base_uncached "${1:-}")"
+  _FORK_BASE_KEY="${1:-}"
+  printf '%s' "$_FORK_BASE_VAL"
+}
+
+_fork_base_uncached() {
+  local configured="${1:-}" default="" rows="" sorted="" first=""
+  local refname symref otype name ahead behind t2 t3
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    printf ''
+    return 0
+  fi
+  configured="${configured#origin/}"
+  default=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || printf '')
+  default="${default#origin/}"
+
+  # Full refnames with %(symref), never %(refname:short): under short formatting
+  # refs/remotes/origin/HEAD prints as the bare string `origin`, which a `/HEAD$`
+  # filter misses and which no `origin/<name>` ref resolves. Dropping every
+  # non-empty symref excludes any symbolic pointer, however it is spelled. The `|`
+  # delimiter is required because an empty symref field collapses under IFS
+  # whitespace splitting and shifts objecttype into its place.
+  rows=$(git for-each-ref --format='%(refname)|%(symref)|%(objecttype)' \
+    refs/remotes/origin 2> /dev/null || printf '')
+  [ -n "$rows" ] || {
+    printf ''
+    return 0
+  }
+
+  # Tie-break, first discriminator wins: ahead-count, then the configured base,
+  # then the repository default branch, then behind-count, then byte order.
+  # The last level is determinism only and carries no meaning.
+  rows=$(printf '%s\n' "$rows" | while IFS='|' read -r refname symref otype; do
+    [ -n "$refname" ] || continue
+    [ -z "$symref" ] || continue
+    [ "$otype" = "commit" ] || continue
+    name="${refname#refs/remotes/origin/}"
+    # A candidate whose probe fails is dropped from the ranking, never ranked at a
+    # sentinel: a failed probe must not be able to become the answer.
+    ahead=$(git rev-list --count "$refname..HEAD" 2> /dev/null) || continue
+    # Leading `(` on the pattern: bash 3.2 misparses an unparenthesised case
+    # pattern inside a command substitution ("syntax error near `;;'").
+    case "$ahead" in ('' | *[!0-9]*) continue ;; esac
+    behind=$(git rev-list --count "HEAD..$refname" 2> /dev/null) || continue
+    case "$behind" in ('' | *[!0-9]*) continue ;; esac
+    # ahead=0 means the ref contains HEAD: HEAD's own pushed branch, a copy of it, or a
+    # descendant. None is what HEAD forked from, and ranking is ahead-ascending, so left in
+    # they always outrank the real parent — the fork-point diagnostic then names the branch
+    # under test. Exception: a ref sitting exactly on HEAD that is also the configured base
+    # or the repo default, because a run whose HEAD equals its integration branch did fork
+    # from there.
+    if [ "$ahead" -eq 0 ]; then
+      [ "$behind" -eq 0 ] || continue
+      if [ "$name" != "$configured" ] && [ "$name" != "$default" ]; then continue; fi
+    fi
+    t2=1
+    if [ -n "$configured" ] && [ "$name" = "$configured" ]; then t2=0; fi
+    t3=1
+    if [ -n "$default" ] && [ "$name" = "$default" ]; then t3=0; fi
+    printf '%s %s %s %s %s\n' "$ahead" "$t2" "$t3" "$behind" "$name"
+  done)
+  [ -n "$rows" ] || {
+    printf ''
+    return 0
+  }
+
+  # Captured, not piped into `head -1`: an early-exit pipe consumer can SIGPIPE
+  # sort and trip a caller's pipefail.
+  sorted=$(printf '%s\n' "$rows" | LC_ALL=C sort -k1,1n -k2,2n -k3,3n -k4,4n -k5,5)
+  first="${sorted%%$'\n'*}"
+  [ -n "$first" ] || {
+    printf ''
+    return 0
+  }
+  # Refnames cannot contain spaces, so the last field is the whole branch name
+  # even for `feature/x` shapes.
+  printf '%s' "${first##* }"
+}
+
+# THE ladder — written once so the value and its provenance can never disagree.
+# Prints "<source> <value>" on one line; the two public wrappers take one field
+# each. A global would not do: `v=$(resolve_base_ref)` runs in a subshell that
+# discards anything the function assigns.
+_base_ref_ranked() {
+  local v src with_fork=0
+  if [ "${1:-}" = "--with-fork-point" ]; then with_fork=1; fi
+  v="${FN_BASE_REF:-}"
+  src="env"
+  [ "$v" = "null" ] && v=""
   if [ -z "$v" ] && command -v jq > /dev/null 2>&1; then
     v=$(jq -r '.metadata.base_ref // empty' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '')
+    [ "$v" = "null" ] && v=""
+    [ -n "$v" ] && src="state"
     if [ -z "$v" ]; then
       local ws="${WORKSPACE_ROOT:-$PWD}/workspace.json"
       if [ -f "$ws" ]; then
         v=$(jq -r '.git.base_branch // empty' "$ws" 2> /dev/null || printf '')
+        [ "$v" = "null" ] && v=""
+        [ -n "$v" ] && src="workspace"
       fi
     fi
   fi
   if [ -z "$v" ]; then
     v=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || printf '')
+    [ "$v" = "null" ] && v=""
+    [ -n "$v" ] && src="origin_head"
   fi
-  [ "$v" = "null" ] && v=""
-  printf '%s' "$v"
+  # Rank 0, evaluated last on purpose: it fills only the gap that used to end in
+  # `unresolved`, and only for a caller that opted in. Calling fork_base ahead of
+  # ranks 1-4 would also cost one rev-list per remote branch on the preflight hot
+  # path.
+  if [ -z "$v" ] && [ "$with_fork" = "1" ]; then
+    v=$(fork_base 2> /dev/null || printf '')
+    [ -n "$v" ] && src="fork_point"
+  fi
+  [ -n "$v" ] || src="unresolved"
+  printf '%s %s' "$src" "$v"
+}
+
+# Pass --with-fork-point to enable rank 0. Without it the return is byte-identical
+# to the pre-rank-0 resolver, including the empty return that callers gate on.
+resolve_base_ref() {
+  local r
+  r=$(_base_ref_ranked "${1:-}")
+  printf '%s' "${r#* }"
+}
+
+# Which rank answered: env | state | workspace | origin_head | fork_point |
+# unresolved. `fork_point` tells a caller the base is inferred evidence rather
+# than a configured target — base-sanity degrades rather than blocking on it.
+base_ref_source() {
+  local r
+  r=$(_base_ref_ranked "${1:-}")
+  printf '%s' "${r%% *}"
 }

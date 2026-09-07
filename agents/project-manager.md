@@ -123,9 +123,10 @@ Templates, data sources, full procedure:
 #### Pre-`gh pr create` validator battery
 
 Compose the PR body to a file, then run `fn-preflight.sh all --body <pr-body-file>`
-(`skills/worktask/scripts/`): attachments → pr-body → validate-pr → continuity, in that order
-(`pr-body` rewrites the body in place, so the body `validate-pr` checks is byte-identical to the
-one reaching `gh pr create`). Each check also runs standalone.
+(`skills/worktask/scripts/`): attachments → pr-body → validate-pr → continuity → base-sanity, in
+that order (`pr-body` rewrites the body in place, so the body `validate-pr` checks is byte-identical
+to the one reaching `gh pr create`; `base-sanity` is last so a block never suppresses `continuity`'s
+diagnostic row). Each check also runs standalone.
 
 **Any blocking exit** → abort FN with `handoff.verdict: blocked`, write the cause (helper stderr
 line plus the audit reason) to `.context/errors/project-manager.md`, and do NOT run
@@ -139,6 +140,19 @@ line plus the audit reason) to `.context/errors/project-manager.md`, and do NOT 
 | `pr-body` | body came out of the mandated pipeline, not hand-authored (below) | batch (`/megatask`) and incident (`--emergency`) routing self-disable it: `pr_body_gate` `result: "skipped"`, body untouched, exit 0 |
 | `validate-pr` | body matches `(?im)^(Closes\|Fixes\|Resolves)\s+#\d+$` for the resolved issue | no issue resolvable → `pr_issue_link` `result:deferred` row, proceed WITHOUT a closing line |
 | `continuity` | worktree HEAD is an ancestor of the integration branch, so fast-forward/merge is safe | diverged → diagnostic + `branch_continuity` `result: "diverged_cherry_pick"` row; cherry-pick the worktree commits, confirm the count matches the unmerged set, record it in `complete-summary-N.md` |
+| `base-sanity` | the PR-vs-ledger magnitude check that discriminates a wrong base (below) | degrades, never false-blocks (below) |
+
+##### `base-sanity` specifics
+
+- **Blocks** when the PR file count is over 3x the ledger's **and** over 20 files larger — the
+  signature of a base this work never forked from. `continuity` cannot see this: `diverged` is the
+  normal state of every feature branch about to merge.
+- **Degrades, never false-blocks**: no `jq`, no work tree, an unresolved, unresolvable or
+  fork-point-inferred base, empty `facts.files_modified`, unreadable diff — each warns with its own
+  `base_sanity` result token and exits 0. `ahead > 25` warns.
+- **One sanctioned downgrade**: `FN_BASE_SANITY_OVERRIDE` set to anything but empty/`0`/`false`/`no`
+  turns the fail arm into a warning and writes a `base_sanity` `result: "override"` row naming both
+  counts. No second bypass path exists.
 
 ##### `pr-body` specifics
 

@@ -22,8 +22,9 @@
 #        cache-lint.sh --anchor-lint <artifact.md>
 #      Verifies the artifact's H2 headings match the per-stage allow-list
 #      from skills/worktask/references/handoff-protocol.md#anchor-allow-list.
-#      Stage is read from the artifact's `handoff:` frontmatter (yq if
-#      available; awk subset fallback). Exits 1 on missing/extra anchors.
+#      Stage is read from the artifact's `handoff:` frontmatter block (yq when
+#      it parses it; awk subset fallback when yq is absent OR errors).
+#      Exits 1 on missing/extra anchors.
 #
 #   3. Frontmatter template lint:
 #        cache-lint.sh --frontmatter-template-lint <agent.md> [<agent.md> ...]
@@ -62,8 +63,6 @@
 #
 # Reference: skills/worktask/references/handoff-protocol.md#cache-prefix
 #            skills/shared/stage-contracts.md#per-stage-frontmatter-templates
-# AR decisions implemented: AD-4 (cache-prefix invariants), AD-5 (anchors).
-# AC satisfied: AC-3 (anchor convention), AC-14 (cache stability).
 
 set -euo pipefail
 
@@ -76,23 +75,81 @@ usage() {
 
 # ---------- Anchor allow-list (mirrors handoff-protocol.md#anchor-allow-list) ----------
 # POSIX-compatible lookup (bash 3.2 has no associative arrays).
+# One row per stage: <code> <agent-basename> <canonical-artifact-basename> <anchors…>.
+#
+# One row, not four parallel case tables: a new stage otherwise stayed half-added and nothing
+# could report which table was missed. Anchors mirror handoff-protocol.md#anchor-allow-list,
+# basenames its #stage-artifact-map, agents stage-contracts.md § Per-Stage Frontmatter
+# Templates; UNIVERSAL_ANCHORS and OPTIONAL_ANCHOR_RE add the stage-independent obligations.
+_STAGE_TABLE='PL product-manager planning requirements acceptance-criteria scope out-of-scope risks complexity stages summary
+AR software-architector architecture decisions trade-offs patterns integration-points schemas open-questions risks
+TL team-lead coordination fan-out shared-snippets sequence risks
+DV developer development files-changed tests-added deviations follow-ups
+DR technical-lead developer-review findings verdict blockers follow-ups
+SR security-reviewer security-review findings verdict blockers threat-model
+QA qa-engineer testing results coverage regressions verdict
+DC technical-writer documentation files-changed cross-references follow-ups
+RE release-engineer release artifacts version rollback-plan
+FN project-manager complete-summary summary artifacts followups metrics
+ST stakeholder retrospective decision learnings followups
+IR incident-responder incident root-cause fix-plan blast-radius
+ET ethics-reviewer ethics-review findings verdict mitigations'
+
+# Out-parameter of _stage_row, holding the matched row minus its stage code. Not a return
+# value: a command substitution would fork once per lookup per artifact.
+_STAGE_ROW=""
+
+# _stage_row <stage> — rc 1 with _STAGE_ROW empty when the stage is unknown.
+_stage_row() {
+  local row
+  _STAGE_ROW=""
+  [ -n "${1:-}" ] || return 1
+  while IFS= read -r row; do
+    case "$row" in
+      "$1 "*) _STAGE_ROW="${row#* }"; return 0 ;;
+    esac
+  done <<< "$_STAGE_TABLE"
+  return 1
+}
+
+# The anchors an artifact of <stage> must carry, space-separated. Empty for an unknown
+# stage, which every caller reads as "not a stage artifact".
 anchors_for_stage() {
-  case "$1" in
-    PL) echo "requirements acceptance-criteria scope out-of-scope risks complexity stages summary" ;;
-    AR) echo "decisions trade-offs patterns integration-points schemas open-questions risks" ;;
-    TL) echo "fan-out shared-snippets sequence risks" ;;
-    DV) echo "files-changed tests-added deviations follow-ups" ;;
-    DR) echo "findings verdict blockers follow-ups" ;;
-    SR) echo "findings verdict blockers threat-model" ;;
-    QA) echo "results coverage regressions verdict" ;;
-    DC) echo "files-changed cross-references follow-ups" ;;
-    RE) echo "artifacts version rollback-plan" ;;
-    FN) echo "summary artifacts followups metrics" ;;
-    ST) echo "decision learnings followups" ;;
-    IR) echo "root-cause fix-plan blast-radius" ;;
-    ET) echo "findings verdict mitigations" ;;
-    *) echo "" ;;
-  esac
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+  set -- $_STAGE_ROW
+  shift 2
+  echo "$*"
+}
+
+# The agent basename that owns <stage> — DV -> developer.
+stage_to_agent_basename() {
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split
+  set -- $_STAGE_ROW
+  echo "$1"
+}
+
+# The canonical artifact basename for <stage> — DV -> development. Pinned against six other
+# spellings of the same map by artifact-map-parity.bats.
+canonical_basename_for_stage() {
+  _stage_row "$1" || { echo ""; return 0; }
+  # shellcheck disable=SC2086  # deliberate word split
+  set -- $_STAGE_ROW
+  echo "$2"
+}
+
+# The inverse of stage_to_agent_basename, read off the same rows rather than out of a
+# second table that could disagree with it.
+agent_basename_to_stage() {
+  local row key="${1:-}"
+  [ -n "$key" ] || { echo ""; return 0; }
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split
+    set -- $row
+    if [ "$2" = "$key" ]; then echo "$1"; return 0; fi
+  done <<< "$_STAGE_TABLE"
+  echo ""
 }
 
 # Anchors REQUIRED in every stage artifact, on top of that stage's own row. Stage-independent
@@ -122,23 +179,47 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture|Blockers|DV Completion Checklist|Incident Report|Release Preparation Summary|Self-Improvement)$'
 
 # ---------- Frontmatter stage extractor ----------
-# Prints stage code on stdout; empty if not found.
+# The frontmatter block alone (between the first two `---` lines), empty if absent.
+# Everything downstream parses THIS, never the whole file: an artifact body is markdown,
+# and a table cell or a `**Bold**:` line makes a whole-file YAML parse abort on a document
+# whose frontmatter is perfectly well-formed.
+frontmatter_block() {
+  awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$1"
+}
+
+# The awk subset parser — the fallback whenever yq cannot answer. Reads a `stage:` line
+# out of an already-isolated frontmatter block.
+_stage_via_awk() {
+  awk '
+    /^[[:space:]]*stage:[[:space:]]*/ {
+      sub(/^[[:space:]]*stage:[[:space:]]*/, "")
+      gsub(/[[:space:]"]+/, "")
+      print
+      exit
+    }'
+}
+
+# Prints stage code on stdout; empty if genuinely absent.
+#
+# Two failure modes that look identical from the outside must NOT be conflated:
+#   - yq ran and reported no stage  -> a REAL absence; report it, do not paper over it
+#     with a second parser that might disagree.
+#   - yq errored (or is missing)    -> NO answer; fall back to awk.
+# Treating the second as the first is how this lint failed OPEN: --anchor-lint reported
+# "no stage in handoff frontmatter" for artifacts that carry one, and every anchor of
+# every such artifact went unchecked on any host where yq is installed.
 extract_stage() {
-  local f="$1"
+  local fm out
+  fm=$(frontmatter_block "$1")
+  [ -n "$fm" ] || return 0
   if command -v yq >/dev/null 2>&1; then
-    yq eval '.handoff.stage // ""' "$f" 2>/dev/null || true
-  else
-    awk '
-      BEGIN { in_fm = 0; depth = 0 }
-      /^---$/ { depth++; in_fm = (depth == 1); next }
-      in_fm && /^[[:space:]]*stage:[[:space:]]*/ {
-        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
-        gsub(/[[:space:]"]+/, "")
-        print
-        exit
-      }
-    ' "$f"
+    if out=$(printf '%s\n' "$fm" | yq eval '.handoff.stage // ""' - 2>/dev/null); then
+      [ "$out" = "null" ] && out=""
+      printf '%s\n' "$out"
+      return 0
+    fi
   fi
+  printf '%s\n' "$fm" | _stage_via_awk
 }
 
 # ---------- Anchor lint ----------
@@ -199,30 +280,9 @@ anchor_lint() {
 }
 
 # ---------- Agent-section cross-check (#16 letter b) ----------
-# Reverse of agent_basename_to_stage. Kept as its own case rather than derived by
-# scanning, so the two directions can never disagree about a stage code.
-stage_to_agent_basename() {
-  case "$1" in
-    PL) echo product-manager ;;
-    AR) echo software-architector ;;
-    TL) echo team-lead ;;
-    DV) echo developer ;;
-    DR) echo technical-lead ;;
-    SR) echo security-reviewer ;;
-    QA) echo qa-engineer ;;
-    DC) echo technical-writer ;;
-    RE) echo release-engineer ;;
-    FN) echo project-manager ;;
-    ST) echo stakeholder ;;
-    IR) echo incident-responder ;;
-    ET) echo ethics-reviewer ;;
-    *) echo "" ;;
-  esac
-}
-
 # The H2 names an agent's prose INSTRUCTS it to write into its own stage artifact.
 #
-# Deliberately under-matching (AD-6): a false negative leaves today's behaviour, while a
+# Deliberately under-matching: a false negative leaves today's behaviour, while a
 # false positive would block correct work by rejecting a section no agent ever mandated.
 # Three filters, all conservative:
 #   1. The name must sit in its own code span opening with `## ` — `development-N.md ## decisions`
@@ -297,7 +357,7 @@ extract_section() {
   ' <<< "$body"
 }
 
-# ---------- Forbidden-token scanner (L1, REQ-3/AC-4) ----------
+# ---------- Forbidden-token scanner ----------
 # Scans ONE section's text for the seven forbidden-token classes named in
 # handoff-protocol.md#cache-prefix (mirrored verbatim in
 # coordination-0.md#shared-snippets so no second taxonomy is ever invented):
@@ -314,39 +374,51 @@ forbidden_token_scan() {
   local section_text="$1" label="$2"
   local rc=0
 
+  # Six `grep` forks per section used to run here, three sections per log line —
+  # eighteen of the ~29 forks this lint spent on every line. The shell's own
+  # regex engine answers the same questions with none. The three classes that
+  # were `grep -i` (3, 5, 6) spell their case-folding inline rather than via
+  # `nocasematch`: that shopt is function-wide, and it silently turned the
+  # case-SENSITIVE classes 2 and 4 into matches on `$user` / `$random`.
+
   # 1. ISO-8601 timestamp (date/now render), e.g. 2026-07-05T15:15:39Z
-  if grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' <<< "$section_text"; then
+  if [[ "$section_text" =~ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
     echo "forbidden-token-lint: $label: ISO-8601 timestamp found" >&2
     rc=1
   fi
 
   # 2. ENV expansions that vary per call (unresolved $VAR / ${VAR} literals,
   #    or a shell already substituted a per-user path under one of these).
-  if grep -qE '\$(HOSTNAME|USER|PWD|RANDOM)\b|\$\{(HOSTNAME|USER|PWD|RANDOM)\}' <<< "$section_text"; then
-    echo "forbidden-token-lint: $label: ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found" >&2
+  if [[ "$section_text" =~ \$(HOSTNAME|USER|PWD|RANDOM)([^A-Za-z0-9_]|$) \
+     || "$section_text" =~ \$\{(HOSTNAME|USER|PWD|RANDOM)\} ]]; then
+    # Single-quoted: this message names the four variables, and double quotes
+    # made it print the running shell's own $USER and $PWD into a lint report
+    # about leaked per-call values.
+    echo "forbidden-token-lint: $label:"' ENV expansion ($HOSTNAME/$USER/$PWD/$RANDOM) found' >&2
     rc=1
   fi
 
   # 3. Random / request IDs — UUID v4 shape.
-  if grep -qiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' <<< "$section_text"; then
+  if [[ "$section_text" =~ [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12} ]]; then
     echo "forbidden-token-lint: $label: UUID found" >&2
     rc=1
   fi
 
   # 4. $RANDOM literal (bash builtin) appearing unresolved in the text.
-  if grep -qE '\$RANDOM\b' <<< "$section_text"; then
+  if [[ "$section_text" =~ \$RANDOM([^A-Za-z0-9_]|$) ]]; then
     echo "forbidden-token-lint: $label: literal \$RANDOM found" >&2
     rc=1
   fi
 
   # 5. Retry counters (belong in section [6], never [1]/[2]/[4]).
-  if grep -qiE 'retry[_-]?count[[:space:]]*[:=][[:space:]]*[0-9]+|attempt[[:space:]]*#?[0-9]+' <<< "$section_text"; then
+  if [[ "$section_text" =~ [Rr][Ee][Tt][Rr][Yy][_-]?[Cc][Oo][Uu][Nn][Tt][[:space:]]*[:=][[:space:]]*[0-9]+ \
+     || "$section_text" =~ [Aa][Tt][Tt][Ee][Mm][Pp][Tt][[:space:]]*#?[0-9]+ ]]; then
     echo "forbidden-token-lint: $label: retry/attempt counter found (belongs in section [6])" >&2
     rc=1
   fi
 
   # 6. File mtime-shaped values (epoch seconds/millis label or "mtime:").
-  if grep -qiE 'mtime[[:space:]]*[:=][[:space:]]*[0-9]{9,13}\b' <<< "$section_text"; then
+  if [[ "$section_text" =~ [Mm][Tt][Ii][Mm][Ee][[:space:]]*[:=][[:space:]]*[0-9]{9,13}([^0-9]|$) ]]; then
     echo "forbidden-token-lint: $label: file mtime found" >&2
     rc=1
   fi
@@ -374,10 +446,18 @@ prefix_lint() {
   local rc=0
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    local wid stage prompt
-    wid=$(jq -r '.worktask_id' <<< "$line")
-    stage=$(jq -r '.stage' <<< "$line")
-    prompt=$(jq -r '.prompt' <<< "$line")
+    # One jq per line, not three: the fields come out in a fixed order, and the
+    # prompt — the only multi-line one — is whatever follows the first two lines.
+    # The `X` sentinel keeps command substitution from eating the separator that
+    # an EMPTY prompt is reduced to, which would shift `stage` into `prompt`.
+    local fields wid stage prompt
+    fields=$(jq -r '.worktask_id, .stage, .prompt' <<< "$line"; printf 'X')
+    fields="${fields%X}"
+    wid="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    stage="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
+    # Three separate substitutions stripped every trailing newline from each
+    # field; keep that, so a prompt is compared the same way it always was.
+    while [ "${prompt%$'\n'}" != "$prompt" ]; do prompt="${prompt%$'\n'}"; done
 
     local s1 s2 s4
     s1=$(extract_section "$prompt" "contract-reminder")
@@ -396,10 +476,9 @@ prefix_lint() {
       rc=1
     fi
 
-    # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]).
-    local widsafe stagesafe
-    widsafe=$(printf '%s' "$wid" | tr -c 'a-zA-Z0-9._-' '_')
-    stagesafe=$(printf '%s' "$stage" | tr -c 'a-zA-Z0-9._-' '_')
+    # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]). Pattern
+    # substitution rather than `tr`, which cost two forks on every line.
+    local widsafe="${wid//[!a-zA-Z0-9._-]/_}" stagesafe="${stage//[!a-zA-Z0-9._-]/_}"
 
     local f1="$td/wf-${widsafe}-s1"
     local f2="$td/wf-${widsafe}-s2"
@@ -409,11 +488,11 @@ prefix_lint() {
       printf '%s' "$s1" > "$f1"
       printf '%s' "$s2" > "$f2"
     else
-      if [[ "$s1" != "$(cat "$f1")" ]]; then
+      if [[ "$s1" != "$(<"$f1")" ]]; then
         echo "prefix-lint: worktask_id=$wid stage=$stage: section [1] contract-reminder DRIFT" >&2
         rc=1
       fi
-      if [[ "$s2" != "$(cat "$f2")" ]]; then
+      if [[ "$s2" != "$(<"$f2")" ]]; then
         echo "prefix-lint: worktask_id=$wid stage=$stage: section [2] worktask-header DRIFT" >&2
         rc=1
       fi
@@ -421,7 +500,7 @@ prefix_lint() {
 
     if [[ ! -f "$f4" ]]; then
       printf '%s' "$s4" > "$f4"
-    elif [[ "$s4" != "$(cat "$f4")" ]]; then
+    elif [[ "$s4" != "$(<"$f4")" ]]; then
       echo "prefix-lint: worktask_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
       rc=1
     fi
@@ -436,27 +515,6 @@ prefix_lint() {
 }
 
 # ---------- Frontmatter template lint ----------
-# Canonical agent-basename → stage code mapping. Mirrors the §
-# Per-Stage Frontmatter Templates section in stage-contracts.md.
-agent_basename_to_stage() {
-  case "$1" in
-    product-manager) echo PL ;;
-    software-architector) echo AR ;;
-    team-lead) echo TL ;;
-    developer) echo DV ;;
-    technical-lead) echo DR ;;
-    security-reviewer) echo SR ;;
-    qa-engineer) echo QA ;;
-    technical-writer) echo DC ;;
-    release-engineer) echo RE ;;
-    project-manager) echo FN ;;
-    stakeholder) echo ST ;;
-    incident-responder) echo IR ;;
-    ethics-reviewer) echo ET ;;
-    *) echo "" ;;
-  esac
-}
-
 # Extract the contents of the first ```yaml fenced block that appears
 # AFTER the `## Handoff Protocol` H2 and BEFORE the next H2 heading.
 # Returns the YAML body (without the fence markers). Empty if not found.
@@ -585,48 +643,6 @@ frontmatter_template_lint() {
 }
 
 # ---------- Filename lint ----------
-# Canonical stage → artifact basename mapping (mirrors handoff-protocol.md#stage-artifact-map).
-canonical_basename_for_stage() {
-  case "$1" in
-    PL) echo "planning" ;;
-    AR) echo "architecture" ;;
-    TL) echo "coordination" ;;
-    DV) echo "development" ;;
-    DR) echo "developer-review" ;;
-    SR) echo "security-review" ;;
-    QA) echo "testing" ;;
-    DC) echo "documentation" ;;
-    RE) echo "release" ;;
-    FN) echo "complete-summary" ;;
-    ST) echo "retrospective" ;;
-    IR) echo "incident" ;;
-    ET) echo "ethics-review" ;;
-    *) echo "" ;;
-  esac
-}
-
-# extract_stage() yq-parses the whole file, which aborts on any real artifact
-# body ("mapping values are not allowed in this context") and made filename-lint
-# skip every artifact it was meant to check. Scoped to the filename path on
-# purpose: this compares basenames only, so tightening it cannot surface new
-# assertions the way repairing extract_stage() for --anchor-lint would.
-extract_stage_from_frontmatter() {
-  local f="$1" fm
-  fm=$(awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f")
-  [[ -n "$fm" ]] || return 0
-  if command -v yq >/dev/null 2>&1; then
-    printf '%s\n' "$fm" | yq eval '.handoff.stage // ""' - 2>/dev/null || true
-  else
-    printf '%s\n' "$fm" | awk '
-      /^[[:space:]]*stage:[[:space:]]*/ {
-        sub(/^[[:space:]]*stage:[[:space:]]*/, "")
-        gsub(/[[:space:]"]+/, "")
-        print
-        exit
-      }'
-  fi
-}
-
 filename_lint() {
   local ctx_dir="$1"
   [[ -d "$ctx_dir" ]] || { echo "filename-lint: directory not found: $ctx_dir" >&2; exit 2; }
@@ -636,7 +652,7 @@ filename_lint() {
     [[ -f "$artifact" ]] || continue
 
     local stage
-    stage=$(extract_stage_from_frontmatter "$artifact")
+    stage=$(extract_stage "$artifact")
     [[ -z "$stage" || "$stage" == "null" ]] && continue
 
     count=$((count + 1))
@@ -670,443 +686,6 @@ filename_lint() {
   return $rc
 }
 
-# ---------- Self-test ----------
-self_test() {
-  # Three levels up from skills/worktask/scripts/ is the plugin root. Resolved from
-  # BASH_SOURCE, never $PWD: the self-test is run from arbitrary cwds (bats tempdirs,
-  # CI checkouts) and a cwd-relative root silently checks the wrong agents/ or none.
-  local SELF_REPO_ROOT
-  SELF_REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd) || SELF_REPO_ROOT="."
-  local td
-  td=$(mktemp -d -t cache-lint-XXXXXX)
-  trap "rm -rf '$td'" EXIT
-
-  # Anchor lint fixture: minimal DV artifact
-  cat > "$td/development.md" <<'EOF'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "self-test fixture"
-  refs: { plan: planning-0.md#requirements }
----
-
-# Development
-
-## files-changed
-
-table goes here
-
-## tests-added
-
-list
-
-## deviations
-
-none
-
-## follow-ups
-
-none
-
-## elicitation-sweep
-
-nothing to elicit
-EOF
-  if "$0" --anchor-lint "$td/development.md" >/dev/null 2>&1; then
-    echo "self-test: anchor-lint pass: ok"
-  else
-    echo "self-test: anchor-lint pass: FAIL" >&2; exit 1
-  fi
-
-  # Negative anchor lint: the four DV anchors are all present, the universal one is not.
-  # Keyed on the sweep heading alone so a regression in the UNIVERSAL_ANCHORS append cannot
-  # hide behind a stage anchor that is also missing.
-  cat > "$td/no-sweep.md" <<'EOF'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "no sweep heading"
-  refs: { plan: planning-0.md#requirements }
----
-
-# Development
-
-## files-changed
-
-x
-
-## tests-added
-
-x
-
-## deviations
-
-none
-
-## follow-ups
-
-none
-EOF
-  # Captured rather than piped: `pipefail` would otherwise read the (expected) non-zero
-  # lint exit as the pipeline's verdict and fail the case it is meant to pass.
-  local no_sweep_out=""
-  no_sweep_out=$("$0" --anchor-lint "$td/no-sweep.md" 2>&1) || true
-  if grep -q 'missing: elicitation-sweep' <<< "$no_sweep_out"; then
-    echo "self-test: anchor-lint universal sweep anchor: ok"
-  else
-    echo "self-test: anchor-lint universal sweep anchor: FAIL (missing heading accepted)" >&2; exit 1
-  fi
-
-  # Negative anchor lint: missing anchor
-  cat > "$td/bad.md" <<'EOF'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "missing anchors"
-  refs: { plan: planning-0.md#requirements }
----
-
-## files-changed
-
-partial
-EOF
-  if "$0" --anchor-lint "$td/bad.md" >/dev/null 2>&1; then
-    echo "self-test: anchor-lint reject: FAIL (should have rejected missing anchors)" >&2; exit 1
-  else
-    echo "self-test: anchor-lint reject: ok"
-  fi
-
-  # Prefix lint fixture: two prompts, identical sections [1][2]
-  local log="$td/log.jsonl"
-  : > "$log"
-  for stg in PL AR; do
-    jq -cn --arg wid wf-self --arg stage "$stg" --arg prompt \
-"<<<contract-reminder>>>
-contract
-<<<worktask-header>>>
-worktask_id=wf-self
-plan_file=planning-0.md
-<<<stage-contract>>>
-stage=$stg
-<<<task>>>
-desc" '{worktask_id:$wid, stage:$stage, prompt:$prompt}' >> "$log"
-  done
-  if "$0" "$log" >/dev/null 2>&1; then
-    echo "self-test: prefix-lint pass: ok"
-  else
-    echo "self-test: prefix-lint pass: FAIL" >&2; exit 1
-  fi
-
-  # Negative: drift in section [1]
-  jq -cn --arg prompt \
-"<<<contract-reminder>>>
-DIFFERENT contract
-<<<worktask-header>>>
-worktask_id=wf-self
-plan_file=planning-0.md
-<<<stage-contract>>>
-stage=TL
-<<<task>>>
-desc" '{worktask_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
-
-  if "$0" "$log" >/dev/null 2>&1; then
-    echo "self-test: prefix-lint drift detect: FAIL (should have caught drift)" >&2; exit 1
-  else
-    echo "self-test: prefix-lint drift detect: ok"
-  fi
-
-  # L1 forbidden-token scanner (REQ-3/AC-4): happy path first (fresh log, no
-  # forbidden tokens — must still pass byte-identity AND the new scan).
-  local ftlog="$td/forbidden-token-log.jsonl"
-  : > "$ftlog"
-  jq -cn --arg wid wf-ft --arg stage PL --arg prompt \
-"<<<contract-reminder>>>
-contract
-<<<worktask-header>>>
-worktask_id=wf-ft
-plan_file=planning-0.md
-<<<stage-contract>>>
-stage=PL
-<<<task>>>
-desc" '{worktask_id:$wid, stage:$stage, prompt:$prompt}' >> "$ftlog"
-  if "$0" "$ftlog" >/dev/null 2>&1; then
-    echo "self-test: forbidden-token-lint happy path: ok"
-  else
-    echo "self-test: forbidden-token-lint happy path: FAIL" >&2; exit 1
-  fi
-
-  # Negative: ISO-8601 timestamp injected into section [2] (worktask-header)
-  # — a previously-uncaught class (byte-identical across every stage of THIS
-  # worktask, so the existing drift check alone would miss it; only becomes a
-  # problem cross-worktask, which the intrinsic scan catches immediately).
-  local ftlog_ts="$td/forbidden-token-log-ts.jsonl"
-  jq -cn --arg prompt \
-"<<<contract-reminder>>>
-contract
-<<<worktask-header>>>
-worktask_id=wf-ft-ts
-plan_file=planning-0.md
-generated_at=2026-07-05T15:15:39Z
-<<<stage-contract>>>
-stage=PL
-<<<task>>>
-desc" '{worktask_id:"wf-ft-ts", stage:"PL", prompt:$prompt}' > "$ftlog_ts"
-  if "$0" "$ftlog_ts" >/dev/null 2>&1; then
-    echo "self-test: forbidden-token-lint timestamp reject: FAIL (should have caught ISO-8601 timestamp)" >&2; exit 1
-  else
-    echo "self-test: forbidden-token-lint timestamp reject: ok"
-  fi
-
-  # Negative: retry counter injected into section [1] (contract-reminder) —
-  # belongs in section [6] only, never [1]/[2]/[4].
-  local ftlog_retry="$td/forbidden-token-log-retry.jsonl"
-  jq -cn --arg prompt \
-"<<<contract-reminder>>>
-contract retry_count: 2
-<<<worktask-header>>>
-worktask_id=wf-ft-retry
-plan_file=planning-0.md
-<<<stage-contract>>>
-stage=PL
-<<<task>>>
-desc" '{worktask_id:"wf-ft-retry", stage:"PL", prompt:$prompt}' > "$ftlog_retry"
-  if "$0" "$ftlog_retry" >/dev/null 2>&1; then
-    echo "self-test: forbidden-token-lint retry-counter reject: FAIL (should have caught retry_count)" >&2; exit 1
-  else
-    echo "self-test: forbidden-token-lint retry-counter reject: ok"
-  fi
-
-  # Frontmatter template lint: positive fixture (stage agent shaped like
-  # the collapsed agents).
-  cat > "$td/developer.md" <<'EOF'
----
-name: developer
-description: dummy
----
-
-# Developer
-
-## Handoff Protocol
-
-Required Inputs etc live in stage-contracts.md.
-
-### Frontmatter for this stage (DV)
-
-```yaml
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "<one-line ≤200 chars>"
-  files_touched:
-    - path/to/file1.md
-  next_stage_focus: "<imperative>"
-  refs:
-    decisions: architecture-N.md#decisions
----
-```
-
-## Other Section
-EOF
-  if "$0" --frontmatter-template-lint "$td/developer.md" >/dev/null 2>&1; then
-    echo "self-test: frontmatter-template-lint pass: ok"
-  else
-    echo "self-test: frontmatter-template-lint pass: FAIL" >&2; exit 1
-  fi
-
-  # Negative: stage mismatch
-  cat > "$td/qa-engineer.md" <<'EOF'
----
-name: qa-engineer
-description: dummy
----
-
-# QA
-
-## Handoff Protocol
-
-text
-
-### Frontmatter for this stage (QA)
-
-```yaml
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "wrong stage"
-  refs: { dev: development-N.md#files-changed }
----
-```
-EOF
-  if "$0" --frontmatter-template-lint "$td/qa-engineer.md" >/dev/null 2>&1; then
-    echo "self-test: frontmatter-template-lint reject mismatch: FAIL (should have rejected stage mismatch)" >&2; exit 1
-  else
-    echo "self-test: frontmatter-template-lint reject mismatch: ok"
-  fi
-
-  # Negative: two yaml blocks (re-inlined boilerplate regression)
-  cat > "$td/team-lead.md" <<'EOF'
----
-name: team-lead
-description: dummy
----
-
-# TL
-
-## Handoff Protocol
-
-text
-
-```yaml
----
-handoff:
-  stage: TL
-  verdict: ok
-  summary: "first"
-  refs: { plan: planning-N.md#requirements }
----
-```
-
-```yaml
-extra: block
-```
-EOF
-  if "$0" --frontmatter-template-lint "$td/team-lead.md" >/dev/null 2>&1; then
-    echo "self-test: frontmatter-template-lint reject duplicate: FAIL (should have rejected two yaml blocks)" >&2; exit 1
-  else
-    echo "self-test: frontmatter-template-lint reject duplicate: ok"
-  fi
-
-  # Positive: pointer-only form (P1 dedup, Batch 5/ad4) — zero inline yaml
-  # blocks, but a stage-contracts.md#tpl-<CODE> pointer is present.
-  cat > "$td/release-engineer.md" <<'EOF'
----
-name: release-engineer
-description: dummy
----
-
-## Handoff Protocol
-
-Frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`.
-
-### State.json Atomic Merge — REQUIRED before return
-
-no yaml block here, just the pointer above
-EOF
-  if "$0" --frontmatter-template-lint "$td/release-engineer.md" >/dev/null 2>&1; then
-    echo "self-test: frontmatter-template-lint pointer-only pass: ok"
-  else
-    echo "self-test: frontmatter-template-lint pointer-only pass: FAIL" >&2; exit 1
-  fi
-
-  # Negative: zero yaml blocks AND no pointer (a botched dedup that deleted
-  # the frontmatter with no replacement reference) — must be rejected.
-  cat > "$td/stakeholder.md" <<'EOF'
----
-name: stakeholder
-description: dummy
----
-
-## Handoff Protocol
-
-Nothing here — no yaml block, no stage-contracts.md pointer.
-
-### State.json Atomic Merge — REQUIRED before return
-
-placeholder
-EOF
-  if "$0" --frontmatter-template-lint "$td/stakeholder.md" >/dev/null 2>&1; then
-    echo "self-test: frontmatter-template-lint reject no-pointer-no-block: FAIL (should have rejected)" >&2; exit 1
-  else
-    echo "self-test: frontmatter-template-lint reject no-pointer-no-block: ok"
-  fi
-
-  # Filename lint: positive — canonical names
-  mkdir -p "$td/ctx"
-  cat > "$td/ctx/development-0.md" <<'EOF'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "self-test"
-  refs: { plan: planning-0.md#requirements }
----
-## files-changed
-EOF
-  cat > "$td/ctx/testing-0.md" <<'EOF'
----
-handoff:
-  stage: QA
-  verdict: pass
-  summary: "self-test"
-  refs: { dev: development-0.md#files-changed }
----
-## results
-EOF
-  if "$0" --filename-lint "$td/ctx" >/dev/null 2>&1; then
-    echo "self-test: filename-lint pass: ok"
-  else
-    echo "self-test: filename-lint pass: FAIL" >&2; exit 1
-  fi
-
-  # Filename lint: negative — non-canonical name
-  cat > "$td/ctx/arch-0.md" <<'EOF'
----
-handoff:
-  stage: AR
-  verdict: ok
-  summary: "wrong name"
-  refs: { plan: planning-0.md }
----
-## decisions
-EOF
-  if "$0" --filename-lint "$td/ctx" >/dev/null 2>&1; then
-    echo "self-test: filename-lint reject non-canonical: FAIL (should have flagged arch-0.md)" >&2; exit 1
-  else
-    echo "self-test: filename-lint reject non-canonical: ok"
-  fi
-
-  # Agent-section cross-check: a fixture agent mandating an UNLISTED section fails and
-  # names both files; one mandating a listed section passes; a backticked `## X` with no
-  # artifact filename on the line is not matched (the under-match constraint, AD-6).
-  mkdir -p "$td/repo/agents"
-  cat > "$td/repo/agents/developer.md" <<'EOF'
-Write the summary to `development-N.md` under `## totally-unlisted-section` now.
-EOF
-  local sect_out=""
-  sect_out=$("$0" --agent-section-lint "$td/repo" 2>&1) || true
-  if grep -q "totally-unlisted-section" <<< "$sect_out" \
-    && grep -q 'agents/developer.md' <<< "$sect_out" \
-    && grep -q 'cache-lint.sh' <<< "$sect_out"; then
-    echo "self-test: agent-section-lint reject unlisted: ok"
-  else
-    echo "self-test: agent-section-lint reject unlisted: FAIL (unlisted section accepted)" >&2; exit 1
-  fi
-
-  cat > "$td/repo/agents/developer.md" <<'EOF'
-Write the summary to `development-N.md` under `## files-changed`.
-A bare mention of `## another-unlisted` with no artifact filename is not a mandate.
-EOF
-  if "$0" --agent-section-lint "$td/repo" >/dev/null 2>&1; then
-    echo "self-test: agent-section-lint accept listed + under-match: ok"
-  else
-    echo "self-test: agent-section-lint accept listed + under-match: FAIL" >&2; exit 1
-  fi
-
-  # The real tree must satisfy the same invariant — this is the #16 gate DV3 re-runs.
-  if "$0" --agent-section-lint "$SELF_REPO_ROOT" >/dev/null 2>&1; then
-    echo "self-test: agent-section-lint against this repo: ok"
-  else
-    echo "self-test: agent-section-lint against this repo: FAIL" >&2; exit 1
-  fi
-
-  echo "self-test: ALL PASS"
-}
-
 # ---------- main ----------
 case "${1:-}" in
   --anchor-lint) shift; [[ $# -ge 1 ]] || usage; anchor_lint "$1" ;;
@@ -1126,7 +705,23 @@ case "${1:-}" in
   # coordination-0.md and the DV2->DV3 #16 contract name, and without the alias it falls
   # through to the prefix-lint arm and reports "log not found" — a green contract command
   # that ran no test at all.
-  --self-test|--selftest)   self_test ;;
+  --self-test | --selftest)
+    # Sourced HERE, not at the top: the harness is test code the lint path never
+    # runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.`
+    # builtin is a special-builtin error that exits the shell immediately,
+    # bypassing an `if ! . …` guard entirely.
+    SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/cache-lint-selftest.sh"
+    if [ -r "$SELFTEST_LIB_PATH" ]; then
+      # shellcheck source=cache-lint-selftest.sh
+      # shellcheck disable=SC1090
+      . "$SELFTEST_LIB_PATH"
+    else
+      printf >&2 'cache-lint: self-test harness unreachable at %s — plugin install broken\n' \
+        "$SELFTEST_LIB_PATH"
+      exit 2
+    fi
+    self_test
+    ;;
   "") usage ;;
   *) prefix_lint "$1"; exit $? ;;
 esac

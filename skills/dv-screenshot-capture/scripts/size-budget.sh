@@ -23,7 +23,7 @@
 #
 # Minimum shell: Bash 4.x
 
-set -euo pipefail
+set -Eeuo pipefail
 shopt -s inherit_errexit 2> /dev/null || true
 IFS=$'\n\t'
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
@@ -224,29 +224,21 @@ _stat_bytes() {
   stat -f%z "$1" 2> /dev/null || stat -c%s "$1" 2> /dev/null || echo 0
 }
 
-# ---------------------------------------------------------------------------
-# Audit helper
-# ---------------------------------------------------------------------------
+# Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
+# Fails closed: a missing library is a broken install, not a runtime condition.
+_AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'size-budget: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
+# audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
+# the shared appender.
 audit() {
-  local action="$1"
-  local result="$2"
-  local metadata="$3"
-  local ts
-  ts="$(date -u +%FT%TZ)"
-  if command -v jq > /dev/null 2>&1; then
-    jq -nc \
-      --arg ts "$ts" \
-      --arg actor "size-budget" \
-      --arg action "$action" \
-      --arg subject "${WORKTASK_ID}/${SLUG}" \
-      --arg result "$result" \
-      --argjson metadata "$metadata" \
-      '{ts:$ts,actor:$actor,action:$action,subject:$subject,result:$result,metadata:$metadata}' \
-      >> "$AUDIT_LOG"
-  else
-    printf '{"ts":"%s","actor":"size-budget","action":"%s","subject":"%s/%s","result":"%s"}\n' \
-      "$ts" "$action" "$WORKTASK_ID" "$SLUG" "$result" >> "$AUDIT_LOG"
-  fi
+  corpflow_audit_row --file "$AUDIT_LOG" --actor "size-budget" \
+    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------

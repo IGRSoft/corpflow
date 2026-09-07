@@ -78,7 +78,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command — plus actual code changes | git diff non-empty + every `handoff.files_touched` path passes `test -e` (write landed, not chat text) + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command — plus actual code changes | git diff non-empty + `handoff.files_touched` obeys `#files-touched` (post-merge repo-relative, capped at `FILES_TOUCHED_MAX`) + `.context/logs/build-*.log` shows success |
 | **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
 | **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
@@ -171,6 +171,8 @@ Canonical contract for the pipeline's end-of-stage asking logic. Every other fil
 
 Before it hands off, every stage runs one closing pass over its own output and asks what it decided on the user's behalf that the user would rather decide. Each surviving question becomes a typed `open_questions[]` item (§ Item shape).
 
+**Every template that shows `open_questions[]` inherits this rule, including its vocabulary:** an observation with nothing to answer is not a sweep item and goes to `follow-ups` (§ A risk-shaped observation is not a sweep item).
+
 **Mandatory for every stage.** A stage with nothing to ask emits an explicit `open_questions: []` plus a one-line "nothing to elicit" statement under its `## elicitation-sweep` heading — a mandatory H2 anchor in every artifact (`handoff-protocol.md#anchor-allow-list`). Silence is a contract violation, because an omitted sweep and an empty one are otherwise indistinguishable.
 
 #### Agents emit; the orchestrator asks
@@ -184,7 +186,35 @@ Two destinations, selected per item by `blocks_next_stage` — never by stage:
 - **`blocks_next_stage: true`** → answered at **its own stage boundary**, before the next stage is dispatched, because the next stage would otherwise build on a guess. PL's sweep is the long-standing instance of this, answered at the plan gate.
 - **absent or `false`** → accumulates in the ledger and renders at the **FN gate**, grouped by originating stage, in batches of ≤4, immediately *before* the existing approve/reject call (`commands/worktask.md § Step C`; `skills/worktask/SKILL.md` loop step 4.9).
 
-**No new gate is created**, and the FN and plan gates keep their existing firing conditions. A blocking item does add a round-trip at its own boundary — that is the point of the flag, and it is why the flag is set per item rather than per stage.
+**No new gate is created**, and the FN and plan gates keep their existing firing conditions. A blocking item does add a round-trip at its own boundary — that is the point of the flag, and it is why the flag is set per item rather than per stage. *Who* takes it depends on the stage (§ Blocking items are resolved, not asked).
+
+#### Blocking items are resolved, not asked
+
+A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`. Why a tier and not a model, how that tier travels, and where it is clamped: § Resolver Effort Tier.
+
+The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR are recorded rather than prompted already, so there is nothing for a resolver to unblock.
+
+##### What the resolver is given
+
+The stub carries `{id, class, ref, blocks_next_stage}` and nothing else, and § Token budget caps a handoff block at 200 tokens — far too thin to decide on. The resolver gets **paths, not inlined content**, and reads what it needs. Filenames resolve through `handoff-protocol.md #stage-artifact-map`; there is no second mapping.
+
+| Tier | Contents |
+|---|---|
+| in full | the emitting stage's own artifact — it holds the `## elicitation-sweep` body with `options[]`, `recommended` and `rationale` |
+| in full | `planning-N.md` — `## requirements`, `## acceptance-criteria`, `## scope` bound every answer |
+| frontmatter only | every completed stage's artifact — the designed compression form |
+| ledger | `facts.decisions[]`, `facts.verdicts`, and the item's already-`resolved` siblings — prior commitments the answer must not contradict |
+| on demand | `files_touched` from the emitting stage's handoff, and any artifact the item names |
+
+##### What the resolver is given — declaring the full reads
+
+Full reads go in the existing `deep_reads` field (`handoff-protocol.md § Schema — deep_reads`), whose `reason` enum already carries `ambiguous` — a sweep item exists *because* something was ambiguous. **A resolver's `deep_reads` is exempt from the B4 fan-in tripwire**: that signal means "a producing stage's frontmatter is under-informative", and a resolver deep-reads by construction, so counting it turns the tripwire into noise.
+
+##### The escalation guard is untouched
+
+Only `effective_class == "decision"` items reach a resolver, and only after the § Step C.2 raise-only join has run — so an item the orchestrator raises to `escalate` can never arrive. Escalate items stop the run exactly as before. Nothing here widens what runs unattended, which is the invariant `commands/worktask.md § Escalation guard (BINDING)` exists to hold.
+
+This is deliberately a partial remedy. It removes the human round-trip for the blocking items that were only ever a judgement call; it removes none of the ones that were correctly escalated, and it is not a licence to relabel the latter as the former to make a run quieter.
 
 #### Facts are not sweep items
 
@@ -208,6 +238,17 @@ Schemas: `handoff-protocol.md#frontmatter-schema` `$defs/SweepItem` (full) and `
 `summary` is **optional** on the stub and canonical in the artifact body: the render reads the question text from the `ref` anchor, whose existence `handoff-harness.sh` verifies. Optional, not forbidden — the stub is the only accepted item shape, so an optional field needs no discriminator to keep it apart from anything else.
 
 The driver is the **200-token budget on the whole `handoff:` block**, enforced by `handoff-harness.sh` over the extracted frontmatter. It is a property of the block, not of the sweep: on a review stage `key_decisions` dominates, and shortening the stub alone will not bring an over-budget block back under.
+
+#### A risk-shaped observation is not a sweep item
+
+The class enum is exactly `decision | escalate` and stays that way. An observation that records a
+risk without asking anything — no options, nothing to answer, nothing to gate — belongs in the
+artifact's mandatory `follow-ups` anchor, which every development and review artifact already
+carries. **Neither sweep class is a home for it.** Filing one as `escalate` to make it visible is
+the mis-file that once nearly triggered a destructive action against a sibling's live stack; filing
+one as `decision` puts an unanswerable question in front of the gate. If it has options and a
+recommendation, it is a sweep item; if it is something the next run should look at, it is a
+follow-up.
 
 #### A re-emitted stub carries its answer forward
 
@@ -331,6 +372,39 @@ Recording never stops; only prompting does. One behaviour row per carrier, each 
 | `CORPFLOW_NONINTERACTIVE=1` | environment | record, never prompt |
 | headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool |
 
+## Resolver Effort Tier
+
+How the Step C.0a resolver's effort tier is chosen, transported and clamped. Kept out of
+§ Closing Elicitation Sweep deliberately: the sweep obligation is strict from day one and its
+section is linted for any warn-only, opt-in or advisory vocabulary, whereas effort transport is
+genuinely advisory on one of its two surfaces. Two different subjects, two sections.
+
+### Why a tier up, and why the same model
+
+The item exists because the stage could not settle it at its own tier. Re-asking the same agent at the same effort re-runs the reasoning that already declined; one rung up is the cheapest thing that is actually different. The **model is unchanged** — the stage's assignment already reflects the work's difficulty, and swapping it would change two variables to explain one outcome.
+
+Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium < high < xhigh < max`, saturating at `max`. Executable copy — the one every consumer reads — is `skills/worktask/scripts/effort-ladder.sh`; the bats suite asserts the two agree.
+
+### The tier is a request, not a guarantee
+
+`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory
+in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own
+frontmatter tier (`agent-coordination/references/headless-dispatch.md § Translation table — model &
+effort`). The bump is therefore computed and recorded on every path and *applied* on one. Every
+resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
+— the tier only reaches some dispatch surfaces` holds the table.
+
+Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
+deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
+a licence to reach the number another way — substituting a higher-frontmatter agent trades the
+domain expertise answering the question for a field value, which is the wrong direction.
+
+### The tier the model can actually carry
+
+`xhigh` requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather than failing (`model-selection.md § xhigh routing`). A bump that crosses that line on a non-Opus model is therefore **clamped to `high`** and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it has to be enforced in code rather than remembered: nothing in a run would show it if it started happening.
+
+A second silent path is not clampable and must be read from the audit row instead: `xhigh`/`max` requested in a session with thinking turned off is sent as `high`. Resolvers therefore audit `effort_requested` **and** `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
+
 ## Per-Stage Frontmatter Templates
 
 Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)). These are the single source of truth — agents MUST NOT diverge from the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
@@ -411,6 +485,46 @@ handoff:
 
 Prev→this label: `AR→TL` (or `PL→TL` when AR was excluded). Skip-exploration short-circuit applies.
 
+### #files-touched — the changed-file list
+
+Every stage that emits `handoff.files_touched` emits it in **one** shape. Seven of nine budgeted
+stages once failed the token budget on this field alone and each invented its own truncation, so
+the shape is fixed here rather than left to the emitter.
+
+#### Semantics — post-merge repo-relative
+
+A path is written as it will read **after** this work
+merges: relative to the repository root, never to a worktree, and never absolute. During a run the
+file physically lives under the emitting task's `metadata.workspace_path`, so any consumer that
+wants to open it resolves `<workspace_path>/<path>`. That resolution base is the answer to "where
+is this file right now"; the recorded value is the answer to "what did this run change", and the
+two differ for the whole life of a worktree. No script enforces existence today — enforcement waits
+until the convention has run a full pipeline (see the DV artifact's `follow-ups`).
+
+#### Cap — `FILES_TOUCHED_MAX = 10`
+
+Emit the first ten repo-relative paths, then, when the full set
+is larger, exactly one final entry of the literal form `+ <count> more`:
+
+```yaml
+  files_touched:
+    - skills/worktask/scripts/state-patch.sh
+    - skills/worktask/scripts/handoff-harness.sh
+    - "+ 7 more"
+```
+
+Ten paths plus the marker cost 33 proxy tokens of the 200-token discretionary budget. The constant
+lives here and in `handoff-harness.sh`; the budget checker gains no second block extractor and no
+second cap constant, because the list stays inside the discretionary count rather than being
+excluded from it. `handoff-harness.sh --validate-frontmatter` fails a list longer than the cap
+without a marker, a marker that is not last, and more than one marker.
+
+#### The marker obliges the body
+
+**Whenever the marker is present**, the artifact's own changed-files body section carries the FULL
+set and is marked authoritative **in the same edit** — the frontmatter is an excerpt, and an
+excerpt nobody can complete is the ad-hoc truncation this convention replaces.
+
 ### #tpl-dv — Development (developer)
 
 ```yaml
@@ -419,7 +533,7 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
-  files_touched:
+  files_touched:              # see #files-touched
     - path/to/file1.md
     - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA must focus on>"

@@ -37,16 +37,16 @@ mk_no_jq_path() {
 }
 
 # ---------------------------------------------------------------------------
-# T2 — symbol inventory: all 10 required functions defined after one source.
+# T2 — symbol inventory: all 16 required functions defined after one source.
 # ---------------------------------------------------------------------------
-@test "T2: all 14 required symbols are defined after sourcing" {
+@test "T2: all 16 required symbols are defined after sourcing" {
   cd "$WD"
   run bash -c "
     . '$PLUGIN_ROOT/$LIB'
     for f in branch_type_regex branch_is_conventional resolve_goal derive_type \
              derive_ticket slug_body slug_budget slug_is_truncated derive_slug \
              target_branch_name meta_json audit_fn \
-             fn_batch_scope resolve_base_ref; do
+             fn_batch_scope fork_base resolve_base_ref base_ref_source; do
       type -t \"\$f\" > /dev/null 2>&1 || { printf 'MISSING: %s\n' \"\$f\"; exit 1; }
     done
     exit 0
@@ -577,4 +577,224 @@ TABLE
   [ -s "$WD/.context/logs/audit.jsonl" ]
   run jq -r '.action' "$WD/.context/logs/audit.jsonl"
   assert_output "branch_renamed"
+}
+
+# ---------------------------------------------------------------------------
+# fork_base (REQ-T2 / AC-B1..B3). Fork-point EVIDENCE, never a retarget: the
+# helper reports which remote branch HEAD descends from, and callers reconcile.
+# Fixtures are local `refs/remotes/origin/*` refs — the real for-each-ref path,
+# no network.
+# ---------------------------------------------------------------------------
+
+# grandparent(master) -> parent -> HEAD, plus `release` tying with `parent`, and
+# an origin/HEAD symref. Three ahead-counts, one tie, one symbolic pointer.
+_mk_stacked_remote_repo() {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m grandparent
+  git update-ref refs/remotes/origin/master HEAD
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m parent
+  git update-ref refs/remotes/origin/parent HEAD
+  git update-ref refs/remotes/origin/release HEAD
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m head
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/parent
+}
+
+@test "fork_base: returns the nearest ancestor branch and never the symref pointer" {
+  _mk_stacked_remote_repo
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  # `parent` (1 ahead) beats `master` (2). Not `origin`: under %(refname:short)
+  # the origin/HEAD pointer prints as the bare remote name, which a `/HEAD\$`
+  # filter would miss and which no origin/<name> ref resolves.
+  assert_output "parent"
+  refute_output --partial "origin"
+}
+
+@test "fork_base: a tie is broken by the configured base, not by branch order" {
+  _mk_stacked_remote_repo
+  # `parent` and `release` are both 1 ahead; the configured base wins so that
+  # evidence agreeing with intent cannot raise a spurious reconcile item.
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base release"
+  assert_success
+  assert_output "release"
+}
+
+@test "fork_base: no remotes yields the empty string, never a sentinel number" {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; v=\$(fork_base); printf '[%s]' \"\$v\""
+  assert_success
+  assert_output "[]"
+  refute_output --partial "999999"
+}
+
+@test "fork_base: a detached HEAD terminates and names only a containing branch" {
+  _mk_stacked_remote_repo
+  # A branch HEAD does not descend from, to prove it is not named.
+  git checkout -q --orphan sidetrack
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m unrelated
+  git update-ref refs/remotes/origin/sidetrack HEAD
+  git checkout -q master
+  git checkout -q --detach HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  assert_output "parent"
+  refute_output --partial "sidetrack"
+}
+
+@test "fork_base: HEAD's own pushed branch is not its own fork point" {
+  _mk_stacked_remote_repo
+  # The repeat-run topology: FN pushed the work branch, so a remote ref sits exactly on
+  # HEAD. Ranking is ahead-ascending, so at 0 ahead it outranks `parent` unless excluded —
+  # and the same value feeds base-sanity's "closest fork-point candidate" line, which would
+  # then name the branch under test.
+  git checkout -q -b feature/x
+  git update-ref refs/remotes/origin/feature/x HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  assert_output "parent"
+  refute_output --partial "feature/x"
+}
+
+@test "fork_base: another branch sitting on HEAD is not a fork point either" {
+  _mk_stacked_remote_repo
+  # A colleague's copy of the same work. Excluding only the current branch's own ref
+  # would leave this one ranked at 0 ahead and winning.
+  git update-ref refs/remotes/origin/colleague-copy HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  assert_output "parent"
+  refute_output --partial "colleague-copy"
+}
+
+@test "fork_base: a branch descending from HEAD is not a fork point" {
+  _mk_stacked_remote_repo
+  git checkout -q -b ahead-of-head
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m later
+  git update-ref refs/remotes/origin/ahead-of-head HEAD
+  git checkout -q master
+  git reset -q --hard "$(git rev-parse ahead-of-head~1)"
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  refute_output --partial "ahead-of-head"
+}
+
+@test "fork_base: a HEAD equal to its integration branch still resolves to it" {
+  # The exclusion must not swallow the documented topology where HEAD is exactly the
+  # base — 0 ahead, 0 behind — which is how a promotion branch sits.
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/develop HEAD
+  git update-ref refs/remotes/origin/feature/x HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base develop"
+  assert_success
+  assert_output "develop"
+}
+
+# ---------------------------------------------------------------------------
+# resolve_base_ref / base_ref_source (AD-1). The value and the rank that
+# supplied it come from one internal ladder, so both wrappers are asserted
+# together: a source that drifts from its value is the failure this shape
+# exists to make impossible. Ranks 1-4 must read exactly as they did before
+# rank 0 was introduced — that is the load-bearing evidence that rank 0 is
+# evidence and not precedence.
+# ---------------------------------------------------------------------------
+
+_pair() {
+  bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; printf '[%s][%s]' \"\$(resolve_base_ref ${1:-})\" \"\$(base_ref_source ${1:-})\""
+}
+
+@test "resolve_base_ref: rank 1 — FN_BASE_REF wins and reports source env" {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/master HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  jq '.metadata.base_ref="develop"' .context/state.json > s && mv s .context/state.json
+  FN_BASE_REF=release/v2 run _pair
+  assert_success
+  assert_output "[release/v2][env]"
+}
+
+@test "resolve_base_ref: rank 2 — state.json outranks the repository default" {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/master HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  jq '.metadata.base_ref="develop"' .context/state.json > s && mv s .context/state.json
+  run _pair
+  assert_success
+  assert_output "[develop][state]"
+}
+
+@test "resolve_base_ref: rank 4 — origin/HEAD answers when nothing above it does" {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/master HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  run _pair
+  assert_success
+  # Remote-qualified, exactly as before rank 0 existed: `symbolic-ref --short`
+  # prints `origin/master`, and readers resolve both shapes.
+  assert_output "[origin/master][origin_head]"
+}
+
+# Remote branches but no origin/HEAD and no configured base: the one shape in which
+# the fork point can supply a value instead of merely reconciling.
+_mk_ranks_1_4_empty() {
+  cd "$WD"
+  git init -q -b feature/work .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/parent HEAD
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m head
+}
+
+@test "resolve_base_ref: rank 0 fills when the caller opts in" {
+  _mk_ranks_1_4_empty
+  run _pair --with-fork-point
+  assert_success
+  assert_output "[parent][fork_point]"
+}
+
+@test "resolve_base_ref: without --with-fork-point an unresolved base stays empty" {
+  _mk_ranks_1_4_empty
+  # Every consumer other than base-sanity reads empty as "decline, do not guess"
+  # and gates on it; rank 0 must not fill that silence uninvited.
+  run _pair
+  assert_success
+  assert_output "[][unresolved]"
+}
+
+@test "resolve_base_ref: rank 3 — workspace.json outranks the repository default" {
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/master HEAD
+  git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+  # Ranks 1 and 2 empty, so rank 3 answers and rank 4 must not: origin/HEAD
+  # resolves to `master`, a different value, which is what makes the ordering
+  # observable rather than merely asserted.
+  jq 'del(.metadata.base_ref)' .context/state.json > s && mv s .context/state.json
+  printf '{"git":{"base_branch":"develop"}}\n' > workspace.json
+  WORKSPACE_ROOT="$WD" run _pair
+  assert_success
+  assert_output "[develop][workspace]"
+}
+
+# Companion to the attach-visual-evidence and attachments-preseed arms of the same name:
+# audit_fn was the last worktask emitter with no symlink refusal.
+@test "SR: audit_fn refuses a symlinked audit.jsonl, never writes through" {
+  cd "$WD"
+  mkdir -p .context/logs target-dir
+  ln -s "$WD/target-dir/escaped.txt" .context/logs/audit.jsonl
+  printf '%s' '{"version":2,"worktask_id":"wt","run_index":0,"tasks":{}}' > .context/state.json
+  run bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; \
+    STATE_PATH=.context/state.json CONTEXT_DIR=.context audit_fn branch_renamed ok '{}'"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
 }

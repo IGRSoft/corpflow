@@ -38,7 +38,7 @@ set +e
 [ -f "$_LIB" ] && . "$_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 LIB_DEGRADED=0
-command -v corpflow_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
+command -v corpflow_hook_audit_row > /dev/null 2>&1 || LIB_DEGRADED=1
 
 # Same guarded-source idiom for the suppression library. Its absence degrades
 # suppression alone — no classifier arm calls into it, so authority enforcement
@@ -51,6 +51,33 @@ set +e
 # shellcheck source=hooks/lib/dedupe-lib.sh
 [ -f "$_DEDUPE_LIB" ] && . "$_DEDUPE_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
+
+# Remediation prose for the three denial classes lives in references/, not inline: it is
+# operator guidance rather than logic, and every constraint on its wording is recorded beside
+# it. Read on a deny path only, so the allow path stays fork-free. Sections are delimited by
+# `<!-- id -->` markers and joined with single spaces.
+#
+# Degrades, never fails closed: an unreadable document leaves the condition clause alone. A
+# gate that cannot find its help text must still deny — and must not deny harder than it would
+# with the text present.
+_DENY_DOC="$(dirname "$0")/references/test-execution-denials.md"
+
+deny_help() {
+  [ -r "$_DENY_DOC" ] || return 0
+  awk -v id="$1" '
+    $0 == "<!-- " id " -->" { on = 1; next }
+    on && /^<!-- / { exit }
+    on { buf = (buf == "" ? $0 : buf " " $0) }
+    END { gsub(/  +/, " ", buf); sub(/^ +/, "", buf); sub(/ +$/, "", buf); print buf }
+  ' "$_DENY_DOC" 2> /dev/null
+}
+
+# deny_reason <condition-clause> <section-id> -> the clause, plus the section when it loads.
+deny_reason() {
+  local _help
+  _help=$(deny_help "$2")
+  if [ -n "$_help" ]; then printf '%s %s' "$1" "$_help"; else printf '%s' "$1"; fi
+}
 
 # ---------------------------------------------------------------------------
 # RUNNERS — parity counterpart of testing-strategy.md's canonical list;
@@ -129,7 +156,7 @@ strip_assignments() {
 # on the hot path of every classified command.
 # ---------------------------------------------------------------------------
 _gradle_subcmd() {
-  local _rest="$1" _task="" _skipv=0 _found=0 _tok
+  local _rest="$1" _task="" _skipv=0 _tok
   # The task is FOUND, not read from first position: gradle accepts options
   # before tasks (`gradle -p . test`), where a first-token read sees `-p` and
   # lets a full run through as scoped. `-p` values are skipped so a dir named
@@ -153,35 +180,43 @@ _gradle_subcmd() {
     *[Tt]est*) : ;;
     *) return 1 ;;
   esac
-  _rest_effective=""
-  for _tok in $_rest; do
-    if [ "$_found" -eq 0 ] && [ -n "$_task" ] && [ "$_tok" = "$_task" ]; then
-      _found=1; continue
-    fi
-    _rest_effective="$_rest_effective $_tok"
-  done
+  # The task token is dropped from what the caller's selector check sees. rc is
+  # ignored on purpose: a gradle invocation with no task word still classifies,
+  # and _consume_action reports "not found" for it.
+  _consume_action "$_rest" "$_task" || :
   return 0
 }
 
-_xcodebuild_subcmd() {
-  local _rest="$1" _found=0 _tok
-  # xcodebuild puts its ACTION after the options (`xcodebuild -scheme A test`),
-  # so the first-token read used for every other multi-purpose runner sees
-  # `-scheme` and lets a real test run through. Scan every token, word-exact: a
-  # substring match would fire on `-scheme MyTests`, and `build-for-testing`
-  # compiles without running. Residual, accepted: an option value that is
-  # literally `test` reads as the action — a false deny, the safe direction.
+# _consume_action <rest> <word>... -> 0 when one of <word> appears as a WHOLE
+# token in <rest>, with _rest_effective set to <rest> minus that first match.
+# Word-exact by construction: a substring match would fire on `-scheme MyTests`.
+# Return code plus a global, never an echoed value: `x=$(f)` forks, and this is on
+# the hot path of every classified command.
+_consume_action() {
+  local _rest="$1" _found=0 _tok _word
+  shift
   _rest_effective=""
   for _tok in $_rest; do
     if [ "$_found" -eq 0 ]; then
-      case "$_tok" in
-        test|test-without-building) _found=1; continue ;;
-      esac
+      for _word in "$@"; do
+        [ "$_tok" = "$_word" ] && { _found=1; break; }
+      done
+      [ "$_found" -eq 1 ] && continue
     fi
     _rest_effective="$_rest_effective $_tok"
   done
   [ "$_found" -eq 1 ] || return 1
   return 0
+}
+
+_xcodebuild_subcmd() {
+  # xcodebuild puts its ACTION after the options (`xcodebuild -scheme A test`),
+  # so the first-token read used for every other multi-purpose runner sees
+  # `-scheme` and lets a real test run through. `build-for-testing` compiles
+  # without running, so it is not an action here. Residual, accepted: an option
+  # value that is literally `test` reads as the action — a false deny, the safe
+  # direction.
+  _consume_action "$1" test test-without-building
 }
 
 _make_subcmd() {
@@ -200,20 +235,11 @@ _make_subcmd() {
 }
 
 _node_subcmd() {
-  local _rest="$1" _found=0 _tok
   # `node script.js` executes a script, not a test suite; only the built-in
   # runner's `--test` switch makes it test execution. Word-exact, and
   # `--test-name-pattern` alone does NOT qualify — it narrows a run it cannot
   # start, so accepting it would deny ordinary script execution.
-  _rest_effective=""
-  for _tok in $_rest; do
-    if [ "$_found" -eq 0 ] && [ "$_tok" = "--test" ]; then
-      _found=1; continue
-    fi
-    _rest_effective="$_rest_effective $_tok"
-  done
-  [ "$_found" -eq 1 ] || return 1
-  return 0
+  _consume_action "$1" --test
 }
 
 # ---------------------------------------------------------------------------
@@ -628,6 +654,32 @@ classify_segment() {
 # ctx-parameterised stage lookup is shared.
 # ---------------------------------------------------------------------------
 
+# emit_deny <reason> — the PreToolUse deny document, written once. rc 1 when jq
+# could not build it, which every caller must treat as "say nothing and allow":
+# a hook that prints a half-formed document is worse than a hook that abstains.
+emit_deny() {
+  local _doc
+  _doc=$(jq -cn --arg reason "$1" '
+    {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
+  ') || return 1
+  printf '%s\n' "$_doc"
+  return 0
+}
+
+# _ledger_read <ctx> <fallback> -> 0 with _LEDGER_FILE set when the session
+# ledger is readable AND jq is present; otherwise prints <fallback> and returns 1.
+#
+# The fallback stays each caller's argument: "cannot tell" is the empty string for
+# the two authority reads (which must fail open) and the literal `unknown` for the
+# mode read (which is denial text). Unifying them would change what a caller says
+# when the ledger is unreadable.
+_ledger_read() {
+  _LEDGER_FILE="$1/state.json"
+  [ -f "$_LEDGER_FILE" ] && command -v jq > /dev/null 2>&1 && return 0
+  printf '%s' "$2"
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # ledger_settled <ctx> -> "settled" when the ledger positively says NOBODY is
 # acting: state.json parses, .tasks is a non-empty object, zero in_progress.
@@ -640,9 +692,8 @@ classify_segment() {
 # ---------------------------------------------------------------------------
 ledger_settled() {
   local _ctx="$1" _state _counts _n_stages _n_active
-  _state="$_ctx/state.json"
-  [ -f "$_state" ] || { printf ''; return; }
-  command -v jq >/dev/null 2>&1 || { printf ''; return; }
+  _ledger_read "$_ctx" '' || return
+  _state="$_LEDGER_FILE"
 
   # Both counts in ONE jq: they read the same file for the same decision, and a
   # second invocation costs more than the comparison it feeds.
@@ -676,11 +727,30 @@ ledger_settled() {
 # the gate permits, so unlike the fail-open classification path its unresolvable
 # direction is the closed one.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# resolved_test_mode <ctx> -> the run's metadata.test_mode, or "unset (resolves
+# to scoped)" when absent, or "unknown" when the ledger cannot be read.
+#
+# Read for the DENIAL TEXT ONLY — never for the decision. Stage authority and
+# test_mode are two independent mechanisms that can each refuse the same command,
+# and a denial naming only one left the caller unable to tell which had fired.
+# ---------------------------------------------------------------------------
+resolved_test_mode() {
+  local _ctx="$1" _state _mode
+  _ledger_read "$_ctx" 'unknown' || return
+  _state="$_LEDGER_FILE"
+  _mode=$(jq -r '.metadata.test_mode // ""' "$_state" 2>/dev/null) || { printf 'unknown'; return; }
+  case "$_mode" in
+    full|scoped|build-only) printf '%s' "$_mode" ;;
+    "") printf 'unset (resolves to scoped)' ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
 ledger_remediation_stage() {
   local _ctx="$1" _state _codes
-  _state="$_ctx/state.json"
-  [ -f "$_state" ] || { printf ''; return; }
-  command -v jq >/dev/null 2>&1 || { printf ''; return; }
+  _ledger_read "$_ctx" '' || return
+  _state="$_LEDGER_FILE"
   _codes=$(jq -r '
     if (.tasks|type=="object")
     then [ .tasks | to_entries[]
@@ -721,7 +791,7 @@ ledger_remediation_stage() {
 # marker only once the tool actually produced a result.
 dedupe_decide() {
   local _ctx="$1" _stage="$2" _class="$3" _inv="$4" _head="$5" _tool="$6" _root="${7:-.}"
-  local _fp _n _key _pkey _prior _sentinel _reason _deny
+  local _fp _n _key _pkey _prior _sentinel _reason
 
   # Suppression library absent, stubbed or truncated: enforce authority, skip
   # suppression. Same fail-open direction as an unresolvable fingerprint.
@@ -756,14 +826,10 @@ dedupe_decide() {
     return 0
   fi
 
-  # Naming the prior run is what makes this actionable: the caller's next move
-  # is to CITE that run, not to find a way around the gate. Reruns after any
-  # edit are automatic, so the env var is framed as the human-only hatch it is.
-  _reason="This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority). To proceed: (1) cite that run as the evidence for this stage — it covers the same tree and the same selection; (2) if you have since changed something, make the edit and re-run — any modification to tracked content re-enables this command automatically, no flag required; or (3) if you need a repeat run of an unchanged tree to investigate a flake, ask a human to restart with CORPFLOW_TEST_DEDUPE=off in the process environment. An agent cannot self-serve that by retrying the command with a prefix, because this hook reads process env rather than the command string."
-  _deny=$(jq -cn --arg reason "$_reason" '
-    {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
-  ') || return 0
-  printf '%s\n' "$_deny"
+  # Naming the prior run is what makes this actionable: the caller's next move is to CITE that
+  # run, not to find a way around the gate. Remediation: references/test-execution-denials.md.
+  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority)." dedupe)
+  emit_deny "$_reason" || return 0
 
   write_audit_row "$_ctx" "test_execution_deduped" \
     "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
@@ -862,8 +928,9 @@ gate_head_tokens() {
 # launcher just skipped so the wrapper's second word is skipped with it.
 #
 # `pnpm` and `yarn` are RUNNERS in their own right and end the search before
-# their second word is read; they are listed anyway so the two lists stay
-# comparable by eye, which is the only thing keeping them in sync.
+# their second word is read, so they need no one-token entry. The two lists are
+# no longer eyeball-synced: test-execution-gate.bats asserts that every launcher
+# the classifier strips is either skipped here or is itself a gateable runner.
 _gate_emit_head() {
   [ -n "$_cur" ] || return 0
   if [ "$_want" -eq 1 ]; then
@@ -960,7 +1027,24 @@ gate_classify_payload() {
       ' 2>/dev/null)
       case "$_skill_cmd" in
         *build-test*--no-test*|*build-test*--count*|*build-test*--dry-run*) return 1 ;;
-        *build-test*) _class="full_test_run" ;;
+        *build-test*)
+          # The Skill branch had NO scoped outcome: every build-test invocation that was
+          # not a declared no-op read as a full run, so a DV stage holding scoped authority
+          # could never invoke the platform build-test command at all. Padded and anchored
+          # so a bare word inside a path cannot match.
+          #
+          # Deliberately WIDER than the Bash branch's run-tests.sh arm, which is not the
+          # same subject: that arm classifies this repo's own suite, whose documented flags
+          # are --changed and --base, while /<plugin>:build-test fans out to xcodebuild,
+          # gradle and friends where --filter and -only-testing: are the scoping flags.
+          # Narrowing this list to match would read a genuinely scoped platform run as a
+          # full one and hand it authority it was not granted.
+          case " $_skill_cmd " in
+            *' --changed '*|*' --base '*|*' --only '*|*' --filter '*|*' -only-testing:'*|*' --tests '*)
+              _class="scoped_test_run" ;;
+            *) _class="full_test_run" ;;
+          esac
+          ;;
         *) return 1 ;;  # deterministic build-test rule only — never a prose scan
       esac
       # Same allow-list as the Bash branch (SR2-M1): the whole skill command can
@@ -987,7 +1071,7 @@ gate_classify_payload() {
 run_gate() {
   local _payload="$1" _ctx="$2"
   local _tool _stage _settled _subagent _prompt _matched _class _cmd_head _ident
-  local _reason _deny _sentinel
+  local _reason _sentinel
 
   # Process-env hatch, checked first: cheapest check, and a control switching
   # off must not be silent. The [ -f ] sentinel notes it once per .context/ so
@@ -1100,33 +1184,15 @@ run_gate() {
     fi
   fi
 
-  # Banned stage (or DV-full): DENY. The relief text is actionable BY AN
-  # AGENT: requests_test_evidence / blocked-escalation are self-serviceable
-  # from inside a stage's own artifact. CORPFLOW_TEST_GATE=off is NOT
-  # agent-serviceable — the hook reads process env, not the command string,
-  # so a retry with a command-string prefix denies identically — so the text
-  # frames it explicitly as a human ask, not a retry an agent can perform.
+  # Banned stage (or DV-full): DENY. Each reason is a condition clause naming what is true
+  # right now, plus the remediation section for its class; the constraints on that wording live
+  # with it in references/test-execution-denials.md.
   if [ -n "$_settled" ]; then
-    # Naming the real condition matters: reusing the per-stage text here would
-    # print "Stage '(none in progress)' has no authority", which reads as a bug
-    # and tells the caller nothing about why now is the wrong time.
-    _reason="No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). Running a suite here gates no decision: the work it would verify is already committed or not yet dispatched, and no verification stage has recorded an open no-go. To proceed: (1) if a stage needs this, dispatch it and let DV (scoped) or QA (full) run it under its own authority, (2) if a verification stage is remediating its own failure, record that stage's verdict as \"no-go\" in the ledger — its authority persists until the verdict flips, so re-opening the stage to lie about its status is never required; or (3) if you want evidence for work already merged, say so and ask a human first. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+    _reason=$(deny_reason "No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority)." settled)
   else
-  # The --no-test remedy is named FIRST and explicitly: it is the one option
-  # that lets the caller get what it usually actually wants (a compile/build
-  # check) without any authority change, and it is spelled identically across
-  # every platform plugin's build-test command. Omitting it cost a real run two
-  # streams: both were denied, neither discovered the flag, both invented
-  # `--build-only` (which no build-test command accepts and the classifier
-  # therefore reads as a full test run), and both then fell back to raw
-  # toolchain calls — precisely what agents/developer.md forbids. A denial that
-  # does not name the supported escape hatch manufactures that workaround.
-  _reason="Stage '$_stage' has no test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority). DV may run scoped tests only; QA is the sole full-suite authority. To proceed: (1) if you only need to BUILD, re-run the same build-test command with --no-test — build-only verification is permitted at every stage and is allowed by this gate (note: --build-only is not a real flag and will be denied again); (2) record requests_test_evidence: <what and why> in this stage's artifact so QA executes it; or (3) return verdict: blocked with error_escalated_to: \"DV\" if it blocks this stage's completion. Do NOT fall back to invoking the toolchain directly — agents/developer.md requires build/test to go through the platform's build-test command. A human operator may disable this gate for a debugging session by restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent cannot self-serve this by retrying the command with a prefix."
+  _reason=$(deny_reason "Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode." authority)
   fi
-  _deny=$(jq -cn --arg reason "$_reason" '
-    {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}
-  ') || return 0
-  printf '%s\n' "$_deny"
+  emit_deny "$_reason" || return 0
 
   write_audit_row "$_ctx" "test_execution_blocked" \
     "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_cmd_head" --arg class "$_class" \
@@ -1182,7 +1248,7 @@ first_runner_token() {
 # committed log file. These rows carry no `subject`, and the appender omits the
 # key entirely rather than emitting an empty one, so the shape is unchanged.
 write_audit_row() {
-  corpflow_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
+  corpflow_hook_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
     --action "${2:-}" --result ok --meta "${3:-}"
 }
 
@@ -1192,6 +1258,7 @@ write_audit_row() {
 # rather than two that can drift apart. `return` outside a sourced file is an
 # error, so the exit is the fallback for a direct invocation.
 # ---------------------------------------------------------------------------
+# shellcheck disable=SC2317 # `return` outside a function fails when executed directly, so the exit IS reached
 case "${1:-}" in
   --lib-only) return 0 2>/dev/null || exit 0 ;;
 esac

@@ -24,21 +24,55 @@ than hiding it.
 
 ## Headline
 
-**Harness 127/156 = 81%. Corrected 77%, 95% CI [65%, 85%].**
+**Harness 127/156 = 81%. TPR 96%, TNR 69% on 12 human negatives. ~~Corrected 77%,
+95% CI [65%, 85%]~~ — withdrawn, see below.**
 
 The raw human figure — 50 of 60 labelled — is **not** a corpus rate and must not be quoted as
 one. The labelled sample is deliberately enriched toward harness-fails; only the
-stratum-weighted correction is comparable to anything.
+stratum-weighted correction is comparable to anything — and this capture no longer has one.
 
 ### Calibration
 
-| | TPR | TNR | corrected |
-|---|--:|--:|--:|
-| dev (42, weighted) | **93%** | **69%** | 82% [72–90] |
-| all 60 labelled (weighted) | 96% | 69% | 77% [65–85] |
-| held-out 18 | 100% | n/a | n/a |
+| | TPR | TNR | human negatives | corrected |
+|---|--:|--:|--:|--:|
+| all 60 labelled | 96% | **69%** | 12 | **withdrawn** |
+| dev subset, 42 | **93%** | **69%** | 12 | **withdrawn** |
+| held-out 18 | 100% | n/a | 0 | n/a |
 
-**TPR clears the 90% target. TNR misses the 80% floor**, and is reported rather than tuned:
+> **Withdrawn 2026-09-05.** Every weighted figure from this capture is retracted; the
+> label-only ones (TPR, TNR, the confusion matrix, every per-case reading below) stand
+> untouched.
+>
+> Two independent reasons, and either alone is sufficient:
+>
+> 1. **The draw and the labels disagree about which stratum each case sits in.**
+>    `request-plan-0.2.0-sample.json` records `dev/pass` 25 and `dev/fail` 17; the exported
+>    labels carry `dev/pass` 30 and `dev/fail` 12. The grade set moved after the draw was
+>    cut, so the sampling fractions divided back out were never the ones taken.
+>    `label-align.py` now detects exactly this and exits 65 rather than printing a rate.
+> 2. **The weighting itself was wrong for every capture.** Strata were derived as
+>    `(split, grader_verdict)` instead of from the draw, so the tranche taken whole was
+>    weighted against the entire `test` split. See `evals/README.md § The weights belong to
+>    the draw`.
+>
+> **Recovery was attempted and is not possible.** Re-cutting the draw needs the grade set
+> the labels were taken under, which needs the stored responses — and they are gone. A
+> sweep of every checkout and worktree on the capture host on 2026-09-05 found exactly one
+> surviving responses directory, `responses-v0.1.0-baseline` (96 records, `skill_version`
+> 0.1.0), which the 0.0.1 reset had already retired. Neither `responses-0.2.0` nor
+> `responses-0.3.0` exists anywhere.
+>
+> So the corrected rate is **withdrawn permanently, not pending**. Nothing short of a fresh
+> ~$164 sweep produces a number here, and that number would measure a different capture.
+> `evals/README.md § The capture surface` said this would happen — *"a grade is reproducible
+> only by paying for the capture again, so record the numbers that matter in the commit or a
+> findings doc rather than assuming the responses will be there"* — and it is the reason
+> `label-align.py` now takes `--p-obs`: the 0.3.0 figures were re-derivable from committed
+> labels plus a recorded rate, and these were not, because the stratum assignment they needed
+> was only ever in the deleted grade set.
+
+**TPR clears the 90% target. TNR misses the 80% floor** on 12 human negatives, and is
+reported rather than tuned:
 the two false passes that hold it down are the already-ships boundary, whose assertion was
 withdrawn at 0.1.0 for 12 firings and 0 true positives. Reinstating it on two cases would fit
 the grader to them.

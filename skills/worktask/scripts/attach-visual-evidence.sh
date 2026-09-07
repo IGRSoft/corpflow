@@ -85,25 +85,39 @@ GH_BIN="${GH_BIN:-gh}"
 DRY_RUN="${DRY_RUN:-0}"
 LOG_DIR="${WORKSPACE_ROOT}/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
-MAX_EMBED=5   # PR/issue embed cap (mirrors capture skill's 5-per-run cap)
+MAX_EMBED="${MAX_EMBED:-5}"   # PR/issue embed cap (mirrors capture skill's 5-per-run cap)
 
 # Source publish-pl-issue.sh for tier logic (library mode — returns before main).
 _LIB="$(dirname "$0")/publish-pl-issue.sh"
 
 # ---------- audit -----------------------------------------------------------
+# Shared ledger reads; the fallback default is an explicit argument, never unified —
+# some call sites probe for absence rather than read a value. `[ -r ]` guard as above.
+_STATE_READ_LIB="$(dirname "$0")/../../shared/lib/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'attach-visual-evidence: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
+# special-builtin error that exits the shell, bypassing an `if !` guard.
+_AUDIT_LIB="$(dirname "$0")/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'attach-visual-evidence: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
 audit_av() {
   # $1=action, $2=result, $3=metadata-json (compact). Never fatal on its own.
-  local action="$1" result="$2" meta="$3"
+  # jq-absent stays a silent no-row rather than the library's degraded row: this
+  # emitter has never written one on a jq-less host and nothing downstream expects it.
   command -v jq >/dev/null 2>&1 || return 0
-  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
-  jq -cn \
-    --arg ts "$(date -u +%FT%TZ)" \
-    --arg actor "orchestrator" \
-    --arg action "$action" \
-    --arg result "$result" \
-    --argjson meta "$meta" \
-    '{ts:$ts, actor:$actor, action:$action, result:$result, metadata:$meta}' \
-    >> "$AUDIT_FILE" 2>/dev/null || true
+  corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
+    --action "$1" --result "$2" --meta "$3"
 }
 
 # ---------- state accessors -------------------------------------------------
@@ -226,8 +240,8 @@ validate_manifest() {
 # ---------- block builder ---------------------------------------------------
 # Build the "## Visual evidence" block from a parsed manifest.
 #   stdout: the block (may be empty)
-#   Globs read: BLOCK_HEADING, BLOCK_MANIFEST_REF (test-only override; callers
-#   deliberately leave it unset so the single path-free default below applies)
+#   Heading arrives as $2. BLOCK_MANIFEST_REF is the one global read here, a
+#   test-only override callers leave unset so the path-free default applies.
 # Hosting decisions go through the sourced select_host_tier/host_one_asset.
 # Returns the chosen host tier via the HOST_TIER global (set by select_host_tier).
 build_block() {
@@ -252,6 +266,10 @@ build_block() {
   # Per-bullet text stays short; the WHY is emitted once below (host_fail_note) so
   # a 5-capture run does not repeat a paragraph five times.
   local HOST_FAIL_HINT="not embeddable; see note below." host_fail=0
+  # The embed cap and a hosting failure are different degradations with different
+  # remedies, and only the second is fixed by a token. Tracked separately so the reason,
+  # the body note and the operator advice can each name the one that actually fired.
+  local cap_hit=0
   local host_fail_note
   case "$(repo_visibility 2>/dev/null || printf '')" in
     PRIVATE|INTERNAL)
@@ -267,6 +285,7 @@ build_block() {
         hostable=$((hostable+1))
         if [ "$embed_count" -ge "$MAX_EMBED" ]; then
           bullets="${bullets}- ${path} — omitted (embed cap ${MAX_EMBED}); see manifest."$'\n'
+          cap_hit=1
           continue
         fi
         # none-tier: never embed an image; list as bullet instead (no broken ![]()).
@@ -312,6 +331,14 @@ EOF
     # Explain the degradation once, in terms an operator can act on.
     printf '\n%s\n' "$host_fail_note"
   fi
+  # State the cap in the body itself. The per-row bullets already said "omitted", but the
+  # summary read as a healthy run: a reader had no way to tell a capped run from one that
+  # captured only what is shown.
+  if [ "$cap_hit" = "1" ]; then
+    # "hosting is healthy" only when no row failed to host; both can fire in one run.
+    printf '\nOnly the first %d capture(s) are embedded inline (embed cap %d). The rest are listed above and on disk at the manifest path%s\n' \
+      "$MAX_EMBED" "$MAX_EMBED" "$([ "$host_fail" = "1" ] && printf '.' || printf '; hosting is healthy.')"
+  fi
   # Manifest reference, deliberately PATH-FREE. Two independent reasons: relative
   # links never resolve in PR/issue bodies (ad7), and the working-folder path is
   # local + gitignored, so it is meaningless to a reviewer. It used to be emitted
@@ -330,7 +357,16 @@ EOF
   # partial loss (e.g. the MAX_EMBED cap silently dropping the 6th capture) is
   # caught too, not just total failure.
   if [ "$hostable" -gt 0 ] && [ "$embed_count" -lt "$hostable" ]; then
-    local reason="${GH_IMAGE_FAIL_REASON:-unknown}" seen
+    # The reason used to come from the hosting probe ALONE, so a capped-but-healthy run
+    # reported a hosting reason (often `unknown`) on a row nothing was wrong with.
+    local reason seen
+    if [ "$cap_hit" = "1" ] && [ "$host_fail" = "1" ]; then
+      reason="embed_cap+${GH_IMAGE_FAIL_REASON:-unknown}"
+    elif [ "$cap_hit" = "1" ]; then
+      reason="embed_cap"
+    else
+      reason="${GH_IMAGE_FAIL_REASON:-unknown}"
+    fi
     if [ "$embed_count" -eq 0 ]; then
       seen="no images"
     else
@@ -338,7 +374,14 @@ EOF
     fi
     printf >&2 'attach-visual-evidence: NOTICE — %d capture(s) on disk, %d embedded (reason=%s).\n' \
       "$hostable" "$embed_count" "$reason"
-    printf >&2 '  Reviewers will see %s. Set GH_SESSION_TOKEN to make tier-0 non-interactive.\n' "$seen"
+    # A token fixes hosting; it does not raise the cap. Telling a capped run to supply one
+    # sends the operator after a credential that changes nothing.
+    if [ "$cap_hit" = "1" ] && [ "$host_fail" != "1" ]; then
+      printf >&2 '  Reviewers will see %s. This is the embed cap (%d), not a hosting failure — the remaining captures are on disk and listed in the body; a session token would not change it.\n' \
+        "$seen" "$MAX_EMBED"
+    else
+      printf >&2 '  Reviewers will see %s. Set GH_SESSION_TOKEN to make tier-0 non-interactive.\n' "$seen"
+    fi
     audit_av visual_evidence_degraded degraded \
       "$(jq -cn --argjson c "$hostable" --argjson e "$embed_count" \
               --arg r "$reason" --arg t "${HOST_TIER:-unknown}" \
@@ -479,7 +522,7 @@ post_issue() {
   local caps; caps=$(printf '%s' "$block" | grep -c '^!\[' || true)
 
   # Gate 4: idempotency — marker already present on the issue → skip.
-  if issue_has_marker "$issue_url" "$marker"; then
+  if pl_issue_has_marker "$issue_url" "$marker"; then
     audit_av "visual_evidence_issue_commented" "skipped" \
       "$(_issue_meta "${caps:-0}" "$_tier" already_published "$issue_url" "$dk")"
     return 0
@@ -508,20 +551,13 @@ _issue_meta() {
     '{worktask_id:$w, run_index:$r, issue_url:$url, captures:$c, host_tier:$t, reason:$reason, dedupe_key:$dk}'
 }
 
-# Return 0 if the issue already carries the marker (idempotency grep).
-issue_has_marker() {
-  local url="$1" marker="$2" body
-  body=$("$GH_BIN" issue view "$url" --json comments --jq '.comments[].body' 2>/dev/null || true)
-  printf '%s' "$body" | grep -qF "$marker"
-}
-
 # ---------- context bootstrap ----------------------------------------------
 load_context() {
   command -v jq >/dev/null 2>&1 || { echo "attach-visual-evidence: jq not found" >&2; exit 1; }
   [ -r "$STATE_FILE" ] || { echo "attach-visual-evidence: state unreadable: $STATE_FILE" >&2; exit 1; }
   jq -e . "$STATE_FILE" >/dev/null 2>&1 || { echo "attach-visual-evidence: state corrupt" >&2; exit 1; }
-  WORKTASK_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_FILE")
-  RUN_INDEX=$(jq -r '.run_index // 0' "$STATE_FILE")
+  WORKTASK_ID=$(corpflow_worktask_id "$STATE_FILE")
+  RUN_INDEX=$(corpflow_run_index "$STATE_FILE")
 }
 
 # ---------- mode: --post completion (AC2) -----------------------------------
@@ -664,7 +700,7 @@ post_completion() {
     dk="$WORKTASK_ID:$RUN_INDEX:completion:$n"
     marker=$(_completion_marker "$n")
     # Gate 2: idempotency — per-issue marker already present → skip.
-    if issue_has_marker "$n" "$marker"; then
+    if pl_issue_has_marker "$n" "$marker"; then
       audit_av "$action" "skipped" "$(_completion_meta "$n" already_published "$dk")"
       continue
     fi
@@ -681,346 +717,22 @@ EOF
   return 0
 }
 
-# ---------- self-test -------------------------------------------------------
-run_self_tests() {
-  local pass=0 fail=0
-  local self="$0"
-
-  _mk_sandbox() { # echoes a fresh sandbox dir with .context/{logs,images/<wid>}
-    local td; td=$(mktemp -d)
-    mkdir -p "$td/.context/logs" "$td/.context/images/wid-test"
-    printf '{"version":1,"worktask_id":"wid-test","run_index":0,"metadata":{"requires_screenshots":true,"github_issue_url":"https://github.com/o/r/issues/9"}}' \
-      > "$td/.context/state.json"
-    printf '%s' "$td"
-  }
-  _manifest_with_captures() { # $1=dir : write a 2-capture manifest + dummy PNGs
-    local d="$1/.context/images/wid-test"
-    cat > "$d/screenshots.md" <<'MD'
-# Screenshots — wid-test
-| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
-|---|------|------|-------|----------|---------|---------|----------|------------|
-| 01 | home | dv-01-home.png | 1000 | apple | apple_adapter | home screen | 2026-01-01T00:00:00Z | — |
-| 02 | diff | dv-02-diff.txt | 0 | all | cli_fallback | tool_missing | 2026-01-01T00:00:00Z | — |
-MD
-    printf 'x' > "$d/dv-01-home.png"
-  }
-  _check() { # $1=label $2=cond(0/1 in $?) -- uses prior exit
-    if [ "$1" = ok ]; then pass=$((pass+1)); else fail=$((fail+1)); fi
-  }
-  _ok()   { echo "attach-visual-evidence: $1 PASS"; pass=$((pass+1)); }
-  _fail() { echo "attach-visual-evidence: $1 FAIL${2:+ — $2}"; fail=$((fail+1)); }
-
-  # GH mock: records calls, simulates `issue view` (marker presence via file) and
-  # `issue comment`. Marker store = $GH_MARKER_DIR/<target> (per-issue). The mock also answers
-  # `pr view` for the completion resolver/summary:
-  #   $GH_PR_BODY    → PR body for keyword scan + title/body fallback
-  #   $GH_PR_REFS    → space-separated issue numbers for closingIssuesReferences
-  #   $GH_PR_TITLE   → PR title (title,body fallback)
-  #   $GH_FAIL_ISSUES→ space-separated issue numbers whose `issue comment` fails
-  _mk_gh() { # $1=dir
-    cat > "$1/bin/gh" <<'MOCK'
-#!/usr/bin/env bash
-# Per-target marker store path. target = the issue ref/number ($3).
-_store() {
-  # Per-issue marker file under $GH_MARKER_DIR. With the dir unset there is no
-  # per-target store, so sink to /dev/null rather than composing /dev/null/<target>,
-  # which is ENOTDIR and would make every read and write in the mock fail.
-  if [ -z "${GH_MARKER_DIR:-}" ]; then
-    printf '/dev/null'
-    return 0
-  fi
-  printf '%s/%s' "$GH_MARKER_DIR" "$(printf '%s' "${1:-_}" | tr '/:' '__')"
-}
-case "$1 $2" in
-  "pr view")
-    # Determine which --json field was asked for.
-    if printf '%s' "$*" | grep -q 'closingIssuesReferences'; then
-      for n in ${GH_PR_REFS:-}; do printf '%s\n' "$n"; done
-    elif printf '%s' "$*" | grep -q 'title,body'; then
-      printf '%s\n\n%s\n' "${GH_PR_TITLE:-}" "${GH_PR_BODY:-}"
-    else
-      # --json body
-      printf '%s\n' "${GH_PR_BODY:-}"
-    fi
-    exit 0 ;;
-  "issue view")
-    # --json comments --jq ... : echo stored comment bodies for this target.
-    s=$(_store "$3"); [ -f "$s" ] && cat "$s"
-    exit 0 ;;
-  "issue comment")
-    # Simulated failure for selected issues (f12).
-    for f in ${GH_FAIL_ISSUES:-}; do [ "$f" = "$3" ] && exit 1; done
-    body=$(cat); s=$(_store "$3"); printf '%s\n' "$body" >> "$s"
-    echo "https://github.com/o/r/issues/$3#comment-1"; exit 0 ;;
-  "auth status") exit 0 ;;
-esac
-exit 0
-MOCK
-    chmod +x "$1/bin/gh"
-  }
-
-  # ---- f1: --emit pr with captures + mock raw tier → hosted URLs, no broken ![]()
-  local d1; d1=$(_mk_sandbox); _manifest_with_captures "$d1"
-  local out1
-  out1=$(STATE_FILE="$d1/.context/state.json" WORKSPACE_ROOT="$d1" \
-         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-         bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$out1" | grep -q '^## Visual evidence' && \
-     printf '%s' "$out1" | grep -q '^!\[dv-01 home screen\](https://raw.githubusercontent.com/' && \
-     ! printf '%s' "$out1" | grep -qE '\]\(\)|\]\(\.context/'; then
-    _ok "f1-emit-pr-hosted"
-  else
-    _fail "f1-emit-pr-hosted" "$(printf '%s' "$out1" | head -8 | tr '\n' '~')"
-  fi
-  # .txt placeholder must be a bullet, never an embed.
-  if printf '%s' "$out1" | grep -q '^- dv-02-diff.txt' && \
-     ! printf '%s' "$out1" | grep -q '!\[.*dv-02-diff.txt'; then
-    _ok "f1-txt-bullet"
-  else
-    _fail "f1-txt-bullet"
-  fi
-  rm -rf "$d1"
-
-  # ---- f2: --emit pr PRIVATE + no gist mock → none-tier note, zero ![](
-  local d2; d2=$(_mk_sandbox); _manifest_with_captures "$d2"
-  local out2
-  out2=$(STATE_FILE="$d2/.context/state.json" WORKSPACE_ROOT="$d2" \
-         ASSET_HOST_MODE=none ASSET_REPO_VISIBILITY=PRIVATE DRY_RUN=1 \
-         bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$out2" | grep -q '^## Visual evidence' && \
-     printf '%s' "$out2" | grep -qi 'inline hosting unavailable' && \
-     ! printf '%s' "$out2" | grep -qE '!\['; then
-    _ok "f2-private-none-tier"
-  else
-    _fail "f2-private-none-tier" "$(printf '%s' "$out2" | head -8 | tr '\n' '~')"
-  fi
-  rm -rf "$d2"
-
-  # ---- f3: --emit pr with skip-rationale manifest → empty stdout + skipped row
-  local d3; d3=$(_mk_sandbox)
-  cat > "$d3/.context/images/wid-test/screenshots.md" <<'MD'
-# Screenshots — wid-test
-
-> Skipped: `metadata.requires_screenshots = false`. Rationale: no UI.
-MD
-  local out3
-  out3=$(STATE_FILE="$d3/.context/state.json" WORKSPACE_ROOT="$d3" \
-         ASSET_HOST_MODE=raw DRY_RUN=1 bash "$self" --emit pr 2>/dev/null)
-  if [ -z "$out3" ] && grep -q '"reason":"no_captures"' "$d3/.context/logs/audit.jsonl" 2>/dev/null; then
-    _ok "f3-skip-manifest-empty"
-  else
-    _fail "f3-skip-manifest-empty" "out='${out3:0:40}'"
-  fi
-  rm -rf "$d3"
-
-  # ---- f4: --post issue first run → one comment + ok row
-  local d4; d4=$(_mk_sandbox); _manifest_with_captures "$d4"
-  mkdir -p "$d4/bin"; _mk_gh "$d4"
-  local mdir4="$d4/markers"; mkdir -p "$mdir4"
-  ( PATH="$d4/bin:$PATH" STATE_FILE="$d4/.context/state.json" WORKSPACE_ROOT="$d4" \
-    GH_BIN=gh GH_MARKER_DIR="$mdir4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-    bash "$self" --post issue >/dev/null 2>&1 )
-  if grep -q '"action":"visual_evidence_issue_commented"' "$d4/.context/logs/audit.jsonl" 2>/dev/null && \
-     grep -q '"result":"ok"' "$d4/.context/logs/audit.jsonl" 2>/dev/null && \
-     grep -rqF "<!-- visual-evidence:wid-test:0 -->" "$mdir4"; then
-    _ok "f4-post-issue-first"
-  else
-    _fail "f4-post-issue-first" "$(tail -1 "$d4/.context/logs/audit.jsonl" 2>/dev/null)"
-  fi
-
-  # ---- f5: --post issue second run, marker present → skipped/already_published
-  ( PATH="$d4/bin:$PATH" STATE_FILE="$d4/.context/state.json" WORKSPACE_ROOT="$d4" \
-    GH_BIN=gh GH_MARKER_DIR="$mdir4" ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-    bash "$self" --post issue >/dev/null 2>&1 )
-  local marker_count; marker_count=$(cat "$mdir4"/* 2>/dev/null | grep -cF "<!-- visual-evidence:wid-test:0 -->")
-  if [ "$marker_count" -eq 1 ] && \
-     grep -q '"reason":"already_published"' "$d4/.context/logs/audit.jsonl" 2>/dev/null; then
-    _ok "f5-post-issue-idempotent"
-  else
-    _fail "f5-post-issue-idempotent" "marker_count=$marker_count"
-  fi
-  rm -rf "$d4"
-
-  # ---- f6: --post issue without github_issue_url → deferred/no_issue_url
-  local d6; d6=$(_mk_sandbox); _manifest_with_captures "$d6"
-  # strip the url
-  jq 'del(.metadata.github_issue_url)' "$d6/.context/state.json" > "$d6/.context/state.json.t" \
-    && mv "$d6/.context/state.json.t" "$d6/.context/state.json"
-  mkdir -p "$d6/bin"; _mk_gh "$d6"
-  ( PATH="$d6/bin:$PATH" STATE_FILE="$d6/.context/state.json" WORKSPACE_ROOT="$d6" \
-    GH_BIN=gh ASSET_HOST_MODE=raw DRY_RUN=1 bash "$self" --post issue >/dev/null 2>&1 )
-  if grep -q '"result":"deferred"' "$d6/.context/logs/audit.jsonl" 2>/dev/null && \
-     grep -q '"reason":"no_issue_url"' "$d6/.context/logs/audit.jsonl" 2>/dev/null; then
-    _ok "f6-post-issue-no-url"
-  else
-    _fail "f6-post-issue-no-url" "$(tail -1 "$d6/.context/logs/audit.jsonl" 2>/dev/null)"
-  fi
-  rm -rf "$d6"
-
-  # ---- f7: .txt placeholder + oversize rows → bullets only, zero broken ![](
-  local d7; d7=$(_mk_sandbox)
-  local dd="$d7/.context/images/wid-test"
-  cat > "$dd/screenshots.md" <<'MD'
-# Screenshots — wid-test
-| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
-|---|------|------|-------|----------|---------|---------|----------|------------|
-| 01 | diff | dv-01-diff.txt | 0 | all | cli_fallback | tool_missing | 2026-01-01T00:00:00Z | — |
-
-## Out-of-budget files (link-only)
-
-- oversize/dv-02-big.png: 740000 after quantize, exceeds 500 KB
-MD
-  local out7
-  out7=$(STATE_FILE="$d7/.context/state.json" WORKSPACE_ROOT="$d7" \
-         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-         bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$out7" | grep -q '^- dv-01-diff.txt' && \
-     printf '%s' "$out7" | grep -q '^- oversize/dv-02-big.png' && \
-     ! printf '%s' "$out7" | grep -qE '!\['; then
-    _ok "f7-bullets-no-embed"
-  else
-    _fail "f7-bullets-no-embed" "$(printf '%s' "$out7" | tr '\n' '~')"
-  fi
-  rm -rf "$d7"
-
-  # ---- f8: resolve_related_issues — keyword-only / refs-only / union+dedup ----
-  # Drive the resolver directly via declare -f with a gh mock on PATH. All
-  # offline (GH_PR_BODY / GH_PR_REFS mocks).
-  local d8; d8=$(_mk_sandbox); mkdir -p "$d8/bin"; _mk_gh "$d8"
-  _resolve() { # $1=body $2=refs ; echoes resolver output (sorted unique ints)
-    PATH="$d8/bin:$PATH" GH_BIN=gh GH_PR_BODY="$1" GH_PR_REFS="$2" \
-      WORKTASK_ID=wid-test RUN_INDEX=0 \
-      bash -c '
-        GH_BIN=gh
-        '"$(declare -f resolve_related_issues)"'
-        resolve_related_issues ""
-      '
-  }
-  local r_kw r_refs r_union f8_ok=1
-  r_kw=$(_resolve "Closes #10"$'\n'"Fixes #12" "")
-  [ "$(printf '%s' "$r_kw" | tr '\n' ' ')" = "10 12" ] || f8_ok=0
-  r_refs=$(_resolve "no keywords here" "12 15")
-  [ "$(printf '%s' "$r_refs" | tr '\n' ' ')" = "12 15" ] || f8_ok=0
-  r_union=$(_resolve "Closes #10" "12 10")
-  [ "$(printf '%s' "$r_union" | tr '\n' ' ')" = "10 12" ] || f8_ok=0
-  if [ "$f8_ok" = "1" ]; then
-    _ok "f8-resolve-union-dedup"
-  else
-    _fail "f8-resolve-union-dedup" "kw='$(printf '%s' "$r_kw" | tr '\n' ',')' refs='$(printf '%s' "$r_refs" | tr '\n' ',')' union='$(printf '%s' "$r_union" | tr '\n' ',')'"
-  fi
-  rm -rf "$d8"
-
-  # ---- f9: --post completion first run → one comment per issue + ok rows ----
-  local d9; d9=$(_mk_sandbox); _manifest_with_captures "$d9"
-  mkdir -p "$d9/bin" "$d9/markers"; _mk_gh "$d9"
-  ( PATH="$d9/bin:$PATH" STATE_FILE="$d9/.context/state.json" WORKSPACE_ROOT="$d9" \
-    GH_BIN=gh GH_MARKER_DIR="$d9/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
-    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-    bash "$self" --post completion >/dev/null 2>&1 )
-  local f9_ok=1
-  [ -f "$d9/markers/10" ] && grep -qF "<!-- completion-summary:wid-test:0:10 -->" "$d9/markers/10" || f9_ok=0
-  [ -f "$d9/markers/12" ] && grep -qF "<!-- completion-summary:wid-test:0:12 -->" "$d9/markers/12" || f9_ok=0
-  local ok_rows; ok_rows=$(grep -c '"action":"completion_summary_commented".*"result":"ok"' "$d9/.context/logs/audit.jsonl" 2>/dev/null || echo 0)
-  [ "${ok_rows:-0}" -eq 2 ] || f9_ok=0
-  if [ "$f9_ok" = "1" ]; then
-    _ok "f9-completion-first-run"
-  else
-    _fail "f9-completion-first-run" "ok_rows=$ok_rows $(tail -2 "$d9/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
-  fi
-
-  # ---- f10: --post completion second run → idempotent, no duplicate ----
-  ( PATH="$d9/bin:$PATH" STATE_FILE="$d9/.context/state.json" WORKSPACE_ROOT="$d9" \
-    GH_BIN=gh GH_MARKER_DIR="$d9/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
-    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-    bash "$self" --post completion >/dev/null 2>&1 )
-  local f10_ok=1 m10 m12 already
-  m10=$(grep -cF "<!-- completion-summary:wid-test:0:10 -->" "$d9/markers/10")
-  m12=$(grep -cF "<!-- completion-summary:wid-test:0:12 -->" "$d9/markers/12")
-  [ "$m10" -eq 1 ] && [ "$m12" -eq 1 ] || f10_ok=0   # still exactly one each
-  already=$(grep -c '"reason":"already_published"' "$d9/.context/logs/audit.jsonl" 2>/dev/null || echo 0)
-  [ "${already:-0}" -ge 2 ] || f10_ok=0
-  if [ "$f10_ok" = "1" ]; then
-    _ok "f10-completion-idempotent"
-  else
-    _fail "f10-completion-idempotent" "m10=$m10 m12=$m12 already=$already"
-  fi
-  rm -rf "$d9"
-
-  # ---- f11: requires_screenshots=false → summary-only comment, no image refs ----
-  local d11; d11=$(_mk_sandbox)
-  jq '.metadata.requires_screenshots=false' "$d11/.context/state.json" > "$d11/.context/state.json.t" \
-    && mv "$d11/.context/state.json.t" "$d11/.context/state.json"
-  mkdir -p "$d11/bin" "$d11/markers"; _mk_gh "$d11"
-  ( PATH="$d11/bin:$PATH" STATE_FILE="$d11/.context/state.json" WORKSPACE_ROOT="$d11" \
-    GH_BIN=gh GH_MARKER_DIR="$d11/markers" GH_PR_BODY="Closes #10" GH_PR_REFS="" DRY_RUN=1 \
-    bash "$self" --post completion >/dev/null 2>&1 )
-  local f11_ok=1
-  [ -f "$d11/markers/10" ] || f11_ok=0
-  # Summary present (heading), but NO image embeds and NO hosting note spam.
-  grep -qF "## Worktask completed" "$d11/markers/10" || f11_ok=0
-  grep -qE '!\[' "$d11/markers/10" && f11_ok=0
-  grep -qi 'inline hosting unavailable' "$d11/markers/10" && f11_ok=0
-  grep -qF "## Visual evidence" "$d11/markers/10" && f11_ok=0
-  if [ "$f11_ok" = "1" ]; then
-    _ok "f11-completion-summary-only"
-  else
-    _fail "f11-completion-summary-only" "$(cat "$d11/markers/10" 2>/dev/null | tr '\n' '~')"
-  fi
-  rm -rf "$d11"
-
-  # ---- f12: gh failure on one issue → continue to others, exit 0 ----
-  local d12; d12=$(_mk_sandbox); _manifest_with_captures "$d12"
-  mkdir -p "$d12/bin" "$d12/markers"; _mk_gh "$d12"
-  ( PATH="$d12/bin:$PATH" STATE_FILE="$d12/.context/state.json" WORKSPACE_ROOT="$d12" \
-    GH_BIN=gh GH_MARKER_DIR="$d12/markers" GH_PR_BODY="Closes #10"$'\n'"Fixes #12" GH_PR_REFS="" \
-    GH_FAIL_ISSUES="12" \
-    ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-    bash "$self" --post completion >/dev/null 2>&1 )
-  local f12_rc=$?
-  local f12_ok=1
-  [ "$f12_rc" -eq 0 ] || f12_ok=0                          # non-blocking exit 0
-  [ -f "$d12/markers/10" ] || f12_ok=0                     # issue #10 succeeded
-  grep -q '"issue":10,"reason":"commented"' "$d12/.context/logs/audit.jsonl" 2>/dev/null || f12_ok=0
-  grep -q '"issue":12,"reason":"gh_error"' "$d12/.context/logs/audit.jsonl" 2>/dev/null || f12_ok=0
-  if [ "$f12_ok" = "1" ]; then
-    _ok "f12-completion-gh-failure-continues"
-  else
-    _fail "f12-completion-gh-failure-continues" "rc=$f12_rc $(grep completion_summary "$d12/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
-  fi
-  rm -rf "$d12"
-
-  # ---- f13: --emit pr twice reuses the first emission; --force re-hosts
-  local d13; d13=$(_mk_sandbox); _manifest_with_captures "$d13"
-  local e13a e13b e13c
-  e13a=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
-         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-         bash "$self" --emit pr 2>/dev/null)
-  e13b=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
-         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-         bash "$self" --emit pr 2>/dev/null)
-  e13c=$(STATE_FILE="$d13/.context/state.json" WORKSPACE_ROOT="$d13" \
-         ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-         bash "$self" --emit pr --force 2>/dev/null)
-  local f13_ok=1
-  [ -n "$e13a" ] || f13_ok=0
-  [ "$e13a" = "$e13b" ] || f13_ok=0                                  # same URLs replayed
-  [ "$e13a" = "$e13c" ] || f13_ok=0                                  # --force still emits
-  [ -s "$d13/.context/logs/visual-evidence-pr-wid-test-0.md" ] || f13_ok=0
-  grep -q '"result":"reused"' "$d13/.context/logs/audit.jsonl" 2>/dev/null || f13_ok=0
-  [ "$(grep -c '"result":"reused"' "$d13/.context/logs/audit.jsonl" 2>/dev/null)" = "1" ] || f13_ok=0
-  if [ "$f13_ok" = "1" ]; then
-    _ok "f13-emit-pr-idempotent"
-  else
-    _fail "f13-emit-pr-idempotent" "$(grep visual_evidence_pr_emitted "$d13/.context/logs/audit.jsonl" 2>/dev/null | tr '\n' '~')"
-  fi
-  rm -rf "$d13"
-
-  echo "attach-visual-evidence: self-test summary — pass=$pass fail=$fail"
-  [ "$fail" -eq 0 ]
-}
-
 # ---------- entrypoint ------------------------------------------------------
 if [ "${1:-}" = "--self-test" ]; then
+  # Sourced HERE, not at the top: the harness is test code the production path
+  # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/attach-visual-evidence-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=attach-visual-evidence-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'attach-visual-evidence: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
   run_self_tests || exit 2
   exit 0
 fi

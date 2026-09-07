@@ -36,24 +36,27 @@ AUDIT_LOG="${AUDIT_LOG:-$CONTEXT_DIR/logs/audit.jsonl}"
 # INSIDE the root it is looking for, so walking up from its own location cannot miss a
 # root that exists, and guessing at a cache entry could silently profile a DIFFERENT
 # installed version than the one being edited. Every candidate is validated.
-find_plugin_root() {
-  local candidate
-  for candidate in \
-    "${CLAUDE_PLUGIN_ROOT:-}" \
-    "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd)" \
-    "$PWD"; do
-    [ -n "$candidate" ] || continue
-    if [ -f "$candidate/.claude-plugin/plugin.json" ]; then
-      printf '%s' "$candidate"
-      return 0
-    fi
-  done
-  # Unresolvable: fall back to cwd, which reproduces the previous behaviour rather than
-  # aborting the retrospective. Reported so an empty set is never mistaken for "no edits".
-  printf >&2 'build-context-set: plugin root unresolved — falling back to cwd (%s)\n' "$PWD"
-  printf '%s' "$PWD"
-}
-PLUGIN_ROOT="$(find_plugin_root)"
+_CORPFLOW_BASE="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
+# `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
+# special-builtin error that exits a `set -e` shell immediately, bypassing an
+# `if ! . …; then` guard entirely.
+if [ -r "$_CORPFLOW_BASE" ]; then
+  # shellcheck source=skills/shared/lib/corpflow-base.sh
+  . "$_CORPFLOW_BASE"
+else
+  printf >&2 'build-context-set: corpflow-base.sh unreachable at %s — plugin install broken\n' \
+    "$_CORPFLOW_BASE"
+  exit 3
+fi
+
+# cwd is the last rung and is taken whether or not it validates: aborting the retrospective
+# is worse than profiling the wrong tree. It is only WARNED about when it too lacks the
+# marker, so an empty set is never mistaken for "the user made no edits".
+if ! PLUGIN_ROOT="$(corpflow_plugin_root "${CLAUDE_PLUGIN_ROOT:-}")"; then
+  PLUGIN_ROOT="$PWD"
+  [ -f "$PWD/.claude-plugin/plugin.json" ] \
+    || printf >&2 'build-context-set: plugin root unresolved — falling back to cwd (%s)\n' "$PWD"
+fi
 
 # Collect raw qualified agent / command names into a temp buffer.
 raw="$(mktemp)"
@@ -184,6 +187,14 @@ resolve_script_path() {
 }
 
 if [ -f "$AUDIT_LOG" ] && command -v jq >/dev/null 2>&1; then
+  # The tolerant read below drops malformed rows silently, so a corrupt log looks
+  # identical to one with no matching rows. Name the drops on stderr; stdout keeps
+  # carrying only the path set.
+  _bcs_total=$(grep -c '[^[:space:]]' "$AUDIT_LOG" || true)
+  _bcs_parsed=$(jq -ncR '[ inputs | select(length > 0) | fromjson? | objects ] | length' "$AUDIT_LOG" 2>/dev/null || echo 0)
+  if [ "$_bcs_total" -gt "$_bcs_parsed" ]; then
+    printf >&2 'warn: %s: %d unparseable audit row(s) skipped\n' "$AUDIT_LOG" "$((_bcs_total - _bcs_parsed))"
+  fi
   # `fromjson? | objects` for the same reason branch-name.sh's already_named uses it: a
   # well-formed non-object line parses and then dies on `.metadata`, aborting the scan.
   jq -rs -R '

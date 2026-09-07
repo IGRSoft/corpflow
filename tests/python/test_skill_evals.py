@@ -26,6 +26,22 @@ _TYPES = set(_engine.ASSERTION_TYPES)
 _CASE1_TOKEN = "test-execution-gate rerun after a tree change\n"
 
 
+_gen = load_module(os.path.join(_REPO, "evals", "scripts", "gen-request-plan-cases.py"),
+                   "gen_request_plan_cases")
+
+
+def _echoed_tokens(value: str, prompt: str) -> list:
+    """Words a regex assertion shares with its prompt, read through the eval set.
+
+    Deliberately a second implementation of the generator's lint rather than a call
+    into it: this one starts from the SHIPPED value in evals.json, so it still fires
+    on an assertion hand-edited into the set after generation.
+    """
+    literal = re.sub(r"\\[sbwd]\*?|\[.*?\]|[\\()?+*|^$]", " ", value)
+    return [t for t in literal.lower().split()
+            if len(t) > 5 and re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", prompt)]
+
+
 def _load(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -264,11 +280,25 @@ class EvalSetLint(unittest.TestCase):
                     for value in assertion["values"]:
                         if not isinstance(value, str):
                             continue
-                        literal = re.sub(r"\\[sbwd]\*?|\[.*?\]|[\\()?+*|^$]", " ", value)
-                        for token in (t for t in literal.lower().split() if len(t) > 5):
-                            self.assertNotIn(token, prompt,
-                                             f"{path} case {case['id']} {assertion['id']}: "
-                                             f"'{token}' is echoed from the prompt")
+                        for token in _echoed_tokens(value, prompt):
+                            self.fail(f"{path} case {case['id']} {assertion['id']}: "
+                                      f"'{token}' is echoed from the prompt")
+
+    def test_an_echo_is_a_shared_word_not_a_shared_substring(self):
+        """The paired case the substring form got wrong, in both implementations.
+
+        A token that only sits INSIDE a longer prompt word echoes nothing, and reading
+        it as an echo blocked a refutation pattern from being registered at all. A
+        whole-word echo must still be caught, or the lint stops being one. Written on a
+        synthetic prompt on purpose: a real case prompt quoted here is a corpus leak.
+        """
+        prompt = "shareholder briefings are assembled by hand every quarter."
+        for echoes in (_echoed_tokens, _gen.echoed_tokens):
+            where = echoes.__module__
+            self.assertEqual(echoes(r"(?i)the account holder?", prompt), [],
+                             f"{where}: 'holder' inside 'shareholder' reported as an echo")
+            self.assertTrue(echoes("shareholder", prompt),
+                            f"{where}: whole-word echo went unreported")
 
     def test_every_case_carries_enough_case_specific_assertions(self):
         """Shared assertions re-measure template conformance; only case-specific ones

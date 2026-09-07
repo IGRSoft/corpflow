@@ -248,6 +248,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 ### Validation checks 6–7
 
 6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (it constrains subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
+6a. **Effort tier check**: `metadata.effort ∈ EFFORT_ENUM` (`scripts/effort-ladder.sh`), which `state-patch.sh` enforces at the write. Absent is NOT fatal — Step C.0a skips the stage (`resolver_skipped`/`effort_unstamped`), costing a round-trip rather than the run
 7. **Workspace existence** (megatask per-issue/worktree mode only): `metadata.workspace_path` directory exists and `workspace.json` is readable
 
 ### Validation check 8
@@ -1223,11 +1224,30 @@ was never asked for.
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
 ```typescript
-    // 6.6. After the completed patch lands and BEFORE the next stage is dispatched, render
-    //      this stage's blocking sweep items: facts.open_questions[] entries this stage
-    //      wrote with blocks_next_stage == true and status != "resolved". Usually none, in
-    //      which case 6.6 is a no-op. Procedure: commands/worktask.md § Step C.0 (it reuses
-    //      C.2-C.5 verbatim), audit subject `<CODE><N>` rather than `FN<N>`.
+    // 6.6. After the completed patch lands and BEFORE the next stage is dispatched, deal with
+    //      this stage's blocking sweep items: facts.open_questions[] entries this stage wrote
+    //      with blocks_next_stage == true and status != "resolved". Two passes, in order.
+```
+
+##### Step 6.6a — resolve
+
+```typescript
+    // 6.6a RESOLVE (commands/worktask.md § Step C.0a). Skipped for PL/FN/ST/IR, and when
+    //      decision_gate != "auto". Otherwise run C.2's raise-only join FIRST, then hand the
+    //      surviving effective_class == "decision" items to the emitting stage's OWN agent on
+    //      its OWN model, at effort_for_resolver(metadata.effort, metadata.model) from
+    //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
+    //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
+    //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
+    //      either way, and never swap in a higher-frontmatter agent to make the tier real.
+```
+
+##### Step 6.6b — render the remainder
+
+```typescript
+    // 6.6b RENDER (commands/worktask.md § Step C.0) whatever 6.6a left: every escalate item,
+    //      everything the resolver declined, and every item on the four exception stages. It
+    //      reuses C.2-C.5 verbatim, audit subject `<CODE><N>` rather than `FN<N>`.
     //      Not a gate: the same render, moved earlier for items whose answers the next
     //      stage needs. Bypassed lanes record and never prompt, so nothing can deadlock.
 ```
@@ -1250,6 +1270,7 @@ was never asked for.
 - NEVER skip a status patch (both in_progress and completed)
 - NEVER execute a stage before its `blocked_by` dependencies have settled
 - ALWAYS pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); omitting or mismatching is a violation — never rely on frontmatter inheritance
+- ALWAYS stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
 - `metadata.agent`: always fully-qualified `plugin:agent` (`corpflow:developer`, `apple-developer:ios-developer`)
 - A stage agent failing after 3 retries escalates per the error handling chain
 
@@ -1372,12 +1393,23 @@ with loop step 4.7, which carries the recorded checkpoint forward on re-dispatch
 
 ## Auto-Decision Delegation (decision_gate)
 
-Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (stamped by
-`--auto=[decision]`, or directly per-issue by the `/megatask` batch orchestrator). On `"auto"`,
-PL0's `open_questions[]` are not held for the user: the orchestrator re-dispatches the PM as a
-decision delegate on `model: "fable"` (loop step 5f's capability fallback to `"opus"` applies). The
-carrier bypasses no gate. Canonical procedure: `commands/worktask.md § Step A.4`; precondition:
-§ PRECONDITION CHECK Signal 2b.
+Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (`--auto=[decision]`, or
+per-issue by `/megatask`). Bypasses no gate. Drives **three** delegations:
+
+| Items | Delegate | Procedure |
+|---|---|---|
+| PL0's, at the plan gate | PM on `model: "fable"` (loop step 5f's `"opus"` capability fallback applies) | `commands/worktask.md § Step A.4` |
+| any other stage's **blocking** `decision` items, at that stage's own boundary | that stage's own agent and model, at `effort_for_resolver(metadata.effort, metadata.model)` | `§ Step C.0a`, loop step 6.6a |
+| the non-blocking batch, at the FN gate | same rule as C.0a, grouped by originating stage | `§ Step C.3` |
+
+PL keeps its own delegate because it is an exception stage (`stage-contracts.md § Exceptions — PL,
+FN, ST, IR`) whose boundary *is* the plan gate. Precondition: § PRECONDITION CHECK Signal 2b.
+
+### decision_gate — what none of the three may touch
+
+Escalation-class items reach no delegate — `commands/worktask.md § Escalation guard (BINDING)`.
+Unchanged by the C.0a work, and what keeps `--auto=[decision]` from widening what a run may do
+unattended.
 
 ### Delegate duties
 

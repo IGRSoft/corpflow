@@ -27,21 +27,63 @@ Provenance is tighter than 0.2.0's, which smeared across `86f5aef ×109, fb8020d
 
 ## Headline
 
-**Harness 162/201 = 81%. Corrected 87%, 95% CI [82%, 92%]. TPR 93%, TNR 100%.**
+**Harness 162/201 = 81%. Corrected 86%, 95% CI [82%, 90%]. TPR 93%, TNR 100% on 13
+human negatives.**
 
 60 labels, 59 usable (one deferred). The raw labelled count is not a corpus rate — the
 sample is enriched toward harness failures — so only the weighted correction compares to
 anything.
 
+> **Restated 2026-09-05 after a weighting defect was found in `label-align.py`.** The
+> figures below are recomputed, not the ones this document first carried. The tool derived
+> its strata as `(split, grader_verdict)` rather than from the draw, which put all 18
+> tranche cases in a stratum whose population was the whole 82-case `test` split and
+> weighted each ~4.6x — an extrapolation of a deliberately harder tail across the corpus.
+> `--min-id` also narrowed the labels without narrowing the population or `p_obs`, so the
+> held-out row was a corpus rate corrected by subset-derived TPR/TNR, and `--min-id 168`
+> never isolated the tranche in the first place: batch 5 seeded 12 dev cases in the same
+> id range. `evals/README.md § The weights belong to the draw` records the whole account.
+>
+> **Nothing about the paired A/B, the flip analysis, the contamination scan or the
+> per-dimension tables changes** — those are harness counts and never passed through a
+> weight. What moved is the calibration block, by 1-2 points.
+
 ### Calibration
 
-| | TPR | TNR | corrected |
-|---|--:|--:|--:|
-| all 59 labelled (weighted) | **93%** | **100%** | 87% [82–92] |
-| held-out 17 (`test` ∧ id≥168) | 92% | 100% | 88% [81–88] |
-| — 0.2.0, for comparison | 96% | **69%** | 77% [65–85] |
+Recomputed from the draw's own strata (`dev/pass` 25 of 69, `dev/fail` 17 of 17,
+`test/held-out` 17 of 18 with one deferred):
 
-**TNR clears the 80% floor for the first time**, against 69% at 0.2.0. The reason is
+| | TPR | TNR | human negatives | corrected |
+|---|--:|--:|--:|--:|
+| all 59 labelled (weighted) | **93%** | **100%** | 13 | 86% [82–90] |
+| held-out tranche, 17 | 94% | 100% | **1** | 89% [83–100] |
+| — 0.2.0, for comparison | 96% | **69%** | 12 | *see below* |
+
+Reproduce without repaying for the capture — `--p-obs` supplies the observed rate the
+gitignored responses would otherwise have to:
+
+```sh
+python3 evals/scripts/label-align.py \
+  --labels evals/labels/request-plan-0.3.0-human.jsonl \
+  --sample evals/labels/request-plan-0.3.0-sample.json --p-obs 0.80597
+python3 evals/scripts/label-align.py \
+  --labels evals/labels/request-plan-0.3.0-human.jsonl \
+  --sample evals/labels/request-plan-0.3.0-sample.json \
+  --stratum test/held-out --p-obs 0.83333
+```
+
+**The 0.2.0 comparison row no longer has a corrected rate.** Run against its own draw,
+`label-align.py` now refuses (rc 65): that draw records `dev/pass` 25 and `dev/fail` 17,
+but its labels carry `dev/pass` 30 and `dev/fail` 12 — the grade set moved after the draw
+was cut, so every weight it ever produced divided out a sampling fraction nobody took. Its
+TPR/TNR stand (they need only the labels); its **77% [65–85] does not** and is withdrawn.
+The 69%→100% TNR movement is unaffected, since both are label-only quantities.
+
+Read the held-out row with care regardless of weighting: it rests on **one** human
+negative, and `label-align.py` prints its own sub-20 warning on it.
+
+**TNR clears the 80% floor for the first time** — 100% on 13 human negatives, against
+69% at 0.2.0. The reason is
 categorical, not marginal: **there are zero false passes in this sample.** Every one of the
 six human/harness disagreements runs the other way — the grader failed something the human
 passed. The two false passes that held 0.2.0's TNR down were both the already-ships
@@ -334,9 +376,14 @@ denominators of 20 and 15 and both are inside the flip band; neither is a findin
 
 ### Establishes
 
-The 0.2.0 responses are preserved and re-grade identically, so a paired baseline exists and
-is durable. **TNR is 100% with zero false passes**, clearing the 80% floor 0.2.0 missed at
-69% — the grader errs strict, never lenient. Corrected rate 87% [82–92] on 59 labels.
+The 0.2.0 responses re-graded identically at the time, so the paired baseline was sound when
+this A/B was run. **It is no longer durable, and that claim is retracted:** a sweep of the
+capture host on 2026-09-05 found neither `responses-0.2.0` nor `responses-0.3.0` — the only
+surviving capture is `responses-v0.1.0-baseline`. The paired result stands as recorded and
+can no longer be re-derived from responses; what survives is the committed labels, the draws,
+and the rates written down here. **TNR is 100% with zero false passes** on 13 human negatives, clearing the 80%
+floor 0.2.0 missed at 69% — the grader errs strict, never lenient. Corrected rate
+86% [82–90] on 59 labels, at eval-set **0.3.0**; the shipping spec is 0.4.0 and unmeasured.
 `disputes-the-premise` has a false-negative mode with a named cause, now confirmed by three
 human labels rather than argued. The capture surface was clean: one sha, no dirty tree, zero
 retries, `evals_files=0`.

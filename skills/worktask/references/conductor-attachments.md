@@ -134,6 +134,7 @@ If you have any skill related to creating PRs, invoke it now. Instructions there
 - Self-review the diff with `mcp__conductor__GetWorkspaceDiff` (start `stat: true`, then drill into hot files). Look for: debug prints, commented-out code, hardcoded secrets/keys, unintended large binaries, unrelated formatting churn. If any are found, fix them and add a follow-up commit before continuing — do not push junk.
 - Confirm working tree is clean: `git status --porcelain` should be empty (or only intentional WIP). The worktask reports `<N>` uncommitted changes; reconcile any drift before pushing.
 - The branch was already named once, at the start of planning (`skills/shared/git-conventions.md § Branch Naming`) — nothing renames it here.
+
 ~~~
 
 #### Template part 3b

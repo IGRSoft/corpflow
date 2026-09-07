@@ -106,7 +106,7 @@ unset: three assigned-tree guards read it and each degrades to a silent pass whe
 
 ### Dispatch metadata (optional)
 
-Optional, additive fields — `effort`, `permission_mode`, `add_dirs`, `mcp_config_path`,
+Optional, additive fields — `permission_mode`, `add_dirs`, `mcp_config_path`,
 `plugin_dir_overrides`, `dangerously_skip_permissions`, `settings_path` — each mapping 1:1 to a
 `claude agents run` flag; canonical per-field table (flag, type, in-process honouring, usage):
 `skills/agent-coordination/references/headless-dispatch.md § Translation table`. In-process the
@@ -121,9 +121,18 @@ PL0 SHOULD set `permission_mode: default` on SR/FN tasks under `--secure`/`--ful
 `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. `workspace_path` (always
 stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
 
+#### effort is mandatory, and still advisory as a flag
+
+`effort` left the optional set above when the Step C.0a resolver began reading it
+(`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`). The two axes are
+independent: as a **ledger record** it is required, because the resolver bumps it one rung and a
+per-stage override exists nowhere else; as a **dispatch flag** it stays advisory, since in-process
+`Task()` takes no effort argument. `state-patch.sh` validates it against `EFFORT_ENUM` on
+`--task-create` and `--task-meta`.
+
 ### JSON Schema
 
-Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `error_file`.
+Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `effort`, `error_file`.
 
 ```json
 {
@@ -140,11 +149,24 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "model": {
       "enum": ["opus", "sonnet", "haiku"]
     },
+    "effort": {
+      "enum": ["low", "medium", "high", "xhigh", "max"]
+    },
     "description": {
       "type": "string",
-      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set."
+      "maxLength": 240,
+      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set. Capped: see below."
     },
 ```
+
+#### `description` is capped at 240 chars
+
+Both writers — `--task-create --metadata` and `--task-meta --set` — truncate a longer value with an
+ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation.
+
+The orchestrator's **dispatch-time appends** (test scope, bans, the FN banner) are a different
+thing. They mutate an in-memory copy that is never written back, so they are transient and
+uncapped; capping post-append would silently strip those banners from the prompt that needs them.
 
 #### Schema — run & context properties
 
@@ -227,7 +249,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
         "required": ["stage"]
       },
       "then": {
-        "required": ["stage", "agent", "model", "error_file"]
+        "required": ["stage", "agent", "model", "effort", "error_file"]
       }
     }
   ]

@@ -327,5 +327,24 @@ JSON
   cd "$WD/elsewhere"
   CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  assert_output "hooks/audit-tooluse.sh"
+  # `--partial`, not an exact match: the malformed rows are now also COUNTED on stderr,
+  # which bats merges into $output. The next case asserts that count.
+  assert_output --partial "hooks/audit-tooluse.sh"
+}
+
+@test "R9b: the unparseable rows are COUNTED on stderr, not skipped in silence" {
+  # Tolerant `fromjson?` drops malformed rows, so a corrupt log used to read exactly like a
+  # clean one with no matching rows. stdout still carries only the path set.
+  mk_plugin_root
+  mkdir -p "$WD/ctx/logs"
+  cat > "$WD/ctx/logs/audit.jsonl" <<'JSON'
+not json at all
+123
+{"actor":"hook:audit-tooluse","action":"tool_invoked"}
+JSON
+  cd "$WD/elsewhere"
+  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT" 2>&1
+  assert_success
+  assert_output --partial "2 unparseable audit row(s) skipped"
+  assert_output --partial "hooks/audit-tooluse.sh"
 }

@@ -117,9 +117,13 @@ FIX_PREFIX="${FIXTURES}/skills/audit-dedup-plugin-prefix.jsonl"
   printf '{"actor":"a","action":"x"}\nnot-json-at-all\n{"actor":"b","action":"y"}\n' > "$WD/mixed.jsonl"
   run_script "$SCRIPT" "$WD/mixed.jsonl"
   assert_success
-  # Two valid JSON lines should yield two output rows; the bad line is silently skipped.
-  run jq -rs 'length' <<< "$output"
-  assert_output "2"
+  # The drop is no longer silent: it is counted on stderr, which bats merges into
+  # $output. Assert the count there, and take the JSON row count from stdout alone
+  # so the warning line is not fed to jq.
+  assert_output --partial "1 unparseable row(s) skipped"
+  local rows
+  rows="$(bash "$PLUGIN_ROOT/$SCRIPT" "$WD/mixed.jsonl" 2>/dev/null | jq -rs 'length')"
+  [ "$rows" = "2" ]
 }
 
 # --- self-test smoke (NON-counting) ---------------------------------------

@@ -18,21 +18,29 @@
 set -euo pipefail
 
 # ---------- Plugin root discovery ----------
-find_plugin_root() {
+# Located from $(dirname "$0") like every sibling resolution this script already does.
+# `[ -r ]` first, not a bare `.`: sourcing a missing file with the `.` builtin is a
+# special-builtin error that exits a `set -e` shell immediately, bypassing an
+# `if ! . …; then` guard entirely.
+_CORPFLOW_BASE="$(dirname "$0")/../../shared/lib/corpflow-base.sh"
+if [[ -r "$_CORPFLOW_BASE" ]]; then
+  # shellcheck source=skills/shared/lib/corpflow-base.sh
+  . "$_CORPFLOW_BASE"
+else
+  printf >&2 'hook-install.sh: corpflow-base.sh unreachable at %s — plugin install broken\n' \
+    "$_CORPFLOW_BASE"
+  exit 3
+fi
+
+# The env rung stays at the call sites, deliberately unvalidated: an explicit override
+# must win whether or not the tree it names carries the marker, and the allowlist that
+# pins which files may read the variable can only see it here.
+_plugin_root() {
   if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
     echo "$CLAUDE_PLUGIN_ROOT"
     return 0
   fi
-  local candidate
-  for candidate in \
-    "$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)" \
-    "$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)"; do
-    if [[ -f "$candidate/.claude-plugin/plugin.json" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-  return 1
+  corpflow_plugin_root
 }
 
 # ---------- Check mode ----------
@@ -46,7 +54,18 @@ check_installation() {
   fi
 
   local plugin_root
-  if plugin_root=$(find_plugin_root); then
+  if plugin_root=$(_plugin_root); then
+    # Presence is not currency. The installed copy is a snapshot taken whenever the
+    # installer last ran, so a security fix shipped into hooks/state-merge.sh keeps
+    # running the old code with no signal anywhere until someone compares the bytes.
+    if [[ -e ".claude/hooks/state-merge.sh" && -f "$plugin_root/hooks/state-merge.sh" ]]; then
+      if cmp -s "$plugin_root/hooks/state-merge.sh" ".claude/hooks/state-merge.sh"; then
+        echo "check: installed hook matches $plugin_root/hooks/state-merge.sh ✓"
+      else
+        echo "check: installed hook DIFFERS from $plugin_root/hooks/state-merge.sh — re-run hook-install.sh to refresh" >&2
+        rc=1
+      fi
+    fi
     if grep -q 'state-merge\.sh' "$plugin_root/.claude-plugin/plugin.json" 2>/dev/null; then
       echo "check: plugin.json registers state-merge.sh SubagentStop hook ✓"
     else
@@ -60,10 +79,22 @@ check_installation() {
   return $rc
 }
 
+# True when git tracks <path> and it carries no local modification — i.e. the content about
+# to be overwritten is already recoverable with `git checkout`, so no rescue copy is needed.
+# Every arm is a refusal, never a failure: outside a repo, without git, or on an untracked
+# path the answer is "not recoverable", which keeps the .bak.
+_tracked_and_clean() { # <path>
+  command -v git > /dev/null 2>&1 || return 1
+  git rev-parse --is-inside-work-tree > /dev/null 2>&1 || return 1
+  git ls-files --error-unmatch -- "$1" > /dev/null 2>&1 || return 1
+  git diff --quiet -- "$1" > /dev/null 2>&1 || return 1
+  return 0
+}
+
 # ---------- Install ----------
 install_hook() {
   local plugin_root
-  if ! plugin_root=$(find_plugin_root); then
+  if ! plugin_root=$(_plugin_root); then
     echo "install: ERROR — cannot locate plugin root. Set CLAUDE_PLUGIN_ROOT." >&2
     return 1
   fi
@@ -76,8 +107,25 @@ install_hook() {
     return 1
   fi
 
-  if [[ -x "$dst" ]]; then
+  if [[ -x "$dst" ]] && cmp -s "$src" "$dst"; then
     echo "install: $dst already installed (idempotent — no-op)"
+  elif [[ -x "$dst" ]]; then
+    # Idempotence used to key on existence alone, which made re-running the installer
+    # — the documented remedy for drift — a no-op precisely when it was needed.
+    if _tracked_and_clean "$dst"; then
+      # git already holds the copy being replaced, so a .bak would add nothing and would
+      # add plenty: it lands untracked in the project tree, reaches the PR through FN's
+      # `git add`, and trips DR's "no untracked files" re-entry rule. This is the common
+      # case — the first worktask after a plugin upgrade.
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      echo "install: refreshed stale $dst (previous copy recoverable via git)"
+    else
+      cp "$dst" "$dst.bak"
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      echo "install: refreshed stale $dst (previous copy → $dst.bak)"
+    fi
   else
     mkdir -p .claude/hooks
     # A non-executable $dst is typically a hand-customized copy or a partial write; the
@@ -98,82 +146,26 @@ install_hook() {
   fi
 }
 
-# ---------- Self-test ----------
-self_test() {
-  local self_path
-  self_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-  local td
-  td=$(mktemp -d -t hook-install-XXXXXX)
-  trap "rm -rf '$td'" EXIT
-
-  mkdir -p "$td/plugin/hooks" "$td/plugin/.claude-plugin"
-  cat > "$td/plugin/hooks/state-merge.sh" <<'HOOK'
-#!/usr/bin/env bash
-echo "state-merge stub"
-HOOK
-  chmod +x "$td/plugin/hooks/state-merge.sh"
-
-  cat > "$td/plugin/.claude-plugin/plugin.json" <<'JSON'
-{"name":"test","hooks":{"SubagentStop":[{"hooks":[{"type":"command","command":"state-merge.sh"}]}]}}
-JSON
-
-  local project="$td/project"
-  mkdir -p "$project"
-  cd "$project"
-
-  # Test 1: fresh install
-  CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1
-  if [[ -x ".claude/hooks/state-merge.sh" ]]; then
-    echo "self-test: fresh install: ok"
-  else
-    echo "self-test: fresh install: FAIL" >&2; exit 1
-  fi
-
-  # Test 2: idempotent re-run
-  local out
-  out=$(CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1)
-  if echo "$out" | grep -q "idempotent"; then
-    echo "self-test: idempotent re-run: ok"
-  else
-    echo "self-test: idempotent re-run: FAIL" >&2; exit 1
-  fi
-
-  # Test 3: check mode
-  if CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" --check >/dev/null 2>&1; then
-    echo "self-test: check mode (installed): ok"
-  else
-    echo "self-test: check mode (installed): FAIL" >&2; exit 1
-  fi
-
-  # Test 4: check mode detects missing
-  rm -f .claude/hooks/state-merge.sh
-  if CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" --check >/dev/null 2>&1; then
-    echo "self-test: check mode (missing): FAIL (should have failed)" >&2; exit 1
-  else
-    echo "self-test: check mode (missing): ok"
-  fi
-
-  # Test 5: a non-executable dst is backed up, not silently destroyed
-  if [[ -e ".claude/hooks/state-merge.sh.bak" ]]; then
-    echo "self-test: backup on overwrite: FAIL (fresh install left a stray .bak)" >&2; exit 1
-  fi
-  printf 'CUSTOMIZED\n' > .claude/hooks/state-merge.sh
-  chmod -x .claude/hooks/state-merge.sh
-  CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" >/dev/null 2>&1
-  if [[ -f ".claude/hooks/state-merge.sh.bak" ]] \
-     && [[ "$(cat .claude/hooks/state-merge.sh.bak)" == "CUSTOMIZED" ]]; then
-    echo "self-test: backup on overwrite: ok"
-  else
-    echo "self-test: backup on overwrite: FAIL" >&2; exit 1
-  fi
-
-  echo "self-test: ALL PASS"
-}
-
 # ---------- main ----------
 case "${1:-}" in
   --check)     check_installation ;;
-  --self-test) self_test ;;
+  --self-test)
+    # Sourced HERE, not at the top: the harness is test code the production path
+    # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+    # `.` builtin is a special-builtin error that exits the shell immediately,
+    # bypassing an `if ! . …` guard entirely.
+    SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/hook-install-selftest.sh"
+    if [ -r "$SELFTEST_LIB_PATH" ]; then
+      # shellcheck source=hook-install-selftest.sh
+      # shellcheck disable=SC1090
+      . "$SELFTEST_LIB_PATH"
+    else
+      printf >&2 'hook-install: self-test harness unreachable at %s — plugin install broken\n' \
+        "$SELFTEST_LIB_PATH"
+      exit 2
+    fi
+    self_test
+    ;;
   -h|--help)
     sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
     exit 0

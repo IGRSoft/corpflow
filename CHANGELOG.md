@@ -2,6 +2,353 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.29] — 2026-09-07
+
+Three bodies of work, one still-unreleased version. A pull request opened against a branch the work never forked from
+silently carries every commit of the intervening integration branch: a run whose own ledger
+recorded 27 changed files opened a PR carrying 156 commits and 1008 files into `develop`, and every
+existing finalization check passed — none compared the would-be PR diff against what the run itself
+claims to have changed. Separately, thirteen remediation items from that same run's own findings
+target a narrower theme underneath it: silent failure, writes that land nothing being
+indistinguishable at the call site from writes that landed, and checks that pass vacuously. This
+release adds the PR-diff comparison as a blocking check, surfaces fork-point evidence for
+reconciliation rather than silent retargeting, corrects two documentation claims that made the gap
+look covered, and closes out the remediation items — one of which was refuted on verification, three
+of which shipped amended from how they were originally planned, and one of which was a fail-closed
+false positive introduced by the fix itself and caught before it shipped. Dogfooding the new
+base-sanity check during the remediation work itself turned up two more issues in the check, folded
+in below as follow-ups rather than fixed here. Third: a plugin-wide shell-script simplification pass
+consolidates plugin-root resolution, `.context/logs/audit.jsonl` appending, and `.context/state.json`
+scalar reads behind three small shared libraries, extracts self-test bodies out of production scripts
+into sibling harnesses, and fixes eleven defects found along the way. The honest headline is a shift
+in *where* the code lives, not a bare line-count drop: production-only `.sh` line count fell by 3,448
+(26,132 → 22,684), while harness/self-test files grew by 4,012 (1,949 → 5,961), for a net **+564**
+lines across the corpus (28,081 → 28,645). The library extraction itself is net **+302** lines — it
+reduced the number of *implementations*, not the number of lines.
+
+### Added
+
+- **`fn-preflight base-sanity` — a blocking wrong-base check.** It compares the would-be pull-request
+  diff against the run's own `facts.files_modified` ledger record and fails when the PR is
+  disproportionately larger (`pr_files > ledger_files * 3` **and** `pr_files - ledger_files > 20`);
+  the second clause is a floor that keeps small runs out of the rule. The failure names both counts
+  and the smallest-ahead candidate base, and states that the thresholds are wrong-base heuristics
+  rather than diff-quality rules. It joins the composite `all` run in last position, so a block never
+  suppresses `continuity`'s own `diverged` row. Seven degrade rungs — missing `jq`, no git,
+  unresolved/unresolvable base ref, a guessed base, an unreadable ledger, an unreadable diff — each
+  warn and exit 0, because a check that cannot see its inputs must not block a finalization. Six of
+  the seven also write their own audit token. The `jq`-unavailable rung writes **no** audit row at
+  all — the audit writer reads `worktask_id` and `run_index` through `jq` itself, so on a host
+  without `jq` the row cannot be produced and the printed warning is the only evidence. Do not go
+  looking in `audit.jsonl` for that one.
+- **A documented, audited override.** `FN_BASE_SANITY_OVERRIDE` converts the fail arm into a warning
+  carrying both counts and writes an `override` audit row with the raw value. The check is
+  deliberately blocking, so the escape hatch is explicit and leaves a trace rather than being a
+  `--no-verify` improvised at the moment of frustration.
+- **`fork_base()` and `base_ref_source()` in `branch-lib.sh`.** `fork_base()` ranks remote branches
+  by commit distance from `HEAD` and returns the nearest parent — the branch the work
+  actually forked from, which is not always the branch it is configured to target. It ranks every
+  remote ref, with no containment filter, which is its known ranking defect (gh#364). It returns empty
+  rather than a sentinel on every failure path, so `v=$(fork_base)` cannot kill a `set -e` caller,
+  and it is safe on a detached HEAD and in a repo with no remotes. `base_ref_source()` reports which
+  rank of the resolution ladder produced a base, which is what lets a caller tell a confident answer
+  from a fallback.
+- **`fn-preflight` gains a `staging` check.** Catches unstaged-on-staged content that could
+  otherwise reach a finalization silently. Built to this run's architecture-stage-amended
+  predicate — the set intersection of `git diff --cached --name-only` and `git diff --name-only` —
+  rather than the original plan's bare ` M` match, which would have fired on every normal FN run,
+  since DC's own writes sit unstaged before FN's `git add`.
+- **`hooks/test-execution-gate.sh` gains a `scoped_test_run` arm on the Skill branch.** There was
+  none, so any scoped `build-test` invoked as a Skill was classified `full_test_run` and denied
+  regardless of its own `--only`/`--filter` scoping. The denial message now also names the resolved
+  `test_mode`, rather than leaving the caller to guess what the gate thought it saw.
+- **`state-patch.sh` regains a spill path with real teeth.** The `facts.decisions[]` eviction spill
+  now covers resolved items, warns loudly on failure instead of failing silently, and its trigger is
+  a length comparison against the live clamp rather than a hard-coded `12` that could drift out of
+  sync with the actual bound.
+- **Three shared shell libraries**: `skills/shared/lib/corpflow-base.sh` (`corpflow_script_dir`,
+  `corpflow_plugin_root` — mirrored byte-identically into `hooks/lib/corpflow-base.sh`, pinned by a
+  parity test), `skills/shared/lib/audit-lib.sh` (`corpflow_audit_row`, the one
+  `.context/logs/audit.jsonl` appender for the skills tree), and `skills/shared/lib/state-read-lib.sh`
+  (`corpflow_state_str`/`corpflow_worktask_id`/`corpflow_run_index`, the read side of
+  `.context/state.json`). All three fail closed under `set -e`, none uses `readonly` (bats sources a
+  library twice per process; a second `readonly` assignment is `rc 1` and kills a `set -e` caller),
+  and each opens with an anti-execution guard plus an include guard. Conventions and the source-block
+  idiom: `skills/shared/lib/README.md`.
+- **28 sibling test harnesses**, extracting self-test bodies out of 22 production scripts so a
+  production script no longer carries its own test runner inline.
+- **Step C.0a — a blocking `decision` item is resolved, not asked (#360).** A
+  `blocks_next_stage: true` item of `effective_class == "decision"` used to stop the run for a human
+  at every stage boundary; on the nine non-exception stages it is now handed to **the emitting
+  stage's own agent, on its own model**, dispatched one effort tier up, and the loop continues. Same
+  model by design — the stage assignment already reflects the work's difficulty, so moving it would
+  change two variables to explain one outcome; one rung up is the cheapest thing that is actually
+  different from the reasoning that already declined. Four conditions gate it, all required: the
+  stage is not PL/FN/ST/IR (those keep their own surfacing, and PL's boundary *is* the plan gate),
+  the item still blocks and is unresolved, `effective_class == "decision"` **after** the § Step C.2
+  raise-only join, and `decision_gate == "auto"`. The join running first is the escalation guard: an
+  item the orchestrator raises to `escalate` can never reach a delegate, so nothing here widens what
+  a run may do unattended. One dispatch per boundary over the whole set, never one per item.
+- **`effort-ladder.sh` — the effort ladder and the non-Opus clamp, as one executable copy.**
+  `EFFORT_ENUM`, `effort_rank`, `effort_plus_one` and `effort_for_resolver`, sourced by the Step
+  C.0a tier computation, by `state-patch.sh`'s enum gate, and by both bats suites — the same
+  one-definition-several-consumers reason as `sweep-stub-lib.sh`, since a tier one caller accepts
+  and another rejects is exactly the disagreement it exists to make impossible. The bump saturates
+  at `max` rather than erroring, and is **clamped to `high` on a non-Opus model**: `xhigh` needs
+  Opus 5 or Fable 5, and Sonnet silently downgrades the thinking budget rather than failing, so an
+  unclamped bump would run one or two rungs below what its own audit row claims. No current stage
+  hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it is
+  enforced in code rather than remembered: nothing in a run would show it if it started happening.
+  The ladder is canonical in `model-selection.md § Effort Levels`; the bats suite asserts the two
+  agree, and `matrix.tsv` gains R43/R44 so an edit to either side re-runs it.
+- **`effort_transport` on every resolver audit row.** `metadata.effort` becomes `--effort` on the
+  headless dispatch surface and is **advisory in-process** — `Task()` takes no effort argument — so
+  the row says which surface it got: `dispatch-flag` or `frontmatter-only`. In-process the tier is
+  recorded, not applied, and the resolver still runs. Recorded-not-applied is not a licence to reach
+  the number another way: substituting a higher-frontmatter agent would trade the domain expertise
+  answering the question for a field value. Rows also carry `effort_requested` alongside
+  `effort_resolved`, because `xhigh`/`max` requested in a session with thinking disabled is sent as
+  `high` and no clamp can catch that — the same reason `dispatched_agents[].model_resolved` exists.
+
+### Changed
+
+- **`fn-preflight base-sanity` resolves its base with fork-point fill enabled; every other reader's
+  base resolution is unchanged.** Fork-point fill is opt-in — `resolve_base_ref` consults
+  `fork_base()` only when passed `--with-fork-point`, only after ranks 1–4 have all come back empty,
+  and only to replace the terminal `unresolved` result. `base-sanity` is the sole opt-in caller.
+  Every other reader of the ladder — branch naming, continuity, tree preflight — sees byte-identical
+  output to 4.0.28. The default is deliberately the fail-safe one: extra evidence reaches the check
+  built to reconcile it, and nothing else silently changes which branch it thinks it is working from.
+- **Fork-point disagreement is reconciled at the plan gate, never applied silently.** When PL0's
+  configured base and the detected fork point differ, the run raises a non-blocking sweep item
+  carrying both, for a human to settle. `--auto=[decision]` keeps the configured base. A resolver
+  that retargeted a branch on its own authority would trade a visible wrong base for an invisible one.
+- **The host-declared target branch is now a documented rank in the base-ref resolution order.** It
+  always participated; it was simply absent from the written ladder, so readers of
+  `handoff-protocol.md`, `pl0-procedure.md` and `workspace-modes.md` could not account for a base the
+  code had actually chosen. All three now list the same ranks in the same sequence.
+- **`state-patch.sh --facts` rejects per item, not per payload.** A mixed submission — some valid
+  sweep resolutions alongside some malformed entries — now persists the valid remainder and exits 2,
+  rather than discarding the whole payload because part of it was bad. Structural problems (a
+  non-object payload, an empty object, an unknown key, a non-array value) remain whole-payload
+  refusals; only item-shaped content gets per-item treatment. This was reproduced live against the
+  pre-fix script during this run's own ledger writes before the fix landed.
+- **`metadata.description` is capped at 240 characters on the two ledger write paths**
+  (`--task-create --metadata` and `--task-meta --set`) — truncated with an ellipsis, never rejected,
+  since a refused `--task-create` would break stage creation outright. The cap deliberately does
+  **not** apply to the orchestrator's own dispatch-site description appends: those are transient
+  and never persisted, and capping them would strip the test-scope, ban, and FN banners they carry.
+- **`handoff-harness.sh` gains a reverse sweep-parity arm.** Previously the parity check only caught
+  an id present in an artifact's frontmatter but missing from the ledger; an id sitting in the
+  ledger with no matching artifact stub was invisible. The arm is scoped by **task**, not stage:
+  a split DV (DV0/DV1) shares one `.stage` slice, so a stage-scoped version charged each stream
+  with the other's stubs. An artifact carrying stubs is charged only ledger ids under its own
+  `sw-<TASK_ID>-` prefixes; a stub-less artifact is charged the stage slice only when the ledger
+  holds at most one task of that stage. It also gains a `files_touched` structural
+  cap (`FILES_TOUCHED_MAX = 10`: first ten paths plus one `"+ N more"` marker) and a check that a
+  frontmatter `key_decisions[]` entry does not diverge from its artifact-body counterpart — narrowly
+  scoped to fire only when the two share no significant vocabulary or disagree on a quoted number,
+  since an artifact's frontmatter summary is a paraphrase of its body by design.
+- **`cli-fallback.sh` drops its `.txt` placeholder floor.** A placeholder file that satisfies an
+  existence check proves nothing about whether a capture actually happened; the floor is replaced by
+  loud failure, and downstream consumers (`adhoc-visual-evidence.sh`) now accept only exit 0 plus a
+  non-empty file on disk as evidence of a real capture.
+- **`attach-visual-evidence.sh` reports a distinct `embed_cap` reason.** A cap-truncated evidence set
+  was previously reported as `reason: "ok"`, indistinguishable from an uncapped run. The body's
+  cap note says "hosting is healthy" only when no row failed to host, since both can fire in one
+  run and the reason already reports that as `embed_cap+<host reason>`.
+- **`state-patch.sh` carries a `--facts` partial rejection out of every paired-`--stage` exit.**
+  The idempotent re-completion, absent-ledger, unresolved-artifact and unparseable-stage no-op
+  returns all exited 0 and hid the exit 2 the caller was told to branch on; a rework round takes
+  the idempotent path by design.
+- **Four audit-log readers made tolerant of malformed lines.** `stale-check.sh`,
+  `post-compact-recovery.sh`, `audit-dedup.sh`, and `build-context-set.sh` now skip an unparseable
+  audit row, count it, and warn on stderr, rather than aborting the whole scan on the first bad line.
+- **10 of 11 audit emitters route through `audit-lib.sh`'s single appender**, replacing their own
+  inline `jq -nc` construction with the shared one-writer, one-key-order, symlink-refusing path.
+- **`skills/shared/plugin-root-resolution.md` now names the one resolver that exists.** It previously
+  pointed at three "reference implementations" that were three *different*, disagreeing
+  implementations of the same walk, and measurement during this run found only 4 of 69 scripts in the
+  repository actually followed the rule the doc stated. It now names `corpflow_script_dir()` /
+  `corpflow_plugin_root()` in `corpflow-base.sh` as the single implementation to source.
+- **`prefix_lint` reduced from ~29 subprocess forks per log line to 4** — a 20-line log that took
+  1,139 ms now takes 252 ms.
+- **`publish-pl-issue.sh`'s header shrank from 161 to 58 lines**, moving plugin-root resolution and
+  ledger reads onto the two new shared libraries.
+- **Dead-code shellcheck classes eliminated: 7 → 0.**
+- **`metadata.effort` is mandatory on a non-PL task row, and validated at the write (#360).** It
+  left the optional dispatch-metadata set when Step C.0a began reading it; the two axes are
+  independent, and only one moved. As a **ledger record** it is now required — the resolver bumps
+  it, and a per-stage override exists nowhere else, so agent frontmatter is the wrong fallback: a DV
+  sub-task dispatched at `xhigh` runs at a tier `developer.md`'s `effort: high` never mentions. As a
+  **dispatch flag** it stays advisory, unchanged. `state-patch.sh` checks it against `EFFORT_ENUM`
+  on `--task-create` and `--task-meta` only, so `--task-status`/`--task-block`/`--task-replay` are
+  untouched; the test is `has("effort")` rather than `.effort // empty`, because the alternative
+  operator reads JSON `null` and `false` as absent and a required field must not be erasable through
+  its own gate. An off-ladder value would otherwise surface as a failed resolver dispatch a stage or
+  more later, rather than at the write that introduced it. Absent still passes — older ledgers
+  predate the field, and Step C.0a skips such a row (`resolver_skipped`, `reason:
+  "effort_unstamped"`) rather than guessing a tier, costing a round-trip instead of the run.
+- **`stage-codes.md` gains an `Effort` column on both tables**, primary and support, as the lookup
+  the orchestrator stamps alongside `model`. Still no third copy.
+- **Step C.3 drops the fable-plus-credit-fallback path.** The FN-gate batch now resolves on the same
+  rule as C.0a — each item's own emitting stage's agent and model, grouped by originating stage, one
+  dispatch per group — and the `facts.capabilities.fable_dispatch == "credit_blocked"` branch goes
+  with it. Step A.4 is deliberately **not** folded in: PL is an exception stage whose boundary is the
+  plan gate, where a user is already present under `checkpoint`.
+- **A resolver's `deep_reads` is exempt from the B4 fan-in tripwire.** It deep-reads by construction
+  — the ≤200-token stub cannot carry an `options[]` body — so counting it would fire the signal on
+  every run that resolves anything and make a real one unreadable. The two are told apart by the
+  audit row the reads belong to.
+
+### Fixed
+
+- **`label-align.py` weighted the held-out tranche against a population it was never drawn
+  from.** Strata were re-derived as `(split, grader_verdict)` rather than taken from the draw
+  `sample-for-labelling.py` actually cut (`dev/<verdict>` over the dev split, plus
+  `test/held-out` taken whole). All 18 labelled tranche cases therefore landed in a stratum
+  whose population was the entire 82-case `test` split and carried a weight near 4.6 — an
+  extrapolation of a deliberately harder tail across cases it does not describe, when weighting
+  assumes a random draw within the stratum. Two faults travelled with it: `--min-id` and
+  `--split` narrowed the labels while `population` and `p_obs` were still built from every
+  grade, so the documented "held-out TPR/TNR only" invocation returned corpus weights and the
+  corpus pass rate; and `--min-id` alone never isolated the tranche, because batch 5 seeded 12
+  dev cases in the same id range. `--sample` now takes the populations from the draw and
+  **refuses (rc 65)** when the labels do not sit in the strata it records, `--stratum` selects a
+  tranche exactly, a `defer` counts as drawn but not as sampled so one deferral no longer reads
+  as a frame mismatch, and `--p-obs` supplies the observed rate when the gitignored responses
+  are gone. Six regression tests. **Published numbers restated:** 0.3.0's corrected rate moves
+  87% [82–92] → **86% [82–90]** and its held-out row 88% [81–88] → **89% [83–100]** on one human
+  negative; 0.2.0's corrected rate is **withdrawn** outright, since its draw records `dev/pass`
+  25 / `dev/fail` 17 against labels carrying 30 / 12. Every label-only quantity — TPR, TNR, the
+  confusion matrices, the paired A/B, the flip and contamination analyses — is unaffected, as is
+  the fully-labelled 0.0.1 baseline.
+- **`build-review-page.py`'s label store was scoped by eval-set version but not by skill.**
+  `localStorage` is one partition across all `file://` pages, so the moment a second eval set
+  shared a version the two label stores would have merged with no symptom. The key now derives
+  from the eval set's own `skill_name`, as do the page title and `<h1>`.
+- **`tests/python/test_eval_capture.py` ran 49 of its 129 tests when executed directly.** An
+  `if __name__ == "__main__": unittest.main()` block sat mid-file, so the 14 classes defined
+  below it did not exist yet when the runner collected. `run-tests.sh` uses discovery and was
+  never affected, which is why it went unnoticed. Moved to EOF.
+- **`evals/README.md` described `failure-labels.jsonl` as a corpus rather than a contract.** The
+  file has never been written: Step 5b is an agent step, not a hook, so the 100-row taxonomy gate
+  stands at 0 of 100. Also corrected two skill ids that resolve to nothing
+  (`evals-skills:error-analysis` → `evals:error-discovery`, `evals-skills:validate-evaluator` →
+  `evals:validate-evaluator`) and a version paragraph still claiming the spec pair reads `0.2.0`
+  — both `SKILL.md` and `eval_set_version` are `0.4.0`, while the last capture is `0.3.0`, so no
+  number in the directory describes the shipping skill.
+- **`fn-preflight continuity` claimed a guarantee it does not provide.** Its description implied it
+  would catch a wrong base; it checks that the branch has not diverged from *its recorded* base and
+  cannot discriminate whether that base was right in the first place. The description now says so and
+  names `base-sanity` as the check that does discriminate.
+- **Three stale "Implemented in `fn-preflight.sh`" attributions** for `resolve_base_ref`, which lives
+  in `branch-lib.sh`.
+- **`dv-tree-preflight.sh` no longer claims parity with the canonical ladder.** Its comment now admits
+  the reduced ladder it actually implements.
+- **A round-1 fail-closed false positive, caught mid-run and fixed before shipping.** The first pass
+  at the per-item `--facts` fix rejected an all-empty `--facts` payload as "no valid items" and
+  exited 2, aborting the paired stage patch — exactly the payload shape the closing-sweep contract
+  tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
+  kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
+- **`base-sanity` resolved its base to a stale local `develop` ref rather than its remote-tracking
+  counterpart, found by dogfooding it in this run** (`0bd7df5`). `refs/heads/develop` sat nine commits
+  behind `refs/remotes/origin/develop`, and `HEAD` was exactly equal to `origin/develop`. Against the
+  stale local ref the check reported "a PR against develop would carry 55 files" and blocked; against
+  `origin/develop` the diff is 0 files — the check built to catch a wrong base picked the wrong base
+  ref itself. `resolve_git_ref` now prefers `origin/<base>` over a diverged local ref, covered by AC-4a
+  in `tests/shell/worktask/fn-preflight.bats`. The ladder still knows only the `origin` remote, so a
+  fork workflow whose base tracks a different remote is not yet correct (gh#353).
+- **`cache-lint.sh`'s `extract_stage` failed open, not closed, on a yq failure.** It fell back to an
+  `awk` extraction only when `yq` was *absent*; when `yq` was present but failed on a given input,
+  the function returned whatever `yq` produced rather than falling back, and QA's own run this cycle
+  produced zero anchor coverage from exactly this path. Deferred earlier in this release, then fixed
+  before shipping: the fallback is now keyed on `yq`'s exit code, not its presence.
+
+### Evals: label pipeline repair, batch-6 captures, and 0.4.0 calibration
+
+- **`map-and-filter.sh` half-closed join dropped every hook and script edit from the label pipeline (#359).** `build-context-set.sh` Source 4 resolves audit-log basenames against four shapes: `hooks/`, `hooks/lib/`, `scripts/`, and `skills/*/scripts/`. Rule 1 only emitted `.md` prompt files as targets, making hooks and bundled scripts unmatchable by construction. Every user edit to a hook or helper script died at rule 17 DISCARD. Rule 1 widened to all four shapes, keeping test-file precedence and anti-recursion precedence intact. The fix is caller-scoped; the shared resolver is untouched. `evals/failure-labels.jsonl` received its first 7 rows (from 0 since 4.0.10); `map-and-filter.bats` expanded 9 → 13 tests (all pass).
+
+- **Batch 6 (ids 213–270) and the first calibrated 0.4.0 rates.** The 26-case `adjacent` analysis (see `evals/findings/request-plan-0.4.0.md`) overturned the 0.3.0 reading: zero of batch 5's three labelled adjacent failures are genuine; the confound is the surface pool. Batch 6 was sized 30 buried / 18 adjacent / 10 absent to ground on the measured-genuine-negative pool (`buried`, registry-excluded surfaces) and the enumerated-registry surfaces (`adjacent`; confound repaired). No obvious or refute cases (the first yields no measurement; the second has a known false-negative floor). Corpus grew 201 → 259 (182 plan / 45 clarify / 32 refute). Two byte-identical captures recorded 259 cases each at imputed cost $207.10 and $209.65 (pair total $416.75, under $500 approved). Human labelling of a 60-case draw produced corrected 0.4.0 rates: **85% CI [81%, 91%]** (TPR 92%, **TNR 100% on 18 human negatives**, full-set); held-out **83% CI [70%, 100%]** (TPR 84%, **TNR 100% on 4 human negatives**). The held-out interval reaches 100% because n=4 — that is what four negatives look like. Corrected rates rest on capture #1 verdicts; the 17.1% run-to-run flip rate (below) means the CI covers sampling error only, not run-to-run variance. The 0.4.0 drifted-rule reconciliations (three copies of rule text, each contradicting the others) predicted a handful of affected cases against this noise band, so they were never measurable by a capture pair. **No delta is attributed to them** and the `evals.json` grading entry stands unamended.
+
+- **The run-to-run flip rate is the headline finding.** Two byte-identical captures agree within 0.8 pp in aggregate (78.7% vs. 79.5%) while disagreeing on 44 of 258 paired-complete cases: 21 shifted pass→fail, 23 fail→pass. Flip rate: **17.1%**. This reproduces 0.3.0's 16% on a larger corpus (201 → 258 cases), elevating it from an observation to a property of this eval. Evidence committed as `evals/findings/request-plan-0.4.0-verdicts.jsonl`. With a noise floor this wide, any single capture verdict is roughly a one-in-six coin flip, and no A/B comparison can resolve an effect smaller than roughly 44 cases.
+
+- **Coverage decision for the other 22 invocable skills.** 23 skill directories exist; 22 carry `SKILL.md` and are invocable. All 22 were ranked on whether a case output can be code-checked against an expected value (without human judgement or network requests) and whether the capture surface can produce that output — ranks 9, 15–18 are depressed by capture constraints (no fixtures, no simulator, no transcript replay), not output determinism. Top candidate: `estimation-methodology`, the only skill with an in-repo numeric oracle (`estimate-calc.py` computes expected story points from size and five factor inputs). No second eval set is committed until the failure-taxonomy gate (oracle run + ~100 label rows) has material; no build, schedule, or funding language appears in the coverage decision.
+
+- **Two grader defects repaired, ground truth only — no spec change and no re-capture (#359).** The 60-case labelling pass measured the harness as over-strict and never lenient (18 human failures, all caught, **zero false negatives**), so both repairs subtract failures at no cost in recall. **Mode A:** nine cases carried `expected_outcome: plan` while being refutations of a false premise (78, 79, 104, 191, 216, 220, 225, 226, 252); they are relabelled in `gen-request-plan-cases.py`'s `REFUTED_PREMISE` table, never in `evals.json`, whose case array is regenerated wholesale — the corpus is now 173 plan / 45 clarify / 41 refute and the held-out tranche 17 plan / 2 refute / 4 clarify, with none of its four genuine negatives (229, 231, 241, 262) affected. Registering case 191 first required word-boundarying the generator's echo lint and its sibling in `test_skill_evals.py`: the character strip set ate the `s` of `\s`, turning `holds?` into `hold`, which a bare substring test then found inside *stakeholders*. Measured: exactly one corpus-wide error dropped, none added. **Mode B:** `classify_outcome` no longer lets a question mark below the section quorum decide the verdict — case 43 landed on both sides of it across two captures of the same response shape. The repair is **one-directional** by construction (`plan` may become `clarify`, never the reverse) and pinned by a property test over every stored response; the reverse form was measured and rejected because it read four genuine questions as plans. Across both captures 36 responses change class, **0 pass→fail**. `eval_set_version` stays 0.4.0, the two captures stay comparable, the recorded `eval_set_sha256` on the verdicts file is deliberately left pre-repair, and no corrected rate is republished — post-repair the harness disagrees with none of the 59 graded labels, so the correction collapses to the corpus observed rate and is in-sample only. The published 85% CI [81%, 91%] still reproduces.
+
+- **`label-align.py --min-id` is refused under `--sample` rather than silently mis-weighting (#359).** A draw's populations are per stratum and whole; an id floor cuts inside one, which the drift check then reported as a moved grade set — the wrong diagnosis — and `--allow-stratum-drift` went on to weight a partial stratum by its full population. The flag now exits 64 with a message naming `--stratum` as the selector to use instead. Unchanged on the `--grades` path, where narrowing the population and `p_obs` by the same predicate is the correct behaviour and stays.
+
+All label-derived quantities carry their denominators explicitly. The 85% and 83% rates measure the grader against humans, not a before-after comparison on the 0.4.0 rule changes.
+
+### Known follow-ups
+
+- Three private base-ref ladders remain divergent from the canonical one in `branch-lib.sh` —
+  `dv-tree-preflight.sh` (now documented as reduced, not unified), `attachments-preseed.sh`, and
+  `adhoc-visual-evidence.sh`. The adhoc one diverges further than the other two: its own
+  `resolve_base_ref` falls back through the literals `origin/main`, `origin/master`, `main` and
+  `master`, which is the hardcoded-literal shape the canonical ladder documents as forbidden.
+  Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
+  path and each additional caller changes the cost profile. They are correct for their own callers
+  today; they are a consolidation debt, not a live defect.
+- **`facts.files_modified` under-recorded 15 files this run** — the ledger listed 18 while 33 files
+  were dirty in the working tree. That field is `base-sanity`'s other input; it did not trip the
+  thresholds here (they need both `>3x` and `>20`), but it leaves the check's second input
+  unreliable, and a larger gap on a smaller ledger could.
+- **gh#316 remains open.** The `facts.decisions[]` clamp still evicts an entry with no spill file
+  recorded — reproduced four times during this run's own ledger writes, most recently by the
+  developer-review stage's own write, which evicted three of the architecture decisions its own
+  confirmations rested on. A second spill path was judged out of scope here: it is a new eviction
+  mechanism with no analogue to the existing "resolved-first" rule, and adding it inside the
+  highest-risk edit of this run's sequence was the wrong trade.
+- **The reverse sweep-parity arm may false-fail on a rework round**, accepted as a follow-up rather
+  than fixed this round.
+- **Two seam-dependent spill-failure WARN arms in `state-patch.sh` remain untested.** Reaching either
+  requires the caller's own merge filter to fail inside the spill function while succeeding in the
+  atomic apply, which no external invocation can currently arrange; adding a test-only seam to the
+  ledger's single write chokepoint was judged a larger risk than the untested branches themselves.
+- **The decision-id divergence extractor does not match the `- **id — title.**` bullet form** used
+  by this repository's own architecture artifacts, so it is near-inert against that style today.
+- **Two P3s on the new spill-append regression test**: its stderr assertion matches wording but not
+  the exact unrecorded count, and it relies on `chmod 0444` denying a write, which would not hold on
+  a CI image running as root.
+- **Refuted, for the record: no change was made to the screenshot capture scripts.** They were
+  reported as interpolating malformed JSON into `audit.jsonl`; on inspection they already build
+  every audit row with `jq -nc --argjson`, so there was nothing to fix.
+- **`scan-secrets.sh` exits 133 on a repo-root scan.** Pre-existing, reproduced during this run, not
+  fixed here.
+- **49 mid-body bare `[[ ]]` assertions are vacuous on bash 3.2** (macOS's default shell) but binding
+  on bash 5.2 (CI). They pass silently on a contributor's Mac and only actually assert in CI. Left
+  as-is; a fix needs either a bash-version floor bump or per-assertion conversion, both out of scope
+  here. Tracked as a follow-up alongside the two above.
+- **`cache-lint.sh anchor_lint` does not yet recognize `development-N-<stream>.md` fan-out
+  artifacts.** `hooks/anchor-preflight.sh` already routes the stream form into the lint
+  (`ARTIFACT_RE='...|development-[0-9]+(-[a-z0-9]+)*)\.md$'`), but `anchor_lint` in
+  `skills/worktask/scripts/cache-lint.sh` has no anchor set for it, so every stream artifact with
+  legitimate extra sections (`commits`, `verification`, `deferrals`, `defects-fixed`, `inherited
+  failures`, `sr0-remediation`, etc.) now fails `--anchor-lint`. The fix needs a relaxed rule per
+  `handoff-protocol.md#anchor-allow-list` — required DV anchors plus `elicitation-sweep` stay
+  enforced, extra H2s are allowed — not a full exemption, since the ledger already points at
+  `development-0-<stream>.md#elicitation-sweep` from `sw-DV0-1`, `sw-DV3-1`, and `sw-DV4-1`.
+
+### Notes (shell-script simplification)
+
+- **`development-0.md` and `development-0-defects.md` each carried the same false claim** —
+  "every one of the 25 [workspace-root ladder] sites is classified" — and each is now retracted at
+  its own site rather than only corrected here: five sites (`publish-pl-issue.sh:85,:93,:113`,
+  `attach-visual-evidence.sh:83`, `adhoc-visual-evidence.sh:53`) were never classified. Raised by
+  developer-review as P1-2's sibling finding; left uncorrected through security-review and QA and
+  fixed in this documentation pass.
+- **17 self-test cases dropped** during the harness extraction, each licensed by a mutation test and
+  confirmed still covered by the surviving suite.
+- **11 defects fixed** along the way; six other reported findings were investigated and refuted with
+  evidence rather than fixed: the `state-merge.sh` "committed duplicate" file does not exist (the
+  installed copy is untracked, not committed), the here-doc test-gate hazard does not reproduce, six
+  apparently-unused variables are live via dynamic scope (not dead code), a standalone
+  `manifest-lib`/`selftest-lib` extraction was measured and judged not worth building, and the
+  reported workspace-root call-site count was itself wrong (measured as 21 files / 25 sites, not the
+  originally reported 14).
+
 ## [4.0.28] — 2026-09-03
 
 Twenty-six fixes from a six-angle code review of `develop 6e09ea8..0dd3d6d`, banded by the priority

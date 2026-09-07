@@ -53,3 +53,11 @@ setup() {
   assert_success
   assert_output --partial "self-test OK"
 }
+
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" --stage DV < "$PAYLOAD"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

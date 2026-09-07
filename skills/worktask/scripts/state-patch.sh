@@ -66,6 +66,12 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+# @arg --ledger-meta  --set <json>            Merge into the ledger's TOP-LEVEL metadata{}.
+#                                             The only op that writes outside tasks{} and
+#                                             facts{}: base_ref, milestone and the other
+#                                             run-wide keys readers resolve from there had
+#                                             no scripted writer, so they were hand-edited
+#                                             into state.json around this script.
 # @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
 #                                             stage loop dispatches it again.  Clears
 #                                             metadata.retry_count, metadata.error_escalated_to
@@ -87,10 +93,16 @@
 # @arg --self-test          Run the built-in self-test and exit.
 # @arg -h | --help          Show this header.
 #
-# @exitcode 0   Patch applied (or already idempotent; or artifact absent / state absent).
+# @exitcode 0   Patch applied (or already idempotent; or artifact absent; or state absent on
+#               every path EXCEPT --facts; or a --facts payload that was legitimately empty).
 # @exitcode 1   Internal error (jq merge failed; use --log to inspect), unsupported ledger
-#               version, or a ledger op rejected for an unknown/malformed task id.
-# @exitcode 2   DISK_MIN_GB hard-halt triggered (caller must remediate before retrying).
+#               version, a ledger op rejected for an unknown/malformed task id, or --facts
+#               with no ledger at --state (that write landed nothing and says so).
+# @exitcode 2   DISK_MIN_GB hard-halt (caller must remediate before retrying), OR a --facts
+#               payload that was refused whole (bad JSON, unknown key, non-array value) with
+#               state.json byte-unchanged, OR a --facts payload that PARTIALLY succeeded: the
+#               valid items were persisted and the rejected ones are named on stderr. Read
+#               stderr to tell them apart — a partial success is the only exit 2 that wrote.
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
 #               An agent patching the artifact it just wrote and finding nothing on disk is a
 #               real failure; every other unresolved case keeps the exit-0 no-op contract.
@@ -120,7 +132,7 @@
 # Minimum shell: bash 3.2+ (macOS default); relies on no bash 4+ features so the
 # SubagentStop hook environment on older macOS is fully supported.
 
-set -euo pipefail
+set -Eeuo pipefail
 IFS=$'\n\t'
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
 
@@ -140,7 +152,14 @@ REPLAY_SIDE_EFFECT_STAGES="FN,RE"
 _LOCK_DIR=""
 _LOCK_HELD=""
 
-# ---------- Usage ----------
+# Set when a --facts payload carried no items at all — the sanctioned empty sweep.
+FACTS_EMPTY_NOOP=0
+
+# Set when --facts dropped at least one item. A partially accepted payload persists its valid
+# remainder AND exits non-zero: every caller branches on exit status, so a silent 0 would hide
+# the rejection from all of them.
+FACTS_REJECTED=0
+
 usage() {
   # Stop at the first non-comment line rather than a hardcoded count: the header block ends
   # where the code begins, and a line count silently truncates help text whenever it grows.
@@ -148,7 +167,6 @@ usage() {
   exit 2
 }
 
-# ---------- Helpers ----------
 log_msg() {
   # log_msg <LEVEL> <message>
   local level="${1:-INFO}" msg="${2:-}"
@@ -216,21 +234,25 @@ resolve_artifact() {
     return 0
   fi
 
-  # 2. Highest-N numbered artifact — sort numerically on trailing -N suffix.
-  #    ls is required here: find output is unordered and we need numeric sort
-  #    on the -N suffix. Artifact basenames are controlled (no special chars).
-  local newest=""
-  # shellcheck disable=SC2012  # ls needed for numeric-sort pipeline on controlled names
+  # 2. Highest-N numbered artifact. A glob walk rather than `ls | sort -n`: it survives a
+  #    filename the shell would word-split, and it costs no forks on a path taken once per
+  #    stage completion.
+  #
   #    The stem must be EXACTLY <base>: the glob alone accepts any trailing -<digits>, so
   #    `qa-notes-3.md` would answer for basename `qa`. Harmless while every basename was a
   #    long canonical word; the short aliases make it reachable.
-  newest=$(ls -1 "${ctx}/${base}-"*.md 2> /dev/null \
-    | grep -E "/${base}-[0-9]+\.md$" \
-    | sed -E 's/.*-([0-9]+)\.md$/\1 &/' \
-    | grep -E '^[0-9]+ ' \
-    | sort -k1,1 -n \
-    | tail -1 \
-    | sed -E 's/^[0-9]+ //')
+  local newest="" newest_n=-1 cand cand_base cand_n
+  for cand in "${ctx}/${base}-"*.md; do
+    [[ -f "$cand" ]] || continue
+    cand_base="${cand##*/}"
+    [[ "$cand_base" =~ ^${base}-([0-9]+)\.md$ ]] || continue
+    # 10# forces base 10: a `-08` suffix is an octal literal to bash arithmetic and aborts.
+    cand_n=$((10#${BASH_REMATCH[1]}))
+    if [[ "$cand_n" -gt "$newest_n" ]]; then
+      newest_n="$cand_n"
+      newest="$cand"
+    fi
+  done
   if [[ -n "$newest" && -f "$newest" ]]; then
     printf '%s' "$newest"
     return 0
@@ -317,33 +339,23 @@ is_valid_prev() {
   [[ -n "$(basename_for_stage "$1")" ]]
 }
 
-# Ledger keys are numbered ids (DV0, DV1); handoff edges stay bare codes (PL→AR).
-# Frontmatter carries only the code, so pick the instance the caller most plausibly means:
-# the one actually running, else the next one queued, else one that is parked — lowest N
-# within each tier, because a split stage is worked in order.  A `completed` instance is
-# never reused and `skipped` is never resurrected: both were settled deliberately.
-# Falls back to the highest existing instance, then to <CODE>0 for a never-seeded stage.
-# Callers must have already established that $STATE_PATH exists.
+# Bare stage CODE → ledger key. Precedence: explicit --task-id, then the artifact match,
+# then the status ladder the jq below spells (lowest N first — a split stage is worked in
+# order). `completed` is never reused and `skipped` never resurrected: both were settled
+# deliberately. Caller must have already established that $STATE_PATH exists.
 #
-# Precedence is explicit id > explicit artifact > the status ladder.  The artifact tier
-# reads ARTIFACT_ARG — what the CALLER passed — never the stage-resolved $ART, which is not
-# assigned until ~1500 lines below this definition and is a basename guess rather than a
-# caller assertion.  A bare `--stage` (hooks/agent-stop.sh passes no artifact) leaves
-# ARTIFACT_ARG empty and falls through to the ladder byte-identically.
+# The artifact tier reads ARTIFACT_ARG — what the CALLER passed — never the stage-resolved
+# $ART, which is a basename guess rather than a caller assertion and is not assigned until
+# ~1100 lines below. Within it the RECORDED `.artifact` beats the PLANNED
+# `.metadata.artifact`: PL0 seeds the planned name and a split stage routinely writes a
+# different file (planned development-0-ledger.md, written development-1.md), so reading
+# metadata first slots the patch by a stale guess — the mis-slotting this resolution exists
+# to prevent. Metadata stays the fallback: it is the only artifact key a stage that has not
+# completed yet carries.
 #
-# Within the artifact tier the RECORDED `.artifact` is consulted before the PLANNED
-# `.metadata.artifact`: PL0 seeds the metadata name from the plan, and a split stage
-# routinely writes a different file than the plan guessed (this run: planned
-# development-0-ledger.md, written development-1.md).  Reading metadata first would slot the
-# patch by the plan's stale guess instead of the file the caller just named — the very
-# mis-slotting this resolution exists to prevent.  Metadata stays as the fallback because it
-# is the only artifact key a stage that has not completed yet carries.
-#
-# Ambiguity inside the winning ladder tier is fatal rather than arbitrary: two `in_progress`
-# instances with nothing to tell them apart means the caller's patch would land on a coin
-# flip.  Ambiguity ACROSS tiers is not — the ladder orders those deliberately, so the
-# ordinary split-stage shape (DV0 in_progress, DV1..DV3 pending) keeps resolving to DV0.
-# Returns 1 on ambiguity, before any lock is taken, leaving state.json untouched.
+# Ambiguity INSIDE the winning tier is fatal rather than arbitrary — two indistinguishable
+# `in_progress` instances would land the patch on a coin flip. Ambiguity ACROSS tiers is not:
+# the ladder orders those deliberately. Returns 1 before any lock is taken.
 resolve_task_id() {
   local code="$1" resolved="" raw base
   if [[ -n "${TASK_ID_ARG:-}" ]]; then
@@ -525,7 +537,10 @@ replay_liveness_payload() {
 replay_audit() {
   local dir="${CONTEXT_DIR:-.context}/logs" ts
   ts=$(date -u +%FT%TZ)
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the write that already landed.
   mkdir -p "$dir" 2> /dev/null || return 0
+  [[ ! -L "$dir/audit.jsonl" ]] || return 0
   jq -c --arg ts "$ts" --arg root "$TASK_OP_ID" --argjson cascade "$REPLAY_CASCADE" '
     (.worktask_id + ":" + (.run_index | tostring)) as $pfx
     | (if $cascade then $pfx + ":" + $root + ":cascade:" + $ts else null end) as $cid
@@ -675,35 +690,27 @@ _STATE_BOUNDS_FILTER='
             + [ .[] | select(.status != "launched") ])[0:6])
        else . end)'
 
-# `stage` and `status` are defaulted, never left null: the FN gate groups unresolved items by
-# stage and treats a missing status as unanswered, so a null in either field renders an item
-# nobody can attribute or act on. `stage` comes from the item's own id (`sw-<TASK_ID>-<n>` is
-# the mandated shape, so the id IS the slot), falling back to the writing stage's code for a
-# legacy id that predates it. Applied to incumbents as well as incoming items, so an array
-# already carrying nulls is backfilled on the next write rather than staying broken forever.
+# `stage` and `status` are defaulted, never left null, on incumbents as well as incoming
+# items: the FN gate groups unresolved items by stage and reads a missing status as
+# unanswered, so a null in either renders an item nobody can attribute or act on. `stage`
+# comes from the item's own id — `sw-<TASK_ID>-<n>` is the mandated shape, so the id IS the
+# slot — falling back to the writing stage's code for a legacy id that predates it.
 #
 # open_questions unions through _union_sweep, not _union_keyed: last-writer-wins would let a
-# re-emitted stub carrying `status: open` destroy an answer already recorded against that id, and
-# since sw-DR0-3 moved sweep answers out of facts.decisions[] that element is the ONLY record of it.
-# `open < resolved` is joined monotonically — a later write may raise, never downgrade — the same
-# lattice shape this feature already ships for `decision < escalate`. The fields are guarded
-# INDEPENDENTLY: an incoming stub that omits `resolution` inherits the incumbent's even when both
-# sides say `resolved`, because dropping the answer body is a downgrade too, and
-# `blocks_next_stage` is sticky ONLY when the incoming stub re-emits WITHOUT the key, so a rework
-# round that drops it cannot silently demote a boundary-blocking item to an FN-batched one. An
-# explicit `false` is the author speaking and CLEARS the flag: the two cases are distinguished by
-# `has`, never by truthiness, because conflating them made `true` unclearable and turned a
-# bookkeeping divergence into a real gate. `--facts` now requires the key, so the sticky arm covers
-# only legacy payloads written before that. Scoped to
-# open_questions alone: _union_keyed stays untouched for facts.decisions, whose semantics do not
-# change.
+# re-emitted stub carrying `status: open` destroy an answer recorded against that id, and the
+# element is the ONLY record of a sweep answer. `open < resolved` joins monotonically — a
+# later write may raise, never downgrade — and the fields are guarded INDEPENDENTLY, because
+# dropping the answer body is a downgrade too. `blocks_next_stage` is sticky only when the
+# stub re-emits WITHOUT the key, so a rework round that drops it cannot demote a
+# boundary-blocking item; an explicit `false` is the author speaking and CLEARS it. `has`,
+# never truthiness, tells those apart — conflating them made `true` unclearable. Legacy
+# payloads only: `--facts` requires the key. facts.decisions keeps _union_keyed.
 #
-# Union semantics for the facts.* arrays. Object-merge (`. * $patch`) REPLACES arrays, so
-# a downstream stage's patch would silently drop every entry an upstream stage recorded.
-# Identity is `.id` for the keyed arrays and the string itself for the scalar ones.
-# Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps `.[-8:]` — appending
-# is what makes "newest 8 survive" true after a union; sorting (unique_by) would hand the
-# clamp an arbitrary 8. Scalars keep first-seen order: no clamp reads them.
+# Object-merge (`. * $patch`) REPLACES arrays, so without this a downstream patch would drop
+# every entry an upstream stage recorded. Identity is `.id`, or the string itself for the
+# scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps
+# `.[-8:]`: appending is what makes "newest 8 survive" true, where unique_by would hand the
+# clamp an arbitrary 8. Scalars keep first-seen order — no clamp reads them.
 _FACTS_UNION_FILTER='
       def _union_keyed(k):
         reduce .[] as $e ([]; map(select((. | k) != ($e | k))) + [$e]);
@@ -745,74 +752,68 @@ _FACTS_UNION_FILTER='
            then .tests_added = (((.tests_added // []) + $f.tests_added) | _union_scalar)
            else . end))'
 
-# Shape gate for --facts, run BEFORE the lock: a malformed payload is a caller bug, and the
-# union filter would otherwise persist an array no downstream reader can parse.
-# open_questions is held to the FULL sweep stub (.id, .class, .ref, .blocks_next_stage), not just
-# .id: a partial
-# item reaches the FN render with no anchor to resolve its options[] from, and the union would
-# have already replaced the incumbent object that did carry one. decisions stays id-only.
-# The three predicates come from sweep-stub-lib.sh and are passed in as jq arguments, never
-# spliced into the filter text — a spliced regex would make the jq program caller-controlled.
-# Each defect gets its own message: "bad shape" names no cause the caller can act on.
-_FACTS_VALIDATE_FILTER='
+# Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
+# refusal, `clean` carries only the items that passed, `rejects` names each dropped item and
+# why. One bad class value used to discard the entire write — decisions, changed files and
+# every valid sweep stub in the same object — which is how a stage lost work it had done.
+#
+# Structural problems stay whole-payload: a non-object, an empty object, an unknown key, or a
+# key whose value is not an array. In those cases the caller is writing to a slot that does
+# not exist or in a shape nothing can be salvaged from, so no part of it can be trusted to
+# land where it was meant to. Everything item-shaped is per-item.
+#
+# Predicates arrive as jq arguments (never spliced into the program text) for the same reason
+# the shape gate did it: a spliced regex would make the program caller-controlled.
+_FACTS_PARTITION_FILTER='
       def _allowed: ["decisions","files_modified","open_questions","tests_added"];
-      if type != "object" then "must be a JSON object"
-      elif (keys | length) == 0 then "object has no keys"
-      else
-        (keys - _allowed) as $unknown
-        | [ to_entries[]
-            | select(.key == "decisions")
-            | select((.value | type) != "array"
-                     or ((.value | map(select((type != "object")
-                                              or ((.id | type) != "string")))) | length) > 0)
-            | .key ] as $badkeyed
-        | [ to_entries[]
-            | select(.key == "open_questions")
-            | select((.value | type) != "array"
-                     or ((.value | map(select((type != "object")
-                                              or ((.id | type) != "string")
-                                              or ((.class | type) != "string")
-                                              or ((.ref | type) != "string")
-                                              or ((.blocks_next_stage | type) != "boolean")))) | length) > 0)
-            | .key ] as $badstub
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.id | type) == "string") and ((.id | test($idre)) | not))
-            | .id ] as $badid
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.class | type) == "string")
-                     and ((.class as $c | $classes | index($c)) == null))
-            | (.id // "?") ] as $badclass
-        | [ (.open_questions // [])[]
-            | select(type == "object")
-            | select(((.ref | type) == "string") and ((.ref | test($refre)) | not))
-            | (.id // "?") ] as $badref
-        | [ to_entries[]
-            | select(.key == "files_modified" or .key == "tests_added")
-            | select((.value | type) != "array"
-                     or ((.value | map(select(type != "string"))) | length) > 0)
-            | .key ] as $badscalar
-        | if ($unknown | length) > 0
-          then "unknown key(s): " + ($unknown | join(", "))
-               + " (allowed: " + (_allowed | join(", ")) + ")"
-          elif ($badkeyed | length) > 0
-          then "bad shape for " + ($badkeyed | join(", "))
-               + " (expected an array of objects each with a string .id)"
-          elif ($badstub | length) > 0
-          then "bad shape for open_questions (expected an array of sweep stubs, each with string .id, .class and .ref and boolean .blocks_next_stage)"
-          elif ($badid | length) > 0
-          then "open_questions id " + ($badid | join(", ")) + " is not sw-<TASK_ID>-<n>"
-          elif ($badclass | length) > 0
-          then "open_questions " + ($badclass | join(", ")) + " class is not "
-               + ($classes | join("|"))
-          elif ($badref | length) > 0
-          then "open_questions " + ($badref | join(", "))
-               + " ref is not an optional <artifact>.md path plus one non-empty #anchor"
-          elif ($badscalar | length) > 0
-          then "bad shape for " + ($badscalar | join(", "))
-               + " (expected an array of strings)"
-          else "" end
+      def _label: if (type == "object") and ((.id | type) == "string")
+                  then .id else (tojson[0:40]) end;
+      def _oq_bad:
+        if type != "object" then "not an object"
+        elif (.id | type) != "string" then "missing string .id"
+        elif (.class | type) != "string" then "missing string .class"
+        elif (.ref | type) != "string" then "missing string .ref"
+        elif (.blocks_next_stage | type) != "boolean" then "missing boolean .blocks_next_stage"
+        elif ((.id | test($idre)) | not) then "id is not sw-<TASK_ID>-<n>"
+        elif ((.class as $c | $classes | index($c)) == null)
+          then "class is not " + ($classes | join("|"))
+        elif ((.ref | test($refre)) | not)
+          then "ref is not an optional <artifact>.md path plus one non-empty #anchor"
+        else "" end;
+      def _dec_bad:
+        if type != "object" then "not an object"
+        elif (.id | type) != "string" then "missing string .id"
+        else "" end;
+      def _fatal($m): {fatal: $m, clean: {}, rejects: []};
+      if type != "object" then _fatal("must be a JSON object")
+      elif (keys | length) == 0 then _fatal("object has no keys")
+      elif ((keys - _allowed) | length) > 0
+        then _fatal("unknown key(s): " + ((keys - _allowed) | join(", "))
+                    + " (allowed: " + (_allowed | join(", ")) + ")")
+      elif ([ to_entries[] | select((.value | type) != "array") | .key ] | length) > 0
+        then _fatal("bad shape for "
+                    + ([ to_entries[] | select((.value | type) != "array") | .key ] | join(", "))
+                    + " (expected an array)")
+      else . as $p
+        | { fatal: "",
+            clean:
+              ( (if $p | has("decisions")
+                 then {decisions: [ $p.decisions[] | select(_dec_bad == "") ]} else {} end)
+              + (if $p | has("open_questions")
+                 then {open_questions: [ $p.open_questions[] | select(_oq_bad == "") ]} else {} end)
+              + (if $p | has("files_modified")
+                 then {files_modified: [ $p.files_modified[] | select(type == "string") ]} else {} end)
+              + (if $p | has("tests_added")
+                 then {tests_added: [ $p.tests_added[] | select(type == "string") ]} else {} end) ),
+            rejects:
+              ( [ ($p.decisions // [])[] | select(_dec_bad != "")
+                  | {key: "decisions", label: _label, reason: _dec_bad} ]
+              + [ ($p.open_questions // [])[] | select(_oq_bad != "")
+                  | {key: "open_questions", label: _label, reason: _oq_bad} ]
+              + [ ($p.files_modified // [])[] | select(type != "string")
+                  | {key: "files_modified", label: (tojson[0:40]), reason: "not a string"} ]
+              + [ ($p.tests_added // [])[] | select(type != "string")
+                  | {key: "tests_added", label: (tojson[0:40]), reason: "not a string"} ] ) }
       end'
 
 # Sweep items the open_questions clamp evicted while still UNRESOLVED are appended to
@@ -837,11 +838,18 @@ _spill_evicted_questions() {
   local state="$1" tmp="$2" filter="$3"
   shift 3
 
-  # The clamp fires only above 12, so a post-clamp length below it means nothing was
-  # evicted — and this is the common case, which must not pay for a second filter pass.
-  local post_len
+  # Trigger on pre > post, never on the clamp's literal bound: hard-coding 12 made the
+  # spill die silently the moment the bound moved. An empty post-clamp array cannot have
+  # evicted anything, which keeps the common path at one cheap length query.
+  local post_len pre_len merged
   post_len=$(jq -r '(.facts.open_questions? // []) | length' "$tmp" 2> /dev/null || printf '0')
-  [[ "$post_len" == "12" ]] || return 0
+  [[ "$post_len" -gt 0 ]] || return 0
+  merged=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null) || {
+    log_msg WARN "open_questions spill: pre-clamp re-evaluation failed; evictions (if any) unrecorded (merge unaffected)"
+    return 0
+  }
+  pre_len=$(printf '%s' "$merged" | jq -r '(.facts.open_questions? // []) | length' 2> /dev/null || printf '0')
+  [[ "$pre_len" -gt "$post_len" ]] || return 0
 
   # Attribution, in the order the writer's own identity becomes known: parsed frontmatter,
   # then --stage, then the code behind --task-id (the only identity a --facts-only call has).
@@ -855,20 +863,40 @@ _spill_evicted_questions() {
   [[ "$spill_dir" == "$state" ]] && spill_dir="."
   spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
 
-  spilled=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null \
+  # EVERY eviction spills, resolved ones included, flagged by `was_resolved`. Filtering
+  # answered items out destroyed the one field the sweep exists to produce and inverted the
+  # incentive: answering a question was what made it disappear without a trace.
+  spilled=$(printf '%s' "$merged" \
     | jq -c --slurpfile post "$tmp" \
            --arg ts "$(date -u +%FT%TZ)" \
            --arg from "$from_stage" '
         (($post[0].facts.open_questions // []) | map(.id)) as $keep
         | (.facts.open_questions // [])
-        | map(select((.status // "open") != "resolved"))
         | map(select(([.id] - $keep) | length > 0))
-        | .[] + {spilled_at: $ts, spilled_from_stage: $from}' 2> /dev/null) || return 0
+        | map(. + {spilled_at: $ts, spilled_from_stage: $from,
+                   was_resolved: ((.status // "open") == "resolved")})
+        | .[]' 2> /dev/null) || {
+    # A failed spill computation used to `return 0`, which read as "nothing was evicted".
+    log_msg WARN "open_questions spill computation failed; up to $((pre_len - post_len)) evicted item(s) may be unrecorded (merge unaffected)"
+    printf >&2 'warn: open_questions spill computation failed; up to %d evicted item(s) unrecorded\n' "$((pre_len - post_len))"
+    return 0
+  }
 
   [[ -n "$spilled" ]] || return 0
-  printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null \
-    || log_msg WARN "open_questions spill append failed for ${spill_path} (merge unaffected)"
-  log_msg INFO "spilled $(printf '%s' "$spilled" | grep -c '^') evicted open_question(s) to ${spill_path}"
+  local spill_n
+  spill_n=$(printf '%s' "$spilled" | grep -c '^')
+  # The INFO line is CONDITIONAL on the append. Logged unconditionally it contradicted the WARN
+  # two lines above and recorded a spill that never reached the file — a write that landed
+  # nothing, indistinguishable from one that landed. Stderr as well as the log, matching the
+  # computation-failure arm above: log_msg writes only to $LOG_FILE, so a log-only warning is
+  # silent at the call site, which is where the loss has to be visible.
+  if printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null; then
+    log_msg INFO "spilled ${spill_n} evicted open_question(s) to ${spill_path}"
+  else
+    log_msg WARN "open_questions spill append failed for ${spill_path}; ${spill_n} evicted item(s) unrecorded (merge unaffected)"
+    printf >&2 'warn: open_questions spill append to %s failed; %d evicted item(s) unrecorded\n' \
+      "$spill_path" "$spill_n"
+  fi
 }
 
 # Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
@@ -882,7 +910,13 @@ _spill_evicted_questions() {
 atomic_apply() {
   local state="$1" filter="$2"
   shift 2
-  local tmp="${state%/*}/.state.json.$$.${RANDOM}.tmp"
+  # `${state%/*}` returns $state unchanged when the path has no directory component,
+  # so a bare `--state state.json` derived `state.json/.state.json….tmp` — ENOTDIR,
+  # and every ledger op failed with the file untouched. Same guard the spill path
+  # below already carries; the two derivations must agree.
+  local dir="${state%/*}"
+  [ "$dir" = "$state" ] && dir="."
+  local tmp="${dir}/.state.json.$$.${RANDOM}.tmp"
 
   # Acquire the lock around the whole read-apply-rename window (timeout ⇒ unlocked+WARN).
   _lock_acquire "$state" || true
@@ -908,851 +942,6 @@ atomic_merge() {
   atomic_apply "$state" '. * $p' --argjson p "$patch"
 }
 
-# ---------- Self-test ----------
-run_self_test() {
-  # Resolve path BEFORE any cd so subprocess calls work.
-  local SELF
-  SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-
-  local td
-  td=$(mktemp -d -t state-patch-selftest-XXXXXX)
-  # shellcheck disable=SC2064   # expand $td now so the trap removes the right dir
-  trap "rm -rf '${td}'" EXIT
-
-  cd "$td"
-  mkdir -p .context/logs
-
-  # ---- Fixture helpers ----
-  make_state() {
-    cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
-EOSTATE
-  }
-
-  # ---- T1: explicit --artifact path, frontmatter present ----
-  make_state
-  cat > .context/development-0.md << 'EOART'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "self-test artifact T1"
-  files_touched: [a.md]
-  next_stage_focus: "DR reviews"
-  refs: { dev: development.md#files-changed }
----
-
-# Development
-EOART
-  bash "$SELF" --stage DV --artifact .context/development-0.md \
-    || {
-      printf 'T1: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DV0.status == "completed" and .tasks.DV0.verdict == "ok"' \
-    .context/state.json > /dev/null; then
-    printf 'T1: explicit artifact → patched: ok\n'
-  else
-    printf 'T1: explicit artifact → patch missing: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T2: idempotency — re-run must leave state.json byte-identical ----
-  cp .context/state.json .context/state.json.snap
-  bash "$SELF" --stage DV --artifact .context/development-0.md
-  if diff -q .context/state.json .context/state.json.snap > /dev/null; then
-    printf 'T2: idempotent re-run: ok\n'
-  else
-    printf 'T2: idempotent re-run: FAIL (state changed)\n' >&2
-    exit 1
-  fi
-
-  # ---- T3: no --artifact, resolve via run_index=0 from state.json ----
-  make_state
-  # development-0.md already exists from T1.
-  bash "$SELF" --stage DV \
-    || {
-      printf 'T3: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DV0.status == "completed" and (.tasks.DV0.artifact | endswith("development-0.md"))' \
-    .context/state.json > /dev/null; then
-    printf 'T3: run_index-resolved artifact: ok\n'
-  else
-    printf 'T3: run_index-resolved artifact: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T4: highest-N fallback when run_index absent from state.json ----
-  cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
-EOSTATE
-  cat > .context/architecture-1.md << 'EOART'
----
-handoff:
-  stage: AR
-  verdict: blocked
-  summary: "highest-N artifact"
-  refs: { plan: planning-0.md#requirements }
----
-EOART
-  cat > .context/architecture-0.md << 'EOART'
----
-handoff:
-  stage: AR
-  verdict: ok
-  summary: "lower-N artifact"
-  refs: { plan: planning-0.md#requirements }
----
-EOART
-  bash "$SELF" --stage AR \
-    || {
-      printf 'T4: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.AR0.verdict == "blocked" and (.tasks.AR0.artifact | endswith("architecture-1.md"))' \
-    .context/state.json > /dev/null; then
-    printf 'T4: highest-N wins when run_index absent: ok\n'
-  else
-    printf 'T4: highest-N resolution: FAIL\n' >&2
-    jq '.tasks.AR0' .context/state.json >&2
-    exit 1
-  fi
-
-  # ---- T5: absent artifact → no-op, state unchanged ----
-  cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"verdicts":{"PL":"ok"}},"handoffs":{}}
-EOSTATE
-  cp .context/state.json .context/state.json.snap2
-  # No QA artifact exists.
-  bash "$SELF" --stage QA \
-    || {
-      printf 'T5: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if diff -q .context/state.json .context/state.json.snap2 > /dev/null; then
-    printf 'T5: absent artifact → no-op: ok\n'
-  else
-    printf 'T5: absent artifact → no-op: FAIL (state changed)\n' >&2
-    exit 1
-  fi
-
-  # ---- T6: disk guard — warn threshold only (no halt) ----
-  # We can't safely drop disk space in a test, so we prove the guard degrades
-  # gracefully when df output is unparseable (empty avail_gb).
-  make_state
-  cat > .context/testing-0.md << 'EOART'
----
-handoff:
-  stage: QA
-  verdict: go
-  summary: "disk guard T6"
-  refs: { dev: development-0.md#files-changed }
----
-EOART
-  bash "$SELF" --stage QA --artifact .context/testing-0.md --disk-check /nonexistent_mountpoint_selftest \
-    || {
-      printf 'T6: disk-guard degrade: non-zero exit\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.QA0.status == "completed"' .context/state.json > /dev/null; then
-    printf 'T6: disk-guard degrade on unparseable df → patch applied: ok\n'
-  else
-    printf 'T6: disk-guard degrade: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T8: --prev writes handoffs["PREV→CODE"] from the parsed summary + ref ----
-  make_state
-  cat > .context/architecture-0.md << 'EOART'
----
-handoff:
-  stage: AR
-  verdict: ok
-  summary: "approach validated; DV split confirmed"
-  refs: { plan: planning-0.md#requirements }
----
-EOART
-  bash "$SELF" --stage AR --prev PL --artifact .context/architecture-0.md \
-    || {
-      printf 'T8: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '(.handoffs["PL→AR"] // "") | test("approach validated") and test("ref:architecture-0.md")' \
-    .context/state.json > /dev/null; then
-    printf 'T8: --prev writes handoffs edge from summary+ref: ok\n'
-  else
-    printf 'T8: --prev handoffs edge: FAIL\n' >&2
-    jq '.handoffs' .context/state.json >&2
-    exit 1
-  fi
-  # Absent --prev must NOT synthesize a handoffs edge (byte-stable default path).
-  make_state
-  bash "$SELF" --stage AR --artifact .context/architecture-0.md
-  if jq -e '(.handoffs | length) == 0' .context/state.json > /dev/null; then
-    printf 'T8: absent --prev leaves handoffs untouched: ok\n'
-  else
-    printf 'T8: absent --prev must not add handoffs: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T10: remediation re-merge — same verdict, new summary must refresh the handoff edge ----
-  make_state
-  cat > .context/development-0.md << 'EOART'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "first pass, pre-review"
-  refs: { dev: development.md#files-changed }
----
-EOART
-  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md \
-    || {
-      printf 'T10: state-patch returned non-zero (round 1)\n' >&2
-      exit 1
-    }
-  cat > .context/development-0.md << 'EOART'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "remediated after DR round 1"
-  refs: { dev: development.md#files-changed }
----
-EOART
-  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md \
-    || {
-      printf 'T10: state-patch returned non-zero (round 2)\n' >&2
-      exit 1
-    }
-  if jq -e '(.handoffs["AR→DV"] // "") | test("remediated after DR round 1")' \
-    .context/state.json > /dev/null; then
-    printf 'T10: same-verdict remediation refreshes handoff edge: ok\n'
-  else
-    printf 'T10: same-verdict remediation left a stale handoff edge: FAIL\n' >&2
-    jq '.handoffs' .context/state.json >&2
-    exit 1
-  fi
-  # A third identical run must still be a byte-identical no-op (T2 invariant preserved).
-  cp .context/state.json .context/state.before
-  bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md
-  if cmp -s .context/state.json .context/state.before; then
-    printf 'T10: unchanged re-run stays idempotent: ok\n'
-  else
-    printf 'T10: unchanged re-run must not rewrite state: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T9: B3 bounds — decisions clamp to newest-8, dispatched_agents to 6 ----
-  # Seed 10 decisions (d0..d9) + 8 dispatched_agents (mix launched/completed), then
-  # patch any stage; atomic_merge must clamp both arrays at the single chokepoint.
-  jq -n '
-    {version:2, worktask_id:"selftest", plan_file:".context/planning-0.md",
-     platform:"all", run_index:0,
-     tasks:{PL0:{status:"completed", verdict:"ok", metadata:{}}},
-     facts:{
-       files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
-       decisions:[ range(0;10) | {id:("d"+(.|tostring)), summary:("dec "+(.|tostring)), ref:"x.md#y"} ],
-       dispatched_agents:(
-         [ range(0;6) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"completed"} ]
-         + [ range(6;8) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"launched"} ])
-     },
-     handoffs:{}}' > .context/state.json
-  bash "$SELF" --stage DV --artifact .context/development-0.md \
-    || {
-      printf 'T9: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '(.facts.decisions | length) == 8 and (.facts.decisions[-1].id == "d9") and (.facts.decisions[0].id == "d2")' \
-    .context/state.json > /dev/null; then
-    printf 'T9: facts.decisions clamped to newest-8: ok\n'
-  else
-    printf 'T9: decisions bound: FAIL\n' >&2
-    jq '.facts.decisions | map(.id)' .context/state.json >&2
-    exit 1
-  fi
-  if jq -e '(.facts.dispatched_agents | length) == 6 and ([.facts.dispatched_agents[] | select(.status == "launched")] | length) == 2' \
-    .context/state.json > /dev/null; then
-    printf 'T9: dispatched_agents clamped to 6, launched survive: ok\n'
-  else
-    printf 'T9: dispatched_agents bound: FAIL\n' >&2
-    jq '.facts.dispatched_agents | map({task_id, status})' .context/state.json >&2
-    exit 1
-  fi
-
-  # ---- T11: alias basename resolves; canonical still wins when both exist ----
-  make_state
-  rm -f .context/testing-*.md .context/qa-*.md
-  cat > .context/qa-0.md << 'EOART'
----
-handoff:
-  stage: QA
-  verdict: go
-  summary: "alias-named artifact"
-  refs: { dev: development-0.md#files-changed }
----
-EOART
-  bash "$SELF" --stage QA \
-    || {
-      printf 'T11: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.QA0.status == "completed" and (.tasks.QA0.artifact | endswith("qa-0.md"))' \
-    .context/state.json > /dev/null; then
-    printf 'T11: alias basename resolves: ok\n'
-  else
-    printf 'T11: alias basename resolution: FAIL\n' >&2
-    exit 1
-  fi
-  make_state
-  cat > .context/testing-0.md << 'EOART'
----
-handoff:
-  stage: QA
-  verdict: go
-  summary: "canonical artifact"
-  refs: { dev: development-0.md#files-changed }
----
-EOART
-  bash "$SELF" --stage QA
-  if jq -e '(.tasks.QA0.artifact | endswith("testing-0.md"))' .context/state.json > /dev/null; then
-    printf 'T11: canonical preferred over alias: ok\n'
-  else
-    printf 'T11: canonical must outrank alias: FAIL\n' >&2
-    exit 1
-  fi
-  rm -f .context/qa-0.md
-
-  # ---- T12: self-patch (--prev, no --via) with no artifact ⇒ exit 3, state unchanged ----
-  make_state
-  rm -f .context/retrospective-*.md
-  cp .context/state.json .context/state.json.snap3
-  set +e
-  st12_out=$(bash "$SELF" --stage ST --prev FN 2>&1)
-  st12_rc=$?
-  set -e
-  if [[ "$st12_rc" -eq 3 ]] && printf '%s' "$st12_out" | grep -q 'retrospective-N.md'; then
-    printf 'T12: unresolved self-patch exits 3 naming the basenames: ok\n'
-  else
-    printf 'T12: unresolved self-patch must exit 3 (got %s): FAIL\n' "$st12_rc" >&2
-    exit 1
-  fi
-  if diff -q .context/state.json .context/state.json.snap3 > /dev/null; then
-    printf 'T12: exit 3 leaves state untouched: ok\n'
-  else
-    printf 'T12: exit 3 must not alter state: FAIL\n' >&2
-    exit 1
-  fi
-  # The hook path (--via) keeps the exit-0 no-op contract even with --prev present.
-  set +e
-  bash "$SELF" --stage ST --prev FN --via hook > /dev/null 2>&1
-  st12b_rc=$?
-  set -e
-  if [[ "$st12b_rc" -eq 0 ]]; then
-    printf 'T12: --via keeps the unresolved no-op at exit 0: ok\n'
-  else
-    printf 'T12: --via must not fail loudly (got %s): FAIL\n' "$st12b_rc" >&2
-    exit 1
-  fi
-
-  # ---- T13: --prev USER writes the origin edge ----
-  make_state
-  cat > .context/planning-0.md << 'EOART'
----
-handoff:
-  stage: PL
-  verdict: ok
-  summary: "origin edge from the user"
-  refs: { plan: planning-0.md#requirements }
----
-EOART
-  bash "$SELF" --stage PL --prev USER --artifact .context/planning-0.md \
-    || {
-      printf 'T13: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '(.handoffs["USER→PL"] // "") | test("origin edge from the user")' \
-    .context/state.json > /dev/null; then
-    printf 'T13: --prev USER writes the USER→PL edge: ok\n'
-  else
-    printf 'T13: --prev USER edge: FAIL\n' >&2
-    jq '.handoffs' .context/state.json >&2
-    exit 1
-  fi
-
-  # ---- T14: ledger ops (create / block union / status) ----
-  make_state
-  bash "$SELF" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
-    && bash "$SELF" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
-    && bash "$SELF" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}' \
-    && bash "$SELF" --task-block DR0 --on DV0,DV1 \
-    && bash "$SELF" --task-block DR0 --on DV0 \
-    && bash "$SELF" --task-status DV0 in_progress \
-    || {
-      printf 'T14: ledger op returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '(.tasks.DR0.blocked_by == ["DV0","DV1"]) and .tasks.DV0.status == "in_progress"
-            and .tasks.DV1.status == "pending"' .context/state.json > /dev/null; then
-    printf 'T14: ledger create/status + blocked_by union: ok\n'
-  else
-    printf 'T14: ledger ops: FAIL\n' >&2
-    jq '.tasks' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-create DV0 --metadata '{"clobbered":true}' > /dev/null
-  if jq -e '.tasks.DV0.metadata.agent == "corpflow:developer"
-            and (.tasks.DV0.metadata | has("clobbered") | not)' \
-    .context/state.json > /dev/null; then
-    printf 'T14: duplicate --task-create is a no-op: ok\n'
-  else
-    printf 'T14: duplicate create clobbered metadata: FAIL\n' >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-create QA0 \
-    || {
-      printf 'T14: --task-create without --metadata returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.QA0.status == "pending" and .tasks.QA0.metadata == {}' \
-    .context/state.json > /dev/null; then
-    printf 'T14: --task-create without --metadata defaults to {}: ok\n'
-  else
-    printf 'T14: bare --task-create: FAIL\n' >&2
-    jq '.tasks.QA0' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-unblock DR0 --off DV1 \
-    || {
-      printf 'T14: --task-unblock returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
-    printf 'T14: --task-unblock subtracts the edge: ok\n'
-  else
-    printf 'T14: unblock subtraction: FAIL\n' >&2
-    jq '.tasks.DR0' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-unblock DR0 --off ST0 \
-    || {
-      printf 'T14: --task-unblock of an absent edge returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DR0.blocked_by == ["DV0"]' .context/state.json > /dev/null; then
-    printf 'T14: --task-unblock of an absent edge is a no-op: ok\n'
-  else
-    printf 'T14: unblock no-op: FAIL\n' >&2
-    exit 1
-  fi
-
-  st14_rc=0
-  bash "$SELF" --task-status ZZ0 pending > /dev/null 2>&1 || st14_rc=$?
-  if [[ "$st14_rc" != "0" ]]; then
-    printf 'T14: --task-status on a malformed id fails loudly: ok\n'
-  else
-    printf 'T14: malformed id must not be accepted: FAIL\n' >&2
-    exit 1
-  fi
-
-  # Only --task-create may introduce a key, so every other op must reject an unknown id
-  # rather than autovivify a ghost through its .tasks[$id] assignment.  The stderr match
-  # pins WHICH guard fired: a plain non-zero exit would also be satisfied by a parse error,
-  # which would leave the real behaviour untested.
-  cp .context/state.json .context/state.json.snap14
-  assert_ghost_rejected() {
-    local label="$1"
-    shift
-    local rc=0 err=""
-    err=$(bash "$SELF" "$@" 2>&1 > /dev/null) || rc=$?
-    if [[ "$rc" == "0" ]] || [[ "$err" != *"unknown task id"* ]] \
-      || ! diff -q .context/state.json .context/state.json.snap14 > /dev/null; then
-      printf 'T14: %s on an unknown id must hit the existence guard (rc=%s err=%s): FAIL\n' \
-        "$label" "$rc" "$err" >&2
-      jq '.tasks | keys' .context/state.json >&2
-      exit 1
-    fi
-  }
-  assert_ghost_rejected status --task-status FN0 pending
-  assert_ghost_rejected block --task-block FN0 --on DV0
-  assert_ghost_rejected unblock --task-unblock FN0 --off DV0
-  assert_ghost_rejected meta --task-meta FN0 --set '{}'
-  printf 'T14: status/block/unblock/meta on an unknown id all fail, state untouched: ok\n'
-
-  # ---- T15: split-stage id resolution (the case bare stage codes could not express) ----
-  # DV0 in_progress + DV1 pending: the running instance outranks the queued one, so a
-  # bare --stage DV cannot stamp the higher-numbered track that has not started.
-  t15_id=$(bash "$SELF" --resolve-task-id DV)
-  if [[ "$t15_id" == "DV0" ]]; then
-    printf 'T15: in_progress instance outranks pending: ok\n'
-  else
-    printf 'T15: in_progress must win (got %s): FAIL\n' "$t15_id" >&2
-    jq '.tasks' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --task-status DV0 completed > /dev/null
-  t15_id=$(bash "$SELF" --resolve-task-id DV)
-  if [[ "$t15_id" == "DV1" ]]; then
-    printf 'T15: settled instance yields to the pending one: ok\n'
-  else
-    printf 'T15: pending must win once DV0 settles (got %s): FAIL\n' "$t15_id" >&2
-    exit 1
-  fi
-  cat > .context/development-0.md << 'EOSPLIT'
----
-handoff:
-  stage: DV
-  verdict: ok
-  summary: "second track"
----
-EOSPLIT
-  bash "$SELF" --stage DV --via step6_5 \
-    || {
-      printf 'T15: state-patch returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DV1.status == "completed" and .tasks.DV1.verdict == "ok"
-            and (.tasks.DV0.artifact // "") == ""' .context/state.json > /dev/null; then
-    printf 'T15: --stage resolves to the open split instance: ok\n'
-  else
-    printf 'T15: split-stage resolution: FAIL\n' >&2
-    jq '.tasks' .context/state.json >&2
-    exit 1
-  fi
-
-  bash "$SELF" --stage DV --task-id DV0 --via step6_5 > /dev/null
-  if jq -e '(.tasks.DV0.artifact // "") | endswith("development-0.md")' \
-    .context/state.json > /dev/null; then
-    printf 'T15: explicit --task-id overrides resolution: ok\n'
-  else
-    printf 'T15: --task-id override: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T15b/c/d/e: artifact-first resolution for a genuinely ambiguous split stage ----
-  # T15 above only ever has ONE open instance, so it passes with or without the artifact
-  # tier — which is how the mis-slotting defect stayed invisible.  These four put two
-  # `in_progress` instances in the ledger, the shape a fanned-out DV run actually has.
-  cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress","metadata":{"artifact":".context/development-0-gate.md"}},"DV1":{"status":"in_progress","metadata":{"artifact":".context/development-0-ledger.md"}}},"facts":{},"handoffs":{}}
-EOSTATE
-  t15b_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-0-ledger.md)
-  if [[ "$t15b_id" == "DV1" ]]; then
-    printf 'T15b: --artifact picks the matching instance out of two in_progress: ok\n'
-  else
-    printf 'T15b: artifact-first resolution (got %s, want DV1): FAIL\n' "$t15b_id" >&2
-    exit 1
-  fi
-
-  # Absolute and ./-prefixed callers must land on the same key as the stored relative path.
-  t15e_id=$(bash "$SELF" --resolve-task-id DV --artifact "$PWD/.context/development-0-ledger.md")
-  t15e_id2=$(bash "$SELF" --resolve-task-id DV --artifact ./.context/development-0-ledger.md)
-  if [[ "$t15e_id" == "DV1" && "$t15e_id2" == "DV1" ]]; then
-    printf 'T15e: absolute and ./-prefixed artifacts resolve like the relative one: ok\n'
-  else
-    printf 'T15e: path normalisation (abs=%s dot=%s, want DV1): FAIL\n' "$t15e_id" "$t15e_id2" >&2
-    exit 1
-  fi
-
-  # The recorded artifact beats another instance's PLANNED one: PL0 seeds metadata from the
-  # plan, and a split stage routinely writes a file the plan did not predict.
-  jq '.tasks.DV0.artifact = ".context/development-1.md"
-      | .tasks.DV1.metadata.artifact = ".context/development-1.md"' \
-    .context/state.json > .context/state.json.t15f && mv .context/state.json.t15f .context/state.json
-  t15f_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-1.md)
-  if [[ "$t15f_id" == "DV0" ]]; then
-    printf 'T15f: recorded artifact outranks a stale planned one: ok\n'
-  else
-    printf 'T15f: recorded-before-planned precedence (got %s, want DV0): FAIL\n' "$t15f_id" >&2
-    exit 1
-  fi
-
-  # No discriminator: refuse, name both candidates, and leave the ledger byte-identical.
-  cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"in_progress"}},"facts":{},"handoffs":{}}
-EOSTATE
-  cp .context/state.json .context/state.json.snap15c
-  t15c_rc=0
-  t15c_err=$(bash "$SELF" --stage DV --artifact .context/development-0.md --via step6_5 2>&1 > /dev/null) \
-    || t15c_rc=$?
-  if [[ "$t15c_rc" == "4" ]] \
-    && printf '%s' "$t15c_err" | grep -q 'DV0,DV1' \
-    && diff -q .context/state.json .context/state.json.snap15c > /dev/null; then
-    printf 'T15c: ambiguous stage refuses with exit 4, both named, state byte-unchanged: ok\n'
-  else
-    printf 'T15c: ambiguity must fail closed (rc=%s err=%s): FAIL\n' "$t15c_rc" "$t15c_err" >&2
-    exit 1
-  fi
-  rm -f .context/state.json.snap15c
-
-  # T15d is the hooks/agent-stop.sh regression guard: one open instance, no --artifact,
-  # behaviour identical to before the artifact tier existed.
-  cat > .context/state.json << 'EOSTATE'
-{"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"pending"}},"facts":{},"handoffs":{}}
-EOSTATE
-  t15d_id=$(bash "$SELF" --resolve-task-id DV)
-  t15d_rc=0
-  bash "$SELF" --stage DV --via step6_5 > /dev/null 2>&1 || t15d_rc=$?
-  if [[ "$t15d_id" == "DV0" && "$t15d_rc" == "0" ]] \
-    && jq -e '.tasks.DV0.status == "completed" and .tasks.DV1.status == "pending"' \
-      .context/state.json > /dev/null; then
-    printf 'T15d: bare --stage with one open instance is unchanged: ok\n'
-  else
-    printf 'T15d: bare --stage regression (id=%s rc=%s): FAIL\n' "$t15d_id" "$t15d_rc" >&2
-    exit 1
-  fi
-
-  # ---- T16: unsupported ledger version halts before any write ----
-  cat > .context/state.json << 'EOSTATE'
-{"version":1,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{},"handoffs":{}}
-EOSTATE
-  cp .context/state.json .context/state.json.snap16
-  st16_rc=0
-  bash "$SELF" --task-status PL0 in_progress > /dev/null 2>&1 || st16_rc=$?
-  if [[ "$st16_rc" != "0" ]] \
-    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
-    printf 'T16: v1 ledger rejected on the ledger-op path, file untouched: ok\n'
-  else
-    printf 'T16: ledger-op version guard (rc=%s): FAIL\n' "$st16_rc" >&2
-    exit 1
-  fi
-
-  st16b_rc=0
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null 2>&1 \
-    || st16b_rc=$?
-  if [[ "$st16b_rc" != "0" ]] \
-    && diff -q .context/state.json .context/state.json.snap16 > /dev/null; then
-    printf 'T16: v1 ledger rejected on the --stage path, file untouched: ok\n'
-  else
-    printf 'T16: --stage version guard (rc=%s): FAIL\n' "$st16b_rc" >&2
-    exit 1
-  fi
-
-  # ---- T17: --via hook appends exactly one audit row; other paths stay silent ----
-  make_state
-  rm -f .context/logs/audit.jsonl
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via hook > /dev/null
-  if [[ -f .context/logs/audit.jsonl ]] \
-    && jq -e 'select(.action == "stage_transition" and .actor == "hook:state-merge")
-              | .task_id == "DV0" and .metadata.via == "hook"' \
-      .context/logs/audit.jsonl > /dev/null; then
-    printf 'T17: hook completion writes its stage_transition row: ok\n'
-  else
-    printf 'T17: hook audit row missing: FAIL\n' >&2
-    cat .context/logs/audit.jsonl >&2 2> /dev/null || true
-    exit 1
-  fi
-
-  make_state
-  rm -f .context/logs/audit.jsonl
-  bash "$SELF" --stage DV --artifact .context/development-0.md --via step6_5 > /dev/null
-  if [[ ! -s .context/logs/audit.jsonl ]]; then
-    printf 'T17: step6_5 completion writes no row (Bash scrape owns it): ok\n'
-  else
-    printf 'T17: non-hook path must not append: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T18: --task-replay resets one task, and refuses while its agent is alive ----
-  # Liveness is fixture-injected so the self-test needs no live agent and no claude CLI.
-  make_state
-  rm -f .context/logs/audit.jsonl
-  printf '[]\n' > agents-gone.json
-  printf '%s\n' '[{"id":"sess-dv0","sessionId":"sess-dv0deadbeef","name":"dv","state":"active"}]' \
-    > agents-busy.json
-  bash "$SELF" --task-create DV0 \
-    --metadata '{"stage":"DV","agent":"corpflow:developer","retry_count":3,"error_escalated_to":"AR"}' \
-    > /dev/null
-  bash "$SELF" --task-status DV0 in_progress > /dev/null
-  # An in_progress task with no dispatch row classifies no-dispatch-record, which the guard
-  # (correctly) refuses — absence of a record proves nothing about liveness. Seed one.
-  jq '.facts.dispatched_agents = [{stage:"DV", task_id:"DV0",
-        subagent_type:"corpflow:developer", agent_id:"sess-dv0", status:"launched"}]' \
-    .context/state.json > .context/state.next && mv .context/state.next .context/state.json
-  bash "$SELF" --task-replay DV0 --agents-json agents-gone.json 2> /dev/null \
-    || {
-      printf 'T18: --task-replay returned non-zero\n' >&2
-      exit 1
-    }
-  if jq -e '.tasks.DV0.status == "pending"
-            and (.tasks.DV0.metadata | has("retry_count") | not)
-            and (.tasks.DV0.metadata | has("error_escalated_to") | not)
-            and .tasks.PL0.status == "completed"' .context/state.json > /dev/null; then
-    printf 'T18: replay resets the target and leaves PL0 alone: ok\n'
-  else
-    printf 'T18: replay blast radius: FAIL\n' >&2
-    jq '.tasks' .context/state.json >&2
-    exit 1
-  fi
-  if jq -e 'select(.action == "stage_replay")
-            | .task_id == "DV0" and .metadata.escalation_cap_override == true' \
-    .context/logs/audit.jsonl > /dev/null; then
-    printf 'T18: replay audits the cap override on success: ok\n'
-  else
-    printf 'T18: stage_replay audit row missing: FAIL\n' >&2
-    cat .context/logs/audit.jsonl >&2 2> /dev/null || true
-    exit 1
-  fi
-
-  jq '.tasks.DV0.status = "in_progress"
-      | .facts.dispatched_agents = [{stage:"DV", task_id:"DV0",
-          subagent_type:"corpflow:developer", agent_id:"sess-dv0", status:"launched"}]' \
-    .context/state.json > .context/state.next && mv .context/state.next .context/state.json
-  cp .context/state.json .context/state.json.snap18
-  st18_rc=0
-  bash "$SELF" --task-replay DV0 --agents-json agents-busy.json > /dev/null 2>&1 || st18_rc=$?
-  if [[ "$st18_rc" -eq 4 ]] \
-    && diff -q .context/state.json .context/state.json.snap18 > /dev/null; then
-    printf 'T18: live target refuses with exit 4, state byte-unchanged: ok\n'
-  else
-    printf 'T18: live-target guard (rc=%s): FAIL\n' "$st18_rc" >&2
-    exit 1
-  fi
-
-  # ---- T19: a partial sweep stub via --facts is rejected before the lock ----
-  # The union REPLACES the incumbent object for that id, so admitting {id} alone would
-  # silently drop the class/ref the FN render resolves options[] through.
-  make_state
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
-    > /dev/null || {
-      printf 'T19: a full sweep stub was rejected\n' >&2
-      exit 1
-    }
-  cp .context/state.json .context/state.json.snap19
-  st19_rc=0
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1"}]}' > /dev/null 2>&1 || st19_rc=$?
-  if [[ "$st19_rc" -eq 2 ]] \
-    && diff -q .context/state.json .context/state.json.snap19 > /dev/null; then
-    printf 'T19: partial sweep stub exits 2, state byte-unchanged: ok\n'
-  else
-    printf 'T19: partial-stub guard (rc=%s): FAIL\n' "$st19_rc" >&2
-    exit 1
-  fi
-  # blocks_next_stage is required too: a stub that omits it is the demotion-by-omission the
-  # union's sticky arm used to absorb, refused here instead — at the door, before any merge.
-  cp .context/state.json .context/state.json.snap19b
-  st19b_rc=0
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep"}]}' \
-    > /dev/null 2>&1 || st19b_rc=$?
-  if [[ "$st19b_rc" -eq 2 ]] \
-    && diff -q .context/state.json .context/state.json.snap19b > /dev/null; then
-    printf 'T19: a stub omitting blocks_next_stage exits 2, state byte-unchanged: ok\n'
-  else
-    printf 'T19: missing-blocks_next_stage guard (rc=%s): FAIL\n' "$st19b_rc" >&2
-    exit 1
-  fi
-  # decisions keeps the id-only contract: the tightening is scoped to open_questions.
-  bash "$SELF" --facts '{"decisions":[{"id":"d1","summary":"s","ref":"planning-0.md#stages"}]}' \
-    > /dev/null || {
-      printf 'T19: decisions payload was rejected: FAIL\n' >&2
-      exit 1
-    }
-
-  # ---- T20: raising blocks_next_stage is honoured ----
-  # The lattice's live half: an item written non-blocking can be raised to blocking later.
-  # Its other half — a stub that OMITS the key cannot demote — is now enforced one layer
-  # earlier by the T19 shape gate, so it can no longer be reached through --facts at all;
-  # the union's sticky arm survives for legacy payloads and is covered directly against the
-  # filter in tests/shell/skills/elicitation-sweep-contracts.bats.
-  make_state
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
-  if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
-    printf 'T20: raising blocks_next_stage is honoured: ok\n'
-  else
-    printf 'T20: a raise to blocking was refused: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T20b: an EXPLICIT false clears an incumbent true ----
-  # The OV-183 defect: the join ORed the flag, so once `true` landed no payload could clear
-  # it — not even the author's own artifact value — and the ledger permanently outvoted the
-  # stub it was derived from. Absent still sticks (T19 refuses it); explicit false does not.
-  make_state
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
-  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
-  if jq -e '.facts.open_questions[0].blocks_next_stage == false' .context/state.json > /dev/null; then
-    printf 'T20b: an explicit false clears an incumbent true: ok\n'
-  else
-    printf 'T20b: explicit false could not clear the flag: FAIL\n' >&2
-    exit 1
-  fi
-
-  # ---- T21/T22/T23: the open_questions clamp spills unresolved evictions (AD-4) ----
-  # Fixture builder: N open_questions, the first $2 of them resolved, run_index 3.
-  t21_seed() {
-    jq -n --argjson n "$1" --argjson res "$2" '
-      { version: 2, worktask_id: "selftest", plan_file: ".context/planning-0.md",
-        platform: "all", run_index: 3,
-        tasks: { DV1: { status: "in_progress" } },
-        facts: { open_questions:
-          [ range(1; $n + 1) as $i
-            | { id: ("sw-PL0-" + ($i | tostring)), class: "decision",
-                ref: "planning-0.md#elicitation-sweep", stage: "PL",
-                status: (if $i <= $res then "resolved" else "open" end) }
-            + (if $i <= $res then { resolution: "answered" } else {} end) ] },
-        handoffs: {} }' > .context/state.json
-    rm -f .context/open-questions-3.jsonl
-  }
-  t21_add() {
-    bash "$SELF" --task-id DV1 --facts \
-      "{\"open_questions\":[{\"id\":\"$1\",\"class\":\"decision\",\"ref\":\"development-1.md#elicitation-sweep\",\"blocks_next_stage\":false}]}" \
-      > /dev/null
-  }
-
-  # An array that stays at or below the bound must behave exactly as it did before the spill
-  # existed: no file, and a ledger byte-identical to the unspilled merge.
-  t21_seed 5 0
-  t21_add sw-DV1-1
-  cp .context/state.json .context/state.json.t21
-  if [[ ! -e .context/open-questions-3.jsonl ]]; then
-    printf 'T21: no spill file while the array is within bounds: ok\n'
-  else
-    printf 'T21: spilled without an eviction: FAIL\n' >&2
-    exit 1
-  fi
-
-  # 12 open + 1 more evicts the OLDEST UNRESOLVED item — the loss #3 reports.
-  t21_seed 12 0
-  t21_add sw-DV1-1
-  if [[ "$(jq -r '.id' .context/open-questions-3.jsonl 2> /dev/null)" == "sw-PL0-1" ]] \
-    && [[ "$(grep -c '^' .context/open-questions-3.jsonl)" == "1" ]] \
-    && jq -e '.spilled_at and .spilled_from_stage and .class and .ref and .stage and .status' \
-      .context/open-questions-3.jsonl > /dev/null \
-    && jq -e '(.facts.open_questions | map(.id)) == ["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-PL0-7","sw-PL0-8","sw-PL0-9","sw-PL0-10","sw-PL0-11","sw-PL0-12","sw-DV1-1"]' \
-      .context/state.json > /dev/null; then
-    printf 'T22: unresolved eviction spills the full stub, ledger order unchanged: ok\n'
-  else
-    printf 'T22: unresolved eviction was not spilled: FAIL\n' >&2
-    cat .context/open-questions-3.jsonl >&2 2> /dev/null
-    jq -c '.facts.open_questions | map(.id)' .context/state.json >&2
-    exit 1
-  fi
-
-  # Resolved-first ordering means an overflow whose evictions are ALL resolved loses
-  # nothing — and must not write a spill line for an item that was already answered.
-  t21_seed 12 2
-  t21_add sw-DV1-1
-  if [[ ! -e .context/open-questions-3.jsonl ]] \
-    && jq -e '(.facts.open_questions | map(select(.status != "resolved") | .id) | length) == 11' \
-      .context/state.json > /dev/null; then
-    printf 'T23: an all-resolved eviction writes no spill line: ok\n'
-  else
-    printf 'T23: resolved eviction leaked into the spill: FAIL\n' >&2
-    cat .context/open-questions-3.jsonl >&2 2> /dev/null
-    exit 1
-  fi
-
-  printf 'self-test: ALL PASS\n'
-  exit 0
-}
-
 # ---------- Argument parsing ----------
 STAGE_ARG=""
 ARTIFACT_ARG=""
@@ -1764,6 +953,7 @@ VIA_ARG=""
 ALLOW_MISSING_ARTIFACT=""
 TASK_ID_ARG=""
 TASK_OP=""
+LEDGER_META_OP=""
 TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
@@ -1772,32 +962,16 @@ REPLAY_CASCADE="false"
 AGENTS_JSON_ARG=""
 
 while [[ $# -gt 0 ]]; do
+  # One line per flag. Every value-taking arm was the same five lines —
+  # `shift`, assign `${1:-}`, `shift` — repeated eleven times, which made the
+  # two arms that are NOT that shape (--disk-check's optional value and
+  # --self-test's guarded source) invisible in the scroll.
   case "$1" in
-    --stage)
-      shift
-      STAGE_ARG="${1:-}"
-      shift
-      ;;
-    --artifact)
-      shift
-      ARTIFACT_ARG="${1:-}"
-      shift
-      ;;
-    --prev)
-      shift
-      PREV_ARG="${1:-}"
-      shift
-      ;;
-    --state)
-      shift
-      STATE_PATH="${1:-}"
-      shift
-      ;;
-    --log)
-      shift
-      LOG_FILE="${1:-}"
-      shift
-      ;;
+    --stage) shift; STAGE_ARG="${1:-}"; shift ;;
+    --artifact) shift; ARTIFACT_ARG="${1:-}"; shift ;;
+    --prev) shift; PREV_ARG="${1:-}"; shift ;;
+    --state) shift; STATE_PATH="${1:-}"; shift ;;
+    --log) shift; LOG_FILE="${1:-}"; shift ;;
     --disk-check)
       shift
       # Optional root value: consume the next token only when it is NOT another flag.
@@ -1808,83 +982,38 @@ while [[ $# -gt 0 ]]; do
         DISK_CHECK_ROOT="."
       fi
       ;;
-    --via)
-      shift
-      VIA_ARG="${1:-}"
-      shift
+    --via) shift; VIA_ARG="${1:-}"; shift ;;
+    --allow-missing-artifact) ALLOW_MISSING_ARTIFACT="1"; shift ;;
+    --facts) shift; FACTS_ARG="${1:-}"; shift ;;
+    --task-id) shift; TASK_ID_ARG="${1:-}"; shift ;;
+    --task-create) shift; TASK_OP="create"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-status) shift; TASK_OP="status"; TASK_OP_ID="${1:-}"; shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --task-block) shift; TASK_OP="block"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-unblock) shift; TASK_OP="unblock"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
+    --ledger-meta) shift; LEDGER_META_OP="1" ;;
+    --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
+    --cascade) REPLAY_CASCADE="true"; shift ;;
+    --agents-json) shift; AGENTS_JSON_ARG="${1:-}"; shift ;;
+    --on | --off | --metadata | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --resolve-task-id) shift; RESOLVE_CODE_ARG="${1:-}"; shift ;;
+    --self-test)
+      # Sourced HERE, not at the top: the harness is ~1k lines the ledger-write
+      # path never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file
+      # with the `.` builtin is a special-builtin error that exits the shell
+      # immediately, bypassing an `if ! . …` guard entirely.
+      SELFTEST_LIB_PATH="$(dirname "$0")/state-patch-selftest.sh"
+      if [ -r "$SELFTEST_LIB_PATH" ]; then
+        # shellcheck source=state-patch-selftest.sh
+        # shellcheck disable=SC1090
+        . "$SELFTEST_LIB_PATH"
+      else
+        printf >&2 'state-patch: self-test harness unreachable at %s — plugin install broken\n' \
+          "$SELFTEST_LIB_PATH"
+        exit 2
+      fi
+      run_self_test
       ;;
-    --allow-missing-artifact)
-      ALLOW_MISSING_ARTIFACT="1"
-      shift
-      ;;
-    --facts)
-      shift
-      FACTS_ARG="${1:-}"
-      shift
-      ;;
-    --task-id)
-      shift
-      TASK_ID_ARG="${1:-}"
-      shift
-      ;;
-    --task-create)
-      shift
-      TASK_OP="create"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-status)
-      shift
-      TASK_OP="status"
-      TASK_OP_ID="${1:-}"
-      shift
-      TASK_OP_VALUE="${1:-}"
-      shift
-      ;;
-    --task-block)
-      shift
-      TASK_OP="block"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-unblock)
-      shift
-      TASK_OP="unblock"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-meta)
-      shift
-      TASK_OP="meta"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --task-replay)
-      shift
-      TASK_OP="replay"
-      TASK_OP_ID="${1:-}"
-      shift
-      ;;
-    --cascade)
-      REPLAY_CASCADE="true"
-      shift
-      ;;
-    --agents-json)
-      shift
-      AGENTS_JSON_ARG="${1:-}"
-      shift
-      ;;
-    --on | --off | --metadata | --set)
-      shift
-      TASK_OP_VALUE="${1:-}"
-      shift
-      ;;
-    --resolve-task-id)
-      shift
-      RESOLVE_CODE_ARG="${1:-}"
-      shift
-      ;;
-    --self-test) run_self_test ;;
     -h | --help) usage ;;
     *)
       printf >&2 'unknown argument: %s\n' "$1"
@@ -1946,6 +1075,53 @@ if [[ -n "$RESOLVE_CODE_ARG" ]]; then
   exit 0
 fi
 
+# ---------- Top-level metadata ----------
+# The ledger's metadata{} is run-wide, not per-task: base_ref, milestone, the gate flags.
+# resolve_base_ref (branch-lib.sh) reads .metadata.base_ref and nothing else, but until this
+# op the writer had only --task-meta, so the key had to be hand-edited into state.json
+# beside the single writer that exists to keep hand edits out. An unresolved base_ref falls
+# through to origin/HEAD — the repository default branch — which is exactly the wrong-base
+# finalization the base-sanity check exists to catch.
+#
+# Merge, not assign: a partial --set updates the named keys and leaves the rest, matching
+# --task-meta. One level deep only (jq `*` is recursive, which is what --task-meta uses and
+# what a caller updating one nested flag expects).
+if [[ -n "$LEDGER_META_OP" ]]; then
+  if [[ -n "$TASK_OP" ]]; then
+    printf >&2 -- '--ledger-meta and --task-%s are separate writes; issue them separately\n' "$TASK_OP"
+    usage
+  fi
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 -- '--ledger-meta needs jq; state.json unchanged\n'
+    log_msg ERROR "--ledger-meta needs jq; state.json unchanged"
+    exit 1
+  }
+  [[ -n "$TASK_OP_VALUE" ]] || {
+    printf >&2 -- 'missing value: --ledger-meta requires --set <json>\n'
+    usage
+  }
+  # An object, not merely valid JSON: `--set '"develop"'` parses, and `. * "develop"` would
+  # replace the whole metadata block with a string.
+  if ! printf '%s' "$TASK_OP_VALUE" | jq -e 'type == "object"' > /dev/null 2>&1; then
+    printf >&2 -- 'invalid --ledger-meta: --set must be a JSON object; state.json unchanged\n'
+    log_msg ERROR "invalid --ledger-meta (--set is not a JSON object); state.json unchanged"
+    exit 1
+  fi
+  if [[ ! -f "$STATE_PATH" ]]; then
+    printf >&2 -- 'no state.json at %s; --ledger-meta writes into an existing ledger only\n' "$STATE_PATH"
+    log_msg ERROR "--ledger-meta: no state.json at ${STATE_PATH}; nothing written"
+    exit 1
+  fi
+  if atomic_apply "$STATE_PATH" '.metadata = ((.metadata // {}) * $meta)' \
+    --argjson meta "$TASK_OP_VALUE"; then
+    log_msg INFO "ledger meta: metadata merged"
+    exit 0
+  fi
+  printf >&2 -- 'ledger meta failed; state.json unchanged (see %s)\n' "$LOG_FILE"
+  log_msg ERROR "jq apply failed for --ledger-meta; state.json unchanged"
+  exit 1
+fi
+
 # ---------- Ledger ops ----------
 # Direct tasks{} writes for the orchestrator loop; they short-circuit the
 # artifact/frontmatter path entirely.
@@ -1969,6 +1145,52 @@ if [[ -n "$TASK_OP" ]]; then
     usage
   fi
 
+  # `metadata.effort` is a dispatch parameter the ledger carries, not free text: the Step
+  # C.0a resolver bumps it one rung (`skills/shared/stage-contracts.md § Blocking items are
+  # resolved, not asked`), and an off-ladder value would surface there as a failed dispatch
+  # a stage or more later rather than at the write that introduced it. Checked on the two
+  # ops that persist metadata. Absent is fine — the field is optional and older ledgers
+  # predate it; present-but-unknown is not.
+  if [[ "$TASK_OP" == "create" || "$TASK_OP" == "meta" ]] && [[ -n "$TASK_OP_VALUE" ]]; then
+    # `has` + `tostring`, not `//`: the alternative operator reads JSON null and false as
+    # absent, and a required field must not be erasable through its own gate.
+    _TASK_EFFORT=$(printf '%s' "$TASK_OP_VALUE" \
+      | jq -r 'if type == "object" and has("effort") then (.effort | tostring) else empty end' \
+        2> /dev/null) \
+      || _TASK_EFFORT=""
+    if [[ -n "$_TASK_EFFORT" ]]; then
+      _EFFORT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/effort-ladder.sh"
+      if [ -r "$_EFFORT_LIB" ]; then
+        # shellcheck source=/dev/null
+        . "$_EFFORT_LIB"
+      fi
+      # Only the two metadata ops need the ladder, so its absence fails them alone and
+      # leaves --task-status/--task-block/--task-replay untouched.
+      if [[ -z "${EFFORT_ENUM:-}" ]]; then
+        printf >&2 'invalid --task-%s: effort-ladder.sh unreachable at %s; state.json unchanged\n' \
+          "$TASK_OP" "$_EFFORT_LIB"
+        log_msg ERROR "effort-ladder.sh unreachable; --task-${TASK_OP} refused, state.json unchanged"
+        exit 1
+      fi
+      if ! effort_rank "$_TASK_EFFORT" > /dev/null; then
+        printf >&2 'invalid effort: %s (expected one of: %s); state.json unchanged\n' \
+          "$_TASK_EFFORT" "$EFFORT_ENUM"
+        log_msg ERROR "invalid metadata.effort (${_TASK_EFFORT}); state.json unchanged"
+        exit 2
+      fi
+    fi
+  fi
+
+  # R-4.4 — the ONLY two paths that persist a task description. Dispatch-time appends
+  # (the orchestrator's test-scope, ban and FN banners) mutate an in-memory copy and are
+  # never written back, so capping post-append would strip banners that no ledger holds.
+  # Truncate, never reject: a refused --task-create would break PL0 stage creation.
+  # 240 chars matches the facts.goal precedent in initialization-patterns.md.
+  _DESC_CAP='def _cap_desc:
+      if (type == "object") and ((.description? | type) == "string")
+         and ((.description | length) > 240)
+      then .description = (.description[0:239] + "…") else . end;'
+
   TASK_FILTER=""
   TASK_JQ_ARGS=()
   case "$TASK_OP" in
@@ -1982,7 +1204,7 @@ if [[ -n "$TASK_OP" ]]; then
         exit 0
       fi
       # --metadata is optional; absent ⇒ an empty object, never a parse abort.
-      TASK_FILTER='.tasks[$id] = {status: "pending", metadata: ($meta // {})}'
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
     status)
@@ -2022,7 +1244,7 @@ if [[ -n "$TASK_OP" ]]; then
     meta)
       require_task_exists "$TASK_OP_ID" meta
       # Recursive merge, so a partial --set updates named keys without dropping the rest.
-      TASK_FILTER='.tasks[$id].metadata = ((.tasks[$id].metadata // {}) * ($meta // {}))'
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = (((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
     replay)
@@ -2154,25 +1376,78 @@ if [[ -n "$FACTS_ARG" ]]; then
   fi
   SWEEP_CLASS_JSON=$(printf '%s' "$SWEEP_CLASS_ENUM" | tr ' ' '\n' | jq -R . | jq -s .)
 
-  FACTS_ERR=$(printf '%s' "$FACTS_ARG" \
-    | jq -r --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
-            --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_VALIDATE_FILTER" 2> /dev/null) \
-    || FACTS_ERR="not valid JSON"
-  if [[ -n "$FACTS_ERR" ]]; then
-    printf >&2 'invalid --facts: %s\n' "$FACTS_ERR"
-    log_msg ERROR "invalid --facts (${FACTS_ERR}); state.json unchanged"
-    usage
+  FACTS_PART=$(printf '%s' "$FACTS_ARG" \
+    | jq -c --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
+            --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_PARTITION_FILTER" 2> /dev/null) \
+    || FACTS_PART=""
+  if [[ -z "$FACTS_PART" ]]; then
+    printf >&2 'invalid --facts: not valid JSON; state.json unchanged\n'
+    log_msg ERROR "invalid --facts (not valid JSON); state.json unchanged"
+    exit 2
+  fi
+
+  FACTS_FATAL=$(printf '%s' "$FACTS_PART" | jq -r '.fatal')
+  if [[ -n "$FACTS_FATAL" ]]; then
+    # Plain exit, never usage(): the help block is ~100 lines and scrolls the one line the
+    # caller needs off the top of the transcript.
+    printf >&2 'invalid --facts: %s; state.json unchanged\n' "$FACTS_FATAL"
+    log_msg ERROR "invalid --facts (${FACTS_FATAL}); state.json unchanged"
+    exit 2
+  fi
+
+  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
+  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    FACTS_REJECTED=1
+    printf >&2 'invalid --facts: %s item(s) rejected, the rest still persist:\n' "$FACTS_REJECT_N"
+    printf '%s' "$FACTS_PART" \
+      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason' >&2
+    log_msg ERROR "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
+  fi
+
+  FACTS_ARG=$(printf '%s' "$FACTS_PART" | jq -c '.clean')
+  FACTS_KEPT=$(printf '%s' "$FACTS_ARG" | jq -r '[ .[] | length ] | add // 0')
+  if [[ "$FACTS_KEPT" -eq 0 ]] && [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    # Every item was rejected: nothing to persist, and the caller must see the refusal.
+    printf >&2 'invalid --facts: no valid items in the payload; state.json unchanged\n'
+    log_msg ERROR "--facts: no valid items; state.json unchanged"
+    exit 2
+  fi
+  # Nothing kept AND nothing rejected means the payload was legitimately EMPTY —
+  # `{"open_questions":[]}` is what stage-contracts.md § Closing Elicitation Sweep tells a stage
+  # with nothing to ask to emit. Refusing it turned a no-op into a hard stop that also aborted the
+  # stage-completion merge the same call was paired with. The union is skipped (it would be a
+  # no-op anyway) and execution falls through to that merge.
+  if [[ "$FACTS_KEPT" -eq 0 ]]; then
+    log_msg INFO "--facts: empty payload, nothing to union (no-op)"
+    FACTS_EMPTY_NOOP=1
   fi
 
   # Fallback slot for a stub whose id predates the `sw-<TASK_ID>-<n>` shape: the stage this
   # invocation is patching, by the same explicit-then-inferred order the id resolution uses.
   SWEEP_STAGE_FALLBACK="${STAGE_ARG:-$(printf '%s' "${TASK_ID_ARG:-}" | sed 's/[0-9]*$//')}"
 
-  if [[ ! -f "$STATE_PATH" ]]; then
-    log_msg INFO "state.json absent — --facts is a no-op"
+  if [[ "$FACTS_EMPTY_NOOP" -eq 1 ]]; then
+    : # no-op: nothing to write, and an absent ledger is not an error for an empty payload
+  elif [[ ! -f "$STATE_PATH" ]]; then
+    # log_msg writes only to $LOG_FILE, so this used to be an INFO line and exit 0 — a write
+    # that landed nothing, indistinguishable at the call site from one that landed.
+    printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
+    log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
+    exit 1
   elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
     --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK"; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
+    # Post-write assertion: keys in the log are not evidence the ids landed. An id that went
+    # in and is not there afterwards was evicted by a clamp, which is exactly the silent loss
+    # this stage exists to remove. Loud on stderr; the merge itself stands.
+    FACTS_LOST=$(jq -r --argjson f "$FACTS_ARG" '
+        (([ ($f.decisions // [])[].id ] - [ (.facts.decisions // [])[].id ])
+       + ([ ($f.open_questions // [])[].id ] - [ (.facts.open_questions // [])[].id ]))
+       | join(", ")' "$STATE_PATH" 2> /dev/null || printf '')
+    if [[ -n "$FACTS_LOST" ]]; then
+      printf >&2 'warn: --facts wrote but these ids are not in the ledger (clamp eviction): %s\n' "$FACTS_LOST"
+      log_msg ERROR "--facts ids absent after write: ${FACTS_LOST}"
+    fi
   else
     printf >&2 'facts union failed; state.json unchanged (see %s)\n' "$LOG_FILE"
     log_msg ERROR "jq apply failed for --facts; state.json unchanged"
@@ -2182,11 +1457,10 @@ if [[ -n "$FACTS_ARG" ]]; then
   # Standalone --facts is done here; with --stage/--artifact it falls through to the
   # completion merge, which takes its own lock.
   if [[ -z "$STAGE_ARG" && -z "$ARTIFACT_ARG" ]]; then
-    exit 0
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
 fi
 
-# ---------- Resolve artifact ----------
 ART="$ARTIFACT_ARG"
 
 if [[ -z "$ART" && -n "$STAGE_ARG" ]]; then
@@ -2215,23 +1489,22 @@ if [[ -z "$ART" || ! -f "$ART" ]]; then
     log_msg ERROR "self-patch unresolved (stage=${STAGE_ARG:-} prev=${PREV_ARG}) — exit 3"
     exit 3
   fi
-  exit 0
+  # Every no-op return on the paired path still carries a --facts rejection out.
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
 if [[ ! -f "$STATE_PATH" ]]; then
   log_msg INFO "state.json absent — nothing to merge (artifact=$ART)"
-  exit 0
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
-# ---------- Parse frontmatter ----------
 parse_frontmatter "$ART"
 
 if [[ -z "$PARSED_STAGE" ]]; then
   log_msg WARN "could not extract stage from $ART; aborting merge silently"
-  exit 0
+  exit $((FACTS_REJECTED == 1 ? 2 : 0))
 fi
 
-# ---------- Resolve the ledger key ----------
 if ! TASK_ID=$(resolve_task_id "$PARSED_STAGE"); then
   exit 4
 fi
@@ -2267,7 +1540,7 @@ if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT
 
   if [[ "$PATCH_IS_NOOP" == "1" ]]; then
     log_msg INFO "idempotent: tasks.${TASK_ID} already completed verdict=${PARSED_VERDICT}"
-    exit 0
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
   log_msg INFO \
     "re-merge: tasks.${TASK_ID} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
@@ -2323,7 +1596,9 @@ fi
 # Best-effort: an unwritable log must never undo a merge that already landed.
 if [[ "$VIA_ARG" == "hook" ]]; then
   AUDIT_DIR="${CONTEXT_DIR:-.context}/logs"
-  if mkdir -p "$AUDIT_DIR" 2> /dev/null; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the write that already landed.
+  if mkdir -p "$AUDIT_DIR" 2> /dev/null && [[ ! -L "${AUDIT_DIR}/audit.jsonl" ]]; then
     AUDIT_WT_ID=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
     AUDIT_RUN_IDX=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
     jq -cn \
@@ -2339,4 +1614,4 @@ if [[ "$VIA_ARG" == "hook" ]]; then
   fi
 fi
 
-exit 0
+exit $((FACTS_REJECTED == 1 ? 2 : 0))

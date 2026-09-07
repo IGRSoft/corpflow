@@ -157,3 +157,35 @@ diff_pngs() { ls "$WD/.context/images/wt-test/"diff-*.png 2>/dev/null | wc -l | 
   [[ "$stderr" == *"usage: visual-diff.sh"* ]]
   assert_audit_row visual_diff_run --file "$WD/.context/logs/audit.jsonl" --absent
 }
+
+
+# DR0 P2-3. R6 moved this adapter's inline emitter into skills/shared/lib/audit-lib.sh
+# and made the source block fail closed. Before that move "the emitter is missing" was
+# not a reachable state; it is now, and on the capture adapters it takes down screenshot
+# capture, which the DV screenshot gate blocks the pipeline on. These two arms declare
+# that behaviour change and pin what an operator actually sees, which is NOT one code:
+# the documented exit 2 is reached only when shared/lib exists but audit-lib.sh does
+# not. When the directory itself is missing, the `cd ... && pwd -P` substitution fails
+# first and errexit takes the script down with a bare exit 1 and no diagnostic.
+@test "install: audit-lib.sh missing from an existing shared/lib -> exit 2, named diagnostic" {
+  mkdir -p "$WD/inst/skills/dv-screenshot-capture/scripts" "$WD/inst/skills/shared/lib"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/inst/skills/dv-screenshot-capture/scripts/visual-diff.sh"
+  cd "$WD"
+  run --separate-stderr bash "$WD/inst/skills/dv-screenshot-capture/scripts/visual-diff.sh" \
+    --worktask-id wt-test --reference "$REF" --candidate "$CAND"
+  assert_failure 2
+  [[ "$stderr" == *"plugin install broken"* ]]
+  [[ "$stderr" == *"audit-lib.sh"* ]]
+}
+
+@test "install: an absent shared/lib degrades to a silent exit 1, not the documented 2" {
+  # Pinned as observed, not as intended. The likelier partial-install shape gives an
+  # operator no diagnostic at all; changing that is a follow-up, not this run.
+  mkdir -p "$WD/lonely"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/lonely/visual-diff.sh"
+  cd "$WD"
+  run --separate-stderr bash "$WD/lonely/visual-diff.sh" \
+    --worktask-id wt-test --reference "$REF" --candidate "$CAND"
+  assert_failure 1
+  [[ "$stderr" != *"plugin install broken"* ]]
+}

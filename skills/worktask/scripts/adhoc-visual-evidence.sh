@@ -61,19 +61,25 @@ BASE_REF="${BASE_REF:-}"
 FORCE=0
 
 # ---------- audit -----------------------------------------------------------
+# Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
+# special-builtin error that exits the shell, bypassing an `if !` guard.
+_AUDIT_LIB="$SCRIPT_DIR/../../shared/lib/audit-lib.sh"
+if [ ! -r "$_AUDIT_LIB" ]; then
+  printf >&2 'adhoc-visual-evidence: plugin install broken — audit-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/audit-lib.sh
+. "$_AUDIT_LIB"
+
 audit_adhoc() {
   # $1=result, $2=reason, $3=extra-json-object. Never fatal on its own.
+  # jq-absent stays a silent no-row: the reason/extra merge below needs jq anyway.
   command -v jq >/dev/null 2>&1 || return 0
-  mkdir -p "$LOG_DIR" 2>/dev/null || return 0
-  jq -cn \
-    --arg ts "$(date -u +%FT%TZ)" \
-    --arg actor "orchestrator" \
-    --arg result "$1" \
-    --arg reason "$2" \
-    --argjson extra "${3:-\{\}}" \
-    '{ts:$ts, actor:$actor, action:"adhoc_visual_evidence", result:$result,
-      metadata:($extra + {reason:$reason})}' \
-    >> "$AUDIT_FILE" 2>/dev/null || true
+  local meta
+  meta=$(jq -cn --arg reason "$2" --argjson extra "${3:-\{\}}" \
+    '$extra + {reason:$reason}' 2>/dev/null) || meta='{}'
+  corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
+    --action adhoc_visual_evidence --result "$1" --meta "$meta"
 }
 
 # ---------- gating ----------------------------------------------------------
@@ -131,22 +137,25 @@ adhoc_id() {
 
 # ---------- capture ---------------------------------------------------------
 # Echoes "<path>\t<bytes>\t<adapter>" for the produced file, or nothing.
-# cli-fallback.sh writes relative to CWD and exits 2 on its .txt floor, which is
-# a successful capture here — only its hard-error exit 1 means no file.
+# ONLY exit 0 is a capture. cli-fallback.sh's floor writes no file: exit 2 is
+# tool_missing and exit 3 is render_failed, and both print the intended .png path
+# on the contract line. Treating either as success manifests a row naming a file
+# that is not on disk, which is the "placeholder counted as evidence" defect with
+# nothing behind it at all. The path is verified against the filesystem too, so a
+# future adapter cannot reintroduce the claim by exiting 0 without writing.
 capture_one() {
   local id="$1" base="$2" files="$3"
-  local out rc path bytes err
+  local out rc path bytes
   out=$(cd "$WORKSPACE_ROOT" && bash "$CAPTURER" \
           --worktask-id "$id" --slug pr-diff --base-ref "$base" \
           --platform all --run-index 0 --files "$files" 2>/dev/null)
   rc=$?
-  [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || return 1
+  [ "$rc" -eq 0 ] || return 1
   path=$(printf '%s' "$out" | sed -n 's/.*path=\([^ ]*\).*/\1/p')
   bytes=$(printf '%s' "$out" | sed -n 's/.*bytes=\([0-9]*\).*/\1/p')
-  err=$(printf '%s' "$out" | sed -n 's/.*error=\([^ ]*\).*/\1/p')
   [ -n "$path" ] || return 1
-  printf '%s\t%s\t%s' "$path" "${bytes:-0}" \
-    "$([ "$err" = "tool_missing" ] && printf 'cli_fallback (.txt)' || printf 'cli_fallback')"
+  [ -s "${WORKSPACE_ROOT}/${path}" ] || [ -s "$path" ] || return 1
+  printf '%s\t%s\t%s' "$path" "${bytes:-0}" 'cli_fallback'
 }
 
 # ---------- manifest --------------------------------------------------------
@@ -276,122 +285,22 @@ detect_json() {
   fi
 }
 
-# ---------- self-test -------------------------------------------------------
-run_self_tests() {
-  local pass=0 fail=0 self="$0"
-  _ok()   { echo "adhoc-visual-evidence: $1 PASS"; pass=$((pass+1)); }
-  _fail() { echo "adhoc-visual-evidence: $1 FAIL${2:+ — $2}"; fail=$((fail+1)); }
-
-  # A repo with one commit on master and a checked-out feature branch, so
-  # `master...HEAD` is a real PR-shaped diff rather than an empty one.
-  _mk_repo() {
-    local td; td=$(mktemp -d)
-    git -C "$td" init -q -b master >/dev/null 2>&1
-    git -C "$td" config user.email t@t; git -C "$td" config user.name t
-    mkdir -p "$td/Views"
-    printf 'a\n' > "$td/README.md"
-    git -C "$td" add -A >/dev/null 2>&1
-    git -C "$td" commit -qm base >/dev/null 2>&1
-    git -C "$td" checkout -q -b feature >/dev/null 2>&1
-    printf '%s' "$td"
-  }
-
-  # ---- t1: a docs-only diff emits nothing (the false-positive gate)
-  local d1; d1=$(_mk_repo)
-  printf 'b\n' >> "$d1/README.md"
-  git -C "$d1" commit -qam docs >/dev/null 2>&1
-  local o1; o1=$(WORKSPACE_ROOT="$d1" BASE_REF="master" bash "$self" --emit pr 2>/dev/null)
-  if [ -z "$o1" ] && grep -q '"reason":"no_ui_surface"' "$d1/.context/logs/audit.jsonl" 2>/dev/null; then
-    _ok "t1-docs-only-silent"
-  else
-    _fail "t1-docs-only-silent" "out='${o1:0:60}'"
-  fi
-  rm -rf "$d1"
-
-  # ---- t2: a UI diff yields a Visual evidence block with no broken embeds
-  local d2; d2=$(_mk_repo)
-  printf 'body { color: red }\n' > "$d2/Views/app.css"
-  git -C "$d2" add -A >/dev/null 2>&1; git -C "$d2" commit -qm ui >/dev/null 2>&1
-  local o2
-  o2=$(WORKSPACE_ROOT="$d2" BASE_REF="master" ASSET_HOST_MODE=none DRY_RUN=1 \
-       bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$o2" | grep -q '^## Visual evidence' \
-     && ! printf '%s' "$o2" | grep -qE '\]\(\)|\]\(\.context/'; then
-    _ok "t2-ui-emits-block"
-  else
-    _fail "t2-ui-emits-block" "$(printf '%s' "$o2" | head -6 | tr '\n' '~')"
-  fi
-
-  # ---- t3: rerun replays the cache instead of stacking a second capture
-  local o3 caps
-  o3=$(WORKSPACE_ROOT="$d2" BASE_REF="master" ASSET_HOST_MODE=none DRY_RUN=1 \
-       bash "$self" --emit pr 2>/dev/null)
-  caps=$(find "$d2/.context/images" -type f -name 'dv-*' 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$o3" = "$o2" ] && [ "$caps" = "1" ]; then
-    _ok "t3-idempotent"
-  else
-    _fail "t3-idempotent" "caps=$caps same=$([ "$o3" = "$o2" ] && echo y || echo n)"
-  fi
-
-  # ---- t4: manifest satisfies the attacher's own schema check
-  local mf; mf=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
-  if bash "$ATTACHER" --validate-manifest "$mf" >/dev/null 2>&1; then
-    _ok "t4-manifest-schema"
-  else
-    _fail "t4-manifest-schema" "$(bash "$ATTACHER" --validate-manifest "$mf" 2>&1 | head -2 | tr '\n' '~')"
-  fi
-  rm -rf "$d2"
-
-  # ---- t5: a worktask tree is refused, leaving FN's attachment the only one
-  local d5; d5=$(_mk_repo)
-  printf 'x\n' > "$d5/Views/app.css"
-  git -C "$d5" add -A >/dev/null 2>&1; git -C "$d5" commit -qm ui >/dev/null 2>&1
-  mkdir -p "$d5/.context"
-  printf '{"version":1,"worktask_id":"wid-real","run_index":0}' > "$d5/.context/state.json"
-  local o5; o5=$(WORKSPACE_ROOT="$d5" BASE_REF="master" bash "$self" --emit pr 2>/dev/null)
-  if [ -z "$o5" ] && grep -q '"reason":"worktask_path"' "$d5/.context/logs/audit.jsonl" 2>/dev/null; then
-    _ok "t5-worktask-refused"
-  else
-    _fail "t5-worktask-refused" "out='${o5:0:60}'"
-  fi
-  rm -rf "$d5"
-
-  # ---- t7: a PNG capture renders as a hosted embed, not a bullet. Seeded on
-  # disk because neither silicon nor ImageMagick is a suite prerequisite.
-  local d7; d7=$(_mk_repo)
-  printf 'x\n' > "$d7/Views/app.css"
-  git -C "$d7" add -A >/dev/null 2>&1; git -C "$d7" commit -qm ui >/dev/null 2>&1
-  mkdir -p "$d7/.context/images/adhoc-feature"
-  printf 'x' > "$d7/.context/images/adhoc-feature/dv-01-pr-diff.png"
-  local o7
-  o7=$(WORKSPACE_ROOT="$d7" BASE_REF="master" ADHOC_ID=adhoc-feature \
-       ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
-       bash "$self" --emit pr 2>/dev/null)
-  if printf '%s' "$o7" | grep -q '^!\[dv-01 ad-hoc PR diff.*\](https://raw\.githubusercontent\.com/'; then
-    _ok "t7-png-embeds"
-  else
-    _fail "t7-png-embeds" "$(printf '%s' "$o7" | head -6 | tr '\n' '~')"
-  fi
-  rm -rf "$d7"
-
-  # ---- t6: outside a git repo, --emit is silent and --detect says so
-  local d6; d6=$(mktemp -d)
-  local o6 j6
-  o6=$(WORKSPACE_ROOT="$d6" bash "$self" --emit pr 2>/dev/null)
-  j6=$(WORKSPACE_ROOT="$d6" bash "$self" --detect 2>/dev/null)
-  if [ -z "$o6" ] && printf '%s' "$j6" | grep -q '"visual_surface":false'; then
-    _ok "t6-no-git-silent"
-  else
-    _fail "t6-no-git-silent" "out='${o6:0:40}' json='$j6'"
-  fi
-  rm -rf "$d6"
-
-  echo "adhoc-visual-evidence: self-test summary — pass=$pass fail=$fail"
-  [ "$fail" -eq 0 ]
-}
-
 # ---------- entrypoint ------------------------------------------------------
 if [ "${1:-}" = "--self-test" ]; then
+  # Sourced HERE, not at the top: the harness is test code the production path
+  # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/adhoc-visual-evidence-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=adhoc-visual-evidence-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'adhoc-visual-evidence: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
   run_self_tests || exit 2
   exit 0
 fi

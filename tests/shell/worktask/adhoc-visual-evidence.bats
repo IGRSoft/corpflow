@@ -30,12 +30,42 @@ mk_pr_repo() { # $1=path-to-add
   printf '%s' "$d"
 }
 
+# cli-fallback's floor no longer writes a .txt placeholder, so a host with no image tool
+# produces NO capture at all. Seeding the capture on disk (the script's existing-capture
+# path, the same idiom its own t7 uses) keeps these arms deterministic without making
+# silicon/ImageMagick a suite prerequisite.
+seed_capture() { # $1=repo dir
+  mkdir -p "$1/.context/images/adhoc-feature"
+  printf '\x89PNG\r\n\x1a\n' > "$1/.context/images/adhoc-feature/dv-01-pr-diff.png"
+}
+
 @test "happy: a UI-touching diff emits a Visual evidence block" {
   local d; d="$(mk_pr_repo Views/app.css)"
-  run env WORKSPACE_ROOT="$d" BASE_REF=master ASSET_HOST_MODE=none DRY_RUN=1 \
-    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  seed_capture "$d"
+  run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
   assert_line --index 0 "## Visual evidence"
+}
+
+@test "floor: no image tool means no capture and no manifest row naming a missing file" {
+  # The un-migrated consumer read cli-fallback's exit 2 as a successful capture, so the
+  # manifest named a .png the new floor never wrote. Nothing may claim a file that is absent.
+  local d; d="$(mk_pr_repo Views/app.css)"
+  run env WORKSPACE_ROOT="$d" BASE_REF=master PATH="/usr/bin:/bin" \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  local mf; mf="$(find "$d/.context/images" -name screenshots.md 2>/dev/null | head -1)"
+  if [ -n "$mf" ]; then
+    local row
+    while IFS='|' read -r _ _ _ row _; do
+      row="$(printf '%s' "$row" | tr -d ' ')"
+      case "$row" in
+        dv-*) [ -e "$(dirname "$mf")/$row" ] || fail "manifest names a missing file: $row" ;;
+      esac
+    done < "$mf"
+  fi
+  refute_output --partial ".txt"
 }
 
 @test "happy: a docs-only diff emits nothing and audits no_ui_surface" {
@@ -70,8 +100,9 @@ mk_pr_repo() { # $1=path-to-add
 
 @test "edge: the emitted manifest satisfies the attacher's own schema check" {
   local d; d="$(mk_pr_repo Views/app.css)"
-  run env WORKSPACE_ROOT="$d" BASE_REF=master ASSET_HOST_MODE=none DRY_RUN=1 \
-    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  seed_capture "$d"
+  run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
   local mf; mf="$(find "$d/.context/images" -name screenshots.md | head -1)"
   [ -n "$mf" ]
@@ -81,12 +112,13 @@ mk_pr_repo() { # $1=path-to-add
 
 @test "edge: rerunning replays the first emission instead of stacking captures" {
   local d; d="$(mk_pr_repo Views/app.css)"
-  run env WORKSPACE_ROOT="$d" BASE_REF=master ASSET_HOST_MODE=none DRY_RUN=1 \
-    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  seed_capture "$d"
+  run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
   local first="$output"
-  run env WORKSPACE_ROOT="$d" BASE_REF=master ASSET_HOST_MODE=none DRY_RUN=1 \
-    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
   assert_output "$first"
   run bash -c "find '$d/.context/images' -type f -name 'dv-*' | wc -l | tr -d ' '"
@@ -138,4 +170,15 @@ mk_pr_repo() { # $1=path-to-add
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "fail=0"
+}
+
+# Companion to the attach-visual-evidence arm of the same name: nothing pinned the
+# symlink refusal for any worktask emitter, only for the hook-side one.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  local d; d="$(mk_tmpworkdir)"
+  mkdir -p "$d/.context/logs" "$d/target-dir"
+  ln -s "$d/target-dir/escaped.txt" "$d/.context/logs/audit.jsonl"
+  run env WORKSPACE_ROOT="$d" ADHOC_SKIP=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  [ ! -e "$d/target-dir/escaped.txt" ]
 }

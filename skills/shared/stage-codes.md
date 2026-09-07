@@ -8,20 +8,20 @@ Single source of truth for worktask stage codes.
 
 ## Primary Stages (11-Stage)
 
-| Code | Stage | Agent | Model |
-|------|-------|-------|-------|
-| PL | Planning | product-manager | opus |
-| AR | Architecture | software-architector | opus |
-| TL | Team Lead | team-lead | sonnet |
-| DV | Development | developer | opus |
-| DR | Developer Review | technical-lead | opus |
-| SR | Security Review | security-reviewer | opus |
-| QA | QA Testing | qa-engineer | sonnet |
-| DC | Documentation | technical-writer | haiku |
-| RE | Release Engineering | release-engineer | haiku |
-| FN | Finalization | project-manager | sonnet |
-| ST | Stakeholder | stakeholder | sonnet |
-| IR | Incident Response | incident-responder | opus |
+| Code | Stage | Agent | Model | Effort |
+|------|-------|-------|-------|--------|
+| PL | Planning | product-manager | opus | high |
+| AR | Architecture | software-architector | opus | high |
+| TL | Team Lead | team-lead | sonnet | medium |
+| DV | Development | developer | opus | high |
+| DR | Developer Review | technical-lead | opus | high |
+| SR | Security Review | security-reviewer | opus | xhigh |
+| QA | QA Testing | qa-engineer | sonnet | medium |
+| DC | Documentation | technical-writer | haiku | low |
+| RE | Release Engineering | release-engineer | sonnet | low |
+| FN | Finalization | project-manager | sonnet | medium |
+| ST | Stakeholder | stakeholder | sonnet | low |
+| IR | Incident Response | incident-responder | opus | high |
 
 ### Test-execution authority note
 
@@ -50,21 +50,28 @@ Single source of truth for worktask stage codes.
 | FN | Commits, pushes, and opens the pull request |
 | RE | Tags the release and publishes artifacts |
 
-## Model Lookup
+## Model and Effort Lookup
 
-The orchestrator MUST pass `model` when spawning a stage agent. The **Model** column in
-§ Primary Stages is that lookup; support agents use § Support Agents below. Deliberately no
-third copy — a duplicate table had already drifted from the agents' shipped frontmatter.
+The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and
+stamp both onto `tasks.<ID>.metadata`. The **Model** and **Effort** columns in § Primary
+Stages are that lookup; support agents use § Support Agents below. Deliberately no third
+copy — a duplicate table had already drifted from the agents' shipped frontmatter.
+
+> `effort` is stamped for the same reason `model` is, plus one of its own: the Step C.0a
+> resolver dispatches one rung above the stage that raised the item
+> (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`), and agent
+> frontmatter is the wrong fallback for that — a stage dispatched at an override runs at a
+> tier its frontmatter never mentions. Only the ledger holds the value that actually ran.
 
 ## Support Agents (On-Demand)
 
-| Code | Agent | Model | Invoked By |
-|------|-------|-------|------------|
-| DS | designer | sonnet | PL, AR, DV, QA |
-| TC | technical-lead | opus | AR, TL, DV, QA |
-| ET | ethics-reviewer | opus | Any stage |
-| PE | prompt-engineer | opus | Agent optimization |
-| WE | workflow-engineer | sonnet | Worktask troubleshooting |
+| Code | Agent | Model | Effort | Invoked By |
+|------|-------|-------|--------|------------|
+| DS | designer | sonnet | medium | PL, AR, DV, QA |
+| TC | technical-lead | opus | high | AR, TL, DV, QA |
+| ET | ethics-reviewer | opus | xhigh | Any stage |
+| PE | prompt-engineer | opus | xhigh | Agent optimization |
+| WE | workflow-engineer | sonnet | medium | Worktask troubleshooting |
 
 Support agents own no worktask stage but can be invoked on-demand via the Task tool.
 

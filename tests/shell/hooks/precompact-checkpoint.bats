@@ -110,3 +110,23 @@ JSON
   run bash -c 'for f in "$1"/.context/state.checkpoint-*.json; do jq -r ".facts.seq" "$f"; done | sort | tr "\n" ","' _ "$WD"
   assert_output "1,2,"
 }
+
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # The checkpoint copy — the hook's actual job — must still have landed.
+  run bash -c "ls $WD/.context/state.checkpoint-*.json"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+@test "SR: the no-state skip row is refused through a symlink too" {
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

@@ -28,53 +28,21 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
-run_self_test() {
-  local tmp; tmp=$(mktemp)
-  cat > "$tmp" <<'JSONL'
-{"ts":"2026-05-15T00:00:01Z","actor":"orchestrator","action":"approval_received","subject":"PL0","result":"ok"}
-{"ts":"2026-05-15T00:00:02Z","actor":"developer","action":"tool_invoked","subject":"Write","result":"ok","metadata":{"dedupe_key":"sessA:toolu1"}}
-{"ts":"2026-05-15T00:00:02Z","actor":"hook:audit-tooluse","action":"tool_invoked","subject":"Write","result":"ok","metadata":{"dedupe_key":"sessA:toolu1","duration_ms":42,"effort":"high"}}
-{"ts":"2026-05-15T00:00:03Z","actor":"developer","action":"tool_invoked","subject":"Edit","result":"ok","metadata":{"dedupe_key":"sessA:toolu2"}}
-{"ts":"2026-05-15T00:00:04Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agX:stop"}}
-{"ts":"2026-05-15T00:00:05Z","actor":"developer","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agY:stop"}}
-{"ts":"2026-05-15T00:00:05Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"developer","result":"ok","metadata":{"dedupe_key":"sessA:agY:stop"}}
-{"ts":"2026-05-15T00:00:06Z","actor":"apple-developer:hook:audit-subagent","action":"subagent_stopped","subject":"","result":"ok","metadata":{"advisory":true,"dedupe_key":"sessA:agZ:stop"}}
-{"ts":"2026-05-15T00:00:06Z","actor":"hook:audit-subagent","action":"subagent_stopped","subject":"corpflow:developer","result":"ok","metadata":{"dedupe_key":"sessA:agZ:stop"}}
-JSONL
-  local out; out=$("$0" "$tmp")
-  rm -f "$tmp"
-  # Expected: 6 rows (orchestrator approval + hook row for toolu1 [agent row dropped]
-  # + developer row for toolu2 [no hook row, kept] + hook subagent_stopped for agX
-  # + hook row for agY [agent row dropped] + canonical hook row for agZ [advisory
-  # plugin mirror dropped]).
-  local n; n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
-  if [ "$n" != "6" ]; then
-    echo "audit-dedup self-test FAIL: expected 6 rows, got $n" >&2
-    return 1
-  fi
-  # The toolu1 row that survives MUST be the hook row.
-  local actor; actor=$(printf '%s\n' "$out" | jq -rs '.[] | select(.metadata.dedupe_key=="sessA:toolu1") | .actor')
-  if [ "$actor" != "hook:audit-tooluse" ]; then
-    echo "audit-dedup self-test FAIL: expected hook row for sessA:toolu1, got actor=$actor" >&2
-    return 1
-  fi
-  # Same key from both a hook and an agent writer must collapse to the hook row.
-  local actor2; actor2=$(printf '%s\n' "$out" | jq -rs '.[] | select(.metadata.dedupe_key == "sessA:agY:stop") | .actor')
-  if [ "$actor2" != "hook:audit-subagent" ]; then
-    echo "audit-dedup self-test FAIL: expected hook row to win for sessA:agY, got actor=$actor2" >&2
-    return 1
-  fi
-  # The advisory plugin mirror must lose to the canonical writer, or the surviving
-  # row carries the mirror's empty subject and the agent goes unnamed downstream.
-  local actor3; actor3=$(printf '%s\n' "$out" | jq -rs '.[] | select(.metadata.dedupe_key == "sessA:agZ:stop") | .subject')
-  if [ "$actor3" != "corpflow:developer" ]; then
-    echo "audit-dedup self-test FAIL: expected canonical row for sessA:agZ, got subject=$actor3" >&2
-    return 1
-  fi
-  echo "audit-dedup: self-test OK"
-}
-
 if [ "${1:-}" = "--self-test" ]; then
+  # Sourced HERE, not at the top: the harness is test code the production path
+  # never runs. `[ -r ]` first, not a bare `.`: sourcing a missing file with the
+  # `.` builtin is a special-builtin error that exits the shell immediately,
+  # bypassing an `if ! . …` guard entirely.
+  SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/audit-dedup-selftest.sh"
+  if [ -r "$SELFTEST_LIB_PATH" ]; then
+    # shellcheck source=audit-dedup-selftest.sh
+    # shellcheck disable=SC1090
+    . "$SELFTEST_LIB_PATH"
+  else
+    printf >&2 'audit-dedup: self-test harness unreachable at %s — plugin install broken\n' \
+      "$SELFTEST_LIB_PATH"
+    exit 2
+  fi
   run_self_test
   exit $?
 fi
@@ -95,6 +63,15 @@ fi
 #   3. For grouped rows, keep the authoritative hook row (canonical before
 #      advisory mirror), else the first by index.
 #   4. Re-merge with ungrouped rows and sort by original index.
+# `fromjson?` below drops malformed rows silently, so a corrupt log reads exactly
+# like a clean one with nothing to dedupe. Count the drops and name them on stderr;
+# stdout stays the deduped stream so callers are unaffected.
+_ad_total=$(printf '%s\n' "$INPUT" | grep -c '[^[:space:]]' || true)
+_ad_parsed=$(printf '%s\n' "$INPUT" | jq -ncR '[ inputs | select(length > 0) | fromjson? | objects ] | length' 2> /dev/null || echo 0)
+if [ "$_ad_total" -gt "$_ad_parsed" ]; then
+  echo "audit-dedup: $((_ad_total - _ad_parsed)) unparseable row(s) skipped in $SRC" >&2
+fi
+
 printf '%s' "$INPUT" | jq -ncR '
   def is_hook: (.actor // "") | (startswith("hook:") or contains(":hook:"));
   def is_advisory: (.metadata.advisory // false) == true;

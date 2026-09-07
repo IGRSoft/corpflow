@@ -118,7 +118,10 @@ else
   # audit_fn is in the library that just failed to source, so this one row is written
   # inline rather than delegated.
   mkdir -p "${CONTEXT_DIR}/logs" 2> /dev/null || true
-  if command -v jq > /dev/null 2>&1; then
+  # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
+  # against an arbitrary target. A lost row never blocks the caller.
+  if command -v jq > /dev/null 2>&1 \
+    && [ ! -L "${CONTEXT_DIR}/logs/audit.jsonl" ]; then
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     wid=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
     ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
@@ -136,7 +139,9 @@ else
   exit 0
 fi
 
+# shellcheck disable=SC2034  # both read by branch-lib.sh audit_fn through dynamic scope
 AUDIT_ACTOR="orchestrator"
+# shellcheck disable=SC2034
 AUDIT_STAGE="PL"
 RUN_INDEX="0"
 AUDIT_SUBJECT="PL0"

@@ -16,17 +16,20 @@ SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
 # Canonical artifact basenames (mirrors handoff-protocol.md#stage-artifact-map).
-# development alone carries an optional kebab -<stream> suffix: under TL fan-out
-# each DV sub-agent writes development-N-<stream>.md before the entry agent
-# merges the canonical development-N.md.
-ARTIFACT_RE='\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$'
+#
+# The per-stream fan-out files development-N-<stream>.md are deliberately NOT matched.
+# handoff-protocol.md § Per-stream DV artifacts calls them merge inputs, not handoff
+# carriers: the entry agent merges them into the canonical development-N.md, and that
+# merged file is the DR/QA input the anchor contract exists to police. Linting the
+# inputs against the carrier's allow-list only produced `unexpected: commits
+# verification` on every stream write — noise on a non-blocking hook, and noise is how
+# a real anchor failure gets scrolled past.
+ARTIFACT_RE='\.context/(planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$'
 
 if [ "$SELF_TEST" -eq 1 ]; then
   ok=0
   for p in \
     ".context/development-0.md" \
-    ".context/development-0-swift-app.md" \
-    ".context/development-2-backend.md" \
     ".context/developer-review-12.md" \
     "/abs/path/.context/planning-3.md"; do
     printf '%s' "$p" | grep -qE "$ARTIFACT_RE" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
@@ -36,6 +39,8 @@ if [ "$SELF_TEST" -eq 1 ]; then
     ".context/state.json" \
     ".context/development.md" \
     ".context/development-0-.md" \
+    ".context/development-0-swift-app.md" \
+    ".context/development-2-backend.md" \
     ".context/development-0-Stream.md" \
     ".context/planning-0-stream.md" \
     ".context/worktask-comms.md"; do
@@ -61,13 +66,22 @@ fi
 printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
-# An explicitly set env var always wins; otherwise derive the root from this
-# script's own location, validated by the .claude-plugin/plugin.json marker.
+# An explicitly set env var always wins; otherwise derive the root from the shared
+# resolver, which validates the .claude-plugin/plugin.json marker.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$PLUGIN_ROOT" ]; then
-  SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd -P)" || SCRIPT_DIR=""
-  if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/../.claude-plugin/plugin.json" ]; then
-    PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
+  # A TRUNCATED library is worse than an absent one: a syntax error in a sourced file is
+  # fatal under `set -e` and `||` does not rescue it. Drop -e across the source and probe
+  # for the symbol afterwards, so an unusable library degrades this preflight to a no-op
+  # instead of turning it into a hard block on every artifact write.
+  _LIB="$(dirname -- "$0")/lib/corpflow-base.sh"
+  _cf_opts=$-
+  set +e
+  # shellcheck source=hooks/lib/corpflow-base.sh
+  [ -f "$_LIB" ] && . "$_LIB"
+  case "$_cf_opts" in *e*) set -e ;; esac
+  if command -v corpflow_plugin_root > /dev/null 2>&1; then
+    PLUGIN_ROOT="$(corpflow_plugin_root)" || PLUGIN_ROOT=""
   fi
 fi
 LINT="${PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"

@@ -299,6 +299,13 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
   d="$(mk_tmpworkdir)"
   out="$d/$(basename "$1")"
   sed "$2" "$1" > "$out"
+  # A sed that matches nothing yields a byte-identical copy, so the arm below
+  # tests an unmutated file and passes forever. Refuse that silently-green shape:
+  # every plant must change something.
+  if cmp -s "$1" "$out"; then
+    printf >&2 'plant: sed matched nothing in %s -- %s\n' "$1" "$2"
+    return 1
+  fi
   printf '%s' "$out"
 }
 
@@ -354,7 +361,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
 @test "AC-3 twin: re-adding the not:{required:[class]} guard fails (nothing left to discriminate)" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
-    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\$ref: '#/\\$defs/SweepStub' }|")"
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { not: { required: [class] }, \\\$ref: '#/\\\$defs/SweepStub' }|")"
   run check_schema_shape "$planted"
   assert_failure
   assert_output --partial "disjointness guard reappeared"
@@ -363,7 +370,7 @@ plant() {  # plant <src> <sed-expr> -> prints the mutated copy's path
 @test "AC-3 twin: re-admitting the legacy string form via a oneOf fails" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$HANDOFF" \
-    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { oneOf: [{ type: string }, { \\$ref: '#/\\$defs/SweepStub' }] }|")"
+    "s|^        items: { \\\$ref: '#/\\\$defs/SweepStub' }.*|        items: { oneOf: [{ type: string }, { \\\$ref: '#/\\\$defs/SweepStub' }] }|")"
   run check_schema_shape "$planted"
   assert_failure
   assert_output --partial "disjunction again"
@@ -638,7 +645,7 @@ A missing sweep is warn-only until the next minor.')"
 @test "P2-6 twin: gating a check_sweep_* call site behind STRICT fails the wide check" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" \
-    's/if ! check_sweep_ledger "\$fmfile" "\$f"; then/if [[ "\$STRICT" == "1" ]] \&\& ! check_sweep_ledger "\$fmfile" "\$f"; then/')"
+    's/check_sweep_ledger "\$fmfile" "\$f" || return 1/[[ "\$STRICT" == "1" ]] \&\& { check_sweep_ledger "\$fmfile" "\$f" || return 1; }/')"
   run check_no_sweep_escape_hatch_wide "$planted"
   assert_failure
 }
@@ -875,8 +882,9 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
 @test "P2-7b: elicitation-sweep is a universal anchor and no longer an optional one" {
   grep -q "^UNIVERSAL_ANCHORS='elicitation-sweep'\$" "$PLUGIN_ROOT/$CACHE_LINT" \
     || fail "UNIVERSAL_ANCHORS is not the single source of the obligation"
-  grep -q "^OPTIONAL_ANCHOR_RE=.*elicitation-sweep" "$PLUGIN_ROOT/$CACHE_LINT" \
-    && fail "elicitation-sweep is still in OPTIONAL_ANCHOR_RE, which would make it not-required"
+  if grep -q "^OPTIONAL_ANCHOR_RE=.*elicitation-sweep" "$PLUGIN_ROOT/$CACHE_LINT"; then
+    fail "elicitation-sweep is still in OPTIONAL_ANCHOR_RE, which would make it not-required"
+  fi
   # The append must reach BOTH the missing loop and the comm, i.e. \$expected itself.
   grep -q 'expected="\$expected \$UNIVERSAL_ANCHORS"' "$PLUGIN_ROOT/$CACHE_LINT" \
     || fail "UNIVERSAL_ANCHORS is declared but never folded into \$expected"
@@ -1009,7 +1017,9 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   sweep_fixture "$d" "documentation-0.md#elicitation-sweep" no-anchor
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   [ "$status" -ne 0 ] || fail "non-vacuity: the fixture did not exercise the check at all"
-  printf '%s\n' "$output" | grep -q '^warn:' && fail "the sweep surface degraded to a warning"
+  if printf '%s\n' "$output" | grep -q '^warn:'; then
+    fail "the sweep surface degraded to a warning"
+  fi
   printf '%s\n' "$output" | grep -q '^fail:' || fail "expected a fail: line, got: $output"
 }
 
@@ -1073,8 +1083,9 @@ sweep_stub_defs() {
   local blk defs
   blk="$(open_questions_schema "$PLUGIN_ROOT/$HANDOFF")"
   [ -n "$blk" ] || fail "non-vacuity: the open_questions block was not extracted"
-  printf '%s\n' "$blk" | grep -q 'not:' \
-    && fail "a disjointness guard survives; with one item shape it discriminates nothing"
+  if printf '%s\n' "$blk" | grep -q 'not:'; then
+    fail "a disjointness guard survives; with one item shape it discriminates nothing"
+  fi
   defs="$(sweep_stub_defs "$PLUGIN_ROOT/$HANDOFF")"
   printf '%s\n' "$defs" | grep -q 'summary:' \
     || fail "summary was removed entirely; it must stay legal-but-optional"
@@ -1282,10 +1293,11 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 
 @test "q9: the canonical section no longer claims no stage boundary gains a round-trip" {
   local body
-  body="$(awk '/^## Closing Elicitation Sweep/{f=1;next} /^## Per-Stage/{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
+  body="$(awk '/^## Closing Elicitation Sweep/{f=1;next} /^## /{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
   [ -n "$body" ] || fail "non-vacuity: canonical section not extracted"
-  printf '%s\n' "$body" | grep -q 'no stage boundary gains a round-trip' \
-    && fail "the section still asserts a claim q9 made false"
+  if printf '%s\n' "$body" | grep -q 'no stage boundary gains a round-trip'; then
+    fail "the section still asserts a claim q9 made false"
+  fi
   printf '%s\n' "$body" | grep -q 'No new gate is created' \
     || fail "the surviving half of the claim (no new gate) was dropped too"
 }
@@ -1312,7 +1324,9 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
   local body
   body="$(awk '/^#### Step C.1 — collect/{f=1;next} f && /^#{2,4} /{f=0} f' "$PLUGIN_ROOT/$WORKTASK_CMD")"
   [ -n "$body" ] || fail "non-vacuity: Step C.1 not found"
-  printf '%s\n' "$body" | grep -q 'stage != "PL"' && fail "the stage-name exclusion survived q9"
+  if printf '%s\n' "$body" | grep -q 'stage != "PL"'; then
+    fail "the stage-name exclusion survived q9"
+  fi
   printf '%s\n' "$body" | grep -qi 'not.. filter on stage' || fail "C.1 does not forbid a stage filter"
   # sw-DR0-2's id-derivation is retained for grouping rather than deleted silently.
   printf '%s\n' "$body" | grep -qi 'grouping' || fail "id-derivation's surviving purpose is unstated"
@@ -1349,7 +1363,9 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
   f="$PLUGIN_ROOT/skills/agent-coordination/SKILL.md"
   body="$(awk '/^### Gate prompts \(AskUserQuestion\)/{f=1;next} f && /^#{2,4} /{f=0} f' "$f")"
   [ -n "$body" ] || fail "non-vacuity: the gate-prompts section is absent"
-  printf '%s\n' "$body" | grep -q 'the one such checkpoint' && fail "the original wrong count came back"
+  if printf '%s\n' "$body" | grep -q 'the one such checkpoint'; then
+    fail "the original wrong count came back"
+  fi
   printf '%s\n' "$body" | grep -q 'blocks_next_stage' \
     || fail "the clause does not account for the boundary render q9 introduced"
   printf '%s\n' "$body" | grep -qi 'not a gate' \
@@ -1359,7 +1375,9 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 @test "q9: the megatask park subject is per-boundary, not FN-scoped" {
   local f
   f="$PLUGIN_ROOT/skills/megatask/SKILL.md"
-  grep -q 'subject:"FN<N>". instead of' "$f" && fail "the park path is still FN-scoped"
+  if grep -q 'subject:"FN<N>". instead of' "$f"; then
+    fail "the park path is still FN-scoped"
+  fi
   grep -q 'CODE><N>' "$f" || fail "the park path names no per-boundary subject"
 }
 
@@ -1371,10 +1389,12 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
   [ -n "$note" ] || fail "non-vacuity: the \$defs obligation sentence is absent"
   # The previous text cited SKILL.md Step 6, which carries no such claim. Verify both:
   # the citation is gone, and the file it named still does not carry the claim.
-  grep -q 'Orchestrator Execution Loop. Step 6, so the item shape' "$PLUGIN_ROOT/$HANDOFF" \
-    && fail "the misattributed citation is still present"
-  grep -q 'SweepItem' "$PLUGIN_ROOT/$WORKTASK_SKILL" \
-    && fail "SKILL.md now mentions SweepItem — re-check whether the citation should be restored"
+  if grep -q 'Orchestrator Execution Loop. Step 6, so the item shape' "$PLUGIN_ROOT/$HANDOFF"; then
+    fail "the misattributed citation is still present"
+  fi
+  if grep -q 'SweepItem' "$PLUGIN_ROOT/$WORKTASK_SKILL"; then
+    fail "SKILL.md now mentions SweepItem — re-check whether the citation should be restored"
+  fi
   grep -q 'no shipped file implements that step today' "$PLUGIN_ROOT/$HANDOFF" \
     || fail "the unimplemented status is not stated"
 }
@@ -1549,8 +1569,12 @@ step_a4_body() {  # <worktask-cmd>
   printf '%s\n' "$body" | grep -q 'Step C.4' \
     || fail "A.4 does not reuse the C.4 resolution rule"
   printf '%s\n' "$body" | grep -q 'sw-PL' || fail "A.4 does not key on sw-PL<N>-* ids"
-  printf '%s\n' "$body" | grep -qi 'numbered' \
-    && fail "A.4 still describes a numbered elicitation list"
+  # `grep && fail` cannot express "must not match": grep's own exit 1 is the last
+  # status and fails the arm on a correct document. `if` returns 0 when the
+  # condition is false, so the absent-match case passes.
+  if printf '%s\n' "$body" | grep -qi 'numbered'; then
+    fail "A.4 still describes a numbered elicitation list"
+  fi
 }
 
 @test "PL-3 twin: restoring the numbered-list wording fails" {
@@ -1578,8 +1602,119 @@ step_a4_body() {  # <worktask-cmd>
   planted="$(plant "$PLUGIN_ROOT/$WORKTASK_SKILL" \
     's|`status != "resolved"`|a non-empty `open_questions[]`|')"
   body="$(awk '/^##### Signal 2b \(decision gate\)/{f=1;next} f && /^#{2,5} /{f=0} f' "$planted")"
-  printf '%s\n' "$body" | grep -q 'status != "resolved"' \
-    && fail "the planted regression was not observable through the extraction helper"
+  if printf '%s\n' "$body" | grep -q 'status != "resolved"'; then
+    fail "the planted regression was not observable through the extraction helper"
+  fi
   printf '%s\n' "$body" | grep -q 'non-empty' \
     || fail "non-vacuity: the plant did not land in the extracted body"
+}
+
+# --- Step C.0a resolver contract ---------------------------------------------
+#
+# The resolver answers a blocking `decision` item with a sub-agent one effort tier up instead
+# of stopping the run. Its three load-bearing properties are all cross-file, so each assertion
+# extracts both sides rather than restating either.
+
+HEADLESS="skills/agent-coordination/references/headless-dispatch.md"
+LADDER="skills/worktask/scripts/effort-ladder.sh"
+
+# The resolver contract spans two sections, and must: AC-15 forbids advisory vocabulary
+# anywhere under § Closing Elicitation Sweep, while the effort caveat below is legitimately
+# advisory, so the tier material cannot live nested inside the sweep. Both halves are required
+# — a silent half-extraction would let either section be renamed with the assertions still green.
+resolver_body() {
+  local policy tier
+  policy=$(awk '/^#### Blocking items are resolved, not asked/{f=1;next} /^#### /{f=0} f' "$1")
+  tier=$(awk '/^## Resolver Effort Tier/{f=1;next} /^## /{f=0} f' "$1")
+  [ -n "$policy" ] || { echo "non-vacuity: § Blocking items are resolved, not asked not extracted"; return 1; }
+  [ -n "$tier" ] || { echo "non-vacuity: § Resolver Effort Tier not extracted"; return 1; }
+  printf '%s\n%s\n' "$policy" "$tier"
+}
+
+@test "the resolver contract exists and is canonical in stage-contracts.md" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_success
+  [ -n "$output" ]
+}
+
+@test "the resolver exempts exactly the four stages the obligation matrix exempts" {
+  # Derived on both sides: a fifth exception added to one file alone must fail here.
+  matrix_exceptions=$(grep -o 'Exceptions — PL, FN, ST, IR' "$PLUGIN_ROOT/$CONTRACTS" | head -1)
+  [ -n "$matrix_exceptions" ]
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "PL, FN, ST or IR"
+}
+
+@test "every non-exception stage code is resolver-eligible in the command" {
+  # The nine are derived from the canonical vocabulary minus the four exceptions, never listed.
+  expected=$(left_codes "$PLUGIN_ROOT/$STAGE_CODES" "$PLUGIN_ROOT/$HANDOFF" \
+    | grep -vxE 'PL|FN|ST|IR' | tr '\n' ' ')
+  [ -n "$expected" ]
+  scope=$(grep 'blocking `decision` item from' "$PLUGIN_ROOT/$WORKTASK_CMD")
+  [ -n "$scope" ] || fail "the --auto=[decision] resolver scope line is gone"
+  for code in $expected; do
+    grep -q "\b$code\b" <<< "$scope" \
+      || fail "stage $code missing from the --auto=[decision] resolver scope line"
+  done
+}
+
+@test "Step C.0a is ordered before Step C.0 in the command" {
+  # C.0a must have had its pass before C.0 renders, or C.0 asks about items a resolver owns.
+  a=$(grep -n '^#### Step C.0a' "$PLUGIN_ROOT/$WORKTASK_CMD" | cut -d: -f1)
+  b=$(grep -n '^#### Step C.0 — blocking items' "$PLUGIN_ROOT/$WORKTASK_CMD" | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ]
+  [ "$a" -lt "$b" ]
+}
+
+@test "the escalate carve-out is stated in both the contract and the command" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial 'effective_class == "decision"'
+  grep -q 'must never' <<< "$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")"
+}
+
+@test "the resolver runs strictly after the C.2 raise-only join" {
+  # Ordering is the whole guard: joined before dispatch, an item raised to escalate cannot
+  # reach a delegate. Reversed, the raise happens too late to exclude anything.
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_success
+  assert_output --partial "**after** the § Step C.2"
+  assert_output --partial "Run C.2 first"
+}
+
+@test "the contract cites the executable ladder rather than restating the rungs" {
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "effort-ladder.sh"
+  [ -f "$PLUGIN_ROOT/$LADDER" ]
+}
+
+@test "the in-process effort caveat matches what headless-dispatch.md actually says" {
+  # The contract claims effort is advisory in-process; that claim is only safe while the
+  # translation table still says so. If the table gains in-process support, this fires and the
+  # caveat becomes wrong rather than merely stale.
+  grep -qE '^\| `effort` \|.*\| Advisory \|' "$PLUGIN_ROOT/$HEADLESS"
+  run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
+  assert_output --partial "advisory"
+}
+
+@test "the resolver records effort_transport on every path" {
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_output --partial "effort_transport"
+  assert_output --partial "dispatch-flag"
+  assert_output --partial "frontmatter-only"
+}
+
+@test "an unstamped effort skips the resolver instead of defaulting a tier" {
+  run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
+  assert_output --partial "effort_unstamped"
+  refute_output --partial "default to"
+}
+
+@test "metadata.effort is mandatory in the PL0 stamp table, not optional" {
+  grep -q '`metadata.effort`' "$PLUGIN_ROOT/$PL0_PROC"
+  # The checklist is the half that actually gets read during a run.
+  grep -q 'metadata.effort' <<< "$(grep 'Stage tasks created with' "$PLUGIN_ROOT/$PL0_PROC")"
+}
+
+@test "the deep_reads resolver exemption is stated where deep_reads is defined" {
+  grep -q 'deep_reads — the resolver exemption' "$PLUGIN_ROOT/$HANDOFF"
 }

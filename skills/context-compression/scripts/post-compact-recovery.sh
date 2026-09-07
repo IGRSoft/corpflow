@@ -99,11 +99,24 @@ derive_recovery() {
   # Collect the tail without echoing file contents back to the model's context.
   # Non-advisory filter: advisory=true rows are duplicates emitted by secondary
   # hooks; only the primary (advisory absent / false) carries ground-truth data.
-  local audit_tail
+  local audit_tail unparseable tail_raw total_rows parsed_rows
+  unparseable=0
   if [[ -s "$audit_file" ]]; then
-    audit_tail=$(tail -n "$tail_lines" -- "$audit_file" | jq -sc '
-      [ .[] | select(.metadata.advisory != true) ]
+    tail_raw=$(tail -n "$tail_lines" -- "$audit_file")
+    # Tolerant per-line read. A slurped `jq -s` aborts the whole tail on the first
+    # malformed line, and an aborted read is indistinguishable from "no rows
+    # matched" — the exact silent failure this recovery path exists to survive.
+    # `objects` guards a well-formed non-object line, which parses and then dies
+    # on `.metadata`.
+    audit_tail=$(printf '%s\n' "$tail_raw" | jq -ncR '
+      [ inputs | select(length > 0) | fromjson? | objects
+        | select(.metadata.advisory != true) ]
     ')
+    total_rows=$(printf '%s\n' "$tail_raw" | grep -c '[^[:space:]]' || true)
+    parsed_rows=$(printf '%s\n' "$tail_raw" | jq -ncR '[ inputs | select(length > 0) | fromjson? | objects ] | length')
+    unparseable=$((total_rows - parsed_rows))
+    [[ "$unparseable" -gt 0 ]] && printf >&2 'warn: %s: %d unparseable audit row(s) skipped in the last %s lines\n' \
+      "$audit_file" "$unparseable" "$tail_lines"
   else
     audit_tail='[]'
   fi
@@ -139,6 +152,7 @@ derive_recovery() {
 
   jq -nc \
     --argjson audit_tail "$audit_tail" \
+    --argjson unparseable "$unparseable" \
     --arg task_id "$task_id" \
     --arg agent "$agent_basename" \
     --arg error_file "$error_file" \
@@ -155,6 +169,7 @@ derive_recovery() {
           error_file: $error_file
         },
         audit_tail_count: ($audit_tail | length),
+        unparseable_rows: $unparseable,
         stage_contracts_ref: $contracts,
         resume_guide_ref:   $resume_guide,
         instruction: "1) Read .context/state.json tasks{} to confirm task status. 2) Read error_file if present. 3) Follow resume_guide_ref — resume from first incomplete stage. Do NOT replay completed tasks."
@@ -282,6 +297,35 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     exit 1
   }
   printf 'PASS: audit_tail_count excludes advisory duplicates\n'
+
+  echo "--- self-test 7: a malformed row is skipped, counted, and does not blind the scan ---"
+  {
+    printf '{ this is not json\n'
+    write_stop "corpflow:developer" "taskY" "error"
+    printf '["well-formed but not an object"]\n'
+    write_tool
+  } > "$FIXTURE"
+  OUT7=$(derive_recovery "$FIXTURE" 20 2> "$TMP/warn7.txt")
+  AGENT7=$(printf '%s' "$OUT7" | jq -r '.recovery.interrupted_stage.agent')
+  UNP7=$(printf '%s' "$OUT7" | jq -r '.recovery.unparseable_rows')
+  COUNT7=$(printf '%s' "$OUT7" | jq -r '.recovery.audit_tail_count')
+  [[ "$AGENT7" == "developer" ]] || {
+    printf 'FAIL: malformed row blinded the scan; agent=%s\n' "$AGENT7"
+    exit 1
+  }
+  [[ "$UNP7" -eq 2 ]] || {
+    printf 'FAIL: expected 2 unparseable rows, got %s\n' "$UNP7"
+    exit 1
+  }
+  [[ "$COUNT7" -eq 2 ]] || {
+    printf 'FAIL: expected the 2 parseable rows to survive, got %s\n' "$COUNT7"
+    exit 1
+  }
+  grep -q 'unparseable audit row' "$TMP/warn7.txt" || {
+    printf 'FAIL: unparseable count was not surfaced on stderr\n'
+    exit 1
+  }
+  printf 'PASS: malformed rows skipped, counted, and warned about\n'
 
   printf '\nAll self-tests passed.\n'
   exit 0

@@ -195,12 +195,28 @@ composed_token_check() {
   assert_output ""
 }
 
+# Files that only ever SET the variable for a child process, never resolve from
+# it. `grep -l` cannot tell a write from a read, so they are carved out by name;
+# the setter-only arm below is what keeps the carve-out honest.
+_setter_only_files() {
+  printf '%s\n' \
+    'benchmark/run-benchmark.sh' \
+    'skills/worktask/scripts/hook-install-selftest.sh'
+}
+
+# Prints every tracked *.sh that mentions the env var, minus the carve-outs.
+_env_var_reader_files() {
+  cd "$PLUGIN_ROOT" || return 1
+  git ls-files -z -- '*.sh' \
+    | xargs -0 grep -l 'CLAUDE_PLUGIN_ROOT' 2>/dev/null \
+    | { grep -vxF "$(_setter_only_files)" || true; } \
+    | LC_ALL=C sort
+}
+
 @test "contract: scripts reading the env var are the 5 known env-first fallbacks" {
-  # The benchmark runner is excluded because it sets the variable for dispatched
-  # stages rather than resolving from it; the test below pins that role.
-  run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.sh" \
-    | xargs -0 grep -l "CLAUDE_PLUGIN_ROOT" 2>/dev/null \
-    | grep -v "^benchmark/run-benchmark.sh$" | LC_ALL=C sort; true'
+  # The benchmark runner exports the variable for dispatched stages; the
+  # hook-install harness passes it per invocation of the script under test.
+  run _env_var_reader_files
   assert_output "hooks/anchor-preflight.sh
 hooks/state-merge.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
@@ -213,4 +229,21 @@ skills/worktask/scripts/hook-install.sh"
   # both the behaviour under test and its measured cost.
   run bash -c 'cd "$PLUGIN_ROOT" && grep -c "^export CLAUDE_PLUGIN_ROOT=" benchmark/run-benchmark.sh'
   assert_output "1"
+}
+
+@test "contract: the carved-out files stay setter-only and stay relevant" {
+  # The carve-out is by filename, so without this either file could grow a real
+  # env-first fallback and silently vanish from the list it then belongs on.
+  # Also fails when a carve-out stops mentioning the variable at all, which
+  # would leave a stale name masking a future reader at the same path.
+  local f hits reads
+  while IFS= read -r f; do
+    [ -f "$PLUGIN_ROOT/$f" ] || fail "carved-out file is missing: $f"
+    hits="$(grep -c 'CLAUDE_PLUGIN_ROOT' "$PLUGIN_ROOT/$f" || true)"
+    [ "${hits:-0}" -ge 1 ] || fail "carve-out no longer mentions the variable: $f"
+    # A read is any expansion of the name; an assignment or `export NAME=` is not.
+    reads="$(grep -nE '\$\{?CLAUDE_PLUGIN_ROOT' "$PLUGIN_ROOT/$f" || true)"
+    [ -z "$reads" ] || fail "carved-out file reads the variable: $f
+$reads"
+  done < <(_setter_only_files)
 }

@@ -1332,3 +1332,124 @@ promote() {
   assert_success
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("No stage is in progress")'
 }
+
+# --- R-3.1: the Skill branch's missing scoped arm ----------------------------
+
+@test "R3-1s: a DV build-test Skill carrying a selection flag classifies scoped and is ALLOWED" {
+  state_with DV
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test","args":"--only tests/shell/worktask"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  [ -z "$output" ]
+}
+
+@test "R3-1s: --filter and -only-testing: are selections too" {
+  state_with DV
+  for args in "--filter StatePatchTests" "-only-testing:AppTests/LoginTests"; do
+    local payload
+    payload="$(jq -cn --arg a "$args" '{tool_name:"Skill",tool_input:{skill:"apple-developer:build-test",args:$a}}')"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+    assert_success
+    [ -z "$output" ] || fail "scoped selection '$args' was denied"
+  done
+}
+
+@test "R3-1s: a bare DV build-test Skill is still a full run and still denied" {
+  state_with DV
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "R3-1s: the denial names BOTH the stage authority and the resolved test mode" {
+  printf '{"metadata":{"test_mode":"full"},"tasks":{"DV0":{"status":"in_progress"}}}' \
+    > "$WD/.context/state.json"
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"has no test-execution authority"* ]]
+  [[ "$reason" == *"resolved test mode is 'full'"* ]]
+}
+
+@test "DH1: the remediation half of a denial comes from references/test-execution-denials.md" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  # A phrase that exists only in the document, so this fails if the section stops loading.
+  [[ "$reason" == *"--build-only is not a real flag"* ]] || fail "remediation section absent: $reason"
+  # Joined into one line: a wrapped paragraph must not reach the caller as multiple lines.
+  [ "$(printf '%s' "$reason" | wc -l | tr -d ' ')" = "0" ] || fail "reason is multi-line"
+}
+
+@test "DH2: an unreadable denial document degrades to the condition clause, never to an allow" {
+  cp -R "$PLUGIN_ROOT/hooks" "$WD/hooks"
+  rm -rf "$WD/hooks/references"
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" <<< "$payload"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"has no test-execution authority"* ]] || fail "condition clause lost: $reason"
+  [[ "$reason" != *"--build-only is not a real flag"* ]] || fail "help text loaded from nowhere"
+}
+
+@test "R3-1s: an absent test_mode is reported as unset, never guessed as full" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q "unset (resolves to scoped)"
+}
+
+# Launcher phrases classify_segment strips off the front of a segment, one per
+# line, quotes and the trailing space removed.
+_classifier_launchers() {
+  grep -m1 '^ *for _launcher in ' "$PLUGIN_ROOT/$SCRIPT" \
+    | grep -o '"[^"]*"' | tr -d '"' | sed 's/ *$//'
+}
+
+# Launcher phrases the fast-path head scanner skips: the two-token `case`
+# alternation plus the one-token one.
+_scanner_launchers() {
+  sed -n 's/^ *case "\$_lnch \$_cur" in//p;s/^ *\("uv run".*\)) *_lnch="" *;;/\1/p' \
+    "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n' | tr -d '"'
+  sed -n 's/^ *\(env|npx[^)]*\)) *_lnch="\$_cur" *;;/\1/p' "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n'
+}
+
+@test "contract: the fast-path scanner skips every launcher the classifier strips" {
+  # These two lists were kept in step by eye — the scanner's own comment said so.
+  # A launcher present in the classifier but missing here makes the fast path
+  # head on the wrapper, find nothing gateable, and ALLOW what the classifier
+  # would deny, so the containment direction is the security-relevant one.
+  local phrase scanner runners missing="" checked=0
+  scanner="$(_scanner_launchers)"
+  runners="$(sed -n 's/^RUNNERS="\(.*\)"$/\1/p' "$PLUGIN_ROOT/$SCRIPT")"
+  [ -n "$runners" ] || fail "RUNNERS list not found in $SCRIPT"
+  [ -n "$scanner" ] || fail "scanner launcher list not found in $SCRIPT"
+  while IFS= read -r phrase; do
+    [ -n "$phrase" ] || continue
+    checked=$((checked + 1))
+    printf '%s\n' "$scanner" | grep -qxF "$phrase" || missing="$missing $phrase"
+    # A two-token phrase needs its first word either in the one-token skip set,
+    # so the scanner can pair the second word with it, or in RUNNERS — `pnpm`
+    # and `yarn` are runners in their own right, so the scanner heads on them
+    # and the classifier gates the invocation anyway. Anything in neither set
+    # is a real hole: the scanner would head on a word that gates nothing.
+    case "$phrase" in
+      *" "*)
+        printf '%s\n' "$scanner" | grep -qxF "${phrase%% *}" \
+          || printf '%s\n' $runners | grep -qxF "${phrase%% *}" \
+          || missing="$missing ${phrase%% *}(head-of:$phrase)" ;;
+    esac
+  done < <(_classifier_launchers)
+  [ "$checked" -ge 8 ] || fail "non-vacuity: only $checked launcher phrases extracted"
+  [ -z "$missing" ] || fail "scanner does not skip:$missing"
+}

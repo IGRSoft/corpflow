@@ -199,8 +199,9 @@ eg1_arm() {
   # Asserted, never silently skipped: "no row to order against" is a checked fact.
   local btext
   btext="$(arm_text "$WORKTASK_DOC" "$ARM_B_BEGIN" "$ARM_B_END")"
-  printf '%s\n' "$btext" | grep -q 'approval_received' \
-    && fail "bypass arm gained an approval_received row; its ordering contract changed"
+  if printf '%s\n' "$btext" | grep -q 'approval_received'; then
+    fail "bypass arm gained an approval_received row; its ordering contract changed"
+  fi
   printf '%s\n' "$btext" | grep -q "task-meta PL0 --set .*approved" \
     || fail "bypass arm lost its stamp"
 
@@ -217,8 +218,9 @@ eg1_arm() {
   local text
   text="$(arm_text "$WORKTASK_DOC" '^### Step A\.4 — Auto-Decision Pre-Pass' '^### Step A\.4b —')"
   [ -n "$text" ] || fail "Step A.4 range empty — the section heading in $WORKTASK_DOC moved"
-  printf '%s\n' "$text" | grep -q "task-meta PL0 --set .*approved" \
-    && fail "Step A.4 stamps an approval carrier; it bypasses no gate and must not"
+  if printf '%s\n' "$text" | grep -q "task-meta PL0 --set .*approved"; then
+    fail "Step A.4 stamps an approval carrier; it bypasses no gate and must not"
+  fi
   return 0
 }
 

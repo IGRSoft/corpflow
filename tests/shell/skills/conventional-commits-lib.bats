@@ -142,3 +142,55 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"unsafe characters"* ]]
 }
+
+# --- the mandatory `#<issue>` prefix (git-conventions.md § Commit Message Format) -------------
+#
+# Every subject this project produces carries one. Before these cases the library was tested
+# only against inputs the project does not emit, so a prefixed `feat` scoring `none` — and a
+# prefixed `feat!` never reaching major — went unseen through eight releases.
+
+@test "cc_parse: an issue-prefixed subject is conventional, prefix excluded from the fields" {
+  cc_parse "#356 feat(worktask): Add a ledger operation"
+  [ "$CC_CONVENTIONAL" = 1 ]
+  [ "$CC_TYPE" = "feat" ]
+  [ "$CC_SCOPE" = "worktask" ]
+  [ "$CC_DESC" = "Add a ledger operation" ]
+  [ "$CC_SUBJECT" = "#356 feat(worktask): Add a ledger operation" ]
+}
+
+@test "cc_parse: a non-numeric issue key is accepted (git-conventions allows #PROJ-123)" {
+  cc_parse "#OV-164 fix: Stop the blink"
+  [ "$CC_CONVENTIONAL" = 1 ]
+  [ "$CC_TYPE" = "fix" ]
+  [ "$CC_DESC" = "Stop the blink" ]
+}
+
+@test "cc_parse: a prefixed breaking bang still reaches major" {
+  cc_parse "#360 feat(api)!: Remove the v1 endpoint"
+  [ "$CC_BREAKING" = 1 ]
+  [ "$CC_TYPE" = "feat" ]
+  [ "$(cc_bump_for "$CC_TYPE" "$CC_BREAKING")" = "major" ]
+}
+
+@test "cc_parse: a prefixed silent type is still classified silent" {
+  cc_parse "#359 docs(evals): Quote the captured pair"
+  [ "$CC_CONVENTIONAL" = 1 ]
+  [ "$CC_TYPE" = "docs" ]
+  [ "$(cc_classify_section "$CC_TYPE" "$CC_BREAKING")" = "" ]
+}
+
+@test "cc_parse: a bare # token is not an issue prefix" {
+  # `#comment: x` must stay non-conventional — the prefix only matches when a space
+  # separates it from the type, so `comment` can never be read as an issue key.
+  cc_parse "#comment: not a commit type"
+  [ "$CC_CONVENTIONAL" = 0 ]
+  [ "$CC_TYPE" = "" ]
+}
+
+@test "cc_parse: an unprefixed subject is unchanged by the optional group" {
+  cc_parse "fix(evals): Scope the label store"
+  [ "$CC_CONVENTIONAL" = 1 ]
+  [ "$CC_TYPE" = "fix" ]
+  [ "$CC_SCOPE" = "evals" ]
+  [ "$CC_DESC" = "Scope the label store" ]
+}

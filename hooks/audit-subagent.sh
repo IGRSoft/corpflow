@@ -80,5 +80,9 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
+# A symlinked audit.jsonl turns this append into a write primitive against an arbitrary
+# target. Refuse rather than follow — the guard hooks/model-switch-lib.sh carries for the
+# hook rows it writes, and tests/shell/hooks/test-execution-gate.bats pins.
+[ ! -L "$LOG_DIR/audit.jsonl" ] || exit 0
 printf '%s\n' "$ROW" >> "$LOG_DIR/audit.jsonl"
 exit 0

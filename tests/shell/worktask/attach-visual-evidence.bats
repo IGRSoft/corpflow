@@ -399,3 +399,69 @@ EOS
   assert_failure 3
   assert_output --partial "no canonical capture rows"
 }
+
+# --- embed cap vs hosting failure (R-4.3) ------------------------------------
+
+# Two captures, both hostable, cap forced to one: the degradation is the cap, and
+# hosting is healthy. Before this fix the audit row took its reason from the hosting
+# probe alone, so a capped-but-healthy run reported a hosting reason on a good row.
+mk_two_row_manifest() {
+  printf '\x89PNG\r\n\x1a\n' > "$WD/dv-02-test.png"
+  cat > "$WD/screenshots.md" <<'EOS'
+| # | slug | path | bytes | tool | adapter | caption | ts | ref |
+|---|------|------|-------|------|---------|---------|----|----|
+| 01 | test | dv-01-test.png | 100 | apple | sim | Login screen | 2026-01-01 | DV |
+| 02 | test | dv-02-test.png | 100 | apple | sim | Home screen | 2026-01-01 | DV |
+EOS
+}
+
+@test "embed cap: a capped but healthy run states the cap in the body" {
+  mk_two_row_manifest
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" MAX_EMBED=1 \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  assert_output --partial "omitted (embed cap 1)"
+  assert_output --partial "embed cap 1"
+  assert_output --partial "hosting is healthy"
+}
+
+@test "embed cap: the audit row carries the distinct embed_cap reason, not a hosting reason" {
+  mk_two_row_manifest
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" MAX_EMBED=1 \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  run jq -rs '[.[] | select(.action == "visual_evidence_degraded")] | last | .metadata.reason' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_output "embed_cap"
+}
+
+@test "embed cap: the operator note does not blame a missing session token" {
+  mk_two_row_manifest
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    MANIFEST_FILE="$WD/screenshots.md" MAX_EMBED=1 \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" \
+    GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr 2>&1
+  assert_success
+  refute_output --partial "Set GH_SESSION_TOKEN"
+  assert_output --partial "not a hosting failure"
+}
+
+# Mirrors the hook-side guard tests/shell/hooks/test-execution-gate.bats pins for
+# corpflow_audit_row. Nothing pinned it for the worktask emitters, and all four
+# appended through a symlink — a write primitive against an arbitrary target.
+@test "SR: a symlinked audit.jsonl is refused, never written through" {
+  mkdir -p "$WD/target-dir"
+  rm -f "$WD/.context/logs/audit.jsonl"
+  ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
+  run env STATE_FILE="$WD/state-false.json" WORKSPACE_ROOT="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.txt" ]
+}

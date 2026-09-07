@@ -35,6 +35,7 @@ read_stdin() {
 }
 
 # Synthetic payload for the self-test: one session, a chosen agent transcript.
+# shellcheck disable=SC2329 # called by lib/comment-standard-context-selftest.sh, sourced at the arm
 selftest_payload() {
   printf '%s' "{\"session_id\":\"sess_selftest_$$\",\"transcript_path\":\"/tmp/tasks/$1.jsonl\",\"tool_input\":{\"file_path\":\"${2:-/tmp/Foo.swift}\"}}"
 }
