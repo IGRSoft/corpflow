@@ -582,55 +582,13 @@ CASES = [
     ("bug", "obvious", "std", "estimate-calc.py stops at hours and cannot turn them into money. plan a fix.",
      ["skills/estimation-methodology/scripts/estimate-calc.py"]),
 
-    # ---- batch 6 (ids 213+): the adjacent cell decontaminated, buried as the engine ----
-    # Two consecutive tranches missed on different cells and neither miss was random, so
-    # this one is sized from the 26-case `adjacent` analysis rather than from a fresh bet.
-    #
-    # What the 0.3.0 LABELS say, per case, not per harness count. Batch 5 nominated
-    # `absent`->`clarify` as its negative engine and it did not fire (all 7 held-out
-    # clarify cases passed). `adjacent` came back 5/10 = 50% against a corpus 81% and was
-    # read as the standout. It is not: of batch 5's three LABELLED adjacent harness
-    # failures, ZERO are genuine -- 191 and 193 are human passes (the grader too strict),
-    # and 187 is the stream-json capture defect, labelled `defer`. The single genuine
-    # adjacent negative in the whole capture is case 33, which is PRE-EXISTING.
-    #
-    # The confound is the surface pool, and it is visible in the manifest. All 10 of batch
-    # 5's `adjacent` cases ground on capability-registry.sh EXCLUSIONS (6 in tests/, 3 in
-    # skills/*/references/, 1 in skills/shared/); 13 of the 16 pre-existing ones ground on
-    # ENUMERATED classes. An `adjacent` case is supposed to test whether the plan NAMES the
-    # near-miss surface. Ground it on a surface the plan cannot look up and the case stops
-    # testing adjacency and starts testing search -- it is a `buried` case wearing the
-    # wrong label, and `finds-the-real-surface` then fails for a discovery reason. So the
-    # 50% is not evidence about `adjacent` at all, and neither is the 73% corpus figure.
-    #
-    # The engine is `buried`, and it is measured rather than nominated: 8 of the 13 human
-    # negatives in the 0.3.0 sample are `buried`, including case 199, the ONLY genuine
-    # held-out negative. Batch 5's own 8 buried cases yielded 2 (199, 203) -- a 25% genuine
-    # yield against `absent` 1/18 = 5.6% and `adjacent` 0/10. `obvious` yielded 0 of 10.
-    #
-    # Hence 58: 30 buried, 18 adjacent, 10 absent, 0 obvious, 0 refute.
-    #   buried   30 on EXCLUDED surfaces -- on-design there, and where the negatives are.
-    #   adjacent 18 on ENUMERATED surfaces (commands/, agents/, SKILL.md, hooks/,
-    #            skills/*/scripts/) -- the configuration case 33 negative came from, and the
-    #            only one that answers the 0.3.0 open question instead of re-asking it.
-    #   absent   10, kept as a control on "are the new absent cases easier?" (p ~ 0.17,
-    #            unresolved). Written in the HARD shape the genuine negatives 36/95/120
-    #            have -- plausible for a repo like this one, ungroundable in this one --
-    #            not batch 5's generic-SaaS template, per the 0.3.0 instruction to sample
-    #            existing prompts for difficulty rather than write fresh ones.
-    #   obvious  0: 92% harness and 0 negatives from 10 labels. It buys no measurement.
-    #   refute   0: `disputes-the-premise` has a MEASURED false-negative floor and every
-    #            repair was rejected, so refute failures are uninterpretable as negatives.
-    # Type weighting follows the same labels (feature 6, incident 3, docs 2; migration 0 of
-    # 6) and the corpus harness table (docs 65%, incident 69%, feature 79%; migration 100%).
-    # Route: 11 emerg of 58 (19%) against the corpus 11% -- emerg is 70% harness and 3 of 9
-    # labelled negatives. `secure` gets none: 90% harness, 0 negatives, 0 of 13.
-    #
-    # Held out by construction, on batch 4 and 5's terms: written after the frozen manifest
-    # and pinned to `test` before any capture reads them. Do not pass --restratify.
-
-    # buried: the measured engine. Surfaces are capability-registry.sh exclusions
-    # (tests/, skills/*/references/, skills/shared/*.md), which is what `buried` is for.
+    # ---- batch 6 (ids 213+): calibrated on measured genuine-negative pool ----
+    # Sized from the 26-case `adjacent` analysis (evals/findings/request-plan-0.4.0.md).
+    # Engine: `buried` (25% yield, source of held-out negative) on registry-excluded
+    # surfaces; `adjacent` (confound repaired) on enumerated; `absent` (p~0.17) as control.
+    # Hence 58: 30 buried / 18 adjacent / 10 absent / 0 obvious / 0 refute.
+    # Type weighting: feature 6, incident 3, docs 2, migration 0 of 6.
+    # Route: 11 emerg of 58 (19%) vs corpus 11%; 0 secure.
     ("bug", "buried", "std", "the depth cap that drops a nested specialist is written down in one place and enforced in another, and nobody checks the two still agree. plan a fix.",
      ["tests/shell/skills/agent-coordination__dispatch-depth.bats"]),
     ("refactor", "buried", "std", "the header rules every shared shell library owes are spelled out in prose and again in a checker, and the two have drifted before. plan a cleanup.",
