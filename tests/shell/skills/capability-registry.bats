@@ -191,17 +191,36 @@ $bad"
   # The awk collects until the next `key:` or the closing fence. Without that
   # guard a description absorbs `model:`/`tools:` and the registry reads as noise.
   use_registry
-  local leaked=0 l
+  local leaked=0 checked=0 l
   for l in "${lines[@]}"; do
     [ -z "$l" ] && continue
     is_trailer "$l" && continue
+    # Markdown only. The leak this guards is desc_markdown running past the fence into
+    # `model:`/`tools:`; desc_shell and desc_python have no frontmatter to run past, so a
+    # sentinel matched there is prose — `effort:` is also an ordinary English word, and
+    # scanning shell headers for it failed a correct description in #360.
+    case "${l%% — *}" in *.md) ;; *) continue ;; esac
+    checked=$((checked + 1))
     # Inspect only the description half; a PATH may legitimately contain a colon.
     case "${l#* — }" in
       *allowed-tools:*|*argument-hint:*|*"model:"*|*"version:"*|*"effort:"*|*"tools:"*)
         leaked=$((leaked + 1)); echo "leaked key: $l" >&2 ;;
     esac
   done
+  # Without a floor the markdown filter could silently match nothing and pass vacuously.
+  [ "$checked" -ge 40 ] || fail "non-vacuity: only $checked markdown descriptions inspected"
   [ "$leaked" -eq 0 ] || fail "$leaked description(s) absorbed a later frontmatter key"
+}
+
+@test "description: a leaked frontmatter key in a markdown asset is still caught" {
+  # Non-vacuity twin for the markdown filter above: the guard must still fire on the
+  # shape it exists for, or scoping it to .md would have quietly disabled it.
+  local line="agents/planted.md — does a thing model: sonnet"
+  case "${line%% — *}" in *.md) ;; *) fail "the .md filter rejected a markdown path" ;; esac
+  case "${line#* — }" in
+    *"model:"*) ;;
+    *) fail "the sentinel no longer matches a genuine folded key" ;;
+  esac
 }
 
 @test "description: no body heading leaks past the frontmatter fence" {

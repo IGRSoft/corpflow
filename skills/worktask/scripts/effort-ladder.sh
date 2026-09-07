@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @description effort-ladder.sh — the effort tier ladder and the resolver's tier/model clamp,
-#   shared verbatim by everything that computes a bumped effort tier — the orchestrator's Step C.0a
+#   shared verbatim by everything that computes a bumped effort: the orchestrator's Step C.0a
 #   resolver dispatch, state-patch.sh (the `metadata.effort` enum gate) and their bats suites.
 #
 #   One definition, several consumers, for the same reason as sweep-stub-lib.sh: a tier that
