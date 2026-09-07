@@ -644,6 +644,56 @@ _mk_stacked_remote_repo() {
   refute_output --partial "sidetrack"
 }
 
+@test "fork_base: HEAD's own pushed branch is not its own fork point" {
+  _mk_stacked_remote_repo
+  # The repeat-run topology: FN pushed the work branch, so a remote ref sits exactly on
+  # HEAD. Ranking is ahead-ascending, so at 0 ahead it outranks `parent` unless excluded —
+  # and the same value feeds base-sanity's "closest fork-point candidate" line, which would
+  # then name the branch under test.
+  git checkout -q -b feature/x
+  git update-ref refs/remotes/origin/feature/x HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  assert_output "parent"
+  refute_output --partial "feature/x"
+}
+
+@test "fork_base: another branch sitting on HEAD is not a fork point either" {
+  _mk_stacked_remote_repo
+  # A colleague's copy of the same work. Excluding only the current branch's own ref
+  # would leave this one ranked at 0 ahead and winning.
+  git update-ref refs/remotes/origin/colleague-copy HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  assert_output "parent"
+  refute_output --partial "colleague-copy"
+}
+
+@test "fork_base: a branch descending from HEAD is not a fork point" {
+  _mk_stacked_remote_repo
+  git checkout -q -b ahead-of-head
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m later
+  git update-ref refs/remotes/origin/ahead-of-head HEAD
+  git checkout -q master
+  git reset -q --hard "$(git rev-parse ahead-of-head~1)"
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base"
+  assert_success
+  refute_output --partial "ahead-of-head"
+}
+
+@test "fork_base: a HEAD equal to its integration branch still resolves to it" {
+  # The exclusion must not swallow the documented topology where HEAD is exactly the
+  # base — 0 ahead, 0 behind — which is how a promotion branch sits.
+  cd "$WD"
+  git init -q -b master .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/develop HEAD
+  git update-ref refs/remotes/origin/feature/x HEAD
+  run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; fork_base develop"
+  assert_success
+  assert_output "develop"
+}
+
 # ---------------------------------------------------------------------------
 # resolve_base_ref / base_ref_source (AD-1). The value and the rank that
 # supplied it come from one internal ladder, so both wrappers are asserted

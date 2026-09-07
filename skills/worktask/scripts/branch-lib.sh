@@ -449,6 +449,16 @@ fork_base() {
     case "$ahead" in ('' | *[!0-9]*) continue ;; esac
     behind=$(git rev-list --count "HEAD..$refname" 2> /dev/null) || continue
     case "$behind" in ('' | *[!0-9]*) continue ;; esac
+    # ahead=0 means the ref contains HEAD: HEAD's own pushed branch, a copy of it, or a
+    # descendant. None is what HEAD forked from, and ranking is ahead-ascending, so left in
+    # they always outrank the real parent — the fork-point diagnostic then names the branch
+    # under test. Exception: a ref sitting exactly on HEAD that is also the configured base
+    # or the repo default, because a run whose HEAD equals its integration branch did fork
+    # from there.
+    if [ "$ahead" -eq 0 ]; then
+      [ "$behind" -eq 0 ] || continue
+      if [ "$name" != "$configured" ] && [ "$name" != "$default" ]; then continue; fi
+    fi
     t2=1
     if [ -n "$configured" ] && [ "$name" = "$configured" ]; then t2=0; fi
     t3=1
