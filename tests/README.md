@@ -26,18 +26,20 @@ No system `bats` or `kcov` required — `make bootstrap` auto-provisions via:
 ```
 tests/
   shell/
-    hooks/             # 11 bats files: agent-stop, anchor-preflight, state-merge, …
-    worktask/          # 16 bats files: state-patch, publish-pl-issue, cache-lint, …
+    hooks/             # 16 bats files: agent-stop, anchor-preflight, state-merge, …
+    worktask/          # 26 bats files: state-patch, publish-pl-issue, cache-lint, …
     dv-screenshot/     # 6 bats files: apple-canvas, cli-fallback, size-budget, visual-diff,
                        #               web-capture, android-capture
-    skills/            # 15 bats files: build-orchestrator, scan-secrets, build-context-set, …
+    skills/            # 28 bats files: build-orchestrator, scan-secrets, build-context-set, …
     benchmark/         # 2 bats files: run-benchmark, canvas-e2e-guards
     lib/               # 1 bats file: test-helper (self-test for the shared helper API)
-    meta/              # 1 bats file: coverage-proxy (the standing coverage gate)
+    meta/              # 4 bats files: coverage-proxy (the standing coverage gate),
+                       #               hook-symbol-parity, ci-workflow, test-selection
   python/              # Skill-script tests (stdlib unittest)
     _scriptimport.py   # importlib loader for hyphenated scripts + JSON helpers
     test_estimate_calc.py   # 21 behaviors via in-process import + CLI smoke
-    test_layout_calc.py     # 16 behaviors via in-process import + CLI smoke
+    test_eval_capture.py    # 112 behaviors via in-process import + CLI smoke
+    test_skill_evals.py     # 24 behaviors via in-process import + CLI smoke
   vendor/
     bats-core/         # v1.11.0 — pinned tag, no network after vendor
     bats-support/      # v0.3.0
@@ -54,7 +56,7 @@ tests/
 
 Two other test suites live with their packages:
 `benchmark/ttt-template/Tests/TicTacToeKitTests` (48 fixture tests, Swift artifact)
-and `benchmark/harness/tests/` (350 Python harness self-tests, zero real LLM calls).
+and `benchmark/harness/tests/` (379 Python harness self-tests, zero real LLM calls).
 `make test` runs all via `run-tests.sh`: bats + Python skill-script tests + Python
 harness tests + Swift ttt-template artifact tests.
 

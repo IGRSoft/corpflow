@@ -6,7 +6,7 @@ never treat it as an entry point.
 | Library | Symbols | Mirrored into `hooks/lib/`? |
 |---|---|---|
 | `corpflow-base.sh` | `corpflow_script_dir`, `corpflow_plugin_root` | **Yes, byte-identical** — see below |
-| `audit-lib.sh` | `corpflow_audit_row` | No — the hook tree has its own single appender, `hooks/lib/model-switch-lib.sh`'s `corpflow_audit_row`; a second same-purpose symbol there would recreate the duplication this file exists to remove |
+| `audit-lib.sh` | `corpflow_audit_row` | No — the hook tree has its own single appender, `hooks/model-switch-lib.sh`'s `corpflow_hook_audit_row`; a second same-purpose symbol there would recreate the duplication this file exists to remove. Named apart deliberately — incompatible flags, both silently ignoring unknown ones |
 | `state-read-lib.sh` | `corpflow_state_str`, `corpflow_worktask_id`, `corpflow_run_index` | No — `.context/state.json` is only reachable once a plugin root and workspace are already resolved, which is a skills-tree concern |
 
 ## `corpflow-base.sh` is mirrored, not shared
