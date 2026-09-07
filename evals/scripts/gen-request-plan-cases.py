@@ -867,6 +867,38 @@ REFUTED_PREMISE = {
     211: ("shipped", "counts an event twice when a hook and an agent both record it",
           "skills/agent-coordination/scripts/audit-dedup.sh groups rows on "
           "metadata.dedupe_key and keeps the hook-written row, dropping the agent copy"),
+    # --- relabelled out of `plan` after the 0.4.0 labelling pass --------------------
+    # Neither conversions nor new cases: nine prompts already in the set that a reader
+    # checked and found to be refutations. Prompt, grounding and dimensions are
+    # untouched — only the expected outcome was wrong, so the six-assertion plan
+    # template was failing the correct "this already ships" answer on every one.
+    78: ("shipped", "catch ethical problems before a feature ships",
+         "commands/ethics-review.md is the pre-ship review, invokable from PL onward per "
+         "its own stage table, and agents/ethics-reviewer.md owns the ET stage that runs it"),
+    79: ("shipped", "no written rule for how comments should be written",
+         "skills/code-comment-standard/SKILL.md states the rule and its budgets; "
+         "hooks/dv-comment-density-gate.sh enforces the density half"),
+    104: ("shipped", "nothing explains how to shrink them",
+          "skills/context-compression/SKILL.md carries the per-handoff budgets, the "
+          "per-content-type techniques and the frontmatter canonical form"),
+    191: ("shipped", "template for telling stakeholders an incident is over",
+          "skills/incident-response/references/templates.md § Resolution Notice sits beside "
+          "the initial and update notices it completes"),
+    216: ("shipped", "nothing records which stages actually owe one",
+          "tests/shell/skills/elicitation-sweep-contracts.bats pins the owing stages as a "
+          "parity contract, extracting both sides from their own defining files"),
+    220: ("shipped", "neither contract is pinned anywhere",
+          "tests/shell/worktask/branch-lib.bats covers the exported symbol set and the "
+          "double-source case for skills/worktask/scripts/branch-lib.sh"),
+    225: ("shipped", "proved identical rather than assumed",
+          "tests/shell/worktask/sweep-stub-lib.bats compares the stub verdict row by row "
+          "across both enforcers, which is what one shared library cannot prove alone"),
+    226: ("shipped", "how our milestone helper scores priority labels",
+          "tests/shell/skills/milestone-helpers.bats states the priority-score and slug "
+          "contracts in its header and covers each one"),
+    252: ("shipped", "written statement of how a change will be verified",
+          "commands/test-plan.md generates the coverage-aware plan from requirements or a "
+          "diff, ahead of the change it verifies"),
     212: ("shipped", "stops at hours and cannot turn them into money",
           "estimate-calc.py step 3 is budget(total_min, total_max, rate), wired to --rate; "
           "tests/python/test_estimate_calc.py covers the arithmetic chain end to end"),
@@ -1140,6 +1172,23 @@ def validate_named_surfaces() -> list:
     return errors
 
 
+def echoed_tokens(value: str, prompt: str) -> list:
+    """Tokens an assertion and its own prompt genuinely share, matched as whole words.
+
+    Case 191 hit both ways of getting this wrong. The strip set is a set of CHARACTERS,
+    so the `s` of `\\s` also ate the letter: `holds?` became `hold`, which a bare
+    substring test then found inside *stakeholders*. Boundaries are asserted on the
+    prompt side rather than with `\\b`, because a token may begin or end in a
+    metacharacter, where `\\b` asserts the opposite of what is wanted.
+    """
+    hits = []
+    for token in (t for t in value.lower().split() if len(t) > 5):
+        stripped = token.strip("\\+*?[]()|^$")
+        if stripped and re.search(rf"(?<![a-z0-9]){re.escape(stripped)}(?![a-z0-9])", prompt):
+            hits.append(token)
+    return hits
+
+
 def validate(cases: list) -> list:
     """Fail closed before any case can reach a paid capture."""
     errors = []
@@ -1156,9 +1205,8 @@ def validate(cases: list) -> list:
             for value in assertion["values"]:
                 if not isinstance(value, str):
                     continue  # paths_resolve carries a count, not a pattern
-                for token in (t for t in value.lower().split() if len(t) > 5):
-                    if token.strip("\\s+*?[]()") in prompt:
-                        errors.append(f"case {cid}: {assertion['id']} echoes '{token}'")
+                for token in echoed_tokens(value, prompt):
+                    errors.append(f"case {cid}: {assertion['id']} echoes '{token}'")
     return errors
 
 

@@ -1,7 +1,7 @@
 {
   "skill_name": "request-plan",
   "eval_set_version": "0.4.0",
-  "grading": "Binary code-checked assertions over the skill's rendered plan. Every assertion is objectively decidable from the text — no judge, no scale. Criteria needing interpretation are listed under `deferred` and are deliberately NOT graded until a validated evaluator exists.\n\nRUBRIC (2026-08-23) — structure vs substance. A substantively correct plan still FAILS when it drops the P0/P1/P2 phase model or the T-shirt-size + 0-25 complexity pair. Those fields are a machine interface, not formatting: milestone-helpers.sh:43 and build-orchestrator.sh:109 parse the tier literally for priority ordering, and validate-export.sh pins them in the CSV schema, so a plan without them cannot be consumed by the stage that receives it. Heading syntax is NOT covered by this rule -- bold pseudo-headings satisfy template-sections-present by design. Written after cases 8, 51, 56 and 78 were labelled inconsistently on identical shape.\n\nROUTE GROUND TRUTH (case 13, decided 2026-08-23) — the tier follows the REQUEST, never what investigation later reveals. Case 13 (\"audit-tooluse.sh may be logging tool inputs verbatim\") was std and a plan emitting --secure failed, even though the hook does write to a committed audit.jsonl. (Case 13 became a `refute` case in 0.0.1 and no longer carries a route assertion; it is kept here as the worked example, because the rule is what was decided, not the case.) Hand-assigning tiers from what the code turns out to contain is what derive_route() exists to prevent; it previously failed correct plans on suspicions the code did not bear out. Do not relitigate per-case — change the markers in derive_route() or the prompt, or leave it.\n\nALREADY-SHIPS ANSWERS (decided 2026-08-23, revised after the v0.5.0 labels) — when the requested capability already exists, the correct answer refutes and STOPS: no plan template, no /worktask line, because there is no work to hand off. Case 16 is the reference shape; case 22 refuted and then rendered the full build plan anyway and fails for it. This does NOT relax SKILL.md § 4 for a disputed *defect report* — a misdiagnosed or unreproducible bug still owes the line, because triage is work. The distinction is whether anything remains to be done.\n\nBASELINE 0.0.1 (2026-08-23) — the corpus was reset. All prior labels, judgements, findings and captured responses were deleted: they spanned three skill versions and a case set that has since been repaired, so no number from them is comparable with one taken after. `eval_set_version` and SKILL.md `version:` both read 0.0.1 and move together. The rubric decisions above are kept deliberately — a labelling contract is not a result — but no TPR/TNR figure exists for the harness until the 0.0.1 capture has been human-labelled, so until then a grader pass rate is uncalibrated and means only what it literally counts.\n\nALREADY-SHIPS, NARROWED (SPEC CHANGE, SKILL.md 0.1.0, decided 2026-08-23) — this REPLACES the 0.0.1 already-ships rule above for captures at 0.1.0 and later. The 0.0.1 capture measured the old rule and found it fires far too wide: 13 responses stopped at \"this already ships\" on cases whose request was to FIND or USE a surface, and a human passed every one, while the harness failed each on 3-6 template assertions. § 4 now stops ONLY when all three hold — the request asked to build/add/fix, the thing exists as asked, and nothing remains. A request to find, reach or use an existing surface is a PLAN. A shipped headline with a live remainder is a refutation of the stale part PLUS a plan for the rest. Per the spec-change rule in evals/README.md, 0.0.1 labels are NOT re-flipped against this: those responses were correct answers to the old contract.\n\nWITHDRAWN AT 0.1.0 — `no-build-plan-for-work-that-exists`. It forbade the plan template on any refute case. Measured on the 0.0.1 capture it fired on 12 cases, all 12 human passes, and did NOT fire on case 22, the only refute case a human failed: TNR 0%, the pathology that retired the LLM judge. It also contradicts the narrowed § 4. The question it was reaching for — is this plan about the work just refuted, or about the live remainder — is now a `deferred` judge criterion, because telling those apart needs to read what the plan is ABOUT.\n\nBURIED NO LONGER MEASURES SEARCH (SPEC CHANGE, SKILL.md 0.2.0, 2026-08-26) — capability-registry.sh was extended to enumerate hooks, skill scripts and harness modules because every search miss in the 0.0.1 capture grounded on one of those classes. The trade is paid in measurement: 42 of the 44 standing `buried` cases (ids below 122) now ground on a registry-listed surface, so for those cases `buried` measures reading a bounded list, not searching a tree. DO NOT quote a post-0.2.0 `buried` rate against the 0.0.1 baseline as if it were the same quantity. Ids 122+ are the replacement: they ground ONLY on classes the registry deliberately does not list (skills/*/references/, skills/shared/, evals/scripts/), and that exclusion is pinned by tests/shell/skills/capability-registry.bats, so widening the globs reddens a test before it silently answers a case.\n\nTHREE UNMEASURED SPEC VERSIONS (2026-08-26) — no capture has run since the 0.0.1 baseline, and three changes have landed on top of it: SKILL.md 0.1.0 (PR #325), the 4.0.26 command-surface reorganization (PR #332, which removed seven commands, renamed five and repointed eight groundings inside the tree eval-capture.py reads), and SKILL.md 0.2.0. Whenever a capture eventually runs it measures ALL THREE AT ONCE and cannot attribute between them. A delta against 0.0.1 is a delta against the stack, never against whichever change the reader happens to be looking at. Also still live: the answer-key contamination (7 of 114 responses read this file during the 0.0.1 run), which bounds any future capture and should be fixed before one is paid for.\n\nGROUND TRUTH CORRECTED, NOT SPEC (0.2.0 capture, 2026-08-27). Five cases whose premise the repo had already answered were converted to `refute` (18, 125, 153, 159, 163): each states an absence the search disproves outright, so the plan they asked for is work that exists. Three cases were repointed where the declared ground file did not own the behaviour (23 -> anchor-preflight.sh, 67 -> pairing.py, 152 -> both review surfaces). `disputes-the-premise` gained two patterns after the already-ships boundary was settled and not before — one response opened \"the premise doesn't hold\", another \"Already built\". NEITHER SKILL.md version NOR eval_set_version moves for this: the spec did not change, only what the cases grade. `prompt_digest` was untouched, so no response was invalidated; every flipped human label carries a dated note. Calibration after: dev TPR 93% / TNR 69%, corrected 77% [65-85] over all 60 labels. TNR misses the 80% floor and is reported as such rather than tuned — the two false passes holding it down are the already-ships boundary, whose assertion was withdrawn at 0.1.0 for 12 firings and 0 true positives.\n\nHELD-OUT TRANCHE HAS NO NEGATIVES LEFT. Its only three human failures were among the five conversions above, so held-out TNR is unmeasurable and the 100% TPR over 18 all-positive cases tests nothing about failure detection. Recovering it needs roughly 20 more labels from the test/harness-pass stratum. See evals/findings/request-plan-0.2.0.md.\n\nLLM JUDGE REFUTED A SECOND TIME (2026-08-27). Re-validated on the 0.2.0 labels, which it had not seen — the condition evals/README.md sets for reinstatement. TNR 0% again: 0 of 10 human failures caught, 59 of 60 passed, claude-opus-5 at effort max. Verdicts in evals/judgements/request-plan.jsonl.\n\nTWO CONTRADICTIONS RESOLVED (SPEC CHANGE, SKILL.md 0.3.0, 2026-08-27). The 0.2.0 capture's failures were almost entirely one class: two rule surfaces disagreeing, with the model following the one the grader did not. Both are fixed at the surface, not by restating the losing rule.\n(1) The tier surface check now reads the REQUEST, not what the work turns out to touch. It previously asked whether 'the work' handles a secret, which escalates on discovery — three plans took --secure for a webhook URL, a CI login and a dependency scan that none of their requests named. It also made the tier undecidable at planning time, since two searches of one repo find different things. This aligns the canon with derive_route(), which can only ever see the prompt.\n(2) SKILL.md § 1's branches are reordered: the no-surface branch now precedes the fold-the-ambiguity branch, and the latter is bounded to requests whose surface was found. Rule 1 was listed first and was broader than rule 2, so it consumed the cases rule 2 exists for; four responses on `absent` grounding named the ambiguity and planned anyway, executing rule 1 correctly.\nPer the spec-change rule in evals/README.md these apply from a 0.3.0 capture forward, and the 0.2.0 labels are NOT re-flipped against them: those responses were correct answers to the old contract. Until a capture runs at 0.3.0 the effect of both changes is argued, not measured.\n\nCORPUS GROWN, NOT SPEC (batch 5, 2026-08-27). 45 cases appended as ids 168-212, taking the set from 156 to 201 (134 plan / 35 clarify / 32 refute). NEITHER eval_set_version NOR SKILL.md version moves: batch 5 adds ground truth and changes no rule, the same treatment the five 0.2.0 REFUTED_PREMISE conversions got. The run apart is carried by the provenance table in evals/findings/, which records `cases: N` and a capture date. Ids 1-167 keep unchanged prompt_digests -- batch 5 only appends -- so a 0.2.0 capture re-graded against this file is a PER-CASE PAIRED comparison with a 0.3.0 one, which is what makes the three 0.3.0 rule edits measurable at all.\n\nThe tranche is weighted to where the 0.2.0 dimension tables say the model fails, so the held-out set contains failures by natural occurrence rather than by construction: 18 `absent` (harness 71%, human 2/6 -- the weakest column, and it takes that column from 17 to 35), 10 `adjacent` (26 in corpus now, and the spent tranche held none), 9 `refute` written as refutations rather than converted from plans, 8 `buried` weighted to incident/migration/feature. Held out: 18 of the 45 stratify to `test` (7 clarify / 7 plan / 4 refute), which REPLACES batch 4's tranche -- those 18 were read during 0.2.0 labelling and per evals/splits/request-plan.json's note re-stratifying does not make a case unread. Ids 168-212 are pinned in that manifest and no id below 168 changed tranche.\n\nSurfaces for the 18 grounded cases come from what capability-registry.sh still excludes and no case had claimed: skills/*/references/, skills/shared/*.md, and the tests/ tree. Deliberately NOT drawn on: references/fixtures/**, which make nonsense grounding, and gen-request-plan-cases.py / sample-for-labelling.py / scan-contamination.py, since grounding a prompt on the file holding every expected outcome is an answer-key read by construction.\n\nDISPUTES-THE-PREMISE: MEASURED, NOT REPAIRED (0.3.0 capture, 2026-08-28). Human labels confirm the criterion produces false NEGATIVES — 210, 211 and 212 are correct refutations scored FAIL, and four more (17, 22, 59, 125) share the shape but went unsampled. Every repair was then measured over all 201 responses and every one is worse than the defect. The criterion ALREADY fires on 57% of `plan`-expected responses, because a grounded plan routinely says the repo already does X; widening it to an open-class `already <verb>` reaches 100% recall on refute but 87% on plan, which on a refute case is a false pass — the 0% TNR shape that retired the LLM judge and withdrew no-build-plan-for-work-that-exists at 0.1.0. Position-scoping to the first 250-400 chars peaks at 41% plan firing for 75% recall. Withdrawal is worse still: refute cases would fall to `cites-evidence` alone, which fires on 32 of 32 refute responses and so passes every one unconditionally. The cause is structural — the two correct refutation shapes are textually opposite (stop without a template; or refute and plan the live remainder, required by SKILL.md § 4 since 0.1.0) and nothing lexical spans both while excluding an ordinary grounded plan. THEREFORE: unchanged, and `refute` grades are to be read as a FLOOR carrying a false-negative rate of at least 3 of 32 and plausibly 7 of 32. Do not widen it on the next miss; the widening reflex is what this entry exists to stop. It is a judge criterion. Neither version moves, per the 0.2.0 ground-truth-vs-spec rule.\n\nTHREE DRIFTED RULE COPIES REPAIRED (SPEC CHANGE, SKILL.md 0.4.0, 2026-08-28). The 0.3.0 capture's 13 graded failures were re-diagnosed and the first diagnosis -- a MISSING rule in each case -- was wrong. request-plan did not lack these rules; it stated each of them more than once, and the copies contradicted each other. Every one of the 13 is a model correctly following the wrong copy, so all three fixes are RECONCILIATIONS and no fourth statement of any rule was added.\n(A) SKILL.md sec 4's \"absent from the file it was blamed on\" licensed a plan for a defect the repo does not contain, which sec 1's ask branch prohibits; the clause is now bounded to a file that EXISTS whose defect sits elsewhere, and sec 1 wins otherwise. Four `absent` responses named the absence and then planned anyway.\n(B) references/context-gathering.md sec When to stop carried the REFUTED 0.2.0 stop condition verbatim (stop once the next read would not change scope/phases/effort) -- the exact rule SKILL.md rejects. The 0.3.0 rewrite fixed SKILL.md and left its own reference contradicting it. Deleted; the section now points at SKILL.md sec When you may stop searching and states no termination condition of its own. Eight responses stopped at a plausible neighbour.\n(C) references/handoff.md added \"security review, threat modelling\" to the --secure trigger -- topic-flavour terms canon rules out by name (estimation-methodology sec What the two escalations are not) -- and references/plan-template.md said a security-sensitive surface \"forces the worktask tier\", contradicting canon's \"a surface you discover does not raise the tier\". Both now point at the canonical asset list, which under skills/request-plan/ is enumerated in exactly ONE place -- handoff.md's --secure row, whose own \"work handling ...\" framing was a third copy of the same discovery reading and now says \"the request names\". Case 80 executed the drifted bullet as written.\nTwo theories were tested and DISPROVED and should not be revived: that the capability registry made excluded file classes invisible (5 of the 8 class-B answers ground on registry-ENUMERATED files), and that (C) needed a new prohibition (handoff.md already carried one, undone by the drifted bullet 15 lines above it).\nPinned by new parity contracts in tests/shell/skills/request-plan-contracts.bats -- stop-condition single-sourcing, asset-enumeration-exists-once, and a subset check whose two sides are both EXTRACTED (canon's surface-check pseudocode and handoff.md's --secure row) rather than restated in the test, so a novel non-canon term fails on membership and not on a deny-list. Each has a paired can-actually-fail test. capability-registry.sh now closes stdout with a class-level trailer naming what it does not enumerate; expected value is low (at most 3 of 8 class-B cases) and it is justified as honesty of the artifact, not as a predicted win.\nMEASUREMENT: per the spec-change rule in evals/README.md this applies from a 0.4.0 capture forward and the 0.3.0 labels are NOT re-flipped against it. It will NOT fix all 8 class-B failures and the fix cannot be cleanly measured: cases 202 and 203 are structurally identical, same batch and same shape, and 202 passed while 203 failed -- a rule cannot explain a difference that has no rule difference. Class B is a mixture (~4 substantive misses, 1 case-design doubt at 28, 1 demonstrably stochastic at 203, 1 opposite-direction at 75, 1 narrow citation miss at 77), and class A and case 75 fail in OPPOSITE directions -- pushing harder toward asking fixes the four and breaks the one. A 0.4.0 capture would face the 16% run-to-run flip rate the 0.3.0 paired A/B already hit against an expected effect of a handful of cases. Repairing verified drift is worth doing on its own merits -- a rule that contradicts itself is a defect whether or not the next capture can see the difference -- but it must not be sold as a measurable improvement, and NO re-capture should be commissioned to prove it.\n\nCORPUS GROWN, NOT SPEC (batch 6, 2026-09-05). 58 cases appended as ids 213-270, taking the set from 201 to 259 (182 plan / 45 clarify / 32 refute). NEITHER eval_set_version NOR SKILL.md version moves -- both stay 0.4.0 -- on the batch 5 terms: batch 6 adds ground truth and changes no rule. That is load-bearing here in a way it was not for batch 5, because the two captures this tranche is built for are a same-version PAIR and a version bump between them would make them non-comparable. 0.4.0 therefore names two case sets over time; the runs are told apart by the provenance `cases: N` row and the capture date in evals/findings/. Ids 1-212 are byte-identical -- batch 6 only appends -- so any earlier capture re-graded against this file stays a per-case paired comparison.\n\nTHE WEIGHTING IS AN ANALYSIS, NOT A BET, and it overturns the reading in evals/findings/request-plan-0.3.0.md § Batch 5 by cell. That section calls `adjacent` at 5/10 = 50% \"the standout\" against a corpus 81%. The 0.3.0 HUMAN LABELS do not support it. Of batch 5's three labelled `adjacent` harness failures, ZERO are genuine: 191 and 193 are human PASSES (the grader too strict, which § Every disagreement is a false fail already establishes as this capture's only error direction) and 187 is the stream-json capture defect, labelled `defer`. The one genuine `adjacent` negative in the whole capture is case 33, which is PRE-EXISTING, not batch 5. The confound is the surface pool and it is checkable in the manifest: all 10 of batch 5's `adjacent` cases ground on capability-registry.sh EXCLUSIONS (6 tests/, 3 skills/*/references/, 1 skills/shared/), while 13 of the 16 pre-existing ones ground on ENUMERATED classes. `adjacent` asks whether the plan NAMES the near-miss surface; ground it where the plan cannot look the surface up and the case tests SEARCH instead, which is `buried` under a different label, and `finds-the-real-surface` then fails for a discovery reason. So neither the 50% nor the 73% corpus figure is evidence about the cell, and the 0.3.0 open question \"is `adjacent` at 50% case difficulty or a real regression\" was unanswerable as posed.\n\nCOMPOSITION, from the same labels. The engine is `buried`, measured rather than nominated: 8 of the 13 human negatives are `buried`, including case 199, the ONLY genuine held-out negative in the tranche; batch 5's own 8 `buried` cases yielded 2 (199, 203), a 25% genuine yield against `absent` 1/18 = 5.6% and `adjacent` 0/10. So: 30 `buried` on EXCLUDED surfaces (on-design there, and where the negatives are), 18 `adjacent` on ENUMERATED surfaces -- commands/, agents/, skills/*/SKILL.md, hooks/, skills/*/scripts/ -- which is the configuration case 33's negative came from and the only one that answers the open question rather than re-asking it, 10 `absent` kept as a control on the unresolved \"are the new absent cases easier\" question (p ~ 0.17) and written in the shape of the genuine negatives 36/95/120, plausible for a repo like this one and ungroundable in this one, rather than batch 5's generic-SaaS template. ZERO `obvious`: 92% harness and 0 negatives from 10 labels, so it buys no measurement. ZERO `refute`: `disputes-the-premise` has a MEASURED false-negative floor and every repair was rejected, so a refute failure cannot be read as a negative. Type follows the labels (feature 6, incident 3, docs 2; migration 0 of 6) and the corpus harness table (docs 65%, incident 69%, feature 79%; migration 100%). Route is 11 emerg of 58 (19%) against a corpus 11% -- emerg is 70% harness and 3 of 9 labelled negatives; `secure` gets none, at 90% harness and 0 of 13. Held out: 23 of the 58 stratify to `test` (12 buried / 7 adjacent / 4 absent; 19 plan / 4 clarify), against batch 5's 18. Ids 213-270 are pinned in evals/splits/request-plan.json with held_out_from: 213, in the same edit that appended them, and no id below 213 changed tranche.\n\nWHAT THE PAIRED 0.4.0 CAPTURES MAY AND MAY NOT BE READ AS. The entry above -- THREE DRIFTED RULE COPIES REPAIRED -- stands unamended, including its instruction that no re-capture be commissioned to prove the 0.4.0 reconciliations. These captures are not that, and are not permitted to become it: NO DELTA IS ATTRIBUTED TO THE 0.4.0 RECONCILIATIONS by either capture or its findings document. They are commissioned on two independent grounds. First, no recorded number describes the shipping spec at all -- the last capture is 0.3.0 and 0.4.0 is what ships. Second, the run-to-run noise band for this corpus is undelivered and was prescribed by the 0.3.0 findings' own § Next item 4, which asks for repeated captures at ONE version precisely because a second single capture cannot settle a rule change. The pair is spec- and corpus-identical by construction; the only difference between them is the output directory. Any reader tempted to difference these two against 0.3.0 and call the residue a rule effect is doing the thing the entry above forbids.",
+  "grading": "Binary code-checked assertions over the skill's rendered plan. Every assertion is objectively decidable from the text — no judge, no scale. Criteria needing interpretation are listed under `deferred` and are deliberately NOT graded until a validated evaluator exists.\n\nRUBRIC (2026-08-23) — structure vs substance. A substantively correct plan still FAILS when it drops the P0/P1/P2 phase model or the T-shirt-size + 0-25 complexity pair. Those fields are a machine interface, not formatting: milestone-helpers.sh:43 and build-orchestrator.sh:109 parse the tier literally for priority ordering, and validate-export.sh pins them in the CSV schema, so a plan without them cannot be consumed by the stage that receives it. Heading syntax is NOT covered by this rule -- bold pseudo-headings satisfy template-sections-present by design. Written after cases 8, 51, 56 and 78 were labelled inconsistently on identical shape.\n\nROUTE GROUND TRUTH (case 13, decided 2026-08-23) — the tier follows the REQUEST, never what investigation later reveals. Case 13 (\"audit-tooluse.sh may be logging tool inputs verbatim\") was std and a plan emitting --secure failed, even though the hook does write to a committed audit.jsonl. (Case 13 became a `refute` case in 0.0.1 and no longer carries a route assertion; it is kept here as the worked example, because the rule is what was decided, not the case.) Hand-assigning tiers from what the code turns out to contain is what derive_route() exists to prevent; it previously failed correct plans on suspicions the code did not bear out. Do not relitigate per-case — change the markers in derive_route() or the prompt, or leave it.\n\nALREADY-SHIPS ANSWERS (decided 2026-08-23, revised after the v0.5.0 labels) — when the requested capability already exists, the correct answer refutes and STOPS: no plan template, no /worktask line, because there is no work to hand off. Case 16 is the reference shape; case 22 refuted and then rendered the full build plan anyway and fails for it. This does NOT relax SKILL.md § 4 for a disputed *defect report* — a misdiagnosed or unreproducible bug still owes the line, because triage is work. The distinction is whether anything remains to be done.\n\nBASELINE 0.0.1 (2026-08-23) — the corpus was reset. All prior labels, judgements, findings and captured responses were deleted: they spanned three skill versions and a case set that has since been repaired, so no number from them is comparable with one taken after. `eval_set_version` and SKILL.md `version:` both read 0.0.1 and move together. The rubric decisions above are kept deliberately — a labelling contract is not a result — but no TPR/TNR figure exists for the harness until the 0.0.1 capture has been human-labelled, so until then a grader pass rate is uncalibrated and means only what it literally counts.\n\nALREADY-SHIPS, NARROWED (SPEC CHANGE, SKILL.md 0.1.0, decided 2026-08-23) — this REPLACES the 0.0.1 already-ships rule above for captures at 0.1.0 and later. The 0.0.1 capture measured the old rule and found it fires far too wide: 13 responses stopped at \"this already ships\" on cases whose request was to FIND or USE a surface, and a human passed every one, while the harness failed each on 3-6 template assertions. § 4 now stops ONLY when all three hold — the request asked to build/add/fix, the thing exists as asked, and nothing remains. A request to find, reach or use an existing surface is a PLAN. A shipped headline with a live remainder is a refutation of the stale part PLUS a plan for the rest. Per the spec-change rule in evals/README.md, 0.0.1 labels are NOT re-flipped against this: those responses were correct answers to the old contract.\n\nWITHDRAWN AT 0.1.0 — `no-build-plan-for-work-that-exists`. It forbade the plan template on any refute case. Measured on the 0.0.1 capture it fired on 12 cases, all 12 human passes, and did NOT fire on case 22, the only refute case a human failed: TNR 0%, the pathology that retired the LLM judge. It also contradicts the narrowed § 4. The question it was reaching for — is this plan about the work just refuted, or about the live remainder — is now a `deferred` judge criterion, because telling those apart needs to read what the plan is ABOUT.\n\nBURIED NO LONGER MEASURES SEARCH (SPEC CHANGE, SKILL.md 0.2.0, 2026-08-26) — capability-registry.sh was extended to enumerate hooks, skill scripts and harness modules because every search miss in the 0.0.1 capture grounded on one of those classes. The trade is paid in measurement: 42 of the 44 standing `buried` cases (ids below 122) now ground on a registry-listed surface, so for those cases `buried` measures reading a bounded list, not searching a tree. DO NOT quote a post-0.2.0 `buried` rate against the 0.0.1 baseline as if it were the same quantity. Ids 122+ are the replacement: they ground ONLY on classes the registry deliberately does not list (skills/*/references/, skills/shared/, evals/scripts/), and that exclusion is pinned by tests/shell/skills/capability-registry.bats, so widening the globs reddens a test before it silently answers a case.\n\nTHREE UNMEASURED SPEC VERSIONS (2026-08-26) — no capture has run since the 0.0.1 baseline, and three changes have landed on top of it: SKILL.md 0.1.0 (PR #325), the 4.0.26 command-surface reorganization (PR #332, which removed seven commands, renamed five and repointed eight groundings inside the tree eval-capture.py reads), and SKILL.md 0.2.0. Whenever a capture eventually runs it measures ALL THREE AT ONCE and cannot attribute between them. A delta against 0.0.1 is a delta against the stack, never against whichever change the reader happens to be looking at. Also still live: the answer-key contamination (7 of 114 responses read this file during the 0.0.1 run), which bounds any future capture and should be fixed before one is paid for.\n\nGROUND TRUTH CORRECTED, NOT SPEC (0.2.0 capture, 2026-08-27). Five cases whose premise the repo had already answered were converted to `refute` (18, 125, 153, 159, 163): each states an absence the search disproves outright, so the plan they asked for is work that exists. Three cases were repointed where the declared ground file did not own the behaviour (23 -> anchor-preflight.sh, 67 -> pairing.py, 152 -> both review surfaces). `disputes-the-premise` gained two patterns after the already-ships boundary was settled and not before — one response opened \"the premise doesn't hold\", another \"Already built\". NEITHER SKILL.md version NOR eval_set_version moves for this: the spec did not change, only what the cases grade. `prompt_digest` was untouched, so no response was invalidated; every flipped human label carries a dated note. Calibration after: dev TPR 93% / TNR 69%, corrected 77% [65-85] over all 60 labels. TNR misses the 80% floor and is reported as such rather than tuned — the two false passes holding it down are the already-ships boundary, whose assertion was withdrawn at 0.1.0 for 12 firings and 0 true positives.\n\nHELD-OUT TRANCHE HAS NO NEGATIVES LEFT. Its only three human failures were among the five conversions above, so held-out TNR is unmeasurable and the 100% TPR over 18 all-positive cases tests nothing about failure detection. Recovering it needs roughly 20 more labels from the test/harness-pass stratum. See evals/findings/request-plan-0.2.0.md.\n\nLLM JUDGE REFUTED A SECOND TIME (2026-08-27). Re-validated on the 0.2.0 labels, which it had not seen — the condition evals/README.md sets for reinstatement. TNR 0% again: 0 of 10 human failures caught, 59 of 60 passed, claude-opus-5 at effort max. Verdicts in evals/judgements/request-plan.jsonl.\n\nTWO CONTRADICTIONS RESOLVED (SPEC CHANGE, SKILL.md 0.3.0, 2026-08-27). The 0.2.0 capture's failures were almost entirely one class: two rule surfaces disagreeing, with the model following the one the grader did not. Both are fixed at the surface, not by restating the losing rule.\n(1) The tier surface check now reads the REQUEST, not what the work turns out to touch. It previously asked whether 'the work' handles a secret, which escalates on discovery — three plans took --secure for a webhook URL, a CI login and a dependency scan that none of their requests named. It also made the tier undecidable at planning time, since two searches of one repo find different things. This aligns the canon with derive_route(), which can only ever see the prompt.\n(2) SKILL.md § 1's branches are reordered: the no-surface branch now precedes the fold-the-ambiguity branch, and the latter is bounded to requests whose surface was found. Rule 1 was listed first and was broader than rule 2, so it consumed the cases rule 2 exists for; four responses on `absent` grounding named the ambiguity and planned anyway, executing rule 1 correctly.\nPer the spec-change rule in evals/README.md these apply from a 0.3.0 capture forward, and the 0.2.0 labels are NOT re-flipped against them: those responses were correct answers to the old contract. Until a capture runs at 0.3.0 the effect of both changes is argued, not measured.\n\nCORPUS GROWN, NOT SPEC (batch 5, 2026-08-27). 45 cases appended as ids 168-212, taking the set from 156 to 201 (134 plan / 35 clarify / 32 refute). NEITHER eval_set_version NOR SKILL.md version moves: batch 5 adds ground truth and changes no rule, the same treatment the five 0.2.0 REFUTED_PREMISE conversions got. The run apart is carried by the provenance table in evals/findings/, which records `cases: N` and a capture date. Ids 1-167 keep unchanged prompt_digests -- batch 5 only appends -- so a 0.2.0 capture re-graded against this file is a PER-CASE PAIRED comparison with a 0.3.0 one, which is what makes the three 0.3.0 rule edits measurable at all.\n\nThe tranche is weighted to where the 0.2.0 dimension tables say the model fails, so the held-out set contains failures by natural occurrence rather than by construction: 18 `absent` (harness 71%, human 2/6 -- the weakest column, and it takes that column from 17 to 35), 10 `adjacent` (26 in corpus now, and the spent tranche held none), 9 `refute` written as refutations rather than converted from plans, 8 `buried` weighted to incident/migration/feature. Held out: 18 of the 45 stratify to `test` (7 clarify / 7 plan / 4 refute), which REPLACES batch 4's tranche -- those 18 were read during 0.2.0 labelling and per evals/splits/request-plan.json's note re-stratifying does not make a case unread. Ids 168-212 are pinned in that manifest and no id below 168 changed tranche.\n\nSurfaces for the 18 grounded cases come from what capability-registry.sh still excludes and no case had claimed: skills/*/references/, skills/shared/*.md, and the tests/ tree. Deliberately NOT drawn on: references/fixtures/**, which make nonsense grounding, and gen-request-plan-cases.py / sample-for-labelling.py / scan-contamination.py, since grounding a prompt on the file holding every expected outcome is an answer-key read by construction.\n\nDISPUTES-THE-PREMISE: MEASURED, NOT REPAIRED (0.3.0 capture, 2026-08-28). Human labels confirm the criterion produces false NEGATIVES — 210, 211 and 212 are correct refutations scored FAIL, and four more (17, 22, 59, 125) share the shape but went unsampled. Every repair was then measured over all 201 responses and every one is worse than the defect. The criterion ALREADY fires on 57% of `plan`-expected responses, because a grounded plan routinely says the repo already does X; widening it to an open-class `already <verb>` reaches 100% recall on refute but 87% on plan, which on a refute case is a false pass — the 0% TNR shape that retired the LLM judge and withdrew no-build-plan-for-work-that-exists at 0.1.0. Position-scoping to the first 250-400 chars peaks at 41% plan firing for 75% recall. Withdrawal is worse still: refute cases would fall to `cites-evidence` alone, which fires on 32 of 32 refute responses and so passes every one unconditionally. The cause is structural — the two correct refutation shapes are textually opposite (stop without a template; or refute and plan the live remainder, required by SKILL.md § 4 since 0.1.0) and nothing lexical spans both while excluding an ordinary grounded plan. THEREFORE: unchanged, and `refute` grades are to be read as a FLOOR carrying a false-negative rate of at least 3 of 32 and plausibly 7 of 32. Do not widen it on the next miss; the widening reflex is what this entry exists to stop. It is a judge criterion. Neither version moves, per the 0.2.0 ground-truth-vs-spec rule.\n\nTHREE DRIFTED RULE COPIES REPAIRED (SPEC CHANGE, SKILL.md 0.4.0, 2026-08-28). The 0.3.0 capture's 13 graded failures were re-diagnosed and the first diagnosis -- a MISSING rule in each case -- was wrong. request-plan did not lack these rules; it stated each of them more than once, and the copies contradicted each other. Every one of the 13 is a model correctly following the wrong copy, so all three fixes are RECONCILIATIONS and no fourth statement of any rule was added.\n(A) SKILL.md sec 4's \"absent from the file it was blamed on\" licensed a plan for a defect the repo does not contain, which sec 1's ask branch prohibits; the clause is now bounded to a file that EXISTS whose defect sits elsewhere, and sec 1 wins otherwise. Four `absent` responses named the absence and then planned anyway.\n(B) references/context-gathering.md sec When to stop carried the REFUTED 0.2.0 stop condition verbatim (stop once the next read would not change scope/phases/effort) -- the exact rule SKILL.md rejects. The 0.3.0 rewrite fixed SKILL.md and left its own reference contradicting it. Deleted; the section now points at SKILL.md sec When you may stop searching and states no termination condition of its own. Eight responses stopped at a plausible neighbour.\n(C) references/handoff.md added \"security review, threat modelling\" to the --secure trigger -- topic-flavour terms canon rules out by name (estimation-methodology sec What the two escalations are not) -- and references/plan-template.md said a security-sensitive surface \"forces the worktask tier\", contradicting canon's \"a surface you discover does not raise the tier\". Both now point at the canonical asset list, which under skills/request-plan/ is enumerated in exactly ONE place -- handoff.md's --secure row, whose own \"work handling ...\" framing was a third copy of the same discovery reading and now says \"the request names\". Case 80 executed the drifted bullet as written.\nTwo theories were tested and DISPROVED and should not be revived: that the capability registry made excluded file classes invisible (5 of the 8 class-B answers ground on registry-ENUMERATED files), and that (C) needed a new prohibition (handoff.md already carried one, undone by the drifted bullet 15 lines above it).\nPinned by new parity contracts in tests/shell/skills/request-plan-contracts.bats -- stop-condition single-sourcing, asset-enumeration-exists-once, and a subset check whose two sides are both EXTRACTED (canon's surface-check pseudocode and handoff.md's --secure row) rather than restated in the test, so a novel non-canon term fails on membership and not on a deny-list. Each has a paired can-actually-fail test. capability-registry.sh now closes stdout with a class-level trailer naming what it does not enumerate; expected value is low (at most 3 of 8 class-B cases) and it is justified as honesty of the artifact, not as a predicted win.\nMEASUREMENT: per the spec-change rule in evals/README.md this applies from a 0.4.0 capture forward and the 0.3.0 labels are NOT re-flipped against it. It will NOT fix all 8 class-B failures and the fix cannot be cleanly measured: cases 202 and 203 are structurally identical, same batch and same shape, and 202 passed while 203 failed -- a rule cannot explain a difference that has no rule difference. Class B is a mixture (~4 substantive misses, 1 case-design doubt at 28, 1 demonstrably stochastic at 203, 1 opposite-direction at 75, 1 narrow citation miss at 77), and class A and case 75 fail in OPPOSITE directions -- pushing harder toward asking fixes the four and breaks the one. A 0.4.0 capture would face the 16% run-to-run flip rate the 0.3.0 paired A/B already hit against an expected effect of a handful of cases. Repairing verified drift is worth doing on its own merits -- a rule that contradicts itself is a defect whether or not the next capture can see the difference -- but it must not be sold as a measurable improvement, and NO re-capture should be commissioned to prove it.\n\nCORPUS GROWN, NOT SPEC (batch 6, 2026-09-05). 58 cases appended as ids 213-270, taking the set from 201 to 259 (182 plan / 45 clarify / 32 refute). NEITHER eval_set_version NOR SKILL.md version moves -- both stay 0.4.0 -- on the batch 5 terms: batch 6 adds ground truth and changes no rule. That is load-bearing here in a way it was not for batch 5, because the two captures this tranche is built for are a same-version PAIR and a version bump between them would make them non-comparable. 0.4.0 therefore names two case sets over time; the runs are told apart by the provenance `cases: N` row and the capture date in evals/findings/. Ids 1-212 are byte-identical -- batch 6 only appends -- so any earlier capture re-graded against this file stays a per-case paired comparison.\n\nTHE WEIGHTING IS AN ANALYSIS, NOT A BET, and it overturns the reading in evals/findings/request-plan-0.3.0.md § Batch 5 by cell. That section calls `adjacent` at 5/10 = 50% \"the standout\" against a corpus 81%. The 0.3.0 HUMAN LABELS do not support it. Of batch 5's three labelled `adjacent` harness failures, ZERO are genuine: 191 and 193 are human PASSES (the grader too strict, which § Every disagreement is a false fail already establishes as this capture's only error direction) and 187 is the stream-json capture defect, labelled `defer`. The one genuine `adjacent` negative in the whole capture is case 33, which is PRE-EXISTING, not batch 5. The confound is the surface pool and it is checkable in the manifest: all 10 of batch 5's `adjacent` cases ground on capability-registry.sh EXCLUSIONS (6 tests/, 3 skills/*/references/, 1 skills/shared/), while 13 of the 16 pre-existing ones ground on ENUMERATED classes. `adjacent` asks whether the plan NAMES the near-miss surface; ground it where the plan cannot look the surface up and the case tests SEARCH instead, which is `buried` under a different label, and `finds-the-real-surface` then fails for a discovery reason. So neither the 50% nor the 73% corpus figure is evidence about the cell, and the 0.3.0 open question \"is `adjacent` at 50% case difficulty or a real regression\" was unanswerable as posed.\n\nCOMPOSITION, from the same labels. The engine is `buried`, measured rather than nominated: 8 of the 13 human negatives are `buried`, including case 199, the ONLY genuine held-out negative in the tranche; batch 5's own 8 `buried` cases yielded 2 (199, 203), a 25% genuine yield against `absent` 1/18 = 5.6% and `adjacent` 0/10. So: 30 `buried` on EXCLUDED surfaces (on-design there, and where the negatives are), 18 `adjacent` on ENUMERATED surfaces -- commands/, agents/, skills/*/SKILL.md, hooks/, skills/*/scripts/ -- which is the configuration case 33's negative came from and the only one that answers the open question rather than re-asking it, 10 `absent` kept as a control on the unresolved \"are the new absent cases easier\" question (p ~ 0.17) and written in the shape of the genuine negatives 36/95/120, plausible for a repo like this one and ungroundable in this one, rather than batch 5's generic-SaaS template. ZERO `obvious`: 92% harness and 0 negatives from 10 labels, so it buys no measurement. ZERO `refute`: `disputes-the-premise` has a MEASURED false-negative floor and every repair was rejected, so a refute failure cannot be read as a negative. Type follows the labels (feature 6, incident 3, docs 2; migration 0 of 6) and the corpus harness table (docs 65%, incident 69%, feature 79%; migration 100%). Route is 11 emerg of 58 (19%) against a corpus 11% -- emerg is 70% harness and 3 of 9 labelled negatives; `secure` gets none, at 90% harness and 0 of 13. Held out: 23 of the 58 stratify to `test` (12 buried / 7 adjacent / 4 absent; 19 plan / 4 clarify), against batch 5's 18. Ids 213-270 are pinned in evals/splits/request-plan.json with held_out_from: 213, in the same edit that appended them, and no id below 213 changed tranche.\n\nWHAT THE PAIRED 0.4.0 CAPTURES MAY AND MAY NOT BE READ AS. The entry above -- THREE DRIFTED RULE COPIES REPAIRED -- stands unamended, including its instruction that no re-capture be commissioned to prove the 0.4.0 reconciliations. These captures are not that, and are not permitted to become it: NO DELTA IS ATTRIBUTED TO THE 0.4.0 RECONCILIATIONS by either capture or its findings document. They are commissioned on two independent grounds. First, no recorded number describes the shipping spec at all -- the last capture is 0.3.0 and 0.4.0 is what ships. Second, the run-to-run noise band for this corpus is undelivered and was prescribed by the 0.3.0 findings' own § Next item 4, which asks for repeated captures at ONE version precisely because a second single capture cannot settle a rule change. The pair is spec- and corpus-identical by construction; the only difference between them is the output directory. Any reader tempted to difference these two against 0.3.0 and call the residue a rule effect is doing the thing the entry above forbids.\n\nGRADER REPAIRED, NOT SPEC (2026-09-07). Two harness defects repaired, no rule changed: `eval_set_version` and SKILL.md version both stay 0.4.0 and NO re-capture was commissioned. Only the assertions digest of nine cases moves; every prompt digest is untouched, so all 518 stored responses stay valid input -- which is what the two-digest split exists for.\n\nMODE A -- nine cases carried `expected_outcome: plan` while being refutations of a false premise: 78, 79, 104, 191, 216, 220, 225, 226, 252. Each was read against this tree, and each rests on a premise this tree makes false. The criterion is the FALSE PREMISE, never the grammar the prompt asked in, and it arrives in two shapes that must both be sorted here. One states an ABSENCE the tree disproves -- nothing records X, there is no written Y. The other states a WANT for something the tree already provides -- we want X, we need Y, plan it. Six of these nine are the first shape and three the second, and a reader who registers only the absence shape will sort the next want-shaped case as a plan and fail its correct answer on all six template assertions, which is the exact defect this entry repairs. The registered `kind` is `shipped` in both shapes: what makes a case a refutation is that the work exists, not how the asker phrased its lack. They are relabelled in the generator's REFUTED_PREMISE table, the only input `expected_outcome` is derived from -- a hand-edit to this file would validate clean, pass the suite, and be silently reverted by the next regeneration. Prompts, groundings and dimensions are byte-identical: the ground truth was wrong, not the case. This SUPERSEDES the composition recorded in CORPUS GROWN, NOT SPEC (batch 6). The set is 173 plan / 45 clarify / 41 refute, and the held-out tranche is 17 plan / 2 refute / 4 clarify. That entry stands as written -- it recorded what was true when written -- but its counts are no longer current. The tranche was designed with ZERO refute cases, on the stated ground that a refute failure cannot be read as a skill negative; 216 and 226 now make it two. None of its four genuine negatives (229, 231, 241, 262) is affected, so its measurement value survives; its stated composition does not.\n\nThree responses that passed now fail: 104 in capture #1, 220 and 226 in capture #2. No human label is contradicted by any of them. 104 sits outside the 60-case draw. 220 and 226 flip only in capture #2, which carries no labels -- the draw was cut against capture #1 and must not be relabelled against #2. In capture #1 the four relabelled cases that ARE in the draw (191, 216, 220, 226) all move from harness-fail to harness-pass, which is the direction the human labels already recorded.\n\nCONSEQUENCE, recorded rather than acted on: `disputes-the-premise` is NOT touched -- closed by two standing entries, its false-negative floor measured and every repair rejected. The nine therefore move under a criterion with a measured floor of at least 3 of 32, plausibly 7 of 32, now covering 41 of 259 cases. A refute failure on any of them may NOT be read as a skill negative. The trade is deliberate: a criterion with a <=22% floor beats a cascade with 9-of-9 defect precision.\n\nMODE B -- `classify_outcome` no longer lets punctuation decide. Below the section quorum the verdict was `clarify` when the response contained a `?` and `plan` otherwise, so case 43 landed on both sides of it across two captures of the same response shape. The repair is ONE-DIRECTIONAL and must be recorded as such: it can move a response from `plan` to `clarify` and never the reverse. Do NOT record it as \"punctuation no longer decides\" -- a two-section response carrying a rhetorical `?` is still a clarification, exactly as it was before. The reverse form (demanding more than a `?`) was measured and rejected: it read four genuine questions as plans -- 172 and 183 in capture #1, 170 and 40 in capture #2 -- each because it named the `/worktask` handoff while asking about it, which the single-trigger shared assertion alone is enough to do. Measured over both captures: 36 responses change class, 0 pass->fail, and 3 fail->pass (42, 43 and 267, all capture #1).\n\nMEASUREMENT: no corrected rate is republished. Post-repair the harness makes zero errors on the 59 graded labels, so the correction collapses to the observed rate -- in-sample, a consistency check, never a headline. The published 85% CI [81%, 91%] describes the PRE-repair harness against capture #1 and still reproduces from the recorded inputs. `eval_set_sha256` in evals/findings/request-plan-0.4.0-verdicts.jsonl is deliberately NOT updated: it names the case set those per-case verdicts were graded against, and the rows are meaningless without it.",
   "assertion_types": {
     "contains_all": "every literal substring must be present",
     "contains_none": "no listed literal substring may be present",
@@ -2608,25 +2608,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "commands/ethics-review.md is the pre-ship review, invokable from PL onward per its own stage table, and agents/ethics-reviewer.md owns the ET stage that runs it",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "/ethics-review",
-            "commands/ethics-review.md",
-            "ethics-review",
-            "ethics-review.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -2634,7 +2643,9 @@
         "commands/ethics-review.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -2646,23 +2657,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/code-comment-standard/SKILL.md states the rule and its budgets; hooks/dv-comment-density-gate.sh enforces the density half",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "code-comment-standard",
-            "skills/code-comment-standard/SKILL.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -2670,7 +2692,9 @@
         "skills/code-comment-standard/SKILL.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "train"
     },
@@ -3414,23 +3438,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/context-compression/SKILL.md carries the per-handoff budgets, the per-content-type techniques and the frontmatter canonical form",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "context-compression",
-            "skills/context-compression/SKILL.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -3438,7 +3473,9 @@
         "skills/context-compression/SKILL.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -6185,23 +6222,34 @@
         "grounding": "adjacent",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "skills/incident-response/references/templates.md § Resolution Notice sits beside the initial and update notices it completes",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "skills/incident-response/references/templates.md",
-            "templates.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -6209,7 +6257,9 @@
         "skills/incident-response/references/templates.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -7215,24 +7265,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "tests/shell/skills/elicitation-sweep-contracts.bats pins the owing stages as a parity contract, extracting both sides from their own defining files",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "elicitation-sweep-contracts",
-            "elicitation-sweep-contracts.bats",
-            "tests/shell/skills/elicitation-sweep-contracts.bats"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -7240,7 +7300,9 @@
         "tests/shell/skills/elicitation-sweep-contracts.bats"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -7363,24 +7425,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "tests/shell/worktask/branch-lib.bats covers the exported symbol set and the double-source case for skills/worktask/scripts/branch-lib.sh",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "branch-lib",
-            "branch-lib.bats",
-            "tests/shell/worktask/branch-lib.bats"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -7388,7 +7460,9 @@
         "tests/shell/worktask/branch-lib.bats"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -7548,24 +7622,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "tests/shell/worktask/sweep-stub-lib.bats compares the stub verdict row by row across both enforcers, which is what one shared library cannot prove alone",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "sweep-stub-lib",
-            "sweep-stub-lib.bats",
-            "tests/shell/worktask/sweep-stub-lib.bats"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -7573,7 +7657,9 @@
         "tests/shell/worktask/sweep-stub-lib.bats"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "dev"
     },
@@ -7585,24 +7671,34 @@
         "grounding": "buried",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "tests/shell/skills/milestone-helpers.bats states the priority-score and slug contracts in its header and covers each one",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "milestone-helpers",
-            "milestone-helpers.bats",
-            "tests/shell/skills/milestone-helpers.bats"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -7610,7 +7706,9 @@
         "tests/shell/skills/milestone-helpers.bats"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "test"
     },
@@ -8552,25 +8650,34 @@
         "grounding": "adjacent",
         "route": "std"
       },
-      "expected_outcome": "plan",
+      "expected_outcome": "refute",
+      "refute_kind": "shipped",
+      "premise_refuted_by": "commands/test-plan.md generates the coverage-aware plan from requirements or a diff, ahead of the change it verifies",
       "assertions": [
         {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
+          "id": "disputes-the-premise",
+          "why": "The answer must say the premise does not hold. Scoring these against the plan template failed case 2 on six assertions while it was right",
+          "type": "regex_any",
           "values": [
-            "/worktask\\s+\\\""
+            "(?i)already\\s+\\w*\\s*(ship|ships|shipped|land|landed|split|exist|exists|done|does|did|implemented|happened|in place|fixed|closed|solved|resolved|addressed|handled|covered|supported|works|working)",
+            "(?i)(already|has been|have been|was|were)\\s+(fixed|shipped|closed|resolved|addressed|split|extracted|added)",
+            "(?i)no longer",
+            "(?i)does not exist",
+            "(?i)is not (present|there)",
+            "(?i)(premise|claim) (is|was) (stale|false|wrong|outdated|no longer true)",
+            "(?i)not\\s+\\d+(\\.\\d+)?\\s*KB",
+            "(?i)the premise (?:doesn't|does not|no longer) holds?",
+            "(?i)already\\s+built"
           ]
         },
         {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "id": "cites-evidence",
+          "why": "A refutation is a claim about this repo, so it owes something checkable — a path or the commit that closed the premise. Without one, 'that already ships' is indistinguishable from a guess, and a guess that happens to be right still teaches the skill to assert instead of check. A FLOOR, not a score: all 20 refute responses in the 0.0.1 capture cleared it, so it catches regression, not quality",
           "type": "regex_any",
           "values": [
-            "/test-plan",
-            "commands/test-plan.md",
-            "test-plan",
-            "test-plan.md"
+            "[\\w.-]+/[\\w.-]+\\.(py|sh|md|json|bats)",
+            "`[0-9a-f]{7,40}`",
+            "\\bcommit\\s+`?[0-9a-f]{7,40}`?"
           ]
         }
       ],
@@ -8578,7 +8685,9 @@
         "commands/test-plan.md"
       ],
       "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+        "Whether the evidence cited actually proves the premise false — needs a validated judge with repo access.",
+        "Whether the refutation cites evidence it actually read, in whatever form.",
+        "Whether a refutation that also renders the plan template is planning the work it just refuted (wrong) or the live remainder behind it (right) — 0/12 precision as a regex in the 0.0.1 capture; needs a judge that can tell the two apart by what the plan is ABOUT."
       ],
       "split": "train"
     },
