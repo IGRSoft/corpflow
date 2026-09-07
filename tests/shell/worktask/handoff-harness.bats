@@ -607,6 +607,30 @@ mk_qa_dec() {
   assert_output --partial "in ledger, not in frontmatter"
 }
 
+@test "sweep parity: a resolved ledger stub the artifact omits does not fail a rework round" {
+  cd "$WD"
+  # The rework topology: round 1 raised sw-DV0-9 and it was answered, so the reworked
+  # artifact re-emits only what is still open. Charging it with the answered id fails the
+  # round, and Step B.1 reads that as missing_input and re-dispatches the whole stage.
+  jq '.facts.open_questions = [{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"resolved"}]' \
+    state.json > state_resolved.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state_resolved.json
+  assert_success
+}
+
+@test "sweep parity: an open ledger stub is still charged when a resolved sibling exists" {
+  cd "$WD"
+  # Non-vacuity twin: the status filter must not disable the arm wholesale.
+  jq '.facts.open_questions = [
+        {"id":"sw-DV0-8","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"resolved"},
+        {"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"DV","status":"open"}]' \
+    state.json > state_mixed.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state_mixed.json
+  assert_failure
+  assert_output --partial "sw-DV0-9"
+  refute_output --partial "sw-DV0-8"
+}
+
 @test "sweep parity: a ledger stub belonging to another stage is not charged to this one" {
   cd "$WD"
   jq '.facts.open_questions = [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false,"stage":"PL","status":"open"}]' \

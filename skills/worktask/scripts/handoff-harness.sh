@@ -375,6 +375,10 @@ check_sweep_ledger() {
   # charge one stream with the other's stubs. The `sw-<TASK_ID>-` prefix is the task identity:
   # an artifact carrying stubs is charged only ids under its own prefixes; one with no stubs
   # is charged the stage slice only when tasks{} holds at most one task of that stage.
+  #
+  # Resolved items are excluded: a rework round re-emits only what is still open, so charging
+  # it with an already-answered id fails the round, and Step B.1 reads that as missing_input
+  # and burns a whole stage re-dispatch. A missing status reads as open, matching state-patch.sh.
   local stage_code ledger_ids extra artifact_tasks stage_tasks
   stage_code=$(yq eval '.handoff.stage // ""' "$fmfile" 2> /dev/null || printf '')
   ledger_ids=""
@@ -384,7 +388,9 @@ check_sweep_ledger() {
     if [[ -n "$artifact_tasks" ]]; then
       ledger_ids=$(jq -r --arg st "$stage_code" \
           --argjson tasks "$(printf '%s\n' "$artifact_tasks" | jq -R . | jq -sc .)" '
-          (.facts.open_questions? // []) | map(select((.stage // "") == $st)) | .[].id // empty
+          (.facts.open_questions? // [])
+          | map(select((.stage // "") == $st and (.status // "open") != "resolved"))
+          | .[].id // empty
           | select(. as $i | $tasks | any(. as $t | $i | startswith("sw-" + $t + "-")))' \
         "$STATE_ARG" 2> /dev/null || printf '')
     else
@@ -393,7 +399,9 @@ check_sweep_ledger() {
         "$STATE_ARG" 2> /dev/null | grep -c . || true)
       if [[ "${stage_tasks:-0}" -le 1 ]]; then
         ledger_ids=$(jq -r --arg st "$stage_code" '
-            (.facts.open_questions? // []) | map(select((.stage // "") == $st)) | .[].id // empty' \
+            (.facts.open_questions? // [])
+            | map(select((.stage // "") == $st and (.status // "open") != "resolved"))
+            | .[].id // empty' \
           "$STATE_ARG" 2> /dev/null || printf '')
       fi
     fi
