@@ -170,11 +170,12 @@ moves to the first id of its successor. One place records it: `held_out_from` in
 that value and refuses to run when the key is missing rather than falling back to a
 literal; `label-align.py --min-id` has no default, so **pass it explicitly**.
 
-**The key is pinned to 213 right now, the first id of batch 6.** The 0.3.0 pass spent batch
-5 (ids 168-212) whole, so no id below 213 is held out any longer; batch 6 (ids 213-270) was
-appended and pinned in the same edit, before any capture read it. Read the floor from the
-manifest, never from the newest `-sample.json`, whose `--min-id` names the tranche the last
-pass just spent -- 168, not 213.
+**The key is absent right now, and that is the correct state.** It was pinned to 213 for the
+two 0.4.0 captures, which ran against it; the 0.4.0 labelling pass then drew batch 6's `test`
+cases whole (23 of 23) and spent them, so the deleting edit is that pass's own. Nothing in the
+manifest is held out today and both tools stop instead of guessing. A new cut needs a batch 7
+appended and its first id pinned as `held_out_from` in the same edit -- not 213, and not a
+`--min-id` read off the newest `-sample.json`, which names the tranche that pass just spent.
 
 Pin `held_out_from` in the edit that appends a batch and delete it in the pass that spends
 one. A floor left pointing at a spent tranche re-samples read cases and labels the result
