@@ -10,6 +10,7 @@ import glob
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -276,7 +277,11 @@ class OfflineGrading(_Fixture):
         self.assertEqual(result["status"], "pass", result)
 
     def test_a_deficient_response_fails_with_named_assertions(self):
-        result = grader.grade_record(self.eval_set, self._record("just some prose about wake"))
+        """The fixture has to reach the section quorum to be graded as a plan at all —
+        below it the verdict is the single `asked-instead-of-planning` decision, which
+        names no assertion and so cannot show that a deficient plan names its gaps."""
+        result = grader.grade_record(
+            self.eval_set, self._record("## Context\nc\n## Goal\ng\n## Scope\ns\n"))
         self.assertEqual(result["status"], "fail")
         self.assertIn("template-sections-present", result["failed"])
 
@@ -306,9 +311,15 @@ class OfflineGrading(_Fixture):
         self.assertFalse(result["asked_instead"])
 
     def test_a_plan_that_merely_lacks_sections_still_fails(self):
-        """Absent sections plus no question is a bad plan, not a clarification."""
+        """Too few sections is a failure whether or not the response asked anything.
+
+        It fails as `asked-instead-of-planning`, which is the whole verdict: asserting
+        only `status == fail` passed before this classifier and after it, for two
+        different reasons, so it proved nothing about either.
+        """
         result = grader.grade_record(self.eval_set, self._record("here is roughly what I would do."))
         self.assertEqual(result["status"], "fail")
+        self.assertEqual(result["failed"], ["asked-instead-of-planning"])
 
     def test_bold_section_labels_still_count_as_a_plan(self):
         """A real dev capture used `**Context**` throughout; reading that as a
@@ -330,6 +341,80 @@ class OfflineGrading(_Fixture):
         result = grader.grade_record(self.eval_set, record)
         self.assertEqual(result["status"], "pass")
         self.assertTrue(result["assertions_moved"])
+
+
+def _captured(capture: str):
+    """Stored responses for one capture, or None — the response trees are gitignored."""
+    root = os.path.join(_REPO, "skills", "request-plan", "evals", f"responses-0.4.0-{capture}")
+    if not os.path.isdir(root):
+        return None
+    responses = {}
+    for path in glob.glob(os.path.join(root, "*.json")):
+        with open(path, encoding="utf-8") as f:
+            record = json.load(f)
+        responses[record["case_id"]] = record["response"]
+    return responses
+
+
+def _classified_on_punctuation(response: str) -> str:
+    """The pre-repair classifier, kept as the baseline the monotonicity property needs."""
+    present = sum(1 for section in engine.PLAN_SECTIONS if section in response)
+    if present >= engine.PLAN_SECTION_QUORUM:
+        return "plan"
+    return "clarify" if "?" in response else "plan"
+
+
+class MonotoneOutcomeClassifier(unittest.TestCase):
+    # Four genuine questions that name the handoff trigger while asking about it. The
+    # reverse repair — demanding more than a question mark below the quorum — read all
+    # four as plans, and the single-trigger shared assertion alone was enough to do it.
+    _ASKED_ABOUT_THE_HANDOFF = ((172, "a"), (183, "a"), (170, "b"), (40, "b"))
+
+    def test_the_plan_markers_are_the_ones_the_shared_assertion_names(self):
+        """Parity, not a fourth copy: the section names live in the eval set's own
+        template assertion, and a classifier reading different ones would silently
+        disagree with what the corpus is graded against."""
+        with open(_EVAL_SET, encoding="utf-8") as f:
+            shared = json.load(f)["shared_assertions"]
+        template = next(a for a in shared if a["id"] == "template-sections-present")
+        named = tuple(re.search(r"\\\*\\\*(\w+)", value).group(1)
+                      for value in template["values"])
+        self.assertEqual(tuple(engine.PLAN_SECTIONS), named)
+
+    def test_no_clarification_is_reclassified_as_a_plan(self):
+        """The property the repair is held to, asserted over every stored response.
+
+        Stated over the corpus rather than over the implementation because the
+        implementation is one line: what must not regress is the DIRECTION. Anything
+        the old form called a question stays one; the reverse is what silently
+        re-admits failures into the plan denominator.
+        """
+        measured = 0
+        for capture in ("a", "b"):
+            responses = _captured(capture)
+            if responses is None:
+                continue
+            for case_id, response in responses.items():
+                measured += 1
+                if _classified_on_punctuation(response) == "clarify":
+                    self.assertEqual(
+                        engine.classify_outcome(response), "clarify",
+                        f"capture {capture} case {case_id}: a clarification became a plan")
+        if not measured:
+            self.skipTest("captured responses are gitignored and absent from this tree")
+
+    def test_four_questions_naming_the_handoff_are_still_questions(self):
+        """The named regression: these four pass today and the reverse form broke them."""
+        checked = 0
+        for case_id, capture in self._ASKED_ABOUT_THE_HANDOFF:
+            responses = _captured(capture)
+            if responses is None or case_id not in responses:
+                continue
+            checked += 1
+            self.assertEqual(engine.classify_outcome(responses[case_id]), "clarify",
+                             f"capture {capture} case {case_id} is a question, not a plan")
+        if not checked:
+            self.skipTest("captured responses are gitignored and absent from this tree")
 
 
 class GradeCli(unittest.TestCase):

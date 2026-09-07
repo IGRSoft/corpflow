@@ -125,8 +125,8 @@ table (docs 65%, incident 69%, feature 79%; migration 100%; emerg 70%, secure 90
 
 ## Batch 6
 
-**58 cases, ids 213-270**, taking the corpus from 201 to 259 (182 plan / 45 clarify / 32
-refute). `eval_set_version` and `SKILL.md version:` both stay **0.4.0** (AD-2) — load-bearing,
+**58 cases, ids 213-270**, taking the corpus from 201 to 259 (as generated then: 182 plan,
+45 clarify, 32 refute; 173 / 45 / 41 after the 2026-09-07 relabel below). `eval_set_version` and `SKILL.md version:` both stay **0.4.0** (AD-2) — load-bearing,
 since AC-10 needs the pair at one spec version.
 
 | cell | n | surfaces | why |
@@ -213,7 +213,7 @@ intact as `9280b39` with exactly its four files, and HEAD `42308a1` contains bat
 | `plugin_sha` | **`42308a1` x259 — one sha, no `-dirty`** |
 | probe | 45 commands offered, 28 expected, 0 missing, 0 leaked, **`evals_files=0`** |
 | captured | 2026-09-06 |
-| cases | **259/259 records; 0 missing, 0 extra** (182 plan / 45 clarify / 32 refute) |
+| cases | **259/259 records; 0 missing, 0 extra** (182 plan, 45 clarify, 32 refute at capture time) |
 | cost | **$207.10 imputed**, `--budget 220`, **no breach**, exit 0, 0 errors, 0 retries |
 | runtime | ~9h at `--concurrency 1` |
 
@@ -456,6 +456,33 @@ cases, so:
 reconciliations. The labels measure the grader against a human, not one spec version against another,
 and the `evals.json` grading entry stands unamended.
 
+### The grader was repaired after this calibration — 2026-09-07
+
+The labels measured the harness as over-strict and never lenient — 18 human failures, all caught,
+**zero false negatives** — so every repair they justify subtracts failures at no cost in recall. Six
+of the 41 human passes were scored as failures, and they reduce to two defects, both repaired
+against this same corpus and these same captures:
+
+- **The template cascade** (§ Next item 1). Nine cases carried `expected_outcome: plan` while being
+  refutations of a false premise: 78, 79, 104, 191, 216, 220, 225, 226, 252. They are relabelled in
+  the generator's refutation table, not in `evals.json` — the case array is regenerated wholesale, so
+  a hand-edit there would have been reverted by the next run. The corpus is now 173 plan / 45 clarify
+  / 41 refute, and the held-out tranche 17 plan / 2 refute / 4 clarify against the zero refute cases
+  it was designed with. None of its four genuine negatives (229, 231, 241, 262) is touched, so the
+  tranche's measurement value survives; the composition claim above does not.
+- **The outcome classifier**, which let a question mark below the section quorum decide the verdict.
+  The repair is **one-directional**: a `plan` may become a `clarify`, never the reverse. Over both
+  captures 36 responses change class, **0 pass→fail**. A two-section response carrying a rhetorical
+  `?` is still a clarification — this is not "punctuation no longer decides".
+
+**Every harness number above this heading is the pre-repair grader, and stays that way.** The
+corrected 85% CI [81%, 91%] describes capture #1 as graded then, and the `eval_set_sha256` recorded
+in `request-plan-0.4.0-verdicts.jsonl` is deliberately **not** updated: it names the case set those
+per-case verdicts were graded against, and the rows are meaningless repointed at a different one. No
+corrected rate is republished either — post-repair the harness disagrees with **none** of the 59
+graded labels, so the correction collapses to the corpus observed rate
+(212/259 = 82%) and is in-sample: a consistency check, never a headline.
+
 ## The `test` split is not an id range — a trap that produced a wrong number
 
 Recorded as a worked instance because the general rule is already written in `evals/labelling.md`
@@ -610,11 +637,12 @@ rate moves if the same 60 cases are relabelled against capture #2. Whether a bat
 
 ## Next
 
-1. **The six-assertion template cascade is a real grader defect with three independent
+1. **The six-assertion template cascade was a real grader defect with three independent
    confirmations** — case 191 at 0.3.0, cases 216 and 226 here, all human passes scored as failures on
-   the same signature. It is the single largest source of false failures now measured in this corpus,
-   and it inflates every harness number quoted from a capture. Recording it is in scope; **repairing it
-   is not, and it was not attempted in this worktask.**
+   the same signature. It was the single largest source of false failures measured in this corpus, and
+   it inflates every harness number quoted from a capture in this document. **It has since been
+   repaired** — 2026-09-07, § The grader was repaired after this calibration. The nine mislabelled
+   cases are refutations in the generator's table, so the plan template is no longer run against them.
 2. **Do not touch `disputes-the-premise`.** Unchanged from 0.3.0: its false-negative floor was measured
    and every repair was rejected. The cascade above is a *different* defect and the two must not be
    conflated in whatever fixes the first.

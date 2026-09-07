@@ -104,12 +104,16 @@ PLAN_SECTION_QUORUM = 3
 
 
 def classify_outcome(response: str) -> str:
-    """`clarify` when the skill asked instead of answering: too few plan sections
-    to be a plan, plus a question."""
+    """`clarify` when the skill asked instead of answering: too few plan sections.
+
+    One-directional, and it must stay that way: this may reclassify a `plan` as a
+    `clarify`, never the reverse. A question mark used to break the tie below the
+    quorum, which let punctuation alone decide a verdict. Requiring MORE than a
+    question mark instead is the reverse move and was measured: it read four genuine
+    questions as plans, each because it named the handoff trigger while asking about it.
+    """
     present = sum(1 for section in PLAN_SECTIONS if section in response)
-    if present >= PLAN_SECTION_QUORUM:
-        return "plan"
-    return "clarify" if "?" in response else "plan"
+    return "plan" if present >= PLAN_SECTION_QUORUM else "clarify"
 
 
 def expected_outcome(eval_set: dict, case_id: int) -> str:
