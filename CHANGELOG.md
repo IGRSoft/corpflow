@@ -76,6 +76,38 @@ reduced the number of *implementations*, not the number of lines.
   idiom: `skills/shared/lib/README.md`.
 - **28 sibling test harnesses**, extracting self-test bodies out of 22 production scripts so a
   production script no longer carries its own test runner inline.
+- **Step C.0a — a blocking `decision` item is resolved, not asked (#360).** A
+  `blocks_next_stage: true` item of `effective_class == "decision"` used to stop the run for a human
+  at every stage boundary; on the nine non-exception stages it is now handed to **the emitting
+  stage's own agent, on its own model**, dispatched one effort tier up, and the loop continues. Same
+  model by design — the stage assignment already reflects the work's difficulty, so moving it would
+  change two variables to explain one outcome; one rung up is the cheapest thing that is actually
+  different from the reasoning that already declined. Four conditions gate it, all required: the
+  stage is not PL/FN/ST/IR (those keep their own surfacing, and PL's boundary *is* the plan gate),
+  the item still blocks and is unresolved, `effective_class == "decision"` **after** the § Step C.2
+  raise-only join, and `decision_gate == "auto"`. The join running first is the escalation guard: an
+  item the orchestrator raises to `escalate` can never reach a delegate, so nothing here widens what
+  a run may do unattended. One dispatch per boundary over the whole set, never one per item.
+- **`effort-ladder.sh` — the effort ladder and the non-Opus clamp, as one executable copy.**
+  `EFFORT_ENUM`, `effort_rank`, `effort_plus_one` and `effort_for_resolver`, sourced by the Step
+  C.0a tier computation, by `state-patch.sh`'s enum gate, and by both bats suites — the same
+  one-definition-several-consumers reason as `sweep-stub-lib.sh`, since a tier one caller accepts
+  and another rejects is exactly the disagreement it exists to make impossible. The bump saturates
+  at `max` rather than erroring, and is **clamped to `high` on a non-Opus model**: `xhigh` needs
+  Opus 5 or Fable 5, and Sonnet silently downgrades the thinking budget rather than failing, so an
+  unclamped bump would run one or two rungs below what its own audit row claims. No current stage
+  hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it is
+  enforced in code rather than remembered: nothing in a run would show it if it started happening.
+  The ladder is canonical in `model-selection.md § Effort Levels`; the bats suite asserts the two
+  agree, and `matrix.tsv` gains R43/R44 so an edit to either side re-runs it.
+- **`effort_transport` on every resolver audit row.** `metadata.effort` becomes `--effort` on the
+  headless dispatch surface and is **advisory in-process** — `Task()` takes no effort argument — so
+  the row says which surface it got: `dispatch-flag` or `frontmatter-only`. In-process the tier is
+  recorded, not applied, and the resolver still runs. Recorded-not-applied is not a licence to reach
+  the number another way: substituting a higher-frontmatter agent would trade the domain expertise
+  answering the question for a field value. Rows also carry `effort_requested` alongside
+  `effort_resolved`, because `xhigh`/`max` requested in a session with thinking disabled is sent as
+  `high` and no clamp can catch that — the same reason `dispatched_agents[].model_resolved` exists.
 
 ### Changed
 
@@ -143,6 +175,30 @@ reduced the number of *implementations*, not the number of lines.
 - **`publish-pl-issue.sh`'s header shrank from 161 to 58 lines**, moving plugin-root resolution and
   ledger reads onto the two new shared libraries.
 - **Dead-code shellcheck classes eliminated: 7 → 0.**
+- **`metadata.effort` is mandatory on a non-PL task row, and validated at the write (#360).** It
+  left the optional dispatch-metadata set when Step C.0a began reading it; the two axes are
+  independent, and only one moved. As a **ledger record** it is now required — the resolver bumps
+  it, and a per-stage override exists nowhere else, so agent frontmatter is the wrong fallback: a DV
+  sub-task dispatched at `xhigh` runs at a tier `developer.md`'s `effort: high` never mentions. As a
+  **dispatch flag** it stays advisory, unchanged. `state-patch.sh` checks it against `EFFORT_ENUM`
+  on `--task-create` and `--task-meta` only, so `--task-status`/`--task-block`/`--task-replay` are
+  untouched; the test is `has("effort")` rather than `.effort // empty`, because the alternative
+  operator reads JSON `null` and `false` as absent and a required field must not be erasable through
+  its own gate. An off-ladder value would otherwise surface as a failed resolver dispatch a stage or
+  more later, rather than at the write that introduced it. Absent still passes — older ledgers
+  predate the field, and Step C.0a skips such a row (`resolver_skipped`, `reason:
+  "effort_unstamped"`) rather than guessing a tier, costing a round-trip instead of the run.
+- **`stage-codes.md` gains an `Effort` column on both tables**, primary and support, as the lookup
+  the orchestrator stamps alongside `model`. Still no third copy.
+- **Step C.3 drops the fable-plus-credit-fallback path.** The FN-gate batch now resolves on the same
+  rule as C.0a — each item's own emitting stage's agent and model, grouped by originating stage, one
+  dispatch per group — and the `facts.capabilities.fable_dispatch == "credit_blocked"` branch goes
+  with it. Step A.4 is deliberately **not** folded in: PL is an exception stage whose boundary is the
+  plan gate, where a user is already present under `checkpoint`.
+- **A resolver's `deep_reads` is exempt from the B4 fan-in tripwire.** It deep-reads by construction
+  — the ≤200-token stub cannot carry an `options[]` body — so counting it would fire the signal on
+  every run that resolves anything and make a real one unreadable. The two are told apart by the
+  audit row the reads belong to.
 
 ### Fixed
 
