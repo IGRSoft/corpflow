@@ -1293,7 +1293,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 
 @test "q9: the canonical section no longer claims no stage boundary gains a round-trip" {
   local body
-  body="$(awk '/^## Closing Elicitation Sweep/{f=1;next} /^## Per-Stage/{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
+  body="$(awk '/^## Closing Elicitation Sweep/{f=1;next} /^## /{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
   [ -n "$body" ] || fail "non-vacuity: canonical section not extracted"
   if printf '%s\n' "$body" | grep -q 'no stage boundary gains a round-trip'; then
     fail "the section still asserts a claim q9 made false"
@@ -1618,9 +1618,17 @@ step_a4_body() {  # <worktask-cmd>
 HEADLESS="skills/agent-coordination/references/headless-dispatch.md"
 LADDER="skills/worktask/scripts/effort-ladder.sh"
 
-# The resolver section's own body, bounded the same way matrix_body is.
+# The resolver contract spans two sections, and must: AC-15 forbids advisory vocabulary
+# anywhere under § Closing Elicitation Sweep, while the effort caveat below is legitimately
+# advisory, so the tier material cannot live nested inside the sweep. Both halves are required
+# — a silent half-extraction would let either section be renamed with the assertions still green.
 resolver_body() {
-  awk '/^#### Blocking items are resolved, not asked/{f=1;next} /^#### /{f=0} f' "$1"
+  local policy tier
+  policy=$(awk '/^#### Blocking items are resolved, not asked/{f=1;next} /^#### /{f=0} f' "$1")
+  tier=$(awk '/^## Resolver Effort Tier/{f=1;next} /^## /{f=0} f' "$1")
+  [ -n "$policy" ] || { echo "non-vacuity: § Blocking items are resolved, not asked not extracted"; return 1; }
+  [ -n "$tier" ] || { echo "non-vacuity: § Resolver Effort Tier not extracted"; return 1; }
+  printf '%s\n%s\n' "$policy" "$tier"
 }
 
 @test "the resolver contract exists and is canonical in stage-contracts.md" {

@@ -190,35 +190,9 @@ Two destinations, selected per item by `blocks_next_stage` — never by stage:
 
 #### Blocking items are resolved, not asked
 
-A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`.
+A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`. Why a tier and not a model, how that tier travels, and where it is clamped: § Resolver Effort Tier.
 
 The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR are recorded rather than prompted already, so there is nothing for a resolver to unblock.
-
-##### Why a tier up, and why the same model
-
-The item exists because the stage could not settle it at its own tier. Re-asking the same agent at the same effort re-runs the reasoning that already declined; one rung up is the cheapest thing that is actually different. The **model is unchanged** — the stage's assignment already reflects the work's difficulty, and swapping it would change two variables to explain one outcome.
-
-Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium < high < xhigh < max`, saturating at `max`. Executable copy — the one every consumer reads — is `skills/worktask/scripts/effort-ladder.sh`; the bats suite asserts the two agree.
-
-##### The tier is a request, not a guarantee
-
-`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory
-in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own
-frontmatter tier (`agent-coordination/references/headless-dispatch.md § Translation table — model &
-effort`). The bump is therefore computed and recorded on every path and *applied* on one. Every
-resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
-— the tier only reaches some dispatch surfaces` holds the table.
-
-Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
-deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
-a licence to reach the number another way — substituting a higher-frontmatter agent trades the
-domain expertise answering the question for a field value, which is the wrong direction.
-
-##### The tier the model can actually carry
-
-`xhigh` requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather than failing (`model-selection.md § xhigh routing`). A bump that crosses that line on a non-Opus model is therefore **clamped to `high`** and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it has to be enforced in code rather than remembered: nothing in a run would show it if it started happening.
-
-A second silent path is not clampable and must be read from the audit row instead: `xhigh`/`max` requested in a session with thinking turned off is sent as `high`. Resolvers therefore audit `effort_requested` **and** `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
 
 ##### What the resolver is given
 
@@ -397,6 +371,39 @@ Recording never stops; only prompting does. One behaviour row per carrier, each 
 | `/megatask` per issue | `PL0.metadata.megatask_group` | PARK on any escalate item, at whichever boundary it surfaces: `workspace.json.execution.status: "failed"`, `execution.reason: "parked_escalation"`, `escalation_parked` audit row with that boundary's `<CODE><N>` subject |
 | `CORPFLOW_NONINTERACTIVE=1` | environment | record, never prompt |
 | headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool |
+
+## Resolver Effort Tier
+
+How the Step C.0a resolver's effort tier is chosen, transported and clamped. Kept out of
+§ Closing Elicitation Sweep deliberately: the sweep obligation is strict from day one and its
+section is linted for any warn-only, opt-in or advisory vocabulary, whereas effort transport is
+genuinely advisory on one of its two surfaces. Two different subjects, two sections.
+
+### Why a tier up, and why the same model
+
+The item exists because the stage could not settle it at its own tier. Re-asking the same agent at the same effort re-runs the reasoning that already declined; one rung up is the cheapest thing that is actually different. The **model is unchanged** — the stage's assignment already reflects the work's difficulty, and swapping it would change two variables to explain one outcome.
+
+Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium < high < xhigh < max`, saturating at `max`. Executable copy — the one every consumer reads — is `skills/worktask/scripts/effort-ladder.sh`; the bats suite asserts the two agree.
+
+### The tier is a request, not a guarantee
+
+`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory
+in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own
+frontmatter tier (`agent-coordination/references/headless-dispatch.md § Translation table — model &
+effort`). The bump is therefore computed and recorded on every path and *applied* on one. Every
+resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
+— the tier only reaches some dispatch surfaces` holds the table.
+
+Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
+deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
+a licence to reach the number another way — substituting a higher-frontmatter agent trades the
+domain expertise answering the question for a field value, which is the wrong direction.
+
+### The tier the model can actually carry
+
+`xhigh` requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather than failing (`model-selection.md § xhigh routing`). A bump that crosses that line on a non-Opus model is therefore **clamped to `high`** and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp — every non-Opus stage sits at `medium` or below — which is precisely why it has to be enforced in code rather than remembered: nothing in a run would show it if it started happening.
+
+A second silent path is not clampable and must be read from the audit row instead: `xhigh`/`max` requested in a session with thinking turned off is sent as `high`. Resolvers therefore audit `effort_requested` **and** `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
 
 ## Per-Stage Frontmatter Templates
 
