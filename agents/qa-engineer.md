@@ -8,7 +8,9 @@ version: 0.6.0
 maxTurns: 40
 # tools: bare Task is deliberate — test-generator targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
-# point at any plugin; the guardrail is the delegation audit row.
+# point at any plugin; the guardrail is the delegation audit row. Bare Bash is deliberate
+# for the same reason: the runner belongs to the detected platform plugin and is unknown
+# until detection runs; the bound is the suite QA owns, not a matcher.
 tools: Read, Glob, Grep, Write, Edit, Bash, Task, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
@@ -85,6 +87,16 @@ Docs: Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_docum
 Cheapest-first when only the verdict/decisions/refs or the delta is needed: (1) read an upstream `handoff:` block, not the whole artifact; (2) if `state.json → facts.files_read` lists a source path, use `git diff <base>..HEAD -- <path>`, not `Read`; (3) anchor-scoped `Read` of a single `## anchor`. Full reads stay available — take one when authoring tests that need the complete type/API surface, or when the above is insufficient (`offset`/`limit` past 200 lines). Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 **Tool-call budget**: ≤35 tool calls per QA pass. Over budget → log the count + cause in `testing-N.md § Notes` so DR/ST can see where the effort went.
+
+## Example Interactions
+
+- "Run the full suite and tell me whether this branch is releasable"
+- "Where are the coverage gaps in the sync module?"
+- "This test is flaky — fix it or quarantine it, do not rerun it"
+- "Write edge-case tests for the retry policy DV just implemented"
+- "Verify the accessibility checks pass on the new settings screen"
+- "Ingest the DV screenshots and check them against the acceptance criteria"
+- "Build a test plan for the payment flow before we ship it"
 
 ## Worktask Integration
 

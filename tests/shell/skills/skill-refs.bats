@@ -327,3 +327,267 @@ mk_skill_layout() {
   refute_output --partial "agents/granted.md"
   refute_output --partial "agents/fallback.md"
 }
+
+# --- ordered scripts vs. their grants ----------------------------------------
+# The sibling defect of the ungranted Skill calls above, one layer down: a body
+# orders `bash skills/<x>/scripts/<y>.sh` while the file's grant line names neither
+# that path nor bare Bash, so the order is unexecutable and silently skipped. Five
+# worktask scripts and three megatask scripts shipped that way.
+#
+# `hooks/*.sh` is deliberately out of scope: hook scripts are dispatched by the
+# runtime from .claude-plugin/plugin.json, never ordered by a body, so a hooks/ path
+# in prose is documentation by construction.
+
+# Emit every skills/… script path this file *orders*, one per line. Three forms
+# count as an order; a path in a table cell, a blockquote, or plain prose does not,
+# and a directory-less basename is out of reach of any path-scoped grant anyway.
+_ordered_script_paths() {
+  awk '
+    function is_interp(t) { return (t == "bash" || t == "sh" || t == "source" || t == ".") }
+    { line = $0 }
+    line ~ /^[[:space:]]*```/ { infence = !infence; next }
+    line ~ /^[[:space:]]*\|/  { next }
+    line ~ /^[[:space:]]*>/   { next }
+    {
+      code = (infence || line ~ /^    [^[:space:]]/)
+      rest = line
+      while (match(rest, /skills\/[a-z0-9-]+\/[A-Za-z0-9._\/-]+\.sh/)) {
+        path = substr(rest, RSTART, RLENGTH)
+        pre  = substr(rest, 1, RSTART - 1)
+        rest = substr(rest, RSTART + RLENGTH)
+        order = 0
+        # F3 variable-rooted: building "$VAR/skills/…" has no purpose but execution.
+        if (pre ~ /\$[A-Za-z_][A-Za-z0-9_]*\/$/ || pre ~ /\$\{[A-Za-z_][A-Za-z0-9_]*\}\/$/) order = 1
+        # F1 interpreter-prefixed: nearest preceding word token, backticks, quotes
+        # and "$(" acting as separators rather than tokens.
+        if (!order) {
+          n = split(pre, tok, /[^A-Za-z0-9._\/-]+/)
+          for (i = n; i >= 1; i--) if (tok[i] != "") { if (is_interp(tolower(tok[i]))) order = 1; break }
+        }
+        # F2 code-position: first token of a line inside a code block, after the
+        # control and assignment prefixes that can legally precede a command.
+        if (!order && code) {
+          head = line
+          sub(/^[[:space:]]+/, "", head)
+          changed = 1
+          while (changed) {
+            changed = 0
+            if (sub(/^[^A-Za-z0-9._$\/-]+/, "", head)) changed = 1
+            if (sub(/^\$\(/, "", head)) changed = 1
+            if (sub(/^(if|then|else)[[:space:]]+/, "", head)) changed = 1
+            if (sub(/^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+/, "", head)) changed = 1
+          }
+          if (index(head, path) == 1) order = 1
+        }
+        if (order) print path
+      }
+    }
+  ' "$1" | LC_ALL=C sort -u
+}
+
+_grant_line() {
+  awk 'NR > 1 && /^---[[:space:]]*$/ { exit } /^(tools|allowed-tools):/ { print }' "$1"
+}
+
+# ungranted_script_orders <plugin-root>
+# One `<file> -> <path>` row per ordered script the file's grant line cannot execute.
+ungranted_script_orders() {
+  local root="$1" f grants p
+  ( cd "$root" || return 1
+    for f in $(git ls-files -- 'agents/*.md' 'commands/*.md'); do
+      grants="$(_grant_line "$f")"
+      # E1: an unrestricted execution grant serves every order in the file.
+      printf '%s' "$grants" | grep -qE '(^|[ ,:])Bash([ ,]|$)' && continue
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        # E2: agents ordering the ledger patcher are owned by
+        # unexecutable_state_patch_orders, whose Edit-direct fallback exemption
+        # would be contradicted by a second row here.
+        if [ "$p" = "skills/worktask/scripts/state-patch.sh" ]; then
+          case "$f" in agents/*) continue ;; esac
+        fi
+        case "$grants" in *"$p"*) continue ;; esac
+        printf '%s -> %s\n' "$f" "$p"
+      done <<< "$(_ordered_script_paths "$f")"
+    done
+    return 0 )
+}
+
+# --- related: entries that resolve to nothing --------------------------------
+# A `related:` entry is a reading order for the next agent. Seven entries across two
+# skills named a bare basename that resolves against no root at all, so the reading
+# order silently pointed nowhere.
+
+# Entries live in the FRONTMATTER only: an unterminated extraction reads body bullet
+# lists as entries and reports ~120 false positives.
+_related_entries() {
+  awk 'NR > 1 && /^---[[:space:]]*$/ { exit }
+       /^related:/ { flag = 1; next }
+       flag && /^[a-zA-Z_-]+:/ { exit }
+       flag && /^[[:space:]]*-[[:space:]]/ { print }' "$1" \
+    | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/^"//; s/"$//'
+}
+
+# dangling_related_targets <plugin-root>
+# One `<file> -> <entry>` row per entry resolving neither file-relative nor from the
+# plugin root. Agents carry no related: block today; the predicate is vacuous there
+# by design, so an agent that grows one is covered without a scope edit.
+dangling_related_targets() {
+  local root="$1" f d e p
+  ( cd "$root" || return 1
+    for f in $(git ls-files -- 'skills/*/SKILL.md' 'skills/*/*/SKILL.md' 'agents/*.md' 'commands/*.md'); do
+      d="$(dirname "$f")"
+      while IFS= read -r e; do
+        case "$e" in ''|http*|\$*) continue ;; esac
+        p="${e%%#*}"
+        { [ -e "$d/$p" ] || [ -e "$p" ]; } || printf '%s -> %s\n' "$f" "$e"
+      done <<< "$(_related_entries "$f")"
+    done
+    return 0 )
+}
+
+# A tree whose every script order is granted; prints its root. The negative controls
+# are inline: a table-cell citation, a prose citation, and a hooks/ path.
+mk_script_order_layout() {
+  local root
+  root="$(mk_tmpworkdir)"
+  mk_git_fixture --dir "$root" \
+    --file 'commands/run.md:---\nallowed-tools: Read, Bash(bash skills/worktask/scripts/patch.sh:*), Bash(bash skills/worktask/scripts/rank.sh:*), Bash(bash skills/worktask/scripts/seed.sh:*)\n---\n\nRun `bash skills/worktask/scripts/patch.sh --stage DV`.\n\n```bash\nskills/worktask/scripts/rank.sh --goal x\n```\n\nHELPER="$PLUGIN_ROOT/skills/worktask/scripts/seed.sh"\n\n| Script | `skills/worktask/scripts/audit.sh` |\n\nReachability is described in `skills/worktask/scripts/audit.sh`.\n\nThe runtime dispatches `bash hooks/state-merge.sh` itself.\n' \
+    --file 'agents/free.md:---\ntools: Read, Bash\n---\n\nRun `bash skills/worktask/scripts/audit.sh --all`.\n' \
+    --file 'skills/worktask/scripts/patch.sh:#!/usr/bin/env bash\n' \
+    --file 'skills/worktask/scripts/rank.sh:#!/usr/bin/env bash\n' \
+    --file 'skills/worktask/scripts/seed.sh:#!/usr/bin/env bash\n' \
+    --file 'skills/worktask/scripts/audit.sh:#!/usr/bin/env bash\n' >/dev/null
+  printf '%s\n' "$root"
+}
+
+# A tree whose every related: entry resolves; prints its root. The negative control
+# is a body bullet list that looks exactly like a frontmatter entry.
+mk_related_layout() {
+  local root
+  root="$(mk_tmpworkdir)"
+  mk_git_fixture --dir "$root" \
+    --file 'skills/alpha/SKILL.md:---\nname: alpha\nrelated:\n  - ../beta/SKILL.md\n  - commands/go.md\n  - references/notes.md#anchor\nversion: 1\n---\n\n## Body\n\n  - nowhere.md\n  - also-nowhere.md\n' \
+    --file 'skills/alpha/references/notes.md:x\n' \
+    --file 'skills/beta/SKILL.md:---\nname: beta\n---\n\nx\n' \
+    --file 'commands/go.md:---\nallowed-tools: Read\n---\n\nx\n' >/dev/null
+  printf '%s\n' "$root"
+}
+
+# --- predicate behaviour: ordered scripts (always runs) ----------------------
+
+@test "resolver: a well-formed script-order tree trips no predicate" {
+  local root
+  root="$(mk_script_order_layout)"
+  run ungranted_script_orders "$root"
+  assert_output ""
+}
+
+@test "resolver: an ordered bash skills/… script with no matching grant is named" {
+  local root
+  root="$(mk_script_order_layout)"
+  sed -i.bak 's|, Bash(bash skills/worktask/scripts/patch.sh:\*)||' "$root/commands/run.md"
+  run ungranted_script_orders "$root"
+  assert_output "commands/run.md -> skills/worktask/scripts/patch.sh"
+}
+
+@test "resolver: an interpreter-less skills/… order in a code block with no grant is named" {
+  local root
+  root="$(mk_script_order_layout)"
+  sed -i.bak 's|, Bash(bash skills/worktask/scripts/rank.sh:\*)||' "$root/commands/run.md"
+  run ungranted_script_orders "$root"
+  assert_output "commands/run.md -> skills/worktask/scripts/rank.sh"
+}
+
+@test "resolver: a \$PLUGIN_ROOT-rooted script order with no grant is named" {
+  local root
+  root="$(mk_script_order_layout)"
+  sed -i.bak 's|, Bash(bash skills/worktask/scripts/seed.sh:\*)||' "$root/commands/run.md"
+  run ungranted_script_orders "$root"
+  assert_output "commands/run.md -> skills/worktask/scripts/seed.sh"
+}
+
+@test "resolver: a script path cited in prose or a table needs no grant" {
+  # audit.sh appears in commands/run.md twice -- once in a table cell, once in a
+  # sentence about reachability -- and is granted nowhere in that file.
+  local root
+  root="$(mk_script_order_layout)"
+  run ungranted_script_orders "$root"
+  refute_output --partial "audit.sh"
+}
+
+@test "resolver: a bare Bash grant exempts the file from the script-order predicate" {
+  local root
+  root="$(mk_script_order_layout)"
+  run ungranted_script_orders "$root"
+  refute_output --partial "agents/free.md"
+}
+
+@test "resolver: a hooks/ script path in a body needs no grant" {
+  local root
+  root="$(mk_script_order_layout)"
+  run ungranted_script_orders "$root"
+  refute_output --partial "hooks/"
+}
+
+# --- predicate behaviour: related: targets (always runs) ---------------------
+
+@test "resolver: a well-formed related: tree trips no predicate" {
+  local root
+  root="$(mk_related_layout)"
+  run dangling_related_targets "$root"
+  assert_output ""
+}
+
+@test "resolver: a related: entry resolving to no file is named" {
+  local root
+  root="$(mk_related_layout)"
+  sed -i.bak 's|  - ../beta/SKILL.md|  - beta.md|' "$root/skills/alpha/SKILL.md"
+  run dangling_related_targets "$root"
+  assert_output "skills/alpha/SKILL.md -> beta.md"
+}
+
+@test "resolver: a related: entry resolved file-relative needs no repo-root twin" {
+  # ../beta/SKILL.md exists only relative to skills/alpha/, never from the root.
+  local root
+  root="$(mk_related_layout)"
+  run dangling_related_targets "$root"
+  refute_output --partial "beta"
+}
+
+@test "resolver: a related: entry with a #anchor suffix resolves to its file" {
+  local root
+  root="$(mk_related_layout)"
+  run dangling_related_targets "$root"
+  refute_output --partial "notes.md"
+}
+
+@test "resolver: a body bullet outside the frontmatter is not a related: entry" {
+  local root
+  root="$(mk_related_layout)"
+  run dangling_related_targets "$root"
+  refute_output --partial "nowhere.md"
+}
+
+# --- this repo (always runs) -------------------------------------------------
+
+@test "contract: every script this repo orders is covered by its file's grant" {
+  # Guard the collector before asserting emptiness: this plugin genuinely orders
+  # scripts from its bodies, so an empty candidate set means the three order forms
+  # regressed, not that the repo went clean.
+  local ordered
+  ordered="$(cd "$PLUGIN_ROOT" && for f in $(git ls-files -- 'agents/*.md' 'commands/*.md'); do
+    _ordered_script_paths "$f"; done)"
+  [ "$(printf '%s\n' "$ordered" | grep -c .)" -ge 10 ]
+  run ungranted_script_orders "$PLUGIN_ROOT"
+  assert_output ""
+}
+
+@test "contract: every related: entry in this repo resolves to a file" {
+  local entries
+  entries="$(cd "$PLUGIN_ROOT" && for f in $(git ls-files -- 'skills/*/SKILL.md' 'skills/*/*/SKILL.md'); do
+    _related_entries "$f"; done)"
+  [ "$(printf '%s\n' "$entries" | grep -c .)" -ge 10 ]
+  run dangling_related_targets "$PLUGIN_ROOT"
+  assert_output ""
+}

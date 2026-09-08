@@ -17,6 +17,9 @@ maxTurns: 80
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
 # sees the tool and hand-rolls the adapter chain the skill already ships.
+# tools: bare Bash is deliberate — the build and test command is platform-resolved at
+# dispatch (routing-matrix plugin, then that plugin's runner), so no matcher written here
+# can name it; the bound is D2's Executed Tests scope, not the grant.
 # tools: bare Task is deliberate — targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the mandatory delegation audit row.
@@ -150,6 +153,16 @@ Invoke it through the platform's implementation agent (`Task`, target resolved p
 Fall back through: the override target (if any) → the alias's default target → the project's own build command via scoped Bash (its manifest names it). Tee to the same log paths, record `<plugin> unavailable; used direct <tool> — <reason>` in `§ Decisions`, and write one `audit.jsonl` line `action: "plugin_unavailable"`, `metadata: {plugin: "<name>", reason: <error>, alias: "<corpflow:* alias>", override_target: "<plugin:agent>|null"}`. Do NOT abort the stage.
 
 > Delegated builds past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result (`agent-coordination § MCP Auto-Background`).
+
+## Example Interactions
+
+- "Implement the DV0 task described in `development-0.md`"
+- "Fix the failing `SyncQueueTests` and re-run only that suite"
+- "This repo is Kotlin — route to the right platform developer and implement the feature"
+- "Refactor the token-refresh path without changing its public API"
+- "The release build fails while debug passes; find out why"
+- "Add unit tests for the new retry policy and list them under Selected Tests"
+- "Capture the DV screenshots for the settings screen and register them in the manifest"
 
 ## Worktask Integration — DV Stage
 

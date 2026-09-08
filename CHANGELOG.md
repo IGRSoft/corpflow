@@ -10,6 +10,8 @@ commands/conventions/schema), plus gh#316. First authority-clean full-suite evid
 sequence: 1855 bats, all green, exit 0, 423 `@test` cases added over `develop` — earlier per-stream
 tallies were taken mid-flight over a tree other streams were still editing and are not comparable.
 
+Also carries a second parallel effort: closes all 26 prompt-audit findings (8 Critical, 18 Warnings) across 16 agents, 28 commands, and 23 skills (score 65/100). Two development streams addressed tool-grant coverage, normative corrections, and agent-template backfill. Full suite for this combined release: 1872 bats + 379 Python, exit 0.
+
 ### Breaking
 
 - **`handoffs` re-keyed `<PREV_CODE>→<TASK_ID>`.** A stage split into four now writes four distinct
@@ -59,6 +61,30 @@ tallies were taken mid-flight over a tree other streams were still editing and a
 - **gh#316, closed.** The `facts.decisions[]` clamp now spills to `.context/decisions-<run_index>.jsonl`
   on eviction — append-only, sibling of the existing questions spill, no reader by design (matches
   the questions-spill precedent). Listed as an open follow-up in the 4.0.29 changelog; closed here.
+
+### Prompt-audit remediation
+
+#### Added
+
+- **Two new predicates in `tests/shell/skills/skill-refs.bats`:** `ungranted_script_orders` (Predicate A, 7 tests) detects execution orders without matching grants, covering interpreter-prefixed paths, plugin-root variables, and bare basenames; `dangling_related_targets` (Predicate B, 5 tests) resolves `related:` entries and reports unresolvable ones. Both ship with planted-violation fixture trees and 2 repository-wide contract tests (14 named tests total, all green).
+- **Agent template backfill:** `commands/create-agent.md § Body sections` gains required slots for `Example Interactions` and `Constraints (DO NOT)` sub-sections; 15 agents backfilled with `## Example Interactions` (5–8 user phrasings each); 10 agents backfilled with `### Rationalizations` and `### Red Flags — STOP` sub-sections.
+- **Command structural gaps:** `## Examples` sections added to `appstore` (4 invocations), `request-plan` (4 per-class invocations), `worktask` (7 covering all unexampled options); `## Output Format` sections added to `appstore`, `megatask`, `worktask`; completion criteria rewritten on 5 commands to name their artifacts.
+- **Agent differentiation:** two new `## Differentiation from Related Roles` tables resolve description collisions between `product-manager`/`stakeholder` and `team-lead`/`project-manager`.
+
+#### Fixed
+
+- **Grant coverage (Critical C1–C3, C13):** five worktask scripts (`branch-name.sh`, `refine-branch-target.sh`, `publish-pl-issue.sh`, `handoff-harness.sh`, `effort-ladder.sh`) added to `commands/worktask.md:allowed-tools`; three megatask scripts added to `commands/megatask.md`; `commands/request-plan.md` matcher gains `bash ` prefix and `:*`; `agents/designer.md` gains `ToolSearch` grant with conditional step-1 delegation in `design-review.md`.
+- **Audit command write grants (Critical C2):** `commands/prompt-audit.md`, `docs-audit.md`, `arch-debt.md` granted `Write, Edit` with `.context/audits/` output paths; `test-coverage.md` granted `Write`; all four gain `# tools:` comments.
+- **Tool-grant comments (Critical C13, Warning W19):** nine bare `Bash`/`Task` grants annotated with `# tools:` comments; `appstore.md` narrowed to `Task(corpflow:release-engineer)`.
+- **G3 invocation gate polarity (Critical C5):** `agents/prompt-engineer.md` restates G3 as "Does it **lack** standalone value…" (shared polarity with G1/G2); G4 tie-breaker re-anchored; `skills/csv-export-templates/SKILL.md` and `skills/preview-ensurer/SKILL.md` re-verified (both confirm pipeline-only via `disable-model-invocation: true`); `skills/dv-screenshot-capture/SKILL.md` scores G3 = no, gains flag.
+- **Model tier correction (Critical C6):** `commands/create-agent.md` and `commands/prompt-audit.md` changed from `model: sonnet` to `model: opus`.
+- **Link resolution (Critical C7):** seven `related:` entries in `skills/agent-coordination/SKILL.md` and `skills/estimation-methodology/SKILL.md` rewritten to file-relative form (`../worktask/SKILL.md`).
+- **Accessibility version (Critical C8):** WCAG 2.1 → 2.2 across `agents/designer.md`, `commands/design-review.md`, `commands/design-accessibility.md`.
+- **Section ordering (Warning W22):** example sections repositioned (W22) in `commands/milestone.md`, `ethics-review.md`; `tech-code-review.md` reordered with `## Your Job (read before you review)` preamble moved.
+- **Argument-hint fixes (Warning W23):** `milestone.md` gains `|all`, `megatask.md` fixed to `<N>`.
+- **Option examples (Warning W24):** 13 new examples covering 16 previously unexampled options across 5 commands.
+- **Completion criteria (Warning W18):** rewritten on `designer.md`, `product-manager.md`, `design-review.md`, `design-accessibility.md`, `design-specs.md` to name artifacts.
+- **Disclosure (Warnings W11–W13):** 15 agents gain `## Example Interactions`; 10 agents gain constraint sub-sections; `technical-writer.md` moves "DO NOT omit examples" from prohibition to required template slot.
 
 ### No code needed
 

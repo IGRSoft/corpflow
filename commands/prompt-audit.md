@@ -2,8 +2,11 @@
 name: prompt-audit
 description: Comprehensive audit of agents, commands, skills, and prompts for quality, consistency, and best practices
 argument-hint: '[--scope agents|commands|skills|all]'
-allowed-tools: Read, Glob, Grep
-model: sonnet
+# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
+# the only file this command creates is `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`.
+# Edit exists solely for `--fix`, bounded to files this same run already read under `--scope`.
+allowed-tools: Read, Glob, Grep, Write, Edit
+model: opus
 related:
   - agents/prompt-engineer.md
   - commands/optimize-agent.md
@@ -30,8 +33,8 @@ Comprehensive audit of agents, commands, skills, and prompts for quality, consis
 - `--agents` - Audit agents only
 - `--commands` - Audit commands only
 - `--skills` - Audit skill manifests only (`skills/**/SKILL.md`)
-- `--report` - Generate detailed audit report file
-- `--fix` - Auto-fix minor issues (formatting, links)
+- `--report` - Write the audit report to `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`; the only file this command creates
+- `--fix` - Auto-fix minor issues (formatting, links) in place, only in files this run already read under `--scope`; never inside a `## Constraints (DO NOT)` block
 - `--severity <level>` - Minimum severity: info, warning, error
 
 ## Examples

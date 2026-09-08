@@ -3,7 +3,7 @@ name: design-review
 description: Conduct a comprehensive design review for screens, components, or features
 argument-hint: '<screen, component, or feature>'
 model: sonnet
-allowed-tools: Read, Glob, Grep
+allowed-tools: Read, Glob, Grep, Task(corpflow:designer)
 related:
   - agents/designer.md
   - commands/design-specs.md
@@ -39,9 +39,9 @@ Comprehensive design review of a screen, component, or feature, run through the 
 
 ## Procedure
 
-1. **Gather context** — read the generated Pencil mockups in `.context/designs/mockup-*.pen` with the Pencil MCP tools (`get_screenshot`, `batch_get`, `snapshot_layout`) for visual and structural review; identify the target and the design patterns, design-system usage, and platform considerations it relies on.
+1. **Gather context** — when `.context/designs/mockup-*.pen` exists, delegate the read: `Task(corpflow:designer)` with "read the mockups for `<target>` and return a ≤400-token structural and visual summary — frames, states, tokens used, deviations from the design system. Write nothing." No mockup present → skip the delegation and read the source or spec directly. Then identify the target's design patterns, design-system usage, and platform considerations.
 2. **Review** — run `agents/designer.md` at the selected focus and depth against the criteria below.
-3. **Report** — per Output Format, with before/after suggestions where applicable.
+3. **Report** — emit every § Output Format section. Each § Review Criteria row selected by `--focus` carries a verdict line — pass, a finding, or `not applicable: <reason>` — and each finding names the screen or component, the criterion it fails, and a before/after. A row with no verdict means the review is unfinished, not that it passed.
 
 ## Review Criteria
 
@@ -49,7 +49,7 @@ Comprehensive design review of a screen, component, or feature, run through the 
 |-------|--------|
 | `ui` | Visual hierarchy and layout; typography and color usage; spacing and alignment consistency; icon and asset quality; dark mode support |
 | `ux` | User flow clarity; interaction patterns; error handling and feedback; loading states; navigation consistency |
-| `a11y` | WCAG 2.1 AA, color contrast, touch target sizes, screen reader support, keyboard navigation — full checklist in `commands/design-accessibility.md` |
+| `a11y` | WCAG 2.2 AA, color contrast, touch target sizes, screen reader support, keyboard navigation — full checklist in `commands/design-accessibility.md` |
 | `system` | Component library adherence; token usage (colors, spacing, typography); pattern consistency; reusability assessment |
 
 ## Output Format

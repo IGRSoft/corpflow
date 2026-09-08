@@ -5,6 +5,9 @@ version: 1.0.1
 effort: medium
 argument-hint: "<worktask_id> <platform> <slug> [args-json]"
 keep-coding-instructions: true
+# G3: no standalone value — every run needs a worktask_id, a stage platform and the adapter
+# argv of an in-flight DV stage, none of which a user has outside a worktask.
+disable-model-invocation: true
 ---
 
 # dv-screenshot-capture

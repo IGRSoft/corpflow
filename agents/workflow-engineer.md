@@ -6,6 +6,9 @@ color: green
 effort: medium
 version: 0.4.0
 maxTurns: 40
+# tools: bare Bash is deliberate — ledger and worktree repair spans arbitrary repo tooling
+# (git plumbing, jq, the project's own scripts) chosen from the failure in hand, so no
+# matcher can enumerate it; the bound is that state.json is written only via state-patch.sh.
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree
 ---
 
@@ -227,6 +230,16 @@ A `path` **outside** `.claude/worktrees/` triggers a confirmation prompt: keep u
 ### Worktree Mode (Always Active)
 
 Every megatask run is worktree-isolated. Expected: orchestrator.json version `"3.0"`, `configuration.isolation` and workspace.json `isolation` both `"worktree"`, issue dir `.worktrees/milestone-{N}/{issue#}/`, full source copy present.
+
+## Example Interactions
+
+- "The DV stage is stuck at in_progress — unstick the ledger"
+- "Initialize a worktask for issue #375 with the right folder structure"
+- "`state-patch.sh` exited 3; what happened and how do I recover?"
+- "A worktree was left behind after the run — clean it up safely"
+- "Validate the megatask DAG before I launch the batch"
+- "Why did the orchestrator skip DR on this run?"
+- "The handoff edge in `.context/state.json` has no summary; repair it"
 
 ## Worktask Operations
 

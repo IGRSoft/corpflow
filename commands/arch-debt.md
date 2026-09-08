@@ -3,7 +3,10 @@ name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path dir] [--severity critical|high|medium|low]'
 model: sonnet
-allowed-tools: Read, Glob, Grep
+# tools: Write takes no path predicate, so the bounds are stated here and in `## Options`:
+# `--report` creates `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`, and `--add`/`--prioritize`
+# maintain the single register `.context/audits/tech-debt.md` (Write on first use, Edit after).
+allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/software-architector.md
   - commands/arch-review.md
@@ -26,9 +29,9 @@ Analyze, document, and prioritize technical debt in the codebase.
 ## Options
 
 - `--path <dir>` - Analyze specific directory
-- `--add "description"` - Add new tech debt item
-- `--report` - Generate full tech debt report
-- `--prioritize` - Re-prioritize existing debt
+- `--add "description"` - Append a tech debt item to the register `.context/audits/tech-debt.md`
+- `--report` - Write the full tech debt report to `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`
+- `--prioritize` - Re-prioritize existing debt in place, in the register `.context/audits/tech-debt.md`
 - `--category [code|architecture|testing|docs|security]` - Filter by category
 - `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
 

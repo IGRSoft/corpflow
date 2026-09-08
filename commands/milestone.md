@@ -1,8 +1,11 @@
 ---
 name: milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
-argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai] [--dry-run] [--secure]'
+argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure]'
 model: sonnet
+# tools: bare Bash is deliberate — ticket generation drives per-milestone repo tooling
+# (gh, git, and whatever the project's own scripts expose), unknown until the milestone is
+# read; the bound is that it writes issues and milestone files, never source.
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 related:
   - agents/product-manager.md
@@ -149,6 +152,16 @@ Then [expected result]
 
 Both trailing sections are parsed, not just read: `Agent Assignments` by the `megatask` skill via `/\| Implementation \| `(.+?)` \|/`, and `Metadata` via the `key: value` form existing `base_branch: <branch>` parsing expects.
 
+## Examples
+
+```bash
+/milestone "Add dark mode support" --milestone 3 --platform apple
+/milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
+/milestone "Implement OAuth2 flow" --milestone 2 --secure
+/milestone "User profile management"                       # auto-creates the milestone
+/milestone "API rate limiting" --milestone 4 --labels "backend,performance"
+```
+
 ## Output Format
 
 ### Dry-run
@@ -177,16 +190,6 @@ Ready to create? Run without --dry-run.
 ### Live
 
 Same summary table keyed by issue number (`#42`) instead of ticket index and without the Dependencies column, headed by `Milestone: #{N} "{title}"`, with dependencies listed below as `#43 → #42` and closing on `Next: /megatask {N}` to execute all tickets.
-
-## Examples
-
-```bash
-/milestone "Add dark mode support" --milestone 3 --platform apple
-/milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
-/milestone "Implement OAuth2 flow" --milestone 2 --secure
-/milestone "User profile management"                       # auto-creates the milestone
-/milestone "API rate limiting" --milestone 4 --labels "backend,performance"
-```
 
 ## Integration
 

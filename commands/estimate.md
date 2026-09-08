@@ -3,7 +3,10 @@ name: estimate
 description: Estimate task complexity, effort, and resources; optionally review an estimate or export it to CSV
 argument-hint: '<task description> [--quick|--detailed] [--review] [--export csv]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Write
+# tools: the Budget and AI Cost rows under `#### Detailed Estimation — Budget & AI Cost
+# Sections` order `estimate-calc.py` as the canonical math, so the grant names that one
+# interpreter and that one script; every other number in the output is read, not computed.
+allowed-tools: Read, Glob, Grep, Write, Bash(python3 skills/estimation-methodology/scripts/estimate-calc.py:*)
 related:
   - skills/worktask/SKILL.md
   - skills/estimation-methodology/SKILL.md
@@ -85,6 +88,11 @@ platform keys of `skills/shared/compatible-plugins.md § Registry`.
 /estimate --review --platform android --update
 /estimate --detailed "Build MVP" --export csv --dir exports/ --platform apple
 /estimate --detailed "Build MVP" --export csv --validate
+/estimate --detailed --stages --sequential "Offline sync"   # 3-stage budget, no parallelism
+/estimate --compare "SwiftData | GRDB | Core Data"
+/estimate --detailed "Payments" --multiplier 8 --dev-rate 95 --ai-rate 200
+/estimate --detailed "Payments" --no-review                 # skip the inline review step
+/estimate --detailed "Build MVP" --export csv --delimiter , --dir exports/
 ```
 
 ## Output Format

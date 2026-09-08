@@ -3,7 +3,7 @@ name: appstore
 description: 'Store publishing front door — listing metadata, screenshots, or in-app purchases; delegates to the platform plugin''s release engineer (Apple App Store, Google Play).'
 argument-hint: '--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run]'
 model: haiku
-allowed-tools: Read, Glob, Grep, Task
+allowed-tools: Read, Glob, Grep, Task(corpflow:release-engineer)
 version: 0.1.0
 related:
   - skills/shared/routing-matrix.md
@@ -41,6 +41,20 @@ one, and none of that writing happens here any more.
 deliberately distinct from the plugin-wide `--platform`. Pass it through; never fold one into the
 other.
 
+## Examples
+
+```
+/appstore --task listing --platform apple --lang ua
+/appstore --task screenshots --apple-platform macos --path AppStore/
+/appstore --task iap --platform apple --bundle com.example.app --dry-run
+/appstore --task listing --platform android
+```
+
+- Line 1 — Ukrainian listing copy for the Apple target; `--lang` is passed through untouched.
+- Line 2 — macOS screenshot set: `--apple-platform` selects the device class, never the plugin.
+- Line 3 — `--dry-run` reaches App Store Connect read-only; no product is created.
+- Line 4 — the Play listing route; `--task iap --platform android` would be refused instead.
+
 ## What this command does
 
 Dispatch `Task(corpflow:release-engineer)` with the parsed arguments and let it work.
@@ -73,6 +87,23 @@ The agent stops and reports rather than guessing when:
 
 None of these fall back to doing the work inline. Writing to a live store account on a guessed
 platform is the failure this design exists to prevent.
+
+## Output Format
+
+This command returns the delegate's report, prefixed by the route it resolved:
+
+~~~markdown
+# App Store Publishing — <task>
+
+## Route — platform (detected or `--platform`) · target agent · command dispatched
+## Result — the platform release engineer's report, verbatim
+## Artifacts — paths the target wrote, or `none` (this command writes nothing itself)
+## Next Steps — the direct `/<plugin>:<command>` to re-run, plus anything the agent flagged
+~~~
+
+A refusal (§ Refusals) replaces `## Result` with `## Refusal — <reason>` naming the plugin, the
+alias, and the direct command to run instead. Either way the run ends in a report; it never ends
+in a partial store write.
 
 ## Relationship to the pipeline
 

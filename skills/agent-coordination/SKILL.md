@@ -4,11 +4,11 @@ description: Use when coordinating agent handoffs, debugging multi-stage executi
 effort: medium
 version: 0.3.0
 related:
-  - worktask.md
-  - claude-constitution.md
-  - security-review-process.md
-  - release-engineering.md
-  - incident-response.md
+  - ../worktask/SKILL.md
+  - ../claude-constitution/SKILL.md
+  - ../security-review-process/SKILL.md
+  - ../release-engineering/SKILL.md
+  - ../incident-response/SKILL.md
 ---
 
 # Agent Coordination

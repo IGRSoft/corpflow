@@ -54,6 +54,9 @@ Read the release notes (auto-fetched or `--notes`), map the new capabilities to 
 /cc-update 2.1.77 --agent developer            # surgical single file
 /cc-update 2.1.77 --bump-min                   # force min bump
 /cc-update 2.1.77 --scope agents --notes "New Elicitation hook; agents inherit model"
+/cc-update 2.1.77 --command worktask           # one command file
+/cc-update 2.1.70 --force                      # older than the recorded min version
+/cc-update 2.1.77 --worktask-impact-only       # impact table only, no file edits
 ```
 
 ## Version Source

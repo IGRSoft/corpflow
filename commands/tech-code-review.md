@@ -27,27 +27,6 @@ A **recall-first, read-only** developer code review. This command IS the DR (Dev
 
 > **Not the CC-native `/code-review`**: this is the corpflow governed DR gate (stage contracts, audit trail, read-only — DV applies the fixes). For ad-hoc work outside the worktask pipeline use the built-in `/code-review` (alias `/review`, applies findings with `--fix`; `ultra` = multi-agent cloud review) or `/simplify`.
 
-## Your Job (read this first)
-
-You are a **recall-first quality gate**, not a courtesy PR commenter: **catch real correctness, security, data-loss, concurrency, and regression risks BEFORE they reach later review or production.** The historic failure mode of this review is silence on bugs the reviewer was *somewhat sure* about — **"somewhat sure about a real bug" is the exact miss profile, and it must NOT default to silence and must NOT be laundered into a throwaway non-blocking note.**
-
-### Operating principles
-
-| Principle | Rule |
-|---|---|
-| **Never default to silence** | Costs are asymmetric: a missed defect becomes a production incident; a hedged over-cautious finding costs a reader thirty seconds. An empty findings list is a strong claim, earned only via the Phase 3 pass — but an earned clean pass IS valid, so never invent a token finding to prove you looked. Coverage (`N files, M hunks reviewed`) is the evidence. |
-| **Judge objectively** | You are not predicting whether the author will agree — authors routinely disagree with valid bug reports. Flag on whether the code is actually *at risk*. |
-
-#### Operating principles — verification stance
-
-| Principle | Rule |
-|---|---|
-| **Read, don't run** | Static, read-only review (`Read`, `Glob`, `Grep`, read-only `git diff`/`log`/`show`). Compensate for the lack of execution with deeper reading and explicit reasoning — never by assuming the code works. |
-| **Adversarial stance** | Assume-it's-wrong-until-checked; for each non-trivial path actively try to construct an input, state, or sequence that breaks it. |
-| **Absence of evidence ≠ safety** | Not finding a concurrent caller does not prove single-threadedness; not finding a consumer does not prove none exists. Inability to verify keeps a concern alive (BLOCKED rule) — it does not retire it. |
-
-The *keep/drop* criteria that decide what is finally reported live in Phase 2 — they are **not** a license to skip discovery. Find first (Phase 1), filter second. A concern you never wrote down can never be caught.
-
 ## Usage
 
 ```
@@ -71,6 +50,27 @@ The *keep/drop* criteria that decide what is finally reported live in Phase 2 �
 - `--output <summary|detailed>` - Output verbosity for `--depth deep` (default: `detailed`). Ignored in surface mode, which always writes the findings artifact format below.
 - `--severity <level>` - Minimum severity to report: `P2`, `P1`, `P0`. Detection (Phase 1) is never filtered by this option — it only gates what is written to the findings artifact.
 - `--ethics` - Include constitutional compliance checks
+
+## Your Job (read before you review)
+
+You are a **recall-first quality gate**, not a courtesy PR commenter: **catch real correctness, security, data-loss, concurrency, and regression risks BEFORE they reach later review or production.** The historic failure mode of this review is silence on bugs the reviewer was *somewhat sure* about — **"somewhat sure about a real bug" is the exact miss profile, and it must NOT default to silence and must NOT be laundered into a throwaway non-blocking note.**
+
+### Operating principles
+
+| Principle | Rule |
+|---|---|
+| **Never default to silence** | Costs are asymmetric: a missed defect becomes a production incident; a hedged over-cautious finding costs a reader thirty seconds. An empty findings list is a strong claim, earned only via the Phase 3 pass — but an earned clean pass IS valid, so never invent a token finding to prove you looked. Coverage (`N files, M hunks reviewed`) is the evidence. |
+| **Judge objectively** | You are not predicting whether the author will agree — authors routinely disagree with valid bug reports. Flag on whether the code is actually *at risk*. |
+
+#### Operating principles — verification stance
+
+| Principle | Rule |
+|---|---|
+| **Read, don't run** | Static, read-only review (`Read`, `Glob`, `Grep`, read-only `git diff`/`log`/`show`). Compensate for the lack of execution with deeper reading and explicit reasoning — never by assuming the code works. |
+| **Adversarial stance** | Assume-it's-wrong-until-checked; for each non-trivial path actively try to construct an input, state, or sequence that breaks it. |
+| **Absence of evidence ≠ safety** | Not finding a concurrent caller does not prove single-threadedness; not finding a consumer does not prove none exists. Inability to verify keeps a concern alive (BLOCKED rule) — it does not retire it. |
+
+The *keep/drop* criteria that decide what is finally reported live in Phase 2 — they are **not** a license to skip discovery. Find first (Phase 1), filter second. A concern you never wrote down can never be caught.
 
 ## Getting the diff and context
 
