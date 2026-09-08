@@ -55,7 +55,7 @@ Every stage's output artifact MUST (full checklist: **Completion Verification** 
 
 1. Start with a `---\nhandoff:\n` block — ≤30 lines, ≤200 tokens, per-stage template `#tpl-<CODE>`.
 2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores), plus the universal `## elicitation-sweep` anchor every artifact carries.
-3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<CODE>"]` edge into `.context/state.json`.
+3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<TASK_ID>"]` edge into `.context/state.json`.
 
 ## Contract Table
 
@@ -78,7 +78,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command — plus actual code changes | git diff non-empty + `handoff.files_touched` obeys `#files-touched` (post-merge repo-relative, capped at `FILES_TOUCHED_MAX`) + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` (**10** paths, then one `"+ <count> more"` obliging the full body set) + the summary line is quoted + `.context/logs/build-*.log` shows success |
 | **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
 | **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
@@ -250,6 +250,27 @@ one as `decision` puts an unanswerable question in front of the gate. If it has 
 recommendation, it is a sweep item; if it is something the next run should look at, it is a
 follow-up.
 
+##### Reaffirmed, against three streams that reached for a third class
+
+The ruling was re-opened and argued on its merits, not carried over. The counter-evidence is real:
+three independent streams in one run reached for three labels the enum does not have — `defect`,
+`constraint` and `risk`. Counted, that looks like demand for a third class.
+
+Read closely, **none of the three is a question.** Each names a thing observed; none carries an
+option set or a recommendation. Against this section's own test, all three are follow-ups. The
+counter-evidence, examined rather than counted, **confirms** the ruling.
+
+###### The pull is toward the transport, not the taxonomy
+
+What the three labels do prove is a different defect: the sweep is the only transport with a ledger
+channel (`--facts`) and a gate render, while `follow-ups` is artifact-only and reaches no decision
+point. Widening the enum would satisfy that symptom and reintroduce the exact mis-file the incident
+above records; the transport gap is filed as a follow-up instead.
+
+**Ruling: the enum stays exactly `decision | escalate`.** A narrow enum is only survivable if its
+refusal cannot be missed, which is why `state-patch.sh` echoes an out-of-enum rejection to standard
+output as well as standard error. Keep the enum narrow, keep the refusal loud.
+
 #### A re-emitted stub carries its answer forward
 
 When a stage re-emits an item it already emitted — a rework round, a retry — it MUST carry the existing `status` and `resolution` forward rather than re-emitting the item as open. `open < resolved` is monotone in both transports: the ledger union refuses the downgrade (`state-patch.sh`), and this rule is the artifact-side half, which is the one that survives ledger eviction. Re-marking a settled item "open" has already destroyed a recorded answer once in this repository.
@@ -257,20 +278,46 @@ When a stage re-emits an item it already emitted — a rework round, a retry —
 #### Ledger bounds
 
 At most **4 items per stage** (the ask tool's questions-per-call ceiling, so one stage never needs
-splitting). `state-patch.sh` clamps `facts.open_questions[]` to the **newest 12**, and the clamp is
-**resolved-first**: every unresolved item survives ahead of every resolved one, because an
-unresolved item is still owed a render at the FN gate while a resolved one is already eviction bait
-under eviction-order rule 2. Same single-chokepoint idiom as `facts.decisions` (newest 8) and
-`facts.dispatched_agents` (6, launched-survive-first).
+splitting). `state-patch.sh` clamps `facts.open_questions[]` to the **newest 4 per task**, and the
+clamp is **resolved-first inside each task's bucket**: every unresolved item survives ahead of every
+resolved one, because an unresolved item is still owed a render at the FN gate while a resolved one
+is already eviction bait under eviction-order rule 2. Same single-chokepoint idiom as
+`facts.decisions` (newest **8 per task**) and `facts.dispatched_agents` (6, launched-survive-first,
+and **not** partitioned — it is not a per-writer field).
+
+##### Ledger bounds — the partition key
+
+The bucket is the **full task id** (`DV1`), never the bare stage code. A four-way DV split is four
+independent writers sharing one code, so a stage-code bucket lets DV3 evict DV0's items — the same
+modelling gap `handoffs` had before its edges became task-keyed. Questions carry the id in their own
+`sw-<TASK_ID>-<n>`; decisions carry it in `.stage`, stamped from the writer's own identity at write
+time on the incoming array only, so an incumbent is never re-attributed. An item with neither falls
+into a reserved `_` bucket, which keeps a pre-partition ledger in one shared bucket rather than
+scattered across confident mis-attributions.
+
+###### The partition key is not the grouping key
+
+`.stage` on a question keeps its bare-code meaning for the FN gate's grouping. Grouping and
+partitioning are two jobs, so the clamp derives its own key rather than reusing that field.
+
+**Breaking for in-flight ledgers, by policy**: no migration step, no tolerant reader. Under the new
+writer an old ledger lands in the reserved bucket or forces a logged re-merge — it fails loudly or
+not at all, never by silent mis-parse.
 
 ##### Ledger bounds — the overflow spill
 
-Past 12 **unresolved** items the clamp has nothing eviction-bait left to drop, so it evicts a live
-question. Those — and only those — are appended to `.context/open-questions-<run_index>.jsonl`, one
-JSON object per line: the full stub plus `spilled_at` and `spilled_from_stage`. The file is
-append-only, written inside the merge lock and **before** the ledger rename, so a crash can leave a
-spill line whose eviction never committed (a duplicate the union collapses) but never an eviction
-whose spill line is missing.
+Past 4 **unresolved** items in one task's bucket the clamp has no eviction bait left to drop, so it
+evicts a live question. Those — and only those — are appended to
+`.context/open-questions-<run_index>.jsonl`, one JSON object per line: the full stub plus
+`spilled_at` and `spilled_from_stage`. Evicted **decisions** spill the same way to
+`.context/decisions-<run_index>.jsonl`, minus the `was_resolved` annotation a decision has no status
+to carry; that file is a recovery and audit record with **no gate reader** by design.
+
+###### The spill is written before the rename
+
+Both files are append-only, written inside the merge lock and **before** the ledger rename, so a
+crash can leave a spill line whose eviction never committed (a duplicate the union collapses) but
+never an eviction whose spill line is missing.
 
 **Both transports are the record.** `handoff-harness.sh` checks frontmatter/ledger parity against
 ledger ∪ spill, and the FN gate reads both, unioned by `.id` with **the ledger winning on conflict**
@@ -278,16 +325,28 @@ ledger ∪ spill, and the FN gate reads both, unioned by `.id` with **the ledger
 ledger later resolved. A missing spill file is the empty set; a spill file that exists but cannot be
 parsed is a failure, never an empty set.
 
-##### Ledger bounds — why 12
+##### Ledger bounds — why 4 per task
 
-12 is a **deliberate bound, not a default**: it is three stages' worth at the per-stage cap, chosen
-against a ~500-token ledger budget that a 13-stage run would otherwise blow. It is reachable — more
-than 12 simultaneously-unresolved items will drop the oldest — and that trade was made knowingly
-rather than discovered.
+4 is a **deliberate bound, not a default**: it is the per-stage emission ceiling stated at the top of
+this section, so transport and emission are now the same number. That equality is the whole point —
+a conforming writer never spills, and a writer that does spill is over-emitting, which is a signal
+rather than a silent loss. The retired global 12 was smaller than what thirteen stages were told to
+emit, so it destroyed conforming writers' items as a matter of course.
+
+Decisions keep **8** and only their scope moved: nothing caps decision emission, so inventing a
+smaller number would open a new eviction source in the change that exists to close one.
+
+###### What the per-task bound costs
+
+The cost is taken with open eyes. Per-task partitioning multiplies worst-case capacity by the task
+count and **there is no global ceiling any more**; the backstops are `validate_state`'s
+non-blocking `state.json … > 500 budget` notice and the two spill files. A loud oversized ledger beats a silently
+lost decision.
 
 Sweep answers are recorded in the item's own `resolution` field, **not** appended to
-`facts.decisions[]`: that ring holds 8 and a 13-stage run would evict architectural decisions with
-sweep answers.
+`facts.decisions[]` — one record, one place. A second write to the decisions ring would put the same
+answer under two bounds with two eviction policies, and the ring is for decisions an author stated,
+not for answers the gate collected.
 
 #### Item ids
 
@@ -533,23 +592,53 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
-  files_touched:              # see #files-touched
+  files_touched:              # cap 10, then ONE marker; #files-touched
     - path/to/file1.md
-    - path/to/file2.md
+    - "+ 7 more"              # obliges the FULL body set
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    decisions: architecture-N.md#decisions     # ONLY when AR ran; omit
+    decisions: architecture-N.md#decisions    # ONLY when AR ran; omit
     coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
     tests: development-N.md#tests-added
-  architecture:                # ONLY when AR ran; omit the object otherwise
+  architecture:                # ONLY when AR ran; omit otherwise
     ref: architecture-N.md#decisions
-    applied: true              # truthful; see the architecture reference contract below
+    applied: true              # truthful; see the reference contract below
 ---
 ```
 
-Prev→this label: `TL→DV` (or `AR→DV` when TL was excluded, `PL→DV` when neither AR nor TL ran, `IR→DV` on the emergency pipeline).
+Prev→this label: `TL→DV` (`AR→DV` without TL, `PL→DV` when neither ran, `IR→DV` on emergency).
+
+#### UI evidence comes from the running app (tpl-dv)
+
+A screenshot offered as DV evidence is captured from the app **built and run on its real runtime
+surface this run**, with each control confirmed on-screen and driven — the full rule, including the
+per-platform adapter table, is `skills/dv-screenshot-capture/SKILL.md § Capture`, and it is not
+restated here.
+
+The contract consequence is what belongs in this file: a `ui_visual_check` whose only evidence is a
+static render — `#Preview`, `ImageRenderer`, an IDE canvas — is **incomplete, not merely weaker**.
+Canvas capture is the registered *degraded* adapter on Apple and emits
+`screenshot_platform_fallback`; a DV artifact resting on it without that row, or with it and no
+statement of why the live surface was unavailable, has not shown the change working. Recapture from
+a live-driven run rather than arguing the render is equivalent — the two differ exactly where UI
+defects live: real data, real layout, real state transitions.
+
+#### Verification Command carries the runner's verbatim summary line (tpl-dv)
+
+`## verification-command` MUST carry the command **and** the summary line the runner printed,
+copied byte-for-byte into the artifact or into a `.context/logs/` capture the artifact names. Not a
+paraphrase, not a count retyped from memory, not "all tests pass".
+
+This is a requirement, not a good habit. DV and QA hold test-execution authority and **nothing
+between them does**, so once the stage closes no reader downstream can re-derive the number — the
+artifact is the only record that a count was ever observed. A stage reporting a green suite without
+the line has produced an unverifiable claim, and DR treats it as one.
+
+Where a runner writes its tally only to a terminal, capture through a pty or a log and copy the line
+out of the capture. Where a stage's scoped authority refuses the full-suite entrypoint, record the
+refusal and quote the summary line of the scoped run that was permitted.
 
 #### Architecture reference contract (tpl-dv)
 
@@ -770,7 +859,7 @@ Single source of truth for what every stage agent verifies before `status: compl
 
 ### Steps 4–5
 
-4. **Patch state.json**: patch `tasks.<ID>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<CODE>"]` (≤300-char summary ending with a `ref:` pointer). `<PREV>→<CODE>` is in each template's footer above (e.g. `PL→AR`, `USER→IR`).
+4. **Patch state.json**: patch `tasks.<ID>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<TASK_ID>"]` (≤300-char summary ending with a `ref:` pointer). The **source** side is a bare stage code — it answers which stage this followed, and each template's footer above names it (e.g. `PL→AR`, `USER→IR`). The **destination** side is the writing task's own id, so a split stage writes one edge per task (`TL→DV0`, `TL→DV1`) instead of four writers colliding on one key.
 5. **Atomic write**: run `skills/worktask/scripts/state-patch.sh --stage <CODE> --prev <PREV>`, which performs the canonical locked read → merge → temp → fsync → rename of `handoff-protocol.md#atomic-write`. NEVER write `.context/state.json` directly. If the script cannot run at all, do not skip silently — use the Edit-direct fallback at `handoff-protocol.md#layer-1-fallback`.
 
 ### Post-return repair (F2/F3)

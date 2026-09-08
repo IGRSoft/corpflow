@@ -99,6 +99,22 @@ dedupe_pending_key() {
 # dedupe_invocation <payload> <tool> <fallback head> -> the string the key
 # hashes. Shared because the promoting hook must reproduce it exactly; a second
 # derivation is the key-drift failure this library exists to prevent.
+#
+# The default arm folds the WHOLE tool_input, so a tool family nobody wrote an
+# arm for keys on what it was actually asked to do. Before that, every such tool
+# degraded to the bare tool name and one run's marker denied every later call of
+# that tool, whatever it was asked to run. The two named arms stay because their
+# extraction is narrower and semantically precise, not because they are special.
+#
+# `-S` sorts object keys recursively: without it two byte-different encodings of
+# one call key differently and suppression silently stops working. Array order is
+# PRESERVED, since order may be semantic; the cost is that two equivalent calls
+# may key differently, which is one extra allowed run — the fail-open direction
+# this library takes everywhere. No truncation: truncating reintroduces exactly
+# the collision being removed, and the digest already bounds what reaches disk.
+#
+# The payload is hashed by the caller, never stored or logged — tool_input can
+# carry a secret. Only dedupe_key/dedupe_pending_key ever see this string.
 dedupe_invocation() {
   local _payload="$1" _tool="$2" _fallback="$3" _v=""
   case "$_tool" in
@@ -112,12 +128,25 @@ dedupe_invocation() {
         | map(select(length > 0)) | join(" ") | select(length > 0)
       ' 2> /dev/null)
       ;;
+    *)
+      # An absent or empty tool_input yields nothing and falls through to the
+      # fallback below, so a payloadless tool keys exactly as it did before.
+      _v=$(printf '%s' "$_payload" | jq -S -c '
+        def _nonempty: if (type == "object" or type == "array" or type == "string")
+                       then (length > 0) else true end;
+        (.tool_input // empty) | select(_nonempty)
+      ' 2> /dev/null)
+      [ -z "$_v" ] || _v="$_tool	$_v"
+      ;;
   esac
   [ -n "$_v" ] || _v="$_fallback"
   printf '%s' "$_v"
 }
 
-# dedupe_lookup <ctx> <key> -> "<stage> <ts>" of the recorded run, or empty.
+# dedupe_lookup <ctx> <key> -> "<stage> <ts> <evidence>" of the recorded run, or
+# empty. Three fields since the evidence token joined the sentinel; a marker
+# written before that carries two, and every reader splits explicitly so the
+# short shape degrades to "evidence unrecorded" rather than mis-parsing.
 #
 # Reads <key>, never <key>.pending: a marker whose PostToolUse never fired must
 # deny nothing, so an orphan is inert by construction rather than by cleanup.
@@ -143,17 +172,30 @@ dedupe_mark_pending() {
   dedupe_prune_pending "$1"
 }
 
-# dedupe_promote <ctx> <pending_key> — turn the intent into a durable sentinel
-# under the full key the marker recorded before the tool ran.
+# dedupe_promote <ctx> <pending_key> <evidence> — turn the intent into a durable
+# sentinel under the full key the marker recorded before the tool ran.
+#
+# <evidence> names what the run produced and is REQUIRED: a promotion whose
+# evidence cannot be named is exactly a promotion that must not happen, because
+# the denial it later powers would cite a run nobody can check. Refusing leaves
+# the next identical run allowed, which is this library's fail-open direction.
+#
+# The grammar is enforced here rather than trusted from the caller, because the
+# token is interpolated into a policy string a model reads and because a token
+# carrying whitespace would silently break every three-field split downstream.
 #
 # The sentinel appears by an atomic rename within one directory, so
 # dedupe_lookup's `head -c 200` can never observe a torn write, and its content
-# is trimmed back to "<stage> <ts>" — the shape that contract returns. Both names
-# are re-checked for a symlink immediately before the move, matching the writer's
-# own guard: the window between marking and promoting is exactly where a swap
-# would be planted.
+# is trimmed back to "<stage> <ts> <evidence>" — the shape that contract returns.
+# Both names are re-checked for a symlink immediately before the move, matching
+# the writer's own guard: the window between marking and promoting is exactly
+# where a swap would be planted.
 dedupe_promote() {
-  local _d _line _rest _stage _ts _full
+  local _d _line _rest _stage _ts _full _ev="${3:-}"
+  case "$_ev" in
+    '' | *[!A-Za-z0-9._/:+-]*) return 0 ;;
+  esac
+  [ "${#_ev}" -le 120 ] || return 0
   _d="$(dedupe_dir "$1")"
   [ -f "$_d/$2.pending" ] || return 0
   [ ! -L "$_d/$2.pending" ] || return 0
@@ -167,7 +209,7 @@ dedupe_promote() {
   # come from this library and must not steer the rename.
   case "$_full" in ''|*/*|.|..) return 0 ;; esac
   [ ! -L "$_d/$_full" ] || return 0
-  printf '%s %s\n' "$_stage" "$_ts" > "$_d/$2.pending" 2> /dev/null || return 0
+  printf '%s %s %s\n' "$_stage" "$_ts" "$_ev" > "$_d/$2.pending" 2> /dev/null || return 0
   mv -f "$_d/$2.pending" "$_d/$_full" 2> /dev/null || return 0
 }
 

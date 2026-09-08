@@ -31,28 +31,98 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 command -v gate_classify_payload > /dev/null 2>&1 || exit 0
 command -v dedupe_pending_key > /dev/null 2>&1 || exit 0
 
-# tool_produced_result <payload> -> 0 when the call returned something usable.
+# EVIDENCE_BASENAME_MAX — the bundle rung's own bound, far below the token's
+# outer 120. A genuine results artifact is named like `Run-2026-09-08.xcresult`
+# or `junit.xml`; a sentence needs room. See tool_evidence_token's security note.
+EVIDENCE_BASENAME_MAX=48
+
+# evidence_bundle_basename <candidate> <base dir> -> prints the basename to cite,
+# or nothing. The candidate must name something that EXISTS, must be a known
+# results shape, and must survive a charset narrower than the token's own.
 #
-# The narrowest observable that separates a real run from an abort. On
-# PostToolUse that is `tool_response`: present and non-empty, with no error flag.
+# Existence is the load-bearing test and it is checked on the host that just ran
+# the tool, at the moment it returned. It is what turns "print a string" into
+# "create a file on this machine with that name", which is a different capability
+# and not one a response body has on its own. A fabricated path is not repeated
+# in any form: the rung declines and the ladder falls through to a derived
+# numeric, which is the fail-open direction everywhere else in this library.
 #
-# A FAILING call carries no `tool_response` at all — the failure arrives as a
-# top-level `error` string — so keying on it there would discard every red suite
-# and suppress only green ones, inverting the point: a red suite that printed its
-# failures IS a run, and its identical repeat is exactly what must be suppressed.
-# On that event the error text therefore counts as output.
+# A relative candidate is resolved against the payload's own cwd, because the
+# hook's cwd is not the tool's — without that, every relative bundle path would
+# decline and the rung would serve absolute paths only.
+evidence_bundle_basename() {
+  local _cand="$1" _base="$2" _abs
+  case "$_cand" in
+    /*) _abs="$_cand" ;;
+    *)  [ -n "$_base" ] || return 1
+        _abs="$_base/$_cand" ;;
+  esac
+  [ -e "$_abs" ] || return 1
+  _base="${_abs##*/}"
+  # Directory separators are already gone with the basename, which is most of
+  # what a sentence needs; `:` and `+` go with them so the cited name cannot
+  # mimic the token's own grammar.
+  case "$_base" in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  [ "${#_base}" -le "$EVIDENCE_BASENAME_MAX" ] || return 1
+  case "$_base" in
+    *.xcresult | *.xcodebuild | *.trx | *.junit | *.xml | *.jsonl | *.log) ;;
+    *) return 1 ;;
+  esac
+  printf '%s' "$_base"
+}
+
+# tool_evidence_token <payload> -> prints ONE evidence token and returns 0, or
+# prints nothing and returns non-zero.
 #
-# The accepted cost: a 1.0s abort carrying only error text now promotes and holds
-# the tree until the next edit. It is the cheaper half of the trade, because the
-# alternative disables suppression for every rerun of a failing suite.
-# `is_interrupt` is the one failure kept inert — a cancelled call produced no
-# evidence at all.
+# Deriving the token and deciding to promote are ONE computation on purpose. Two
+# separate computations can disagree, and the shape of that disagreement is the
+# defect this replaces: a marker promoted for an invocation that produced
+# nothing, whose denial then cited a run with no result to name. If the evidence
+# cannot be named, the run does not get to deny its own retry.
 #
-# Unresolvable shapes fall through to a discard, the allow direction. Honest
-# limit — a runner that exits 0 having executed 0 tests still promotes; that is
-# beyond a hook's reach and belongs to QA's evidence check.
-tool_produced_result() {
-  printf '%s' "$1" | jq -e '
+# The narrowest observable that separates a real run from an abort is
+# `tool_response`: present and non-empty, with no error flag. A FAILING call
+# carries no `tool_response` at all — the failure arrives as a top-level `error`
+# string — so keying on it there would discard every red suite and suppress only
+# green ones, inverting the point: a red suite that printed its failures IS a
+# run. On that event the error text therefore counts as output. `is_interrupt`
+# is the one failure kept inert: a cancelled call produced no evidence at all.
+#
+# Ladder, most specific first — the whole reason a token is carried rather than
+# a boolean is that a reader of a later denial can tell at a glance how strong
+# the cited run's evidence was:
+#
+#   bundle:<name>   the BASENAME of a results artifact that exists on this host
+#   tests:<n>       a count read off the runner's summary line
+#   output:<n>B     a response was present but said nothing interpretable
+#   errtext:<n>B    the PostToolUseFailure arm — a red suite that printed
+#
+# Rung three keeps the honest limit ("a runner that exits 0 having executed 0
+# tests still promotes") while making it VISIBLE: `output:812B` in a denial says
+# the cited run recorded no count, which is the hour of diagnosis this exists to
+# remove.
+#
+# SECURITY — the token is interpolated into a policy denial that a model reads,
+# so it is a channel from tool output into a policy string. Structure was never
+# the weak half: the outer filter is one whitespace-free run of
+# [A-Za-z0-9._/:+-], bounded at 120 characters (which also keeps the sentinel
+# line inside dedupe_lookup's `head -c 200`), it runs before the bound so
+# droppable bytes cannot smuggle length past it, and emit_deny escapes through
+# `jq --arg`. The weak half was the ALPHABET: that charset is a complete one for
+# dot- and slash-separated English, and this rung used to pass a caller-supplied
+# path through unchanged, so a response could land a hundred characters of
+# chosen prose verbatim in a refusal. Three of the four rungs never could — they
+# emit derived numerics and nothing else. This one now emits an existing file's
+# basename, so the free text is gone and what remains must first be made real on
+# disk. Empty after all of it means no evidence, which means discard: predicate
+# and token stay one thing.
+tool_evidence_token() {
+  local _out _line _tok="" _fallback="" _cand _base _root="" _seen=0
+  command -v jq > /dev/null 2>&1 || return 1
+  # Candidate bundle paths on `B` lines, the derived-numeric answer on the single
+  # `F` line. Two prefixes rather than two jq invocations: the ladder is one
+  # decision and splitting it is how the predicate and the token drift apart.
+  _out=$(printf '%s' "$1" | jq -r '
     (.tool_response // null) as $r
     | ((.error // "") | if type == "string" then . else "" end) as $errtext
     | (if ($r | type) == "object" then (($r.error? // false) or ($r.is_error? // false))
@@ -66,14 +136,57 @@ tool_produced_result() {
       as $interrupted
     | ((.hook_event_name // "") == "PostToolUseFailure"
        or ($r == null and ($errtext | length) > 0)) as $failed
-    | ($interrupted | not)
-      and ($rflag | not)
-      and ($rhas or ($failed and ($errtext | length) > 0))
-  ' > /dev/null 2>&1
+    | (($interrupted | not)
+       and ($rflag | not)
+       and ($rhas or ($failed and ($errtext | length) > 0))) as $isrun
+    | if ($isrun | not) then empty else
+        (if $r == null then ""
+         elif ($r | type) == "string" then $r
+         else ($r | tojson) end) as $rtext
+      | ($rtext + " " + $errtext) as $all
+      | [$all | match("[A-Za-z0-9._/-]+[.](xcresult|xcodebuild|trx|junit|xml|jsonl|log)\\b"; "g")
+         | .string] as $bundles
+      | ([$all | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"; "g")
+          | .captures[0].string] | first) as $count
+      | (if $count != null then "tests:" + $count
+         elif ($rtext | length) > 0 then "output:" + (($rtext | length) | tostring) + "B"
+         elif ($errtext | length) > 0 then "errtext:" + (($errtext | length) | tostring) + "B"
+         else null end) as $fb
+      | [$bundles[] | "B" + .] + (if $fb == null then [] else ["F" + $fb] end)
+      | .[]
+      end
+  ' 2> /dev/null) || return 1
+
+  while IFS= read -r _line; do
+    case "$_line" in
+      B*)
+        [ -n "$_tok" ] && continue
+        # A response naming hundreds of paths is a payload, not a result; the
+        # first few candidates are where a real bundle appears.
+        [ "$_seen" -lt 20 ] || continue
+        _seen=$((_seen + 1))
+        _cand="${_line#B}"
+        if [ -z "$_root" ] && command -v dedupe_root > /dev/null 2>&1; then
+          _root="$(dedupe_root "$1")"
+        fi
+        _base="$(evidence_bundle_basename "$_cand" "$_root")" || continue
+        [ -n "$_base" ] && _tok="bundle:$_base"
+        ;;
+      F*) _fallback="${_line#F}" ;;
+    esac
+  done <<EOF
+$_out
+EOF
+
+  [ -n "$_tok" ] || _tok="$_fallback"
+  _tok=$(printf '%s' "$_tok" | LC_ALL=C tr -cd 'A-Za-z0-9._/:+-')
+  _tok=$(printf '%.120s' "$_tok")
+  [ -n "$_tok" ] || return 1
+  printf '%s' "$_tok"
 }
 
 run_promote() {
-  local _payload="$1" _ctx="$2" _tool _ident _class _cmd_head _inv _n _pkey
+  local _payload="$1" _ctx="$2" _tool _ident _class _cmd_head _inv _n _pkey _ev
 
   [ "${CORPFLOW_TEST_DEDUPE:-}" = "off" ] && return 0
   [ "${CORPFLOW_TEST_GATE:-}" = "off" ] && return 0
@@ -101,8 +214,10 @@ run_promote() {
   _pkey=$(dedupe_pending_key "$_class" "$_inv" "$_n")
   [ -n "$_pkey" ] || return 0
 
-  if tool_produced_result "$_payload"; then
-    dedupe_promote "$_ctx" "$_pkey"
+  # One computation, one branch: `_ev` is both the promotion predicate and the
+  # string the later denial will cite.
+  if _ev="$(tool_evidence_token "$_payload")"; then
+    dedupe_promote "$_ctx" "$_pkey" "$_ev"
   else
     dedupe_discard "$_ctx" "$_pkey"
   fi

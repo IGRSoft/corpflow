@@ -29,8 +29,12 @@ corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate`
 (`PL0`, `AR0`, `DV0`, `DV1`). The human-readable label lives in `tasks.<ID>.metadata.description`.
 
 **PL is always `PL0` only** (singleton — no splitting); other stages split into sub-tasks, which is
-what the numbered key exists to express: parallel DVN tracks are distinct keys. Handoff edges
-(`handoffs["PL→AR"]`) stay keyed by bare **stage code**, not by ledger id.
+what the numbered key exists to express: parallel DVN tracks are distinct keys. Handoff edges carry
+that same split: `handoffs["<PREV_CODE>→<TASK_ID>"]` — the source is a bare **stage code**, the
+destination is the **ledger id** of the task that wrote the edge (`PL→AR0`, `TL→DV1`). Keying the
+destination by bare code let four parallel DV tracks overwrite one another's edge; the source needs
+no id, because it answers only which stage this followed. **Breaking for in-flight ledgers**: no
+migration, no tolerant reader — an old-shape key reads as absent and forces a logged re-merge.
 
 ## Write Operations
 

@@ -17,7 +17,7 @@
 #                           --stage + run_index from state.json.
 # @arg --prev <CODE>        Previous stage code, or USER for the documented USER→PL /
 #                           USER→IR origin edges.  When present, ALSO writes
-#                           handoffs["<PREV>→<CODE>"] = "<summary> ref:<artifact basename>"
+#                           handoffs["<PREV>→<TASK_ID>"] = "<summary> ref:<artifact basename>"
 #                           from the parsed frontmatter summary (the ledger edge the 13
 #                           stage agents used to hand-roll in inline jq).  ABSENT = ledger
 #                           patch only, byte-stable; hook callers
@@ -664,25 +664,65 @@ trap '_lock_release' EXIT
 # B3 state bounds are enforced HERE (the single write chokepoint, AD-7) rather than
 # scattered across the 13 stage agents: after every mutation the unbounded arrays are
 # clamped so a long run cannot grow state.json past its ~500-token budget.
-#   facts.decisions          → newest 8 (tail, matches the eviction-order rule).
-#   facts.open_questions     → newest 12, resolved-evicted-first. Every stage now writes
-#                              its closing sweep here, so the array grows ~13x faster than
-#                              it did; resolved items go first because eviction-order rule 2
-#                              already drops them and only unresolved ones still have to
-#                              reach the FN gate.
-#   facts.dispatched_agents  → 6, launched-survive-first (live agents resume needs are
-#                              retained ahead of terminal rows, which are eviction bait).
-# Every clamp fires ONLY when the array already exists AND exceeds its bound, so a normal
-# small state is byte-identical to an unbounded merge (idempotency + no-op paths hold).
+#   facts.decisions          → newest 8 PER TASK (tail-newest, matching the eviction rule).
+#   facts.open_questions     → newest 4 PER TASK, resolved-evicted-first WITHIN each task.
+#                              4 is the contract's own per-stage emission ceiling
+#                              (stage-contracts.md § Ledger bounds), so the transport bound
+#                              and the emission bound are the same number and a conforming
+#                              writer never spills.
+#   facts.dispatched_agents  → 6, launched-survive-first. Not a per-writer field, so it
+#                              keeps its global bound.
+#
+# The partition key is the FULL TASK ID (`DV1`), never the bare stage code: the writer is
+# the task, and a four-way DV split is four independent writers who must not be able to
+# evict one another. Questions carry that id in their own `sw-<TASK_ID>-<n>` id; decisions
+# carry it in the `.stage` _FACTS_UNION_FILTER stamps from the writer's identity. An item
+# with neither falls into the reserved "_" bucket, which keeps a pre-partition ledger in one
+# shared bucket rather than scattering it across confident mis-attributions.
+#
+# `.stage` on a QUESTION keeps its bare-code meaning for the FN gate's grouping; that is a
+# different job from partitioning, which is why the question's partition key is derived
+# from the id (index retained) instead of read from `.stage`.
+#
+# Resolved-evicted-first is evaluated INSIDE each bucket. A global resolved-first pass with
+# a per-bucket tail would let one task's resolved items protect another's — the cross-task
+# coupling this partition exists to remove.
+#
+# Each clamp fires ONLY when some bucket exceeds its bound, and survivors keep their
+# original positions, so a state inside the bounds is byte-identical to an unbounded merge
+# (idempotency + no-op paths hold).
+#
+# The global ceiling is retired deliberately: worst-case size now scales with the task
+# count. The backstop is validate_state's advisory token-budget warning plus the spill
+# files — a loud oversized ledger beats a silently lost decision.
 _STATE_BOUNDS_FILTER='
-      (if ((.facts.decisions? // []) | length) > 8
-       then .facts.decisions |= .[-8:] else . end)
-    | (if ((.facts.open_questions? // []) | length) > 12
-       then .facts.open_questions |=
-            (([ .[] | select((.status // "open") != "resolved") ] | .[-12:]) as $keep
-             | $keep
-               + ([ .[] | select((.status // "open") == "resolved") ]
-                  | .[ ((length - (12 - ($keep | length))) | if . < 0 then 0 else . end) : ]))
+      def _task_of_decision: (.stage // "_");
+      def _task_of_question:
+        (([ (.id // "") | scan("^sw-([A-Za-z]+[0-9]*)-") ] | first | first)
+         // (.stage // "_"));
+      def _bucket_overflow(keyf; $n):
+        (length > $n) and (((group_by(keyf) | map(length) | max) // 0) > $n);
+      def _keep_newest_per(keyf; $n):
+        . as $arr
+        | [ range(0; ($arr | length)) | {i: ., k: ($arr[.] | keyf)} ]
+        | group_by(.k) | map(.[-$n:]) | add | map(.i) | sort
+        | [ $arr[.[]] ];
+      def _keep_newest_unresolved_first(keyf; $n):
+        . as $arr
+        | [ range(0; ($arr | length))
+            | {i: ., k: ($arr[.] | keyf),
+               r: ((($arr[.].status) // "open") == "resolved")} ]
+        | group_by(.k)
+        | map(([ .[] | select(.r | not) ] | .[-$n:]) as $keep
+              | $keep
+                + ([ .[] | select(.r) ]
+                   | .[ ((length - ($n - ($keep | length))) | if . < 0 then 0 else . end) : ]))
+        | add | map(.i) | sort
+        | [ $arr[.[]] ];
+      (if ((.facts.decisions? // []) | _bucket_overflow(_task_of_decision; 8))
+       then .facts.decisions |= _keep_newest_per(_task_of_decision; 8) else . end)
+    | (if ((.facts.open_questions? // []) | _bucket_overflow(_task_of_question; 4))
+       then .facts.open_questions |= _keep_newest_unresolved_first(_task_of_question; 4)
        else . end)
     | (if ((.facts.dispatched_agents? // []) | length) > 6
        then .facts.dispatched_agents |=
@@ -708,9 +748,16 @@ _STATE_BOUNDS_FILTER='
 #
 # Object-merge (`. * $patch`) REPLACES arrays, so without this a downstream patch would drop
 # every entry an upstream stage recorded. Identity is `.id`, or the string itself for the
-# scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps
-# `.[-8:]`: appending is what makes "newest 8 survive" true, where unique_by would hand the
-# clamp an arbitrary 8. Scalars keep first-seen order — no clamp reads them.
+# scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps the
+# newest 8 of each task's bucket: appending is what makes "newest survives" true, where
+# unique_by would hand the clamp an arbitrary 8. Scalars keep first-seen order — no clamp
+# reads them.
+#
+# Decisions carry no id convention, so their partition key is stamped here: `.stage` is
+# defaulted from the WRITER's own task id on the INCOMING array only, before concatenation.
+# Defaulting the union would re-stamp every incumbent with the current writer and
+# re-attribute PL's `pd1` to whoever writes next; incumbents without a stage stay in the
+# reserved "_" bucket. An explicit `.stage` from the author always wins.
 _FACTS_UNION_FILTER='
       def _union_keyed(k):
         reduce .[] as $e ([]; map(select((. | k) != ($e | k))) + [$e]);
@@ -733,13 +780,18 @@ _FACTS_UNION_FILTER='
         | . + { status: (.status // "open") }
             + (if (.stage // null) == null and $slot != null
                then { stage: $slot } else {} end);
+      def _dec_defaults:
+        (($ARGS.named.decision_task // "") | if . == "" then null else . end) as $tid
+        | . + (if (.stage // null) == null and $tid != null
+               then { stage: $tid } else {} end);
       def _union_sweep:
         reduce (.[] | _sweep_defaults) as $e ([];
           ((map(select(.id == $e.id)) | first) // null) as $prev
           | map(select(.id != $e.id)) + [ _sweep_join($prev; $e) ]);
       .facts = ((.facts // {})
         | (if ($f.decisions // null) != null
-           then .decisions = (((.decisions // []) + $f.decisions) | _union_keyed(.id))
+           then .decisions =
+                (((.decisions // []) + [ $f.decisions[] | _dec_defaults ]) | _union_keyed(.id))
            else . end)
         | (if ($f.open_questions // null) != null
            then .open_questions =
@@ -816,39 +868,32 @@ _FACTS_PARTITION_FILTER='
                   | {key: "tests_added", label: (tojson[0:40]), reason: "not a string"} ] ) }
       end'
 
-# Sweep items the open_questions clamp evicted while still UNRESOLVED are appended to
-# `.context/open-questions-<run_index>.jsonl` before the rename, so the FN gate can still
-# render a question the ledger no longer has room for.  Nothing else recovers them: the
-# clamp keeps unresolved items ahead of resolved ones, but past 12 unresolved it starts
-# dropping live questions and the eviction is the only record that they existed.
+# Items a bounds clamp evicted are appended to `.context/<file>-<run_index>.jsonl` before
+# the rename, so the eviction leaves a record the ledger no longer has room for.  The
+# question spill is read by the FN gate, which can still render a dropped question; the
+# decision spill has NO reader by design and is a recovery and audit artifact.
 #
 # ADDITIVE around _STATE_BOUNDS_FILTER, which is deliberately NOT edited: the spill is the
-# set difference (pre-clamp unresolved − post-clamp), computed by re-evaluating the caller's
+# set difference (pre-clamp − post-clamp) by `.id`, computed by re-evaluating the caller's
 # filter without the bounds tail.  The ordering jq is untouched, so it cannot regress, and
-# output is byte-identical for any array of 12 or fewer and for any overflow whose evictions
-# are all resolved.
+# output is byte-identical for any state in which no bucket overflows.
 #
 # Ordered before the rename on purpose: a crash can then leave a spill line whose eviction
 # never committed — a duplicate the union collapses — but never an eviction whose spill line
 # is missing, which would be loss.  Append-only, never rewritten, never deduped on write.
 # Every failure here is swallowed: a spill that cannot be written must not undo a merge.
 #
-# _spill_evicted_questions <state> <tmp> <filter> [jq-args...]
-_spill_evicted_questions() {
-  local state="$1" tmp="$2" filter="$3"
-  shift 3
+# _spill_evicted_items <state> <tmp> <merged-json> <field> <file-stem> <annotate-resolved>
+_spill_evicted_items() {
+  local state="$1" tmp="$2" merged="$3" field="$4" stem="$5" annotate="$6"
 
   # Trigger on pre > post, never on the clamp's literal bound: hard-coding 12 made the
   # spill die silently the moment the bound moved. An empty post-clamp array cannot have
   # evicted anything, which keeps the common path at one cheap length query.
-  local post_len pre_len merged
-  post_len=$(jq -r '(.facts.open_questions? // []) | length' "$tmp" 2> /dev/null || printf '0')
+  local post_len pre_len
+  post_len=$(jq -r --arg f "$field" '(.facts[$f]? // []) | length' "$tmp" 2> /dev/null || printf '0')
   [[ "$post_len" -gt 0 ]] || return 0
-  merged=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null) || {
-    log_msg WARN "open_questions spill: pre-clamp re-evaluation failed; evictions (if any) unrecorded (merge unaffected)"
-    return 0
-  }
-  pre_len=$(printf '%s' "$merged" | jq -r '(.facts.open_questions? // []) | length' 2> /dev/null || printf '0')
+  pre_len=$(printf '%s' "$merged" | jq -r --arg f "$field" '(.facts[$f]? // []) | length' 2> /dev/null || printf '0')
   [[ "$pre_len" -gt "$post_len" ]] || return 0
 
   # Attribution, in the order the writer's own identity becomes known: parsed frontmatter,
@@ -861,24 +906,29 @@ _spill_evicted_questions() {
   run_idx=$(jq -r '.run_index // 0' "$tmp" 2> /dev/null || printf '0')
   spill_dir="${state%/*}"
   [[ "$spill_dir" == "$state" ]] && spill_dir="."
-  spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
+  spill_path="${spill_dir}/${stem}-${run_idx}.jsonl"
 
   # EVERY eviction spills, resolved ones included, flagged by `was_resolved`. Filtering
   # answered items out destroyed the one field the sweep exists to produce and inverted the
-  # incentive: answering a question was what made it disappear without a trace.
+  # incentive: answering a question was what made it disappear without a trace. The flag is
+  # sweep-only — a decision has no resolution status to record.
   spilled=$(printf '%s' "$merged" \
     | jq -c --slurpfile post "$tmp" \
            --arg ts "$(date -u +%FT%TZ)" \
-           --arg from "$from_stage" '
-        (($post[0].facts.open_questions // []) | map(.id)) as $keep
-        | (.facts.open_questions // [])
+           --arg from "$from_stage" \
+           --arg f "$field" \
+           --argjson annotate "$annotate" '
+        ((($post[0].facts[$f]) // []) | map(.id)) as $keep
+        | (.facts[$f] // [])
         | map(select(([.id] - $keep) | length > 0))
-        | map(. + {spilled_at: $ts, spilled_from_stage: $from,
-                   was_resolved: ((.status // "open") == "resolved")})
+        | map(. + {spilled_at: $ts, spilled_from_stage: $from}
+                + (if $annotate
+                   then {was_resolved: ((.status // "open") == "resolved")} else {} end))
         | .[]' 2> /dev/null) || {
     # A failed spill computation used to `return 0`, which read as "nothing was evicted".
-    log_msg WARN "open_questions spill computation failed; up to $((pre_len - post_len)) evicted item(s) may be unrecorded (merge unaffected)"
-    printf >&2 'warn: open_questions spill computation failed; up to %d evicted item(s) unrecorded\n' "$((pre_len - post_len))"
+    log_msg WARN "${field} spill computation failed; up to $((pre_len - post_len)) evicted item(s) may be unrecorded (merge unaffected)"
+    printf >&2 'warn: %s spill computation failed; up to %d evicted item(s) unrecorded\n' \
+      "$field" "$((pre_len - post_len))"
     return 0
   }
 
@@ -891,12 +941,31 @@ _spill_evicted_questions() {
   # computation-failure arm above: log_msg writes only to $LOG_FILE, so a log-only warning is
   # silent at the call site, which is where the loss has to be visible.
   if printf '%s\n' "$spilled" >> "$spill_path" 2> /dev/null; then
-    log_msg INFO "spilled ${spill_n} evicted open_question(s) to ${spill_path}"
+    log_msg INFO "spilled ${spill_n} evicted ${field} item(s) to ${spill_path}"
   else
-    log_msg WARN "open_questions spill append failed for ${spill_path}; ${spill_n} evicted item(s) unrecorded (merge unaffected)"
-    printf >&2 'warn: open_questions spill append to %s failed; %d evicted item(s) unrecorded\n' \
-      "$spill_path" "$spill_n"
+    log_msg WARN "${field} spill append failed for ${spill_path}; ${spill_n} evicted item(s) unrecorded (merge unaffected)"
+    printf >&2 'warn: %s spill append to %s failed; %d evicted item(s) unrecorded\n' \
+      "$field" "$spill_path" "$spill_n"
   fi
+}
+
+# Both rings spill through one seam. The pre-clamp merge is computed ONCE here and handed to
+# each ring, so a two-field spill costs one extra jq rather than two.
+#
+# _spill_evicted <state> <tmp> <filter> [jq-args...]
+_spill_evicted() {
+  local state="$1" tmp="$2" filter="$3"
+  shift 3
+  local populated merged
+  populated=$(jq -r '((.facts.open_questions? // []) | length) + ((.facts.decisions? // []) | length)' \
+    "$tmp" 2> /dev/null || printf '0')
+  [[ "$populated" -gt 0 ]] || return 0
+  merged=$(jq "$@" "( ${filter} )" "$state" 2> /dev/null) || {
+    log_msg WARN "eviction spill: pre-clamp re-evaluation failed; evictions (if any) unrecorded (merge unaffected)"
+    return 0
+  }
+  _spill_evicted_items "$state" "$tmp" "$merged" open_questions open-questions true
+  _spill_evicted_items "$state" "$tmp" "$merged" decisions decisions false
 }
 
 # Atomic state.json mutation (read → apply → temp → fsync → rename), serialized by the
@@ -923,7 +992,7 @@ atomic_apply() {
 
   local rc=0
   if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then
-    _spill_evicted_questions "$state" "$tmp" "$filter" "$@"
+    _spill_evicted "$state" "$tmp" "$filter" "$@"
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -940,6 +1009,55 @@ atomic_apply() {
 atomic_merge() {
   local state="$1" patch="$2"
   atomic_apply "$state" '. * $p' --argjson p "$patch"
+}
+
+# A stage completing with sweep ids in its artifact that the ledger does not hold has lost
+# them — to a clamp, to a swallowed rejection, or to a --facts call that was never made.
+# The loss used to surface a whole boundary later, at the harness's parity arm.
+#
+# Runs AFTER the merge, against the WRITTEN state. The same invocation routinely carries
+# --facts, so a pre-write comparison false-warns on every correct combined call — the exact
+# false-positive class this check exists to remove. Warns to the log AND stderr, because
+# log_msg writes only to $LOG_FILE and the call site is where the loss has to be visible.
+# It NEVER moves the exit code: a warning that did would break every `set -e` caller.
+#
+# The id shape is schema-pinned, so a grep over the frontmatter slice is enough and this
+# script gains no yq dependency.
+#
+# Compared against ledger ∪ spill, the union check_sweep_ledger and the FN gate read: an id
+# the clamp evicted to `open-questions-<run_index>.jsonl` is recorded, not lost. A missing
+# or unreadable spill contributes the empty set.
+#
+# _warn_unledgered_sweep_ids <artifact> <state>
+_warn_unledgered_sweep_ids() {
+  local artifact="$1" state="$2"
+  [[ -f "$artifact" && -f "$state" ]] || return 0
+  command -v jq > /dev/null 2>&1 || return 0
+
+  local declared missing spill_dir run_idx spill_path spilled_ids
+  declared=$(awk 'NR == 1 && $0 !~ /^---[[:space:]]*$/ { exit }
+                  NR > 1 && /^---[[:space:]]*$/ { exit }
+                  NR > 1 { print }' "$artifact" 2> /dev/null \
+    | grep -oE 'sw-[A-Za-z]+[0-9]*-[0-9]+' | sort -u || true)
+  [[ -n "$declared" ]] || return 0
+
+  run_idx=$(jq -r '.run_index // 0' "$state" 2> /dev/null || printf '0')
+  spill_dir="${state%/*}"
+  [[ "$spill_dir" == "$state" ]] && spill_dir="."
+  spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
+  spilled_ids="[]"
+  if [[ -f "$spill_path" && ! -L "$spill_path" ]]; then
+    spilled_ids=$(jq -c -s 'map(.id? // empty)' "$spill_path" 2> /dev/null || printf '[]')
+  fi
+
+  missing=$(printf '%s\n' "$declared" \
+    | jq -Rsr --slurpfile st "$state" --argjson spilled "$spilled_ids" '
+      (split("\n") | map(select(length > 0))) as $want
+      | (((($st[0].facts.open_questions) // []) | map(.id)) + $spilled) as $have
+      | ($want - $have) | join(", ")' 2> /dev/null || printf '')
+  [[ -n "$missing" ]] || return 0
+  log_msg WARN "sweep ids declared by ${artifact} are absent from the ledger: ${missing}"
+  printf >&2 'warn: %s declares sweep id(s) the ledger does not hold: %s\n' "$artifact" "$missing"
 }
 
 # ---------- Argument parsing ----------
@@ -1398,9 +1516,16 @@ if [[ -n "$FACTS_ARG" ]]; then
   FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
   if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
     FACTS_REJECTED=1
-    printf >&2 'invalid --facts: %s item(s) rejected, the rest still persist:\n' "$FACTS_REJECT_N"
-    printf '%s' "$FACTS_PART" \
-      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason' >&2
+    # Built ONCE, then written to each stream. Two independent emissions read as two
+    # separate rejections in any caller that merges the streams. Stdout as well as stderr
+    # because a caller whose harness swallows stderr otherwise ships a stage one item short,
+    # and the artifact/ledger divergence then surfaces a boundary later than its cause.
+    FACTS_REJECT_LIST=$(printf '%s' "$FACTS_PART" \
+      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason')
+    FACTS_REJECT_MSG="invalid --facts: ${FACTS_REJECT_N} item(s) rejected, the rest still persist:
+${FACTS_REJECT_LIST}"
+    printf '%s\n' "$FACTS_REJECT_MSG" >&2
+    printf '%s\n' "$FACTS_REJECT_MSG"
     log_msg ERROR "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
   fi
 
@@ -1426,6 +1551,16 @@ if [[ -n "$FACTS_ARG" ]]; then
   # invocation is patching, by the same explicit-then-inferred order the id resolution uses.
   SWEEP_STAGE_FALLBACK="${STAGE_ARG:-$(printf '%s' "${TASK_ID_ARG:-}" | sed 's/[0-9]*$//')}"
 
+  # The decisions ring partitions by the FULL task id, which the sweep fallback above
+  # deliberately strips. Explicit --task-id wins, then the id the ledger resolves for
+  # --stage, then the bare code. Empty means no stamp at all: an unattributable decision
+  # belongs in the reserved bucket, never under whoever happens to write next.
+  DECISION_TASK_ID="${TASK_ID_ARG:-}"
+  if [[ -z "$DECISION_TASK_ID" && -n "$STAGE_ARG" ]]; then
+    [[ -f "$STATE_PATH" ]] && DECISION_TASK_ID=$(resolve_task_id "$STAGE_ARG" 2> /dev/null || printf '')
+    [[ -n "$DECISION_TASK_ID" ]] || DECISION_TASK_ID="$STAGE_ARG"
+  fi
+
   if [[ "$FACTS_EMPTY_NOOP" -eq 1 ]]; then
     : # no-op: nothing to write, and an absent ledger is not an error for an empty payload
   elif [[ ! -f "$STATE_PATH" ]]; then
@@ -1435,7 +1570,8 @@ if [[ -n "$FACTS_ARG" ]]; then
     log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
     exit 1
   elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
-    --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK"; then
+    --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK" \
+    --arg decision_task "$DECISION_TASK_ID"; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
     # Post-write assertion: keys in the log are not evidence the ids landed. An id that went
     # in and is not there afterwards was evicted by a clamp, which is exactly the silent loss
@@ -1531,7 +1667,7 @@ if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT
     # Mirrors the handoff value built below; keep the two in step.
     WOULD_HANDOFF=$(jq -rn --arg summary "$PARSED_SUMMARY" --arg ref "$(basename "$ART")" \
       '(($summary) + " ref:" + $ref) | .[0:300]' 2> /dev/null || printf '')
-    CURRENT_HANDOFF=$(jq -r --arg k "${PREV_ARG}→${PARSED_STAGE}" '.handoffs[$k] // ""' \
+    CURRENT_HANDOFF=$(jq -r --arg k "${PREV_ARG}→${TASK_ID}" '.handoffs[$k] // ""' \
       "$STATE_PATH" 2> /dev/null || printf '')
     if [[ "$CURRENT_HANDOFF" != "$WOULD_HANDOFF" ]]; then
       PATCH_IS_NOOP=0
@@ -1551,9 +1687,13 @@ fi
 # absence.  facts.verdicts[<CODE>] is mirrored here because this is the only writer a
 # completed stage passes through: the schema has carried the field since v2 and nothing ever
 # filled it, so every consumer reading it saw an empty object.  Keyed by CODE, not task id,
-# because the handoff edges it pairs with are bare codes; a split stage's last instance to
-# complete owns the entry, which matches how the edge behaves. --prev additionally emits handoffs["<PREV>→<CODE>"] (maxLength 300, must
-# contain "ref:"); absent --prev ⇒ no handoffs key at all.
+# and deliberately NOT re-keyed alongside the handoff edges: a stage has one verdict, and
+# its readers ask whether DV passed, never whether DV2 did.  A split stage's last instance
+# to complete owns the entry.  --prev additionally emits handoffs["<PREV>→<TASK_ID>"]
+# (maxLength 300, must contain "ref:"); absent --prev ⇒ no handoffs key at all.  The
+# destination is the WRITING TASK, so an N-way split writes N edges instead of collapsing to
+# one last-writer-wins entry; the source stays a bare code because it answers which stage
+# this followed, and only the destination ever collided.
 ART_BASE=$(basename "$ART")
 PATCH=$(jq -cn \
   --arg stage "$PARSED_STAGE" \
@@ -1578,11 +1718,12 @@ PATCH=$(jq -cn \
   | {tasks: {($taskid): $stageObj}}
   + {facts: {verdicts: {($stage): $verdict}}}
   + (if $prev != ""
-     then {handoffs: {($prev + "→" + $stage): ((($summary) + " ref:" + $ref) | .[0:300])}}
+     then {handoffs: {($prev + "→" + $taskid): ((($summary) + " ref:" + $ref) | .[0:300])}}
      else {} end)')
 
 if atomic_merge "$STATE_PATH" "$PATCH"; then
   log_msg INFO "merged tasks.${TASK_ID} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"
+  _warn_unledgered_sweep_ids "$ART" "$STATE_PATH"
 else
   log_msg ERROR "jq merge failed for task=${TASK_ID} artifact=${ART}; state.json unchanged"
   exit 1

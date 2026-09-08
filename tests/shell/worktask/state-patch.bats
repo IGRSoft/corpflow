@@ -117,11 +117,11 @@ setup() {
 # 13 stage agents used to hand-roll; bounds are enforced in atomic_merge (AD-7).
 # ---------------------------------------------------------------------------
 
-@test "prev: --prev writes handoffs[PREV→CODE] from summary + artifact basename" {
+@test "prev: --prev writes handoffs[PREV→TASK_ID] from summary + artifact basename" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev TL --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["TL→DV"]' .context/state.json
+  run jq -r '.handoffs["TL→DV0"]' .context/state.json
   assert_output --partial "ref:development-0.md"
   # Stage patch still lands alongside the handoffs edge.
   run jq -r '.tasks.DV0.status' .context/state.json
@@ -215,7 +215,7 @@ setup() {
   sed 's/stage: DV/stage: PL/' .context/development-0.md > .context/planning-0.md
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage PL --prev USER --artifact .context/planning-0.md
   assert_success
-  run jq -r '.handoffs["USER→PL"]' .context/state.json
+  run jq -r '.handoffs["USER→PL0"]' .context/state.json
   assert_output --partial "ref:planning-0.md"
 }
 
@@ -224,7 +224,7 @@ setup() {
   sed 's/stage: DV/stage: IR/' .context/development-0.md > .context/incident-0.md
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage IR --prev USER --artifact .context/incident-0.md
   assert_success
-  run jq -r '.handoffs["USER→IR"]' .context/state.json
+  run jq -r '.handoffs["USER→IR0"]' .context/state.json
   assert_output --partial "ref:incident-0.md"
 }
 
@@ -241,7 +241,7 @@ setup() {
   assert_output --partial "invalid --prev value"
 }
 
-@test "bounds: facts.decisions clamps to newest-8, dispatched_agents to 6 (launched survive)" {
+@test "bounds: unstamped decisions share the reserved bucket, dispatched_agents clamp to 6" {
   cd "$WD"
   jq -n '
     {version:2, worktask_id:"b", plan_file:".context/planning-0.md", platform:"all",
@@ -254,6 +254,8 @@ setup() {
      handoffs:{}}' > .context/state.json
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
   assert_success
+  # No .stage on any of the 11, so all of them fall into the reserved "_" bucket and the
+  # per-task clamp degrades to exactly the old global one — the pre-partition ledger arm.
   run jq -r '.facts.decisions | length' .context/state.json
   assert_output "8"
   run jq -r '.facts.decisions[-1].id' .context/state.json
@@ -684,9 +686,9 @@ EOART
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  run jq -r '.handoffs["AR→DV0"]' .context/state.json
   assert_output --partial "ref:development-0.md"
-  run jq -r '.handoffs | has("TL→DV")' .context/state.json
+  run jq -r '.handoffs | has("TL→DV0")' .context/state.json
   assert_output "false"
 }
 
@@ -694,7 +696,7 @@ EOART
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev PL --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  run jq -r '.handoffs["PL→DV0"]' .context/state.json
   assert_output --partial "ref:development-0.md"
   run jq -r '.handoffs | keys | length' .context/state.json
   assert_output "1"
@@ -720,7 +722,7 @@ Single stream.
 EOF
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage TL --prev PL --artifact .context/coordination-0.md
   assert_success
-  run jq -r '.handoffs["PL→TL"]' .context/state.json
+  run jq -r '.handoffs["PL→TL0"]' .context/state.json
   assert_output --partial "ref:coordination-0.md"
   run jq -r '.tasks.TL0.status' .context/state.json
   assert_output "completed"
@@ -732,16 +734,16 @@ EOF
   # so PL→DV here would be exactly the phantom edge R8 exists to eliminate.
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev IR --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["IR→DV"]' .context/state.json
+  run jq -r '.handoffs["IR→DV0"]' .context/state.json
   assert_output --partial "ref:development-0.md"
-  run jq -r '.handoffs | has("PL→DV")' .context/state.json
+  run jq -r '.handoffs | has("PL→DV0")' .context/state.json
   assert_output "false"
 }
 
 @test "remediation: same verdict with a new summary refreshes the handoffs edge" {
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
-  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  run jq -r '.handoffs["AR→DV0"]' .context/state.json
   assert_output --partial "DV0a fixture development artifact"
 
   # A DV→DR→DV loop re-completes DV at the same verdict; the edge must follow the new summary.
@@ -749,7 +751,7 @@ EOF
     .context/development-0.md
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev AR --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["AR→DV"]' .context/state.json
+  run jq -r '.handoffs["AR→DV0"]' .context/state.json
   assert_output --partial "remediated after DR round 1"
   refute_output --partial "DV0a fixture development artifact"
 }
@@ -1412,10 +1414,11 @@ two_open_dv() {
   [ ! -s .context/logs/audit.jsonl ]
 }
 
-# --- open_questions eviction spill --------------------------------------------
-# _spill_evicted_questions is the heaviest function on the --facts hot path and had
-# no coverage outside the script's own self-test. run_index 3 puts the spill file at
-# a fixed, non-zero name so a stray run-0 file cannot satisfy these assertions.
+# --- eviction spill (both rings) ----------------------------------------------
+# _spill_evicted_items is the heaviest function on the --facts hot path and had no
+# coverage outside the script's own self-test. run_index 3 puts the spill files at
+# fixed, non-zero names so a stray run-0 file cannot satisfy these assertions.
+# The questions bound is 4 PER TASK, so every seed below is one task's bucket.
 
 # seed_questions <total> <resolved-prefix-count>
 seed_questions() {
@@ -1440,7 +1443,7 @@ add_question() {
 
 @test "spill: an array inside the bound writes no spill file" {
   cd "$WD"
-  seed_questions 5 0
+  seed_questions 3 0
   run add_question sw-DV1-1
   assert_success
   [ ! -e .context/open-questions-3.jsonl ]
@@ -1448,7 +1451,7 @@ add_question() {
 
 @test "spill: an unresolved eviction spills the full stub and leaves ledger order intact" {
   cd "$WD"
-  seed_questions 12 0
+  seed_questions 5 0
   run add_question sw-DV1-1
   assert_success
   run jq -r '.id' .context/open-questions-3.jsonl
@@ -1459,14 +1462,14 @@ add_question() {
     .context/open-questions-3.jsonl
   assert_success
   run jq -c '.facts.open_questions | map(.id)' .context/state.json
-  assert_output '["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-PL0-7","sw-PL0-8","sw-PL0-9","sw-PL0-10","sw-PL0-11","sw-PL0-12","sw-DV1-1"]'
+  assert_output '["sw-PL0-2","sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-DV1-1"]'
 }
 
 @test "spill: a RESOLVED eviction spills too, flagged was_resolved, answer intact" {
   # Spilling only unresolved items inverted the incentive: answering a question was
   # what made it vanish without a trace.
   cd "$WD"
-  seed_questions 12 2
+  seed_questions 5 2
   run add_question sw-DV1-1
   assert_success
   run jq -c '[.id, .was_resolved, .resolution]' .context/open-questions-3.jsonl
@@ -1474,16 +1477,16 @@ add_question() {
 }
 
 @test "spill: the trigger is bound-free — a union that evicts nothing writes no line" {
-  # It once fired only on a post-clamp length of exactly 12, so the spill died silently
-  # the moment the bound moved.
+  # It once fired only on a post-clamp length of exactly the bound, so the spill died
+  # silently the moment the bound moved — as it has now moved twice.
   cd "$WD"
-  seed_questions 12 0
+  seed_questions 4 0
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
     '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
   assert_success
   [ ! -e .context/open-questions-3.jsonl ]
   run jq -r '.facts.open_questions | length' .context/state.json
-  assert_output "12"
+  assert_output "4"
 }
 
 @test "spill: an append that FAILS warns on stderr and claims no success" {
@@ -1491,7 +1494,7 @@ add_question() {
   # nothing; skip rather than pass vacuously.
   [ "$(id -u)" -ne 0 ] || skip "runs as root: a 0444 spill path stays writable"
   cd "$WD"
-  seed_questions 12 0
+  seed_questions 5 0
   : > .context/open-questions-3.jsonl
   chmod 0444 .context/open-questions-3.jsonl
   : > .context/spill.log
@@ -1520,8 +1523,9 @@ add_question() {
 # --- post-write clamp-eviction detector ---------------------------------------
 
 @test "clamp detector: an id evicted by the clamp on its own write is named on stderr" {
-  # facts.decisions[] clamps to the newest 8 and has no spill, so an id can land and be
-  # evicted by the same write. The post-write assertion is the only signal that happened.
+  # facts.decisions[] clamps to the newest 8 of the writer's own bucket, and its spill has
+  # no reader, so an id can land and be evicted by the same write. The post-write assertion
+  # is what makes that visible at the call site.
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --facts "$(jq -nc '{decisions: [range(1;9) | {id: ("old-" + (.|tostring))}]}')"
   run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
@@ -1554,7 +1558,7 @@ exit 0'
     --stage DV --prev PL --artifact .context/development-0.md
   assert_success
   [ "$(stub_log --count yq)" -gt 0 ]
-  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  run jq -r '.handoffs["PL→DV0"]' .context/state.json
   assert_output --partial "summary parsed by the yq branch"
   # `null` from yq must not reach the ledger as a worktree record.
   run jq -r '.tasks.DV0 | has("worktree")' .context/state.json
@@ -1566,7 +1570,7 @@ exit 0'
   run_script_env --cwd "$WD" --hide yq "$SCRIPT" \
     --stage DV --prev PL --artifact .context/development-0.md
   assert_success
-  run jq -r '.handoffs["PL→DV"]' .context/state.json
+  run jq -r '.handoffs["PL→DV0"]' .context/state.json
   assert_output --partial "DV0a fixture development artifact"
 }
 
@@ -1786,4 +1790,222 @@ exit 0'
   assert_success
   run jq -r '.tasks.DV9.metadata.effort' .context/state.json
   assert_output "xhigh"
+}
+
+# ---------------------------------------------------------------------------
+# Per-task clamp partitioning, the decision spill, and the task-keyed edge.
+# The defect: one prolific task evicted every other task's items from a global
+# ring, and a fan-out collapsed to one last-writer-wins handoff entry.
+# ---------------------------------------------------------------------------
+
+@test "bounds: four tasks' questions survive each other — newest 4 per task, not 4 in total" {
+  cd "$WD"
+  mk_multitask_ledger .context/state.json --run-index 0 \
+    --task PL0:6:0 --task AR0:5:0 --task TL0:4:0 --task DV1:7:0 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-DV1-8","class":"decision","ref":"development-1.md#elicitation-sweep","blocks_next_stage":false}]}'
+  assert_success
+  # Every task keeps its own newest four, in the array's original order; the writing task's
+  # eight-item bucket does not touch anyone else's.
+  run jq -c '[.facts.open_questions[].id]' .context/state.json
+  assert_output '["sw-PL0-3","sw-PL0-4","sw-PL0-5","sw-PL0-6","sw-AR0-2","sw-AR0-3","sw-AR0-4","sw-AR0-5","sw-TL0-1","sw-TL0-2","sw-TL0-3","sw-TL0-4","sw-DV1-5","sw-DV1-6","sw-DV1-7","sw-DV1-8"]'
+}
+
+@test "bounds: resolved-evicted-first is per bucket — one task's answers cannot shield another's" {
+  cd "$WD"
+  # PL0 holds four resolved and one open; DV1 holds five open. Under a GLOBAL resolved-first
+  # pass PL0's answered items would be evicted to make room for DV1's, coupling the two.
+  mk_multitask_ledger .context/state.json --run-index 0 \
+    --task PL0:5:0:4 --task DV1:5:0 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    '{"open_questions":[{"id":"sw-DV1-6","class":"decision","ref":"development-1.md#elicitation-sweep","blocks_next_stage":false}]}'
+  assert_success
+  # PL0 keeps its one open item plus its newest three answers; DV1 keeps its newest four open.
+  run jq -c '[.facts.open_questions[] | select(.id | startswith("sw-PL0")) | [.id, .status]]' \
+    .context/state.json
+  assert_output '[["sw-PL0-2","resolved"],["sw-PL0-3","resolved"],["sw-PL0-4","resolved"],["sw-PL0-5","open"]]'
+  run jq -c '[.facts.open_questions[] | select(.id | startswith("sw-DV1")) | .id]' .context/state.json
+  assert_output '["sw-DV1-3","sw-DV1-4","sw-DV1-5","sw-DV1-6"]'
+}
+
+@test "bounds: four tasks' decisions survive each other — newest 8 per task" {
+  cd "$WD"
+  mk_multitask_ledger .context/state.json --run-index 0 \
+    --task PL0:0:9 --task AR0:0:10 --task DV0:0:8 --task DV1:0:3 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    '{"decisions":[{"id":"dv1-4","summary":"newest","ref":"development-1.md#approach"}]}'
+  assert_success
+  run jq -c '[.facts.decisions[].stage] | group_by(.) | map({(.[0]): length}) | add' \
+    .context/state.json
+  assert_output '{"AR0":8,"DV0":8,"DV1":4,"PL0":8}'
+  # The writer stamps its own task id on the incoming item and on nothing else.
+  run jq -r '[.facts.decisions[] | select(.id == "dv1-4") | .stage] | .[0]' .context/state.json
+  assert_output "DV1"
+  run jq -r '[.facts.decisions[] | select(.id == "pl0-1")] | length' .context/state.json
+  assert_output "0"
+  run jq -r '[.facts.decisions[] | select(.id == "pl0-2")] | length' .context/state.json
+  assert_output "1"
+}
+
+@test "bounds: the stamp defaults only the INCOMING array — incumbents keep their author" {
+  cd "$WD"
+  # Defaulting the union instead would re-attribute PL0's decisions to whoever writes next.
+  mk_multitask_ledger .context/state.json --run-index 0 --task PL0:0:2 > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id AR0 --facts \
+    '{"decisions":[{"id":"ar0-1","summary":"arch","ref":"architecture-0.md#decisions"}]}'
+  assert_success
+  run jq -c '[.facts.decisions[] | [.id, .stage]]' .context/state.json
+  assert_output '[["pl0-1","PL0"],["pl0-2","PL0"],["ar0-1","AR0"]]'
+}
+
+@test "spill: a decision the clamp evicts is written to decisions-<n>.jsonl" {
+  cd "$WD"
+  mk_multitask_ledger .context/state.json --run-index 3 --task DV1:0:8 > /dev/null
+  rm -f .context/decisions-3.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-id DV1 --facts \
+    '{"decisions":[{"id":"dv1-9","summary":"newest","ref":"development-1.md#approach"}]}'
+  assert_success
+  run jq -r '.id' .context/decisions-3.jsonl
+  assert_output "dv1-1"
+  # was_resolved is sweep-only: a decision carries no resolution status to flag.
+  run jq -e '.spilled_at and .spilled_from_stage and ((has("was_resolved")) | not)' \
+    .context/decisions-3.jsonl
+  assert_success
+  # The questions ring is untouched by the decisions spill.
+  [ ! -e .context/open-questions-3.jsonl ]
+}
+
+@test "sweep warning: an artifact id the ledger does not hold is named at THIS write" {
+  cd "$WD"
+  cat > .context/development-0.md << 'ARTEOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "artifact declares a sweep id the ledger never received"
+  open_questions:
+    - { id: sw-DV0-9, class: decision, ref: "development-0.md#elicitation-sweep", blocks_next_stage: false }
+  refs: { dev: development.md#files-changed }
+---
+ARTEOF
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --stage DV --prev TL --artifact .context/development-0.md
+  # A warning never moves the exit code: every `set -e` caller depends on that.
+  assert_success
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'sw-DV0-9' stderr.cap
+  assert_success
+  run grep -F 'the ledger does not hold' stderr.cap
+  assert_success
+  run jq -r '.tasks.DV0.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "sweep warning: the same call carrying --facts for that id must NOT warn" {
+  cd "$WD"
+  # The check runs AFTER the merge against the WRITTEN state; comparing before the write
+  # would false-warn on every correct combined invocation.
+  cat > .context/development-0.md << 'ARTEOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "artifact and ledger agree inside one call"
+  open_questions:
+    - { id: sw-DV0-9, class: decision, ref: "development-0.md#elicitation-sweep", blocks_next_stage: false }
+  refs: { dev: development.md#files-changed }
+---
+ARTEOF
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --stage DV --prev TL --artifact .context/development-0.md --facts \
+    '{"open_questions":[{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  assert_success
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'the ledger does not hold' stderr.cap
+  assert_failure
+}
+
+@test "sweep warning: an id the clamp evicted to the spill is recorded, not lost — no warning" {
+  cd "$WD"
+  # The record is ledger ∪ spill, the same union check_sweep_ledger and the FN gate read.
+  cat > .context/development-0.md << 'ARTEOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "artifact declares an id that lives only in the eviction spill"
+  open_questions:
+    - { id: sw-DV0-9, class: decision, ref: "development-0.md#elicitation-sweep", blocks_next_stage: false }
+  refs: { dev: development.md#files-changed }
+---
+ARTEOF
+  printf '%s\n' '{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"spilled_at":"2026-09-08T00:00:00Z","spilled_from_stage":"DV"}' \
+    > .context/open-questions-0.jsonl
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --stage DV --prev TL --artifact .context/development-0.md
+  assert_success
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'the ledger does not hold' stderr.cap
+  assert_failure
+}
+
+@test "facts: a rejection is named on stdout as well as stderr, remainder still persists" {
+  cd "$WD"
+  # An agent branching on the exit code alone, or whose harness swallows stderr, used to ship
+  # a stage one sweep item short and discover it a boundary later.
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" --facts \
+    '{"open_questions":[{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false},{"id":"sw-PL0-2","class":"risk","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" > stdout.cap
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'sw-PL0-2' stdout.cap
+  assert_success
+  run grep -F 'sw-PL0-2' stderr.cap
+  assert_success
+  # One message per stream — not doubled in a caller that merges them.
+  run grep -c 'item(s) rejected' stdout.cap
+  assert_output "1"
+  run jq -c '[.facts.open_questions[].id]' .context/state.json
+  assert_output '["sw-PL0-1"]'
+}
+
+@test "prev: a four-way DV split writes four distinct edges, none overwriting another" {
+  cd "$WD"
+  jq '.tasks = {PL0:{status:"completed",verdict:"ok"}, TL0:{status:"completed",verdict:"ok"},
+                DV0:{status:"in_progress"}, DV1:{status:"in_progress"},
+                DV2:{status:"in_progress"}, DV3:{status:"in_progress"}}' \
+    .context/state.json > s.tmp && mv s.tmp .context/state.json
+  for i in 0 1 2 3; do
+    cat > ".context/development-$i.md" << ARTEOF
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "stream $i landed"
+  refs: { dev: development.md#files-changed }
+---
+ARTEOF
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id "DV$i" --prev TL \
+      --artifact ".context/development-$i.md"
+    assert_success
+  done
+  run jq -c '.handoffs | keys' .context/state.json
+  assert_output '["TL→DV0","TL→DV1","TL→DV2","TL→DV3"]'
+  run jq -r '.handoffs["TL→DV2"]' .context/state.json
+  assert_output --partial "stream 2 landed"
+  run jq -r '.handoffs["TL→DV0"]' .context/state.json
+  assert_output --partial "stream 0 landed"
+}
+
+@test "prev: a re-run of one split instance stays idempotent under the task-keyed edge" {
+  cd "$WD"
+  jq '.tasks = {TL0:{status:"completed",verdict:"ok"}, DV1:{status:"in_progress"}}' \
+    .context/state.json > s.tmp && mv s.tmp .context/state.json
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV1 --prev TL \
+    --artifact .context/development-0.md
+  cp .context/state.json snap
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV1 --prev TL \
+    --artifact .context/development-0.md
+  run diff -q .context/state.json snap
+  assert_success
 }

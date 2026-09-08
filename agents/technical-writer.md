@@ -180,7 +180,7 @@ state-patch.sh --stage DC --prev QA --facts '{
 > **First-named closing action, non-optional.** Before returning from the DC stage:
 >
 > 1. **Write `documentation-N.md`, then immediately patch the ledger** (`state-patch.sh --stage DC --prev QA`). One closing action, done first — not last, not "if there's time". The artifact leads only because the patch reads it: with none on disk the tool exits 3.
-> 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
+> 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC0` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
 > 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
 >
 > If you can only complete one closing action, complete this one.
