@@ -669,3 +669,212 @@ mk_qa_dec() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter development-0.md --state state5.json
   assert_success
 }
+
+# mk_qa_dec_bullet <file> <fm-summary> <body-bullet-line> — the two bullet body forms the
+# extractor must reach; the table fixture above covered neither.
+mk_qa_dec_bullet() {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: QA'
+    echo '  verdict: ok'
+    echo '  summary: "divergence fixture"'
+    echo '  files_touched: [a.sh]'
+    echo '  key_decisions:'
+    echo "    - { id: qa-1, summary: \"$2\" }"
+    echo '  open_questions: []'
+    echo '  refs: { qa: testing.md#results }'
+    echo '---'
+    echo
+    echo '## decisions'
+    echo
+    echo "$3"
+  } > "$1"
+}
+
+@test "decisions: the bullet body form is extracted, not silently skipped" {
+  # Anti-vacuity for the two bullet passes below: if the extractor found nothing, a
+  # contradiction this total would still pass.
+  mk_qa_dec_bullet "$WD/bullet-diverge.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    '- **qa-1** — Screenshots are waived for this platform'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/bullet-diverge.md"
+  assert_failure
+  assert_output --partial "decision qa-1 disagrees across transports"
+}
+
+@test "decisions: the '- **id — title.**' bullet form is reached too" {
+  # The form this repo's own architecture artifacts use; the extractor was inert against it.
+  mk_qa_dec_bullet "$WD/bullet-inline-diverge.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    '- **qa-1 — Screenshots are waived for this platform.**'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/bullet-inline-diverge.md"
+  assert_failure
+  assert_output --partial "decision qa-1 disagrees across transports"
+}
+
+@test "decisions: an agreeing '- **id — title.**' bullet passes" {
+  mk_qa_dec_bullet "$WD/bullet-inline-agree.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    '- **qa-1 — The full suite runs: the harness changed, so a scoped selection proves nothing.**'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/bullet-inline-agree.md"
+  assert_success
+}
+
+@test "decisions: an em-dash inside the summary is not eaten by the trim" {
+  # The inline-bullet trim anchors to the id, so a second separator belongs to the summary.
+  mk_qa_dec_bullet "$WD/bullet-emdash.md" \
+    "Selection runs the full suite because the harness itself changed" \
+    '- **qa-1 — Selection — the full one — runs because the harness changed.**'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/bullet-emdash.md"
+  assert_success
+}
+
+@test "decisions: a body citing a sibling artifact does not manufacture a digit (F-07a)" {
+  # planning-0.md used to contribute a bare 0, so the frontmatter's 3 matched nothing and
+  # the boundary blocked on an artifact that agrees with itself.
+  mk_qa_dec "$WD/filename-digit.md" \
+    "The retry budget for a failing stage is 3 attempts" \
+    "The retry budget for a failing stage is three attempts, per planning-0.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/filename-digit.md"
+  assert_success
+}
+
+@test "decisions: every filename extension in the allow-list is stripped" {
+  local ext
+  for ext in md yml yaml json jsonl sh bats txt log; do
+    mk_qa_dec "$WD/fn-$ext.md" \
+      "The retry budget for a failing stage is 3 attempts" \
+      "The retry budget for a failing stage is three attempts, per state-0.$ext"
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/fn-$ext.md"
+    assert_success || fail "extension $ext still contributed a digit"
+  done
+}
+
+@test "decisions: a digit inside a hyphenated name is not a quoted count (F-07b)" {
+  # `newest-8` names a ring; it is not the "restated bound or count" the arm looks for.
+  mk_qa_dec "$WD/hyphen-digit.md" \
+    "The newest-8 decisions ring is rescoped per task" \
+    "The newest-4 questions ring is rescoped per task as well"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/hyphen-digit.md"
+  assert_success
+}
+
+@test "decisions: a genuine numeric divergence still fails after both harvest fixes" {
+  # The sensitivity floor for AC-6: standalone counts on both sides, none common.
+  mk_qa_dec "$WD/still-fails.md" \
+    "The retry budget for a failing stage is 3 attempts, see planning-0.md" \
+    "The retry budget for a failing stage is 5 attempts, see planning-0.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/still-fails.md"
+  assert_failure
+  assert_output --partial "decision qa-1 disagrees across transports"
+}
+
+@test "decisions: stripping filenames cannot false-fail arm 1" {
+  # A summary made entirely of filenames empties one side, and arm 1 declines rather than
+  # firing on a vocabulary set it just erased.
+  mk_qa_dec "$WD/all-filenames.md" \
+    "planning-0.md architecture-0.md" \
+    "Selection runs the full suite because the harness itself changed"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/all-filenames.md"
+  assert_success
+}
+
+# --- collect-all frontmatter reporting (REQ-13) ------------------------------
+
+@test "collect-all: two violated check groups report two lines and one non-zero exit" {
+  # AC-7. Before this, an author fixed the cap failure and was immediately handed the stub
+  # failure on the re-run — one boundary round per defect.
+  local ft="[a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]"
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: DV'
+    echo '  verdict: ok'
+    echo '  summary: "collect-all fixture"'
+    echo "  files_touched: $ft"
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions:'
+    echo '    - "q1: not a stub"'
+    echo '  refs: { dev: development.md#files-changed }'
+    echo '---'
+    echo
+    echo '# Development'
+  } > "$WD/two-faults.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/two-faults.md"
+  assert_failure 1
+  assert_output --partial "FILES_TOUCHED_MAX=10"
+  assert_output --partial "is not a sweep stub"
+  # Each failure keeps its own greppable line; they are not aggregated.
+  local lines
+  lines="$(printf '%s\n' "$output" | grep -c '^fail: ')"
+  [ "$lines" -ge 2 ] || fail "expected >=2 distinct fail: lines, got $lines"
+}
+
+@test "collect-all: the required-field loop reports every missing field, not the first" {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: DV'
+    echo '  verdict: ok'
+    echo '  summary: "missing fields fixture"'
+    echo '---'
+    echo
+    echo '# Development'
+  } > "$WD/missing-fields.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/missing-fields.md"
+  assert_failure 1
+  assert_output --partial "missing required field: refs"
+  assert_output --partial "missing required field: files_touched"
+  assert_output --partial "missing required field: next_stage_focus"
+}
+
+@test "collect-all: the prologue still fails fast — an unknown stage reports only itself" {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: ZZ'
+    echo '  verdict: ok'
+    echo '---'
+    echo
+    echo '# Nothing'
+  } > "$WD/unknown-stage.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/unknown-stage.md"
+  assert_failure 1
+  assert_output --partial "fail: unknown stage ZZ"
+  refute_output --partial "missing required field"
+}
+
+@test "collect-all: a broken stub counts in full against the budget and says so" {
+  # Not a skip: the exclusion is only sound once the stub shape passes, and skipping the
+  # budget arm would let a broken stub hide an over-budget block for a round.
+  local pad
+  pad="$(head -c 900 < /dev/zero | tr '\0' 'x' | sed 's/x/word /g')"
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: DV'
+    echo '  verdict: ok'
+    echo "  summary: \"budget fixture $pad\""
+    echo '  files_touched: [a.md]'
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions:'
+    echo '    - "q1: not a stub"'
+    echo '  refs: { dev: development.md#files-changed }'
+    echo '---'
+    echo
+    echo '# Development'
+  } > "$WD/broken-stub-budget.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/broken-stub-budget.md"
+  assert_failure 1
+  assert_output --partial "is not a sweep stub"
+  assert_output --partial "(stub-shape invalid: sweep stubs counted in full)"
+  assert_output --partial "- 0 sweep-stub tokens excluded"
+}
+
+@test "collect-all: a clean artifact still reports one ok: line and exit 0" {
+  # Anti-vacuity: an aggregate return that never resets would fail everything.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/development-0.md"
+  assert_success
+  assert_output --partial "ok: "
+}

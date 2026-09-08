@@ -116,10 +116,30 @@ EOF
   assert_output --partial "Test plan"
 }
 
-@test "P4: a body with no Closes trailer is caught" {
+@test "P4: a body with no Closes trailer is caught when an issue anchor resolves" {
   printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n' > "$WD/b.md"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/b.md"
+  mkdir -p "$WD/.context"
+  printf '{"version":1,"worktask_id":"w","run_index":0,"metadata":{"github_issue_url":"https://github.com/o/r/issues/368"},"tasks":{},"facts":{}}\n' \
+    > "$WD/.context/state.json"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/b.md" \
+    --state "$WD/.context/state.json" --context "$WD/.context"
   assert_output --partial "Closes #<N>"
+  assert_output --partial "anchor #368"
+}
+
+# The other arm of git-conventions.md § No issue anchor. Run from a scratch dir so
+# no branch name or recent commit resolves an anchor behind the ledger's back —
+# the linter must agree with `fn-preflight.sh validate-pr`, which passes here.
+@test "P4: with no issue anchor, a body without a closing trailer is compliant" {
+  printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n' > "$WD/b.md"
+  mkdir -p "$WD/.context"
+  printf '{"version":1,"worktask_id":"w","run_index":0,"metadata":{},"tasks":{},"facts":{}}\n' \
+    > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" "$PLUGIN_ROOT/$SCRIPT" --body "$WD/b.md" \
+    --state "$WD/.context/state.json" --context "$WD/.context" --strict
+  assert_success
+  refute_output --partial "Closes #<N>"
+  assert_output --partial "clean"
 }
 
 @test "edge: --strict promotes findings to a blocking exit 1" {

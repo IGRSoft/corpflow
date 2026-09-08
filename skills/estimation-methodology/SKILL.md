@@ -4,8 +4,8 @@ description: Use when estimating task complexity, effort, or determining worktas
 version: 0.3.0
 effort: low
 related:
-  - cost-optimization.md
-  - worktask.md
+  - ../cost-optimization/SKILL.md
+  - ../worktask/SKILL.md
 ---
 
 # Estimation Methodology

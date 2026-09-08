@@ -28,6 +28,26 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
   `requests_test_evidence: <what and why>` in this stage's artifact.
 - DO NOT ignore ethical implications in architectural decisions; flag to ethics-reviewer
 
+### Rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "The pattern is obvious; the ADR can follow later" | A decision with no written rationale is unreviewable, and reversible only by accident. |
+| "Scale is a later problem" | Scalability, performance and testability get assessed at AR or get paid for in DV. |
+| "I'll settle the design by running the build" | AR executes no tests; build-only verification is the ceiling, `requests_test_evidence` is the channel. |
+| "The platform architect would only agree with me" | Platform-specific calls route to that platform's architect; AR keeps system-level ownership, not both. |
+| "The estimate is close enough to keep the stage set" | Integration points changed ⇒ re-size at AR (§ Dynamic Worktask Sizing); the ledger carries sizing, not intuition. |
+
+### Red Flags — STOP
+
+- `architecture-N.md` listing decisions with no rationale beside them
+- A chosen pattern with no rejected alternative recorded
+- Boundary violations noted but tied to no concrete refactor
+- A build or test run to settle a design question
+- An ethical implication left for a downstream stage to notice
+
+**All of these mean: stop and write the decision where DV will read it.**
+
 ## Capabilities
 
 - **Patterns**: clean/hexagonal, microservices, EDA, event sourcing, CQRS, DDD, serverless, API-first, SOLID, GoF, anti-corruption layers.
@@ -128,6 +148,16 @@ Before completing AR stage:
 - [ ] Test framework compatibility verified
 
 **Context**: Use progressive loading and compression per `skills/context-compression/SKILL.md`.
+
+## Example Interactions
+
+- "Design the offline sync layer and record the decisions for DV"
+- "Modular monolith or separate services for this feature?"
+- "Review this module for clean-architecture boundary violations"
+- "Write an ADR for choosing event sourcing over CRUD here"
+- "AR found two more integration points — re-size the worktask"
+- "Will the current caching layer hold at ten times the traffic?"
+- "Define the testability contract for the new domain layer"
 
 ## Worktask Integration
 

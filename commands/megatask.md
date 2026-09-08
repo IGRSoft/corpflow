@@ -1,10 +1,10 @@
 ---
 name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
-argument-hint: '<milestone-N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
+argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
 model: opus
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/megatask/scripts/build-orchestrator.sh:*), Bash(bash skills/megatask/scripts/init-worktree.sh:*), Bash(bash skills/megatask/scripts/resolve-pbxproj-membership.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -213,6 +213,22 @@ apart by `execution.reason`) so the user can re-run it interactively, re-scope, 
    permanently `blocked`, so report them.
 6. **Terminate** when no track is active and every issue is `completed`, `failed`, or `skipped`:
    print per-issue status + PR links, then `git worktree prune`.
+
+## Output Format
+
+`--dry-run` stops after the plan block; a live run appends progress and a batch summary:
+
+~~~markdown
+# Megatask: milestone <N> | issues <list> · <M> issues · <T> tracks
+
+## Plan — issue | title | blockers | track | priority | worktree path
+## Progress — per issue: stage reached, verdict, PR URL, worktree path
+## Blocked — issues waiting, each naming the blocker issue it waits on
+## Summary — merged / open / failed counts, plus follow-up issues filed
+~~~
+
+A dependency cycle or an unreadable ledger replaces everything after `## Plan` with
+`## Halted — <cycle members or ledger error>`: no worktree is created and no issue is started.
 
 ## Relationship to /worktask and /milestone
 

@@ -1193,6 +1193,77 @@ promote() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
 }
 
+@test "D17: the denial NAMES the cited run's evidence (F-18c)" {
+  # A denial that cannot say what the run it protects produced is the symptom
+  # that cost an hour of diagnosis: the message pointed at a run whose sentinel
+  # held no counts, no verdict and no output.
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("evidence: tests:7")'
+  # And the audit row carries it as its own field, so the trail is greppable
+  # without parsing the denial prose.
+  run jq -e '.metadata.prior_evidence == "tests:7"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D18: a STALE two-field sentinel reports its evidence as unrecorded, never mis-parsed" {
+  # Markers written before the evidence token joined the grammar exist in the
+  # wild. The explicit three-field split degrades them loudly; the `%% */#* `
+  # pair the old denial used would have quoted the timestamp as a result.
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  local sentinel
+  sentinel="$(find "$WD/.context/logs/.test-runs" -type f ! -name '*.pending' | head -1)"
+  printf 'QA 2026-09-07T17:30:49Z\n' > "$sentinel"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("evidence: unrecorded")'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("at 2026-09-07T17:30:49Z")'
+}
+
+@test "D19: two MCP test calls differing only in SELECTION do not collide (F-18a end to end)" {
+  # The P0 in its original shape: every mcp__*test* call fell through to the bare
+  # tool name, so the first run's sentinel denied every later call of that tool
+  # whatever it was asked to run — one platform left DV with 0 executed tests.
+  git_ctx QA
+  local a b post_a
+  a="$(jq -cn '{tool_name:"mcp__XcodeBuildMCP__test_sim",
+                tool_input:{scheme:"App", testTarget:"AppTests/LoginTests"}}')"
+  b="$(jq -cn '{tool_name:"mcp__XcodeBuildMCP__test_sim",
+                tool_input:{scheme:"App", testTarget:"AppTests/SignupTests"}}')"
+  post_a="$(jq -cn '{tool_name:"mcp__XcodeBuildMCP__test_sim",
+                     tool_input:{scheme:"App", testTarget:"AppTests/LoginTests"},
+                     tool_response:{stdout:"Executed 12 tests, with 0 failures"}}')"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" --stdin-string "$a" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" --stdin-string "$post_a" "$PROMOTE"
+
+  # The OTHER selection is a different run and must be allowed.
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" --stdin-string "$b" "$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+
+  # The SAME selection against the same tree is the duplicate, and it is denied
+  # naming what the first one produced.
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" --stdin-string "$a" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("evidence: tests:12")'
+}
+
 # --- #8: the Node standard-library runner -----------------------------------
 
 @test "N-node-1: 'node --test' denies at a banned stage (the suite that ran ungated at every stage)" {

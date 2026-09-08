@@ -320,6 +320,52 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 > download step — it collides with the Phase-1 Bash prohibition in `commands/worktask.md` and races
 > the expiring URL. See `skills/shared/figma-capture.md § Capture Workflow`.
 
+### Delegation-only (BINDING)
+
+> **The orchestrator never writes code, tests or docs during a worktask.** Every change is made by
+> the stage agent that owns it, through `Task()`. "It is a one-line fix" is the case this rule
+> exists for: an orchestrator edit lands in no stage's `files_touched`, is reviewed by no DR or SR,
+> and appears in no artifact — so the run's own record says nobody made it. Reading is unrestricted;
+> writing is delegated.
+
+> **This is not a tooling restriction, so it cannot be satisfied by tooling.** The orchestrator can
+> Edit; it declines to. When a stage returns work that is nearly right, the fix is a re-dispatch with
+> the correction, not a patch applied here.
+
+#### Delegation-only — the build-tooling corollary
+
+> Build and test tooling is a separate prohibition with its own section: the orchestrator holds
+> none, and DV/DR/QA delegate to the detected platform's `/<plugin>:build-test`
+> (§ Platform tooling ownership). Never re-add a platform's MCP grants — `mcp__XcodeBuildMCP__*` and
+> friends — to a stage agent to work around it; the plugin that owns the toolchain owns its
+> lifecycle.
+
+### Dispatch on the same turn (BINDING)
+
+> **Verify a boundary and dispatch the next ready stage in the SAME turn.** Report after dispatching,
+> never instead of. A running background `Task` does **not** block the orchestrator — its turn stays
+> free, so "an agent is working" is never a reason to stop, and that misconception is what makes an
+> idle turn feel justified from the inside. Ending a turn with "next: DC → RE → FN" when those stages
+> are dispatchable is idle time, not a handoff: the pipeline sits until a human asks whether anything
+> is happening. Exactly three things justify stopping mid-pipeline — the plan gate
+> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, and the FN gate (§ FN Gate).
+> Nothing else does.
+
+#### Readiness is mechanical, not a judgement call
+
+> Between stages, ask the ledger:
+>
+> ```bash
+> jq -r '.tasks as $t | $t | to_entries[]
+>   | select(.value.status == "pending")
+>   | select([(.value.blocked_by // [])[] | $t[.].status] | all(. == "completed"))
+>   | .key' .context/state.json
+> ```
+>
+> A name returned with nothing live means there is work to do — dispatch it. The trap bites hardest
+> after a **headline milestone**: a big green result makes the summary feel like a completion, and it
+> is not. The boundary is a handoff, and the handoff is the deliverable.
+
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.

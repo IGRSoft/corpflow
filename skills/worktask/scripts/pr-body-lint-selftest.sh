@@ -89,13 +89,22 @@ x
 - y
 Closes #1
 '
-  _expect p4-missing-closes     P4   '## Motivation
+  # Both trailer arms are pinned with the anchor forced, never inherited from the
+  # cwd: a self-test whose verdict depends on whether it ran inside a git checkout
+  # with a `#NNN` in recent history is not pinning anything.
+  local NO_TRAILER='## Motivation
 x
 ## Changes
 - y
 ## Test plan
 - z
 '
+  ISSUE_ANCHOR=42
+  ISSUE_ANCHOR_RESOLVED=1
+  _expect p4-missing-closes     P4   "$NO_TRAILER"
+  ISSUE_ANCHOR=""
+  ISSUE_ANCHOR_RESOLVED=1
+  _expect p4-no-issue-anchor    ""   "$NO_TRAILER"
 
   # Usage error: nothing on stdout. A piped caller treats stdout as the run's output,
   # so help text there reads as "ran, nothing to report" over an exit-2 argument error.

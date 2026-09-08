@@ -2,6 +2,147 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.30] — 2026-09-08
+
+Closes all thirteen findings from `corpflow-fix-plan-2026-09-07.md` across four parallel
+development streams (dedupe/audit hooks, ledger-writer clamps, boundary harness, contracts/
+commands/conventions/schema), plus gh#316. First authority-clean full-suite evidence of the
+sequence: 1855 bats, all green, exit 0, 423 `@test` cases added over `develop` — earlier per-stream
+tallies were taken mid-flight over a tree other streams were still editing and are not comparable.
+
+Also carries a second parallel effort: closes all 26 prompt-audit findings (8 Critical, 18 Warnings) across 16 agents, 28 commands, and 23 skills (score 65/100). Two development streams addressed tool-grant coverage, normative corrections, and agent-template backfill. Full suite for this combined release: 1872 bats + 379 Python, exit 0.
+
+### Breaking
+
+- **`handoffs` re-keyed `<PREV_CODE>→<TASK_ID>`.** A stage split into four now writes four distinct
+  edges instead of collapsing to one. No tolerant reader, no migration — readers must key on the
+  new format.
+- **`facts.decisions` and `facts.open_questions` clamps repartitioned per task** (8 and 4
+  respectively), retiring the global rings of 8 and 12. A reader that assumed one shared ring across
+  all tasks in a run will see a different item set than before. No migration.
+
+### Fixed
+
+- **F-18a** — `dedupe_invocation`'s default arm now folds `tool_input` into the dedupe key, not just
+  the tool name, closing the credential-in-arguments exposure (security finding T6).
+- **F-18b** — test-execution promotion is evidence-gated: `test-execution-promote.sh` derives one
+  evidence token per run and a run whose evidence cannot be named is discarded, never promoted.
+- **Phantom SubagentStop rows** — `audit-subagent.sh` suppresses and counts the ~31s-cadence
+  repeats a dispatch fires, reporting them as one `subagent_stops_suppressed` row per window.
+  The discriminator is a repeated `dedupe_key` within the trail: every stop the runtime delivers
+  arrives with no stage and duration 0, so a predicate on those fields matched every genuine
+  stop and emptied the trail — caught in review before release.
+- **F-18c** — denial messages now name the evidence they were rejected against, rather than a bare
+  refusal.
+- **F-07a/b** — `state-patch.sh` rejects `--facts` per item; the valid remainder persists and exit 2
+  fires only when something was actually rejected.
+- **F-09** — the eviction spill covers resolved items, warns loudly on failure, and triggers off a
+  live length comparison instead of a hard-coded bound.
+- **F-21a/c** — `handoff-harness.sh` gains a reverse sweep-parity arm (a ledger id absent from the
+  artifact frontmatter was previously invisible) and a decision-id divergence check.
+- **F-06a/b/c** — the decisions and questions ledger writers are re-partitioned per task id, closing
+  the eviction-without-spill path that let one stage's writes silently displace another's.
+- **F-14** — `handoffs` re-keyed `<PREV_CODE>→<TASK_ID>` (breaking; see above).
+- **F-15b** — the third-class sweep item now carries a concrete option set at the call site.
+- **F-13** — `plant()`'s harness verification path fixed for the case this run's own review flagged
+  (see Beyond-brief below for the residual gap).
+- **F-17** — `cli-fallback.sh`'s `.txt` placeholder floor replaced by loud failure instead of a
+  silent stand-in.
+- **F-10** — `attach-visual-evidence.sh` gains a distinct `embed_cap` reason instead of an
+  unlabelled truncation.
+- **F-08** — four audit-log readers made tolerant and loud instead of silently aborting on the first
+  malformed line.
+- **F-04a** — `hooks/test-execution-gate.sh` gains a `scoped_test_run` arm on the Skill branch; a
+  scoped `build-test` invoked as a Skill was previously classified `full_test_run` and denied
+  regardless of its own `--only`/`--filter` scoping. The denial message now also names the resolved
+  `test_mode`.
+- **F-11a** — `state-patch.sh`'s decision/question eviction spill covers resolved items (folded into
+  the same fix as F-09's trigger correction).
+- **gh#316, closed.** The `facts.decisions[]` clamp now spills to `.context/decisions-<run_index>.jsonl`
+  on eviction — append-only, sibling of the existing questions spill, no reader by design (matches
+  the questions-spill precedent). Listed as an open follow-up in the 4.0.29 changelog; closed here.
+
+### Prompt-audit remediation
+
+#### Added
+
+- **Two new predicates in `tests/shell/skills/skill-refs.bats`:** `ungranted_script_orders` (Predicate A, 7 tests) detects execution orders without matching grants, covering interpreter-prefixed paths, plugin-root variables, and bare basenames; `dangling_related_targets` (Predicate B, 5 tests) resolves `related:` entries and reports unresolvable ones. Both ship with planted-violation fixture trees and 2 repository-wide contract tests (14 named tests total, all green).
+- **Agent template backfill:** `commands/create-agent.md § Body sections` gains required slots for `Example Interactions` and `Constraints (DO NOT)` sub-sections; 15 agents backfilled with `## Example Interactions` (5–8 user phrasings each); 10 agents backfilled with `### Rationalizations` and `### Red Flags — STOP` sub-sections.
+- **Command structural gaps:** `## Examples` sections added to `appstore` (4 invocations), `request-plan` (4 per-class invocations), `worktask` (7 covering all unexampled options); `## Output Format` sections added to `appstore`, `megatask`, `worktask`; completion criteria rewritten on 5 commands to name their artifacts.
+- **Agent differentiation:** two new `## Differentiation from Related Roles` tables resolve description collisions between `product-manager`/`stakeholder` and `team-lead`/`project-manager`.
+
+#### Fixed
+
+- **Grant coverage (Critical C1–C3, C13):** five worktask scripts (`branch-name.sh`, `refine-branch-target.sh`, `publish-pl-issue.sh`, `handoff-harness.sh`, `effort-ladder.sh`) added to `commands/worktask.md:allowed-tools`; three megatask scripts added to `commands/megatask.md`; `commands/request-plan.md` matcher gains `bash ` prefix and `:*`; `agents/designer.md` gains `ToolSearch` grant with conditional step-1 delegation in `design-review.md`.
+- **Audit command write grants (Critical C2):** `commands/prompt-audit.md`, `docs-audit.md`, `arch-debt.md` granted `Write, Edit` with `.context/audits/` output paths; `test-coverage.md` granted `Write`; all four gain `# tools:` comments.
+- **Tool-grant comments (Critical C13, Warning W19):** nine bare `Bash`/`Task` grants annotated with `# tools:` comments; `appstore.md` narrowed to `Task(corpflow:release-engineer)`.
+- **G3 invocation gate polarity (Critical C5):** `agents/prompt-engineer.md` restates G3 as "Does it **lack** standalone value…" (shared polarity with G1/G2); G4 tie-breaker re-anchored; `skills/csv-export-templates/SKILL.md` and `skills/preview-ensurer/SKILL.md` re-verified (both confirm pipeline-only via `disable-model-invocation: true`); `skills/dv-screenshot-capture/SKILL.md` scores G3 = no, gains flag.
+- **Model tier correction (Critical C6):** `commands/create-agent.md` and `commands/prompt-audit.md` changed from `model: sonnet` to `model: opus`.
+- **Link resolution (Critical C7):** seven `related:` entries in `skills/agent-coordination/SKILL.md` and `skills/estimation-methodology/SKILL.md` rewritten to file-relative form (`../worktask/SKILL.md`).
+- **Accessibility version (Critical C8):** WCAG 2.1 → 2.2 across `agents/designer.md`, `commands/design-review.md`, `commands/design-accessibility.md`.
+- **Section ordering (Warning W22):** example sections repositioned (W22) in `commands/milestone.md`, `ethics-review.md`; `tech-code-review.md` reordered with `## Your Job (read before you review)` preamble moved.
+- **Argument-hint fixes (Warning W23):** `milestone.md` gains `|all`, `megatask.md` fixed to `<N>`.
+- **Option examples (Warning W24):** 13 new examples covering 16 previously unexampled options across 5 commands.
+- **Completion criteria (Warning W18):** rewritten on `designer.md`, `product-manager.md`, `design-review.md`, `design-accessibility.md`, `design-specs.md` to name artifacts.
+- **Disclosure (Warnings W11–W13):** 15 agents gain `## Example Interactions`; 10 agents gain constraint sub-sections; `technical-writer.md` moves "DO NOT omit examples" from prohibition to required template slot.
+
+### No code needed
+
+- **F-21b/d** — the questions spill already existed since 4.0.29; the actual gap was that no command
+  document read it. Fixed by documentation, not code.
+- **F-15a** — the rejection message already named the enum; verified, not changed.
+- **F-15c** — reopened at the user's request and reaffirmed as no-code: `defect`/`constraint`/`risk`
+  are observations without an option set, so they remain follow-ups rather than sweep items.
+
+### Beyond brief — defects this run discovered
+
+Six defects surfaced while closing the thirteen findings, none in the original brief:
+
+- **`run-tests.sh` has five widening paths to the full suite; only the weakest (`WIDE`) is guarded by
+  `dv_in_progress`.** A scoped invocation can self-escalate past DV authority through the other four.
+  **Deferred to its own worktask by user decision.** Cost: until it lands, no DV full-suite evidence
+  in any run is authority-clean.
+- **`state-patch.sh --stage DV --task-id DVn` without `--artifact` resolves to the stage's first
+  instance**, so a fan-out stream can silently inherit a sibling's artifact and summary.
+- **`plant()` proves *something* changed, not that *every* expression matched** — a compound `sed`
+  passes when only one half lands.
+- **`cache-lint --anchor-lint`'s DV allow-list omits sections `stage-contracts.md § DV` requires** —
+  two internal specs disagreeing with each other.
+- **`scan-secrets.sh` exits 133 outside its documented `{0,1,2}` contract, bypassing its own
+  fail-closed arm.** QA established the trigger is cumulative (153 repo files plus one specific
+  file), not the BSD-grep trap the script's own comment anticipates. No automated Pass was obtained
+  for this run; SR's manual line-by-line pass over every added line compensates.
+- **`.context/state.json` is 1859 tokens against a documented 500-token budget.**
+
+### Process notes
+
+- **This run reproduced its own findings while fixing them.** F-06 fired twice: AR0's eight
+  decisions evicted all five of PL0's with no spill and exit 0, and QA confirmed eight decisions
+  (`pd1`–`pd5`, `tl1`–`tl3`) are gone from the final ledger because those stages wrote before DV1's
+  rescope landed. This is not a defect in the delivered code — it is the self-hosting risk
+  `planning-0.md` predicted, and incidental proof the retired global ring was harmful. Those
+  decisions are readable only from `planning-0.md` and `coordination-0.md`, not from the ledger.
+- **Operator note**: an operator with a stale installed `.claude/hooks/state-merge.sh` should
+  re-run `hook-install.sh`. That file is generated and gitignored; it was not edited by this change.
+- **Post-review addition, user-directed and outside the finding set.**
+  `skills/worktask/SKILL.md § Dispatch on the same turn (BINDING)` states that the orchestrator
+  verifies a boundary and dispatches the next ready stage in the same turn, that a running
+  background `Task` does not block it, and that only the plan gate, an `escalate`-class sweep item
+  and the FN gate justify stopping mid-pipeline. It landed **after** DR, SR and QA reviewed the tree
+  and after the version bump, so it did **not** go through the review the thirteen findings did. It
+  is prose in an untested section — no code, test or other doc changed — so the suite evidence above
+  still describes the shipped code exactly.
+- **Six orchestrator rules moved from an operator's private config into the plugin**, same
+  post-review status and for the same reason: a rule enforced from `~/.claude/CLAUDE.md` binds one
+  operator and nobody else, which is the finding class this release closes. Delegation-only and the
+  build-tooling corollary → `skills/worktask/SKILL.md § Delegation-only (BINDING)`; what counts as
+  approval at the plan gate → `commands/worktask.md § What counts as approval — and what does not`;
+  explicit per-stage model passing → `model-selection.md § Worktask stages: explicit, never
+  inherited`; UI evidence from the running app → `stage-contracts.md § UI evidence comes from the
+  running app (tpl-dv)`; spec-outranks-`git log` and the no-AI-footer rule →
+  `git-conventions.md § This spec outranks git log`. Prose only, in five files, reviewed by nobody
+  but the user who directed them.
+
 ## [4.0.29] — 2026-09-07
 
 Three bodies of work, one still-unreleased version. A pull request opened against a branch the work never forked from

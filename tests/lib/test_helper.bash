@@ -426,6 +426,51 @@ mk_state_fixture() {
   return 0
 }
 
+# mk_multitask_ledger <outfile> [--run-index N] [--task ID:QUESTIONS:DECISIONS[:RESOLVED]]...
+# Writes a v2 ledger owned by several tasks at once — the shape the per-task ledger clamps
+# partition on, and the one a single-task fixture cannot express.
+#   QUESTIONS become sw-<ID>-1..n, the first RESOLVED of them answered. Their `.stage` is the
+#   BARE code, as the FN gate's grouping expects; the clamp reads the task id out of the id.
+#   DECISIONS become <lowercased-id>-1..n stamped `.stage: <ID>`, the full task id the
+#   decisions ring partitions on.
+mk_multitask_ledger() {
+  local out="$1"; shift
+  local run_index=0
+  local specs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --run-index) shift; run_index="${1:-0}"; shift ;;
+      --task) shift; specs+=("${1:-}"); shift ;;
+      *) fail "mk_multitask_ledger: unknown arg: $1" ;;
+    esac
+  done
+  mkdir -p "$(dirname "$out")"
+  local spec_json
+  spec_json=$(printf '%s\n' ${specs[@]+"${specs[@]}"} | jq -R -s -c '
+    split("\n") | map(select(length > 0) | split(":"))
+    | map({id: .[0], q: ((.[1] // "0") | tonumber), d: ((.[2] // "0") | tonumber),
+           r: ((.[3] // "0") | tonumber)})') \
+    || fail "mk_multitask_ledger: could not parse --task specs"
+  jq -n --argjson t "$spec_json" --argjson ri "$run_index" '
+    { version: 2, worktask_id: "multitask-fixture", plan_file: ".context/planning-0.md",
+      platform: "all", run_index: $ri,
+      tasks: ($t | map({key: .id, value: {status: "in_progress"}}) | from_entries),
+      facts: {
+        files_modified: [], tests_added: [], verdicts: {},
+        decisions: [ $t[] as $x | range(1; $x.d + 1) as $i
+                     | {id: (($x.id | ascii_downcase) + "-" + ($i | tostring)),
+                        summary: "s", ref: "x.md#y", stage: $x.id} ],
+        open_questions: [ $t[] as $x | range(1; $x.q + 1) as $i
+                     | {id: ("sw-" + $x.id + "-" + ($i | tostring)), class: "decision",
+                        ref: "x.md#elicitation-sweep", blocks_next_stage: false,
+                        stage: ($x.id | sub("[0-9]+$"; "")),
+                        status: (if $i <= $x.r then "resolved" else "open" end)}
+                       + (if $i <= $x.r then {resolution: "answered"} else {} end) ] },
+      handoffs: {} }' > "$out" || fail "mk_multitask_ledger: jq failed"
+  printf '%s\n' "$out"
+  return 0
+}
+
 # mk_git_fixture [--dir DIR] [--branch NAME] [--file PATH:CONTENT]...
 #                [--commit MSG] [--stage PATH]... [--modify PATH:CONTENT]...
 #                [--remote URL]

@@ -791,7 +791,7 @@ ledger_remediation_stage() {
 # marker only once the tool actually produced a result.
 dedupe_decide() {
   local _ctx="$1" _stage="$2" _class="$3" _inv="$4" _head="$5" _tool="$6" _root="${7:-.}"
-  local _fp _n _key _pkey _prior _sentinel _reason
+  local _fp _n _key _pkey _prior _sentinel _reason _p_rest _p_stage _p_ts _p_ev
 
   # Suppression library absent, stubbed or truncated: enforce authority, skip
   # suppression. Same fail-open direction as an unresolvable fingerprint.
@@ -826,16 +826,30 @@ dedupe_decide() {
     return 0
   fi
 
+  # Explicit three-field split, never the `%% */#* ` pair the two-field sentinel
+  # used: on three fields that pair silently hands back the wrong slices. A
+  # marker written before the evidence token joined the grammar carries only two,
+  # and `_p_ev` then equals the whole remainder — the same no-op guard
+  # dedupe_promote uses — so a stale marker reports its evidence as unrecorded
+  # instead of quoting a timestamp as a result.
+  _p_stage="${_prior%% *}"
+  _p_rest="${_prior#* }"
+  _p_ts="${_p_rest%% *}"
+  _p_ev="${_p_rest#* }"
+  [ "$_p_ev" != "$_p_rest" ] || _p_ev="unrecorded"
+
   # Naming the prior run is what makes this actionable: the caller's next move is to CITE that
-  # run, not to find a way around the gate. Remediation: references/test-execution-denials.md.
-  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: ${_prior% *}, at ${_prior#* }) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority)." dedupe)
+  # run, not to find a way around the gate. Naming its EVIDENCE is what makes the citation
+  # checkable — a denial that cannot say what the run it protects produced is the symptom that
+  # cost an hour of diagnosis. Remediation: references/test-execution-denials.md.
+  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: $_p_stage, at $_p_ts, evidence: $_p_ev) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority)." dedupe)
   emit_deny "$_reason" || return 0
 
   write_audit_row "$_ctx" "test_execution_deduped" \
     "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
-        --arg class "$_class" --arg prior "$_prior" --arg n "$_n" \
+        --arg class "$_class" --arg prior "$_prior" --arg ev "$_p_ev" --arg n "$_n" \
         '{stage:$st, tool:$tool, command_head:$head, classification:$class,
-          prior_run:$prior, run_index:$n}')"
+          prior_run:$prior, prior_evidence:$ev, run_index:$n}')"
   return 0
 }
 

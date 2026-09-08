@@ -38,6 +38,7 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 /roadmap --quarter Q1 --view timeline
 /roadmap --add "Dark Mode" --quarter Q1
 /roadmap --move F-12 --to Q2 --export
+/roadmap --platform apple --quarter Q3
 ```
 
 ## Output Format

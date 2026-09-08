@@ -629,7 +629,7 @@ from the artifact's `handoff:` frontmatter when there is none (F2/F3).
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
 | `FN.verdict` | `tasks.FN0.verdict` | complete-summary-N.md `## summary` |
-| `FN.pr_url` | `handoffs["RE→FN"]`/`DC→FN` (ref pointer) | complete-summary-N.md `## artifacts` |
+| `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
 | `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
@@ -676,9 +676,9 @@ downstream stage silently dropped an upstream stage's entries.
 
 ##### Ordering and idempotency
 
-Tail placement for the keyed arrays is load-bearing: the B3 clamp keeps `.[-8:]`, so appending is
-what makes "newest 8 survive" true after a union. Never sort (`unique_by` does) — that hands the
-clamp an arbitrary 8.
+Tail placement for the keyed arrays is load-bearing: the B3 clamp keeps the tail of **each task's
+bucket**, so appending is what makes "newest survives" true after a union. Never sort (`unique_by`
+does) — that hands the clamp an arbitrary survivor set.
 
 Both shapes are idempotent: re-merging an already-merged payload leaves `state.json`
 byte-identical, so a remediation loop may re-run its self-patch freely. A payload whose shape does
@@ -799,8 +799,10 @@ ordered, are restated in `pl0-procedure.md § Integration-branch detection`.
 #### tasks
 
 The **sole** stage ledger, keyed by numbered stage id (`[STAGE][N]` — `PL0`, `DV0`, `DV1`), the
-same identity used in artifact names and handoff edges (`skills/shared/state-ledger.md`). Handoff
-edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
+same identity used in artifact names and in the **destination** side of a handoff edge
+(`skills/shared/state-ledger.md`). An edge is `<PREV_CODE>→<TASK_ID>` (`TL→DV1`): only its source
+side is a bare stage code. Hand-writing one — `#layer-1-fallback` — uses the numbered id, or a
+split stage's four writers collide on one key. Full grammar: § Field notes — handoffs.
 
 ```yaml
 # …continued: WorktaskStateLedger.properties.tasks
@@ -902,8 +904,8 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
 # …continued: WorktaskStateLedger.properties.facts.properties
       decisions:
         type: array
-        maxItems: 8
-        description: "Bounded (B3): newest 8 survive. Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7), not by producers — matches eviction-order rule 3."
+        maxItems: 8   # PER TASK — there is no global ceiling; see the field notes below
+        description: "Bounded (B3): newest 8 PER TASK survive, partitioned by the writing task's id (from `stage`, stamped at write time). Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7), not by producers — matches eviction-order rule 3. Evicted items spill to .context/decisions-<run_index>.jsonl."
         items:
           type: object
           required: [id, summary, ref]
@@ -919,18 +921,30 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
 # …continued: WorktaskStateLedger.properties.facts.properties
       open_questions:
         type: array
-        maxItems: 12
-        description: "Bounded (B3): newest 12 survive, `status: resolved` evicted first. Clamped at the single write chokepoint state-patch.sh atomic_merge() (AD-7) — every stage writes its closing sweep here. Matches eviction-order rule 2."
+        maxItems: 4   # PER TASK — no global ceiling
+        description: "Bounded (B3): newest 4 PER TASK, keyed by the TASK_ID in the item's own `sw-<TASK_ID>-<n>` id, `status: resolved` evicted first inside each bucket. 4 equals the per-stage emission ceiling, so a conforming writer never spills. Clamped at state-patch.sh atomic_merge() (AD-7); evictions spill to open-questions-<run_index>.jsonl."
+```
+
+##### facts — open_questions, the item shape
+
+```yaml
+# …continued: facts.open_questions
         items:
-          # Mirrors $defs/SweepStub — the sweep stub is the only accepted item shape here
-          # too, so the ledger and the frontmatter cannot disagree about what an entry is.
+          # Mirrors $defs/SweepStub — the only accepted item shape here too, so the
+          # ledger and the frontmatter cannot disagree about what an entry is.
           type: object
           required: [id, class, ref, blocks_next_stage]
           properties:
             id: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }
-            summary: { type: string, maxLength: 160 }   # OPTIONAL; the artifact body is canonical
-            stage: { type: string }                     # derived from the id when absent
+            summary: { type: string, maxLength: 160 }   # OPTIONAL; the body is canonical
+            stage: { type: string }                     # bare CODE, for FN-gate grouping
 ```
+
+##### facts — open_questions, the partition key
+
+The clamp's partition key is derived from the item's id, **not** from `stage`: `stage` is the bare
+code the FN gate groups by, and grouping is not partitioning. Breaking for in-flight ledgers — no
+migration, no tolerant reader.
 
 ##### facts — open_questions, the ledger-only fields
 
@@ -1029,14 +1043,28 @@ edges keep bare **stage codes** (`PL→AR`); only the ledger key is numbered.
 
 #### Field notes — handoffs (edge registry)
 
-Keys are `FROM→TO` stage-code pairs. PL0 sizes the stage set, so several stages have more than one
-possible predecessor — the edge written is the one whose when-clause holds. A stage that never ran
-never appears in an edge label; a "phantom edge" for an absent stage is a ledger defect.
+Keys are `<PREV_CODE>→<TASK_ID>`: the **source** side is the predecessor's bare stage code, the
+**destination** side is the writing task's own id (`TL→DV1`, not `TL→DV`). Only the destination ever
+collided — a four-way DV split is four writers, and one shared key meant three edges overwrote each
+other — while the source answers "which stage did this follow", which a fan-in does not make
+ambiguous. This is **breaking for in-flight ledgers**: there is no migration and no tolerant reader,
+and an old-shape key simply reads as absent, which forces a logged re-merge rather than a silent
+mis-parse.
 
-The tables below are **exhaustive across all three pipelines** (standard, secure/full,
-emergency). The emergency pipeline (`IR→DV→DR→QA→RE→FN`) has **no PL, AR or TL stage**, so DV's
-predecessor there is `IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a
-row before writing one.
+##### Reading the edge tables
+
+The tables below name **edges**, so their rows stay stage-level and are read with one rule applied:
+the destination is written as the writing task's id, so a split stage contributes one row per task.
+The rows are not enumerated per task — PL0 sizes each split per run.
+
+PL0 sizes the stage set, so several stages have more than one possible predecessor — the edge
+written is the one whose when-clause holds. A stage that never ran never appears in an edge label; a
+"phantom edge" for an absent stage is a ledger defect.
+
+The tables are **exhaustive across all three pipelines** (standard, secure/full, emergency). The
+emergency pipeline (`IR→DV→DR→QA→RE→FN`) has **no PL, AR or TL stage**, so DV's predecessor there is
+`IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a row before writing
+one.
 
 ##### Edge table — standard and secure pipelines
 
@@ -1066,8 +1094,9 @@ row before writing one.
 | `QA→RE` | emergency pipeline (RE's predecessor is QA, not DC) | RE |
 | `<invoker>→ET` | the ethics gate fired; `<invoker>` is whichever stage triggered it | ET |
 
-The writer passes its predecessor to `state-patch.sh --stage <CODE> --prev <PREV>`; the script
-composes the key mechanically and knows none of the when-clauses. `USER` is a predecessor
+The writer passes its predecessor to `state-patch.sh --stage <CODE> --prev <PREV>` (plus
+`--task-id <TASK_ID>` in a fan-out); the script composes `<PREV>→<TASK_ID>` mechanically and knows
+none of the when-clauses. `USER` is a predecessor
 **only** — it owns no artifact and is never a valid `--stage`.
 
 #### #layer-1-fallback
@@ -1079,7 +1108,8 @@ Every stage agent's State Patch section points here. Three outcomes, in order.
    item 2 — `--allow-missing-artifact` only silences the error and patches **nothing**.
 2. **The tool cannot run at all** (not granted, denied, not found). Do **NOT** skip silently.
    `Edit` `.context/state.json` directly: write both the `tasks.<ID>` completion entry and the
-   `handoffs["<PREV>→<CODE>"]` edge, then record the failure under `metadata.pl_tooling_gaps`.
+   `handoffs["<PREV>→<TASK_ID>"]` edge — the destination is your task id (`TL→DV1`), not the bare
+   stage code — then record the failure under `metadata.pl_tooling_gaps`.
    The SubagentStop hook is **not** a substitute — it builds its args without `--prev`, so it
    repairs the stage entry and drops the edge.
 3. **`jq` or `.context/state.json` genuinely absent** — skipping is correct here, and only here
@@ -1177,8 +1207,8 @@ OPTIONAL (additive). Probe cache for account-level hard-fails, so later stages d
 
 When state.json approaches the 500-token cap:
 
-1. Drop `tasks.<ID>.artifact` paths for stages with `status=completed` once their `handoffs[FROM→TO]` string captures the essentials.
-2. Drop `facts.open_questions` whose status is resolved (the `maxItems: 12` clamp applies the same preference automatically at every write).
+1. Drop `tasks.<ID>.artifact` paths for stages with `status=completed` once their `handoffs` edge string captures the essentials.
+2. Drop `facts.open_questions` whose status is resolved (the newest-4-per-task clamp applies the same preference automatically at every write, inside each task's bucket).
 3. Drop `facts.decisions` older than 2 stages back (keep current + previous stage decisions).
 4. Drop `facts.files_read` entries whose `stage` is older than 2 stages back.
 
@@ -1295,7 +1325,8 @@ Manual rebuild only — the hook never walks (`#f4-partial`). Runbook: `agents/w
 2. Extract `handoff:` frontmatter from each (yq or fallback parser).
 3. Sort by stage order: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR, ET.
 4. Seed state.json from PL0's frontmatter.
-5. Per subsequent stage, merge `tasks.<ID>` and add `handoffs[FROM→TO]`.
+5. Per subsequent stage, merge `tasks.<ID>` and add `handoffs["<PREV_CODE>→<ID>"]` — one edge per
+   task, so a split stage contributes one per stream.
 6. Atomic-write per `#atomic-write`.
 
 ---

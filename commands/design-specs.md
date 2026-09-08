@@ -39,7 +39,7 @@ Generate developer-ready design specifications for components, screens, or featu
 
 1. **Analyze target** — structure, design-system token mapping, platform-specific variations.
 2. **Generate specifications** — fill the template below in `--format`.
-3. **Create handoff documentation** — specs plus asset requirements and implementation notes.
+3. **Hand off** — every slot in § Specification Template holds a measured value or `n/a: <reason>`, and every colour, spacing and type value either names the design-system token it comes from or is flagged as a one-off. With `--include-assets`, each asset carries an export row with size and scale. A `[bracketed placeholder]` left anywhere means the spec is not deliverable.
 
 ## Specification Template
 

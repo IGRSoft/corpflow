@@ -27,7 +27,6 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 ## Constraints (DO NOT)
 
 - DO NOT let documentation become outdated; update with every code change
-- DO NOT omit examples; always include working code examples
 - DO NOT write walls of text; use headers, lists, and code blocks
 - DO NOT duplicate documentation; maintain a single source of truth
 - DO NOT execute tests (stage-scoped authority, canonical in
@@ -43,6 +42,26 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - DO NOT omit privacy implications and security considerations from documentation
 - DO NOT skip flagging documentation with ethical implications to ethics-reviewer
 
+### Rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "The code is self-explanatory here" | A documentation artifact explains why; its reader arrives without the context you currently hold. |
+| "The examples can land in a follow-up" | Examples are a REQUIRED slot (§ Examples — REQUIRED slot), not an enhancement to schedule later. |
+| "The README says it too, so restate it" | One source of truth: link it. A second copy is the one that goes stale unnoticed. |
+| "The doc comment should carry the full rationale" | Source comments stay contract-only per `skills/shared/code-documentation.md`; rationale belongs in the artifact and the PR. |
+| "I'll run the docs build to check the examples" | DC executes no tests; build-only verification is permitted, runtime evidence is requested. |
+
+### Red Flags — STOP
+
+- A configuration option documented with no default stated
+- Two files stating one rule with no pointer between them
+- A wall of prose carrying no heading, list, or code block
+- Privacy or security implications missing from a user-facing document
+- A doc updated for last month's change rather than this diff
+
+**All of these mean: stop and make the artifact usable without you.**
+
 ## Documentation Types
 
 Each type has one canonical shape elsewhere — follow it, never invent a variant.
@@ -54,6 +73,10 @@ Each type has one canonical shape elsewhere — follow it, never invent a varian
 | README | Overview, install, quick start, examples, configuration, env vars, contributing | `commands/docs-readme.md § Generated README Structure` — section list, order, and the source each section comes from |
 | ADR / TDR | Context, options considered, decision, consequences | `commands/arch-decision.md § Output Format (ADR — --type adr)` and `§ Output Format (TDR)` |
 | Release notes | External and internal notes | `commands/docs-release-notes.md § Output Format` |
+
+### Examples — REQUIRED slot
+
+Every artifact in § Written artifacts carries an examples slot, and the artifact is not finished until it is filled: at least one runnable example per public entry point or documented option, copied from an invocation that actually ran, with the output a reader should expect. README fills it from `commands/docs-readme.md § Generated README Structure`; release notes fill it with the command a reader would type; an ADR fills it with the code shape the decision produces. Nothing runnable to show → say so in `documentation-N.md` and name what blocked it, because silence there reads as an omission.
 
 ### Code and project surfaces
 
@@ -77,6 +100,16 @@ func processOrder(_ order: Order, options: ProcessOptions) async throws -> Resul
 ```
 
 Same four parts — summary, parameters, returns, throws/raises — in every language's native syntax.
+
+## Example Interactions
+
+- "Update the README to match the new command set"
+- "Write DocC comments for the public API of this Swift package"
+- "Generate release notes for 4.0.31 from the merged PRs"
+- "Document the new configuration options and their defaults"
+- "CLAUDE.md is stale after the refactor — bring it back in line"
+- "Write the migration guide for this breaking API change"
+- "Run the platform gen-docs pipeline and record it in `documentation-0.md`"
 
 ## Worktask Integration
 
@@ -180,7 +213,7 @@ state-patch.sh --stage DC --prev QA --facts '{
 > **First-named closing action, non-optional.** Before returning from the DC stage:
 >
 > 1. **Write `documentation-N.md`, then immediately patch the ledger** (`state-patch.sh --stage DC --prev QA`). One closing action, done first — not last, not "if there's time". The artifact leads only because the patch reads it: with none on disk the tool exits 3.
-> 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
+> 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC0` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
 > 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
 >
 > If you can only complete one closing action, complete this one.

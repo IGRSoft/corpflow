@@ -2,7 +2,10 @@
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
 argument-hint: '[--path dir] [--threshold N]'
-allowed-tools: Read, Glob, Grep, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
+# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
+# the only file this command creates is `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`.
+# No Edit — the command reports coverage and mutates nothing it read.
+allowed-tools: Read, Glob, Grep, Write, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
 model: haiku
 related:
   - agents/qa-engineer.md
@@ -25,7 +28,7 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 
 - `--path <dir>` - Analyze specific directory (default: entire project)
 - `--threshold <n>` - Set coverage threshold (default: 80)
-- `--report` - Generate detailed HTML report
+- `--report` - Write a detailed markdown summary to `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`, linking the toolchain's own coverage artifact; the only file this command creates
 - `--critical-only` - Focus on critical/high-risk areas
 - `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
 

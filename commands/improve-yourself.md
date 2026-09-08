@@ -2,6 +2,9 @@
 name: improve-yourself
 description: Manual entry point for the self-improvement skill. Analyzes user edits since a baseline, classifies diffs, and writes .context/learnings.md with scoped approvable proposals. Complements automatic ST-stage invocation.
 argument-hint: '[--since <ref>] [--target agents|skills|commands|all] [--dry-run] [--no-scope-filter] [--apply]'
+# tools: bare Bash is deliberate — the self-audit runs the repo's own lints and diff tooling,
+# which differ per repository, so no matcher can name them; the bound is that proposals land
+# in .context/learnings.md and are applied only under `--apply`.
 allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(corpflow:prompt-engineer)
 model: sonnet
 estimated-cost:

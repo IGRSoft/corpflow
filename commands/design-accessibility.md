@@ -39,7 +39,7 @@ Accessibility audit of a screen, component, or the entire application against WC
 
 1. **Analyze** — WCAG success criteria at `--level`, platform-specific guidelines, assistive-technology support.
 2. **Identify issues** — severity, WCAG criterion, and remediation guidance per issue.
-3. **Report** — per Output Format below.
+3. **Report** — emit every § Output Format section. Every § Audit Categories row, plus every § Platform-Specific Checks row `--platform` selects, carries a verdict — pass, an issue, or `not applicable: <reason>` — and every issue names the WCAG 2.2 success criterion it fails, its severity, and the remediation. An unscored row means the audit is unfinished.
 
 ## Audit Categories
 
@@ -79,7 +79,7 @@ Screen reader compatibility; keyboard navigation; ARIA implementation; focus ind
 # Accessibility Audit: [Target]
 
 ## Executive Summary
-- **Conformance Target**: WCAG 2.1 [Level]
+- **Conformance Target**: WCAG 2.2 [Level]
 - **Current Status**: [Pass/Partial/Fail]
 - **Critical Issues**: [Count]
 - **Total Issues**: [Count]

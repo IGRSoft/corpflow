@@ -17,6 +17,9 @@ maxTurns: 80
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
 # the capture checklist has no alternative path. Without the grant the model never
 # sees the tool and hand-rolls the adapter chain the skill already ships.
+# tools: bare Bash is deliberate — the build and test command is platform-resolved at
+# dispatch (routing-matrix plugin, then that plugin's runner), so no matcher written here
+# can name it; the bound is D2's Executed Tests scope, not the grant.
 # tools: bare Task is deliberate — targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the mandatory delegation audit row.
@@ -150,6 +153,16 @@ Invoke it through the platform's implementation agent (`Task`, target resolved p
 Fall back through: the override target (if any) → the alias's default target → the project's own build command via scoped Bash (its manifest names it). Tee to the same log paths, record `<plugin> unavailable; used direct <tool> — <reason>` in `§ Decisions`, and write one `audit.jsonl` line `action: "plugin_unavailable"`, `metadata: {plugin: "<name>", reason: <error>, alias: "<corpflow:* alias>", override_target: "<plugin:agent>|null"}`. Do NOT abort the stage.
 
 > Delegated builds past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result (`agent-coordination § MCP Auto-Background`).
+
+## Example Interactions
+
+- "Implement the DV0 task described in `development-0.md`"
+- "Fix the failing `SyncQueueTests` and re-run only that suite"
+- "This repo is Kotlin — route to the right platform developer and implement the feature"
+- "Refactor the token-refresh path without changing its public API"
+- "The release build fails while debug passes; find out why"
+- "Add unit tests for the new retry policy and list them under Selected Tests"
+- "Capture the DV screenshots for the settings screen and register them in the manifest"
 
 ## Worktask Integration — DV Stage
 
@@ -442,6 +455,17 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 - [ ] **Every `handoff.files_touched` path landed on disk** — written, then recorded per `stage-contracts.md#files-touched`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file
 - [ ] **You did not end the turn to announce what you would do next** — § The voluntary yield
 
+#### The runner's summary line is part of the artifact
+
+`## verification-command` carries the command **and** the summary line the runner printed, copied
+byte-for-byte — into the artifact, or into a `.context/logs/` capture the artifact names. Not a
+paraphrase, not a count retyped from memory, not "all tests pass".
+
+Nothing between DV and QA holds test-execution authority, so once this stage closes no reader can
+re-derive the number: the artifact is the only record that a count was ever observed. A green suite
+reported without the line is an unverifiable claim and DR treats it as one. Contract:
+`stage-contracts.md § Verification Command carries the runner's verbatim summary line`.
+
 #### The voluntary yield
 
 The boxes above guard *budget exhaustion*; the more common failure is voluntary — ending the turn with budget remaining to announce what you are about to do (*"Now the BLE constant, the event enum case, and the host mount gate."*). **An intent sentence is not a handoff**: do the three things, then return. If you genuinely cannot continue, that is a `## Blockers` entry and a `verdict: blocked` — a named stop, not a trailing sentence. The orchestrator cannot clean it up, because a mid-turn yield is not an errored return (`skills/worktask/SKILL.md § Step 6.5a2`).
@@ -523,6 +547,16 @@ handoff:
     applied: true              # truthful; see the architecture field notes below
 ---
 ```
+
+#### Field notes — files_touched
+
+- **Cap**: `FILES_TOUCHED_MAX = 10`. Emit the first ten post-merge repo-relative paths, then — only
+  when the full set is larger — exactly **one** final entry of the literal form `"+ <count> more"`.
+  A marker that is not last, more than one marker, or a longer list without one fails
+  `handoff-harness.sh --validate-frontmatter`.
+- **The marker obliges the body**: whenever it is present, this artifact's changed-files section
+  carries the FULL set and is marked authoritative **in the same edit**. Shape and rationale:
+  `stage-contracts.md#files-touched`.
 
 #### Field notes — architecture fields
 

@@ -163,7 +163,7 @@ EOART
     exit 1
   fi
 
-  # ---- T8: --prev writes handoffs["PREV→CODE"] from the parsed summary + ref ----
+  # ---- T8: --prev writes handoffs["PREV→TASK_ID"] from the parsed summary + ref ----
   make_state
   cat > .context/architecture-0.md << 'EOART'
 ---
@@ -179,7 +179,7 @@ EOART
       printf 'T8: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '(.handoffs["PL→AR"] // "") | test("approach validated") and test("ref:architecture-0.md")' \
+  if jq -e '(.handoffs["PL→AR0"] // "") | test("approach validated") and test("ref:architecture-0.md")' \
     .context/state.json > /dev/null; then
     printf 'T8: --prev writes handoffs edge from summary+ref: ok\n'
   else
@@ -227,7 +227,7 @@ EOART
       printf 'T10: state-patch returned non-zero (round 2)\n' >&2
       exit 1
     }
-  if jq -e '(.handoffs["AR→DV"] // "") | test("remediated after DR round 1")' \
+  if jq -e '(.handoffs["AR→DV0"] // "") | test("remediated after DR round 1")' \
     .context/state.json > /dev/null; then
     printf 'T10: same-verdict remediation refreshes handoff edge: ok\n'
   else
@@ -245,16 +245,21 @@ EOART
     exit 1
   fi
 
-  # ---- T9: B3 bounds — decisions clamp to newest-8, dispatched_agents to 6 ----
-  # Seed 10 decisions (d0..d9) + 8 dispatched_agents (mix launched/completed), then
-  # patch any stage; atomic_merge must clamp both arrays at the single chokepoint.
+  # ---- T9: B3 bounds — decisions clamp to newest-8 PER TASK, dispatched_agents to 6 ----
+  # Seed 10 PL0 decisions + 10 AR0 decisions + 8 dispatched_agents (mix launched/completed),
+  # then patch any stage; atomic_merge must clamp at the single chokepoint, and the two
+  # decision buckets must survive each other — a global ring keeps 8 of the 20 in total.
   jq -n '
     {version:2, worktask_id:"selftest", plan_file:".context/planning-0.md",
      platform:"all", run_index:0,
      tasks:{PL0:{status:"completed", verdict:"ok", metadata:{}}},
      facts:{
        files_modified:[], tests_added:[], open_questions:[], verdicts:{PL:"ok"},
-       decisions:[ range(0;10) | {id:("d"+(.|tostring)), summary:("dec "+(.|tostring)), ref:"x.md#y"} ],
+       decisions:(
+         [ range(0;10) | {id:("d"+(.|tostring)), summary:("dec "+(.|tostring)),
+                          ref:"x.md#y", stage:"PL0"} ]
+       + [ range(0;10) | {id:("a"+(.|tostring)), summary:("arc "+(.|tostring)),
+                          ref:"x.md#y", stage:"AR0"} ]),
        dispatched_agents:(
          [ range(0;6) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"completed"} ]
          + [ range(6;8) | {stage:"DV", task_id:("t"+(.|tostring)), subagent_type:"a", status:"launched"} ])
@@ -265,9 +270,11 @@ EOART
       printf 'T9: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '(.facts.decisions | length) == 8 and (.facts.decisions[-1].id == "d9") and (.facts.decisions[0].id == "d2")' \
+  if jq -e '(.facts.decisions | length) == 16
+            and ([.facts.decisions[] | select(.stage == "PL0") | .id] == ["d2","d3","d4","d5","d6","d7","d8","d9"])
+            and ([.facts.decisions[] | select(.stage == "AR0") | .id] == ["a2","a3","a4","a5","a6","a7","a8","a9"])' \
     .context/state.json > /dev/null; then
-    printf 'T9: facts.decisions clamped to newest-8: ok\n'
+    printf 'T9: facts.decisions clamped to newest-8 per task, both buckets survive: ok\n'
   else
     printf 'T9: decisions bound: FAIL\n' >&2
     jq '.facts.decisions | map(.id)' .context/state.json >&2
@@ -373,9 +380,9 @@ EOART
       printf 'T13: state-patch returned non-zero\n' >&2
       exit 1
     }
-  if jq -e '(.handoffs["USER→PL"] // "") | test("origin edge from the user")' \
+  if jq -e '(.handoffs["USER→PL0"] // "") | test("origin edge from the user")' \
     .context/state.json > /dev/null; then
-    printf 'T13: --prev USER writes the USER→PL edge: ok\n'
+    printf 'T13: --prev USER writes the USER→PL0 edge: ok\n'
   else
     printf 'T13: --prev USER edge: FAIL\n' >&2
     jq '.handoffs' .context/state.json >&2
