@@ -438,7 +438,7 @@ check_sweep_ledger() {
   # 2>&1 into the same capture, like _sweep_yq: a ledger whose open_questions is a string
   # or a list of non-objects aborts jq mid-filter, and treating that exit as "nothing
   # missing" would pass the gate on exactly the shapes it exists to catch.
-  # The ledger is not the whole record: the newest-12 clamp spills unresolved evictions to
+  # The ledger is not the whole record: the per-task question clamp spills unresolved evictions to
   # `open-questions-<run_index>.jsonl` (AD-4), and an item that legitimately reached the FN
   # gate through the spill must not read here as a dropped stub.  The path derives from the
   # ledger's own run_index — never guessed — and a MISSING spill contributes the empty set,
@@ -568,13 +568,24 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
   local failed=0
   while IFS=$'\t' read -r id fsum; do
     [[ -n "$id" && -n "$fsum" ]] || continue
-    # Table row `| id | summary | ...` or bullet `- **id** — summary`; first hit wins.
+    # Table row `| id | summary | ...`, bullet `- **id** — summary`, or bullet
+    # `- **id — summary.**` (the form this repo's architecture artifacts use, against which
+    # the check was inert); first hit wins. The third arm anchors its trim to the known id
+    # rather than to a separator class, because leftmost-longest would eat an em-dash that
+    # belongs to the summary.
     bsum=$(awk -v id="$id" '
       $0 ~ ("^[[:space:]]*\\|[[:space:]]*(\\*\\*)?" id "(\\*\\*)?[[:space:]]*\\|") {
         n = split($0, f, "|"); if (n >= 4) { print f[3]; exit }
       }
       $0 ~ ("^[[:space:]]*[-*][[:space:]]+\\*\\*" id "\\*\\*") {
         line = $0; sub(/^[^*]*\*\*[^*]*\*\*[[:space:]]*[-—:]*[[:space:]]*/, "", line)
+        print line; exit
+      }
+      $0 ~ ("^[[:space:]]*[-*][[:space:]]+\\*\\*" id "[[:space:]]*[-—:]") {
+        line = $0
+        sub(/^[^*]*\*\*/, "", line)
+        sub("^" id "[[:space:]]*[-—:]+[[:space:]]*", "", line)
+        sub(/\*\*[[:space:]]*$/, "", line)
         print line; exit
       }' "$body")
     [[ -n "$bsum" ]] || continue
@@ -586,13 +597,26 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
       # different statements rather than two phrasings of one:
       #   1. the two share no significant vocabulary at all;
       #   2. both quote numbers and no number is common (a restated bound or count).
-      function harvest(x, W, D,   i, n, w) {
+      # Filenames are stripped BEFORE the split: `<stage>-<run_index>.md` would otherwise
+      # contribute its index as a bare digit, and arm 2 fires on an unmatched numeral. A
+      # digit counts only as a whole whitespace-delimited word — `newest-8` is a name, not a
+      # count. Residual: a bare `planning-0` carrying no extension survives the strip, and
+      # the whole-word rule is what covers it.
+      function harvest(x, W, D,   i, n, w, m, t, tok) {
         x = tolower(x)
+        gsub(/[a-z0-9_\/.-]+\.(md|yml|yaml|json|jsonl|sh|bats|txt|log)/, " ", x)
+        m = split(x, t, /[ \t\n]+/)
+        for (i = 1; i <= m; i++) {
+          tok = t[i]
+          sub(/^[^a-z0-9]+/, "", tok)
+          sub(/[^a-z0-9]+$/, "", tok)
+          if (tok ~ /^[0-9]+$/) D[tok] = 1
+        }
         n = split(x, w, /[^a-z0-9]+/)
         for (i = 1; i <= n; i++) {
           if (w[i] == "") continue
-          if (w[i] ~ /^[0-9]+$/) D[w[i]] = 1
-          else if (length(w[i]) >= 4) W[w[i]] = 1
+          if (w[i] ~ /^[0-9]+$/) continue
+          if (length(w[i]) >= 4) W[w[i]] = 1
         }
       }
       BEGIN {
@@ -720,26 +744,35 @@ validate_frontmatter() {
   req=$(required_for "$stage")
   [[ -n "$req" ]] || { echo "fail: unknown stage $stage" >&2; return 1; }
 
+  # Everything above is the fail-fast prologue: each of its checks makes every later check
+  # meaningless, so running on would emit noise rather than information. Everything below
+  # collects — an author handed one failure and then a second on the re-run pays a boundary
+  # round per defect. Each check keeps its own message text and its own line: Step B.1
+  # re-dispatches with the `fail:` line verbatim and the orchestrator greps for one naming a
+  # sweep id, so aggregating them into a single line would break that reader.
+  local rc=0
+
   local field
   for field in $req; do
     local val
     val=$(yq eval ".handoff.${field} // \"\"" "$fmfile")
     if [[ -z "$val" || "$val" == "null" ]]; then
       echo "fail: stage=$stage missing required field: $field" >&2
-      return 1
+      rc=1
     fi
   done
 
   if [[ "$stage" == "DV" && -n "$STATE_ARG" ]]; then
-    check_ar_ref "$f" "$fmfile" || return 1
+    check_ar_ref "$f" "$fmfile" || rc=1
   fi
 
-  check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || return 1
-  check_decision_divergence "$f" "$fmfile" "$stage" || return 1
-  check_sweep_stub_shape "$fmfile" || return 1
-  check_sweep_ref_anchor "$f" "$fmfile" || return 1
+  check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || rc=1
+  check_decision_divergence "$f" "$fmfile" "$stage" || rc=1
+  local stub_shape_ok=1
+  check_sweep_stub_shape "$fmfile" || { rc=1; stub_shape_ok=0; }
+  check_sweep_ref_anchor "$f" "$fmfile" || rc=1
   if [[ -n "$STATE_ARG" ]]; then
-    check_sweep_ledger "$fmfile" "$f" || return 1
+    check_sweep_ledger "$fmfile" "$f" || rc=1
   fi
 
   # Token budget (AD-2). The budget constrains DISCRETIONARY prose — summary,
@@ -755,10 +788,20 @@ validate_frontmatter() {
   # so it cannot be gamed by inflating `ref` strings or emitting extra stubs: 264 is a
   # deterministic ceiling. check_sweep_stub_shape has already run above, so only
   # shape-valid stubs are ever excluded — that ordering is what makes the cap safe.
-  local tcount stubtoks discretionary
+  #
+  # Under collect-all the stub-shape check may have FAILED above, and the exclusion is only
+  # sound once it passes. The arm then counts the stubs in full and says so, rather than
+  # skipping: a skip lets a broken stub hide an over-budget block for a round, which is the
+  # cost collect-all exists to remove.
+  local tcount stubtoks discretionary budget_note=""
   tcount=$(toks "$fmfile")
-  stubtoks=$(toks_open_questions_block "$fmfile")
-  [[ "$stubtoks" -le 64 ]] || stubtoks=64
+  if [[ "$stub_shape_ok" -eq 1 ]]; then
+    stubtoks=$(toks_open_questions_block "$fmfile")
+    [[ "$stubtoks" -le 64 ]] || stubtoks=64
+  else
+    stubtoks=0
+    budget_note="(stub-shape invalid: sweep stubs counted in full) "
+  fi
   discretionary=$((tcount - stubtoks))
   # The advisory line is emitted BEFORE the failure, not after: 264 is exactly 200 plus the
   # 64-token exclusion cap, so every artifact over the ceiling is already over the budget and
@@ -768,10 +811,11 @@ validate_frontmatter() {
     echo "warn: stage=$stage frontmatter ${tcount} tokens > 264 absolute ceiling" >&2
   fi
   if [[ "$discretionary" -gt 200 ]]; then
-    echo "fail: stage=$stage frontmatter ${discretionary} discretionary tokens > 200 budget (${tcount} total - ${stubtoks} sweep-stub tokens excluded)" >&2
-    return 1
+    echo "fail: ${budget_note}stage=$stage frontmatter ${discretionary} discretionary tokens > 200 budget (${tcount} total - ${stubtoks} sweep-stub tokens excluded)" >&2
+    rc=1
   fi
 
+  [[ "$rc" -eq 0 ]] || return "$rc"
   echo "ok: $f stage=$stage tokens=$tcount"
 }
 
@@ -837,9 +881,9 @@ make_fixtures() {
     "verdicts": {"PL":"ok","AR":"ok","TL":"ok"}
   },
   "handoffs": {
-    "PL→AR": "9-stage, complexity 38. ref: planning-0.md#requirements",
-    "AR→TL": "Schemas designed, atomic write strategy. ref: architecture.md#decisions",
-    "TL→DV": "24-file fan-out, 8 batches. ref: coordination.md#fan-out"
+    "PL→AR0": "9-stage, complexity 38. ref: planning-0.md#requirements",
+    "AR→TL0": "Schemas designed, atomic write strategy. ref: architecture.md#decisions",
+    "TL→DV0": "24-file fan-out, 8 batches. ref: coordination.md#fan-out"
   }
 }
 EOF

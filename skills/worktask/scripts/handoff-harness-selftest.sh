@@ -33,8 +33,60 @@ self_test() {
   fi
 
   self_test_ar_gate "$td"
+  self_test_collect_all "$td"
 
   echo "self-test: ALL PASS"
+}
+
+# The frontmatter body reports every failure per invocation, and the divergence check no
+# longer harvests a digit out of a sibling artifact's filename.
+self_test_collect_all() {
+  local ctx="$1/.context"
+
+  if ! command -v yq >/dev/null 2>&1; then
+    echo "self-test: collect-all: SKIP (yq unavailable)"
+    return 0
+  fi
+
+  {
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '  summary: "Two independent violations in one artifact."'
+    echo '  files_touched: [a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]'
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions:'
+    echo '    - "q1: not a stub"'
+    echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+    echo '# Development'
+  } > "$ctx/dv-two-faults.md"
+
+  local out rc=0
+  out=$(validate_frontmatter "$ctx/dv-two-faults.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]]; then
+    echo "self-test: collect-all: FAIL (rc=$rc want=1)" >&2; exit 1
+  fi
+  if ! printf '%s\n' "$out" | grep -q "FILES_TOUCHED_MAX=10" \
+     || ! printf '%s\n' "$out" | grep -q "is not a sweep stub"; then
+    echo "self-test: collect-all: FAIL (one invocation did not report both faults)" >&2; exit 1
+  fi
+  echo "self-test: collect-all: ok"
+
+  {
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '  summary: "Filename digits must not be harvested."'
+    echo '  files_touched: [a.md]'
+    echo '  key_decisions:'
+    echo '    - { id: dv-1, summary: "The retry budget for a failing stage is 3 attempts" }'
+    echo '  next_stage_focus: "DR reviews"'
+    echo '  open_questions: []'
+    echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+    echo '## decisions'; echo
+    echo '- **dv-1 — The retry budget for a failing stage is three attempts, per planning-0.md.**'
+  } > "$ctx/dv-filename-digit.md"
+
+  if ! validate_frontmatter "$ctx/dv-filename-digit.md" >/dev/null 2>&1; then
+    echo "self-test: harvest: FAIL (a filename digit still blocks the boundary)" >&2; exit 1
+  fi
+  echo "self-test: harvest: ok"
 }
 
 # Exercises every branch of the AR->DV gate. Each case restores STATE_ARG/STRICT

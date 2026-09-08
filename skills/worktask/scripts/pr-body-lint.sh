@@ -20,7 +20,9 @@
 #     P3  an image reference that is not an absolute https:// URL (relative and
 #         local paths never resolve in a PR/issue body).
 #     P4  a missing required section (Motivation / Changes / Test plan) or a
-#         missing `Closes #<N>` trailer.
+#         missing `Closes #<N>` trailer. The trailer arm fires only when an issue
+#         anchor resolves (git-conventions.md § No issue anchor); with none, a body
+#         without a closing line is compliant, matching `validate-pr`'s degrade.
 #
 #   Warn-only by DEFAULT: findings print and the exit status stays 0, so this
 #   can land without breaking in-flight worktasks. --strict (or
@@ -100,6 +102,46 @@ usage() {
   exit 2
 }
 
+# ---------- issue anchor ----------
+# Ranked identically to `resolve_issue` in fn-preflight-cmds.sh, and that parity is
+# the point: P4's trailer rule must fire on exactly the runs where
+# `fn-preflight.sh validate-pr` blocks, or the convention and its two enforcers
+# disagree. Duplicated rather than sourced because that library is a `set -u`
+# ~1600-line prologue this script cannot pull into its own `set -euo pipefail`.
+# Cached: the answer is per run, while scan_document runs per body.
+ISSUE_ANCHOR=""
+ISSUE_ANCHOR_RESOLVED=0
+issue_anchor() {
+  if [ "$ISSUE_ANCHOR_RESOLVED" = "1" ]; then
+    printf '%s' "$ISSUE_ANCHOR"
+    return 0
+  fi
+  local n=""
+  if command -v jq > /dev/null 2>&1; then
+    n=$(jq -r '.metadata.github_issue_url // empty' "$STATE_PATH" 2> /dev/null \
+      | grep -oE '[0-9]+$' || true)
+    if [ -z "$n" ]; then
+      n=$(jq -r 'if .url then .url elif .number then (.number|tostring) else empty end' \
+        "${CONTEXT_DIR}/gh-issue.json" 2> /dev/null | grep -oE '[0-9]+$' || true)
+    fi
+    if [ -z "$n" ]; then
+      n=$(jq -r '.metadata.github_issue_number // empty' "$STATE_PATH" 2> /dev/null || true)
+    fi
+  fi
+  # A ticket-less `feature/<slug-ending-in-digit>` branch must not resolve a bogus
+  # number, so this is the `<type>/<NNN>-<slug>` shape, never a trailing integer.
+  if [ -z "$n" ]; then
+    n=$(git rev-parse --abbrev-ref HEAD 2> /dev/null \
+      | sed -nE 's#^[a-zA-Z]+/([0-9]+)-.*#\1#p' || true)
+  fi
+  if [ -z "$n" ]; then
+    n=$(git log --oneline -n 5 2> /dev/null | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
+  fi
+  ISSUE_ANCHOR="$n"
+  ISSUE_ANCHOR_RESOLVED=1
+  printf '%s' "$ISSUE_ANCHOR"
+}
+
 # ---------- per-line rules (P1, P3) ----------
 # One awk pass. Emits "<rule>\t<lineno>\t<text>" for each finding.
 scan_lines() {
@@ -148,8 +190,15 @@ scan_document() {
     grep -E -i -q "^#{1,6}[[:space:]]+${h}[[:space:]]*$" "$f" \
       || printf 'P4\t0\tmissing required section: ## %s\n' "$h"
   done
-  grep -E -q '(^|[[:space:]])(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+' "$f" \
-    || printf 'P4\t0\tno "Closes #<N>" trailer — the PR will not close its issue\n'
+  # Two arms, per git-conventions.md § No issue anchor. With no anchor there is no
+  # issue to close and a bare body is compliant; demanding a trailer anyway invites
+  # an invented number, which closes an unrelated issue on merge.
+  local anchor
+  anchor=$(issue_anchor)
+  if [ -n "$anchor" ]; then
+    grep -E -q '(^|[[:space:]])(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+' "$f" \
+      || printf 'P4\t0\tno "Closes #<N>" trailer — the PR will not close its issue (anchor #%s)\n' "$anchor"
+  fi
 }
 
 lint_body() {

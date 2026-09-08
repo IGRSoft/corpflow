@@ -496,12 +496,12 @@ items. It adds NO new anchor (`handoff-protocol.md § #anchor-allow-list`) and d
 
 3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: mark each
    answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` (the § Step C.5
-   write — the whole stub, never `{id, status, resolution}` alone), and **also** append each decided
-   item to `facts.decisions[]` marked `(auto-decided)`. That second write is a deliberate deviation
-   from § Step C.5, which sends sweep answers to `resolution` only: AR/TL/DV read `facts.decisions[]`
-   on stage entry (`skills/shared/stage-contracts.md`), and at most 4 PL items cannot evict AR's
-   newest-8 ring before AR has written to it. Entries are marked resolved, **never removed** — a
-   deleted item takes its `ref` anchor and its answer with it.
+   write — the whole stub, never `{id, status, resolution}` alone). That write is the **only** one:
+   there is no second append to `facts.decisions[]`. § Step C.5 sends sweep answers to `resolution`
+   and nowhere else, and the record survives because every stage extracts `facts.open_questions[]`
+   on entry (`skills/shared/stage-contracts.md § Required Inputs`), so no downstream reader loses
+   the answer. Entries are marked resolved, **never removed** — a deleted item takes its `ref`
+   anchor and its answer with it.
 
 ##### Auto-decision ledger merge — the audit row
 
@@ -547,9 +547,9 @@ interactive `/worktask`.
 #### Presentation in the gate summary
 
 On a `checkpoint` plan gate the Step A.5 summary MUST list every auto-decided question with its
-answer marked `(auto-decided by Fable — see facts.decisions[] / audit)`, so the user approves the
-decisions together with the plan. On `bypass`, the audit rows plus the merged `facts.decisions[]`
-entries are the durable record.
+answer marked `(auto-decided by Fable — see facts.open_questions[].resolution / audit)`, so the user
+approves the decisions together with the plan. On `bypass`, the `auto_decision_resolved` audit rows
+plus each item's own `resolution` are the durable record.
 
 ### Step A.4b — Refine the branch target (after A.4, before A.5)
 
@@ -614,6 +614,23 @@ Read `tasks.PL0.metadata.plan_gate` (default `"checkpoint"`). Resolve the run in
    Keep the `/config` idle-timeout opt-in OFF on hosts running gated worktasks — an idle auto-answer
    would count as an approval the operator never gave, and a background-task completion notification
    (which states that no human input occurred) is never this approval either.
+
+##### What counts as approval — and what does not
+
+The gate holds for an **explicit human answer to this call**. Three things that routinely look like
+approval are not:
+
+- **A subagent returning `verdict: ok`.** PL0 finishing means the plan exists, not that anyone
+  accepted it. No agent can approve on the user's behalf, and no message from one is the user's
+  consent.
+- **A background-task completion notification**, which states on its face that no human input
+  occurred (see the idle-timeout note in step 3).
+- **A free-text reply that is a question.** "Wait, explain the AR exclusion first" is a question:
+  answer it and re-present the gate. Same rule as `commands/megatask.md § R1 outcomes`.
+
+Only the user's own answer, or `plan_gate == "bypass"` set before the run, moves past this point.
+Recording `approval_received` on anything else fabricates the one row an operator relies on to know
+a human saw the plan.
 
 ##### Stage-inclusion decisions in the gate summary
 
@@ -857,6 +874,30 @@ verified`) → append the same row with `result:"fail"` and the line as `reason`
 next stage; re-dispatch the stage with the `fail:` line verbatim so it writes the missing stub, `ref`
 anchor, or `--facts` entry. There is no advisory tier here — the unreadable-ledger case fails too.
 
+##### Step B.1 — the `key_decisions` divergence arm
+
+Not every failure names a `sw-` id. `check_decision_divergence` compares each `key_decisions[]`
+summary against the same id's entry in the artifact body and fails with
+
+```
+fail: decision <id> disagrees across transports — frontmatter says "…" but the <artifact> body says "…"
+```
+
+which names a **decision** id and mentions neither a sweep id nor ledger parity. Without this arm
+the table above has no branch for it, and the boundary fails with a line nobody is told how to
+route — which is exactly how the first boundary of a recent run stalled.
+
+###### Step B.1 — routing the divergence failure
+
+Treat it as the same class as the arms above: `result:"fail"` with the line as `reason`, no Step
+C.0, no next stage, re-dispatch with the `fail:` line verbatim. What differs is the fix the stage
+owes — the two transports are reconciled to **one** statement, and the artifact body is the author's
+copy. Never settle it by deleting the body entry: that removes the reader's only expansion of the
+id.
+
+Because the harness now collects every failure in one invocation, a single re-dispatch may carry a
+sweep line and a decision line together. Pass **every** `fail:` line, not the first.
+
 ### Step C — Closing-sweep collection and render (loop step 4.9)
 
 Step C is to the FN gate what Step A.4 is to the plan gate: it resolves questions, it approves
@@ -975,8 +1016,8 @@ record, never prompt — so no unattended run can deadlock on it.
 
 #### Step C.1 — collect everything not already answered
 
-1. **C.1 — Collect.** Read `facts.open_questions[]` and keep the items whose `status`
-   is not `"resolved"`. That status test is the whole filter: an item already answered at its own
+1. **C.1 — Collect.** Read `facts.open_questions[]` **unioned with the eviction spill** (below) and
+   keep the items whose `status` is not `"resolved"`. That status test is the whole filter: an item already answered at its own
    boundary (C.0) or at the plan gate is resolved, so it is excluded by the same rule that excludes
    PL's. Do **not** filter on stage — under `blocks_next_stage` any stage can be answered at its own
    boundary, so a stage-name exclusion would be both wrong and incomplete. **Derive the stage from
@@ -984,6 +1025,41 @@ record, never prompt — so no unattended run can deadlock on it.
    explicit `stage` field takes precedence when present, but it is optional and absent from every
    template, so nothing may depend on it. Resolve each item's `ref` anchor to its full `options[]`
    body in the emitting stage's artifact.
+
+##### Step C.1 — the collection is ledger ∪ spill
+
+The ledger is not the whole record. `state-patch.sh` clamps `facts.open_questions[]` to the newest
+four per task and appends every evicted item to `.context/open-questions-<run_index>.jsonl`
+(`stage-contracts.md § Ledger bounds — the overflow spill`), so an item reachable **only** through
+the spill is an item this gate would otherwise never render — silently, with no error anywhere.
+
+###### Step C.1 — how the two sources are unioned
+
+Union both sources by `.id`, with the **ledger winning on conflict**: a spill line is a snapshot
+taken at eviction time and is necessarily staler than an item the ledger later resolved. A missing
+spill file is the empty set. A spill file that exists but cannot be parsed is a **failure**, never
+an empty set — degrading a parse error to "nothing to collect" is how the gate would go quiet in
+exactly the case it exists for. `handoff-harness.sh` already checks frontmatter/ledger parity
+against the same union, so the gate and the boundary check now read the same record.
+
+`.context/decisions-<run_index>.jsonl` is **not** read here. It is the decisions ring's recovery and
+audit artifact; this gate renders questions.
+
+##### Step C.1 — the artifact fallback and its warning
+
+Both transports can still under-report, so count what the artifacts claim. Every `.context/*-N.md`
+carries a `## elicitation-sweep` section and its frontmatter carries the stubs. When the collected
+count is **below** the number of sweep stubs on disk, render the collected items and warn, naming
+the shortfall and the ids that are missing:
+
+```
+warn: FN gate collected 9 sweep items; 11 stubs exist on disk (missing: sw-DV1-2, sw-DR0-1)
+```
+
+The warning does not block the gate and does not change what is rendered. It is the tripwire for a
+transport that lost an item, and the whole point is that it names the loss instead of leaving a
+count nobody compares. Read the stubs from artifact frontmatter, never by re-parsing bodies.
+
 #### Step C.2 — classify before anything answers
 
 2. **C.2 — Classify.** Apply § Escalation guard — raise-only self-labels to every collected item.

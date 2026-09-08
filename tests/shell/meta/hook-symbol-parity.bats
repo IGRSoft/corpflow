@@ -70,8 +70,12 @@ _frozen() {
   # `[ -f ]` alone does not cover a TRUNCATED library: a syntax error in a sourced
   # file is fatal under set -e and `||` cannot rescue it. The $- save/restore is
   # what keeps that from turning a fail-open hook into a hard block.
+  #
+  # audit-subagent joined when its suppression summary became a row through the
+  # shared appender rather than a third hand-rolled append site. It runs under
+  # `set -eu`, so for it the idiom is load-bearing rather than defensive.
   local f
-  for f in model-switch-gate model-switch-audit test-execution-gate state-merge; do
+  for f in model-switch-gate model-switch-audit test-execution-gate state-merge audit-subagent; do
     grep -q 'set +e' "$HOOKDIR/$f.sh" \
       || fail "$f.sh sources the library without dropping -e first"
     grep -qE 'case "\$_[cC][fF]_[oO][pP][tT][sS]" in \*e\*\) set -e' "$HOOKDIR/$f.sh" \

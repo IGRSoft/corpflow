@@ -648,9 +648,9 @@ to the plan's EXISTING mandatory anchors (`## requirements` / `## acceptance-cri
 `## scope`) in ONE batch pass. Never add a `## decisions` anchor to `<plan_file>`, whose anchor set
 is exact (`handoff-protocol.md#anchor-allow-list § PL`; `## decisions` belongs to AR's
 `architecture-N.md`). Return every decision as a `key_decisions[]` entry prefixed
-`(auto-decided)`; the orchestrator merges them into `state.json facts.decisions[]`, marks each
-answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` — never deletes
-it — and carries each rationale in its `auto_decision_resolved` audit row. Do NOT re-run `state-patch.sh` — PL0 is already `completed`,
+`(auto-decided)`; the orchestrator marks each answered `state.json facts.open_questions[]` item
+`status: "resolved"` with its `resolution` — never deletes it, and never also appends it to
+`facts.decisions[]` — and carries each rationale in its `auto_decision_resolved` audit row. Do NOT re-run `state-patch.sh` — PL0 is already `completed`,
 so the plan amendments are your only writes.
 
 #### Escalation-class questions (never auto-decided)

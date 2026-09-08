@@ -431,7 +431,9 @@ check_typed_return_shape() {  # <handoff>
 # The ledger mirrors SweepStub inline (it is a different document), so the two `required:`
 # lines are compared rather than assumed equal.
 ledger_oq_required() {  # <handoff>
-  awk '/^#### facts — open_questions$/{f=1;next} f && /^#{2,6} /{f=0} f' "$1" \
+  # Stops at the next H2-H4, not at the next heading of any level: the schema block
+  # is split across H5 children, and `required:` lives in the item-shape child.
+  awk '/^#### facts — open_questions$/{f=1;next} f && /^#{2,4} /{f=0} f' "$1" \
     | grep -m1 'required:'
 }
 
@@ -463,7 +465,10 @@ ledger_oq_required() {  # <handoff>
 @test "AC-4 twin: a template missing open_questions fails the enumeration" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/$CONTRACTS" '/sw-ST0-1/d')"
-  sed -i.bak '/^  stage: ST$/,/^  refs:$/ s/^  open_questions:$//' "$planted"
+  # Chained through plant(), not a bare `sed -i`: this second mutation is the one
+  # the assertion actually rests on, and an unguarded sed that stops matching
+  # leaves a twin that can no longer fail.
+  planted="$(plant "$planted" '/^  stage: ST$/,/^  refs:$/ s/^  open_questions:$//')"
   run check_templates_carry_field "$planted"
   assert_failure
 }
@@ -645,7 +650,7 @@ A missing sweep is warn-only until the next minor.')"
 @test "P2-6 twin: gating a check_sweep_* call site behind STRICT fails the wide check" {
   local planted
   planted="$(plant "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" \
-    's/check_sweep_ledger "\$fmfile" "\$f" || return 1/[[ "\$STRICT" == "1" ]] \&\& { check_sweep_ledger "\$fmfile" "\$f" || return 1; }/')"
+    's/check_sweep_ledger "\$fmfile" "\$f" || rc=1/[[ "\$STRICT" == "1" ]] \&\& { check_sweep_ledger "\$fmfile" "\$f" || rc=1; }/')"
   run check_no_sweep_escape_hatch_wide "$planted"
   assert_failure
 }
@@ -805,23 +810,55 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
 # rather than the presence of a line.
 bounds_filter() { sed -n "/^_STATE_BOUNDS_FILTER='/,/'$/p" "$1" | sed "1s/^_STATE_BOUNDS_FILTER='//" | sed "\$s/'$//"; }
 
-@test "sw-DR0-3: facts.open_questions is clamped, unresolved items surviving ahead of resolved ones" {
-  local filter out
+# The bound is READ from the clamp, never restated here. Two cases below hard-coded
+# `12` and went stale the moment the bound moved per task — the failure mode is the
+# assertion, not the code. Deriving it closes the class: a future rescope moves these
+# with it, and a bound that vanishes from the filter fails as non-vacuity.
+bounds_value() {  # <state-patch> <decisions|open_questions>
+  bounds_filter "$1" \
+    | sed -n "s/.*\.facts\.$2 |= _keep_newest[a-z_]*(_task_of_[a-z]*; \([0-9][0-9]*\)).*/\\1/p" \
+    | head -1
+}
+
+@test "sw-DR0-3: facts.open_questions is clamped PER TASK, unresolved surviving ahead of resolved" {
+  local filter bound out
   filter="$(bounds_filter "$PLUGIN_ROOT/$STATE_PATCH")"
   [ -n "$filter" ] || fail "non-vacuity: bounds filter not extracted"
   printf '%s\n' "$filter" | grep -q 'open_questions' || fail "open_questions is not clamped at the chokepoint"
+  bound="$(bounds_value "$PLUGIN_ROOT/$STATE_PATCH" open_questions)"
+  [ -n "$bound" ] || fail "non-vacuity: the open_questions bound was not derived from the clamp"
 
-  # 10 resolved + 10 open: every open item survives, resolved ones are evicted first.
-  local input
+  # One task's bucket, over-filled with resolved items first: the bound survives and
+  # every survivor is unresolved, because resolved items are eviction bait.
+  local input i n=$((bound * 2))
   input='{"facts":{"open_questions":['
-  local i
-  for i in 0 1 2 3 4 5 6 7 8 9; do input="${input}{\"id\":\"r$i\",\"status\":\"resolved\"},"; done
-  for i in 0 1 2 3 4 5 6 7 8; do input="${input}{\"id\":\"o$i\"},"; done
-  input="${input}{\"id\":\"o9\"}]}}"
-  out="$(printf '%s' "$input" | jq -c "$filter" | jq -c '[.facts.open_questions[] | .id]')"
-  [ "$(printf '%s' "$out" | jq 'length')" -eq 12 ] || fail "clamp did not bound the array: $out"
-  printf '%s' "$out" | jq -e 'index("o0") != null and index("o9") != null' > /dev/null \
-    || fail "an unresolved item was evicted while resolved ones survived: $out"
+  for i in $(seq 0 $((n - 1))); do input="${input}{\"id\":\"sw-DV0-1$i\",\"status\":\"resolved\"},"; done
+  for i in $(seq 0 $((n - 1))); do input="${input}{\"id\":\"sw-DV0-2$i\"},"; done
+  input="${input%,}]}}"
+  out="$(printf '%s' "$input" | jq -c "$filter" | jq -c '[.facts.open_questions[]]')"
+  [ "$(printf '%s' "$out" | jq 'length')" -eq "$bound" ] \
+    || fail "clamp did not bound the bucket to $bound: $out"
+  [ "$(printf '%s' "$out" | jq '[.[] | select((.status // "open") == "resolved")] | length')" -eq 0 ] \
+    || fail "a resolved item survived while unresolved ones were evicted: $out"
+}
+
+@test "sw-DR0-3: one task's bucket cannot evict another's" {
+  local filter bound input i out
+  filter="$(bounds_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  bound="$(bounds_value "$PLUGIN_ROOT/$STATE_PATCH" open_questions)"
+  [ -n "$bound" ] || fail "non-vacuity: the open_questions bound was not derived from the clamp"
+
+  # DV0 over-fills its bucket; DV1 stays inside its own. A global ring would evict
+  # DV1's older items on volume alone — the cross-task coupling being removed.
+  input='{"facts":{"open_questions":['
+  for i in $(seq 0 $bound); do input="${input}{\"id\":\"sw-DV1-$i\"},"; done
+  for i in $(seq 0 $((bound * 3))); do input="${input}{\"id\":\"sw-DV0-$i\"},"; done
+  input="${input%,}]}}"
+  out="$(printf '%s' "$input" | jq -c "$filter" | jq -c '[.facts.open_questions[].id]')"
+  [ "$(printf '%s' "$out" | jq '[.[] | select(startswith("sw-DV1-"))] | length')" -eq "$bound" ] \
+    || fail "DV1's bucket was not clamped to its own bound: $out"
+  [ "$(printf '%s' "$out" | jq '[.[] | select(startswith("sw-DV0-"))] | length')" -eq "$bound" ] \
+    || fail "DV0's bucket was not clamped to its own bound: $out"
 }
 
 @test "sw-DR0-3 twin: a below-bound array is left byte-identical (no-op path holds)" {
@@ -1023,26 +1060,36 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   printf '%s\n' "$output" | grep -q '^fail:' || fail "expected a fail: line, got: $output"
 }
 
-# --- sw-DV0-4 (USER: keep 12, resolved-first): pin the ORDERING, not just the count ---
+# --- sw-DV0-4 (USER: resolved-first): pin the ORDERING, not just the count ---
+# The bound is derived from the clamp (bounds_value), never restated: this case
+# hard-coded the retired global 12 and went stale the moment the bound moved.
 
 @test "sw-DV0-4: eviction prefers resolved items — every unresolved item outlives every resolved one" {
-  local filter input out i
+  local filter bound input out i open_n res_n
   filter="$(bounds_filter "$PLUGIN_ROOT/$STATE_PATCH")"
   [ -n "$filter" ] || fail "non-vacuity: bounds filter not extracted"
+  bound="$(bounds_value "$PLUGIN_ROOT/$STATE_PATCH" open_questions)"
+  [ -n "$bound" ] || fail "non-vacuity: the open_questions bound was not derived from the clamp"
 
-  # 11 unresolved + 11 resolved, interleaved so position alone cannot produce the answer.
+  # One bucket, interleaved so position alone cannot produce the answer. Fewer
+  # unresolved items than the bound, so the spare seats are contested: every
+  # unresolved item must survive and a resolved one may take only what is left.
+  open_n=$((bound - 1))
+  res_n=$((bound + 2))
   input='{"facts":{"open_questions":['
-  for i in 0 1 2 3 4 5 6 7 8 9 10; do
-    input="${input}{\"id\":\"o$i\",\"status\":\"open\"},{\"id\":\"r$i\",\"status\":\"resolved\"},"
+  for i in $(seq 0 $((open_n - 1))); do
+    input="${input}{\"id\":\"sw-DV0-1$i\",\"status\":\"open\"},{\"id\":\"sw-DV0-2$i\",\"status\":\"resolved\"},"
+  done
+  for i in $(seq $open_n $((res_n - 1))); do
+    input="${input}{\"id\":\"sw-DV0-2$i\",\"status\":\"resolved\"},"
   done
   input="${input%,}]}}"
   out="$(printf '%s' "$input" | jq -c "$filter" | jq -c '[.facts.open_questions[]]')"
 
-  [ "$(printf '%s' "$out" | jq 'length')" -eq 12 ] || fail "bound not applied: $out"
-  # Every unresolved item survives; the single surviving spare is a resolved one.
-  [ "$(printf '%s' "$out" | jq '[.[] | select(.status == "open")] | length')" -eq 11 ] \
+  [ "$(printf '%s' "$out" | jq 'length')" -eq "$bound" ] || fail "bound not applied: $out"
+  [ "$(printf '%s' "$out" | jq '[.[] | select(.status == "open")] | length')" -eq "$open_n" ] \
     || fail "an unresolved item was evicted while resolved ones survived: $out"
-  [ "$(printf '%s' "$out" | jq '[.[] | select(.status == "resolved")] | length')" -eq 1 ] \
+  [ "$(printf '%s' "$out" | jq '[.[] | select(.status == "resolved")] | length')" -eq $((bound - open_n)) ] \
     || fail "resolved items were not evicted first: $out"
 }
 
@@ -1052,7 +1099,10 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
   # (leaf semantics, matching section-lint) would stop at that child's heading.
   body="$(awk '/^#### Ledger bounds/{f=1;next} f && /^#{2,4} /{f=0} f' "$PLUGIN_ROOT/$CONTRACTS")"
   [ -n "$body" ] || fail "non-vacuity: the Ledger bounds section is absent"
-  printf '%s\n' "$body" | grep -q '12' || fail "the bound is not stated"
+  # The LIVE bound, not merely a number: the retired global 12 is still named in this
+  # section as history, so grepping a bare digit would pass on the wrong value.
+  printf '%s\n' "$body" | grep -q 'per task' || fail "the bound is not stated as per-task"
+  printf '%s\n' "$body" | grep -qE 'newest \*\*4 per task\*\*|4 per task' || fail "the bound value is not stated"
   printf '%s\n' "$body" | grep -qi 'resolved' || fail "the eviction preference is not stated"
   printf '%s\n' "$body" | grep -qi 'deliberate' || fail "the bound does not read as a decision anyone made"
 }

@@ -53,7 +53,16 @@ restarting with CORPFLOW_TEST_GATE=off in the process environment — an agent c
 this by retrying the command with a prefix.
 
 <!-- dedupe -->
-To proceed: (1) cite that run as the evidence for this stage — it covers the same tree and the
+Read the evidence token first: it says what the run being cited actually produced. `tests:<n>`
+is a count read off that run's own summary line and is the strongest form; `bundle:<name>` is the
+file name of a results bundle or log that existed on this machine when the run finished — search
+for it by that name under your build output or results directory; `output:<n>B` means the run
+returned something but no
+count could be read from it, so it is weak evidence and worth re-reading before you rely on it;
+`errtext:<n>B` is a failing run that printed its failures, which is still a run. `unrecorded`
+means the marker predates this grammar and its evidence was never captured — treat it as no
+evidence at all and make the edit in (2) rather than citing it. To proceed: (1) cite that run as
+the evidence for this stage — it covers the same tree and the
 same selection; (2) if you have since changed something, make the edit and re-run — any
 modification to tracked content re-enables this command automatically, no flag required; or (3)
 if you need a repeat run of an unchanged tree to investigate a flake, ask a human to restart

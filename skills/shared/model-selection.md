@@ -167,6 +167,17 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
   stage does not revert to the parent's model on reattach, so `model_requested`/
   `model_resolved` in `dispatched_agents[]` keep matching for the stage's whole lifecycle.
 
+### Worktask stages: explicit, never inherited
+
+A worktask stage is **always** dispatched with an explicit `model`. The orchestrator reads
+`task.metadata.model` from the ledger and passes it as a short alias — `Task({ model: "opus" })` —
+never relying on the agent file's frontmatter to supply it.
+
+Frontmatter inheritance is silent when it fails: the stage runs on whatever the parent session had,
+`model_requested` and `model_resolved` disagree in `dispatched_agents[]`, and the effort tier the
+stage was sized for is gone with no error anywhere. `xhigh` in particular needs Opus 5 or Fable 5
+(§ xhigh routing) — a stage that inherits Sonnet is downgraded, not refused.
+
 ## Default Subagent Model (`CLAUDE_CODE_SUBAGENT_MODEL`)
 
 `CLAUDE_CODE_SUBAGENT_MODEL` sets the **default** subagent model, not an override: an agent

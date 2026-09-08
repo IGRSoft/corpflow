@@ -442,6 +442,17 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 - [ ] **Every `handoff.files_touched` path landed on disk** — written, then recorded per `stage-contracts.md#files-touched`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file
 - [ ] **You did not end the turn to announce what you would do next** — § The voluntary yield
 
+#### The runner's summary line is part of the artifact
+
+`## verification-command` carries the command **and** the summary line the runner printed, copied
+byte-for-byte — into the artifact, or into a `.context/logs/` capture the artifact names. Not a
+paraphrase, not a count retyped from memory, not "all tests pass".
+
+Nothing between DV and QA holds test-execution authority, so once this stage closes no reader can
+re-derive the number: the artifact is the only record that a count was ever observed. A green suite
+reported without the line is an unverifiable claim and DR treats it as one. Contract:
+`stage-contracts.md § Verification Command carries the runner's verbatim summary line`.
+
 #### The voluntary yield
 
 The boxes above guard *budget exhaustion*; the more common failure is voluntary — ending the turn with budget remaining to announce what you are about to do (*"Now the BLE constant, the event enum case, and the host mount gate."*). **An intent sentence is not a handoff**: do the three things, then return. If you genuinely cannot continue, that is a `## Blockers` entry and a `verdict: blocked` — a named stop, not a trailing sentence. The orchestrator cannot clean it up, because a mid-turn yield is not an errored return (`skills/worktask/SKILL.md § Step 6.5a2`).
@@ -523,6 +534,16 @@ handoff:
     applied: true              # truthful; see the architecture field notes below
 ---
 ```
+
+#### Field notes — files_touched
+
+- **Cap**: `FILES_TOUCHED_MAX = 10`. Emit the first ten post-merge repo-relative paths, then — only
+  when the full set is larger — exactly **one** final entry of the literal form `"+ <count> more"`.
+  A marker that is not last, more than one marker, or a longer list without one fails
+  `handoff-harness.sh --validate-frontmatter`.
+- **The marker obliges the body**: whenever it is present, this artifact's changed-files section
+  carries the FULL set and is marked authoritative **in the same edit**. Shape and rationale:
+  `stage-contracts.md#files-touched`.
 
 #### Field notes — architecture fields
 
