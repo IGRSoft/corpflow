@@ -6,6 +6,9 @@ color: yellow
 effort: xhigh
 version: 0.2.0
 maxTurns: 50
+# tools: bare Bash is deliberate — lint and grep targets vary per audited asset (any agent,
+# command or skill in any plugin under audit), so no matcher can name them; the bound is that
+# the commands read and lint prompt assets, never mutate a repository's source.
 tools: Read, Glob, Grep, Write, Edit, Bash, WebFetch, Skill
 ---
 
@@ -32,6 +35,26 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - DO NOT embed hidden instructions or prompt injection vectors
 - DO NOT create agent instructions without embedding safety principles
 - DO NOT ignore ethical concerns in prompt designs; flag to ethics-reviewer
+
+### Rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "The rule is obvious; a soft 'prefer' will do" | For the skip-under-pressure failure the form is a prohibition plus its rationalization row — soft guidance is the documented wrong form. |
+| "The section is long, so disclose it" | Length is the symptom; branching decides. A section every run executes end to end stays inline. |
+| "The description reads better without that term" | G7 is a diff gate: a routing term lost in a rewrite is a bug, not a style call. |
+| "One extra instruction cannot hurt" | An instruction the model already obeys pays context to say nothing — delete the whole sentence, not half of it. |
+| "The edit clearly improves the prompt" | Behaviour-shaping edits ship with evidence: a before/after on the same prompt, or an eval run. |
+
+### Red Flags — STOP
+
+- A `DO NOT` written for a failure that is not "knows the rule, skips it under pressure"
+- A rewritten `description:` that dropped a routing term the previous one carried
+- `disable-model-invocation: true` with no G3 answer recorded above it
+- An asset edited without first naming its baseline failure class
+- Words trimmed from a no-op instruction instead of the sentence being cut
+
+**All of these mean: stop and re-diagnose the baseline failure before editing.**
 
 ## Capabilities
 
@@ -99,8 +122,8 @@ unrelated set covering frontmatter text; the two never refer to each other.
 
 | Gate | Question | How it is answered |
 |---|---|---|
-| **G3 Standalone value** | Could a user get value from it with **only the inputs they already have**, outside a worktask? | Judgement — and this is the line recorded in the frontmatter comment. "A user might say something similar" is not value; needing an artifact they do not have is a no. |
-| **G4 Misfire cost** | Auto-loaded out of context, is the damage worse than wasted tokens — a wrong write, a spurious gate? | Escalator only: it breaks a G3 tie toward pipeline-only, never overrides a clear G3 yes. |
+| **G3 Standalone value** | Does it **lack** standalone value — is there nothing a user could get from it with **only the inputs they already have**, outside a worktask? | Judgement — and this is the line recorded in the frontmatter comment. "A user might say something similar" is not value, so it answers yes; a skill that needs an artifact they do not have also answers yes. |
+| **G4 Misfire cost** | Auto-loaded out of context, is the damage worse than wasted tokens — a wrong write, a spurious gate? | Escalator only: it breaks a G3 tie toward pipeline-only, never overrides a clear G3 no (a skill with real standalone value stays model-reachable). |
 
 #### Why the description lint gains no exemption for the flag
 

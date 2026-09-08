@@ -2,7 +2,7 @@
 name: create-agent
 description: Create new agent definitions with proper structure, model selection, and best practices
 argument-hint: <agent name and purpose>
-model: sonnet
+model: opus
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md
@@ -38,6 +38,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal
 /create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read
 /create-agent "test-automator" --purpose "Automated test generation" --stage QA --template comprehensive
+/create-agent "release-notary" --purpose "Notarization and stapling for macOS builds" --output agents/platform/release-notary.md
 ```
 
 ## Templates
@@ -52,7 +53,9 @@ Create new agent definitions with proper structure, model selection, and best pr
 | Worktask + state-ledger integration | — | ✅ | ✅ |
 | Response approach | basic | ✅ | numbered steps |
 | Related agents/commands | — | ✅ | ✅ + integration points |
-| Example interactions, anti-patterns | — | — | ✅ |
+| Rationalizations + Red Flags — STOP | ✅ | ✅ | ✅ |
+| Example Interactions | 5 bullets | 5-8 bullets | 5-8 bullets |
+| Anti-patterns | — | — | ✅ |
 | Completion Verification | — | — | optional (see § Completion Verification) |
 | Handoff Protocol + State Patch | — | stage owners only | stage owners only |
 
@@ -116,10 +119,18 @@ Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` betw
 | Section | Rule |
 |---|---|
 | `description` | Include "Use PROACTIVELY for..." to improve routing — e.g. "Database specialist for schema design. Use PROACTIVELY for query optimization or migration planning." |
-| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents). |
 | Purpose | Role, domain and boundaries, integration context. |
 | Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
+
+#### Slots that carry their own shape
+
+Naming either slot without its shape reproduces the gap one level down; both are REQUIRED.
+
+| Section | Rule |
+|---|---|
+| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), then two sub-sections that make them falsifiable: `### Rationalizations`, an `Excuse | Reality` table of 3-5 rows whose Excuse is a shortcut *this* agent takes mid-run and whose Reality is the rule overriding it; and `### Red Flags — STOP`, 3-5 observable behaviours closing on a bold `**All of these mean: …**` verdict. Both: `agents/qa-engineer.md § Constraints (DO NOT)`. |
+| Example Interactions | 5-8 bullets, each a verbatim user phrasing that should route to this agent — never a description of its job. Placement: last section, or immediately before `## Worktask Integration` for a stage owner, since § Handoff Protocol stays last. |
 
 ### Completion Verification (optional)
 

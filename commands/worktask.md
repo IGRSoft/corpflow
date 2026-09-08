@@ -4,7 +4,14 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
+related:
+  - skills/worktask/SKILL.md
+  - commands/megatask.md
+  - skills/megatask/SKILL.md
+  - skills/shared/stage-codes.md
+  - skills/agent-coordination/references/headless-dispatch.md
+  - agents/workflow-engineer.md
 ---
 
 > **EXECUTION MODEL (BINDING)** — every worktask is worktree-isolated, so the PR is the review
@@ -90,8 +97,13 @@ carrier on PL0.
 ## Examples
 
 ```bash
-/worktask "Add dark mode support"        # Standard mode (compose with --priority, --secure)
-/worktask --emergency "Production login failing"   # Emergency (incident pipeline)
+/worktask "Add dark mode support"                      # standard pipeline
+/worktask "Rotate the API token store" --secure        # 11-stage; --full is the same flag
+/worktask "Fix flaky sync test" --priority High --platform apple
+/worktask "Ship the referral banner" --ethics-review --sequential
+/worktask "Bump the SDK" --no-gh-issue --auto=[plan,finalization]
+/worktask --emergency "Production login failing"       # IR→DV→DR→QA→RE→FN
+/worktask --resume DV1 --cascade                       # replay DV1 and its dependents
 # Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
 ```
 
@@ -1209,6 +1221,23 @@ builds the flag string. The copy-paste one-liner (task `task.json` metadata + re
 the `sonnet`-alias / `--permission-mode manual`↔`default` equivalence, the mandatory
 `external_dispatch` audit line, and the CI-only `--dangerously-skip-permissions` caveat live in
 `skills/agent-coordination/references/headless-dispatch.md`.
+
+## Output Format
+
+One block per stage as it settles, then the run summary:
+
+~~~markdown
+# Worktask: <title> · <worktask_id> · <standard|secure|emergency>
+
+## Stage — <CODE><N> · agent · model/effort · verdict (ok|blocked|escalate)
+## Artifact — `.context/<stage>-N.md` plus its `handoff.summary` line, verbatim
+## Ledger — the `state-patch.sh` call applied and the task ids it moved
+## Gates — plan gate and FN gate: reached, bypassed, or approved (and by whom)
+## Result — branch, PR URL, issue closed, follow-up issues filed
+~~~
+
+A blocked or escalated stage replaces `## Result` with `## Blocker — what stopped, at which stage,
+and the decision the user owes`. The ledger stays resumable either way: `/worktask --resume <ID>`.
 
 ## See Also
 

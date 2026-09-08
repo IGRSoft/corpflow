@@ -64,6 +64,19 @@ Review tasks, features, or code for alignment with Claude's constitutional princ
 | --include-benefits | bool | true | Include benefits in the cost-benefit analysis |
 | --mitigation | bool | true | Include mitigation recommendations |
 
+## Examples
+
+```
+/ethics-review --depth quick                                                  # current task
+/ethics-review "user authentication system" --scope feature --depth comprehensive
+/ethics-review src/payment.ts --scope code --focus safety --output checklist
+/ethics-review "recommendation algorithm" --focus harm --depth comprehensive  # scoped standard pass
+/ethics-review "AI-powered content recommendation" --lens harm
+/ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false
+/ethics-review "data collection expansion" --lens harm --output matrix --stakeholders all
+/ethics-review "targeted advertising" --lens harm --include-benefits false
+```
+
 ## Output (`--lens full`)
 
 ### Summary Format (default)
@@ -183,19 +196,6 @@ Very Likely (> 70%) │        │        │        │
 - **Detection**: monitoring systems, anomaly detection, user reporting, audit logging.
 - **Response**: graceful degradation, incident response plans, user notification, rollback capabilities.
 - **Recovery**: data restoration, user support, compensation mechanisms, learning processes.
-
-## Examples
-
-```
-/ethics-review --depth quick                                                  # current task
-/ethics-review "user authentication system" --scope feature --depth comprehensive
-/ethics-review src/payment.ts --scope code --focus safety --output checklist
-/ethics-review "recommendation algorithm" --focus harm --depth comprehensive  # scoped standard pass
-/ethics-review "AI-powered content recommendation" --lens harm
-/ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false
-/ethics-review "data collection expansion" --lens harm --output matrix --stakeholders all
-/ethics-review "targeted advertising" --lens harm --include-benefits false
-```
 
 ## Severity Levels
 

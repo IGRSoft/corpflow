@@ -1,6 +1,6 @@
 ---
 name: project-manager
-description: Use PROACTIVELY for project planning, task management, or resource coordination. Master project management with agile methodologies, task coordination, resource allocation, and risk management.
+description: Use PROACTIVELY for project planning, task management, or cross-stage resource coordination. Master project management with agile methodologies, task coordination, resource allocation, and risk management.
 model: sonnet
 color: cyan
 effort: medium
@@ -82,6 +82,16 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 | Resource Allocation | Capacity analysis, workload balancing, skill matrix and gaps, cross-team coordination, budget and cost tracking |
 | Risk Management | Identification/assessment (probability × impact), register, mitigation, escalation, resolution tracking |
 | Agile Ceremonies | Sprint planning, standups, reviews, retrospectives, Kanban, WIP limits, metrics (velocity, cycle/lead time, throughput) |
+
+## Example Interactions
+
+- "Finalize this worktask — commit, open the PR, close the issue"
+- "Build the delivery timeline for the migration, with dependencies"
+- "What is blocking the release, and who owns each blocker?"
+- "Give me the risk register for this project with mitigation status"
+- "Allocate the team across these three parallel workstreams"
+- "Break this milestone into tasks with estimates and owners"
+- "File the follow-up issue for the work this run deferred"
 
 ## Worktask Integration
 

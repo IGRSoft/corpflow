@@ -3,7 +3,7 @@ name: request-plan
 description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it
 argument-hint: '<request> [--save]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Write, Task, Bash(skills/request-plan/scripts/capability-registry.sh)
+allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash skills/request-plan/scripts/capability-registry.sh:*)
 related:
   - skills/request-plan/SKILL.md
   - skills/estimation-methodology/SKILL.md
@@ -29,6 +29,21 @@ Thin entry point to the **`request-plan` skill**, which holds the full workflow 
 
 - `--save` — persist the plan to `.context/request-plan-0.md` (naming per
   `skills/task-folder-organization/SKILL.md`). Default is inline output only.
+
+## Examples
+
+```
+/request-plan "we keep getting duplicate push notifications, help me plan a fix"
+/request-plan --save "add CSV export to the estimates feature"
+/request-plan "split the 4k-line sync manager into testable units"
+/request-plan --save "migrate the app from UIKit to SwiftUI"
+```
+
+- Line 1 — a bug with no known cause: context gathering reads the failing area before scoping.
+- Line 2 — `--save` writes `.context/request-plan-0.md` as well as printing the plan.
+- Line 3 — a refactor: no new behaviour, so Scope carries the seams and Risks the regression surface.
+- Line 4 — XL work: the plan names 2-3 sub-tasks per `references/handoff.md` and still emits one
+  ready-to-paste `/worktask` line, for the first of them.
 
 ## Workflow
 

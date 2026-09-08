@@ -2,7 +2,10 @@
 name: docs-audit
 description: Audit documentation for gaps, outdated content, and quality issues
 argument-hint: '[--path dir] [--scope full|section]'
-allowed-tools: Read, Glob, Grep
+# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
+# the only file this command creates is `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`.
+# Edit exists solely for `--fix`, bounded to the rows under `## Auto-Fix Available`.
+allowed-tools: Read, Glob, Grep, Write, Edit
 model: haiku
 related:
   - agents/technical-writer.md
@@ -26,8 +29,8 @@ Audit documentation for gaps, outdated content, and quality issues.
 | `--path <dir>` | any directory | Audit that subtree only (default: repo root) |
 | `--type <type>` | `code`, `readme`, `api`, `architecture` | Restrict to one doc type (default: all four) |
 | `--scope <scope>` | `full`, `section` | Whole-file audit vs. the addressed section only (default: `full`) |
-| `--fix` | — | Apply the mechanical fixes listed under Auto-Fix Available |
-| `--report` | — | Emit every report section; without it, emit Summary + Critical Issues only |
+| `--fix` | — | Apply the mechanical fixes listed under Auto-Fix Available, in place, to files this run already read |
+| `--report` | — | Emit every report section and write it to `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`, the only file this command creates; without it, emit Summary + Critical Issues only |
 
 ## Examples
 

@@ -85,6 +85,16 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 | **Decisions** | Implementation | Resource allocation | System architecture |
 | **Risk** | Implementation | Team/schedule | Architectural |
 
+## Example Interactions
+
+- "Review the DV diff and give me a verdict with blocking findings only"
+- "Is this dependency upgrade safe to take?"
+- "Rank the tech debt in this module and say what to pay down first"
+- "Evaluate GRDB against Core Data for our persistence layer"
+- "Tests pass but the design looks wrong — do a deep review"
+- "Which of these review findings actually block the merge?"
+- "Assess the technical risk of shipping this refactor this week"
+
 ## Worktask Integration
 
 Stage owner **DR** (Developer Review, 5/11); support agent **TC** (Technical Review, on-demand). Pipeline context: `skills/shared/worktask-stage-context.md`.
