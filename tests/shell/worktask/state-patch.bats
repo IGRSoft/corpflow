@@ -1925,6 +1925,30 @@ ARTEOF
   assert_failure
 }
 
+@test "sweep warning: an id the clamp evicted to the spill is recorded, not lost — no warning" {
+  cd "$WD"
+  # The record is ledger ∪ spill, the same union check_sweep_ledger and the FN gate read.
+  cat > .context/development-0.md << 'ARTEOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "artifact declares an id that lives only in the eviction spill"
+  open_questions:
+    - { id: sw-DV0-9, class: decision, ref: "development-0.md#elicitation-sweep", blocks_next_stage: false }
+  refs: { dev: development.md#files-changed }
+---
+ARTEOF
+  printf '%s\n' '{"id":"sw-DV0-9","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false,"spilled_at":"2026-09-08T00:00:00Z","spilled_from_stage":"DV"}' \
+    > .context/open-questions-0.jsonl
+  run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
+    --stage DV --prev TL --artifact .context/development-0.md
+  assert_success
+  printf '%s' "$stderr" > stderr.cap
+  run grep -F 'the ledger does not hold' stderr.cap
+  assert_failure
+}
+
 @test "facts: a rejection is named on stdout as well as stderr, remainder still persists" {
   cd "$WD"
   # An agent branching on the exit code alone, or whose harness swallows stderr, used to ship

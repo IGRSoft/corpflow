@@ -1024,22 +1024,36 @@ atomic_merge() {
 # The id shape is schema-pinned, so a grep over the frontmatter slice is enough and this
 # script gains no yq dependency.
 #
+# Compared against ledger ∪ spill, the union check_sweep_ledger and the FN gate read: an id
+# the clamp evicted to `open-questions-<run_index>.jsonl` is recorded, not lost. A missing
+# or unreadable spill contributes the empty set.
+#
 # _warn_unledgered_sweep_ids <artifact> <state>
 _warn_unledgered_sweep_ids() {
   local artifact="$1" state="$2"
   [[ -f "$artifact" && -f "$state" ]] || return 0
   command -v jq > /dev/null 2>&1 || return 0
 
-  local declared missing
+  local declared missing spill_dir run_idx spill_path spilled_ids
   declared=$(awk 'NR == 1 && $0 !~ /^---[[:space:]]*$/ { exit }
                   NR > 1 && /^---[[:space:]]*$/ { exit }
                   NR > 1 { print }' "$artifact" 2> /dev/null \
     | grep -oE 'sw-[A-Za-z]+[0-9]*-[0-9]+' | sort -u || true)
   [[ -n "$declared" ]] || return 0
 
-  missing=$(printf '%s\n' "$declared" | jq -Rsr --slurpfile st "$state" '
+  run_idx=$(jq -r '.run_index // 0' "$state" 2> /dev/null || printf '0')
+  spill_dir="${state%/*}"
+  [[ "$spill_dir" == "$state" ]] && spill_dir="."
+  spill_path="${spill_dir}/open-questions-${run_idx}.jsonl"
+  spilled_ids="[]"
+  if [[ -f "$spill_path" && ! -L "$spill_path" ]]; then
+    spilled_ids=$(jq -c -s 'map(.id? // empty)' "$spill_path" 2> /dev/null || printf '[]')
+  fi
+
+  missing=$(printf '%s\n' "$declared" \
+    | jq -Rsr --slurpfile st "$state" --argjson spilled "$spilled_ids" '
       (split("\n") | map(select(length > 0))) as $want
-      | ((($st[0].facts.open_questions) // []) | map(.id)) as $have
+      | (((($st[0].facts.open_questions) // []) | map(.id)) + $spilled) as $have
       | ($want - $have) | join(", ")' 2> /dev/null || printf '')
   [[ -n "$missing" ]] || return 0
   log_msg WARN "sweep ids declared by ${artifact} are absent from the ledger: ${missing}"

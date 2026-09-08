@@ -23,8 +23,13 @@ tallies were taken mid-flight over a tree other streams were still editing and a
 
 - **F-18a** — `dedupe_invocation`'s default arm now folds `tool_input` into the dedupe key, not just
   the tool name, closing the credential-in-arguments exposure (security finding T6).
-- **F-18b** — test-execution promotion is evidence-gated; a phantom stop is suppressed and counted
-  rather than silently promoted.
+- **F-18b** — test-execution promotion is evidence-gated: `test-execution-promote.sh` derives one
+  evidence token per run and a run whose evidence cannot be named is discarded, never promoted.
+- **Phantom SubagentStop rows** — `audit-subagent.sh` suppresses and counts the ~31s-cadence
+  repeats a dispatch fires, reporting them as one `subagent_stops_suppressed` row per window.
+  The discriminator is a repeated `dedupe_key` within the trail: every stop the runtime delivers
+  arrives with no stage and duration 0, so a predicate on those fields matched every genuine
+  stop and emptied the trail — caught in review before release.
 - **F-18c** — denial messages now name the evidence they were rejected against, rather than a bare
   refusal.
 - **F-07a/b** — `state-patch.sh` rejects `--facts` per item; the valid remainder persists and exit 2

@@ -24,9 +24,8 @@ setup() {
 }
 
 @test "edge: non-numeric duration_ms coerces to 0; absent ids fall back" {
-  # The stage is supplied so the row survives the phantom predicate, which needs
-  # BOTH an unresolved stage and a zero duration: the coercion under test is what
-  # produces the zero half, and this case is about the coercion.
+  # A first-seen key records whatever its fields say; the stage is supplied only
+  # so the row also exercises the env half of the identity ladder.
   run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_TASK_METADATA_STAGE=DV \
     bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"corpflow:y","duration_ms":"oops"}'
   assert_success
@@ -50,8 +49,6 @@ setup() {
 @test "edge: empty agent_type falls back to CLAUDE_SUBAGENT_TYPE, qualifier intact" {
   # The runtime sends "" (not null) for plugin agents, so `// "unknown"` alone
   # left the row anonymous and the report could not name who ran.
-  # A real duration keeps this out of the phantom predicate: identity resolution
-  # is what the case is about, not whether the stop was a stage event.
   run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_SUBAGENT_TYPE="apple-developer:ios-developer" \
     bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"","agent_id":"a1","session_id":"s1","duration_ms":7}'
   assert_success
@@ -94,9 +91,11 @@ setup() {
 
 # --- phantom-row suppression, and the count that keeps it honest -------------
 # The runtime fires SubagentStop on a ~31s cadence for the whole life of a
-# dispatch: one real agent produced 21 rows, all stage-unresolved and duration 0.
-# Suppressing them is only safe if the suppression itself is recorded, because a
-# predicate one shade too broad would otherwise hide real events undetectably.
+# dispatch: one real agent produced 21 rows. Every row the runtime delivers,
+# phantom or terminal, carries no stage and duration 0 — so the discriminator is
+# a REPEATED dedupe_key, and a first-seen key always records whatever its fields
+# say. Suppressing repeats is only safe if the suppression itself is recorded,
+# because a predicate one shade too broad would hide real events undetectably.
 
 stop() {
   # stop <json payload> — one SubagentStop firing with no identity in the
@@ -105,43 +104,66 @@ stop() {
     CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$1"
 }
 
-rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/logs/audit.jsonl" 2>/dev/null | wc -l | tr -d ' '; }
-
-@test "AC-3a: an unresolved stage AND zero duration writes no subagent_stopped row" {
-  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
-  assert_success
-  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+# ghost <session> <n> — n phantom firings of one agent whose first stop has
+# already been recorded: every one is a repeat of a key the trail holds.
+ghost() {
+  local i
+  for i in $(seq 1 "$2"); do
+    stop "$(jq -cn --arg s "$1" '{agent_id:"ghost", session_id:$s, duration_ms:0}')"
+    assert_success
+  done
 }
 
-@test "AC-3a: EITHER field populated still records the row, unchanged" {
-  # The conjunction is what keeps the predicate narrow. A stop carrying a stage
-  # is a stage event however short it was; a stop carrying real time is a real
-  # agent however anonymous.
-  stop '{"agent_id":"a1","session_id":"s1","duration_ms":900}'
+rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/logs/audit.jsonl" 2>/dev/null | wc -l | tr -d ' '; }
+
+@test "AC-3a: a repeated dedupe_key writes no second subagent_stopped row" {
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  assert_success
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
   assert_success
   [ "$(rows_of subagent_stopped)" = "1" ]
+}
 
-  run env -u CLAUDE_SUBAGENT_TYPE CLAUDE_TASK_METADATA_STAGE=DV CLAUDE_PROJECT_DIR="$WD" \
-    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_id":"a2","session_id":"s1","duration_ms":0}'
+@test "AC-3a: a FIRST-seen key with no stage and zero duration still records" {
+  # The shape every real terminal stop arrives in. A predicate on those two
+  # fields would suppress every genuine stop of every agent and empty the trail.
+  stop '{"agent_type":"Explore","agent_id":"a1","session_id":"s1","duration_ms":0}'
+  assert_success
+  stop '{"agent_type":"corpflow:qa-engineer","agent_id":"a2","session_id":"s1","duration_ms":0}'
   assert_success
   [ "$(rows_of subagent_stopped)" = "2" ]
-  run jq -se 'last | .metadata.stage == "DV" and .metadata.duration_ms == 0' \
+  [ "$(rows_of subagent_stops_suppressed)" = "0" ]
+  run jq -se 'map(.metadata.stage == "unknown" and .metadata.duration_ms == 0) | all' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
+}
+
+@test "AC-3a: the same agent_id in ANOTHER session is a different key and records" {
+  stop '{"agent_id":"a1","session_id":"sA","duration_ms":0}'
+  stop '{"agent_id":"a1","session_id":"sB","duration_ms":0}'
+  assert_success
+  [ "$(rows_of subagent_stopped)" = "2" ]
+}
+
+@test "AC-3a: the match is on the encoded key fragment, not a substring of another key" {
+  # `s1:a1:stop` must not be read as already-seen because `xs1:a1:stop` is.
+  stop '{"agent_id":"a1","session_id":"xs1","duration_ms":0}'
+  stop '{"agent_id":"a1","session_id":"s1","duration_ms":0}'
+  assert_success
+  [ "$(rows_of subagent_stopped)" = "2" ]
 }
 
 @test "AC-3b: n suppressions then a flush emit exactly one summary row counting n" {
   # n is deliberately greater than one: a test asserting only that the row exists,
   # or using n of one, cannot tell a working counter from a broken one — which is
   # the failure mode this whole option was chosen to prevent.
-  local i
-  for i in 1 2 3 4 5; do
-    stop "$(jq -cn --arg i "$i" '{agent_id:("ghost"+$i), session_id:"s1", duration_ms:0}')"
-    assert_success
-  done
-  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  assert_success
+  ghost s1 5
+  [ "$(rows_of subagent_stopped)" = "1" ]
+  [ "$(rows_of subagent_stops_suppressed)" = "0" ]
 
-  # A genuine stop for the same session is the flush trigger.
+  # A first-seen stop for the same session is the flush trigger.
   stop '{"agent_id":"real","session_id":"s1","duration_ms":1200}'
   assert_success
   [ "$(rows_of subagent_stops_suppressed)" = "1" ]
@@ -164,8 +186,8 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
 }
 
 @test "AC-3b: the flush resets the window — a second flush does not re-report it" {
-  stop '{"agent_id":"g1","session_id":"s1","duration_ms":0}'
-  stop '{"agent_id":"g2","session_id":"s1","duration_ms":0}'
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  ghost s1 2
   stop '{"agent_id":"real","session_id":"s1","duration_ms":1200}'
   stop '{"agent_id":"real2","session_id":"s1","duration_ms":1200}'
   assert_success
@@ -180,11 +202,13 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   # concurrently. A read-increment-write on a shared counter under-counts here,
   # silently — reproducing this finding's own defect class inside its fix. One
   # token appended per suppression cannot.
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  assert_success
   local i pids=()
   for i in $(seq 1 20); do
     env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
       bash "$PLUGIN_ROOT/$SCRIPT" \
-      <<< "{\"agent_id\":\"g$i\",\"session_id\":\"s1\",\"duration_ms\":0}" &
+      <<< '{"agent_id":"ghost","session_id":"s1","duration_ms":0}' &
     pids+=($!)
   done
   for i in "${pids[@]}"; do wait "$i"; done
@@ -197,9 +221,10 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
 }
 
 @test "AC-3b: windows are per session — one session's flush leaves another's pending" {
-  stop '{"agent_id":"g1","session_id":"sA","duration_ms":0}'
-  stop '{"agent_id":"g2","session_id":"sA","duration_ms":0}'
-  stop '{"agent_id":"g3","session_id":"sB","duration_ms":0}'
+  stop '{"agent_id":"ghost","session_id":"sA","duration_ms":0}'
+  ghost sA 2
+  stop '{"agent_id":"ghost","session_id":"sB","duration_ms":0}'
+  ghost sB 1
   stop '{"agent_id":"real","session_id":"sA","duration_ms":1200}'
   assert_success
   run jq -se 'map(select(.action == "subagent_stops_suppressed"))
@@ -217,7 +242,8 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   grep -q 'corpflow_hook_audit_row' "$PLUGIN_ROOT/$SCRIPT"
   [ "$(grep -c '>> "\$LOG_DIR/audit.jsonl"' "$PLUGIN_ROOT/$SCRIPT")" = "1" ]
 
-  stop '{"agent_id":"g1","session_id":"s1","duration_ms":0}'
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  ghost s1 1
   stop '{"agent_id":"real","session_id":"s1","duration_ms":1200}'
   run jq -se 'map(select(.action == "subagent_stops_suppressed")) | last
     | .actor == "hook:audit-subagent" and (has("subject"))
@@ -232,13 +258,18 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   local fake="$WD/hooks"
   mkdir -p "$fake"
   cp "$PLUGIN_ROOT/$SCRIPT" "$fake/"
-  run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
-    bash "$fake/audit-subagent.sh" <<< '{"agent_id":"g1","session_id":"s1","duration_ms":0}'
-  assert_success
+  local i
+  for i in 1 2; do
+    run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
+      bash "$fake/audit-subagent.sh" <<< '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+    assert_success
+  done
   run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
     bash "$fake/audit-subagent.sh" <<< '{"agent_id":"real","session_id":"s1","duration_ms":1200}'
   assert_success
-  [ "$(rows_of subagent_stopped)" = "1" ]
+  [ "$(rows_of subagent_stopped)" = "2" ]
+  [ "$(rows_of subagent_stops_suppressed)" = "0" ]
+  [ "$(wc -l < "$WD/.context/logs/.subagent-suppressed.s1" | tr -d ' ')" = "1" ]
 }
 
 # --- SR-1 / SR-2: the window file is store-shaped, so it is guarded like one ---
@@ -250,8 +281,8 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   printf 'untouched\n' > "$WD/target-dir/victim.txt"
   ln -s "$WD/target-dir/victim.txt" "$WD/.context/logs/.subagent-suppressed.s1"
 
-  stop '{"agent_id":"g1","session_id":"s1","duration_ms":0}'
-  assert_success
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  ghost s1 1
   [ "$(cat "$WD/target-dir/victim.txt")" = "untouched" ]
 }
 
@@ -283,9 +314,10 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   mkdir -p "$fake"
   cp "$PLUGIN_ROOT/$SCRIPT" "$fake/"
   local i
-  for i in 1 2 3 4; do
+  # The first firing records; the four that follow are repeats of its key.
+  for i in 0 1 2 3 4; do
     run env -u CLAUDE_SUBAGENT_TYPE -u CLAUDE_TASK_METADATA_STAGE CLAUDE_PROJECT_DIR="$WD" \
-      bash "$fake/audit-subagent.sh" <<< "{\"agent_id\":\"g$i\",\"session_id\":\"s1\",\"duration_ms\":0}"
+      bash "$fake/audit-subagent.sh" <<< '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
     assert_success
   done
   # A genuine stop under the degraded library: the row it cannot write is not a
@@ -311,8 +343,10 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   # its reachable refusals are anticipated before the claim rather than detected
   # after it. This is the second of the two, and the one no library probe sees.
   mkdir -p "$WD/.context/logs" "$WD/target-dir"
-  stop '{"agent_id":"g1","session_id":"s1","duration_ms":0}'
-  stop '{"agent_id":"g2","session_id":"s1","duration_ms":0}'
+  stop '{"agent_id":"ghost","session_id":"s1","duration_ms":0}'
+  ghost s1 2
+  # The swap happens after the seen-set was consulted; the trail is now a link.
+  mv "$WD/.context/logs/audit.jsonl" "$WD/.context/logs/audit.real"
   ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
 
   stop '{"agent_id":"real","session_id":"s1","duration_ms":1200}'
@@ -331,6 +365,9 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
   # A CURRENT epoch, or the window expires on the first suppression and flushes
   # before the cap is ever exercised.
   now="$(date -u +%s)"
+  # Seeded AFTER the key's first stop, or that stop would flush the window itself.
+  stop '{"agent_id":"over","session_id":"s1","duration_ms":0}'
+  assert_success
   for i in $(seq 1 1000); do printf '%s 2026-09-08T00:00:00Z\n' "$now"; done > "$pending"
 
   stop '{"agent_id":"over","session_id":"s1","duration_ms":0}'

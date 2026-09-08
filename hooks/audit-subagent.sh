@@ -10,10 +10,15 @@
 # which rejects "" as well as null.
 #
 # Phantom rows: the runtime fires this event on a ~31s cadence for the whole life
-# of a dispatch, so one real agent produced 21 rows, all with no resolvable stage
-# and duration 0. Those are suppressed (see SUPPRESS below) and COUNTED, because
-# a suppression that leaves no trace narrows the audit trail invisibly, which is
-# the failure class this hook exists to record rather than create.
+# of a dispatch, so one real agent produced 21 rows. Those are suppressed (see
+# SUPPRESS below) and COUNTED, because a suppression that leaves no trace narrows
+# the audit trail invisibly, which is the failure class this hook exists to
+# record rather than create.
+#
+# The discriminator is a repeated dedupe_key, never the row's fields: every stop
+# the runtime delivers, phantom or terminal, arrives with no stage and duration 0,
+# so those fields cannot tell them apart. A phantom is a key the trail already
+# holds — the duplicate the dedupe_key is declared for.
 set -eu
 
 # The shared appender, sourced under the guarded idiom. `[ -f ]` alone does not
@@ -205,13 +210,19 @@ fi
 SESSION=$(printf '%s' "$PAYLOAD" | jq -r '.session_id // "nosession"' 2> /dev/null) || SESSION="nosession"
 [ -n "$SESSION" ] || SESSION="nosession"
 
-# The predicate, evaluated against the RESOLVED row rather than the raw payload,
-# so the identity ladder's env fallbacks count as a resolved stage. Either field
-# populated still records, unchanged: a stop carrying neither is not a stage
-# event, and that conjunction is what keeps the predicate from hiding real ones.
+# The trail itself is the seen-set, so there is no second store to race or drift.
+# The fragment is JSON-encoded the way jq -c wrote it into the row, making the
+# fixed-string match byte-exact; a symlinked trail reads as empty because the
+# append below refuses it anyway.
+#
+# Residual: the surviving row is the FIRST firing, so its `ts` is the cadence
+# tick after launch; the summary row's window_end marks a dispatch's last event.
 SUPPRESS=0
-printf '%s' "$ROW" | jq -e '.metadata.stage == "unknown" and .metadata.duration_ms == 0' \
-  > /dev/null 2>&1 && SUPPRESS=1
+DEDUPE_FRAG="\"dedupe_key\":$(printf '%s' "$ROW" | jq -r '.metadata.dedupe_key' | jq -R .)"
+if [ -f "$LOG_DIR/audit.jsonl" ] && [ ! -L "$LOG_DIR/audit.jsonl" ] \
+  && grep -qF -- "$DEDUPE_FRAG" "$LOG_DIR/audit.jsonl" 2> /dev/null; then
+  SUPPRESS=1
+fi
 
 PENDING="$(pending_file "$SESSION")"
 
@@ -222,7 +233,10 @@ if [ "$SUPPRESS" -eq 1 ]; then
   # someone else's file is not.
   [ ! -L "$PENDING" ] || exit 0
   FIRST_EPOCH=$(head -n 1 "$PENDING" 2> /dev/null | cut -d' ' -f1) || FIRST_EPOCH=""
-  PENDING_LINES=$(wc -l < "$PENDING" 2> /dev/null | tr -d ' ') || PENDING_LINES=0
+  # `wc -l <` on an absent file is a SHELL redirect error that no `2>` on wc can
+  # silence, so the first suppression of every window would print to stderr.
+  PENDING_LINES=0
+  [ ! -f "$PENDING" ] || PENDING_LINES=$(wc -l < "$PENDING" 2> /dev/null | tr -d ' ') || PENDING_LINES=0
   case "$PENDING_LINES" in '' | *[!0-9]*) PENDING_LINES=0 ;; esac
   if [ "$PENDING_LINES" -lt "$SUPPRESS_PENDING_MAX" ]; then
     # Epoch first, ISO second: the window arithmetic needs no portable date parser,

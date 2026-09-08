@@ -45,7 +45,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
   contracts/commands/schema), plus gh#316. **Breaking, no migration, decided in-run
   (sw-PL0-3, option A — new runs only):** `handoffs` re-keyed `<PREV_CODE>→<TASK_ID>` (a
   fan-out now writes one edge per task instead of collapsing to one); `facts.decisions`/
-  `facts.open_questions` clamps repartitioned per stage (8/4), retiring the global rings of
+  `facts.open_questions` clamps repartitioned per task id (8/4), retiring the global rings of
   8/12. First authority-clean full-suite run of the sequence: 1855 bats green, exit 0, 423
   `@test` cases added over `develop`. Beyond-brief, disclosed rather than fixed: `run-tests.sh`
   has five widening paths to the full suite and only the weakest is guarded — deferred to its
