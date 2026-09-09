@@ -93,7 +93,13 @@ evidence_bundle_basename() {
 # the cited run's evidence was:
 #
 #   bundle:<name>   the BASENAME of a results artifact that exists on this host
-#   tests:<n>       a count read off the runner's summary line
+#   tests:<n>       a count read off the runner's summary line, alongside outcome
+#                   vocabulary proving the cases actually ran
+#   discovered:<n>  a count with NO outcome vocabulary anywhere — an enumeration,
+#                   not an execution. Deliberately a distinct token shape: the
+#                   suppression gate must be able to tell it from a result, and a
+#                   `tests:` that meant either was indistinguishable to every
+#                   reader downstream
 #   output:<n>B     a response was present but said nothing interpretable
 #   errtext:<n>B    the PostToolUseFailure arm — a red suite that printed
 #
@@ -148,7 +154,17 @@ tool_evidence_token() {
          | .string] as $bundles
       | ([$all | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"; "g")
           | .captures[0].string] | first) as $count
-      | (if $count != null then "tests:" + $count
+      # A count alone does not say the cases RAN. `Executing 49 tests` is a
+      # discovery banner, and a scheme with an empty test plan prints it and
+      # exits having executed nothing — which is how one run recorded `tests:49`
+      # for zero executed tests and then suppressed every later attempt to run
+      # them. Outcome vocabulary is the discriminator: a summary that reports a
+      # result says one of these words somewhere. `executed` is in the list and
+      # `executing` deliberately is not.
+      | ($all | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))
+        as $ran
+      | (if $count != null and $ran then "tests:" + $count
+         elif $count != null then "discovered:" + $count
          elif ($rtext | length) > 0 then "output:" + (($rtext | length) | tostring) + "B"
          elif ($errtext | length) > 0 then "errtext:" + (($errtext | length) | tostring) + "B"
          else null end) as $fb

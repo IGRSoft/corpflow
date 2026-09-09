@@ -1,6 +1,7 @@
 ---
 handoff:
   stage: DV
+  tests_executed: 12
   verdict: ok
   summary: "DV0a fixture development artifact"
   files_touched: [tests/shell/worktask/state-patch.bats]

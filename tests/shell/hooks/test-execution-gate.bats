@@ -1212,10 +1212,15 @@ promote() {
   assert_success
 }
 
-@test "D18: a STALE two-field sentinel reports its evidence as unrecorded, never mis-parsed" {
+@test "D18: a STALE two-field sentinel splits to unrecorded, and unrecorded no longer suppresses" {
   # Markers written before the evidence token joined the grammar exist in the
   # wild. The explicit three-field split degrades them loudly; the `%% */#* `
   # pair the old denial used would have quoted the timestamp as a result.
+  #
+  # It no longer DENIES: the denial prose has always told the caller to treat
+  # `unrecorded` as no evidence at all, so suppressing against it refused the one
+  # run that could still produce some. The split is still what is under test —
+  # asserted now on the audit row, which is where an allowed run records it.
   git_ctx QA
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
@@ -1228,8 +1233,114 @@ promote() {
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
   assert_success
-  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("evidence: unrecorded")'
-  echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason | test("at 2026-09-07T17:30:49Z")'
+  [ -z "$output" ] || fail "a zero-evidence prior must not deny: $output"
+  run jq -e 'select(.action == "test_dedupe_skipped_zero_prior")
+             | .metadata.prior_evidence == "unrecorded"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D18a: a tests:0 prior does not suppress the next run (F-01)" {
+  # The P0 in one line: a scheme with an empty test plan enumerated 49 cases,
+  # executed none, and its sentinel then refused every later attempt to run them.
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  local sentinel
+  sentinel="$(find "$WD/.context/logs/.test-runs" -type f ! -name '*.pending' | head -1)"
+  printf 'QA 2026-09-07T17:30:49Z tests:0\n' > "$sentinel"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ] || fail "tests:0 is not a result to reproduce: $output"
+  run jq -e 'select(.action == "test_dedupe_skipped_zero_prior")
+             | .metadata.prior_evidence == "tests:0"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "D18b: a discovered: prior does not suppress, but a real count still does" {
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  local sentinel
+  sentinel="$(find "$WD/.context/logs/.test-runs" -type f ! -name '*.pending' | head -1)"
+
+  printf 'QA 2026-09-07T17:30:49Z discovered:49\n' > "$sentinel"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ] || fail "an enumeration is not an execution: $output"
+
+  # The control: the same tree, the same invocation, one executed test — denies.
+  printf 'QA 2026-09-07T17:30:49Z tests:1\n' > "$sentinel"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "A3-1: a dedupe denial names the authority holder and the test mode (F-02)" {
+  # Four stages escalated in one run naming a remedy that would have been refused
+  # again by the arm nobody told them about. The gate knows all three of its own
+  # arms at deny time; before this it volunteered one.
+  git_ctx QA
+  printf '{"run_index":0,"metadata":{"test_mode":"full"},"tasks":{"QA0":{"status":"in_progress"}}}' \
+    > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"already ran during run_index"* ]] || fail "not the dedupe arm: $reason"
+  [[ "$reason" == *"test-execution authority (held by stage 'QA')"* ]] \
+    || fail "authority holder unnamed: $reason"
+  [[ "$reason" == *"resolved test mode 'full'"* ]] || fail "test mode unnamed: $reason"
+  # One line, like every other denial the caller reads.
+  [ "$(printf '%s' "$reason" | wc -l | tr -d ' ')" = "0" ] || fail "reason is multi-line"
+}
+
+@test "A3-2: a dedupe denial with NO stage in_progress still names both controls" {
+  # The exact shape the run hit: authority survives a settled ledger through an
+  # unresolved no-go, so dedupe can fire with nothing in_progress.
+  git_ctx QA
+  printf '{"run_index":0,"metadata":{"test_mode":"scoped"},"tasks":{"QA0":{"status":"completed","verdict":"no-go"}}}' \
+    > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"test-execution authority (held by stage 'QA')"* ]] \
+    || fail "authority holder unnamed: $reason"
+  [[ "$reason" == *"resolved test mode 'scoped'"* ]] || fail "test mode unnamed: $reason"
+}
+
+@test "A3-3: an authority denial names suppression, and never repeats the mode" {
+  state_with DR
+  local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
+  assert_success
+  local reason
+  reason="$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')"
+  [[ "$reason" == *"redundant-run suppression (on)"* ]] || fail "suppression unnamed: $reason"
+  # The authority clause already quotes the mode inline; the trailing list must
+  # not say it a second time.
+  [ "$(printf '%s' "$reason" | grep -o "resolved test mode" | wc -l | tr -d ' ')" = "1" ] \
+    || fail "test mode named twice: $reason"
 }
 
 @test "D19: two MCP test calls differing only in SELECTION do not collide (F-18a end to end)" {

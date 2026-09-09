@@ -277,6 +277,26 @@ PATCH_ARGS+=(--log "$LOG")
 # so the two layers are distinguishable in state.json. (Additive; absence = Layer 1.)
 PATCH_ARGS+=(--via "${STATE_MERGE_VIA:-hook}")
 
+# With neither variable set, state-patch.sh resolves no artifact and no-ops: one
+# WARN into a log nobody reads, exit 0. One run produced 335 of them and every
+# sweep over audit.jsonl reported that boundary clean, because the condition left
+# no row anywhere. Record it — once per run, the same sentinel shape the test gate
+# uses for its hatch notes, since the per-call volume is the point.
+#
+# Deliberately does NOT change the fail-open behaviour: a SubagentStop with no
+# stage is a normal event for a non-stage subagent, and blocking it would break
+# every dispatch this hook is not about. Visible, not fatal.
+if [ -z "${CLAUDE_TASK_METADATA_STAGE:-}" ] && [ -z "${CLAUDE_ARTIFACT_PATH:-}" ] \
+  && [ "$LIB_DEGRADED" -eq 0 ]; then
+  _NOOP_SENTINEL="$LOG_DIR/.state-merge-noop-noted"
+  if [ ! -f "$_NOOP_SENTINEL" ]; then
+    : > "$_NOOP_SENTINEL" 2> /dev/null || true
+    corpflow_hook_audit_row --ctx "$WORKSPACE_DIR/.context" \
+      --actor hook:state-merge --action state_merge_noop --result ok \
+      --meta '{"reason":"no stage and no artifact in the SubagentStop environment"}'
+  fi
+fi
+
 bash "$PATCH_SCRIPT" "${PATCH_ARGS[@]}" 2>> "$LOG" || {
   log ERROR "state-patch.sh exited non-zero (stage=${CLAUDE_TASK_METADATA_STAGE:-} art=${CLAUDE_ARTIFACT_PATH:-}); continuing"
 }

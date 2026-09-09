@@ -17,6 +17,125 @@ setup() {
   cp "$FIXTURES/worktask/development-0.sample.md" "$WD/.context/development-0.md"
 }
 
+# --- C3: a non-canonical artifact name is silently un-linted ----------------------------
+
+@test "artifact: a non-canonical --artifact name warns and still ledgers (F-16)" {
+  # hooks/anchor-preflight.sh gates its lint on the canonical name and fails OPEN on
+  # anything else, so an artifact one character off canonical is written, ledgered,
+  # harness-passed and never anchor-linted. That hid two missing required anchors in one
+  # run. Failing open is right; failing open silently is the defect.
+  cd "$WD"
+  cp .context/development-0.md .context/dev-notes.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/dev-notes.md
+  assert_success
+  [[ "$output" == *"is not the canonical name for stage DV"* ]] || fail "$output"
+  [[ "$output" == *"development-<N>.md"* ]] || fail "canonical form unnamed: $output"
+  # A warning, never a refusal: the row still lands.
+  run jq -r '.tasks.DV0.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "artifact: the canonical name is silent" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
+  assert_success
+  [[ "$output" != *"is not the canonical name"* ]] || fail "false positive: $output"
+}
+
+# --- B1/B2: the decisions ring's recovery path and its casualty reporting ---------------
+
+_write_n_decisions() {  # <count> [id-prefix]
+  local n="$1" pre="${2:-ar}" i
+  for ((i = 1; i <= n; i++)); do
+    bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json \
+      --facts "{\"decisions\":[{\"id\":\"${pre}${i}\",\"summary\":\"d${i}\",\"stage\":\"AR0\"}]}" \
+      > /dev/null 2>&1 || true
+  done
+}
+
+@test "decisions: 12 written for one task all resolve through --read-decisions (F-04)" {
+  # The ring keeps 8 per task and spills the rest. Before --read-decisions the spill had no
+  # reader, so this run lost four architecture decisions — three of them the cross-client
+  # parity controls — with nothing anywhere reporting it.
+  cd "$WD"
+  _write_n_decisions 12
+
+  run jq '.facts.decisions | length' .context/state.json
+  assert_success
+  [ "$output" = "8" ] || fail "expected the clamp to keep 8, got $output"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json --read-decisions
+  assert_success
+  local n
+  n="$(printf '%s' "$output" | jq 'length')"
+  [ "$n" = "12" ] || fail "expected all 12 to resolve, got $n"
+  printf '%s' "$output" | jq -e 'map(.id) | index("ar1") and index("ar12")' > /dev/null \
+    || fail "the union lost an end of the range: $output"
+}
+
+@test "decisions: the ledger wins on conflict with a staler spill line" {
+  cd "$WD"
+  _write_n_decisions 9
+  # ar1 is evicted by now; re-writing it restores it to the ledger with new text while the
+  # spill still holds the old snapshot.
+  bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json \
+    --facts '{"decisions":[{"id":"ar1","summary":"RESTORED","stage":"AR0"}]}' > /dev/null 2>&1
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json --read-decisions
+  assert_success
+  local got
+  got="$(printf '%s' "$output" | jq -r 'map(select(.id == "ar1")) | .[0].summary')"
+  [ "$got" = "RESTORED" ] || fail "spill won over the ledger: $got"
+  local dupes
+  dupes="$(printf '%s' "$output" | jq '[.[].id] | length - (unique | length)')"
+  [ "$dupes" = "0" ] || fail "union produced duplicate ids"
+}
+
+@test "decisions: an unparseable spill is a failure, never an empty set" {
+  cd "$WD"
+  _write_n_decisions 9
+  printf 'not json at all\n' > .context/decisions-0.jsonl
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json --read-decisions
+  assert_failure
+  [[ "$output" == *"not readable as JSON lines"* ]] || fail "$output"
+}
+
+@test "facts: a rejected item id reaches audit.jsonl, not only stderr (F-15)" {
+  # stderr inside a subagent turn is not a durable channel, and the run that needed this
+  # could not afterwards say which items it had rejected.
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json \
+    --facts '{"decisions":[{"id":"ok1","summary":"kept"}],"open_questions":[{"id":"BADID","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}'
+  [ "$status" -eq 2 ] || fail "expected exit 2 for a partial rejection, got $status"
+
+  run jq -e 'select(.action == "facts_items_rejected")
+             | .metadata.rejected[0].label == "BADID"' .context/logs/audit.jsonl
+  assert_success
+
+  # The valid remainder still persisted — the partial-success contract is unchanged.
+  run jq -e '[.facts.decisions[].id] | index("ok1")' .context/state.json
+  assert_success
+}
+
+@test "facts: eviction is reported as eviction, and only real loss as loss (F-04)" {
+  # The message used to assert `(clamp eviction)` unconditionally. On the run that produced
+  # this finding it named four ids a later write had restored, while four OTHER ids were the
+  # ones actually gone — so the only durable clue pointed away from the casualties.
+  cd "$WD"
+  local payload
+  payload="$(jq -cn '{decisions: [range(1;12) | {id: ("ar" + (. | tostring)), summary: "d", stage: "AR0"}]}')"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json --facts "$payload"
+  [[ "$output" == *"clamp evicted these ids"* ]] || fail "eviction not named as eviction: $output"
+  [[ "$output" != *"NEITHER the ledger nor the spill"* ]] || fail "spilled ids reported as lost: $output"
+
+  # And every id it called evicted is genuinely recoverable.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json --read-decisions
+  assert_success
+  local n
+  n="$(printf '%s' "$output" | jq 'length')"
+  [ "$n" = "11" ] || fail "expected all 11 to resolve through the union, got $n"
+}
+
 @test "happy: merges completed DV verdict into tasks.DV0 (atomic)" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
@@ -1531,10 +1650,15 @@ add_question() {
   run_script_env --cwd "$WD" --separate-stderr "$SCRIPT" \
     --facts "$(jq -nc '{decisions: [range(1;10) | {id: ("new-" + (.|tostring))}]}')"
   printf '%s' "$stderr" > stderr.cap
-  run grep -F 'not in the ledger (clamp eviction)' stderr.cap
+  # Named as an EVICTION, which is a recoverable state, and not as loss: these ids are in
+  # the spill and `--read-decisions` still resolves them. Asserting the distinction here is
+  # the point — the message used to claim eviction for both cases.
+  run grep -F 'clamp evicted these ids' stderr.cap
   assert_success
   run grep -F 'new-1' stderr.cap
   assert_success
+  run grep -F 'NEITHER the ledger nor the spill' stderr.cap
+  assert_failure
 }
 
 # --- parse_frontmatter: both branches ------------------------------------------

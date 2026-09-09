@@ -747,6 +747,46 @@ resolved_test_mode() {
   esac
 }
 
+# ---------------------------------------------------------------------------
+# controls_in_force <ctx> <stage> <arm> -> the controls OTHER than <arm> that
+# would still refuse this command, as one trailing sentence. Empty when there is
+# nothing left to name.
+#
+# Denial text only, never a decision input — the same contract resolved_test_mode
+# carries. Three mechanisms can each refuse one command, and a denial naming only
+# the one that fired sends the caller to build an incomplete remedy: in a single
+# run four stages escalated that way, each proposing a fix the arm nobody named
+# would have refused again. The gate knows all three of its own arms; the agent
+# knows none of them.
+# ---------------------------------------------------------------------------
+controls_in_force() {
+  local _ctx="$1" _stage="$2" _arm="$3" _parts=""
+
+  # No holder exists on the settled arm, and the authority arm IS the holder
+  # check, so naming it there would restate the clause it follows.
+  case "$_arm" in
+    authority | settled) : ;;
+    *) _parts="test-execution authority (held by stage '$_stage')" ;;
+  esac
+
+  if [ "$_arm" != "dedupe" ]; then
+    if [ "${CORPFLOW_TEST_DEDUPE:-}" = "off" ]; then
+      _parts="${_parts:+$_parts; }redundant-run suppression (off for this session)"
+    else
+      _parts="${_parts:+$_parts; }redundant-run suppression (on)"
+    fi
+  fi
+
+  # The authority clause already quotes the mode inline; never say it twice.
+  if [ "$_arm" != "authority" ]; then
+    _parts="${_parts:+$_parts; }resolved test mode '$(resolved_test_mode "$_ctx")'"
+  fi
+
+  [ -n "$_parts" ] || return 0
+  printf ' Still in force, and NOT cleared by satisfying the above: %s. Each is a separate mechanism.' \
+    "$_parts"
+}
+
 ledger_remediation_stage() {
   local _ctx="$1" _state _codes
   _ledger_read "$_ctx" '' || return
@@ -838,11 +878,35 @@ dedupe_decide() {
   _p_ev="${_p_rest#* }"
   [ "$_p_ev" != "$_p_rest" ] || _p_ev="unrecorded"
 
+  # A prior that executed NOTHING is not a result this run could reproduce, so
+  # suppressing against it refuses the only run that could still produce one —
+  # which is how a platform reached a merge decision with zero tests executed and
+  # every stage downstream reading a verdict that said only "denied".
+  #
+  # Recognise evidence of EXECUTION, not merely of a record existing: `bundle:`,
+  # `output:` and `errtext:` each mean the runner returned something, and a
+  # non-zero `tests:` is a count off its own summary line. Everything else —
+  # `tests:0`, the `discovered:` token promote writes for a bare enumeration,
+  # the legacy `unrecorded` marker, and any shape this grammar does not cover —
+  # is no result at all. Unparseable takes the same arm as zero deliberately: a
+  # token nobody can read cannot be cited either.
+  case "$_p_ev" in
+    bundle:?* | output:?* | errtext:?* | tests:[1-9]*) : ;;
+    *)
+      write_audit_row "$_ctx" "test_dedupe_skipped_zero_prior" \
+        "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
+            --arg class "$_class" --arg prior "$_prior" --arg ev "$_p_ev" --arg n "$_n" \
+            '{stage:$st, tool:$tool, command_head:$head, classification:$class,
+              prior_run:$prior, prior_evidence:$ev, run_index:$n}')"
+      return 0
+      ;;
+  esac
+
   # Naming the prior run is what makes this actionable: the caller's next move is to CITE that
   # run, not to find a way around the gate. Naming its EVIDENCE is what makes the citation
   # checkable — a denial that cannot say what the run it protects produced is the symptom that
   # cost an hour of diagnosis. Remediation: references/test-execution-denials.md.
-  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: $_p_stage, at $_p_ts, evidence: $_p_ev) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority)." dedupe)
+  _reason=$(deny_reason "This exact test invocation already ran during run_index $_n (stage: $_p_stage, at $_p_ts, evidence: $_p_ev) against a byte-identical tree, so it can only reproduce the result already on record (skills/shared/testing-strategy.md § Test-Execution Authority).$(controls_in_force "$_ctx" "$_stage" dedupe)" dedupe)
   emit_deny "$_reason" || return 0
 
   write_audit_row "$_ctx" "test_execution_deduped" \
@@ -1202,9 +1266,9 @@ run_gate() {
   # right now, plus the remediation section for its class; the constraints on that wording live
   # with it in references/test-execution-denials.md.
   if [ -n "$_settled" ]; then
-    _reason=$(deny_reason "No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority)." settled)
+    _reason=$(deny_reason "No stage is in progress — this worktask is finished, or the loop is between stages, so nobody holds test-execution authority (skills/shared/testing-strategy.md § Test-Execution Authority).$(controls_in_force "$_ctx" "$_stage" settled)" settled)
   else
-  _reason=$(deny_reason "Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode." authority)
+  _reason=$(deny_reason "Stage '$_stage' has no test-execution authority for a ${_class} (skills/shared/testing-strategy.md § Test-Execution Authority); the run's resolved test mode is '$(resolved_test_mode "$_ctx")', which is a SEPARATE mechanism — this refusal is the authority check, not the mode.$(controls_in_force "$_ctx" "$_stage" authority)" authority)
   fi
   emit_deny "$_reason" || return 0
 

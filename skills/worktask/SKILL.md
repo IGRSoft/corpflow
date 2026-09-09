@@ -703,6 +703,51 @@ violated until it was injected at dispatch.
     }
 ```
 
+#### Step 4.7a
+
+AR writes design outputs — an OpenAPI contract, a schema, a generated header — into the **shared
+checkout**, untracked. DV then forks its worktree from `task.metadata.base_ref`, a committed ref, so
+those files are absent at the path every architecture reference cites.
+
+No stage can fix it: AR holds no git grant, DV is inside the broken tree, FN runs last. Reproduced
+across three runs, always cleared by the same manual step — this codifies that step.
+
+```typescript
+    // 4.7a. AR contract landing — runs when the NEXT stage is DV and AR left untracked or
+    //       unstaged non-.context/ writes in the shared checkout. Commit them onto the ref
+    //       DV's worktree will fork from, so the tree DV receives contains what AR's
+    //       artifact says it contains. The orchestrator does this because it is the only
+    //       actor holding git that is not itself inside the tree under repair.
+```
+
+##### Step 4.7a — landing and audit
+
+```typescript
+    if (full.metadata.stage === "DV" && state.tasks?.AR0?.status === "completed") {
+      // .context/ is the ledger's own tree and never lands here: it is not what DV reads
+      // through an architecture reference, and committing it would put run bookkeeping in
+      // the payload's history.
+      const stray = gitPorcelain()                       // `git status --porcelain`
+        .filter(f => !f.path.startsWith(".context/"))
+        .filter(f => f.worktreeDirty || f.untracked);
+      if (stray.length > 0) {
+        gitCommit(stray.map(f => f.path),
+                  `AR contract landing for ${task.id} (run ${state.run_index})`);
+        appendAudit({ actor: "orchestrator", action: "ar_contract_landed", subject: "AR0",
+                      result: "ok",
+                      metadata: { files: stray.map(f => f.path), next_stage: "DV" } });
+      }
+    }
+```
+
+##### Step 4.7a — why the orchestrator, and not a stash
+
+**Land, never stash**: a stash leaves the files invisible to a worktree forked from the ref, which
+is the failure being fixed. **Never widen AR's grants instead** — an agent that can commit can
+commit anything, and the narrow version of that grant does not exist. If the landing fails, return
+`blocked` naming the paths: a DV dispatched into a tree missing its contract cannot succeed and
+takes a full budget to discover it.
+
 #### Step 4.8
 
 Two banners, because isolation and assignment are two claims: a stale worktree of a *different*
