@@ -994,6 +994,49 @@ _bs_row() {
     .context/logs/audit.jsonl
 }
 
+# A fan-out payload: four streams staged independently, merged into the integration branch.
+# `facts.files_modified` records what ONE stream knew; no stage records the assembly.
+_bs_fanout_repo() {
+  cd "$WD"
+  git init -q -b master .
+  _bs_commit --allow-empty -m base
+  git checkout -q -b feature/work
+  _bs_files run 2
+  local stream
+  for stream in a b c; do
+    git checkout -q -b "stream/$stream" master
+    _bs_files "$stream" 12
+    git checkout -q feature/work
+    git merge -q --no-ff -m "merge stream/$stream" "stream/$stream"
+  done
+  jq '.metadata.base_ref="master" | .facts.files_modified=["run1.txt","run2.txt"]' \
+    .context/state.json > s && mv s .context/state.json
+}
+
+@test "base-sanity: a multi-parent payload degrades instead of blocking (F-10)" {
+  # The denominator is incomplete BY CONSTRUCTION under fan-out — each stream records what
+  # it knew, none records the assembly — so the rule blocked on every fan-out and was
+  # cleared only with the sanctioned override, which is a gate teaching its own operators
+  # to bypass it. Observed at 140 PR files against 19 ledger files.
+  _bs_fanout_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_success
+  assert_output --partial "merge commit(s)"
+  assert_output --partial "skipped"
+  run _bs_row
+  assert_output --partial "multi_parent_payload"
+}
+
+@test "base-sanity: a single-stream payload still blocks on a wrong base" {
+  # The rung must not swallow the topology it exists to catch: no merge parents, no degrade.
+  _bs_stacked_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" base-sanity
+  assert_failure 1
+  assert_output --partial "BLOCKED: base-sanity"
+  run _bs_row
+  assert_output --partial '"blocked"'
+}
+
 @test "base-sanity: a flat repo whose ledger matches the diff passes, naming both counts" {
   _bs_flat_repo 4
   jq '.metadata.base_ref="master"' .context/state.json > s && mv s .context/state.json

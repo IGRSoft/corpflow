@@ -271,6 +271,33 @@ token_of() {
   [[ "$output" =~ ^output:[0-9]+B$ ]]
 }
 
+@test "EV: an enumeration is discovered:, never tests: (F-01)" {
+  # The P0's origin. A scheme with an empty <TestPlans></TestPlans> enumerates its
+  # cases and exits; the banner carries a count and no outcome word, and recording
+  # it as `tests:49` told every later reader that 49 tests had run.
+  token_of '{"tool_response":{"stdout":"Executing 49 tests"}}'
+  assert_success
+  [ "$output" = "discovered:49" ]
+
+  # The discriminator is the vocabulary, not the number: the same count with a
+  # result attached is a real count.
+  token_of '{"tool_response":{"stdout":"Executed 49 tests, with 0 failures"}}'
+  assert_success
+  [ "$output" = "tests:49" ]
+
+  # `executing` must not satisfy the `executed` alternation.
+  token_of '{"tool_response":{"stdout":"Executing 3 tests in FooTests"}}'
+  assert_success
+  [ "$output" = "discovered:3" ]
+
+  # A genuine zero stays `tests:0` — it ran and found nothing to run, which is a
+  # different claim from never having started, and the gate treats both as no
+  # result but the reader must still be able to tell them apart.
+  token_of '{"tool_response":{"stdout":"Executed 0 tests, with 0 failures"}}'
+  assert_success
+  [ "$output" = "tests:0" ]
+}
+
 @test "EV: no evidence means no token AND no promotion — one computation" {
   token_of '{"tool_response":""}'
   assert_failure

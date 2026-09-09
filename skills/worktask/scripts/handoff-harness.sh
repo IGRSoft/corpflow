@@ -137,7 +137,7 @@ TL_REQ="stage verdict summary refs next_stage_focus open_questions"
 # checker gains no second extractor and no second cap constant.
 FILES_TOUCHED_MAX=10
 
-DV_REQ="stage verdict summary refs files_touched next_stage_focus open_questions"
+DV_REQ="stage verdict summary refs files_touched next_stage_focus tests_executed open_questions"
 DR_REQ="stage verdict summary refs key_decisions open_questions"
 SR_REQ="stage verdict summary refs key_decisions open_questions"
 QA_REQ="stage verdict summary refs files_touched key_decisions open_questions"
@@ -170,6 +170,18 @@ if [ -z "${SWEEP_ID_RE:-}" ] || [ -z "${SWEEP_CLASS_ENUM:-}" ] || [ -z "${SWEEP_
   echo "fail: sweep-stub-lib.sh unreachable at $_SWEEP_LIB — the sweep shape gate cannot run" >&2
   exit 1
 fi
+
+# One frontmatter reader across this tool and state-patch.sh. Fail closed for the same
+# reason the sweep library does: a missing library under skills/ is a broken install.
+# Sourced AFTER the sweep guard so a wholly broken install still reports the sweep library
+# first, which is the message the cross-enforcer parity suite pins.
+_FM_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/frontmatter-lib.sh"
+if [ ! -r "$_FM_LIB" ]; then
+  printf >&2 'fail: frontmatter-lib.sh unreachable at %s — the frontmatter reader cannot run\n' "$_FM_LIB"
+  exit 1
+fi
+# shellcheck source=frontmatter-lib.sh
+. "$_FM_LIB"
 
 # A yq failure inside a sweep check is a gate FAILURE, never a skip: the gate has no advisory
 # tier, so a read that cannot be trusted must not yield a pass. First error line is surfaced.
@@ -300,6 +312,35 @@ _sweep_label() {
 # exists is not enough; check_sweep_stub_shape's own error message hands the agent the
 # literal to paste. An empty open_questions array walks nothing, so there is nothing to
 # compare and the check is silent.
+# An empty `open_questions: []` is a claim, not an absence: it says "I ran the sweep and had
+# nothing to ask". Nothing distinguished that from a stage that never swept, which is the
+# whole point of the rule — so the prose half is required exactly when the array half is
+# empty, the mirror of the `ref` anchor already required when it is not.
+#
+# The heading alone is the check. Its CONTENT is the stage's explicit statement, and this
+# gate does not read it: an anchor with an empty body is a stage that wrote the heading
+# without thinking, which is a review problem rather than a mechanical one.
+check_empty_sweep_prose() {
+  local artifact="$1" fmfile="$2" oqtype rows
+
+  oqtype=$(_sweep_rows TYPE)
+  # Only a real sequence reaches this arm. A non-sequence is check_sweep_stub_shape's
+  # failure and an ABSENT field is the required-field loop's, both already reported;
+  # calling either one "empty" here would send the stage two failures for one slip.
+  case "$oqtype" in
+    '!!seq') ;;
+    *) return 0 ;;
+  esac
+  rows=$(_sweep_rows STUB)
+  [[ -z "$rows" ]] || return 0
+
+  if ! grep -qE '^## +elicitation-sweep[[:space:]]*$' "$artifact"; then
+    echo "fail: open_questions is empty but $(basename "$artifact") has no '## elicitation-sweep' heading — an empty array alone cannot tell 'swept, nothing to ask' from 'never swept'. Write the heading with the explicit statement (stage-contracts.md § Closing Elicitation Sweep)" >&2
+    return 1
+  fi
+  return 0
+}
+
 check_sweep_ref_anchor() {
   local artifact="$1" fmfile="$2"
   local dir rows line id ref file anchor target
@@ -637,6 +678,45 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
   return "$failed"
 }
 
+# A DV stage reporting zero executed tests must say whether the suite COMPILES.
+# Zero is a legal outcome; being unable to tell it from "never built" is not — that
+# ambiguity let a platform reach a merge decision with no test ever run, while four
+# stages escalated with remedies aimed at a control that was not the one refusing
+# them. Compilation is answerable WITHOUT test-execution authority, which is why it
+# is asked of the stage that was denied.
+#
+# Blocking, not warn-only: unlike the AR-ref arm this is not a rollout, and a
+# missing value is exactly the state the check exists to refuse.
+# Contract: stage-contracts.md#tpl-dv § Zero executed tests must say whether the
+# suite compiles.
+check_test_evidence() {
+  local fmfile="$1" executed compiles
+
+  executed=$(yq eval '.handoff.tests_executed // ""' "$fmfile")
+  [[ "$executed" == "null" ]] && executed=""
+  # An absent or non-numeric value is the required-field loop's business, not
+  # this arm's: reporting it twice would send the stage two failures for one slip.
+  case "$executed" in
+    '' | *[!0-9]*) return 0 ;;
+  esac
+  [[ "$executed" -eq 0 ]] || return 0
+
+  # NOT `// ""`: yq's alternative operator treats a literal `false` as falsy and
+  # hands back the default, which would silently turn one of the three legal
+  # answers into "absent" — the exact ambiguity this check exists to refuse.
+  compiles=$(yq eval '.handoff.test_suite_compiles' "$fmfile")
+  [[ "$compiles" == "null" ]] && compiles=""
+  case "$compiles" in
+    true | false | unknown) return 0 ;;
+    "")
+      echo "fail: stage=DV reports tests_executed: 0 with no test_suite_compiles — add test_suite_compiles: true|false|unknown. It is checkable without test-execution authority, and it is what separates gate-blocked from never-built" >&2
+      return 1 ;;
+    *)
+      echo "fail: stage=DV test_suite_compiles is \"$compiles\" — expected true, false or unknown" >&2
+      return 1 ;;
+  esac
+}
+
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
 
 # Warn-only by default so an advisory check can never break an unrelated run.
@@ -688,15 +768,19 @@ check_ar_ref() {
     return 0
   fi
 
+  # Two different defects shared one message, so neither said what to do. A malformed shape
+  # is not a dangling reference: the commonest form by far is a `.context/` prefix, which
+  # every SIBLING ref in this block carries, so it is a reasonable thing to write and worth
+  # naming outright rather than leaving to be inferred from a regex nobody is shown.
   if ! printf '%s' "$ref" | grep -qE "$ARCH_REF_RE"; then
-    ar_ref_violation "DV architecture ref dangling: $ref" || return 1
+    ar_ref_violation "DV architecture ref malformed: $ref (expected a bare 'architecture-<N>.md#<anchor>' relative to the artifact — no .context/ prefix, unlike the sibling refs in this block)" || return 1
     return 0
   fi
 
   local reffile
   reffile="${ref%%#*}"
   if [[ ! -f "$(dirname "$artifact")/$reffile" ]]; then
-    ar_ref_violation "DV architecture ref dangling: $reffile" || return 1
+    ar_ref_violation "DV architecture ref dangling: $reffile names no file next to $(basename "$artifact")" || return 1
     return 0
   fi
 
@@ -723,16 +807,25 @@ validate_frontmatter() {
   # `set -u`. Baked, that late firing is a no-op on an already-removed path.
   # shellcheck disable=SC2064  # expansion at set time is the point, see above
   trap "rm -f '$fmfile'" RETURN
-  awk '/^---$/{c++; if (c==1) next; if (c==2) exit} c==1' "$f" > "$fmfile"
+  # One extractor, shared with state-patch.sh: the two used different awk programs, and an
+  # artifact carrying a second `---` in its body was sliced differently by each.
+  corpflow_fm_block "$f" > "$fmfile" 2> /dev/null || true
   if [[ ! -s "$fmfile" ]]; then
     echo "fail: missing frontmatter block in $f" >&2
+    return 1
+  fi
+
+  # The shape gate, also shared. Checked before the yq branch below so the flat shape is
+  # refused identically with or without yq on the host — it is the divergence that let an
+  # artifact be unreadable here and still write a healthy ledger row.
+  if ! corpflow_fm_has_handoff "$fmfile"; then
+    echo "fail: no handoff: block" >&2
     return 1
   fi
 
   command -v yq >/dev/null 2>&1 || {
     echo "frontmatter: yq required for full validation; running grep-only fallback" >&2
     head -1 "$f" | grep -q '^---$' || { echo "fail: missing leading ---" >&2; return 1; }
-    grep -q '^handoff:' "$fmfile" || { echo "fail: no handoff: block" >&2; return 1; }
     return 0
   }
 
@@ -766,11 +859,16 @@ validate_frontmatter() {
     check_ar_ref "$f" "$fmfile" || rc=1
   fi
 
+  if [[ "$stage" == "DV" ]]; then
+    check_test_evidence "$fmfile" || rc=1
+  fi
+
   check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || rc=1
   check_decision_divergence "$f" "$fmfile" "$stage" || rc=1
   local stub_shape_ok=1
   check_sweep_stub_shape "$fmfile" || { rc=1; stub_shape_ok=0; }
   check_sweep_ref_anchor "$f" "$fmfile" || rc=1
+  check_empty_sweep_prose "$f" "$fmfile" || rc=1
   if [[ -n "$STATE_ARG" ]]; then
     check_sweep_ledger "$fmfile" "$f" || rc=1
   fi
@@ -905,6 +1003,10 @@ handoff:
 
 ## requirements
 
+## elicitation-sweep
+
+nothing to ask
+
 EOF
   # Pad with synthetic body to make the baseline-mode reading expensive.
   for i in $(seq 1 200); do echo "- requirement line $i with extra context describing the work to be done in this synthetic plan" >> "$d/.context/planning-0.md"; done
@@ -994,6 +1096,7 @@ handoff:
   stage: DV
   verdict: ok
   summary: "Implemented."
+  tests_executed: 12
   files_touched: [a.md, b.md]
   next_stage_focus: "DR reviews"
   open_questions: []
@@ -1003,6 +1106,10 @@ handoff:
 # Development
 
 ## files-changed
+
+## elicitation-sweep
+
+nothing to ask
 
 EOF
   for i in $(seq 1 100); do echo "- file-$i.md edit description" >> "$d/.context/development.md"; done

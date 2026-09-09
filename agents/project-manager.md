@@ -342,3 +342,16 @@ skipped) to atomically patch `tasks.FN0` plus the `RE→FN` (or `DC→FN`) hando
 artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the
 tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in
 `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
+
+Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
+
+```bash
+state-patch.sh --stage FN --prev RE --facts '{
+  "files_modified": ["CHANGELOG.md"],
+  "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#decisions"}],
+  "open_questions": [{"id":"sw-FN0-1","class":"decision","ref":"complete-summary-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+```
+
+Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.

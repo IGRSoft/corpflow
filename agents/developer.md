@@ -191,6 +191,30 @@ bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"
 
 Exit 1 = resolved ≠ assigned: stop, do not edit, log `workspace_path_mismatch`, return `verdict: blocked` quoting both paths it printed. Warnings are advisory. **Exit 0 is not always a confirmation** — if neither source resolves, the script warns and exits 0 by design (a pre-flight that false-blocks DV is worse than the failure it guards); say so in `§ Approach`, since an unverified tree is not a verified one.
 
+### D0.0b — Claim the ledger BEFORE you implement (mandatory)
+
+> # ⚠️ FIRST WRITE AFTER THE WORKTREE PIN ⚠️
+>
+> Before D1, before the first edit, run the ledger patch and the sweep stub for what you know
+> right now — an empty `files_modified`, `open_questions: []`, a `summary` that says work has
+> started. One call:
+>
+> ```bash
+> state-patch.sh --stage DV --prev <PREV> --facts '{"open_questions":[]}'
+> ```
+>
+> Then re-run it with the real payload at § State Patch when you finish, which unions over this one.
+
+#### Why this is first, not last (D0.0b)
+
+Three of four parallel streams once hit their turn ceiling holding a running service and 25 source
+files each, with **0 staged, no artifact, and the ledger still `in_progress`** — nothing recoverable
+and nothing recorded. All three carried a degradation order; all three ran out before reaching it.
+
+A stage cannot see its remaining budget, so it cannot reliably self-trigger a graceful stop. This is
+the mitigation that needs no budget signal: a stage that has recorded "in progress, nothing yet" is
+recoverable from any point after, at the cost of one call at the cheapest moment in the run.
+
 ### D0.1 — Requirements & environment
 
 Analyze requirements, set up the development environment, read test specs from `<plan_file>`.
@@ -487,7 +511,8 @@ The gate above fires at *return* time; it cannot fire if you exhaust context mid
 
 #### Checkpoint steps 2–3
 
-2. **When budget is near exhaustion** (the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward: finish and commit the batch in flight, write `development-N.md` for the batches completed, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `tasks.DV0.progress`, and return that completed-so-far artifact as your handoff. The orchestrator resumes from `tasks.DV0.progress.next_batch` (`retry_count` bumped) — `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
+2. **When budget is near exhaustion** (§ D0.0b has already claimed the ledger, so what follows
+   improves an existing record rather than creating the only one) (the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward: finish and commit the batch in flight, write `development-N.md` for the batches completed, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `tasks.DV0.progress`, and return that completed-so-far artifact as your handoff. The orchestrator resumes from `tasks.DV0.progress.next_batch` (`retry_count` bumped) — `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
 3. **Never emit a progress narration as terminal output.** A budget-exhausted DV with a checkpoint artifact + `## Blockers` is a valid partial handoff; a chat-style "here's where I got to" is not.
 
 ## Architecture Ownership
@@ -529,24 +554,41 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files changed, M tests added>"
-  worktree: true               # MUST be true — see the worktree notes below
-  worktree_path: <abs path>    # OPTIONAL — see field notes
-  worktree_branch: <branch>    # OPTIONAL — see field notes
+  tests_executed: 12
+  test_suite_compiles: true
+  worktree: true               # MUST be true — worktree notes below
+  worktree_path: <abs path>    # OPTIONAL — field notes
+  worktree_branch: <branch>    # OPTIONAL — field notes
   files_touched:
     - path/to/file1.md
     - path/to/file2.md
-  next_stage_focus: "<imperative: what DR/QA must focus on>"
+  next_stage_focus: "<imperative: what DR/QA focuses on>"
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    decisions: architecture-N.md#decisions    # ONLY when AR ran; omit
-    coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
+    decisions: architecture-N.md#decisions    # ONLY when AR ran
+    coordination: coordination-N.md#fan-out   # ONLY when TL ran
     tests: development-N.md#tests-added
-  architecture:                # ONLY when AR ran; omit the object otherwise
+  architecture:                # ONLY when AR ran; else omit
     ref: architecture-N.md#decisions
-    applied: true              # truthful; see the architecture field notes below
+    applied: true              # truthful; architecture field notes below
 ---
 ```
+
+#### Field notes — test evidence
+
+`tests_executed` is the count of cases that actually **ran**, taken from the same summary line
+`## verification-command` quotes verbatim — never a number a runner printed while enumerating.
+
+Zero is a legal value. Report it honestly when the gate denied the run, when the selector matched
+nothing, or when the suite never got as far as executing. What you may not do is leave it
+ambiguous: **whenever `tests_executed` is 0, `test_suite_compiles` is required** — `true`, `false`,
+or `unknown` with the reason in `§ Decisions`.
+
+You can answer it while denied. Building the test target needs no test-execution authority, so a
+denial is never a reason to omit it, and it is the only field that tells DR and QA whether they are
+looking at gate-blocked work or work that never compiled. `handoff-harness.sh` fails the stage for a
+`tests_executed: 0` with no `test_suite_compiles`.
 
 #### Field notes — files_touched
 

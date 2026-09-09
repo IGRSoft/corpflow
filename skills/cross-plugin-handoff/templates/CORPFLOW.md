@@ -195,7 +195,8 @@ yours to resolve, not the user's — cost is not an exemption.
   stage's question. Max 4 per stage; more is handing the user your triage.
 - `escalate` is never auto-answered, `decision` may be; the orchestrator raises your label, never
   lowers it. `blocks_next_stage` is REQUIRED on every
-  stub and on both transports, and the two copies must agree — `true` costs a round trip at your
+  stub and on BOTH stub transports — `handoff.open_questions[]` **and** the
+  `state-patch.sh --facts` payload — and the two copies must agree — `true` costs a round trip at your
   own boundary, `false` batches at the final gate.
 - Re-emitting after a rework or retry carries `status` and `resolution` forward.
 - You never ask — no plugin agent holds an ask tool; the orchestrator renders every item.

@@ -880,11 +880,28 @@ alone. For DV this **is** the § Step B invocation — run it once, not twice. A
 #### Step B.1 — on failure
 
 Exit 0 → append `{"action":"sweep_check","subject":"<CODE><N>","result":"ok"}` and continue to
-§ Step C.0. Non-zero with a `fail:` line naming a `sw-` id (or `sweep ledger parity cannot be
-verified`) → append the same row with `result:"fail"` and the line as `reason`, then treat it as a
-`missing_input` contract violation on `<CODE><N>`: do **not** run Step C.0, do **not** dispatch the
-next stage; re-dispatch the stage with the `fail:` line verbatim so it writes the missing stub, `ref`
-anchor, or `--facts` entry. There is no advisory tier here — the unreadable-ledger case fails too.
+§ Step C.0.
+
+**Any non-zero exit** → append the same row with `result:"fail"` and every `fail:` line as
+`reason`, then treat it as a `missing_input` contract violation on `<CODE><N>`: do **not** run Step
+C.0, do **not** dispatch the next stage; re-dispatch the stage with the `fail:` lines verbatim so it
+writes what it owes. There is no advisory tier here — the unreadable-ledger case fails too.
+
+##### Step B.1 — the routing default, and why it is a default
+
+The default is the rule, not a fallback: a shape absent from this table routes like every row in
+it. An earlier version routed only the first three, so one run's boundary stalled four times on
+lines that each named a real defect and had no branch to take.
+
+| `fail:` line names | What the stage owes |
+|---|---|
+| a `sw-` id | the missing stub, its `ref` anchor, or its `--facts` entry |
+| `sweep ledger parity cannot be verified` | a readable ledger or spill, then re-run |
+| a decision id `disagrees across transports` | one reconciled statement — see the arm below |
+| `missing required field: <field>` | that field, per `stage-contracts.md#tpl-<CODE>` |
+| `tests_executed: 0 with no test_suite_compiles` | the compile answer — no test authority needed |
+| `N discretionary tokens > 200 budget` | a shorter `summary` / `next_stage_focus` |
+| anything else | what the line says — route it here regardless |
 
 ##### Step B.1 — the `key_decisions` divergence arm
 
@@ -895,20 +912,30 @@ summary against the same id's entry in the artifact body and fails with
 fail: decision <id> disagrees across transports — frontmatter says "…" but the <artifact> body says "…"
 ```
 
-which names a **decision** id and mentions neither a sweep id nor ledger parity. Without this arm
-the table above has no branch for it, and the boundary fails with a line nobody is told how to
-route — which is exactly how the first boundary of a recent run stalled.
+which names a **decision** id and mentions neither a sweep id nor ledger parity. It has its own row
+in the table above, and would route correctly on the default arm even without one — but the fix it
+asks for differs from every other row's, which is what the next section is for.
 
 ###### Step B.1 — routing the divergence failure
 
-Treat it as the same class as the arms above: `result:"fail"` with the line as `reason`, no Step
-C.0, no next stage, re-dispatch with the `fail:` line verbatim. What differs is the fix the stage
-owes — the two transports are reconciled to **one** statement, and the artifact body is the author's
+Routing is the default: `result:"fail"` with the line as `reason`, no Step C.0, no next stage,
+re-dispatch with the `fail:` line verbatim. What differs is the fix the stage owes — the two transports are reconciled to **one** statement, and the artifact body is the author's
 copy. Never settle it by deleting the body entry: that removes the reader's only expansion of the
 id.
 
-Because the harness now collects every failure in one invocation, a single re-dispatch may carry a
-sweep line and a decision line together. Pass **every** `fail:` line, not the first.
+The harness collects every failure it can reach in one invocation, so a single re-dispatch may carry
+a sweep line and a decision line together. Pass **every** `fail:` line, not the first.
+
+###### Step B.1 — shape failures short-circuit
+
+"Every failure" is bounded by what stays parseable. A non-sequence `open_questions`, a missing
+`handoff:` block and an unknown stage each stop the checks at that point, because every later check
+reads the structure the failed one was validating.
+
+So a re-dispatch that fixes a shape line can legitimately return new failures that were always
+present and unreachable. That is the check working, not the stage regressing. Do not treat the
+second round as a new defect, and do not promise a stage one-shot batching when its first line is a
+shape line.
 
 ### Step C — Closing-sweep collection and render (loop step 4.9)
 
@@ -1049,17 +1076,20 @@ the spill is an item this gate would otherwise never render — silently, with n
 
 Union both sources by `.id`, with the **ledger winning on conflict**: a spill line is a snapshot
 taken at eviction time and is necessarily staler than an item the ledger later resolved. A missing
-spill file is the empty set. A spill file that exists but cannot be parsed is a **failure**, never
-an empty set — degrading a parse error to "nothing to collect" is how the gate would go quiet in
-exactly the case it exists for. `handoff-harness.sh` already checks frontmatter/ledger parity
-against the same union, so the gate and the boundary check now read the same record.
+spill file is the empty set. A spill that exists but cannot be parsed is a **failure**, never an
+empty set — degrading a parse error to "nothing to collect" is how this gate goes quiet in exactly
+the case it exists for. `handoff-harness.sh` checks parity against the same union.
 
-`.context/decisions-<run_index>.jsonl` is **not** read here. It is the decisions ring's recovery and
-audit artifact; this gate renders questions.
+###### Step C.1 — the decisions spill is a different reader
+
+`.context/decisions-<run_index>.jsonl` is **not** read here: this gate renders questions. It is no
+longer readerless, though — `state-patch.sh --read-decisions` returns `facts.decisions[] ∪ spill`
+under the same union rule, and that is the path for anything asking what this run decided. Reading
+`facts.decisions[]` alone under-reports the moment one task records more than eight.
 
 ##### Step C.1 — the artifact fallback and its warning
 
-Both transports can still under-report, so count what the artifacts claim. Every `.context/*-N.md`
+Both machine-readable transports — `handoff.open_questions[]` and `facts.open_questions[]` — can still under-report, so count what the artifacts claim. Every `.context/*-N.md`
 carries a `## elicitation-sweep` section and its frontmatter carries the stubs. When the collected
 count is **below** the number of sweep stubs on disk, render the collected items and warn, naming
 the shortfall and the ids that are missing:

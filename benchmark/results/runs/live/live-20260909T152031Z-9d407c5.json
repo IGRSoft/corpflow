@@ -1,0 +1,121 @@
+{
+  "run_id": "live-20260909T152031Z-9d407c5",
+  "timestamp_utc": "2026-09-09T15:20:39Z",
+  "mode": "live",
+  "git_sha": "9d407c5",
+  "budget_usd": 50.0,
+  "paths": {
+    "with": {
+      "tokens": {
+        "in": null,
+        "out": null,
+        "total": null,
+        "cache_read": null,
+        "cache_creation": null
+      },
+      "cost_usd": null,
+      "wall_clock_s": 0.0,
+      "loc_produced": 0,
+      "test_count": 0,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 0,
+      "pass_fail": "fail",
+      "app_path": null
+    },
+    "without": {
+      "tokens": {
+        "in": 10,
+        "out": 9573,
+        "total": 9583,
+        "cache_read": 331975,
+        "cache_creation": 76558
+      },
+      "cost_usd": 1.1709425000000002,
+      "wall_clock_s": 143.0285,
+      "loc_produced": 0,
+      "test_count": 0,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 1,
+      "pass_fail": "fail",
+      "app_path": null
+    }
+  },
+  "comparison": {
+    "loc_produced": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "test_count": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "coverage_pct": {
+      "with": null,
+      "without": null,
+      "delta": null
+    },
+    "wall_clock_s": {
+      "with": 0.0,
+      "without": 143.0285,
+      "delta": -143.0285
+    },
+    "estimate_complexity_score": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "stage_count": {
+      "with": 0,
+      "without": 1,
+      "delta": -1
+    },
+    "tokens_total": {
+      "with": null,
+      "without": 9583,
+      "delta": null
+    },
+    "cost_usd": {
+      "with": null,
+      "without": 1.1709425000000002,
+      "delta": null
+    }
+  },
+  "live_partial": true,
+  "stages": [
+    {
+      "stage": "PL",
+      "fresh_in": 10,
+      "cache_creation": 76558,
+      "cache_read": 331975,
+      "out": 9573,
+      "cost_usd": 1.1709425000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without"
+    }
+  ],
+  "era": {
+    "harness": "python-1",
+    "prompt_contract": "scripted-cli-v3",
+    "model_pins": {
+      "PL": "claude-opus-5",
+      "AR": "claude-opus-5",
+      "TL": "claude-sonnet-5",
+      "DV": "claude-opus-5",
+      "DR": "claude-opus-5",
+      "SR": "claude-opus-5",
+      "QA": "claude-sonnet-5",
+      "DC": "claude-haiku-4-5",
+      "FN": "claude-sonnet-5",
+      "ST": "claude-sonnet-5"
+    }
+  }
+}

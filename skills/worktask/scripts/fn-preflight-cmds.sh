@@ -623,6 +623,28 @@ cmd_base_sanity() {
     return 0
   fi
 
+  # Ninth degrade rung. Under fan-out the payload is a MERGE of independently-staged
+  # streams, and `facts.files_modified` is never their union: each stream records what it
+  # knows, none records the assembly. So the denominator is incomplete BY CONSTRUCTION, not
+  # by under-recording, and the rule blocks on every fan-out — observed at 140 PR files
+  # against 19 ledger files, cleared only with the sanctioned override, which is a gate
+  # teaching its own operators to bypass it.
+  #
+  # A merge parent is the mechanical signal: a single-stream payload has none. Same
+  # direction as every rung above — an input the rule cannot trust degrades to a warn, and
+  # a wrong base still shows up in `continuity`, which does not depend on this denominator.
+  local merge_parents=0
+  merge_parents=$(git rev-list --merges --count "${ref}..HEAD" 2> /dev/null || printf '0')
+  case "$merge_parents" in '' | *[!0-9]*) merge_parents=0 ;; esac
+  if [[ "$merge_parents" -gt 0 ]]; then
+    printf 'base-sanity: this payload has %s merge commit(s) — facts.files_modified cannot be the union of independently-staged streams, so the magnitude comparison is unreliable; skipped
+' \
+      "$merge_parents"
+    audit_fn base_sanity multi_parent_payload \
+      "$(meta_json base "$base" ledger_files "$ledger_files" merge_parents "$merge_parents")"
+    return 0
+  fi
+
   # Captured, then counted — never `git diff | wc -l`: `wc` has already written `0`
   # by the time git fails, so the pipeline yields a plausible zero-file count and the
   # only trace of the failure is an exit status the pipeline then hides. A base sharing

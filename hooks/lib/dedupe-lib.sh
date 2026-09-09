@@ -62,6 +62,13 @@ tree_fingerprint() {
   # Gap, deliberately accepted: content edits to a never-added untracked file
   # move neither output. Its creation does, and CORPFLOW_TEST_DEDUPE=off covers
   # the rest; hashing untracked contents costs an unbounded walk on every call.
+  #
+  # What this means under fan-out, since it has been misread once: STAGED work is
+  # INSIDE the digest — `git diff HEAD` covers the index — so staging re-enables a
+  # run and committing is never required to clear a denial. A stream that commits
+  # to clear one has misdiagnosed the gap above, and has put a commit in the
+  # payload's graph that no reviewer asked for. The untracked-content case is the
+  # only one where a real edit leaves the digest unmoved.
   _delta=$({ git -C "$_root" status --porcelain 2> /dev/null; git -C "$_root" diff HEAD 2> /dev/null; } \
     | shasum 2> /dev/null | cut -d' ' -f1) || return 0
   printf '%s' "$_head$_delta" | shasum 2> /dev/null | cut -d' ' -f1

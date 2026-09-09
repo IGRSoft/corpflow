@@ -271,6 +271,17 @@ identical run within the same run. Denied callers are told to **cite** the prior
 timestamp appear in the deny reason and in a `test_execution_deduped` audit row. Build-only
 verification is never suppressed.
 
+#### A prior that executed nothing suppresses nothing
+
+Suppression only makes sense against a result that could be cited instead. A prior whose evidence
+token is `tests:0`, `discovered:<n>` (the runner enumerated cases and executed none), `unrecorded`
+(a marker predating the evidence grammar), or any shape this grammar does not cover records **no
+result**, so the gate allows and writes a `test_dedupe_skipped_zero_prior` row instead of a denial.
+
+This is not a softening of the control. Denying against a zero-execution prior refuses the only run
+that could still produce evidence — the path by which one platform reached a merge decision with
+zero tests executed while every stage downstream read a verdict that said only "denied".
+
 #### Keyed on the tree, never on an outcome
 
 `PreToolUse` cannot know whether a run passed, so the key is the tree: HEAD plus
@@ -278,6 +289,12 @@ verification is never suppressed.
 reports only names and status letters. Any edit to tracked content changes the fingerprint and
 re-enables the command with no flag — **this is what keeps test → fix → retest working, and it is the
 property to protect in any change to the fingerprint.**
+
+The one gap, and it is documented rather than closed: an **untracked** file's *content* is outside
+the digest. Its creation shows in porcelain, so the first write moves the fingerprint; later edits
+to a file never `git add`ed do not. Staged content is inside the digest — `git diff HEAD` covers the
+index — so staging is not a way to re-enable a run, and neither is committing anything less than a
+real change.
 
 #### Fail-open and the hatch
 

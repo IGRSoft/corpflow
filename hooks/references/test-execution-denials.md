@@ -59,9 +59,11 @@ file name of a results bundle or log that existed on this machine when the run f
 for it by that name under your build output or results directory; `output:<n>B` means the run
 returned something but no
 count could be read from it, so it is weak evidence and worth re-reading before you rely on it;
-`errtext:<n>B` is a failing run that printed its failures, which is still a run. `unrecorded`
-means the marker predates this grammar and its evidence was never captured — treat it as no
-evidence at all and make the edit in (2) rather than citing it. To proceed: (1) cite that run as
+`errtext:<n>B` is a failing run that printed its failures, which is still a run. Two tokens never
+reach you here, because a prior carrying either no longer suppresses anything: `discovered:<n>`
+(the runner enumerated n cases and executed none) and `unrecorded` (a marker predating this
+grammar, whose evidence was never captured). Both are no evidence at all; if you are somehow
+reading one, cite nothing and make the edit in (2). To proceed: (1) cite that run as
 the evidence for this stage — it covers the same tree and the
 same selection; (2) if you have since changed something, make the edit and re-run — any
 modification to tracked content re-enables this command automatically, no flag required; or (3)
