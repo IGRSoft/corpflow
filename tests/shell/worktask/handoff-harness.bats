@@ -121,6 +121,65 @@ _fm_temp_count() {
   assert_failure 2
 }
 
+# A DV artifact with the given tests_executed / test_suite_compiles pair, and
+# nothing else that could fail — so a failure here is this arm and no other.
+_dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
+  local _compiles="${3:-}"
+  {
+    printf -- '---\n'
+    printf 'handoff:\n'
+    printf '  stage: DV\n'
+    printf '  verdict: ok\n'
+    printf '  summary: "test evidence fixture"\n'
+    printf '  tests_executed: %s\n' "$2"
+    if [ -n "$_compiles" ]; then printf '  test_suite_compiles: %s\n' "$_compiles"; fi
+    printf '  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n'
+    printf '  open_questions: []\n'
+    printf '  refs:\n'
+    printf '    dev: development-0.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
+  } > "$1"
+}
+
+@test "test-evidence: tests_executed: 0 with no test_suite_compiles fails (F-02)" {
+  # The ambiguity the field exists to remove: a stage denied a run and a stage
+  # whose suite never compiled both reported nothing, and the two were
+  # indistinguishable to every reader downstream for ten hours of one run.
+  local a="$WD/te-0.md"
+  _dv_test_evidence_artifact "$a" 0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_failure
+  [[ "$output" == *"tests_executed: 0 with no test_suite_compiles"* ]] || fail "$output"
+}
+
+@test "test-evidence: all three legal values clear a zero count" {
+  # `unknown` included, deliberately: a stage that genuinely cannot tell must be
+  # able to say so rather than pick one and be wrong.
+  local a="$WD/te-1.md" v
+  for v in true false unknown; do
+    _dv_test_evidence_artifact "$a" 0 "$v"
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+    assert_success
+  done
+}
+
+@test "test-evidence: a non-zero count needs no test_suite_compiles" {
+  local a="$WD/te-2.md"
+  _dv_test_evidence_artifact "$a" 12
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_success
+}
+
+@test "test-evidence: a value outside the enum is refused, not accepted as truthy" {
+  # `yes` reads as an answer and carries none of the three meanings.
+  local a="$WD/te-3.md"
+  _dv_test_evidence_artifact "$a" 0 yes
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_failure
+  [[ "$output" == *"expected true, false or unknown"* ]] || fail "$output"
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
@@ -135,6 +194,7 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
+    printf '  tests_executed: 12\n'
     printf '  verdict: ok\n'
     printf '  summary: "sweep fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -267,6 +327,7 @@ dv_artifact() {
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
+    printf '  tests_executed: 12\n'
     printf '  verdict: ok\n'
     printf '  summary: "gate fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -274,7 +335,7 @@ dv_artifact() {
     printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    %s\n' "$refs"
-    printf -- '---\n\n# Development\n'
+    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$path"
 }
 
@@ -437,6 +498,7 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
+    printf '  tests_executed: 12\n'
     printf '  verdict: ok\n'
     printf '  summary: "budget fixture%s"\n' "$pad"
     printf '  files_touched: [a.md]\n'
@@ -510,6 +572,7 @@ mk_dv_ft() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
+    echo '  tests_executed: 12'
     echo '  verdict: ok'
     echo '  summary: "cap fixture"'
     echo "  files_touched: $ft"
@@ -519,6 +582,10 @@ mk_dv_ft() {
     echo '---'
     echo
     echo '# Development'
+    echo
+    echo '## elicitation-sweep'
+    echo
+    echo 'nothing to ask'
   } > "$out"
 }
 
@@ -567,6 +634,10 @@ mk_qa_dec() {
     echo "| id | summary |"
     echo "|----|---------|"
     echo "| qa-1 | $3 |"
+    echo
+    echo '## elicitation-sweep'
+    echo
+    echo 'nothing to ask'
   } > "$1"
 }
 
@@ -689,6 +760,10 @@ mk_qa_dec_bullet() {
     echo '## decisions'
     echo
     echo "$3"
+    echo
+    echo '## elicitation-sweep'
+    echo
+    echo 'nothing to ask'
   } > "$1"
 }
 
@@ -790,6 +865,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
+    echo '  tests_executed: 12'
     echo '  verdict: ok'
     echo '  summary: "collect-all fixture"'
     echo "  files_touched: $ft"
@@ -816,6 +892,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
+    echo '  tests_executed: 12'
     echo '  verdict: ok'
     echo '  summary: "missing fields fixture"'
     echo '---'
@@ -854,6 +931,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
+    echo '  tests_executed: 12'
     echo '  verdict: ok'
     echo "  summary: \"budget fixture $pad\""
     echo '  files_touched: [a.md]'

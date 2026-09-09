@@ -66,6 +66,7 @@ handoff:
   stage: DV
   verdict: ok
   summary: "parity fixture"
+  tests_executed: 12
   files_touched: 1
   next_stage_focus: "review"
   open_questions:

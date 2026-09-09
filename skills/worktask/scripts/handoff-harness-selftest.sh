@@ -49,7 +49,7 @@ self_test_collect_all() {
   fi
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
     echo '  summary: "Two independent violations in one artifact."'
     echo '  files_touched: [a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]'
     echo '  next_stage_focus: "DR reviews"'
@@ -71,7 +71,7 @@ self_test_collect_all() {
   echo "self-test: collect-all: ok"
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
     echo '  summary: "Filename digits must not be harvested."'
     echo '  files_touched: [a.md]'
     echo '  key_decisions:'
@@ -81,6 +81,7 @@ self_test_collect_all() {
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
     echo '## decisions'; echo
     echo '- **dv-1 — The retry budget for a failing stage is three attempts, per planning-0.md.**'
+    echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
   } > "$ctx/dv-filename-digit.md"
 
   if ! validate_frontmatter "$ctx/dv-filename-digit.md" >/dev/null 2>&1; then
@@ -109,6 +110,7 @@ self_test_ar_gate() {
       echo '---'
       echo 'handoff:'
       echo '  stage: DV'
+      echo '  tests_executed: 12'
       echo '  verdict: ok'
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
@@ -179,7 +181,7 @@ self_test_ar_gate() {
   # Sweep ledger parity rides on the same invocation: every stub must be in the
   # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
     echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'

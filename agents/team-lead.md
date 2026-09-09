@@ -233,3 +233,15 @@ When `task.metadata.skip_exploration === true`, treat `metadata.exploration_anch
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage TL --prev <PREV>` (`skills/worktask/scripts/`), `<PREV>` = `AR` when AR ran, `PL` when AR was excluded. It atomically patches `tasks.TL0` plus the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Union this stage's facts in the same call
+
+Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
+
+```bash
+state-patch.sh --stage TL --prev <PREV> --facts '{
+  "decisions": [{"id":"tl1","summary":"≤160 chars","ref":"coordination-0.md#fan-out"}],
+  "open_questions": [{"id":"sw-TL0-1","class":"decision","ref":"coordination-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+```
+
+Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.

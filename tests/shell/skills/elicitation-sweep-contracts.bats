@@ -112,6 +112,44 @@ check_pointer_once() {  # <agents-dir> <contracts>
   return $rc
 }
 
+# Every stage agent must show the SECOND transport as a literal command. A stage
+# told to emit open_questions[] but never shown `--facts` writes a stub that
+# reaches the frontmatter and stops: `handoff-protocol.md` § open_questions is
+# agent-written says the two have no derivation between them, so the FN gate
+# never renders it. QA shipped exactly that way, and the run's only blocker was
+# nearly lost to it.
+#
+# PL is the one stage whose payload lives in a procedure file rather than the
+# agent (pl0-procedure.md § Union this stage's facts), so it points there instead.
+FACTS_VIA_PROCEDURE="product-manager"
+
+check_facts_transport() {  # <agents-dir>
+  local f base checked=0 rc=0
+  for f in "$1"/*.md; do
+    base="$(basename "$f" .md)"
+    case " $NON_STAGE_AGENTS " in *" $base "*) continue ;; esac
+    case " $FACTS_VIA_PROCEDURE " in *" $base "*) continue ;; esac
+    checked=$((checked + 1))
+    grep -q -- "--facts" "$f" \
+      || { echo "$base.md: no --facts invocation — its sweep stub cannot reach the ledger"; rc=1; }
+  done
+  [ "$checked" -ge 13 ] || { echo "non-vacuity: only $checked stage agents checked"; return 1; }
+  return $rc
+}
+
+@test "transport: every stage agent shows --facts as a literal command (F-06)" {
+  run check_facts_transport "$PLUGIN_ROOT/agents"
+  [ "$status" -eq 0 ] || fail "$output"
+}
+
+@test "transport: PL's --facts payload is literal in pl0-procedure.md" {
+  # The exemption above is only sound while the procedure it defers to carries
+  # the command; otherwise PL is a hole this suite declared out of scope.
+  grep -q -- "state-patch.sh --stage PL" \
+    "$PLUGIN_ROOT/skills/worktask/references/pl0-procedure.md" \
+    || fail "pl0-procedure.md carries no literal PL --facts invocation"
+}
+
 # The stub is the ONLY item shape. Non-vacuity is the presence of exactly one
 # `$ref: '#/$defs/SweepStub'` under `items:` — an extraction that silently returned nothing
 # would otherwise satisfy every "must not contain" assertion below.
@@ -1516,6 +1554,10 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     printf -- '---\nhandoff:\n  stage: DC\n  verdict: ok\n  summary: "empty sweep"\n'
     printf '  files_touched: [a.md]\n  open_questions: []\n'
     printf '  refs: { dev: development-0.md#files-changed }\n---\n\n# Documentation\n'
+    # The prose half of an empty sweep: the array says nothing was asked, the heading says a
+    # sweep ran. Both are required — this fixture is exercising the LEDGER-parity arm, which
+    # must stay silent when there are no stubs, and it needs a compliant artifact to do so.
+    printf '\n## elicitation-sweep\n\nNothing to elicit.\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
   assert_success

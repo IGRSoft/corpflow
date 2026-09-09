@@ -78,7 +78,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` (**10** paths, then one `"+ <count> more"` obliging the full body set) + the summary line is quoted + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + the summary line is quoted + `tests_executed` present (plus `test_suite_compiles` when it is 0) + `.context/logs/build-*.log` shows success |
 | **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
 | **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
@@ -273,7 +273,7 @@ output as well as standard error. Keep the enum narrow, keep the refusal loud.
 
 #### A re-emitted stub carries its answer forward
 
-When a stage re-emits an item it already emitted — a rework round, a retry — it MUST carry the existing `status` and `resolution` forward rather than re-emitting the item as open. `open < resolved` is monotone in both transports: the ledger union refuses the downgrade (`state-patch.sh`), and this rule is the artifact-side half, which is the one that survives ledger eviction. Re-marking a settled item "open" has already destroyed a recorded answer once in this repository.
+When a stage re-emits an item it already emitted — a rework round, a retry — it MUST carry the existing `status` and `resolution` forward rather than re-emitting the item as open. `open < resolved` is monotone in BOTH transports — artifact frontmatter `handoff.open_questions[]` **and** `state.json facts.open_questions[]` via `state-patch.sh --facts`: the ledger union refuses the downgrade (`state-patch.sh`), and this rule is the artifact-side half, which is the one that survives ledger eviction. Re-marking a settled item "open" has already destroyed a recorded answer once in this repository.
 
 #### Ledger bounds
 
@@ -311,7 +311,7 @@ evicts a live question. Those — and only those — are appended to
 `.context/open-questions-<run_index>.jsonl`, one JSON object per line: the full stub plus
 `spilled_at` and `spilled_from_stage`. Evicted **decisions** spill the same way to
 `.context/decisions-<run_index>.jsonl`, minus the `was_resolved` annotation a decision has no status
-to carry; that file is a recovery and audit record with **no gate reader** by design.
+to carry.
 
 ###### The spill is written before the rename
 
@@ -319,11 +319,17 @@ Both files are append-only, written inside the merge lock and **before** the led
 crash can leave a spill line whose eviction never committed (a duplicate the union collapses) but
 never an eviction whose spill line is missing.
 
-**Both transports are the record.** `handoff-harness.sh` checks frontmatter/ledger parity against
-ledger ∪ spill, and the FN gate reads both, unioned by `.id` with **the ledger winning on conflict**
-— a spill line is a snapshot taken at eviction time and is necessarily staler than an item the
-ledger later resolved. A missing spill file is the empty set; a spill file that exists but cannot be
-parsed is a failure, never an empty set.
+###### Every spill has a reader — never read a ring alone
+
+`handoff.open_questions[]` and `facts.open_questions[]` are both the record.
+`handoff-harness.sh` checks parity against ledger ∪ spill, and the FN gate reads both, unioned by
+`.id` with **the ledger winning on conflict** — a spill line is a snapshot taken at eviction time
+and is necessarily staler than an item the ledger later resolved. A missing spill file is the empty
+set; one that exists but cannot be parsed is a failure, never an empty set.
+
+The decisions ring is read the same way, by `state-patch.sh --read-decisions`. **Never read
+`facts.decisions[]` alone**: past eight per task it is a partial record that reports no partiality,
+which cost one run three of its cross-client parity decisions.
 
 ##### Ledger bounds — why 4 per task
 
@@ -397,7 +403,7 @@ There is exactly one auto-answer authority — the existing Fable decision deleg
 
 ##### The join is over labellers, never transports
 
-The lattice above resolves a disagreement between two *parties* labelling one item. It does **not** apply when one agent's artifact stub and its own ledger stub disagree: that is a single author with two copies, so a divergence is a **defect, not a lattice**. Never join them — the harness fails the stage (`handoff-harness.sh check_sweep_ledger`, which compares `class` and `blocks_next_stage`, not just `id`) and the agent reconciles both copies. Joining instead converts a bookkeeping slip into a real gate, which is how a non-blocking QA-scoping question once stopped a run before DR. The corollary binds the orchestrator too: a value it raises at Step C.2 is written to **both** transports at C.5, because a one-sided write manufactures exactly the divergence the harness refuses.
+The lattice above resolves a disagreement between two *parties* labelling one item. It does **not** apply when one agent's artifact stub and its own ledger stub disagree: that is a single author with two copies, so a divergence is a **defect, not a lattice**. Never join them — the harness fails the stage (`handoff-harness.sh check_sweep_ledger`, which compares `class` and `blocks_next_stage`, not just `id`) and the agent reconciles both copies. Joining instead converts a bookkeeping slip into a real gate, which is how a non-blocking QA-scoping question once stopped a run before DR. The corollary binds the orchestrator too: a value it raises at Step C.2 is written at C.5 to BOTH the artifact's `handoff.open_questions[]` stub **and** `state.json facts.open_questions[]`, because a one-sided write manufactures exactly the divergence the harness refuses.
 
 ### Not the sweep
 
@@ -592,20 +598,28 @@ handoff:
   stage: DV
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
+  tests_executed: 12          # cases RUN, not discovered; 0 is legal
+  test_suite_compiles: true   # true/false/unknown; REQUIRED when the count is 0
   files_touched:              # cap 10, then ONE marker; #files-touched
     - path/to/file1.md
     - "+ 7 more"              # obliges the FULL body set
   next_stage_focus: "<imperative: what DR/QA must focus on>"
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
+---
+```
+
+#### The refs and architecture half (tpl-dv)
+
+```yaml
+# …continued: handoff
   refs:
     decisions: architecture-N.md#decisions    # ONLY when AR ran; omit
     coordination: coordination-N.md#fan-out   # ONLY when TL ran; omit
     tests: development-N.md#tests-added
-  architecture:                # ONLY when AR ran; omit otherwise
+  architecture:                # ONLY when AR ran; omit the object otherwise
     ref: architecture-N.md#decisions
     applied: true              # truthful; see the reference contract below
----
 ```
 
 Prev→this label: `TL→DV` (`AR→DV` without TL, `PL→DV` when neither ran, `IR→DV` on emergency).
@@ -639,6 +653,23 @@ the line has produced an unverifiable claim, and DR treats it as one.
 Where a runner writes its tally only to a terminal, capture through a pty or a log and copy the line
 out of the capture. Where a stage's scoped authority refuses the full-suite entrypoint, record the
 refusal and quote the summary line of the scoped run that was permitted.
+
+#### Zero executed tests must say whether the suite compiles (tpl-dv)
+
+`tests_executed` counts cases that actually **ran** — the number in the summary line above, never
+the number a runner enumerated before exiting. Zero is legal and is not a failure; being unable to
+tell zero from "never built" is.
+
+So when `tests_executed` is `0`, `test_suite_compiles` is REQUIRED: `true`, `false`, or `unknown`
+with the reason in the body. **Compilation is checkable without test-execution authority**, which
+is exactly why it is asked of the stage that was denied.
+
+##### Why not build_status (tpl-dv)
+
+`build_status` reports the app build. A test target can fail to compile while the app builds clean,
+and that combination is what stayed invisible for ten hours of one run while four stages escalated
+with remedies aimed at the wrong control. `handoff-harness.sh --validate-frontmatter` fails a DV
+artifact reporting `tests_executed: 0` with no `test_suite_compiles`.
 
 #### Architecture reference contract (tpl-dv)
 
@@ -722,6 +753,20 @@ handoff:
 
 Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
 
+#### An unverified security claim in shipped docs is a finding (tpl-qa)
+
+A security or networking claim in payload documentation that QA did not verify is a **finding**,
+recorded in `key_decisions` and reflected in the verdict — not prose to be read past. "The README
+says it binds to loopback" is a claim about the artifact, not about the system.
+
+The pattern to demand is the one a remediation on this run produced: the corrected README **carries
+the `lsof` command that would falsify it**. A claim that ships its own test cannot drift from the
+system it describes, and checking it costs a single command instead of a review argument.
+
+This is not QA inventing scope. A shipped README asserting loopback binding, over a database
+listening on `*:5433` with a documented default credential, passed a full developer review; only a
+live probe caught it.
+
 ### #tpl-dc — Documentation (technical-writer)
 
 ```yaml
@@ -741,6 +786,27 @@ handoff:
 ```
 
 Prev→this label: `QA→DC`.
+
+#### Security and networking claims cite their evidence (tpl-dc)
+
+Any security or networking claim in payload documentation names **the stage and the evidence that
+verified it** — a probe, a config line, a test — or it does not ship. "Binds to loopback", "requires
+auth", "no credentials at rest" are all claims of this class.
+
+Prefer a claim that carries its own falsifier: documentation that ships the command proving it
+cannot drift from the system silently. A claim with no cited evidence is DC asserting something no
+stage established, and it will be believed.
+
+#### Under fan-out, DC reads a tree that does not exist yet (tpl-dc)
+
+In fan-out mode DC runs before the streams are merged, so a cross-stream claim — a path, a command,
+an integration — describes an **assembled tree DC cannot see**. Three of four paths one payload's
+README documented were absent from the tree DC was reading. The README was right; DC's method could
+not have established that.
+
+Mark every cross-stream claim `consistency-checked, not executed`, naming what was compared and why
+execution was impossible. An unmarked claim reads as verified, which is the failure: DC's verdict
+then carries a confidence its evidence does not support, and the next reader has no way to tell.
 
 ### #tpl-re — Release Engineering (release-engineer)
 

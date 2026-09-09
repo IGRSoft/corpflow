@@ -284,7 +284,7 @@ under its own stage id.
 | PL | next_stage_focus, key_decisions, open_questions | files_touched | ok / blocked / escalate |
 | AR | key_decisions, next_stage_focus, open_questions | files_touched, subagents_spawned | ok / blocked / escalate |
 | TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
-| DV | files_touched, next_stage_focus, open_questions | key_decisions, subagents_spawned | ok / blocked / escalate |
+| DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
 | DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
 
 #### Stages SR–ET
@@ -389,25 +389,45 @@ The stage schemas below are printed without it, so the item shape is never resta
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DVHandoff",
   "type": "object",
-  "required": ["verdict", "files_modified", "build_status", "open_questions"],
+  "required": ["verdict", "files_modified", "build_status", "tests_executed",
+               "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["ok", "blocked", "escalate"] },
     "files_modified": { "type": "array", "items": { "type": "string" } },
     "tests_added": { "type": "array", "items": { "type": "string" } },
-    "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
     "decisions": { "type": "array", "items": { "type": "string" } },
-    "architecture": {
-      "type": "object",
-      "properties": {
-        "ref": { "type": "string", "pattern": "^architecture-[0-9]+\\.md(#[a-z-]+)?$" },
-        "applied": { "type": "boolean" }
-      },
-      "required": ["ref", "applied"]
-    },
     "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }
 ```
+
+### DVHandoff — build, test-evidence and architecture properties
+
+```json
+{
+  "…continued": "DVHandoff.properties",
+  "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
+  "tests_executed": { "type": "integer", "minimum": 0 },
+  "test_suite_compiles": { "enum": [true, false, "unknown"] },
+  "architecture": {
+    "type": "object",
+    "required": ["ref", "applied"],
+    "properties": {
+      "ref": { "type": "string", "pattern": "^architecture-[0-9]+\\.md(#[a-z-]+)?$" },
+      "applied": { "type": "boolean" }
+    }
+  }
+}
+```
+
+#### DVHandoff — test-evidence field notes
+
+`tests_executed` counts cases that **ran**, never cases a runner enumerated. `test_suite_compiles`
+is required whenever `tests_executed` is `0` and optional otherwise — the distinction between
+gate-blocked and never-built, answerable without test-execution authority. It is deliberately not
+folded into `build_status`, which reports the app build: a test target can fail to compile against a
+clean app build. Contract and rationale: `stage-contracts.md#tpl-dv § Zero executed tests must say
+whether the suite compiles`. Enforced by `handoff-harness.sh --validate-frontmatter`.
 
 #### DVHandoff — architecture field notes
 
@@ -658,7 +678,7 @@ stage passes them in its own `--facts` payload; the two are separate transports 
 no derivation between them, so a stub written to frontmatter alone never reaches the FN gate.
 `handoff-harness.sh --validate-frontmatter --state`, run at each stage completion
 (`commands/worktask.md § Step B.1`), fails the stage when a sweep stub is missing from
-`facts.open_questions[]`, when a stub present in both transports carries a different `class` or
+`facts.open_questions[]`, when a stub present in BOTH `handoff.open_questions[]` and `facts.open_questions[]` carries a different `class` or
 `blocks_next_stage` in each, and when the ledger is unreadable. Two writers with no derivation
 between them means id parity is not agreement: the fields are compared too, and a divergence is
 reconciled by the agent rather than joined by the harness.

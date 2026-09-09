@@ -154,10 +154,10 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 |-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
 | `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
-| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}` |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`; one-shot `state_merge_noop` when the stop carried no stage and no artifact |
 | `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
 | `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with `metadata.stage` |
-| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_delegation_observed`, and one-shot `test_gate_disabled` / `test_dedupe_disabled` hatch notes |
+| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus one-shot `test_gate_disabled` / `test_dedupe_disabled` |
 
 #### Plugin-hook row fields
 
@@ -205,7 +205,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
 ```
 
 #### Schema — remaining fields

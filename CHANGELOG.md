@@ -2,6 +2,108 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.31] — 2026-09-09
+
+Closes phases A–E of `ttt-run-tictactoe-multiplatform-leaderboard-2026-09-09-fixplan.md` — 21 of
+the run's 26 findings. One theme runs through all of them, and it is the one 4.0.30 started: a
+control that fails silently is indistinguishable from a control that passed, and an evidence token
+that asserts more than it observed is worse than no token. Phase F targets a separate repository;
+Phase G is filed upstream, not fixed here.
+
+### Breaking
+
+- **`tests_executed` is a required DV frontmatter field**, and `test_suite_compiles` is required
+  alongside it whenever the count is `0`. A DV artifact without it fails
+  `handoff-harness.sh --validate-frontmatter`. No migration: the field records something no reader
+  could previously derive.
+- **A frontmatter block with no `handoff:` key is refused by `state-patch.sh`**, which previously
+  accepted a flat top-level shape through its awk fallback. An artifact with no frontmatter at all
+  keeps the F3 fallback unchanged — only the malformed shape is newly refused.
+
+### Fixed
+
+- **F-01** — the dedupe gate no longer suppresses against a prior that executed nothing.
+  `tests:0`, the new `discovered:<n>` token, `unrecorded` and any unparseable evidence now allow
+  and write `test_dedupe_skipped_zero_prior`. This is the P0: a scheme with an empty test plan
+  enumerated 49 cases, executed none, recorded `tests:49`, and then refused every later attempt to
+  run them — so a platform reached a merge decision with zero tests executed.
+- **F-01** — `test-execution-promote.sh` distinguishes discovery from execution. A count with no
+  outcome vocabulary anywhere in the runner output is recorded as `discovered:<n>`, never
+  `tests:<n>`. `executed` counts as outcome vocabulary; `executing` deliberately does not. The
+  vocabulary is matched against the string leaves of an object response, never its serialised
+  keys, so a response carrying an `error: false` field cannot pass an enumeration off as a result.
+- **F-02** — every denial names the controls still in force. The dedupe denial previously named
+  neither the authority holder nor the resolved test mode, which is why four stages escalated in
+  one run each proposing a remedy a different arm would have refused again.
+- **F-02** — DV records `tests_executed` and, at zero, `test_suite_compiles`. Compilation is
+  checkable without test-execution authority, and it is the datum separating *gate-blocked* from
+  *never built* — a distinction that stayed invisible for ten hours.
+- **F-04** — the `facts.decisions[]` eviction spill has a reader: `state-patch.sh
+  --read-decisions` returns ledger ∪ spill, ledger winning on conflict, a parse error or a
+  symlinked spill being a failure rather than an empty set. Twelve decisions written for one task now all resolve; four
+  were previously lost in silence, three of them cross-client parity controls.
+- **F-04, F-15** — a partial `--facts` write records its casualties durably: rejected ids reach
+  `audit.jsonl` as `facts_items_rejected` rather than stderr alone, and the post-write check now
+  distinguishes *evicted to spill* (recoverable) from *lost* (in neither place). The old message
+  asserted eviction unconditionally, and on the run that produced this finding it named four ids a
+  later write had restored while four different ids were the ones actually gone.
+- **F-05** — one frontmatter reader, `skills/worktask/scripts/frontmatter-lib.sh`, shared by
+  `handoff-harness.sh` and `state-patch.sh`. The two previously disagreed about what a valid
+  artifact looked like, so a flat-shaped artifact was unreadable to the boundary gate and still
+  wrote a healthy ledger row.
+- **F-06** — the second transport is now a literal command in every sweep-obligated agent.
+  `qa-engineer.md`, `project-manager.md`, `stakeholder.md`, `team-lead.md` and
+  `ethics-reviewer.md` carried no `--facts` invocation at all, so **every sweep item those stages
+  emitted was structurally invisible to the FN gate** — the mechanism behind this run nearly
+  losing its only blocker. Bare "both transports" phrasing is gone from every shipping surface.
+- **F-09** — the DC contract requires cross-stream claims to be marked `consistency-checked, not
+  executed`: under fan-out DC reads a tree that does not exist yet, and three of four documented
+  paths were absent from the tree it was reading.
+- **F-08** — security and networking claims in payload documentation must cite the stage and
+  evidence that verified them, and QA treats an unverified one as a finding. A README asserting
+  loopback binding shipped over a database on `*:5433` with a default credential and passed
+  developer review; only a live probe caught it.
+- **F-10** — `base-sanity` gains a `multi_parent_payload` degrade rung. Under fan-out
+  `facts.files_modified` cannot be the union of independently-staged streams, so the rule blocked
+  by construction on every fan-out — 140 PR files against 19 ledger files, cleared only with the
+  sanctioned override.
+- **F-11** — DV claims the ledger as its first write after the worktree pin (§ D0.0b), generalizing
+  the `MANDATORY CLOSE` pattern that previously existed only in `technical-writer.md`. Three of
+  four streams hit their turn ceiling with nothing staged, no artifact and the ledger still
+  `in_progress`; all three carried a degradation order and ran out before reaching it.
+- **F-12, F-13** — `§ Step B.1` routes **any** non-zero harness exit as a `missing_input` contract
+  violation, with the named shapes demoted to an illustrative table, and states plainly that shape
+  failures short-circuit so a fix may reveal further failures. The previous text enumerated three
+  shapes and promised one-shot batching that shape-dependent checks cannot honour.
+- **F-14** — the AR-reference warn distinguishes a malformed shape from a dangling file and names
+  the expected bare form; both causes previously shared one message.
+- **F-16** — a non-canonical `--artifact` name warns and names the canonical form.
+  `hooks/anchor-preflight.sh` fails open on an unmatched name, so such an artifact was written,
+  ledgered, harness-passed and never anchor-linted — which hid two missing required anchors.
+- **F-18** — orchestrator loop step 4.7a lands AR's untracked non-`.context/` writes onto the ref
+  DV forks from. AR holds no git grant, DV is inside the broken tree and FN runs last, so no stage
+  could fix this; it has reproduced across three runs.
+- **F-19** — `state-merge.sh` writes one `state_merge_noop` row per run when a SubagentStop carries
+  neither stage nor artifact; the sentinel is keyed on `run_index`, so a later run in the same
+  workspace gets its own row. Fail-open behaviour is unchanged; one run produced 335 of these and
+  every sweep over `audit.jsonl` reported that boundary clean.
+- **F-20** — an empty `open_questions` now requires the `## elicitation-sweep` heading. An empty
+  array alone cannot distinguish "swept, nothing to ask" from "never swept", which is the rule's
+  whole purpose. An absent field stays the required-field loop's single failure.
+- **F-25** — the tree-fingerprint gap is documented accurately. Staged content **is** inside the
+  digest, so committing is never needed to clear a denial; only untracked-file *content* is outside
+  it. The finding's premise was wrong and is corrected rather than repeated.
+
+### Not changed, after checking
+
+- The fixplan's proposal to add `stage` and `status` to every agent's `--facts` stub was dropped:
+  `state-patch.sh`'s `_sweep_defaults` already derives `stage` from the item id and defaults
+  `status` to `open`, so the examples are correct as written and the addition would have been
+  redundant tokens in eight agent files.
+- `agents/product-manager.md` was not given a `--facts` example: PL's payload is canonical in
+  `pl0-procedure.md § Union this stage's facts`, which carries the literal command. The exemption
+  is pinned by a test so it cannot decay into a hole.
+
 ## [4.0.30] — 2026-09-08
 
 Closes all thirteen findings from `corpflow-fix-plan-2026-09-07.md` across four parallel
