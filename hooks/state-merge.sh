@@ -283,17 +283,24 @@ PATCH_ARGS+=(--via "${STATE_MERGE_VIA:-hook}")
 # no row anywhere. Record it — once per run, the same sentinel shape the test gate
 # uses for its hatch notes, since the per-call volume is the point.
 #
+# Keyed on run_index because .context/logs outlives a run: a bare sentinel would
+# note the first run only, and a sweep over a later run's rows would read clean
+# for the same reason the unrecorded no-op did. No state.json reads as run 0.
+#
 # Deliberately does NOT change the fail-open behaviour: a SubagentStop with no
 # stage is a normal event for a non-stage subagent, and blocking it would break
 # every dispatch this hook is not about. Visible, not fatal.
 if [ -z "${CLAUDE_TASK_METADATA_STAGE:-}" ] && [ -z "${CLAUDE_ARTIFACT_PATH:-}" ] \
   && [ "$LIB_DEGRADED" -eq 0 ]; then
-  _NOOP_SENTINEL="$LOG_DIR/.state-merge-noop-noted"
+  _NOOP_RUN=$(jq -r '.run_index // 0' "$WORKSPACE_DIR/.context/state.json" 2> /dev/null || printf '0')
+  case "$_NOOP_RUN" in '' | *[!0-9]*) _NOOP_RUN=0 ;; esac
+  _NOOP_SENTINEL="$LOG_DIR/.state-merge-noop-noted-${_NOOP_RUN}"
   if [ ! -f "$_NOOP_SENTINEL" ]; then
     : > "$_NOOP_SENTINEL" 2> /dev/null || true
     corpflow_hook_audit_row --ctx "$WORKSPACE_DIR/.context" \
       --actor hook:state-merge --action state_merge_noop --result ok \
-      --meta '{"reason":"no stage and no artifact in the SubagentStop environment"}'
+      --meta "$(jq -cn --argjson n "$_NOOP_RUN" \
+        '{reason: "no stage and no artifact in the SubagentStop environment", run_index: $n}')"
   fi
 fi
 

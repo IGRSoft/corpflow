@@ -29,7 +29,9 @@ Phase G is filed upstream, not fixed here.
   run them — so a platform reached a merge decision with zero tests executed.
 - **F-01** — `test-execution-promote.sh` distinguishes discovery from execution. A count with no
   outcome vocabulary anywhere in the runner output is recorded as `discovered:<n>`, never
-  `tests:<n>`. `executed` counts as outcome vocabulary; `executing` deliberately does not.
+  `tests:<n>`. `executed` counts as outcome vocabulary; `executing` deliberately does not. The
+  vocabulary is matched against the string leaves of an object response, never its serialised
+  keys, so a response carrying an `error: false` field cannot pass an enumeration off as a result.
 - **F-02** — every denial names the controls still in force. The dedupe denial previously named
   neither the authority holder nor the resolved test mode, which is why four stages escalated in
   one run each proposing a remedy a different arm would have refused again.
@@ -37,8 +39,8 @@ Phase G is filed upstream, not fixed here.
   checkable without test-execution authority, and it is the datum separating *gate-blocked* from
   *never built* — a distinction that stayed invisible for ten hours.
 - **F-04** — the `facts.decisions[]` eviction spill has a reader: `state-patch.sh
-  --read-decisions` returns ledger ∪ spill, ledger winning on conflict, a parse error being a
-  failure rather than an empty set. Twelve decisions written for one task now all resolve; four
+  --read-decisions` returns ledger ∪ spill, ledger winning on conflict, a parse error or a
+  symlinked spill being a failure rather than an empty set. Twelve decisions written for one task now all resolve; four
   were previously lost in silence, three of them cross-client parity controls.
 - **F-04, F-15** — a partial `--facts` write records its casualties durably: rejected ids reach
   `audit.jsonl` as `facts_items_rejected` rather than stderr alone, and the post-write check now
@@ -82,11 +84,12 @@ Phase G is filed upstream, not fixed here.
   DV forks from. AR holds no git grant, DV is inside the broken tree and FN runs last, so no stage
   could fix this; it has reproduced across three runs.
 - **F-19** — `state-merge.sh` writes one `state_merge_noop` row per run when a SubagentStop carries
-  neither stage nor artifact. Fail-open behaviour is unchanged; one run produced 335 of these and
+  neither stage nor artifact; the sentinel is keyed on `run_index`, so a later run in the same
+  workspace gets its own row. Fail-open behaviour is unchanged; one run produced 335 of these and
   every sweep over `audit.jsonl` reported that boundary clean.
 - **F-20** — an empty `open_questions` now requires the `## elicitation-sweep` heading. An empty
   array alone cannot distinguish "swept, nothing to ask" from "never swept", which is the rule's
-  whole purpose.
+  whole purpose. An absent field stays the required-field loop's single failure.
 - **F-25** — the tree-fingerprint gap is documented accurately. Staged content **is** inside the
   digest, so committing is never needed to clear a denial; only untracked-file *content* is outside
   it. The finding's premise was wrong and is corrected rather than repeated.

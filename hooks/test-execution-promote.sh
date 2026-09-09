@@ -161,7 +161,15 @@ tool_evidence_token() {
       # them. Outcome vocabulary is the discriminator: a summary that reports a
       # result says one of these words somewhere. `executed` is in the list and
       # `executing` deliberately is not.
-      | ($all | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))
+      #
+      # Tested against string LEAVES, never the serialised object: an object
+      # response carrying an `error` or `errors` key — a shape $rflag above
+      # already anticipates — would otherwise satisfy `errors?` by its key name
+      # alone and hand a bare enumeration back its `tests:` token.
+      | (if ($r | type) == "object" then ([$r | .. | strings] | join(" "))
+         else $rtext end) as $leaftext
+      | (($leaftext + " " + $errtext)
+         | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))
         as $ran
       | (if $count != null and $ran then "tests:" + $count
          elif $count != null then "discovered:" + $count

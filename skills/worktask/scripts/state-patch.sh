@@ -1206,8 +1206,15 @@ if [[ -n "$READ_DECISIONS" ]]; then
 
   _RD_SPILLED="[]"
   # A symlinked spill is refused rather than followed, matching every other reader of a
-  # `.context/` side file here.
-  if [[ -f "$_RD_SPILL" && ! -L "$_RD_SPILL" ]]; then
+  # `.context/` side file here — and refused LOUDLY, like the unparseable arm below: a
+  # spill this reader will not open is a spill it cannot vouch for, and answering with the
+  # ledger half alone is the partial set the contract above rules out.
+  if [[ -L "$_RD_SPILL" ]]; then
+    printf >&2 'ERROR: %s is a symlink — refusing to follow it or to report a partial decision set\n' \
+      "$_RD_SPILL"
+    exit 2
+  fi
+  if [[ -f "$_RD_SPILL" ]]; then
     if ! _RD_SPILLED=$(jq -c -s '.' "$_RD_SPILL" 2> /dev/null); then
       printf >&2 'ERROR: %s exists but is not readable as JSON lines — refusing to report a partial decision set\n' \
         "$_RD_SPILL"

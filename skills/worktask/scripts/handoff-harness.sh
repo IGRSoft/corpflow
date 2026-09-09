@@ -324,10 +324,11 @@ check_empty_sweep_prose() {
   local artifact="$1" fmfile="$2" oqtype rows
 
   oqtype=$(_sweep_rows TYPE)
-  # A non-sequence is check_sweep_stub_shape's failure, already reported; only `[]` and a
-  # literal null reach this arm as "empty".
+  # Only a real sequence reaches this arm. A non-sequence is check_sweep_stub_shape's
+  # failure and an ABSENT field is the required-field loop's, both already reported;
+  # calling either one "empty" here would send the stage two failures for one slip.
   case "$oqtype" in
-    '!!seq' | '!!null') ;;
+    '!!seq') ;;
     *) return 0 ;;
   esac
   rows=$(_sweep_rows STUB)
