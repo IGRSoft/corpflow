@@ -9146,6 +9146,1352 @@
         "Whether the question it asks is the most useful one — needs a validated judge."
       ],
       "split": "train"
+    },
+    {
+      "id": 271,
+      "prompt": "our simplest design-capture path -- one linked screen in, one stored image out -- is written up as expected behaviour and nothing executes it. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "01-single-screen",
+            "01-single-screen.md",
+            "skills/worktask/references/fixtures/figma-capture/01-single-screen.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/figma-capture/01-single-screen.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 272,
+      "prompt": "we want the descent into a design container pinned, so a section holding four children cannot quietly capture only its parent. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "02-multi-frame-section",
+            "02-multi-frame-section.md",
+            "skills/worktask/references/fixtures/figma-capture/02-multi-frame-section.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/figma-capture/02-multi-frame-section.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 273,
+      "prompt": "when the design tool rejects our credentials the run is meant to stop gently with one message, and the expected wording lives only in a note nobody runs. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "03-auth-failure",
+            "03-auth-failure.md",
+            "skills/worktask/references/fixtures/figma-capture/03-auth-failure.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/figma-capture/03-auth-failure.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 274,
+      "prompt": "two older link shapes for a design file stopped triggering our capture step and the regression is recorded only in prose. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "04-alternate-url-forms",
+            "04-alternate-url-forms.md",
+            "skills/worktask/references/fixtures/figma-capture/04-alternate-url-forms.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/figma-capture/04-alternate-url-forms.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 275,
+      "prompt": "the expected input-and-output pairs for design capture sit in four numbered notes with no index saying what they collectively cover. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "figma-capture",
+            "skills/worktask/references/fixtures/figma-capture/README.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/figma-capture/README.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 276,
+      "prompt": "we want the case where every open question is answerable from the tree, so none should reach the approval gate, pinned as an executable expectation. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "01-facts-only-zero-questions",
+            "01-facts-only-zero-questions.md",
+            "skills/worktask/references/fixtures/plan-gate-questions/01-facts-only-zero-questions.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/plan-gate-questions/01-facts-only-zero-questions.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 277,
+      "prompt": "reviewers cannot tell which question-batching rules our notes actually cover versus which are only asserted in the procedure. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "plan-gate-questions",
+            "skills/worktask/references/fixtures/plan-gate-questions/README.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/plan-gate-questions/README.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 278,
+      "prompt": "our two-pass scrubber is supposed to strip every internal path before a plan is published, and the sample proving it sits outside the suite. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "02-leaky-plan",
+            "02-leaky-plan.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/02-leaky-plan.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/02-leaky-plan.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 279,
+      "prompt": "republishing a plan that already has an issue should do nothing, and the case describing that is not wired to anything. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "04-already-published",
+            "04-already-published.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/04-already-published.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/04-already-published.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 280,
+      "prompt": "in our strict setting an operational failure must exit non-zero, and that contract is only written down beside a sample. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "06-strict-mode",
+            "06-strict-mode.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/06-strict-mode.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/06-strict-mode.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 281,
+      "prompt": "on a fresh repository all four of our issue labels should be created automatically, and nothing verifies that first-run path. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "08-missing-labels",
+            "08-missing-labels.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/08-missing-labels.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/08-missing-labels.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 282,
+      "prompt": "our design preview is meant to host and rewrite placeholder image tokens before publishing, and the expected rewrite is captured only as a sample. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "10-figma-image-embed",
+            "10-figma-image-embed.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/10-figma-image-embed.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/10-figma-image-embed.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 283,
+      "prompt": "when every prose rank of our title chain is empty the fallback must record that it degraded instead of publishing quietly, and only a sample says so. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "13c-no-title-source",
+            "13c-no-title-source.md",
+            "skills/worktask/references/fixtures/publish-pl-issue/13c-no-title-source.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "skills/worktask/references/fixtures/publish-pl-issue/13c-no-title-source.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 284,
+      "prompt": "we want the payload shape our stop hooks parse pinned in one place, so a renamed field cannot break four of them at once. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "agent-stop.payload",
+            "agent-stop.payload.json",
+            "tests/fixtures/hooks/agent-stop.payload.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/hooks/agent-stop.payload.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 285,
+      "prompt": "our write-time preflight also fires on files that are not stage artifacts, and the sample covering that negative case is asserted nowhere. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "anchor-preflight-nonartifact.payload",
+            "anchor-preflight-nonartifact.payload.json",
+            "tests/fixtures/hooks/anchor-preflight-nonartifact.payload.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/hooks/anchor-preflight-nonartifact.payload.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 286,
+      "prompt": "nothing pins the payload our tool-call audit reads, so a renamed field would first be noticed in production. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "audit-tooluse.payload",
+            "audit-tooluse.payload.json",
+            "tests/fixtures/hooks/audit-tooluse.payload.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/hooks/audit-tooluse.payload.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 287,
+      "prompt": "we want the developer-versus-other-agent branch of our visual-evidence gate pinned, since the two inputs differ by a single field. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "dv-screenshot-gate-developer.payload",
+            "dv-screenshot-gate-developer.payload.json",
+            "tests/fixtures/hooks/dv-screenshot-gate-developer.payload.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/hooks/dv-screenshot-gate-developer.payload.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 288,
+      "prompt": "our visual-evidence gate should stay quiet for agents that never touch the interface, and the input for that case is not exercised. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "dv-screenshot-gate-nondeveloper.payload",
+            "dv-screenshot-gate-nondeveloper.payload.json",
+            "tests/fixtures/hooks/dv-screenshot-gate-nondeveloper.payload.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/hooks/dv-screenshot-gate-nondeveloper.payload.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 289,
+      "prompt": "our duplicate-suppression pass over the audit log has a stored input that no assertion reads. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "audit-dedup",
+            "audit-dedup.jsonl",
+            "tests/fixtures/skills/audit-dedup.jsonl"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/audit-dedup.jsonl"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 290,
+      "prompt": "nothing pins how our suppression treats audit entries whose actor carries another plugin's prefix. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "audit-dedup-plugin-prefix",
+            "audit-dedup-plugin-prefix.jsonl",
+            "tests/fixtures/skills/audit-dedup-plugin-prefix.jsonl"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/audit-dedup-plugin-prefix.jsonl"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 291,
+      "prompt": "the commit-subject shapes our release notes generator must handle are listed in a stored sample with no written statement of the grouping rules. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "changelog-subjects",
+            "changelog-subjects.txt",
+            "tests/fixtures/skills/changelog-subjects.txt"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/changelog-subjects.txt"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 292,
+      "prompt": "a batch run is hanging with two issues each waiting on the other, and the stored case encoding that loop is checked by nothing. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "orchestrator-cycle",
+            "orchestrator-cycle.json",
+            "tests/fixtures/skills/orchestrator-cycle.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/orchestrator-cycle.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 293,
+      "prompt": "our audit trail is vanishing after every mid-run context compaction right now, and the reconstruction reads a stored sample nobody asserts against. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "buried",
+        "route": "emerg"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-emergency-tier",
+          "why": "A live incident takes the incident pipeline, not the planning tiers",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--emergency"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "post-compact-audit",
+            "post-compact-audit.jsonl",
+            "tests/fixtures/skills/post-compact-audit.jsonl"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/post-compact-audit.jsonl"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 294,
+      "prompt": "the stored input holding an embedded private key for our secret scanner is asserted against by nothing. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "p2-private-key",
+            "p2-private-key.env",
+            "tests/fixtures/skills/scan-secrets/p2-private-key.env"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/scan-secrets/p2-private-key.env"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 295,
+      "prompt": "a connection string with inline credentials is one of the classes our scanner claims to catch, and its stored input is unasserted. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "p4-database-url",
+            "p4-database-url.env",
+            "tests/fixtures/skills/scan-secrets/p4-database-url.env"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/scan-secrets/p4-database-url.env"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 296,
+      "prompt": "we have no negative case proving our secret scanner stays quiet on a file with nothing sensitive in it. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "clean.env",
+            "tests/fixtures/skills/scan-secrets/clean.env"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/scan-secrets/clean.env"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 297,
+      "prompt": "we want one stored input carrying every severity class our secret scanner recognises, so a dropped class surfaces as a failure. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "buried",
+        "route": "secure"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-secure-tier",
+          "why": "Security-sensitive work routes to --secure regardless of size (skills/request-plan/references/handoff.md)",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+--secure"
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "all-classes",
+            "all-classes.env",
+            "tests/fixtures/skills/scan-secrets/all-classes.env"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/skills/scan-secrets/all-classes.env"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 298,
+      "prompt": "the input our path scrubber is meant to rewrite is stored with no expected output beside it. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "sanitiser-input",
+            "sanitiser-input.md",
+            "tests/fixtures/worktask/sanitiser-input.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/worktask/sanitiser-input.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 299,
+      "prompt": "a ledger that records a replay loop should be refused, and the stored case encoding one is not covered. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "state.cycle.json",
+            "tests/fixtures/worktask/state.cycle.json"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/worktask/state.cycle.json"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 300,
+      "prompt": "the merged stage artifact our handoff reader consumes has a stored example but nothing written down about which block wins. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "buried",
+        "route": "std"
+      },
+      "expected_outcome": "plan",
+      "assertions": [
+        {
+          "id": "routes-to-standard-tier",
+          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
+          "type": "regex_all",
+          "values": [
+            "/worktask\\s+\\\""
+          ]
+        },
+        {
+          "id": "finds-the-real-surface",
+          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
+          "type": "regex_any",
+          "values": [
+            "architecture-0.merged.sample",
+            "architecture-0.merged.sample.md",
+            "tests/fixtures/worktask/architecture-0.merged.sample.md"
+          ]
+        }
+      ],
+      "grounding": [
+        "tests/fixtures/worktask/architecture-0.merged.sample.md"
+      ],
+      "deferred": [
+        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 301,
+      "prompt": "we want our release notes mirrored into the Notion space the support team reads. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 302,
+      "prompt": "we want a weekly digest emailed to product owners summarising shipped work. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 303,
+      "prompt": "we want single sign-on for the admin console through the company identity provider. plan it.",
+      "dimensions": {
+        "type": "feature",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 304,
+      "prompt": "our runbook for rotating third-party api keys is out of date. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "absent",
+        "route": "secure"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 305,
+      "prompt": "new hires cannot tell which of our staging environments is safe to deploy to. plan the documentation.",
+      "dimensions": {
+        "type": "docs",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 306,
+      "prompt": "our invoice pdf prints the customer address twice for eu accounts. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 307,
+      "prompt": "our mobile push notifications arrive twice for users in two timezones. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 308,
+      "prompt": "our search results page drops the last row when the count is an exact multiple of the page size. plan a fix.",
+      "dimensions": {
+        "type": "bug",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 309,
+      "prompt": "three of our microservices each ship their own copy of the date-parsing helper. plan a cleanup.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 310,
+      "prompt": "our email templates duplicate the same footer markup in eleven files. plan a cleanup.",
+      "dimensions": {
+        "type": "refactor",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
+    },
+    {
+      "id": 311,
+      "prompt": "we are moving our feature flags off a hosted service onto one we run. plan the migration.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 312,
+      "prompt": "we are consolidating two crm tenants after the acquisition. plan the migration.",
+      "dimensions": {
+        "type": "migration",
+        "grounding": "absent",
+        "route": "std"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 313,
+      "prompt": "our payment provider is declining every card right now. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "dev"
+    },
+    {
+      "id": 314,
+      "prompt": "our dns provider is serving stale records and half our traffic is misrouted right now. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "test"
+    },
+    {
+      "id": 315,
+      "prompt": "the customer-facing status page is stuck showing a resolved outage. plan the response.",
+      "dimensions": {
+        "type": "incident",
+        "grounding": "absent",
+        "route": "emerg"
+      },
+      "expected_outcome": "clarify",
+      "assertions": [],
+      "grounding": [],
+      "deferred": [
+        "Whether the question it asks is the most useful one — needs a validated judge."
+      ],
+      "split": "train"
     }
   ],
   "dimensions": {

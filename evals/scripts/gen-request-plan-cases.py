@@ -704,6 +704,97 @@ CASES = [
     ("incident", "absent", "emerg", "the artifact registry is rejecting every upload right now. plan the response.", []),
     ("incident", "absent", "emerg", "our on-call paging provider is failing and alerts are not reaching anyone. plan the response.", []),
     ("incident", "absent", "emerg", "the shared build cache is returning 503 and every run is starting cold. plan the response.", []),
+    # ---- batch 7 (ids 271+): buried on registry-excluded FIXTURE corpora ----
+    # `adjacent` cut on findings-0.4.0 § Next item 4 (0 genuine negatives from 7 held-out);
+    # `buried` kept (3 of 4), `absent` retained as the p~0.17 control. Hence 45:
+    # 30 buried / 15 absent / 0 adjacent / 0 obvious / 0 refute -> 18 held-out at the
+    # 40/40/20 cycle. Route derives from the prompt, never from the tuple's third field:
+    # 33 std / 7 secure / 5 emerg, the last matching the corpus's 11%.
+    #
+    # Fresh cell, not batch 6's. capability-registry.sh enumerates neither `tests/` nor
+    # `skills/*/references/`, so these surfaces are reachable only by reading the tree --
+    # the property that made batch 6's buried cell yield, without re-measuring it. Every
+    # prompt states a VERIFICATION gap rather than a defect: a fixture that no assertion
+    # reads is checkable from the tree, where "this code is wrong" would need a premise
+    # this table cannot keep true.
+    ("bug", "buried", "std", "our simplest design-capture path -- one linked screen in, one stored image out -- is written up as expected behaviour and nothing executes it. plan a fix.",
+     ["skills/worktask/references/fixtures/figma-capture/01-single-screen.md"]),
+    ("feature", "buried", "std", "we want the descent into a design container pinned, so a section holding four children cannot quietly capture only its parent. plan it.",
+     ["skills/worktask/references/fixtures/figma-capture/02-multi-frame-section.md"]),
+    ("bug", "buried", "secure", "when the design tool rejects our credentials the run is meant to stop gently with one message, and the expected wording lives only in a note nobody runs. plan a fix.",
+     ["skills/worktask/references/fixtures/figma-capture/03-auth-failure.md"]),
+    ("bug", "buried", "std", "two older link shapes for a design file stopped triggering our capture step and the regression is recorded only in prose. plan a fix.",
+     ["skills/worktask/references/fixtures/figma-capture/04-alternate-url-forms.md"]),
+    ("docs", "buried", "std", "the expected input-and-output pairs for design capture sit in four numbered notes with no index saying what they collectively cover. plan the documentation.",
+     ["skills/worktask/references/fixtures/figma-capture/README.md"]),
+    ("feature", "buried", "std", "we want the case where every open question is answerable from the tree, so none should reach the approval gate, pinned as an executable expectation. plan it.",
+     ["skills/worktask/references/fixtures/plan-gate-questions/01-facts-only-zero-questions.md"]),
+    ("docs", "buried", "std", "reviewers cannot tell which question-batching rules our notes actually cover versus which are only asserted in the procedure. plan the documentation.",
+     ["skills/worktask/references/fixtures/plan-gate-questions/README.md"]),
+    ("bug", "buried", "std", "our two-pass scrubber is supposed to strip every internal path before a plan is published, and the sample proving it sits outside the suite. plan a fix.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/02-leaky-plan.md"]),
+    ("bug", "buried", "std", "republishing a plan that already has an issue should do nothing, and the case describing that is not wired to anything. plan a fix.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/04-already-published.md"]),
+    ("bug", "buried", "std", "in our strict setting an operational failure must exit non-zero, and that contract is only written down beside a sample. plan a fix.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/06-strict-mode.md"]),
+    ("feature", "buried", "std", "on a fresh repository all four of our issue labels should be created automatically, and nothing verifies that first-run path. plan it.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/08-missing-labels.md"]),
+    ("bug", "buried", "secure", "our design preview is meant to host and rewrite placeholder image tokens before publishing, and the expected rewrite is captured only as a sample. plan a fix.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/10-figma-image-embed.md"]),
+    ("bug", "buried", "std", "when every prose rank of our title chain is empty the fallback must record that it degraded instead of publishing quietly, and only a sample says so. plan a fix.",
+     ["skills/worktask/references/fixtures/publish-pl-issue/13c-no-title-source.md"]),
+    ("feature", "buried", "std", "we want the payload shape our stop hooks parse pinned in one place, so a renamed field cannot break four of them at once. plan it.",
+     ["tests/fixtures/hooks/agent-stop.payload.json"]),
+    ("bug", "buried", "std", "our write-time preflight also fires on files that are not stage artifacts, and the sample covering that negative case is asserted nowhere. plan a fix.",
+     ["tests/fixtures/hooks/anchor-preflight-nonartifact.payload.json"]),
+    ("bug", "buried", "std", "nothing pins the payload our tool-call audit reads, so a renamed field would first be noticed in production. plan a fix.",
+     ["tests/fixtures/hooks/audit-tooluse.payload.json"]),
+    ("feature", "buried", "std", "we want the developer-versus-other-agent branch of our visual-evidence gate pinned, since the two inputs differ by a single field. plan it.",
+     ["tests/fixtures/hooks/dv-screenshot-gate-developer.payload.json"]),
+    ("bug", "buried", "std", "our visual-evidence gate should stay quiet for agents that never touch the interface, and the input for that case is not exercised. plan a fix.",
+     ["tests/fixtures/hooks/dv-screenshot-gate-nondeveloper.payload.json"]),
+    ("bug", "buried", "std", "our duplicate-suppression pass over the audit log has a stored input that no assertion reads. plan a fix.",
+     ["tests/fixtures/skills/audit-dedup.jsonl"]),
+    ("bug", "buried", "std", "nothing pins how our suppression treats audit entries whose actor carries another plugin's prefix. plan a fix.",
+     ["tests/fixtures/skills/audit-dedup-plugin-prefix.jsonl"]),
+    ("docs", "buried", "std", "the commit-subject shapes our release notes generator must handle are listed in a stored sample with no written statement of the grouping rules. plan the documentation.",
+     ["tests/fixtures/skills/changelog-subjects.txt"]),
+    ("incident", "buried", "emerg", "a batch run is hanging with two issues each waiting on the other, and the stored case encoding that loop is checked by nothing. plan the response.",
+     ["tests/fixtures/skills/orchestrator-cycle.json"]),
+    ("incident", "buried", "emerg", "our audit trail is vanishing after every mid-run context compaction right now, and the reconstruction reads a stored sample nobody asserts against. plan the response.",
+     ["tests/fixtures/skills/post-compact-audit.jsonl"]),
+    ("bug", "buried", "secure", "the stored input holding an embedded private key for our secret scanner is asserted against by nothing. plan a fix.",
+     ["tests/fixtures/skills/scan-secrets/p2-private-key.env"]),
+    ("bug", "buried", "secure", "a connection string with inline credentials is one of the classes our scanner claims to catch, and its stored input is unasserted. plan a fix.",
+     ["tests/fixtures/skills/scan-secrets/p4-database-url.env"]),
+    ("bug", "buried", "secure", "we have no negative case proving our secret scanner stays quiet on a file with nothing sensitive in it. plan a fix.",
+     ["tests/fixtures/skills/scan-secrets/clean.env"]),
+    ("feature", "buried", "secure", "we want one stored input carrying every severity class our secret scanner recognises, so a dropped class surfaces as a failure. plan it.",
+     ["tests/fixtures/skills/scan-secrets/all-classes.env"]),
+    ("bug", "buried", "std", "the input our path scrubber is meant to rewrite is stored with no expected output beside it. plan a fix.",
+     ["tests/fixtures/worktask/sanitiser-input.md"]),
+    ("bug", "buried", "std", "a ledger that records a replay loop should be refused, and the stored case encoding one is not covered. plan a fix.",
+     ["tests/fixtures/worktask/state.cycle.json"]),
+    ("docs", "buried", "std", "the merged stage artifact our handoff reader consumes has a stored example but nothing written down about which block wins. plan the documentation.",
+     ["tests/fixtures/worktask/architecture-0.merged.sample.md"]),
+    # ---- batch 7: absent control (ids continue) ----
+    # Ungroundable in THIS repo and distinct from batch 5/6's absent prompts, which the
+    # 0.3.0 findings flagged as plausibly easier at p ~ 0.17.
+    ("feature", "absent", "std", "we want our release notes mirrored into the Notion space the support team reads. plan it.", []),
+    ("feature", "absent", "std", "we want a weekly digest emailed to product owners summarising shipped work. plan it.", []),
+    ("feature", "absent", "std", "we want single sign-on for the admin console through the company identity provider. plan it.", []),
+    ("docs", "absent", "secure", "our runbook for rotating third-party api keys is out of date. plan the documentation.", []),
+    ("docs", "absent", "std", "new hires cannot tell which of our staging environments is safe to deploy to. plan the documentation.", []),
+    ("bug", "absent", "std", "our invoice pdf prints the customer address twice for eu accounts. plan a fix.", []),
+    ("bug", "absent", "std", "our mobile push notifications arrive twice for users in two timezones. plan a fix.", []),
+    ("bug", "absent", "std", "our search results page drops the last row when the count is an exact multiple of the page size. plan a fix.", []),
+    ("refactor", "absent", "std", "three of our microservices each ship their own copy of the date-parsing helper. plan a cleanup.", []),
+    ("refactor", "absent", "std", "our email templates duplicate the same footer markup in eleven files. plan a cleanup.", []),
+    ("migration", "absent", "std", "we are moving our feature flags off a hosted service onto one we run. plan the migration.", []),
+    ("migration", "absent", "std", "we are consolidating two crm tenants after the acquisition. plan the migration.", []),
+    ("incident", "absent", "emerg", "our payment provider is declining every card right now. plan the response.", []),
+    ("incident", "absent", "emerg", "our dns provider is serving stale records and half our traffic is misrouted right now. plan the response.", []),
+    ("incident", "absent", "emerg", "the customer-facing status page is stuck showing a resolved outage. plan the response.", []),
 ]
 
 
@@ -724,9 +815,10 @@ def surface_tokens(paths: list) -> list:
         base = os.path.basename(rel)
         stem, _, _ = base.rpartition(".")
         tokens.append(rel)
-        if base == "SKILL.md":
+        if base in ("SKILL.md", "README.md"):
             # NOT the bare basename. "SKILL.md" matches any response naming any skill
             # file, so it grades nothing; the owning directory is what identifies this one.
+            # README.md is the same shape and this repo has dozens.
             tokens.append(os.path.basename(os.path.dirname(rel)))
             continue
         tokens.append(base)

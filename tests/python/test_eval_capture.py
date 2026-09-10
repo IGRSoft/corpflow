@@ -477,6 +477,26 @@ class CaptureCli(unittest.TestCase):
     def test_unreadable_eval_set_is_a_usage_error(self):
         self.assertEqual(capture.main(["--eval-set", "/nonexistent/evals.json"]), 64)
 
+    def _dry_run_ids(self, *extra):
+        held, sys.stdout = sys.stdout, io.StringIO()
+        try:
+            rc = capture.main(["--eval-set", _EVAL_SET, "--dry-run", *extra])
+            out = sys.stdout.getvalue()
+        finally:
+            sys.stdout = held
+        self.assertEqual(rc, 0)
+        return {json.loads(chunk)["case_id"]
+                for chunk in re.findall(r"\{\n  \"case_id\".*?\n\}", out, re.S)}
+
+    def test_min_id_buys_only_the_newly_pinned_tranche(self):
+        """A held-out tranche has to be capturable without re-paying for read cases."""
+        with open(_EVAL_SET, encoding="utf-8") as f:
+            ids = sorted(c["id"] for c in json.load(f)["evals"])
+        floor = ids[len(ids) // 2]
+        selected = self._dry_run_ids("--min-id", str(floor))
+        self.assertTrue(selected)
+        self.assertEqual(selected, {i for i in ids if i >= floor})
+
 
 
 class PathsResolve(unittest.TestCase):
