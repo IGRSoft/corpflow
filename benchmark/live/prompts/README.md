@@ -2,7 +2,7 @@
 
 One `<stage>.txt` per pipeline stage (PL, AR, TL, DV, DR, SR, QA, DC, FN, ST). Each
 file is **section [5] (the dynamic task text) ONLY**. At dispatch time,
-`BenchmarkLive/Preamble.assembleStagePrompt` PREPENDS the production
+`benchmarklive/preamble.py::assemble_stage_prompt` PREPENDS the production
 cache-prefix sections — [1] contract-reminder, [2] worktask-header, [3] state-json,
 [4] stage-contract — in binding order (REQ-1 / AC-1), so the live A/B measures the
 same cache-prefix byte layout production ships (not a bare flat prompt). The
@@ -10,10 +10,15 @@ assembled `[1][2][3][4][5]` string is fed on stdin to:
 
 ```
 claude -p --model <m> --effort <e> \
-  --permission-mode default --output-format <json|stream-json> --agent <agent>
+  --permission-mode bypassPermissions \
+  --settings benchmark/live/settings/benchmark-settings.json \
+  --output-format <json|stream-json> --agent <agent>
 ```
 
-(Subprocess specifies `cwd=<workdir>` since `claude -p` has no `--cwd` flag.
+(Headless has no interactive prompt, so the mode cannot gate anything and safety
+rides entirely on the deny-list `--settings` file — dispatch refuses to start
+without it. Subprocess specifies `cwd=<workdir>` since `claude -p` has no
+`--cwd` flag.
 `stream-json` is the default capture — it additionally yields the per-stage
 coverage manifest; see `benchmark/README.md`.)
 

@@ -119,6 +119,11 @@ class OracleResult:
         # Emitted last and only when set, so hand-built results keep their byte shape.
         if self.cases_digest is not None:
             out["cases_digest"] = self.cases_digest
+        # A pass rate says how many cases broke; only these say what broke, and they
+        # are the input `evals/README.md § failure-taxonomy.md` blocks on. Dropping
+        # them at write time made that gate unsatisfiable by any run.
+        if self.failures:
+            out["failures"] = [f.to_dict() for f in self.failures]
         return out
 
 

@@ -5,8 +5,10 @@ baseline prompt: it must exist, stay free of plugin vocabulary (it is sent verba
 with no cache-prefix preamble), and still name the same TTT spec scope.
 """
 
+import hashlib
 import json
 import os
+import sys
 import unittest
 
 _HARNESS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +68,23 @@ class ScriptedCLIContract(unittest.TestCase):
                       "---+---+---", "exit 0", "0..8"):
             self.assertIn(token, self.canonical,
                           f"contract missing graded surface: {token!r}")
+
+    def test_contract_text_matches_the_version_stamped_into_records(self):
+        """A contract edit must move `PROMPT_CONTRACT`, or records claim a stale era.
+
+        Re-pin and bump together, then re-audit oracle tiers: behaviour the contract
+        now states is `specified`, not `implied`.
+        """
+        sys.path.insert(0, _HARNESS)
+        from benchmarklive.stage_table import CLI_CONTRACT_DIGEST, PROMPT_CONTRACT
+
+        with open(os.path.join(_PROMPTS, "_cli-contract.txt"), "rb") as f:
+            actual = "sha256:" + hashlib.sha256(f.read()).hexdigest()
+        self.assertEqual(
+            actual, CLI_CONTRACT_DIGEST,
+            f"_cli-contract.txt changed while PROMPT_CONTRACT still reads "
+            f"{PROMPT_CONTRACT!r} — bump it, re-pin CLI_CONTRACT_DIGEST to {actual}, "
+            f"and re-audit the oracle tiers")
 
     def test_contract_matches_the_goldens_it_grades(self):
         """Every terminal state the contract names must appear in the case set."""

@@ -150,6 +150,19 @@ class Tiers(unittest.TestCase):
         self.assertEqual(r.tier_rate("specified"), 0.0)
         self.assertEqual(r.tier_rate("implied"), 0.0)
 
+    def test_failures_are_serialized_so_a_run_can_say_what_broke(self):
+        """`failures` is the taxonomy input; a rate alone cannot name a failure mode."""
+        runner = FakeRunner(results={"0": (0, "a\n"), "1": (0, "b\n"), "9": (0, "")})
+        with _tmpdir() as tmp:
+            emitted = self._grade(runner, tmp).to_dict()
+        self.assertEqual([f["case_id"] for f in emitted["failures"]], ["i1"])
+        self.assertEqual(emitted["failures"][0]["reason"], "exit_code")
+
+    def test_a_clean_sweep_omits_the_failures_key(self):
+        runner = FakeRunner(results={"0": (0, "a\n"), "1": (0, "b\n"), "9": (1, "")})
+        with _tmpdir() as tmp:
+            self.assertNotIn("failures", self._grade(runner, tmp).to_dict())
+
     def test_untiered_cases_emit_no_breakdown(self):
         self.cases = [_case("a", "0", 0, "a\n")]
         runner = FakeRunner(results={"0": (0, "a\n")})
@@ -217,6 +230,22 @@ class AgainstReferenceImplementation(unittest.TestCase):
         self.assertTrue(r.built)
         self.assertEqual(r.cases_passed, r.cases_total, [f.to_dict() for f in r.failures])
 
+    def _grade_mutant(self, anchor: str, mutation: str):
+        """Grade the reference with one edit applied to `main.swift`."""
+        tmp = tempfile.mkdtemp(prefix="oracle-mutant-")
+        try:
+            app = os.path.join(tmp, "app")
+            shutil.copytree(_TEMPLATE, app, ignore=shutil.ignore_patterns(".build"))
+            main = os.path.join(app, "Sources", "tictactoe", "main.swift")
+            with open(main, encoding="utf-8") as f:
+                src = f.read()
+            self.assertEqual(src.count(anchor), 1, "template drifted; re-derive the mutation")
+            with open(main, "w", encoding="utf-8") as f:
+                f.write(src.replace(anchor, mutation))
+            return oracle.grade(app, cases=oracle.load_cases(_CASES))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def test_implied_tier_separates_a_plausible_wrong_implementation(self):
         """The point of the implied tier: catch what full contract conformance misses.
 
@@ -245,24 +274,49 @@ class AgainstReferenceImplementation(unittest.TestCase):
         }
         state = try board.play(m)
     }"""
-        tmp = tempfile.mkdtemp(prefix="oracle-mutant-")
-        try:
-            app = os.path.join(tmp, "app")
-            shutil.copytree(_TEMPLATE, app, ignore=shutil.ignore_patterns(".build"))
-            main = os.path.join(app, "Sources", "tictactoe", "main.swift")
-            with open(main, encoding="utf-8") as f:
-                src = f.read()
-            self.assertEqual(src.count(anchor), 1, "template drifted; re-derive the mutation")
-            with open(main, "w", encoding="utf-8") as f:
-                f.write(src.replace(anchor, mutation))
-            r = oracle.grade(app, cases=oracle.load_cases(_CASES))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        r = self._grade_mutant(anchor, mutation)
 
         self.assertTrue(r.built)
         self.assertEqual(r.tier_rate("specified"), 1.0,
                          [f.to_dict() for f in r.failures])
         self.assertLess(r.tier_rate("implied"), 1.0)
+
+    def test_every_parse_family_implied_case_has_a_conformant_mutant(self):
+        """An implied case earns its tier only if full conformance can still miss it.
+
+        A case no contract-conformant mutant can fail belongs in `specified`, so
+        each id asserted here is what stops the tier reinflating with checks the
+        contract already enumerates.
+        """
+        mutants = {
+            # Emptiness tested before trimming, so a space-only token reaches Int().
+            "whitespace-only-token-is-empty": (
+                """        let trimmed = token.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { continue }""",
+                """        if token.isEmpty { continue }
+        let trimmed = token.trimmingCharacters(in: .whitespaces)""",
+            ),
+            # A single-digit index parser that still admits negatives, so it rejects
+            # 0..8-shaped indices only when they are written with two characters.
+            "two-digit-out-of-range-is-invalid-not-malformed": (
+                """        guard let value = Int(trimmed) else { return nil }""",
+                """        guard trimmed.count == 1 || (trimmed.hasPrefix("-") && trimmed.count == 2),
+              let value = Int(trimmed) else { return nil }""",
+            ),
+            # Spaces stripped from the whole argument rather than padding each token,
+            # which silently welds two indices into one.
+            "internal-whitespace-is-malformed": (
+                """    for token in raw.split(separator: ",") {""",
+                """    for token in raw.replacingOccurrences(of: " ", with: "").split(separator: ",") {""",
+            ),
+        }
+        for case_id, (anchor, mutation) in mutants.items():
+            with self.subTest(case=case_id):
+                r = self._grade_mutant(anchor, mutation)
+                self.assertTrue(r.built)
+                self.assertEqual(r.tier_rate("specified"), 1.0,
+                                 [f.to_dict() for f in r.failures])
+                self.assertIn(case_id, {f.case_id for f in r.failures})
 
     def test_committed_goldens_match_regenerated_ones(self):
         cases = oracle.load_cases(_CASES)
