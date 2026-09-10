@@ -158,7 +158,15 @@ realized figure off the record.
   reserving the larger of the next stage's projection and the heaviest stage
   that arm has actually run. Once a stage beats its projection the gate
   reserves the observed figure instead, so only a stage heavier than every
-  predecessor can still overshoot
+  predecessor can still overshoot.
+  **This is what truncates a paired run that is comfortably inside its budget.**
+  DV is an order of magnitude heavier than the six stages after it, so once it
+  lands the gate demands DV-sized headroom to start a $0.20 stage.
+  `live-20260910T160618Z` died on exactly this at `--budget 50`: the WITH arm had
+  spent $16.32 of its $25 share, DR projected $2.70, and the reserve carried DV's
+  $12.35 — $16.32 + $12.35 > $25, so the arm stopped needing ~$7 more. It realized
+  $32.48 of $50. **Budget a paired run at ~$80, not the ~$44 it costs**; the
+  headroom is for the reserve rule, not for spend
 - **Per-arm shares**: `--budget` is divided by the number of arms actually
   dispatched, each with its own tally — halved on a paired run, and given
   **whole** to a single `--arm` run (see below). One shared purse let the arm
@@ -719,6 +727,10 @@ excluded from the denominator).
 ## References
 
 **Findings & evidence:**
+- `benchmark/results/variance-envelope.md` — **read first.** The measured noise floor
+  (n=2, 2026-09-10). Only `cost_usd` survives it: the plugin costs ~32-39% more, while
+  the token, LOC and test-count deltas are inside run-to-run noise. Every n=1 finding
+  below predates this floor and should be re-read against it.
 - `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
 - `benchmark/results/token-findings-2.md` — live A/B measurement (n=1, honesty rule)
 - `benchmark/results/runs/live/` — raw per-stage live records (token attribution + coverage manifests)
