@@ -1,0 +1,60 @@
+name: benchmark
+
+# Separate workflow rather than a job in test.yml because path filters are
+# workflow-level in Actions, and macOS minutes bill at 10x: only a change under
+# benchmark/ is worth a macOS runner. The deterministic mode is offline and
+# credential-free (AC-8), so nothing here can dispatch or spend — `make
+# benchmark-live` is never run in CI.
+on:
+  push:
+    branches: [master]
+    paths: ['benchmark/**', '.github/workflows/benchmark.yml']
+  pull_request:
+    branches: [master]
+    paths: ['benchmark/**', '.github/workflows/benchmark.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  deterministic:
+    # ubuntu cannot run this at all: run-benchmark.sh requires a swift toolchain and
+    # ttt-template imports SwiftUI/AppKit/AudioToolbox, which no Linux toolchain ships.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      # Every Apple-SDK-gated test class SKIPS when this probe would fail, so without
+      # it the job could sweep green having built nothing. Fail here instead.
+      - name: preflight — the toolchain is the measurement instrument
+        shell: bash
+        run: |
+          command -v swift
+          command -v python3
+          command -v jq
+          swift --version
+          printf 'import SwiftUI\nimport AppKit\nimport AudioToolbox\n' > /tmp/probe.swift
+          swiftc -typecheck /tmp/probe.swift
+
+      # Runs the deterministic A/B, the harness suite, and the HTML report. On a macOS
+      # runner the suite also covers the oracle-vs-reference and generator classes that
+      # skip on the Linux job, so this is the only place they are exercised in CI.
+      - name: make benchmark
+        shell: bash
+        run: make benchmark 2>&1 | tee benchmark.log
+
+      - name: report the graded case set
+        if: always()
+        shell: bash
+        run: |
+          { echo '### Oracle case set'
+            echo
+            python3 -c 'import collections, json; c = json.load(open("benchmark/oracle/cases.json"))["cases"]; t = collections.Counter(x["tier"] for x in c); print(len(c), "cases —", ", ".join(f"{n} {k}" for k, n in sorted(t.items())))' \
+              || echo 'cases.json unreadable'; } >> "$GITHUB_STEP_SUMMARY"
