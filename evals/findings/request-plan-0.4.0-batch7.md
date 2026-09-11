@@ -141,3 +141,40 @@ set mutually satisfiable, so naming `dv-screenshot-gate-nondeveloper` now satisf
 assertion for `-developer`. That is correct for 287/288, which had read both, and wrong in
 principle. It survived the guard — TNR stayed 100% across all 36 labels — but it is the
 loosest thing in the assertion set and the first place to look if a false pass ever appears.
+
+
+## The secure-tier fix is not measurable at this n — 2026-09-11
+
+`estimation-methodology` 0.4.0 (`a54c455`) added the missing de-escalation guard, and batch 7
+was re-captured against it: 35 of 45 cases, `plugin_sha` a54c455, **$32.37**, stopped at the
+$200 ceiling with the last 10 `absent`/clarify cases unbought. Both sets graded by the same
+repaired grader, so the grader repair cannot be mistaken for a skill change.
+
+| | before (954783e) | after (a54c455) |
+|---|---|---|
+| `routes-to-secure-tier` failures | 4 of 7 | **3 of 7** |
+| secure cell pass | 2/7 | 3/7 |
+| overall | 20/35 | 22/35 |
+
+**One case moved, and that is inside the noise.** 294 — the case whose reasoning motivated the
+fix — now routes `--secure`. 273, 282 and 297 still do not. Meanwhile **12 of 35 cases changed
+status, six in each direction**, a 34% flip rate against the 17.1% measured at 0.4.0 between two
+*identical* captures. A 7-case cell with a ~34% background flip rate would move by one or two
+cases on a re-run with no change at all, so this measurement cannot tell a working fix from a
+coin toss.
+
+That the flip rate doubled is itself consistent: 0.4.0 measured `buried` as the noisiest cell at
+22%, and batch 7 is two-thirds `buried` by construction.
+
+**What this does and does not establish.** It does not establish the fix works. It does not
+establish it fails — three of four target cases were unchanged, which is equally consistent with
+a fix that needs more than a document edit and with a fix that landed but was swamped. The
+result is genuinely null, and the design is why: a 7-case cell cannot resolve a single-case
+effect.
+
+**What it would take.** Either many more `secure` cases — the cell needs to be sized against the
+flip rate, not against convenience — or repeated captures of the same cell to average the noise
+out. Both cost money this budget no longer has. **Do not quote 3/7 as an improvement over 4/7.**
+
+Recorded rather than dropped, because the negative result is the useful part: it prices what a
+future prompt-fix measurement has to buy before it can claim anything.
