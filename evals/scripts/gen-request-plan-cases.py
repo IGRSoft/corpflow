@@ -826,6 +826,11 @@ def surface_tokens(paths: list) -> list:
             tokens.append("/" + stem)
         if "-" in stem:
             tokens.append(stem)
+            # A response may name a file in a sibling set by glob or brace expansion
+            # (`.../dv-screenshot-gate-*.payload.json`) and still quote its contents.
+            # Path-qualified so it cannot be satisfied by a same-named file elsewhere --
+            # the bare stem is what leaks, not the directory it sits in.
+            tokens.append(os.path.join(os.path.dirname(rel), stem.rsplit("-", 1)[0]) + "-")
     return sorted(set(tokens))
 
 
@@ -847,6 +852,19 @@ REFUTED_PREMISE = {
     # (kind, prompt anchor, why). The anchor is not decoration: ids are positional, so a
     # future edit to CASES that shifts one would re-point every entry below at a different
     # prompt with no error. validate() checks each anchor against the case it lands on.
+    #
+    # 283 and 296 are batch 7's own false premises, found by the labelling pass: both were
+    # written from a "verification gap" template without executing the check first, and the
+    # grounding file disproves each. Recorded here rather than rewritten, so the cost of
+    # that authoring shortcut stays visible -- 2 of 30 buried cases.
+    283: ("shipped", "when every prose rank of our title chain is empty",
+          "publish-pl-issue.sh:816-824 tracks TITLE_SOURCE down to the worktask_id rank and "
+          "emits a non-blocking audit row; self-test 13c-slug-fallback-audited drives the "
+          "real path against that fixture"),
+    296: ("shipped", "we have no negative case proving our secret scanner stays quiet",
+          "scan-secrets.bats 'happy: clean directory exits 0 with no findings' consumes "
+          "clean.env with refute_output --partial Critical/High, and run-tests.sh globs it "
+          "into the required CI suite"),
     2: ("shipped", "dispatch.py has grown",
         "dispatch.py was split in 18ba0c2; it is now a 352-line orchestration shim"),
     3: ("shipped", "fn-preflight.sh is 24KB",
