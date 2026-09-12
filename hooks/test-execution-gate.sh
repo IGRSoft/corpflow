@@ -883,15 +883,21 @@ dedupe_decide() {
   # which is how a platform reached a merge decision with zero tests executed and
   # every stage downstream reading a verdict that said only "denied".
   #
-  # Recognise evidence of EXECUTION, not merely of a record existing: `bundle:`,
-  # `output:` and `errtext:` each mean the runner returned something, and a
-  # non-zero `tests:` is a count off its own summary line. Everything else —
+  # Recognise evidence of EXECUTION, not merely of a record existing: `bundle:`
+  # and `errtext:` each mean a runner produced a result or printed its failures,
+  # and a non-zero `tests:` is a count off its own summary line. Everything else —
   # `tests:0`, the `discovered:` token promote writes for a bare enumeration,
   # the legacy `unrecorded` marker, and any shape this grammar does not cover —
   # is no result at all. Unparseable takes the same arm as zero deliberately: a
   # token nobody can read cannot be cited either.
+  #
+  # `output:` is NOT on the list. It is minted for any non-empty response with no
+  # parseable count, so `error: no such module Foo` earns `output:38B` — a run
+  # that executed nothing, which then denies every retry that could still execute
+  # something. A byte count is evidence that a tool SPOKE, never that a suite RAN,
+  # and suppression must cite a result the denied run could only reproduce.
   case "$_p_ev" in
-    bundle:?* | output:?* | errtext:?* | tests:[1-9]*) : ;;
+    bundle:?* | errtext:?* | tests:[1-9]*) : ;;
     *)
       write_audit_row "$_ctx" "test_dedupe_skipped_zero_prior" \
         "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
