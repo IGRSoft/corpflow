@@ -14,7 +14,8 @@ setup() {
 @test "happy: an in_progress task is reported as unsettled with result=warn" {
   printf '%s' '{"run_index":1,"tasks":{"PL0":{"status":"completed"},"DV0":{"status":"in_progress"}}}' \
     > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_SESSION_END_REASON="clear" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string '{"hook_event_name":"SessionEnd","reason":"clear"}' "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -e '.action == "session_end_finalize" and .result == "warn"
              and (.metadata.unsettled | index("DV0"))
@@ -26,7 +27,7 @@ setup() {
 @test "happy: a fully settled ledger records result=ok and no unsettled tasks" {
   printf '%s' '{"run_index":0,"tasks":{"PL0":{"status":"completed"},"QA0":{"status":"skipped"}}}' \
     > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -e '.result == "ok" and (.metadata.unsettled | length) == 0
              and .metadata.status_counts.completed == 1
@@ -34,8 +35,16 @@ setup() {
   assert_success
 }
 
+@test "edge: an empty stdin records reason=unknown rather than failing" {
+  printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -e '.metadata.session_end_reason == "unknown"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
 @test "edge: absent state.json logs a skipped row and still exits 0" {
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -e '.result == "skipped" and .metadata.reason == "no state.json"' \
     "$WD/.context/logs/audit.jsonl"
@@ -44,7 +53,7 @@ setup() {
 
 @test "edge: a corrupt ledger neither aborts teardown nor invents a task list" {
   printf '%s' '{ not json at all' > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -e '.action == "session_end_finalize" and (.metadata.unsettled | length) == 0
              and .metadata.run_index == "unknown"' "$WD/.context/logs/audit.jsonl"
@@ -55,7 +64,7 @@ setup() {
   local state="$WD/.context/state.json" before
   printf '%s' '{"run_index":0,"tasks":{"DV0":{"status":"in_progress"}}}' > "$state"
   before="$(cat "$state")"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run cat "$state"
   assert_output "$before"
@@ -65,13 +74,13 @@ setup() {
   printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
   mkdir -p "$WD/.context/logs" "$WD/target-dir"
   ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
 
 @test "contract: --self-test passes (smoke, NON-counting)" {
-  run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
+  run_script_env "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "self-test OK"
 }

@@ -20,14 +20,14 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 CONTEXT_DIR="$PROJECT_DIR/.context"
 LOG_DIR="$CONTEXT_DIR/logs"
 STATE_FILE="$CONTEXT_DIR/state.json"
-REASON="${CLAUDE_SESSION_END_REASON:-unknown}"
 
 if [ "$SELF_TEST" -eq 1 ]; then
   TMP=$(mktemp -d)
   mkdir -p "$TMP/.context"
   echo '{"run_index":0,"tasks":{"DV0":{"status":"in_progress"}}}' > "$TMP/.context/state.json"
-  CLAUDE_PROJECT_DIR="$TMP" "$0" > /dev/null 2>&1
-  if ! grep -q 'session_end_finalize' "$TMP/.context/logs/audit.jsonl" 2> /dev/null; then
+  printf '%s' '{"hook_event_name":"SessionEnd","reason":"clear"}' \
+    | CLAUDE_PROJECT_DIR="$TMP" "$0" > /dev/null 2>&1
+  if ! grep -q '"session_end_reason":"clear"' "$TMP/.context/logs/audit.jsonl" 2> /dev/null; then
     echo "session-end-finalize: self-test FAIL"
     rm -rf "$TMP"
     exit 1
@@ -37,12 +37,22 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
+# The payload arrives on stdin like every other hook event; `reason` names the
+# teardown cause (clear / logout / prompt_input_exit / other). Read only when
+# something is attached, so a bare invocation cannot hang on a terminal — and
+# below the self-test branch, whose own stdin is whatever harness invoked it.
+PAYLOAD=""
+[ -t 0 ] || PAYLOAD=$(cat 2> /dev/null || printf '')
+
 mkdir -p "$LOG_DIR" 2> /dev/null || true
 
 # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
 # against an arbitrary target. A lost row never blocks the caller.
 command -v jq > /dev/null 2>&1 || exit 0
 [ ! -L "$LOG_DIR/audit.jsonl" ] || exit 0
+
+REASON=$(printf '%s' "$PAYLOAD" | jq -r '.reason // "unknown"' 2> /dev/null) || REASON="unknown"
+[ -n "$REASON" ] || REASON="unknown"
 
 if [ ! -f "$STATE_FILE" ]; then
   jq -cn --arg ts "$(date -u +%FT%TZ)" --arg reason "$REASON" '{

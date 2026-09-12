@@ -315,6 +315,12 @@ token_of() {
   assert_success
   [ "$output" = "tests:49" ]
 
+  # A banner ABOVE the tally must not steal the count from it either: the
+  # summary is the count line with the outcome word, not the first count line.
+  token_of '{"tool_response":{"stdout":"Executing 49 tests\nExecuted 49 tests, with 0 failures"}}'
+  assert_success
+  [ "$output" = "tests:49" ]
+
   # Same defeat through a multi-leaf object response: the discriminator reads
   # string leaves, so two leaves must not lend each other their vocabulary.
   token_of '{"tool_response":{"stdout":"Executing 49 tests","stderr":"** TEST SUCCEEDED **"}}'

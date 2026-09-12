@@ -179,9 +179,16 @@ tool_evidence_token() {
       | (if ($r | type) == "object" or ($r | type) == "array"
          then [$r | .. | strings] else [$rtext] end) as $leaves
       | (($leaves + [$errtext]) | map(split("\n")) | add) as $lines
-      | ([$lines[]
-          | select(test("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"))]
-         | first) as $cline
+      | [$lines[]
+          | select(test("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"))] as $clines
+      # The summary is the count line carrying its own outcome word, wherever it
+      # sits: a runner that prints an enumeration banner ABOVE its tally would
+      # otherwise bind the count to the banner and demote a real run to
+      # `discovered:`. With no such line the first count line stands, so a
+      # banner alone still reads as enumeration.
+      | (([$clines[]
+          | select(test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))]
+         | first) // ($clines | first)) as $cline
       | (if $cline == null then null
          else ($cline
                | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b")
