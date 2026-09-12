@@ -152,6 +152,28 @@
         ]
       }
     ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/context-compression/scripts/post-compact-recovery.sh",
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-finalize.sh",
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": ".*corpflow:product-manager.*|.*corpflow:project-manager.*",

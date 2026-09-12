@@ -130,3 +130,52 @@ JSON
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+# --- failed copy ---------------------------------------------------------------
+# The copy was bare under `set -eu` and the success row was written after it, so
+# the one state a resume must not miss — "the checkpoint you are looking for was
+# never written" — aborted the hook before anything recorded it.
+
+@test "guard: an unwritable context dir records result=error and still exits 0" {
+  printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/logs"
+  # logs/ stays writable, so the audit row can still land while the copy cannot.
+  chmod a-w "$WD/.context"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  local status_seen="$status"
+  chmod u+w "$WD/.context"
+  [ "$status_seen" -eq 0 ] || fail "hook exited $status_seen; the contract is always 0"
+
+  run jq -e '.action == "precompact_checkpoint" and .result == "error"
+             and (.metadata.error | length) > 0' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run bash -c "ls $WD/.context/state.checkpoint-*.json 2>/dev/null"
+  assert_failure
+}
+
+# --- SR P3-3: the checkpoint destination ---------------------------------------
+# cp -p follows a destination symlink, so the one unguarded path in a file whose two
+# audit appends are both symlink-guarded was the copy itself. The name is a
+# 1-second-granularity timestamp, so the destination is predictable enough to pre-place.
+
+@test "SR: a symlinked checkpoint destination is refused and recorded, never written through" {
+  printf '%s' '{"run_index":0,"tasks":{}}' > "$WD/.context/state.json"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir" "$WD/binshim"
+  # Pin only the checkpoint timestamp so the destination is knowable; every other
+  # `date` call passes through.
+  cat > "$WD/binshim/date" <<'SHIM'
+#!/usr/bin/env bash
+[ "${2:-}" = "+%Y%m%d-%H%M%S" ] && { printf '19700101-000000\n'; exit 0; }
+exec /bin/date "$@"
+SHIM
+  chmod +x "$WD/binshim/date"
+  ln -s "$WD/target-dir/escaped.json" "$WD/.context/state.checkpoint-19700101-000000.json"
+
+  run env PATH="$WD/binshim:$PATH" CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$WD/target-dir/escaped.json" ] || fail "the copy was written through the symlink"
+  # Refused, not silently skipped: a resume must never have to infer a missing checkpoint.
+  run jq -e '.action == "precompact_checkpoint" and .result == "error"
+             and (.metadata.error | test("symlink"))' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}

@@ -48,7 +48,25 @@ if [ ! -f "$STATE_FILE" ]; then
   exit 0
 fi
 
-cp -p "$STATE_FILE" "$CHECKPOINT"
+# Guarded, not bare: under `set -eu` a failed copy would abort the script before
+# the audit row below, so the one outcome a resume must not miss — "the
+# checkpoint you are about to look for does not exist" — was the only outcome
+# that left no trace anywhere. Failure is recorded and still exits 0.
+CHECKPOINT_RESULT="ok"
+CHECKPOINT_ERROR=""
+if [ -L "$CHECKPOINT" ]; then
+  # Same refusal the two audit appends make, for the same reason: cp -p follows a
+  # destination symlink, which turns the checkpoint into a write primitive against an
+  # arbitrary target. The name is a 1-second-granularity timestamp and fully predictable,
+  # so pre-placement is awkward rather than impossible. Recorded rather than silently
+  # skipped — a resume must never have to infer a missing checkpoint.
+  CHECKPOINT_RESULT="error"
+  CHECKPOINT_ERROR="checkpoint destination is a symlink; refused"
+elif ! CHECKPOINT_ERROR=$(cp -p "$STATE_FILE" "$CHECKPOINT" 2>&1); then
+  CHECKPOINT_RESULT="error"
+  # A partial copy is worse than none: it would restore as a truncated ledger.
+  rm -f "$CHECKPOINT" 2> /dev/null || true
+fi
 
 # Capture pointers to current planning/coordination/development artifacts.
 ARTIFACTS=$(find "$CONTEXT_DIR" -maxdepth 1 -type f \( \
@@ -67,16 +85,18 @@ if command -v jq >/dev/null 2>&1 && [ ! -L "$LOG_DIR/audit.jsonl" ]; then
     --arg ts "$(date -u +%FT%TZ)" \
     --arg state_file "${CHECKPOINT#$PROJECT_DIR/}" \
     --arg run_index "$RUN_INDEX" \
+    --arg result "$CHECKPOINT_RESULT" \
+    --arg error "$CHECKPOINT_ERROR" \
     --argjson artifacts "$ARTIFACTS" '{
       ts: $ts,
       actor: "hook:precompact",
       action: "precompact_checkpoint",
-      result: "ok",
-      metadata: {
+      result: $result,
+      metadata: ({
         state_file: $state_file,
         run_index: $run_index,
         artifacts: $artifacts
-      }
+      } + (if $result == "ok" then {} else { error: $error } end))
     }' >> "$LOG_DIR/audit.jsonl" || true
 fi
 

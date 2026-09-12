@@ -204,15 +204,21 @@ Compaction is silent — any decision that lived only in the conversation can va
 
 Use cases: gate compaction during critical multi-stage handoffs (PreCompact); re-inject task state, log compression metrics, recover worktask context in long sessions (PostCompact).
 
+#### Managed registration
+
+The example above is the project-local form. Installing the plugin already registers both events in `.claude-plugin/plugin.json` — `hooks/precompact-checkpoint.sh` and `scripts/post-compact-recovery.sh` — so no project configuration is required to get the managed behaviour. Registration parity is pinned by `tests/shell/worktask/manifest-parity.bats`.
+
 ### `scripts/post-compact-recovery.sh` — canonical implementation
 
-Parses the `audit.jsonl` tail (non-advisory `subagent_stopped` entries only — NOT mtime/ls ordering, which is unreliable) to resolve the interrupted stage, its Task System handle, and its per-agent error file, then writes a compact JSON pointer to `.context/logs/post-compact-<ts>.json`. Only that path is reported, on stderr; the body is never echoed, keeping the hook's token footprint near zero.
+Parses the `audit.jsonl` tail (non-advisory `subagent_stopped` entries only — NOT mtime/ls ordering, which is unreliable) to resolve the interrupted stage, its Task System handle, and its per-agent error file, then writes a compact JSON pointer to `.context/logs/post-compact-<ts>.json`. The selector does not filter on `result`: the last stage that stopped is the interrupted one whatever its outcome. Both default paths are rooted on `$CLAUDE_PROJECT_DIR`, never on the hook's cwd. Only that path is reported, on stderr; the body is never echoed, keeping the hook's token footprint near zero.
+
+#### Invocation
 
 ```
 bash skills/context-compression/scripts/post-compact-recovery.sh
 # Optional overrides:
-#   --audit-file <path>   (default: .context/logs/audit.jsonl)
-#   --out-dir    <path>   (default: .context/logs)
+#   --audit-file <path>   (default: $CLAUDE_PROJECT_DIR/.context/logs/audit.jsonl)
+#   --out-dir    <path>   (default: $CLAUDE_PROJECT_DIR/.context/logs)
 #   --tail-lines <N>      (default: 20)
 #   --dry-run             print JSON to stdout instead of writing file
 #   --self-test           run fixture tests; exit 0 on pass
