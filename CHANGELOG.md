@@ -2,6 +2,62 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.32] — 2026-09-11
+
+A control that fails silently is indistinguishable from a control that passed, and an evidence
+token that asserts more than it observed is worse than no token — the theme 4.0.31 opened, applied
+here to the completion loop itself, two continuity mechanisms that existed but were never wired,
+and the ledger lock's ownership.
+
+### Breaking
+
+- **`test_summary_line` is now required of DV and QA artifacts whenever `tests_executed > 0`.**
+  `handoff-harness.sh --validate-frontmatter` fails an artifact reporting executed tests with no
+  verbatim runner summary line to corroborate the count. No migration: an artifact that already
+  carries the line is unaffected.
+- **A present but non-numeric `tests_executed` now blocks** at the same gate, closing the gap
+  where a claimed execution count was accepted without ever being checked.
+- **`oracle.cases_digest` moves to `sha256:80652591`** (benchmark eval harness). Records either
+  side of the retiering that fixed six mistiered cases and closed the era-stamp gaps refuse to
+  pair; `era.prompt_contract` is unchanged. Unreleased since it landed, folded in here rather than
+  shipped silently under a patch line that never mentioned it.
+
+### Added
+
+- **A terminal `failed` task status.** Escalation counts are tracked per full task id
+  (`escalation_counts`); at the cap the task is written `failed` with `last_error.class:
+  "exhausted"`. Joins `completed`/`skipped` in `SETTLED`, so the loop exits instead of spinning on
+  a stage it can neither settle nor dispatch. Additive — existing ledgers load unchanged.
+- **`PostCompact` and `SessionEnd` registered in `plugin.json`.** `PostCompact` drives
+  `post-compact-recovery.sh`, recurrence-guarded by a new inverse manifest-parity assertion, but
+  the live firing is **not yet observed** — a real compaction cannot be simulated in CI. `SessionEnd`
+  drives the new `hooks/session-end-finalize.sh`: reports any task still `in_progress` at teardown
+  to an audit row, never mutates status, always exits `0`.
+- **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
+  freeing a lock another writer still holds.
+
+### Fixed
+
+- The pre-compaction checkpoint hook no longer leaves an unconditional copy unguarded under
+  `set -eu`; a failed checkpoint now records the failure instead of leaving no trace.
+- The compaction recovery script's two output paths are rooted on the same project-directory
+  variable as its sibling script, and its header no longer claims a filtered selector it does not
+  run.
+- **`estimation-methodology`**: a synthetic asset no longer downgrades the complexity tier it is
+  scored against.
+- **benchmark eval harness**: oracle discrimination restored — six mistiered cases moved from
+  `implied` to `specified`, four new `implied` cases added, `failures[]` now persists into the
+  record instead of being dropped at write time, and `cli_version`/`plugin_version` are stamped as
+  a new era axis.
+- **request-plan**: four review findings closed on the leaderboard fix plan.
+
+### Also in this release
+
+Batch 7 of the request-plan calibration set was pinned and its two defects repaired
+(`request-plan`, 45 cases, 18 held out, cases 271–315) between the 4.0.31 tag and this one; it
+carries no user-facing behavior change and is recorded here only because it landed in the same
+unreleased window.
+
 ## [4.0.31] — 2026-09-09
 
 Closes phases A–E of `ttt-run-tictactoe-multiplatform-leaderboard-2026-09-09-fixplan.md` — 21 of

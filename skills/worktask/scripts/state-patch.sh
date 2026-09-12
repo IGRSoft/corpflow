@@ -152,6 +152,14 @@ REPLAY_SIDE_EFFECT_STAGES="FN,RE"
 # Set by _lock_acquire so the EXIT trap and _lock_release know which dir to remove.
 _LOCK_DIR=""
 _LOCK_HELD=""
+# The `<pid>:<nonce>:<epoch>` line written inside the lock dir at claim time. Release
+# compares it byte-for-byte, which is what lets a writer tell its own lock from the one a
+# stale-break handed to a successor; the nonce is what defeats PID reuse.
+_LOCK_TOKEN=""
+# Seconds _lock_acquire spent waiting. Read by the unlocked-path audit row, which is
+# worthless without it: "proceeded unlocked" and "waited the full budget" are the same
+# event only when the budget is known.
+_LOCK_WAITED=0
 
 # Set when a --facts payload carried no items at all — the sanctioned empty sweep.
 FACTS_EMPTY_NOOP=0
@@ -623,6 +631,88 @@ _lock_break_if_stale() {
   fi
 }
 
+# _lock_audit <action> <key=value>... — one audit row about the lock, never a gate.
+#
+# The audit library is probed HERE rather than reusing the --facts probe near the bottom of
+# the script: that one runs during --facts handling, which may be reached only AFTER
+# atomic_apply has already written, so a flag hoisted from it is empty on exactly the
+# unlocked path this row exists to record. Re-probing per call has no ordering precondition
+# at all, and the library's include guard makes a second source a no-op.
+#
+# Values go through --meta-kv, not --meta: they are flat scalars the appender sanitises,
+# so no lock path can break the row's JSON literal.
+_lock_audit() {
+  local action="$1"
+  shift
+  local lib sp dir pair
+  if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+    lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
+    [ -r "$lib" ] || return 0
+    # shellcheck source=../../shared/lib/audit-lib.sh
+    . "$lib" || return 0
+    command -v corpflow_audit_row > /dev/null 2>&1 || return 0
+  fi
+  sp="${STATE_PATH:-.context/state.json}"
+  dir="${sp%/*}"
+  [ "$dir" = "$sp" ] && dir="."
+  local kv=()
+  for pair in "$@"; do kv[${#kv[@]}]="--meta-kv"; kv[${#kv[@]}]="$pair"; done
+  corpflow_audit_row --file "${dir}/logs/audit.jsonl" \
+    --actor "${VIA_ARG:-agent}:state-patch" --action "$action" --result degraded \
+    ${kv[@]+"${kv[@]}"} || true
+}
+
+# _lock_owner_read <lockdir> — the owner token, bounded, empty when there is none.
+#
+# The bound is not tidiness: this value reaches an audit row, and one oversized value
+# inflates that row past the size below which the unlocked `>>` to audit.jsonl is atomic,
+# which is the single condition under which the evidence log can interleave. It also makes
+# the claim-side prefix test sound — an owner longer than a token can never look like one.
+_lock_owner_read() {
+  [[ -f "$1/owner" ]] || return 0
+  head -c 256 "$1/owner" 2> /dev/null || printf ''
+}
+
+# _lock_claim <lockdir> — mkdir + owner token. 0 only when the lock is held AND verifiable.
+#
+# The token is written after the mkdir that is the atomic claim, so the directory exists
+# ownerless for the width of one small write. That residual TOCTOU is accepted, not closed
+# (sw-AR0-3): it is microseconds against a stale threshold of many seconds, and strictly
+# smaller than the pre-change exposure, where no token existed at any point.
+#
+# _LOCK_HELD is set only once the token is durable. A lock nobody can verify is worse than
+# no lock — release could not tell it from a successor's — so a failed write hands the
+# directory back and the caller falls through to the unlocked path.
+_lock_claim() {
+  local lockdir="$1"
+  mkdir "$lockdir" 2> /dev/null || return 1
+  _LOCK_TOKEN="$$:${RANDOM}${RANDOM}:$(date +%s 2> /dev/null || printf '0')"
+  if ! printf '%s\n' "$_LOCK_TOKEN" > "${lockdir}/owner" 2> /dev/null; then
+    log_msg WARN "lock owner token unwritable in $lockdir — releasing the claim"
+    # The handback obeys the same asymmetry as _lock_release: a failed write does not
+    # prove the directory is still this process's, because a stale-break and re-claim
+    # can have landed inside the window. Anything that is not a prefix of the token just
+    # attempted belongs to that successor and is left alone — one STATE_LOCK_STALE_S
+    # cycle against unbounded corruption.
+    #
+    # rmdir rather than rm -rf makes that refusal the kernel's, not this test's. It is not
+    # sufficient alone: the failed write can also leave an empty or partial owner, and then
+    # rmdir refuses and this process wedges every other writer behind its own dead lock for
+    # a full stale cycle — the disk-full case, the likely one. So an owner still recognisable
+    # as ours is removed first, and only then is the empty directory handed back.
+    local found
+    found=$(_lock_owner_read "$lockdir")
+    if [[ "$_LOCK_TOKEN" == "$found"* ]]; then
+      rm -f "${lockdir}/owner" 2> /dev/null || true
+    fi
+    _LOCK_TOKEN=""
+    rmdir "$lockdir" 2> /dev/null || true
+    return 1
+  fi
+  _LOCK_HELD="1"
+  return 0
+}
+
 # _lock_acquire <statepath> — returns 0 with the lock held, or 1 (proceed unlocked).
 _lock_acquire() {
   local state="$1"
@@ -630,18 +720,19 @@ _lock_acquire() {
   local waited=0
   _LOCK_DIR="$lockdir"
   _LOCK_HELD=""
+  _LOCK_TOKEN=""
+  _LOCK_WAITED=0
   while :; do
-    if mkdir "$lockdir" 2> /dev/null; then
-      _LOCK_HELD="1"
+    if _lock_claim "$lockdir"; then
       return 0
     fi
     _lock_break_if_stale "$lockdir"
     # Retry immediately after a stale-break before counting against the budget.
-    if mkdir "$lockdir" 2> /dev/null; then
-      _LOCK_HELD="1"
+    if _lock_claim "$lockdir"; then
       return 0
     fi
     if ((waited >= STATE_LOCK_TIMEOUT_S)); then
+      _LOCK_WAITED="$waited"
       log_msg WARN "lock timeout (${waited}s ≥ ${STATE_LOCK_TIMEOUT_S}s) on $lockdir — proceeding UNLOCKED"
       return 1
     fi
@@ -651,8 +742,29 @@ _lock_acquire() {
 }
 
 # _lock_release — idempotent; safe to call from the EXIT trap and inline.
+#
+# Removing a lock this process does not own is the defect verbatim: after a stale-break the
+# directory belongs to a successor, and removing it lets a third writer in mid-write, with
+# no warning on either side. The asymmetry decides it — leaving a foreign lock costs at
+# most one STATE_LOCK_STALE_S cycle and self-heals, removing it costs correctness unbounded.
+#
+# This runs from the EXIT trap AFTER the patch is written and renamed, so it MUST NOT exit
+# non-zero on the mismatch path: doing so would report a successful write as a failure,
+# the absence-of-evidence inversion this contract exists to remove.
 _lock_release() {
-  [[ -n "${_LOCK_HELD:-}" && -n "${_LOCK_DIR:-}" && -d "$_LOCK_DIR" ]] || return 0
+  [[ -n "${_LOCK_HELD:-}" && -n "${_LOCK_DIR:-}" && -d "$_LOCK_DIR" ]] || {
+    _LOCK_HELD=""
+    return 0
+  }
+  local found=""
+  found=$(_lock_owner_read "$_LOCK_DIR")
+  if [[ -z "${_LOCK_TOKEN:-}" || "$found" != "$_LOCK_TOKEN" ]]; then
+    log_msg WARN "lock owner mismatch on release — refusing to remove ${_LOCK_DIR} (found: ${found:-<none>})"
+    _lock_audit lock_release_foreign "lock=${_LOCK_DIR}" "expected_pid=$$" "found=${found:-none}"
+    _LOCK_HELD=""
+    return 0
+  fi
+  rm -f "${_LOCK_DIR}/owner" 2> /dev/null || true
   rmdir "$_LOCK_DIR" 2> /dev/null || rm -rf "$_LOCK_DIR" 2> /dev/null || true
   _LOCK_HELD=""
 }
@@ -989,7 +1101,12 @@ atomic_apply() {
   local tmp="${dir}/.state.json.$$.${RANDOM}.tmp"
 
   # Acquire the lock around the whole read-apply-rename window (timeout ⇒ unlocked+WARN).
-  _lock_acquire "$state" || true
+  # The result is NOT discarded: afterwards an unserialized write is indistinguishable from
+  # a clean one unless it is recorded where an audit sweep can find it, and the WARN goes to
+  # a plain log nothing sweeps.
+  if ! _lock_acquire "$state"; then
+    _lock_audit state_write_unlocked "lock=${state}.lock.d" "waited_s=${_LOCK_WAITED:-0}" "reason=timeout"
+  fi
 
   local rc=0
   if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then

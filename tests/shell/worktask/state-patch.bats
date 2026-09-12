@@ -2133,3 +2133,172 @@ ARTEOF
   run diff -q .context/state.json snap
   assert_success
 }
+
+# ---------------------------------------------------------------------------
+# R4a/R4b — the lock owner token and its two audit rows. Extends the five lock
+# tests above; same env-knob determinism, no sleep-races.
+#
+# The observation point is a `sync` shim: atomic_apply calls sync INSIDE the
+# lock, just before the rename and the release, which is the only window where
+# the lock dir of a SUCCESSFUL run is observable from outside the process.
+# ---------------------------------------------------------------------------
+
+_mk_sync_shim() { # <shim-body>
+  mkdir -p "$WD/binshim"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '%s\n' "$1"
+    printf 'exit 0\n'
+  } > "$WD/binshim/sync"
+  chmod +x "$WD/binshim/sync"
+}
+
+@test "lock: the claim writes a pid:nonce:epoch owner token and removes it on a clean release" {
+  cd "$WD"
+  _mk_sync_shim 'cp .context/state.json.lock.d/owner owner.seen 2>/dev/null || true'
+  PATH="$WD/binshim:$PATH" run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV \
+    --artifact .context/development-0.md
+  assert_success
+  [ -f owner.seen ] || fail "no owner token was written inside the lock window"
+  run cat owner.seen
+  [[ "$output" =~ ^[0-9]+:[0-9]+:[0-9]+$ ]] || fail "token shape: $output"
+  mv owner.seen owner.first
+  # PID is reusable; the nonce is what makes two claims distinguishable, so a second
+  # claim — here a --facts write, which cannot be short-circuited as idempotent —
+  # must not produce the same token.
+  PATH="$WD/binshim:$PATH" run bash "$PLUGIN_ROOT/$SCRIPT" --state .context/state.json \
+    --facts '{"decisions":[{"id":"lk1","summary":"second claim","stage":"AR0"}]}'
+  assert_success
+  [ -f owner.seen ] || fail "the second claim wrote no token"
+  run diff -q owner.first owner.seen
+  assert_failure
+  [ ! -d .context/state.json.lock.d ] || fail "clean release leaked the lock dir"
+}
+
+@test "lock: a successor's token is NOT removed by this writer's release (AC-G4)" {
+  cd "$WD"
+  # The defect sequence without a second process: a stale-break handing the lock to
+  # writer B is, from A's side, exactly B's token replacing A's inside A's window.
+  _mk_sync_shim 'printf "%s\n" "999999:deadbeef:1" > .context/state.json.lock.d/owner'
+  PATH="$WD/binshim:$PATH" run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV \
+    --artifact .context/development-0.md --log .context/logs/lock.log
+  # The patch itself succeeded; refusing the removal must not invert that verdict.
+  assert_success
+  run jq -r '.tasks.DV0.status' .context/state.json
+  assert_output "completed"
+  [ -d .context/state.json.lock.d ] || fail "the successor's lock was removed"
+  run cat .context/state.json.lock.d/owner
+  assert_output "999999:deadbeef:1"
+  run grep -c 'lock owner mismatch on release' .context/logs/lock.log
+  assert_output "1"
+  run jq -r 'select(.action=="lock_release_foreign") | [.result, .metadata.found] | @tsv' \
+    .context/logs/audit.jsonl
+  assert_output "$(printf 'degraded\t999999:deadbeef:1')"
+}
+
+@test "lock: an owner token that vanished mid-window is a mismatch, not a licence to remove" {
+  cd "$WD"
+  _mk_sync_shim 'rm -f .context/state.json.lock.d/owner'
+  PATH="$WD/binshim:$PATH" run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV \
+    --artifact .context/development-0.md --log .context/logs/lock.log
+  assert_success
+  [ -d .context/state.json.lock.d ] || fail "an ownerless lock dir was removed anyway"
+  run jq -r 'select(.action=="lock_release_foreign") | .metadata.found' .context/logs/audit.jsonl
+  assert_output "none"
+}
+
+@test "lock: the timeout's unlocked write emits a state_write_unlocked audit row (R4b)" {
+  cd "$WD"
+  mkdir .context/state.json.lock.d
+  STATE_LOCK_TIMEOUT_S=1 STATE_LOCK_STALE_S=99999 \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
+    --log .context/logs/lock.log
+  assert_success
+  run grep -c 'proceeding UNLOCKED' .context/logs/lock.log
+  assert_output "1"
+  [ -f .context/logs/audit.jsonl ] || fail "the unlocked write left no audit row"
+  run jq -r 'select(.action=="state_write_unlocked")
+             | [.result, .metadata.reason, .metadata.waited_s] | @tsv' \
+    .context/logs/audit.jsonl
+  assert_output "$(printf 'degraded\ttimeout\t1')"
+}
+
+@test "lock: the acquire result is consumed, never discarded (R4b source guard)" {
+  # The one-line defect: `|| true` made an unserialized write indistinguishable from
+  # a clean one. A re-introduction is a source-level regression with no runtime shape
+  # of its own, so it is pinned here rather than behaviourally.
+  run grep -c '_lock_acquire "$state" || true' "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+  run grep -c 'if ! _lock_acquire "$state"; then' "$PLUGIN_ROOT/$SCRIPT"
+  assert_output "1"
+}
+
+# --- SR P3-1/P3-2: the claim's write-failure handback -----------------------------------
+#
+# The handback ran `rm -rf` with no ownership test, so a stale-break landing inside the
+# window had this process delete a successor's LIVE lock. The shim plants the successor's
+# token and makes it unwritable, which is the failed-write case from this process's side.
+
+_mk_mkdir_shim() { # <post-mkdir-body>
+  mkdir -p "$WD/binshim"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf '/bin/mkdir "$@" || exit $?\n'
+    printf 'for a in "$@"; do case "$a" in *.lock.d)\n'
+    printf '%s\n' "$1"
+    printf ';; esac; done\nexit 0\n'
+  } > "$WD/binshim/mkdir"
+  chmod +x "$WD/binshim/mkdir"
+}
+
+@test "lock: a failed owner write does NOT remove a lock this process cannot claim (P3-1)" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode bits this shim relies on"
+  cd "$WD"
+  _mk_mkdir_shim 'printf "999999:deadbeef:1\n" > "$a/owner"; chmod 444 "$a/owner"'
+  PATH="$WD/binshim:$PATH" STATE_LOCK_TIMEOUT_S=1 STATE_LOCK_STALE_S=99999 \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
+    --log .context/logs/lock.log
+  # The patch still lands — unlocked, warned about, never silently dropped.
+  assert_success
+  run jq -r '.tasks.DV0.status' .context/state.json
+  assert_output "completed"
+  [ -d .context/state.json.lock.d ] || fail "the foreign lock dir was removed by the handback"
+  run cat .context/state.json.lock.d/owner
+  assert_output "999999:deadbeef:1"
+}
+
+@test "lock: a failed owner write hands the directory back, never wedges it (P3-1)" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode bits this shim relies on"
+  cd "$WD"
+  # One-shot: the first claim finds an unwritable EMPTY owner — the disk-full shape, where
+  # the file was created and the content never landed. rmdir alone refuses a non-empty
+  # directory, so this process would wedge behind its own dead lock for a full stale cycle.
+  _mk_mkdir_shim "[ -e '$WD/.planted' ] || { : > \"\$a/owner\"; chmod 444 \"\$a/owner\"; : > '$WD/.planted'; }"
+  PATH="$WD/binshim:$PATH" STATE_LOCK_TIMEOUT_S=2 STATE_LOCK_STALE_S=99999 \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md \
+    --log .context/logs/lock.log
+  assert_success
+  run jq -r '.tasks.DV0.status' .context/state.json
+  assert_output "completed"
+  # The retry claimed the lock for real, so the write was serialized, not degraded.
+  run grep -c 'proceeding UNLOCKED' .context/logs/lock.log
+  assert_failure
+  [ ! -d .context/state.json.lock.d ] || fail "the handback leaked a lock dir nobody owns"
+  run grep -c 'lock owner token unwritable' .context/logs/lock.log
+  assert_output "1"
+}
+
+@test "lock: an oversized owner is bounded before it reaches the audit row (P3-2)" {
+  cd "$WD"
+  # An unbounded value inflates one row past the size at which the unlocked >> to
+  # audit.jsonl is still atomic — the only condition under which the evidence log
+  # this worktask protects can interleave.
+  _mk_sync_shim 'head -c 5000 < /dev/zero | tr "\0" "A" > .context/state.json.lock.d/owner'
+  PATH="$WD/binshim:$PATH" run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV \
+    --artifact .context/development-0.md --log .context/logs/lock.log
+  assert_success
+  run jq -r 'select(.action=="lock_release_foreign") | .metadata.found | length' \
+    .context/logs/audit.jsonl
+  assert_output "256"
+  [ -d .context/state.json.lock.d ] || fail "the foreign lock was removed"
+}
