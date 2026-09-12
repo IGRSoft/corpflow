@@ -118,7 +118,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 | Symptom | Diagnose → fix |
 |---------|----------------|
 | Task in error state | `.context/errors/<agent>.md` (one file per failing task's `metadata.agent` basename). `retry_count` < 3 → fix, keep `in_progress`, increment; = 3 → escalate to the previous stage per chain; append the resolution to the same file |
-| Escalation (3 failures) | Previous agent reads that retry history, fixes root cause, resets `retry_count` to 0 on the retried task, transitions back |
+| Escalation (3 failures) | Previous agent reads that retry history, fixes root cause, resets **`retry_count` alone** to 0 on the retried task, transitions back. `metadata.escalation_counts` is NOT reset — it is the only bound on the escalation loop; at cap 2 on an edge the task goes `failed`/`exhausted` instead of escalating again |
 
 ### Megatask & Orchestrator Troubleshooting
 

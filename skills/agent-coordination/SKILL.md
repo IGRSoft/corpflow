@@ -75,14 +75,24 @@ Every stage reads `exploration.md`; source-file access differs.
 | Classification | Trigger | Retry | Escalate to |
 |---|---|---|---|
 | `transient` | 5xx / rate-limit / network | 3, backoff 2^n s | — (same agent) |
-| `logic` | bug / wrong approach | 2, corrective context on retry 2 | — (same agent) |
+| `logic` | bug / wrong approach | 3, corrective context from retry 2 | — (same agent) |
 | `missing_input` | required artifact absent | No | previous stage per chain |
 | `ambiguous_requirements` | requirements unclear | No | PL |
 | `design_flaw` | architecture blocks implementation | No | AR |
 | `hard_constraint` | ethics / security / legal block | No | abort + block for human (`"ST"`) |
 | `exhausted` | `retry_count == 3` | No | previous stage per chain |
 
-Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset `retry_count` at handoff.
+Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset **`retry_count` alone** at handoff.
+
+#### Retry / Escalate Matrix — one ceiling, reachable from every retrying class
+
+Every retrying class carries the same ceiling of **3**, so `exhausted` is reachable from each of them; the non-retrying classes never pass through it because they escalate on their first failure. No class parks below its own trigger. The ceiling is single-sourced in the table above — `skills/worktask/SKILL.md § Retry Logic` and its `retry_count == 3` escalation trigger restate it and must not diverge.
+
+#### Retry / Escalate Matrix — the per-edge escalation cap
+
+`metadata.escalation_counts` on the escalating task counts escalations per target, keyed by the target's **full task id** (`{"AR0": 2}`) so a split stage's writers do not share a counter. Increment it on each escalation handoff; **it is explicitly NOT reset** by that handoff, unlike `retry_count`. Resetting it would erase the only bound on the loop it exists to bound, and DV→AR→DV→AR would ping-pong forever.
+
+At **cap 2** on an edge the escalating task is written `status: "failed"` with `last_error.class: "exhausted"` instead of escalating again; `failed` is settled, so the completion loop terminates. Schema: `skills/shared/state-ledger.md § Schema — error & retry properties`.
 
 #### Retry / Escalate Matrix — environmental contention
 

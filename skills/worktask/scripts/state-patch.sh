@@ -62,7 +62,7 @@
 #
 # @arg --task-create  <ID> --metadata <json>  Seed tasks.<ID> as pending; no-op if it exists.
 #                                             --metadata is optional (defaults to {}).
-# @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped.
+# @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped|failed.
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
@@ -1382,7 +1382,10 @@ if [[ -n "$TASK_OP" ]]; then
       ;;
     status)
       case "$TASK_OP_VALUE" in
-        pending | in_progress | completed | blocked | skipped) ;;
+        # Sole decode of the status enum in the tooling. Readers use bare jq field access, so a
+        # value an older copy does not model still round-trips through it untouched; keeping the
+        # closed set on the write path alone is what makes `failed` additive rather than breaking.
+        pending | in_progress | completed | blocked | skipped | failed) ;;
         *)
           printf >&2 'invalid status: %s\n' "$TASK_OP_VALUE"
           usage

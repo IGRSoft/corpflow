@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "worktask_id": "request-plan-batch7-fixes",
+  "plan_file": ".context/planning-0.md",
+  "platform": "all",
+  "run_index": 0,
+  "metadata": {
+    "workspace_path": "/Volumes/internal/conductor/workspaces/corpflow/valencia"
+  },
+  "tasks": {
+    "PL0": {
+      "status": "in_progress",
+      "metadata": {
+        "stage": "PL",
+        "agent": "corpflow:product-manager",
+        "model": "opus",
+        "worktask_id": "request-plan-batch7-fixes",
+        "priority": "High",
+        "plan_gate": "bypass",
+        "decision_gate": "auto",
+        "fn_gate": "checkpoint",
+        "isolation": "worktree",
+        "workspace_path": "/Volumes/internal/conductor/workspaces/corpflow/valencia",
+        "platform": "all",
+        "description": "Act on what the batch 7 eval measured. Fix the nine defects the batch-7 traces name, in the skill and doc surfaces that own them. Group A (7 of 12 failures): grounding gets a forced output — add a required Grounding: line to references/pla…"
+      }
+    }
+  },
+  "facts": {
+    "goal": "Act on what the batch 7 eval measured: fix the nine traced request-plan defects — a forced grounding output (Group A), the ambiguous --emergency live/latent test (Group B), and four single-case rules (Group C).",
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [],
+    "verdicts": {},
+    "dispatched_agents": [],
+    "branch": "bugfix/fix-the-nine-request-plan-defects-batch-7-traced"
+  },
+  "handoffs": {}
+}
