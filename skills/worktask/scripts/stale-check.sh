@@ -157,7 +157,7 @@ CLASSES = {
     ),
     "reattach-undeliverable": (
         True,
-        "A reattach SendMessage did not deliver (refused / dropped / oversized / burst_limited / "
+        "A reattach SendMessage did not deliver (refused / dropped / oversized / burst_limited / queued / "
         "session_list_truncated). The stage is still parked, not nudged. Do NOT re-delegate and do "
         "NOT increment metadata.retry_count — resolve the delivery failure first",
         f"{RESUME} § Reattach rows — the SendMessage has a result too",

@@ -124,13 +124,14 @@ The **Extended** column needs a live 1M window and suits genuinely complex runs 
 
 #### 1M credit caveats
 
-- **Credit gate**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit, so a nominal 1M window does not guarantee extended budgets — plan against the **standard** column unless credits are confirmed. **Fable 5** is 1M by default but credit-gated: fable-tier *dispatch* fails outright without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M under the same account caveat.
+- **Credit gate**: a 1M session on an account **without 1M usage credits** auto-compacts back under the standard limit, so a nominal 1M window does not guarantee extended budgets — plan against the **standard** column unless credits are confirmed. **Fable 5.x** (Fable 5.1 is the default Fable model) is 1M by default but credit-gated: fable-tier *dispatch* fails outright without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M under the same account caveat.
 - **Opus 5 is the exception**: its 1M window is ungated (default Opus, no plan qualifier), so opus-tier stages on the `opus` alias plan against the extended column unconditionally.
 
 #### Compaction fallback & thinking
 
 - **`--fallback-model`**: compaction honors it, so a credit-gated 1M Fable compaction degrades to the fallback (e.g. `claude-sonnet-5`) instead of failing.
 - **Thinking inheritance**: compaction inherits the session's extended-thinking configuration — a high-effort session compacts with its own thinking budget, improving summary fidelity and PostCompact recovery.
+- **Auto-compact near 1M**: Opus and Fable 1M sessions auto-compact shortly before the 1M-token limit, and recovery compaction on a very large context does not time out at 10 minutes.
 
 ## Exploration Cache Budget
 
@@ -173,7 +174,7 @@ Over budget, cut in this order:
 | Auto-compact thrash | CC errors out after 3 immediate refills instead of burning API calls |
 | Focus mode | Focus view (Ctrl+O) generates self-contained summaries |
 | Compaction duplicates | Compaction produces no duplicate transcript entries |
-| 1M without credits | Credit-gated 1M session auto-compacts under the standard limit — standing on Fable 5, never on Opus 5 |
+| 1M without credits | Credit-gated 1M session auto-compacts under the standard limit — standing on Fable 5.x, never on Opus 5 |
 | Context overflow | `/context` warns past the window; a failed `/compact` errors instead of silently no-op'ing |
 
 ## PostCompact Recovery

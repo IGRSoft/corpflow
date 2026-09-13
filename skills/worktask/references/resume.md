@@ -69,8 +69,8 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 |----------------|------------|--------|
 | Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
 | Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
-| Live `agent_id` matching that stage AND its status reads **"Needs input"** (sandbox / MCP-input / managed-settings prompt) | — | Parked **on us** but operator-owned. Reattach via `SendMessage` only to surface the prompt verbatim — never auto-answer or re-dispatch a duplicate for that stage |
-| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge |
+| Live `agent_id` matching that stage AND its status reads **"Needs input"** (sandbox / MCP-input / managed-settings prompt, or an inbound message from another session awaiting the operator's approval — `claude agents` names the sender; its JSON field is unconfirmed, so it lands in this same bucket) | — | Parked **on us** but operator-owned. Reattach via `SendMessage` only to surface the prompt verbatim — never auto-answer or re-dispatch a duplicate for that stage |
+| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge. The busy read holds even while that session runs background agents: a headless or remote session with background agents still running never reports "waiting for your input" |
 
 ### Live-agent rows — broken hook configuration
 
@@ -149,9 +149,10 @@ tree it edited, so re-delegating discards that work and re-pays the stage
 Every row above that says "reattach via `SendMessage`" assumed the send succeeds. It no longer
 does: each non-delivery mode is observable rather than a silent success. **This is the entry the
 plugin's min-CC floor rests on.** Read the result before treating any reattach as done, and log one
-`reattach_send_result` row per attempt. Contract: `result: "ok"` means delivered; every non-delivery
-is `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`, `burst_limited`,
-`session_list_truncated`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`, and never omit the
+`reattach_send_result` row per attempt. Contract: `result: "ok"` means delivered to the addressed
+session itself (a backgrounded session has no interactive twin in `ListAgents` to absorb the send);
+every non-delivery is `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`,
+`burst_limited`, `session_list_truncated`, `queued`) in `metadata.reason`. Never log a delivered-and-awaiting send as `deferred`, and never omit the
 field: `stale-check.sh` reads any *present* result other than `ok` as undelivered, while a missing
 or null `result` counts as delivered — an omitted result hides a non-delivery instead of surfacing
 it.
@@ -165,6 +166,7 @@ it.
 | `dropped` — recipient's inbox is full or rate-limited | Stage stays parked. Back off and retry once; a second drop escalates |
 | `oversized` — refused up front for message size | Stage stays parked. The reattach prompt is too large — an authoring defect on our side, not a recipient problem. Shorten and retry |
 | `burst_limited` — refused up front for send rate | Stage stays parked. Back off briefly, retry once |
+| `queued` — recipient is an offline Remote Control session on another machine; the send waits for that machine to reconnect | Stage stays parked. Do **not** re-send (the queued copy still lands on reconnect, so a second send duplicates the nudge), do **not** re-delegate, and do **not** increment `retry_count`. Await reconnection; escalate to the operator once the stage reads stale |
 
 #### Reattach rows — an unconfirmed absence
 
@@ -198,19 +200,20 @@ A stage that sent its own ask before this rule existed has no path to the answer
 
 0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:
    - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
-   - live + status **"Needs input"** (sandbox / MCP-input / managed-settings prompt) → parked on us but **operator-owned**; reattach only to surface the prompt verbatim — never auto-answer or re-delegate.
+   - live + status **"Needs input"** (sandbox / MCP-input / managed-settings prompt, or an inbound cross-session message awaiting approval) → parked on us but **operator-owned**; reattach only to surface the prompt verbatim — never auto-answer or re-delegate.
    - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
    - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
    - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
 
 ### Step 0 notes — observed CLI field set
 
-   The field names above are the contract; the shipping CLI exposes fewer. An observed
-   `--json --all` row carries `id`, `sessionId`, `name`, `kind`, `cwd`, `pid`, `startedAt`, and
-   **either** `state` (background) **or** `status` (interactive) — no `agent_id`, no `waitingFor`,
-   no `parent_agent_id`. Read identity from `agent_id // id // sessionId` (`id` is a prefix of
-   `sessionId`, so match on prefix too) and liveness from `waitingFor` when present, else
-   `state`/`status`. An unrecognised token is **unknown, not absent** — never re-delegate off one.
+   The field names above are the contract; the shipping CLI exposes fewer. A live-probed
+   interactive row carries exactly `cwd`, `kind`, `name`, `pid`, `sessionId`, `startedAt` and
+   `status` (e.g. `"busy"`) — no `id`, no `agent_id`, no `waitingFor`, no `parent_agent_id`. The
+   background-row variant is unobserved, so `id` and `state` stay in the defensive reads. Read
+   identity from `agent_id // id // sessionId` (where `id` appears it is a prefix of `sessionId`, so
+   match on prefix too) and liveness from `waitingFor` when present, else `state`/`status`. Dated
+   probes: `skills/agent-coordination/references/headless-dispatch.md § Schema Versioning Watch`. An unrecognised token is **unknown, not absent** — never re-delegate off one.
    `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
 
 ### Step 0 notes — own-name & teammate visibility
@@ -225,6 +228,10 @@ A stage that sent its own ask before this rule existed has no path to the answer
    read as gone) and fewer false positives (a phantom read as live). The degrade rules are
    unchanged and simply act on better input.
 
+   The own name reuses the existing `name` key, confirmed live: the `ListAgents` self line and the
+   `--json` row carry the same value. A teammate row's `kind` is still unconfirmed. Names are not
+   unique, so when two rows share one, match on `sessionId`, never on `name`.
+
 ### Step 0 notes — reattach vs re-dispatch has a price
 
    `SessionStart` resume hooks receive the session's **staleness and an estimated re-cache cost**.
@@ -233,6 +240,12 @@ A stage that sent its own ask before this rule existed has no path to the answer
    stage. Weigh the reported cost rather than assuming, and prefer re-dispatch only when the
    estimate clearly exceeds the stage's own cost — reattach still wins whenever the agent holds
    edited tree state, at any cache price (§ Mid-stage yield).
+
+   Reattach also keeps what a re-dispatch throws away. A resumed subagent keeps its tool list,
+   system-prompt prefix, `SubagentStart` hook context and preloaded skills, so its cache prefix
+   survives, and nested background results are saved in the parent subagent's transcript, so they
+   survive too. A `--bg` session that receives a message just before its idle timeout is not
+   retired mid-turn.
 
 ### Step 0 notes — proactive detection
 

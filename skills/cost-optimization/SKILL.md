@@ -54,6 +54,8 @@ Worked before/after examples and per-content-type techniques: `skills/context-co
 
 Automatic in CC; the knobs, caps, and visibility surfaces still worth acting on are in `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
 
+`/skill-doctor` lists loaded skills that go unused and what each costs in context — use it to prune.
+
 ### 4. Batch Operations
 
 Group file reads before analysis, combine related searches, cache repeated lookups. One batched request instead of five sequential ones drops ~80% of per-call overhead.
@@ -120,7 +122,7 @@ Two upstream cache-miss bugs are fixed and no longer need working around: tool d
 
 0% at PL (cold) → ≈20% cross-stage → ≈80% on retries within a stage → ≈60% cross-stage average, meeting AC-14 (`handoff-protocol.md#cache-prefix`).
 
-**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
+**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. Both name a likely cause for each miss (e.g. tool definitions or system prompt changed, idle past the TTL), which separates preamble drift from an idle gap. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
 
 Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2] across consecutive stages of one `worktask_id`, and of [4]+[4b] within a stage type. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
 
@@ -137,7 +139,7 @@ Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity M
 ```
 
 - **Base Tokens**: per-stage baselines (`${CLAUDE_SKILL_DIR}/references/token-baselines.md`)
-- **Model Cost**: haiku $0.25/1M · sonnet $3/1M (Sonnet 5 promo $2/$10 per Mtok through 2026-08-31) · opus $15/1M
+- **Model Cost**: haiku $0.25/1M · sonnet $3/1M (Sonnet 5 promo $2/$10 per Mtok through 2026-08-31) · opus $15/1M · fable (Fable 5.1) $10/$50 per Mtok, $0.25/Mtok cache reads
 - **Retry Factor**: 0.1 low · 0.2 medium · 0.5 high complexity
 - **Complexity Multiplier**: 1.0 standard · 1.5 large codebase · 2.0 novel domain
 

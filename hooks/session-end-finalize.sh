@@ -9,8 +9,9 @@
 # it would have to take the ledger lock from, and a wrong terminal status is
 # worse than an honest "unsettled at session end".
 #
-# Exit code is always 0 — a lost row must never delay teardown. Give the hook
-# room via CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS on slow ledgers.
+# Exit code is always 0 — a lost row must never delay teardown. The plugin.json
+# entry's `timeout` bounds the run: without one, SessionEnd hooks get a 1.5 s
+# budget that a slow ledger can outlast, losing the row.
 set -eu
 
 SELF_TEST=0
