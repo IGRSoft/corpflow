@@ -169,6 +169,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-finalize.sh",
+            "timeout": 5,
             "continueOnBlock": true
           }
         ]

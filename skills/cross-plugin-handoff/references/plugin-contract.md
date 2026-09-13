@@ -159,6 +159,19 @@ their own `SKILL.md` are listed in `skills[]`.
 - A plugin may declare `"."` as a `skills` path, meaning the plugin root itself (CC 2.1.221).
 - The `archive` source installs from a zip over HTTPS with no git or npm and accepts an optional
   SHA-256 pin (CC 2.1.224). Pin the hash for any non-first-party marketplace entry.
+- `claude plugin validate --json` emits a machine-readable report (CC 2.1.259). Observed on this repo
+  at CLI 2.1.270: top-level keys `success`, `strict`, `target`, `manifest`, `contents`, with
+  `success: true`. Tooling reads `success` rather than scraping the text output.
+- `claude plugin list --json` rows carry `errorDetails`/`noteDetails`, which tell a sibling that is
+  installed but failed to load apart from one that is absent; `claude plugin install`, `uninstall`,
+  `update`, `enable` and `disable` accept `--json` too (CC 2.1.268).
+- `--plugin-dir` pointed at a folder of plugins loads every child folder with a manifest and picks up
+  children added or removed while running (CC 2.1.265) — one flag loads the siblings for local dev.
+- `claude plugin eval` runs a plugin eval suite (`<eval dir>/**/case.yaml`, or `prompt.md` +
+  `graders/*.md`; default dir `evals/`) with a no-plugin baseline arm (CC 2.1.269). corpflow's
+  `skills/request-plan/evals/evals.json` is not in that format — noted, not adopted.
+- Component paths that are symlinks, contain a backslash, or escape the plugin root are refused;
+  directory names beginning with two dots are accepted by both the loader and `validate`.
 
 ## D. Replacing an existing plugin
 

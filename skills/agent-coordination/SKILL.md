@@ -394,7 +394,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 ##### Delivery is reported, so check it
 
-> A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, or `burst_limited`, and `SendMessage`/`ListAgents` say when the account's session list was too long to enumerate fully — which makes any "peer is gone" conclusion drawn under that condition unconfirmed rather than established. Branch on the result; the resume loop's table is `references/resume.md § Reattach rows — the SendMessage has a result too`.
+> A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, `burst_limited`, or `queued`, and `SendMessage`/`ListAgents` say when the account's session list was too long to enumerate fully — which makes any "peer is gone" conclusion drawn under that condition unconfirmed rather than established. `queued` means the target is an offline Remote Control session on another machine and delivery waits for it to reconnect: never re-send, or the message arrives twice. Branch on the result; the resume loop's table is `references/resume.md § Reattach rows — the SendMessage has a result too`.
 
 ##### notify_when_idle, availability & preview collapse
 
@@ -406,7 +406,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Replies from a subagent land in the parent conversation
 
-> A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly.
+> A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly — including resume: a subagent that resumes another agent via `SendMessage` is woken by that agent's completion.
 
 > Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.cross_session_ask` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — open_questions, refs, constraints`); the orchestrator sends, receives the reply natively, and relays it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`).
 
@@ -618,7 +618,7 @@ For a bug with multiple candidate causes: generate N hypotheses spanning differe
 
 ## Native Dynamic Workflows vs corpflow Staged Worktask
 
-Claude Code's native `/workflows` command and Workflow tool cover **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. Complementary to the staged worktask, not a replacement.
+Claude Code's native `/workflows` command and Workflow tool cover **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` (1–256) raises the Workflow tool's per-run concurrent agent limit for inference-bound fan-outs. Complementary to the staged worktask, not a replacement.
 
 ### Comparison
 

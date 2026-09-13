@@ -17,11 +17,12 @@ end, compaction, and resume with no configuration. Full schema:
 corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
 `TaskList`) — not even where those tools are available.
 
-> **Why, so nobody re-adds them**: CC 2.1.233 removed the Todo/task-tracking tools on every model
-> this plugin dispatches (Opus 4.8, Sonnet 5, Fable 5, Mythos 5, newer), so an orchestrator built on
-> them cannot run at all. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` restores them; the plugin deliberately
-> does not depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that
-> switch.
+> **Why, so nobody re-adds them**: the Todo/task-tracking tools are offered only on Claude 3.x,
+> Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, so an orchestrator built on them cannot run on the
+> opus-, sonnet- or fable-tier models this plugin dispatches. A haiku-tier stage
+> (`corpflow:technical-writer`) does see them, and uses the ledger all the same.
+> `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` offers them on other models; the plugin deliberately does not
+> depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch.
 
 ## Ledger Keys
 
@@ -70,7 +71,7 @@ only purpose and normative use.
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are not accepted |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset (`skills/shared/model-selection.md § Default Subagent Model`). A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6) |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset (`skills/shared/model-selection.md § Default Subagent Model`). A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides even the explicit alias, so `dispatched_agents[].model_resolved` diverges from the pin: Step 6.5b backfills it when the runtime surfaces the model that ran (`skills/worktask/SKILL.md § Step 6.5b — dispatch entry completed`), and PL0 raises a plan-gate sweep item (`skills/shared/model-selection.md § Forced subagent model overrides every pin`) |
 
 ### Run & context fields
 
@@ -320,7 +321,7 @@ field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, ma
 the conditional `if` field) and configuration examples:
 `skills/agent-coordination/references/hook-monitoring.md § Project-Level Configuration`.
 
-> `SessionEnd` is registered by the plugin to `hooks/session-end-finalize.sh`, which appends one `session_end_finalize` audit row naming every task still `in_progress` at teardown — the only completion record background work killed with the session otherwise gets. It reports and never mutates task status. Its timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning).
+> `SessionEnd` is registered by the plugin to `hooks/session-end-finalize.sh`, which appends one `session_end_finalize` audit row naming every task still `in_progress` at teardown — the only completion record background work killed with the session otherwise gets. It reports and never mutates task status. Its manifest entry carries `"timeout": 5`, so the row does not depend on the operator exporting `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` — without a per-hook `timeout` a SessionEnd hook gets 1.5 s (`skills/agent-coordination/references/hook-monitoring.md § SessionEnd finalization`).
 
 ## Agent Teams Integration
 

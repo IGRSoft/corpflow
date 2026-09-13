@@ -42,6 +42,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 - `reloadSkills: true` reloads plugin skills mid-session (e.g. after `/reload-skills`), re-announcing **only changed skills** — listeners must re-apply skill-specific initialization idempotently, never assuming every skill re-announces. `sessionTitle` (UI session title) rides alongside it.
 - Events stream in headless sessions, so a headless run cannot idle-reap remote workers mid-hook before the handler finishes.
 - Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch has a price`.
+- `--continue`/`--resume` render the conversation without waiting for `SessionStart` hooks, so resume context a hook injects can arrive after the conversation is already on screen. Never assume a SessionStart hook has finished before a resumed session is shown.
 
 #### SessionStart — form & grant floor
 
@@ -56,6 +57,8 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 #### SessionEnd finalization
 
 `SessionEnd` fires on session teardown. The managed handler `hooks/session-end-finalize.sh` (registered in `plugin.json`) appends one `session_end_finalize` row to `.context/logs/audit.jsonl` naming any tasks still `in_progress` at teardown — a resume can then tell "still running" apart from "died with the session". It only reports: it never mutates task status, because a teardown hook races the very writer it would need the ledger lock from, and a wrong terminal status is worse than an honest unsettled one. Exit is always `0` so a lost row never delays teardown.
+
+Its `plugin.json` entry carries `"timeout": 5`, and that is what bounds the run. A SessionEnd hook without a per-hook `timeout` gets a 1.5 s budget unless the operator exports `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`; the row is the resume loop's only "died with the session" signal, so its budget must not hang on operator env.
 
 #### Payload, monitor & stall notes
 
@@ -124,6 +127,7 @@ Dedupe unchanged: these are metadata-only, `dedupe_key` shape preserved. With ne
 - `tool_decision` events carry `tool_parameters` — the decision span records *which* tool args were classified, so dashboards can tell a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values surface as **metric-datapoint labels**, not only span attributes: tag `worktask_id` / `stage` there to slice collector dashboards per-stage without parsing spans.
 - `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution pairs with the tier split in `skills/shared/stage-codes.md`.
+- `OTEL_METRICS_INCLUDE_REPOSITORY` tags metrics and events with `vcs.*` repository attributes, so a collector shared across repositories slices per repo without a hand-set resource attribute.
 #### Log correlation, limits & trace nesting
 
 - Log events carry `message.uuid`, `client_request_id`, and `tool_source` for message-level correlation and tool provenance across spans and audit rows.
@@ -134,6 +138,8 @@ Dedupe unchanged: these are metadata-only, `dedupe_key` shape preserved. With ne
 #### BG-Task ID Schema Watch
 
 The ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
+
+Evidence so far: six `subagent_stopped` audit rows (2026-09-07) resolved real ids and none read `"unknown"`. The coalesce masks which spelling matched, so the canonical key is still **unconfirmed**.
 
 ### Managed (plugin) vs ad-hoc (user) hooks
 
@@ -241,6 +247,8 @@ The payload shape is **unconfirmed**: these events postdate every doc in this re
 #### Why this gate fails open
 
 The gate's pin is **not** guessed: it reads `.facts.dispatched_agents[].model_requested` (`skills/worktask/references/handoff-protocol.md § facts — dispatched_agents`). That asymmetry is what makes it fail open — a block is reachable only once the destination coalesce matches a real field, so a wholly wrong guess degrades to annotate-or-silent rather than to a spurious block. A model-switch gate that failed closed on a malformed payload would wedge every session that switches models, which is why it does not follow the fail-closed posture used for the completion sweeps.
+
+One closed path sits outside the gate: a plugin hook that fails to load refuses the model switch with the cause named, and each later switch re-checks. A broken `model-switch-gate.sh` load therefore refuses switches until the fault is fixed, and the next switch after the fix goes through — the refusal never outlives the fault.
 
 ## Agent Teams Lifecycle Hooks
 

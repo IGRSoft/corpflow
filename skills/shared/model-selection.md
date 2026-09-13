@@ -24,7 +24,7 @@ to write a prompt for the model this file picks** lives in `skills/shared/model-
 |-------|-------------|---------|---------|
 | `opus` | **Opus 5** (`claude-opus-5`) — the default Opus | 1M by default; no plan qualifier, no usage-credit gate | fast mode $10/$50 per Mtok |
 | `sonnet` | **Sonnet 5** — the Claude Code default model | native 1M | promo $2/$10 per Mtok through 2026-08-31 |
-| `fable` | **Fable 5** (`claude-fable-5`) — Mythos-class top reasoning | 1M by default (`[1m]` names normalize to the base id) | via `/model` |
+| `fable` | **Fable 5.1** (`claude-fable-5-1`) — Mythos-class top reasoning. Claude apps gateway sessions keep resolving `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | $10/$50 per Mtok, $0.25/Mtok cache reads |
 | `haiku` | current Haiku | standard | § Cost Tiers |
 
 Pull steady-state pricing from `/model` or the `claude-api` skill. Opus-tier stages get
@@ -39,7 +39,7 @@ Opus 5 with no plugin change; `fable` is a valid operator override, never a plug
 
 ### Fable 5 credit gate
 
-> Without 1M usage credits a fable-tier *dispatch* fails hard with `API Error: Usage
+> Without 1M usage credits a Fable 5.x (fable-tier) *dispatch* fails hard with `API Error: Usage
 > credits required for 1M context` (observed live 2026-06-12); an *interactive* 1M session
 > instead auto-compacts back under the standard limit. Degrade path: a session
 > `fallbackModel` (`--fallback-model`), or a direct `Task({ model })` / `metadata.model`
@@ -63,7 +63,7 @@ explicitly.
 
 ### xhigh routing
 
-> `xhigh` requires **Opus 5 or Fable 5** — Sonnet silently downgrades the thinking budget,
+> `xhigh` requires **Opus 5 or Fable 5.x** — Sonnet silently downgrades the thinking budget,
 > and Sonnet 5 does not change that: do not assume it accepts `xhigh` without verifying.
 > Prefer the `opus` alias; `fable` carries the credit gate above and hard-fails on
 > credit-gated accounts.
@@ -84,6 +84,14 @@ explicitly.
 > Subagents and compaction inherit the session's extended-thinking config; keep passing
 > per-stage `metadata.model` + `effort` regardless — explicit beats inherited for stage
 > determinism and cost attribution.
+
+### Effort frontmatter and caps
+
+> `effort:` frontmatter on subagents, commands and skills is honoured on every model. A managed or
+> user `maxEffortLevel` (top-level, or per model under `modelSettings`) caps effort on every
+> provider, Bedrock, Vertex and Foundry included: a stage pinned above the cap runs at the cap with
+> no error. `metadata.effort` keeps recording the requested tier, so read the hook-reported
+> `effort.level` before trusting a stage's depth.
 
 ## Managed Allowlists and Org Restrictions
 
@@ -133,8 +141,8 @@ prefixes GovCloud inference profiles `us-gov`, so headless runners need no regio
 ## Context-Window Accounting
 
 `/context` percentages are computed against the **full 1M window** on models that have one
-(Opus 5, Sonnet 5, Fable 5) — no premature autocompacting on long opus-tier sessions. How
-the extended window changes stage handoff budgets, plus the Fable 5 without-credits
+(Opus 5, Sonnet 5, Fable 5.x) — no premature autocompacting on long opus-tier sessions. How
+the extended window changes stage handoff budgets, plus the Fable 5.x without-credits
 caveat: `skills/context-compression/SKILL.md`.
 
 ## Selection Criteria
@@ -170,6 +178,8 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 - An explicit per-call override **survives resume and follow-up `SendMessage`** — a pinned
   stage does not revert to the parent's model on reattach, so `model_requested`/
   `model_resolved` in `dispatched_agents[]` keep matching for the stage's whole lifecycle.
+- Command and skill frontmatter `model:` is honoured in interactive sessions. In auto mode, a
+  command or skill naming a model auto mode does not support keeps the session model for that turn.
 
 ### Worktask stages: explicit, never inherited
 
@@ -195,3 +205,17 @@ to the agent's own tier, it falls through to whatever an operator or CI runner e
 
 A mid-worktask switch away from a pinned model is separately gated by `hooks/model-switch-gate.sh`
 (`agent-coordination/references/hook-monitoring.md § Model-Switch Hooks`).
+
+### Forced subagent model overrides every pin
+
+`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` inverts the precedence above. When it is set, every subagent runs
+on `CLAUDE_CODE_SUBAGENT_MODEL`, or on the main session model when that is unset, and both the
+per-spawn `model` and the agent definition's `model:` are ignored. Ledger-dispatched stages lose the
+safety the paragraph above grants them: `Task({ model: "opus" })` still passes step 6, then runs on
+the forced model with no refusal and no error.
+
+Two controls cover it. PL0 reads the variable before any spend and raises a plan-gate sweep item
+(`skills/worktask/references/pl0-procedure.md § Subagent model-force preflight`), and Step 6.5b
+backfills `dispatched_agents[].model_resolved` when the runtime surfaces the model that ran, so cost
+follows the forced tier rather than the pin. The force applies at spawn, so there is no mid-stage
+switch for `hooks/model-switch-gate.sh` to refuse.

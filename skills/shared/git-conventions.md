@@ -83,7 +83,9 @@ A commit or PR body carries **no** `Generated with …` line and **no** `Co-Auth
 trailer. Authorship is the human operator's; a footer claiming otherwise is wrong in the record that
 outlives the session, and it propagates into release notes and blame output. Setting
 `attribution.sessionUrl` additionally omits the session link, keeping the rule enforced at the
-tooling layer rather than by memory.
+tooling layer rather than by memory. The harness's attribution reminder yields to a CLAUDE.md or
+memory rule against attribution (lines set by managed settings still apply), so this rule and the
+`attribution.*` settings hold together.
 
 ## No issue anchor
 
