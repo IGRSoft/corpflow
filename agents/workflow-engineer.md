@@ -90,7 +90,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 | Phase | Must hold |
 |-------|-----------|
 | Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.0, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, `.worktrees/` writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
-| Per-issue (CRITICAL) | Branch cut from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
+| Per-issue | Branch cut from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
 | Completion | Work committed to the issue branch and pushed; PR created with `Closes #{issue}`; orchestrator.json status `"completed"` |
 
 ### Common Validation Failures

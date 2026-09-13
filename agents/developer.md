@@ -177,7 +177,7 @@ Fall back through: the override target (if any) → the alias's default target �
 
 ### D0.0 — Worktree isolation (mandatory before any Edit/Write)
 
-DV ALWAYS runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If NOT isolated, either **create one** (`EnterWorktree`, honoring `task.metadata.base_ref`/`worktree.baseRef`, then re-run D0 inside it) or — if one genuinely cannot be created (bare/read-only repo) — **flag and return** a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `§ Approach` and set the `worktree:` handoff field.
+DV runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If NOT isolated, either **create one** (`EnterWorktree`, honoring `task.metadata.base_ref`/`worktree.baseRef`, then re-run D0 inside it) or — if one genuinely cannot be created (bare/read-only repo) — **flag and return** a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `§ Approach` and set the `worktree:` handoff field.
 
 This proves **isolation**, not **assignment**: a stale worktree from an earlier session is genuinely isolated, so it passes D0.0 cleanly while being the wrong tree entirely.
 
@@ -556,7 +556,7 @@ handoff:
   summary: "<N files changed, M tests added>"
   tests_executed: 12
   test_suite_compiles: true
-  worktree: true               # MUST be true — worktree notes below
+  worktree: true               # true — DR hard-fails on false; notes below
   worktree_path: <abs path>    # OPTIONAL — field notes
   worktree_branch: <branch>    # OPTIONAL — field notes
   files_touched:

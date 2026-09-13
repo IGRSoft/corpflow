@@ -2,7 +2,7 @@
 name: cost-optimization
 description: Apply for budget management, model selection, and efficiency analysis. Cost tracking and optimization strategies for AI agent worktasks.
 effort: medium
-version: 0.2.0
+version: 0.3.0
 related:
   - skills/worktask/SKILL.md
   - skills/agent-coordination/SKILL.md
@@ -122,7 +122,7 @@ Two upstream cache-miss bugs are fixed and no longer need working around: tool d
 
 **Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
 
-Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2]+[4] across consecutive stages of one `worktask_id`. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
+Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2] across consecutive stages of one `worktask_id`, and of [4]+[4b] within a stage type. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
 
 ### Sibling fan-out staggering
 

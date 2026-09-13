@@ -2,7 +2,7 @@
 name: agent-coordination
 description: Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows. Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation.
 effort: medium
-version: 0.3.0
+version: 0.4.0
 related:
   - ../worktask/SKILL.md
   - ../claude-constitution/SKILL.md
@@ -292,6 +292,21 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 | Test design | qa-engineer | sonnet |
 
 > **Cross-plugin AR collaboration**: on platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (for Apple: pattern selection, DI, navigation, concurrency; equivalents elsewhere). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
+
+#### When not to delegate
+
+The table says who takes a sub-task, not that every sub-task needs one. The ceilings below are
+*caps*, and there is deliberately **no per-session total-spawn cap**, so nothing here stops a stage
+spending its budget on spawns a direct tool call would have answered.
+
+Delegate for work that is genuinely independent and parallelizable, or needs expertise this stage
+lacks: a wide multi-file investigation, a platform specialist, a per-stream DV split. Do not
+delegate what a grep and two reads would settle, and never spawn a subagent to double-check your
+own output. Where one delegate suffices, use one.
+
+This bites hardest on the `opus` stages, which reach for delegation more readily. Section `[4b]`
+carries the same rule at dispatch; it is here too because a stage agent reads this skill directly
+when deciding whom to call. Source: `skills/shared/model-prompting.md § opus`.
 
 #### Nested delegation
 

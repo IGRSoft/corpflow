@@ -6,7 +6,9 @@ effort: low
 # Model Selection Guidelines
 
 Canonical for tiers, selection criteria, and alias/model behaviour. The stage→model
-assignment itself lives in `skills/shared/stage-codes.md` and is not restated here.
+assignment itself lives in `skills/shared/stage-codes.md` and is not restated here, and **how
+to write a prompt for the model this file picks** lives in `skills/shared/model-prompting.md`
+— that split is the reason neither file needs the other's tables.
 
 ## Cost Tiers
 
@@ -70,7 +72,9 @@ explicitly.
 > thinking turned off is sent as `high` rather than failing. A stage pinned to `xhigh`
 > (`agents/ethics-reviewer.md`, `agents/prompt-engineer.md`, `agents/security-reviewer.md`)
 > then runs one tier down with no error anywhere — the step-6 audit row is the only place
-> it shows. Verify there before trusting an `xhigh` stage's depth.
+> it shows. Verify there before trusting an `xhigh` stage's depth. The lost tier is not the
+> only cost on Opus 5: `skills/shared/model-prompting.md § xhigh with thinking disabled` names
+> the two output artifacts that appear in that configuration.
 
 ### Effort visibility and inheritance
 

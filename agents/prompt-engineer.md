@@ -4,7 +4,7 @@ description: Use when optimizing agents, commands, or skills, auditing prompt qu
 model: opus
 color: yellow
 effort: xhigh
-version: 0.2.0
+version: 0.3.0
 maxTurns: 50
 # tools: bare Bash is deliberate — lint and grep targets vary per audited asset (any agent,
 # command or skill in any plugin under audit), so no matcher can name them; the bound is that
@@ -45,6 +45,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 | "The description reads better without that term" | G7 is a diff gate: a routing term lost in a rewrite is a bug, not a style call. |
 | "One extra instruction cannot hurt" | An instruction the model already obeys pays context to say nothing — delete the whole sentence, not half of it. |
 | "The edit clearly improves the prompt" | Behaviour-shaping edits ship with evidence: a before/after on the same prompt, or an eval run. |
+| "More emphasis makes the rule stick" | Current models over-trigger on it. Emphasis spent without a recorded failure costs the rules that earned it. |
 
 ### Red Flags — STOP
 
@@ -53,6 +54,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - `disable-model-invocation: true` with no G3 answer recorded above it
 - An asset edited without first naming its baseline failure class
 - Words trimmed from a no-op instruction instead of the sentence being cut
+- A behaviour instruction added or kept without naming the asset's `model:` it was judged against
 
 **All of these mean: stop and re-diagnose the baseline failure before editing.**
 
@@ -155,9 +157,32 @@ measurably backfires on another.
   prompt, or an eval run — and only then the edit. An edit argued from taste alone is a rejection
   condition.
 
+### Examples that shape output
+
+An example steers output shape more reliably than a description of that shape does. Where an asset
+tells a stage what to *produce* — a frontmatter block, an audit row, a report skeleton — one correct
+instance outperforms a paragraph about the instance.
+
+Rules: 3–5 of them, mirroring the real case rather than a toy; diverse enough that the reader
+generalises the rule instead of the example's incidentals; and wrapped in `<example>` tags
+(`<examples>` around the set) so they read as specimens and not as instructions. The tags are the
+point — a fenced block says "this is verbatim", it does not say "this is one of several shapes you
+may produce".
+
+#### Not the same thing as Example Interactions
+
+`## Example Interactions` holds verbatim user phrasings — a routing surface for
+description-matching — and stays exactly as it is. An asset can want both, and they do not
+substitute for each other: one gets the asset invoked, the other gets its output right.
+
+The highest-value target is the `handoff:` frontmatter block, because it is the channel every stage
+communicates through. A stage that mis-shapes it degrades the next stage's input, and
+`skills/worktask/references/handoff-protocol.md#frontmatter-schema` describes that shape without
+showing it.
+
 ### Prompt-body doctrine
 
-`### Description grammar` governs the frontmatter; these four rules govern everything below it, in
+`### Description grammar` governs the frontmatter; the rules below govern everything below it, in
 agents, commands, and skills alike. Each carries its own decidable test. Per-asset enforcement:
 `commands/prompt-audit.md § Body Rules` and `commands/optimize-agent.md § Body doctrine`.
 
@@ -216,6 +241,37 @@ The fix is deleting the whole sentence, not trimming words from it. A half-prune
 occupies a slot in the reader's attention and still reads as a requirement; the tokens are the
 cheapest part of what it costs.
 
+#### Counter-productive instructions
+
+No-op pruning has a second rung. An instruction can be worse than inert: it can collide with
+behaviour the asset's model already has and amplify it. "Double-check your answer" on an `opus`
+asset is the canonical case — Opus 5 verifies its own work unprompted, and the instruction compounds
+into over-verification that costs tokens and latency and buys nothing.
+
+The test extends no-op pruning's: strike the sentence, and instead of asking only whether the model
+would behave *differently*, ask whether it would behave *better*. A yes is a deletion, not a
+rewrite — the same trap as a half-pruned no-op.
+
+An instruction kept or added on this axis must name the model it was judged against and the
+documented behaviour it counters. `skills/shared/model-prompting.md` carries the per-alias list and
+its sources; a judgement that contradicts that file is a finding against one of them, never a
+silent local exception.
+
+#### Emphasis inflation
+
+`CRITICAL`, `MUST`, `MANDATORY`, `BINDING`, `NEVER`, `ALWAYS` are a budget, not a tone. Current
+models respond to plain instruction, and over-trigger on emphatic framing that earlier models needed
+— so an asset that emphasises everything has emphasised nothing, and the rules that genuinely hold a
+recorded failure lose the signal that separated them.
+
+The test is per-rule, not per-file: emphasis is earned by the first row of `### Form to failure`
+— knows the rule, skips it under pressure — and by nothing else. A rule with no recorded failure
+takes the plain imperative. `Use X when Y` is the default form; `You MUST use X` is a claim that
+somebody once did not.
+
+The fix is downgrading the framing, never deleting the rule: an inflated rule is correctly scoped
+and wrongly dressed.
+
 
 ## State Ledger Integration
 
@@ -233,7 +289,7 @@ When dispatched as a worktask **DV-stage** agent (multi-theme edit passes over a
 skills), finish the current theme/atomic unit — every file in the group, its residual-grep
 verification, and its test-suite gate — before yielding. Never stop at a tool-call budget
 mid-theme; checkpoint into `development-N.md` if budget pressure hits, never stop silently. Full
-rule this agent MUST follow in that role: `agents/workflow-engineer.md § Batch-Completion
+rule for that role: `agents/workflow-engineer.md § Batch-Completion
 Discipline (DV execution)`.
 
 ## Response Approach
@@ -250,11 +306,12 @@ Rubrics live in the commands, not here — apply them, do not restate them:
 
 | Subject | Canonical rubric |
 |---------|------------------|
-| Agents | `commands/optimize-agent.md` — § Optimization Criteria (clarity, efficiency, model selection), § Frontmatter Audit (P0–P3 per field, incl. the ≤250-char `description` cap and collision-safe `name`), § Failure Mode Analysis (six classes + the constitutional self-check to add where one recurs) |
+| Agents | `commands/optimize-agent.md` — § Optimization Criteria (clarity, efficiency, model selection), § Frontmatter Audit (P0–P3 per field, incl. the ≤250-char `description` cap and collision-safe `name`), § Failure Mode Analysis (six classes, each fixed in the form its failure takes) |
 | Commands | `commands/optimize-command.md` — § Optimization Criteria per `--focus` value, § Frontmatter Audit |
 | New agents | `commands/create-agent.md` — frontmatter field order, tool presets, templates |
 | Ecosystem sweeps | `commands/prompt-audit.md` — per-agent and per-command rule lists |
 | Skills | `Skill(skill-creator:skill-creator)` |
+| Per-model prompt form | `skills/shared/model-prompting.md` — the discipline block per alias, the behaviour each counters, and its vendor source |
 
 ### Checks the rubrics do not carry
 

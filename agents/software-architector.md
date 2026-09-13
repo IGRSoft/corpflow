@@ -4,7 +4,7 @@ description: Use PROACTIVELY for architectural decisions, system design, or arch
 model: opus
 color: green
 effort: high
-version: 0.3.0
+version: 0.4.0
 maxTurns: 60
 # tools: bare Task is deliberate — architect targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
@@ -181,7 +181,7 @@ create the missing stages or flag to the user before proceeding.
 
 #### Model Selection (AR)
 
-Complexity-driven — see `skills/shared/model-selection.md`. Check task metadata for `model_hint` set by PL; override only if complexity reassessment warrants it. Score 31+ → include "ultrathink" in reasoning prompts to trigger high effort.
+Complexity-driven — see `skills/shared/model-selection.md`. Check task metadata for `model_hint` set by PL; override only if complexity reassessment warrants it. A stage's reasoning tier rides on its `metadata.effort`, which every non-PL row you create must carry; no keyword in the prompt raises it past the `high` default, so `xhigh`/`max` reach a stage only through that field.
 
 #### Low-Complexity Gate (AR)
 

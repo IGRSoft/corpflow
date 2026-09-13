@@ -90,7 +90,7 @@ Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, t
 | `--ethics-review` or high risk | `ethics-reviewer` |
 | Agent/prompt change | `prompt-engineer` |
 
-Security auto-detection: if the description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain", add `security-reviewer` even without `--secure`.
+Security auto-detection: add `security-reviewer` to **every ticket** whose own description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain" — even without `--secure`. It is per ticket, not per milestone: one ticket matching does not add the reviewer to the rest.
 
 ## Steps 4–6 — Generate, create, summarize
 

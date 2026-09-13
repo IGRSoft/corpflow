@@ -33,6 +33,12 @@ Read CORPFLOW.md at the root of your plugin and follow it. It is the contract fo
 
 Omit it and the target cannot learn the stage contract — it carries no corpflow instructions of its own.
 
+Section `[4b]`, the per-model discipline block, is injected here too and on the same rule: it is
+selected by `task.metadata.model` and copied verbatim from `skills/shared/model-prompting.md`
+(`handoff-protocol.md#cache-prefix`). A sibling plugin's agent runs on the model corpflow dispatched
+it with, so the behaviours the block counters are the delegating stage's to manage — the sibling has
+no way to know which model it was given.
+
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
 Cross-plugin agents MUST adopt the **full** schema when they take over a stage — canonical at `skills/worktask/references/handoff-protocol.md` (frontmatter + state.json + cache layout). It binds every dev plugin in the registry `skills/shared/compatible-plugins.md` plus the support plugins (`debugging-toolkit:*`, `security-scanning:*`).

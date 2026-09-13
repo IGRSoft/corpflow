@@ -7,12 +7,21 @@
 #        cache-lint.sh <prompt-log.jsonl>
 #      Reads a prompt-log.jsonl (one prompt per line, schema:
 #        {"worktask_id": "...", "stage": "...", "prompt": "..."}
-#      where `prompt` contains marker tags <<<contract-reminder>>>,
-#      <<<worktask-header>>>, <<<stage-contract>>> as section delimiters).
+#      where `prompt` contains the marker tags named in
+#      handoff-protocol.md#cache-prefix as section delimiters:
+#      <<<contract-reminder>>>, <<<worktask-header>>>, <<<state-json>>>,
+#      <<<stage-contract>>>, <<<model-discipline>>>, <<<task-description>>>,
+#      <<<retry-hints>>>, <<<stage-banners>>>.
 #      Asserts byte-identity of sections [1] contract-reminder + [2]
 #      worktask-header across ALL stages of the same worktask_id, and
-#      byte-identity of section [4] stage-contract across all calls of
-#      the same (worktask_id, stage) pair. Exits 1 on drift.
+#      byte-identity of sections [4] stage-contract + [4b] model-discipline
+#      across all calls of the same (worktask_id, stage) pair. Exits 1 on drift.
+#
+#      An optional `model` field on a log line turns on the canon check:
+#      section [4b] must equal, byte for byte, the block
+#      skills/shared/model-prompting.md carries for that alias. Byte-identity
+#      alone cannot see a stage that consistently carries the WRONG model's
+#      block, which is the routing miss this check exists for.
 #
 #      N (number of lines compared) is computed from the FIRST stage's
 #      sections [1]+[2]+[4] line count — derived dynamically, NOT a magic
@@ -357,6 +366,35 @@ extract_section() {
   ' <<< "$body"
 }
 
+# Resolves the plugin root: $CLAUDE_PLUGIN_ROOT when set, else three levels up
+# from this script (skills/worktask/scripts/ -> root). Full ladder:
+# skills/shared/plugin-root-resolution.md.
+plugin_root() {
+  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" ]]; then
+    printf '%s' "$CLAUDE_PLUGIN_ROOT"
+    return 0
+  fi
+  local d
+  d=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+  printf '%s' "$d"
+}
+
+# canonical_model_block <alias> <root> -> the fenced `text` block under that
+# alias's H2 in model-prompting.md, or empty when the alias has none (haiku).
+# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5`,
+# because the em-dash suffix is prose and is not part of the key.
+canonical_model_block() {
+  local alias="$1" root="$2" canon="$2/skills/shared/model-prompting.md"
+  [[ -f "$canon" ]] || { echo "prefix-lint: canon not found: $canon" >&2; return 2; }
+  awk -v a="$alias" '
+    $0 ~ "^## " a "($| )" { inalias = 1; next }
+    /^## / { inalias = 0 }
+    inalias && $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$canon"
+}
+
 # ---------- Forbidden-token scanner ----------
 # Scans ONE section's text for the seven forbidden-token classes named in
 # handoff-protocol.md#cache-prefix (mirrored verbatim in
@@ -450,19 +488,21 @@ prefix_lint() {
     # prompt — the only multi-line one — is whatever follows the first two lines.
     # The `X` sentinel keeps command substitution from eating the separator that
     # an EMPTY prompt is reduced to, which would shift `stage` into `prompt`.
-    local fields wid stage prompt
-    fields=$(jq -r '.worktask_id, .stage, .prompt' <<< "$line"; printf 'X')
+    local fields wid stage model prompt
+    fields=$(jq -r '.worktask_id, .stage, (.model // ""), .prompt' <<< "$line"; printf 'X')
     fields="${fields%X}"
     wid="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
-    stage="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
+    stage="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    model="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
     # Three separate substitutions stripped every trailing newline from each
     # field; keep that, so a prompt is compared the same way it always was.
     while [ "${prompt%$'\n'}" != "$prompt" ]; do prompt="${prompt%$'\n'}"; done
 
-    local s1 s2 s4
+    local s1 s2 s4 s4b
     s1=$(extract_section "$prompt" "contract-reminder")
     s2=$(extract_section "$prompt" "worktask-header")
     s4=$(extract_section "$prompt" "stage-contract")
+    s4b=$(extract_section "$prompt" "model-discipline")
 
     # L1 forbidden-token scan — runs on EVERY line (intrinsic per-section
     # check, independent of the cross-line byte-identity comparison below).
@@ -475,6 +515,25 @@ prefix_lint() {
     if ! forbidden_token_scan "$s4" "worktask_id=$wid stage=$stage section[4]"; then
       rc=1
     fi
+    if ! forbidden_token_scan "$s4b" "worktask_id=$wid stage=$stage section[4b]"; then
+      rc=1
+    fi
+
+    # Canon check. Opt-in on the log line carrying `model`, because the field is
+    # new and a log written before it existed must stay lintable rather than
+    # fail as if the block were wrong.
+    if [[ -n "$model" ]]; then
+      local canon
+      if canon=$(canonical_model_block "$model" "$(plugin_root)"); then
+        while [ "${canon%$'\n'}" != "$canon" ]; do canon="${canon%$'\n'}"; done
+        if [[ "$s4b" != "$canon" ]]; then
+          echo "prefix-lint: worktask_id=$wid stage=$stage: section [4b] does not match model-prompting.md block for model=$model" >&2
+          rc=1
+        fi
+      else
+        rc=1
+      fi
+    fi
 
     # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]). Pattern
     # substitution rather than `tr`, which cost two forks on every line.
@@ -483,6 +542,7 @@ prefix_lint() {
     local f1="$td/wf-${widsafe}-s1"
     local f2="$td/wf-${widsafe}-s2"
     local f4="$td/wf-${widsafe}-stage-${stagesafe}-s4"
+    local f4b="$td/wf-${widsafe}-stage-${stagesafe}-s4b"
 
     if [[ ! -f "$f1" ]]; then
       printf '%s' "$s1" > "$f1"
@@ -502,6 +562,13 @@ prefix_lint() {
       printf '%s' "$s4" > "$f4"
     elif [[ "$s4" != "$(<"$f4")" ]]; then
       echo "prefix-lint: worktask_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
+      rc=1
+    fi
+
+    if [[ ! -f "$f4b" ]]; then
+      printf '%s' "$s4b" > "$f4b"
+    elif [[ "$s4b" != "$(<"$f4b")" ]]; then
+      echo "prefix-lint: worktask_id=$wid stage=$stage: section [4b] model-discipline DRIFT" >&2
       rc=1
     fi
   done < "$log"

@@ -325,7 +325,7 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.
 
-> **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
+> **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4][4b]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
 
 ### PLHandoff
 
@@ -1412,17 +1412,55 @@ Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equ
 ### Preamble layout (binding)
 
 ```
-[1] Plugin/agent contract reminder         ← stable across ALL stages
-[2] Worktask header (id, plan, exploration)← stable across ALL stages
-[3] state.json blob (inlined JSON)         ← evolves per stage
-[4] Stage contract excerpt (this stage)    ← stable WITHIN stage type
-─────── (cache prefix boundary for sections 1+2+4 sharing) ───────
-[5] task.description                       ← dynamic per delegation
-[6] retry hints (if retry_count > 0)       ← dynamic per delegation
-[7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← suffix only
+<<<contract-reminder>>>
+[1]  Plugin/agent contract reminder         ← stable across ALL stages
+<<<worktask-header>>>
+[2]  Worktask header (id, plan, exploration)← stable across ALL stages
+<<<state-json>>>
+[3]  state.json blob (inlined JSON)         ← evolves per stage
+<<<stage-contract>>>
+[4]  Stage contract excerpt (this stage)    ← stable WITHIN stage type
+<<<model-discipline>>>
+[4b] Model discipline block                 ← stable WITHIN stage type
+─────── (cache prefix boundary for sections 1+2+4+4b sharing) ───────
+<<<task-description>>>
+[5]  task.description                       ← dynamic per delegation
+<<<retry-hints>>>
+[6]  retry hints (if retry_count > 0)       ← dynamic per delegation
+<<<stage-banners>>>
+[7]  Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← suffix only
 ```
 
-### Forbidden tokens in sections [1], [2], [4]
+### Section markers (binding)
+
+Each section opens with its `<<<marker>>>` on a line of its own and runs to the next marker or
+to the end of the prompt; there are no closing tags. The markers are not decoration and not
+optional:
+
+- **The lint parses them.** `cache-lint.sh` prefix mode extracts sections by marker, so the
+  layout above is what makes an assembler's output checkable rather than guessed at.
+- **Section [3] needs a marker even though nothing asserts [3].** Without `<<<state-json>>>`,
+  [2] runs to `<<<stage-contract>>>` and swallows the inlined ledger, which evolves every stage —
+  byte-identity then fails on a section that never changed. A marker whose own section is never
+  compared still terminates the one before it.
+- **They separate instruction from data.** [3] is JSON and [5] is free-form text, both sitting
+  between blocks of instructions.
+
+### Section [4b] — model discipline block
+
+Copied verbatim from `skills/shared/model-prompting.md`, selected by `task.metadata.model`. It
+is inside the cache prefix for the same reason [4] is: a stage's model is fixed for the stage's
+lifetime (`skills/shared/model-selection.md § Worktask stages: explicit, never inherited`), so
+the block is stable within stage type even though it varies across the pipeline.
+
+`haiku` has no block; its marker is emitted with an empty body rather than omitted, so the
+section count does not vary by model.
+
+The orchestrator never composes this text. A block assembled at dispatch instead of copied is
+the drift `cache-lint.sh` exists to catch — and the reason the blocks live in one canon file
+rather than in the agent definitions is in `model-prompting.md § Why this lives at dispatch`.
+
+### Forbidden tokens in sections [1], [2], [4], [4b]
 
 Anything below collapses cache-hit rate:
 
@@ -1434,12 +1472,13 @@ Anything below collapses cache-hit rate:
 - Agent-specific names beyond `worktask_id` (don't bake `software-architector` into [1] or [2]; that goes in [4])
 - Conversation message IDs
 
-### Required tokens in sections [1], [2], [4]
+### Required tokens in sections [1], [2], [4], [4b]
 
 - `worktask_id` (string literal in [2])
 - `plan_file` path (string literal in [2])
 - Static contract reminder text (section [1])
 - Stage contract excerpt for this stage type (section [4]) — drawn from `skills/shared/stage-contracts.md`, copied verbatim
+- Model discipline block for `task.metadata.model` (section [4b]) — drawn from `skills/shared/model-prompting.md`, copied verbatim
 
 ### Expected cache_read_input_tokens ratio
 
@@ -1458,9 +1497,9 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 ### Lint
 
-`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2]+[4] across consecutive stages of the same `worktask_id`.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant.
 
-**Fixture-gated, not log-gated.** Prefix-lint consumes a `prompt-log.jsonl` (`{worktask_id, stage, prompt}` per line) that nothing here emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout — so it is exercised by `cache-lint.sh --self-test` fixtures. CI runs exactly that mode on every PR (`.github/workflows/test.yml`), which gates the lint's own parser; no captured prompt is checked until an emitter exists. Treat this section as the spec the assembler must satisfy.
+**Fixture-gated, not log-gated.** Prefix-lint consumes a `prompt-log.jsonl` (`{worktask_id, stage, model, prompt}` per line, `model` being the resolved `task.metadata.model` alias) that nothing here emits — the live harness assembles prompts in `benchmarklive/dispatch.py` but persists only stage stdout — so it is exercised by `cache-lint.sh --self-test` fixtures. CI runs exactly that mode on every PR (`.github/workflows/test.yml`), which gates the lint's own parser; no captured prompt is checked until an emitter exists. Treat this section as the spec the assembler must satisfy.
 
 ---
 

@@ -2,7 +2,7 @@
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Complete staged worktask system with dynamic sizing, task initialization, and stage management.
 effort: high
-version: 0.5.0
+version: 0.6.0
 ---
 
 > **INVOCATION GATE**: reaching this file by a direct Read/Task/Grep instead of
@@ -370,6 +370,8 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses, and it is why section [3] carries one even though nothing compares [3]. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. The orchestrator copies these blocks, never composes them.
+
 #### Preamble layout (binding)
 
 ```
@@ -377,6 +379,7 @@ Every delegation prompt is built in a **binding** order so consecutive `Task()` 
 [2] Worktask header (id, plan, exploration)← stable across ALL stages (cacheable)
 [3] state.json blob (inlined JSON)         ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
+[4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
 [5] task.description                       ← dynamic per delegation
 [6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
@@ -461,7 +464,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), never prepended, so prefixes [1][2][3][4] stay byte-identical across stages and the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`); asserting a real captured prompt-log is still a manual run.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4][4b]: timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`); asserting a real captured prompt-log is still a manual run.
 
 ### CRITICAL: Delegation-Only Rule
 
@@ -639,7 +642,7 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
 #### Prompt-injection steps 4.6–4.8b — shared rules
 
 These steps mutate ONLY `full.description`: remediation/resume blocks are PREPENDED (dynamic
-section [6]), enforcement banners APPENDED (suffix [7]) — cache prefix [1][2][4] is never touched.
+section [6]), enforcement banners APPENDED (suffix [7]) — cache prefix [1][2][4][4b] is never touched.
 Each fires one `appendAudit` row, and that row is what makes the injection observable: its absence
 for a dispatch proves the loop was bypassed. Readers (DR, TL) surface a missing row as an
 **advisory** finding, never a hard fail — the orchestrator writes it, so a stale version-keyed
@@ -1028,9 +1031,9 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     //     written either way (durability/compression + F4 source); the typed return never
     //     replaces them. Structured-output dispatch is reliable: no indefinite StructuredOutput
     //     re-call after success, and schema-validation failures abort after 5 attempts.
-    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text
-    //     — never in [1][2][4] nor in `full.description` — so byte-identity of the cacheable
-    //     prefix is untouched and no per-call varying token enters it.
+    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, not preamble
+    //     text — never in [1][2][4][4b] nor `full.description` — so byte-identity of the
+    //     cacheable prefix is untouched and no per-call varying token enters it.
 ```
 
 ##### Step 5f — model resolution
