@@ -2,59 +2,18 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-Correctness pass across agent, command and skill surfaces: seven documented defects fixed
-(divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag
-documentation, stale section citations, lint regressions, and stale version line), two parity test
-methods added, and five distinct stale citations across eleven occurrences repaired. Eleven follow-up items filed
-out-of-scope.
-
-### Fixed
-
-- **headless-dispatch reference**: per-stage effort table now matches `stage-codes.md` canon on all rows
-  (DV/DR corrected from `xhigh` to `high`, QA from `high` to `medium`, RE from `medium` to `low`); module
-  citation corrected to `stage_table.py`; four missing rows (PL, AR, TL, DC) added; test-pinned advisory
-  cell preserved byte-for-byte.
-- **Parity test enforcement**: `test_stage_table_ssot.py` extended with two new methods (`test_efforts_match_stage_codes_md`
-  and `test_headless_dispatch_table_matches_stage_codes`) to catch effort column divergence on future edits;
-  existing model-family test retained unchanged.
-- **Single-source-of-truth routing glob**: restated verbatim in `agents/workflow-engineer.md` replaced
-  with a pointer to its canonical source in `skills/worktask/references/pl0-procedure.md`.
-- **Pipeline flag documentation**: `--with-design` now appears in both `commands/worktask.md` options table
-  and `skills/shared/state-ledger.md` schema, closing documentation gap where flag was live in README
-  and procedure but absent from owning command's table.
-- **Section-length lint regressions**: two branches-introduced sections split or trimmed under 1000-character
-  cap (`commands/prompt-audit.md` and `skills/worktask/references/handoff-protocol.md`).
-- **Stale cross-file section citations**: five distinct broken references repaired across nine files,
-  including resume-procedure path correction, ceiling-count update, auto-delegation file/anchor fix,
-  escalation-guard heading refinement, and four bare `references/` path qualifications.
-- **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
-  status corrected.
-
-### Changed
-
-- **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
-  cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next
-  `/cc-update`" obligations closed as confirmed/unconfirmed each run; min-CC rule stated) and a Ledger
-  Field Review (every new CLI flag, frontmatter key, tool param, or `claude agents --json` key decided as
-  New field / Existing field / Row key / None against `task.metadata` and the headless flag bridge).
-  Both run by default on every invocation. Version Source now names the real README carriers (badge
-  line + Requirements row) instead of a `claude-code min version:` token that never existed; the
-  `curl`/`jq` fetch fallback and `claude agents --json` are granted in `allowed-tools`.
-
-### Also in this release
-
-Eleven follow-ups filed out-of-scope (F1–F11 in the architecture stage artifact): redundant-but-agreeing
-mirrored tables pinned by parity tests, compound section-path citation convention, `with_design` writer
-gap, per-stage table's missing-row note, and three cross-file reference style questions.
-
 ## [4.0.32] — 2026-09-11
 
 A control that fails silently is indistinguishable from a control that passed, and an evidence
 token that asserts more than it observed is worse than no token — the theme 4.0.31 opened, applied
 here to the completion loop itself, two continuity mechanisms that existed but were never wired,
 and the ledger lock's ownership.
+
+Correctness pass across agent, command and skill surfaces: seven documented defects fixed
+(divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag
+documentation, stale section citations, lint regressions, and stale version line), two parity test
+methods added, and five distinct stale citations across eleven occurrences repaired. Eleven follow-up items filed
+out-of-scope.
 
 ### Breaking
 
@@ -83,6 +42,17 @@ and the ledger lock's ownership.
 - **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
   freeing a lock another writer still holds.
 
+### Changed
+
+- **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
+  cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next
+  `/cc-update`" obligations closed as confirmed/unconfirmed each run; min-CC rule stated) and a Ledger
+  Field Review (every new CLI flag, frontmatter key, tool param, or `claude agents --json` key decided as
+  New field / Existing field / Row key / None against `task.metadata` and the headless flag bridge).
+  Both run by default on every invocation. Version Source now names the real README carriers (badge
+  line + Requirements row) instead of a `claude-code min version:` token that never existed; the
+  `curl`/`jq` fetch fallback and `claude agents --json` are granted in `allowed-tools`.
+
 ### Fixed
 
 - The pre-compaction checkpoint hook no longer leaves an unconditional copy unguarded under
@@ -98,12 +68,36 @@ and the ledger lock's ownership.
   a new era axis.
 - **request-plan**: four review findings closed on the leaderboard fix plan.
 
+- **headless-dispatch reference**: per-stage effort table now matches `stage-codes.md` canon on all rows
+  (DV/DR corrected from `xhigh` to `high`, QA from `high` to `medium`, RE from `medium` to `low`); module
+  citation corrected to `stage_table.py`; four missing rows (PL, AR, TL, DC) added; test-pinned advisory
+  cell preserved byte-for-byte.
+- **Parity test enforcement**: `test_stage_table_ssot.py` extended with two new methods (`test_efforts_match_stage_codes_md`
+  and `test_headless_dispatch_table_matches_stage_codes`) to catch effort column divergence on future edits;
+  existing model-family test retained unchanged.
+- **Single-source-of-truth routing glob**: restated verbatim in `agents/workflow-engineer.md` replaced
+  with a pointer to its canonical source in `skills/worktask/references/pl0-procedure.md`.
+- **Pipeline flag documentation**: `--with-design` now appears in both `commands/worktask.md` options table
+  and `skills/shared/state-ledger.md` schema, closing documentation gap where flag was live in README
+  and procedure but absent from owning command's table.
+- **Section-length lint regressions**: two branches-introduced sections split or trimmed under 1000-character
+  cap (`commands/prompt-audit.md` and `skills/worktask/references/handoff-protocol.md`).
+- **Stale cross-file section citations**: five distinct broken references repaired across nine files,
+  including resume-procedure path correction, ceiling-count update, auto-delegation file/anchor fix,
+  escalation-guard heading refinement, and four bare `references/` path qualifications.
+- **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
+  status corrected.
+
 ### Also in this release
 
 Batch 7 of the request-plan calibration set was pinned and its two defects repaired
 (`request-plan`, 45 cases, 18 held out, cases 271–315) between the 4.0.31 tag and this one; it
 carries no user-facing behavior change and is recorded here only because it landed in the same
 unreleased window.
+
+Eleven follow-ups filed out-of-scope (F1–F11 in the architecture stage artifact): redundant-but-agreeing
+mirrored tables pinned by parity tests, compound section-path citation convention, `with_design` writer
+gap, per-stage table's missing-row note, and three cross-file reference style questions.
 
 ## [4.0.31] — 2026-09-09
 
