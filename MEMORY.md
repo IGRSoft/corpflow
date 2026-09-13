@@ -4,7 +4,7 @@ Repository-tracked memory note (lean rolling format). The authoritative cross-co
 
 ## Version Tracking
 
-- Plugin version: **4.0.33** — unreleased, pending on feature branch (origin/master at 4.0.31, origin/develop at 4.0.32). Correctness pass across agent, command and skill surfaces: seven documented defects fixed (divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag documentation, stale section citations, lint regressions, and stale version line), two parity test methods added, and five distinct stale citations across eleven occurrences repaired. Eleven follow-up items filed out-of-scope.
+- Plugin version: **4.0.32** (released 2026-09-11 — the version carried while develop is in progress; unreleased on develop: correctness pass across agent/command/skill surfaces, and `/cc-update` 0.3.0 with the comms-surfaces watch and ledger-field review passes. Version bumps only at release.)
 - Claude Code min required: **2.1.251** (README.md is authoritative; pinned to the band top, and this time load-bearing rather than conventional — the resume loop branches on the `SendMessage` non-delivery reporting that lands across 2.1.234–2.1.238)
 - Claude Code latest integrated band: **2.1.234→2.1.251**
 

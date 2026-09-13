@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [4.0.33] — unreleased
+## [Unreleased]
 
 Correctness pass across agent, command and skill surfaces: seven documented defects fixed
 (divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag
