@@ -321,7 +321,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/megatask` | Orchestrate many worktasks across a milestone or issue array, ordered by a dependency/blocker DAG |
 | `/estimate` | Estimate task complexity and effort; `--detailed` runs the platform review inline, `--review` reviews an existing estimate, `--export csv` emits the CSV pack |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
-| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
+| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features; watches cross-session/cross-plugin comms surfaces and reviews new flags for state-ledger fields |
 
 #### Design (`design-`)
 | Command | Description |

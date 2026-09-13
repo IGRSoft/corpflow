@@ -32,6 +32,17 @@ out-of-scope.
 - **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
   status corrected.
 
+### Changed
+
+- **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
+  cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next
+  `/cc-update`" obligations closed as confirmed/unconfirmed each run; min-CC rule stated) and a Ledger
+  Field Review (every new CLI flag, frontmatter key, tool param, or `claude agents --json` key decided as
+  New field / Existing field / Row key / None against `task.metadata` and the headless flag bridge).
+  Both run by default on every invocation. Version Source now names the real README carriers (badge
+  line + Requirements row) instead of a `claude-code min version:` token that never existed; the
+  `curl`/`jq` fetch fallback and `claude agents --json` are granted in `allowed-tools`.
+
 ### Also in this release
 
 Eleven follow-ups filed out-of-scope (F1–F11 in the architecture stage artifact): redundant-but-agreeing
