@@ -122,6 +122,8 @@ Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` betw
 | Purpose | Role, domain and boundaries, integration context. |
 | Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
+| Model fit | Write the body for the `model:` in the frontmatter — `skills/shared/model-prompting.md` lists what each alias needs countered. A body `commands/prompt-audit.md § Body rules 5-7` would flag is a generation bug, not a follow-up. |
+| Emphasis | Generate the plain imperative. `CRITICAL`/`MUST` is earned by a recorded failure, later. |
 
 #### Slots that carry their own shape
 

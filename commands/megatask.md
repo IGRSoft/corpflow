@@ -17,7 +17,7 @@ related:
   - agents/workflow-engineer.md
 ---
 
-> **EXECUTION MODEL (BINDING)** — megatask is the **meta-orchestrator**: it owns the issue set,
+> **Execution model** — megatask is the **meta-orchestrator**: it owns the issue set,
 > builds the dependency DAG, and launches one **`/worktask`** per issue in its own worktree. It
 > writes no code and holds no stage logic — stages belong to `/worktask`. Every per-issue `PL0` is
 > stamped `plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`: a batch cannot stop
@@ -37,7 +37,7 @@ mechanics: `skills/megatask/SKILL.md`.
 ## Usage
 
 `/megatask <N> | --issues N,N,N [--secure] [--platform <p>] [--dry-run]` — `N` (bare positional
-integer) selects a milestone, `--issues` an explicit set; at least one MUST be present, and together
+integer) selects a milestone, `--issues` an explicit set; at least one is required, and together
 `--issues` filters within milestone `N`.
 
 ## Options

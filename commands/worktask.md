@@ -14,7 +14,7 @@ related:
   - agents/workflow-engineer.md
 ---
 
-> **EXECUTION MODEL (BINDING)** — every worktask is worktree-isolated, so the PR is the review
+> **Execution model** — every worktask is worktree-isolated, so the PR is the review
 > surface. Three orthogonal carriers on `PL0.metadata` drive the two human checkpoints and the
 > optional decision delegate; `/megatask` stamps them directly on each per-issue PL0.
 >
@@ -119,10 +119,10 @@ route and **no** readiness rule: the replayed task becomes `pending` with its de
 
 ### Phase 0 — what runs
 
-**MUST SKIP** — all of Phase 1 (Steps 2a, 3, 3a, 3c, 4, 5–6, 7–8) and every pre-loop Phase 2 step
+**Skip** — all of Phase 1 (Steps 2a, 3, 3a, 3c, 4, 5–6, 7–8) and every pre-loop Phase 2 step
 (A.4, A.4b, A.5, Step A publish). `run_index` is frozen; no `planning-N.md`, no rename, no issue.
 
-**MUST RUN** — Step 3b hook-install verification (idempotent; a resumed loop still needs
+**Run** — Step 3b hook-install verification (idempotent; a resumed loop still needs
 SubagentStop), the `fn-preflight.sh branch-divergence` check (`resume.md § Branch-rename
 detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
@@ -581,7 +581,7 @@ rule`). Placed here so the Step A.5 summary carries the final name before anythi
 #### Step A.4b invariants
 
 - The trailing `|| true` is mandatory — non-blocking by contract, like the Step A publish helper. A
-  helper failure MUST NEVER fail the worktask.
+  helper failure does not fail the worktask.
 - **Self-guarding**: it scans `audit.jsonl` for a prior successful `branch_target_refined` row at
   this run index, so a duplicate invocation after a resume is a `noop`, never a second refinement.
 - Exactly one audit row per invocation **whenever `jq` is available**; the `jq_unavailable` arm alone
@@ -755,7 +755,7 @@ a real human approval with `auto`. Stamp before row, as in the approval arm.
 
 #### Step A publish invariants
 
-- The trailing `; true` is mandatory — non-blocking by contract. A helper failure MUST NEVER fail the
+- The trailing `; true` is mandatory — non-blocking by contract. A helper failure does not fail the
   worktask.
 - The helper self-skips (`--no-gh-issue`; megatask per-issue mode, detected via `workspace.json` /
   `metadata.milestone`; already published; missing `gh`/auth/remote) — each exits 0 and audits a

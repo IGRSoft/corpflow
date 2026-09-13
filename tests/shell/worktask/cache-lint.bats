@@ -271,6 +271,99 @@ EOF
   assert_equal "$stderr" ""
 }
 
+# --- section [4b], the per-model discipline block -----------------------------
+# Two independent checks guard [4b], and each catches what the other cannot:
+# byte-identity catches a block that changes between calls of one stage, and
+# the canon check catches a block that never changes and is consistently the
+# WRONG model's. A stage mis-keyed at the assembler fails only the second.
+
+@test "failure: prefix-lint reports [4b] drift within one stage" {
+  cat > "$WD/md-drift.jsonl" <<'EOF'
+{"worktask_id":"wt6","stage":"DV","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDV\n<<<model-discipline>>>\nblock A\n<<<task-description>>>\nwork"}
+{"worktask_id":"wt6","stage":"DV","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDV\n<<<model-discipline>>>\nblock B\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-drift.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"section [4b] model-discipline DRIFT"* ]]
+  assert_output ""
+}
+
+@test "happy: a haiku stage with an empty [4b] matches the canon (exit 0)" {
+  # model-prompting.md deliberately gives haiku no block, and the marker is
+  # emitted with an empty body rather than omitted so the section count does
+  # not vary by model. That empty body is the canonical value, not a miss.
+  cat > "$WD/md-haiku.jsonl" <<'EOF'
+{"worktask_id":"wt7","stage":"DC","model":"haiku","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDC\n<<<model-discipline>>>\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-haiku.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+  assert_equal "$stderr" ""
+}
+
+@test "failure: a haiku stage carrying another model's [4b] fails the canon check" {
+  # The byte-identity check passes here — one line cannot drift from itself.
+  # Only the canon check can see this, which is the whole reason it exists.
+  cat > "$WD/md-wrong.jsonl" <<'EOF'
+{"worktask_id":"wt8","stage":"DC","model":"haiku","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDC\n<<<model-discipline>>>\nDeliver what the stage contract asks for\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-wrong.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"section [4b] does not match model-prompting.md block for model=haiku"* ]]
+  assert_output ""
+}
+
+@test "failure: an opus stage carrying a hand-written [4b] fails the canon check" {
+  cat > "$WD/md-opus.jsonl" <<'EOF'
+{"worktask_id":"wt9","stage":"DV","model":"opus","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDV\n<<<model-discipline>>>\nbe careful and double-check your work\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-opus.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"section [4b] does not match model-prompting.md block for model=opus"* ]]
+}
+
+@test "happy: the real opus block from model-prompting.md passes the canon check" {
+  # Built FROM the canon file, so it cannot rot when the block is reworded — and it is the
+  # only test here that would fail if the canon and the extractor disagreed about whether
+  # the <<<model-discipline>>> marker belongs to the block or to the envelope. Both
+  # mismatch tests above pass either way, which is exactly why this one is needed.
+  python3 - "$WD/md-canon.jsonl" "skills/shared/model-prompting.md" <<'PYEOF'
+import json, re, sys
+
+out, canon = sys.argv[1], sys.argv[2]
+body = open(canon).read()
+sec = re.search(r"^## opus(?: |$).*?^```text\n(.*?)^```", body, re.S | re.M)
+assert sec, "no fenced opus block in " + canon
+block = sec.group(1).rstrip("\n")
+assert block, "the opus block is empty"
+
+prompt = (
+    "<<<contract-reminder>>>\nr\n"
+    "<<<worktask-header>>>\nh\n"
+    "<<<stage-contract>>>\nDV\n"
+    "<<<model-discipline>>>\n" + block + "\n"
+    "<<<task-description>>>\nwork"
+)
+with open(out, "w") as fh:
+    fh.write(json.dumps({"worktask_id": "wtc", "stage": "DV",
+                         "model": "opus", "prompt": prompt}) + "\n")
+PYEOF
+
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-canon.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+  assert_equal "$stderr" ""
+}
+
+@test "happy: a log line without a model field skips the canon check" {
+  # Backwards compatibility is load-bearing, not politeness: every fixture in
+  # this file predates the field, and a log captured before it existed must
+  # stay lintable rather than fail as if its block were wrong.
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/stable.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+}
+
 @test "happy: --filename-lint on canonical artifacts passes (exit 0, 'canonical')" {
   # Fixture dir, not the live .context: nothing under .context/ is tracked
   # (git ls-files .context is empty), so its contents are runtime state that any

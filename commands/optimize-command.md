@@ -1,7 +1,7 @@
 ---
 name: optimize-command
 description: Analyze and optimize existing command definitions for usability, consistency, and completeness
-version: 0.2.0
+version: 0.3.0
 argument-hint: <command name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
@@ -88,6 +88,7 @@ Must Apply / Should Apply / Consider — numbered, most impactful first.
 | `examples` | Minimum 3 diverse examples; cover common use cases; show option combinations; realistic values |
 | `output` | Output format structured and parseable; all fields documented; status indicators consistent; actionable information |
 | `integration` | Related commands linked; agent relationships documented; worktask stage usage noted |
+| `body` | Passes `commands/prompt-audit.md § Body Rules`. Rules 5–7 read the command's own `model:` — see `skills/shared/model-prompting.md` |
 
 ### Frontmatter Audit
 
@@ -111,13 +112,13 @@ Run on every command regardless of focus area. Treat findings here as blocking o
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `description` trigger phrase | MUST include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and MUST NOT be flagged. | P1 |
+| `description` trigger phrase | Include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and are not flagged. | P1 |
 
 #### Frontmatter Audit — P2 consistency checks
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `$ARGUMENTS` substitution | Body references `$ARGUMENTS` → `argument-hint` MUST be non-empty. Body has no `$ARGUMENTS` but hint is set → suggest removing the hint. Unmatched `$1`/`$2` placeholders survive verbatim in bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
+| `$ARGUMENTS` substitution | Body references `$ARGUMENTS` → `argument-hint` is non-empty. Body has no `$ARGUMENTS` but hint is set → suggest removing the hint. Unmatched `$1`/`$2` placeholders survive verbatim in bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
 | Option-to-example coverage | Every `--option` in `## Options` should appear at least once in `## Examples`. Compute `set(options) − set(options-used-in-examples)`; flag each diff as "missing example for `--<flag>`". | P2 |
 | Output-format consistency | Output samples must match the schema declared in prose — e.g. flag a command claiming "JSON output via `--format json`" whose Output Format shows only Markdown. | P2 |
 | Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |

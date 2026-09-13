@@ -27,6 +27,7 @@ Second-most-effective: prefix-prefix equality with the Anthropic prompt cache tu
 [2] Worktask header (id, plan, exploration)← stable across ALL stages
 [3] state.json blob (inlined JSON)         ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type
+[4b] Model discipline block                ← stable WITHIN stage type
 ─────── (cache prefix boundary) ───────
 [5] task.description                       ← dynamic
 [6] retry hints                            ← dynamic
@@ -35,7 +36,9 @@ Second-most-effective: prefix-prefix equality with the Anthropic prompt cache tu
 
 ### Prefix stability rules
 
-Forbidden in [1][2][4]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`), which gates the parser and its fixtures; asserting a real captured `prompt-log.jsonl` is still a manual run, because nothing in this repo emits one.
+Each section opens with its `<<<marker>>>` and runs to the next one; the full marker set and why `[3]` needs one are normative in `skills/worktask/references/handoff-protocol.md#cache-prefix`. `[4b]` carries the per-model discipline block from `skills/shared/model-prompting.md`, selected by `task.metadata.model`.
+
+Forbidden in [1][2][4][4b]: timestamps, ENV expansions, random IDs, retry counters, file mtimes, agent-specific names beyond `worktask_id`. `skills/worktask/scripts/cache-lint.sh` asserts byte-stability. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`), which gates the parser and its fixtures; asserting a real captured `prompt-log.jsonl` is still a manual run, because nothing in this repo emits one.
 
 Expected `cache_read_input_tokens`: ≈20% on cross-stage transitions, ≈80% on retries within a stage, ≈60% cross-stage average — meets AC-14 threshold of `≥60%` for stages 2–N.
 

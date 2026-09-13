@@ -213,14 +213,18 @@ _env_var_reader_files() {
     | LC_ALL=C sort
 }
 
-@test "contract: scripts reading the env var are the 5 known env-first fallbacks" {
+@test "contract: scripts reading the env var are the 6 known env-first fallbacks" {
   # The benchmark runner exports the variable for dispatched stages; the
   # hook-install harness passes it per invocation of the script under test.
+  # cache-lint.sh joined the list when prefix mode gained the section [4b] canon
+  # check, which has to read skills/shared/model-prompting.md from the plugin
+  # root rather than from whatever directory the lint was invoked in.
   run _env_var_reader_files
   assert_output "hooks/anchor-preflight.sh
 hooks/state-merge.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
 skills/self-improvement/scripts/build-context-set.sh
+skills/worktask/scripts/cache-lint.sh
 skills/worktask/scripts/hook-install.sh"
 }
 

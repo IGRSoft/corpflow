@@ -203,7 +203,7 @@ is the upgrade *workflow*, that is the security *verdict*.
 
 | Rule | Why |
 |------|-----|
-| Read the changelog, not the version number | Semver is a promise the maintainer may not have kept; a "patch" can carry behavior change. Major bump → read the migration notes |
+| Read each bumped dependency's changelog, not its version number | Semver is a promise the maintainer may not have kept; a "patch" can carry behavior change. Major bump → read the migration notes. Every bumped package in the diff, not just the one that looks riskiest |
 | One dependency per change | A bulk bump that breaks the build hides which package did it; single-package changes keep the cause and the revert clean |
 | Let the suite decide | Green before *and* after, not "it resolved". Thin coverage around the dependency's behavior is itself the finding — add a test first |
 | Mind the transitive graph | Most resolved packages nobody chose directly; review the lockfile / transitive diff, not just the manifest |
