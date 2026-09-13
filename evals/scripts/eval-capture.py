@@ -519,6 +519,10 @@ def main(argv_in: list) -> int:
     p = argparse.ArgumentParser(prog="eval-capture", add_help=True)
     p.add_argument("--eval-set", required=True)
     p.add_argument("--case", action="append", type=int, default=None)
+    p.add_argument("--min-id", type=int, default=None,
+                   help="capture only ids at or above this. Set it to the manifest's "
+                        "held_out_from to buy a newly pinned tranche without paying "
+                        "again for cases an earlier pass already read")
     p.add_argument("--out-dir", default=None)
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--mode", choices=("command", "natural"), default="command")
@@ -552,7 +556,8 @@ def main(argv_in: list) -> int:
         return 64
 
     ids = [c["id"] for c in eval_set["evals"]
-           if args.split is None or c.get("split") == args.split]
+           if (args.split is None or c.get("split") == args.split)
+           and (args.min_id is None or c["id"] >= args.min_id)]
     selected = ids if not args.case else [i for i in ids if i in args.case]
     unknown = sorted(set(args.case or []) - set(ids))
     if unknown:

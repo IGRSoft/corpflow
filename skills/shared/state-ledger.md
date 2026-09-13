@@ -87,6 +87,7 @@ only purpose and normative use.
 | `error_file` | Auto-derived from `agent` when absent (§ error_file derivation). The stage agent reads it to see its own prior retry narrative |
 | `retry_count` | Incremented on retry; resets on escalation or success |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
+| `escalation_counts` | Escalations attempted per edge, keyed by the **full task id** of the target (`{"AR0": 2}`) so a split stage's writers do not share a counter. Survives the escalation handoff that resets `retry_count`; at cap 2 the task is written `failed` with `last_error.class: "exhausted"` |
 
 ### Worktask & workspace fields
 
@@ -209,6 +210,11 @@ uncapped; capping post-append would silently strip those banners from the prompt
     "error_escalated_to": {
       "enum": ["PL", "AR", "TL", "DV", "DR", "SR", "QA", "DC", "RE", "FN", "ST", "IR", "ET"]
     },
+    "escalation_counts": {
+      "type": "object",
+      "propertyNames": { "pattern": "^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$" },
+      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 3 }
+    },
 ```
 
 #### Schema — worktask properties
@@ -304,6 +310,7 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `completed` | Done |
 | `blocked` | Waiting on an unsatisfied `blocked_by` entry |
 | `skipped` | Dropped by dynamic sizing during PL/AR (`state-patch.sh --task-status QA0 skipped`). The entry stays as an audit record of what was sized out; terminal, and never blocks a dependent |
+| `failed` | Terminally failed: retries and per-edge escalations are both exhausted, `last_error.class` is `exhausted`, and no further dispatch will be attempted. Terminal, and settles the completion loop (`skills/worktask/SKILL.md` `SETTLED`) |
 
 ## Hook Events for Stage Monitoring
 
@@ -312,7 +319,7 @@ field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, ma
 the conditional `if` field) and configuration examples:
 `skills/agent-coordination/references/hook-monitoring.md § Project-Level Configuration`.
 
-> `SessionEnd` hook timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning, orchestrator state finalization).
+> `SessionEnd` is registered by the plugin to `hooks/session-end-finalize.sh`, which appends one `session_end_finalize` audit row naming every task still `in_progress` at teardown — the only completion record background work killed with the session otherwise gets. It reports and never mutates task status. Its timeout is configurable via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` for worktasks requiring cleanup time (e.g., worktree pruning).
 
 ## Agent Teams Integration
 

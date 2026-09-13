@@ -78,7 +78,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + the summary line is quoted + `tests_executed` present (plus `test_suite_compiles` when it is 0) + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + the summary line is quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
 | **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
 | **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
@@ -599,6 +599,7 @@ handoff:
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   tests_executed: 12          # cases RUN, not discovered; 0 is legal
+  test_summary_line: "12 tests, 0 failures"  # verbatim; REQUIRED when the count is non-zero
   test_suite_compiles: true   # true/false/unknown; REQUIRED when the count is 0
   files_touched:              # cap 10, then ONE marker; #files-touched
     - path/to/file1.md
@@ -653,6 +654,26 @@ the line has produced an unverifiable claim, and DR treats it as one.
 Where a runner writes its tally only to a terminal, capture through a pty or a log and copy the line
 out of the capture. Where a stage's scoped authority refuses the full-suite entrypoint, record the
 refusal and quote the summary line of the scoped run that was permitted.
+
+##### test_summary_line is the checked half (tpl-dv)
+
+The same line goes in the frontmatter as `test_summary_line`, and DV and QA both carry it whenever
+`tests_executed` is non-zero — they are the two stages holding test-execution authority, so no other
+can produce it honestly. `handoff-harness.sh --validate-frontmatter` **fails** an artifact whose
+line is absent, empty, digitless, or found neither in the artifact body nor in a `.context/logs/`
+capture the artifact names. It **warns** when the line does not carry `tests_executed` as a
+whole-number token: a TAP plan line (`1..840`) is a whole summary and a Gradle or Xcode formatter
+need not repeat the count, so blocking there would fail honest stages.
+
+##### tests_executed is the bats plan count, not the grand total (tpl-dv)
+
+A multi-runner suite (bats + swift + python + a benchmark harness, say) reports `tests_executed` as
+the **bats plan count alone**, never the sum across runners. The corroboration rule above requires
+`test_summary_line` to carry `tests_executed` as a whole-number token, and only the bats TAP plan
+(`1..N`) does that reliably — a non-bats runner's own summary line rarely repeats the grand total
+verbatim. Convention, not accident: a run with 1949 bats cases plus 589 non-bats cases records
+`tests_executed: 1949` with `test_summary_line: "1..1949"`; the 589 are attested in the artifact
+body, not folded into the frontmatter count.
 
 #### Zero executed tests must say whether the suite compiles (tpl-dv)
 
@@ -739,6 +760,8 @@ handoff:
   stage: QA
   verdict: go                  # go / no-go
   summary: "<N unit tests pass, M integration checks. Coverage X%>"
+  tests_executed: 840          # cases RUN; QA holds full-suite authority
+  test_summary_line: "1..840"  # verbatim; REQUIRED when the count is non-zero
   files_touched:
     - tests/added/test-file.sh
   key_decisions:

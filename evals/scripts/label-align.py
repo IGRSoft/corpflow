@@ -163,7 +163,9 @@ def report(name, rows, p_obs=None, weighted=True):
 def main(argv) -> int:
     p = argparse.ArgumentParser(prog="label-align")
     p.add_argument("--labels", required=True, help="JSONL exported from the review page")
-    p.add_argument("--grades", default="/tmp/allgrades.json", help="eval-grade --json output")
+    p.add_argument("--grades", default=None,
+                   help="eval-grade --json output. Omitted, the rates fall back to "
+                        "each label's own harness_status and the weights to 1")
     p.add_argument("--sample", default=None,
                    help="the draw's <skill>-<version>-sample.json. Its `strata` are the "
                         "populations the sample was actually drawn from; without it they "
@@ -241,6 +243,8 @@ def main(argv) -> int:
 
     grades = {}
     try:
+        if args.grades is None:
+            raise FileNotFoundError("no --grades given")
         with open(args.grades, encoding="utf-8") as f:
             grades = {r["case_id"]: r for r in json.load(f)["results"]}
     except (OSError, ValueError) as exc:

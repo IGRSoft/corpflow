@@ -1153,7 +1153,7 @@ promote() {
 
   local p2
   p2="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d},
-                               tool_response:{stdout:"ok"}}')"
+                               tool_response:{stdout:"7 tests, 0 failures"}}')"
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" \
     --stdin-string "$p2" "$PROMOTE"
 
@@ -1183,7 +1183,7 @@ promote() {
   local p1 p2
   p1="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d}}')"
   p2="$(jq -cn --arg d "$wt" '{tool_name:"Bash", tool_input:{command:"./run-tests.sh", cwd:$d},
-                               tool_response:{stdout:"ok"}}')"
+                               tool_response:{stdout:"7 tests, 0 failures"}}')"
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" --stdin-string "$p1" "$SCRIPT"
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$wt" --stdin-string "$p2" "$PROMOTE"
 
@@ -1279,6 +1279,39 @@ promote() {
 
   # The control: the same tree, the same invocation, one executed test — denies.
   printf 'QA 2026-09-07T17:30:49Z tests:1\n' > "$sentinel"
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+}
+
+@test "D18c: an output: prior does not suppress — bytes are not an execution (2b)" {
+  # `output:` is minted for ANY non-empty response with no parseable count, so
+  # `error: no such module Foo` earns one, and the gate then denied every retry
+  # citing a run that compiled nothing and executed nothing. A byte count says a
+  # tool SPOKE; suppression must cite a result the denied run could only reproduce.
+  git_ctx QA
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  promote './run-tests.sh'
+
+  local sentinel
+  sentinel="$(find "$WD/.context/logs/.test-runs" -type f ! -name '*.pending' | head -1)"
+  printf 'QA 2026-09-07T17:30:49Z output:38B\n' > "$sentinel"
+
+  run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
+  assert_success
+  [ -z "$output" ] || fail "a compiler error is not a test result: $output"
+  run jq -e 'select(.action == "test_dedupe_skipped_zero_prior")
+             | .metadata.prior_evidence == "output:38B"' \
+    "$WD/.context/logs/audit.jsonl"
+  assert_success
+
+  # The control: `errtext:` stays evidence. A PostToolUseFailure payload is a red
+  # suite that printed its failures, which IS a run — dropping it with `output:`
+  # would have discarded every failing suite from the record.
+  printf 'QA 2026-09-07T17:30:49Z errtext:38B\n' > "$sentinel"
   run_script_env --cwd "$WD" --env "CLAUDE_PROJECT_DIR=$WD" \
     --stdin-string "$(bash_payload './run-tests.sh')" "$SCRIPT"
   assert_success

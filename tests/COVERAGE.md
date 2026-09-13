@@ -152,6 +152,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` | — | — | — |
 | `hooks/megatask-monitor.sh` | `tests/shell/hooks/megatask-monitor.bats` | — | — | — |
 | `hooks/precompact-checkpoint.sh` | `tests/shell/hooks/precompact-checkpoint.bats` | — | — | — |
+| `hooks/session-end-finalize.sh` | `tests/shell/hooks/session-end-finalize.bats` | — | — | — |
 | `hooks/comment-standard-context.sh` | `tests/shell/hooks/comment-standard-context.bats` | — | — | — |
 | `hooks/dv-comment-density-gate.sh` | `tests/shell/hooks/comment-density-gate.bats` (aliased) | — | — | — |
 | `hooks/test-execution-gate.sh` | `tests/shell/hooks/test-execution-gate.bats` | — | — | — |

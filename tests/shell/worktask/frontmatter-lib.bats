@@ -30,12 +30,13 @@ _artifact() {  # <path> <nested|flat>
     printf '%sverdict: ok\n' "$pad"
     printf '%ssummary: "shape fixture"\n' "$pad"
     printf '%stests_executed: 12\n' "$pad"
+    printf '%stest_summary_line: "12 tests, 0 failures"\n' "$pad"
     printf '%sfiles_touched: [a.md]\n' "$pad"
     printf '%snext_stage_focus: "DR reviews"\n' "$pad"
     printf '%sopen_questions: []\n' "$pad"
     printf '%srefs:\n' "$pad"
     printf '%s  dev: development-0.md#files-changed\n' "$pad"
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$1"
 }
 

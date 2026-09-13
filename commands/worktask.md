@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md

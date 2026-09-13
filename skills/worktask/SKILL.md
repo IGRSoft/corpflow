@@ -45,7 +45,7 @@ stateDiagram-v2
     ErrorRetry --> StageActive: retry_count < 3, fix applied
     ErrorRetry --> Escalated: retry_count == 3 OR hard_constraint
     Escalated --> StageActive: previous-stage fix applied
-    Escalated --> [*]: abort / hard_constraint / user stop
+    Escalated --> [*]: abort / hard_constraint / user stop / escalation cap (status failed)
     StageActive --> Completed: all tasks completed
     Completed --> [*]
 ```
@@ -553,8 +553,9 @@ let tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 ##### Steps 2–3 — completion loop & ready filter
 
 ```typescript
-// 2. Loop until every task has settled ("skipped" is terminal, like "completed")
-const SETTLED = new Set(["completed", "skipped"]);
+// 2. Loop until every task has settled. "skipped" and "failed" are terminal like "completed":
+//    a task nothing will dispatch again must settle, or the loop spins with an empty ready set.
+const SETTLED = new Set(["completed", "skipped", "failed"]);
 while (tasks.some(t => !SETTLED.has(t.status))) {
   // 3. Find unblocked pending tasks
   const ready = tasks.filter(t =>
@@ -1131,25 +1132,78 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
         // …continued: step 6.5a body
+        const esc = escalationBookkeeping(stateForFailed, task, cls);  // see 6.5a1
         atomicMergeStateJson({
           tasks: {
             [task.id]: {
+              ...(esc.terminal ? { status: "failed" } : {}),
               last_error: {
-                class: cls,                              // transient|logic|missing_input|…|exhausted
+                class: esc.terminal ? "exhausted" : cls,
                 partial: Boolean(launchAck?.partial),    // partial work preserved
                 at: new Date().toISOString(),
                 ref: `.context/errors/${errorBasename(subagentType)}.md#retry-${runIndex}`,
               },
+              metadata: esc.metadata,                    // escalation_counts, never reset here
             },
           },
           facts: {
             dispatched_agents: markDispatchStatus(stateForFailed, task.id, "failed"),
           },
         });
-        routeToRetryMatrix(code, cls);  // never falls through to completion
+```
+
+##### Step 6.5a — why the arm ends in continue
+
+```typescript
+        // …continued: step 6.5a body
+        // Routing is the next iteration's ready filter reading the patch just written; this
+        // continue is what guarantees an errored return never falls through to the completion
+        // patch, which would record a failure as a success.
         continue;
       }
 
+```
+
+##### Step 6.5a1 — the escalation target
+
+```typescript
+// The Escalate-to column of agent-coordination § Retry / Escalate Matrix, as data. That
+// table stays the SSOT — status-enum-parity.bats diffs this map against it, so the two
+// cannot drift. `transient` and `logic` are absent: they retry the same agent, so there is
+// no edge. `hard_constraint` is absent too — it aborts for a human rather than re-entering
+// the loop, and capping an abort would be meaningless.
+const ESCALATE_TO = {
+  missing_input: "PREV", exhausted: "PREV",
+  ambiguous_requirements: "PL", design_flaw: "AR",
+};
+```
+
+##### Step 6.5a1 — the per-edge escalation cap
+
+```typescript
+function escalationBookkeeping(state, task, cls) {
+  const meta = { ...(state.tasks[task.id].metadata ?? {}) };
+  const code = ESCALATE_TO[cls];  // one patch; routing stays the next iteration's ready filter
+  if (!code) return { terminal: false, metadata: meta };   // same-agent retry, or abort
+  // Full task id, never a bare code: DV0→AR0 must not share a counter with DV3→AR0.
+  const target = code === "PREV"
+    ? (task.blocked_by ?? []).slice(-1)[0]    // previous stage per chain
+    : Object.keys(state.tasks).find(id => id.startsWith(code));
+  if (!target) return { terminal: false, metadata: meta };
+```
+
+##### Step 6.5a1 — the cap, and the reset that must not reach it
+
+```typescript
+// …continued: escalationBookkeeping body
+  const counts = { ...(meta.escalation_counts ?? {}) };
+  counts[target] = (counts[target] ?? 0) + 1;
+  meta.escalation_counts = counts;            // survives the reset below
+  if (counts[target] > 2) return { terminal: true, metadata: meta };  // cap 2
+  meta.retry_count = 0;                       // reset at handoff — retry_count ALONE
+  meta.error_escalated_to = target.replace(/[0-9]+$/, "");
+  return { terminal: false, metadata: meta };
+}
 ```
 
 ##### Step 6.5a2 — why a mid-stage yield needs its own arm

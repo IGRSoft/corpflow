@@ -132,13 +132,14 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
     printf '  verdict: ok\n'
     printf '  summary: "test evidence fixture"\n'
     printf '  tests_executed: %s\n' "$2"
+    printf '  test_summary_line: "%s tests, 0 failures"\n' "$2"
     if [ -n "$_compiles" ]; then printf '  test_suite_compiles: %s\n' "$_compiles"; fi
     printf '  files_touched: [a.md]\n'
     printf '  next_stage_focus: "DR reviews"\n'
     printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    dev: development-0.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n## verification-command\n\n%s tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n' "$2"
   } > "$1"
 }
 
@@ -180,6 +181,144 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
   [[ "$output" == *"expected true, false or unknown"* ]] || fail "$output"
 }
 
+# --- AD-4: a non-zero count is checked against the runner's own words ---------
+
+# mk_te <path> <stage> <count> <summary-line-yaml> <body-line>
+# `-` in either slot omits it, so one generator covers absent, malformed and
+# corroborated without a second fixture shape to drift.
+mk_te() {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo "  stage: $2"
+    echo '  verdict: ok'
+    echo '  summary: "ad4 fixture"'
+    echo "  tests_executed: $3"
+    [ "$4" = "-" ] || echo "  test_summary_line: $4"
+    echo '  files_touched: [a.sh]'
+    echo '  key_decisions: []'
+    echo '  next_stage_focus: "next stage"'
+    echo '  open_questions: []'
+    echo '  refs: { dev: development.md#files-changed }'
+    echo '---'
+    echo
+    echo '# Artifact'
+    echo
+    echo '## verification-command'
+    echo
+    [ "$5" = "-" ] || echo "$5"
+    echo
+    echo '## elicitation-sweep'
+    echo
+    echo 'nothing to ask'
+  } > "$1"
+}
+
+@test "ad4: a non-zero count with no test_summary_line fails (R2d)" {
+  # The hole in one line: the old arm returned early unless the count was zero,
+  # so `tests_executed: 4000` validated clean for a stage that ran nothing.
+  mk_te "$WD/ad4-absent.md" DV 4000 - -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-absent.md"
+  assert_failure
+  [[ "$output" == *"tests_executed: 4000 with no test_summary_line"* ]] || fail "$output"
+}
+
+@test "ad4: an empty or digitless summary line fails with its own message" {
+  local v
+  for v in '"   "' '"all green"'; do
+    mk_te "$WD/ad4-malformed.md" DV 12 "$v" -
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-malformed.md"
+    assert_failure
+    [[ "$output" == *"carries no digit"* ]] || fail "$v: $output"
+  done
+}
+
+@test "ad4: a summary line corroborated nowhere fails — an excerpt must be checkable" {
+  mk_te "$WD/ad4-uncorr.md" DV 12 '"12 tests, 0 failures"' -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-uncorr.md"
+  assert_failure
+  [[ "$output" == *"uncorroborated"* ]] || fail "$output"
+}
+
+@test "ad4: the body quoting the line passes, and so does a named log capture" {
+  mk_te "$WD/ad4-body.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-body.md"
+  assert_success
+
+  # The second legal home: a runner whose tally reaches only a terminal is
+  # captured to .context/logs/ and the artifact names the capture, glob included.
+  mkdir -p "$WD/logs"
+  printf 'run 1\n12 tests, 0 failures\n' > "$WD/logs/dv-bats-1.log"
+  mk_te "$WD/ad4-log.md" DV 12 '"12 tests, 0 failures"' 'capture: .context/logs/dv-bats-*.log'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-log.md"
+  assert_success
+}
+
+@test "ad4: a count the line does not name warns, it does not block (sw-AR0-2)" {
+  # Warn-only because `verbatim` is not mechanically decidable: a TAP plan line
+  # is the whole summary a scoped bats run prints, and blocking on the token
+  # would fail a stage that satisfies the contract. Same posture as ar_ref.
+  mk_te "$WD/ad4-tap.md" DV 1814 '"1..840"' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-tap.md"
+  assert_success
+  [[ "$output" == *"warn:"* && "$output" == *"is not a whole-number token"* ]] || fail "$output"
+  [[ "$output" != *"fail:"* ]] || fail "the soft tier blocked: $output"
+}
+
+@test "ad4: QA carries the count and the line too (R2e)" {
+  # QA is the sole holder of full-suite authority and reported no count at all,
+  # so the arm that checks counts could never reach the one stage that has one.
+  mk_te "$WD/ad4-qa.md" QA 840 '"1..840"' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-qa.md"
+  assert_success
+
+  mk_te "$WD/ad4-qa-absent.md" QA 840 - -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-qa-absent.md"
+  assert_failure
+  [[ "$output" == *"stage=QA"* ]] || fail "$output"
+}
+
+@test "ad4: a QA artifact with no tests_executed at all fails the required set (R2e)" {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo '  stage: QA'
+    echo '  verdict: go'
+    echo '  summary: "no count"'
+    echo '  files_touched: [a.sh]'
+    echo '  key_decisions: []'
+    echo '  open_questions: []'
+    echo '  refs: { qa: testing.md#results }'
+    echo '---'
+    echo
+    echo '# QA'
+  } > "$WD/ad4-qa-nofield.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-qa-nofield.md"
+  assert_failure
+  [[ "$output" == *"missing required field: tests_executed"* ]] || fail "$output"
+}
+
+@test "ad4: a present non-numeric tests_executed is refused, not delegated (sw-DR0-3)" {
+  # The required-field loop tests non-emptiness only, so a count carrying units or
+  # a parenthetical used to satisfy it and then skip every tier of the evidence
+  # contract below it.
+  local stage
+  for stage in DV QA; do
+    mk_te "$WD/ad4-nonnum-$stage.md" "$stage" '"1841 (scoped)"' '"1..1841"' '1..1841'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-nonnum-$stage.md"
+    assert_failure
+    [[ "$output" == *"stage=$stage tests_executed is"* ]] || fail "$stage: $output"
+  done
+}
+
+@test "ad4: a zero count is untouched — test_suite_compiles still owns it" {
+  mk_te "$WD/ad4-zero.md" DV 0 - -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-zero.md"
+  assert_failure
+  [[ "$output" == *"no test_suite_compiles"* ]] || fail "$output"
+  [[ "$output" != *"test_summary_line"* ]] || fail "the zero path asked for a summary line: $output"
+}
+
 @test "contract: --self-test passes (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
@@ -195,6 +334,7 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf 'handoff:\n'
     printf '  stage: DV\n'
     printf '  tests_executed: 12\n'
+    printf '  test_summary_line: "12 tests, 0 failures"\n'
     printf '  verdict: ok\n'
     printf '  summary: "sweep fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -203,7 +343,7 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf '    - %s\n' "$2"
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
   } > "$1"
 }
 
@@ -328,6 +468,7 @@ dv_artifact() {
     printf 'handoff:\n'
     printf '  stage: DV\n'
     printf '  tests_executed: 12\n'
+    printf '  test_summary_line: "12 tests, 0 failures"\n'
     printf '  verdict: ok\n'
     printf '  summary: "gate fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -335,7 +476,7 @@ dv_artifact() {
     printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    %s\n' "$refs"
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$path"
 }
 
@@ -499,6 +640,7 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     printf 'handoff:\n'
     printf '  stage: DV\n'
     printf '  tests_executed: 12\n'
+    printf '  test_summary_line: "12 tests, 0 failures"\n'
     printf '  verdict: ok\n'
     printf '  summary: "budget fixture%s"\n' "$pad"
     printf '  files_touched: [a.md]\n'
@@ -509,7 +651,7 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     done
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
   } > "$path"
 }
 
@@ -573,6 +715,7 @@ mk_dv_ft() {
     echo 'handoff:'
     echo '  stage: DV'
     echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  verdict: ok'
     echo '  summary: "cap fixture"'
     echo "  files_touched: $ft"
@@ -582,6 +725,8 @@ mk_dv_ft() {
     echo '---'
     echo
     echo '# Development'
+    echo
+    echo '12 tests, 0 failures'
     echo
     echo '## elicitation-sweep'
     echo
@@ -621,6 +766,8 @@ mk_qa_dec() {
     echo 'handoff:'
     echo '  stage: QA'
     echo '  verdict: ok'
+    echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  summary: "divergence fixture"'
     echo '  files_touched: [a.sh]'
     echo '  key_decisions:'
@@ -634,6 +781,8 @@ mk_qa_dec() {
     echo "| id | summary |"
     echo "|----|---------|"
     echo "| qa-1 | $3 |"
+    echo
+    echo '12 tests, 0 failures'
     echo
     echo '## elicitation-sweep'
     echo
@@ -749,6 +898,8 @@ mk_qa_dec_bullet() {
     echo 'handoff:'
     echo '  stage: QA'
     echo '  verdict: ok'
+    echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  summary: "divergence fixture"'
     echo '  files_touched: [a.sh]'
     echo '  key_decisions:'
@@ -760,6 +911,8 @@ mk_qa_dec_bullet() {
     echo '## decisions'
     echo
     echo "$3"
+    echo
+    echo '12 tests, 0 failures'
     echo
     echo '## elicitation-sweep'
     echo
@@ -866,6 +1019,7 @@ mk_qa_dec_bullet() {
     echo 'handoff:'
     echo '  stage: DV'
     echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  verdict: ok'
     echo '  summary: "collect-all fixture"'
     echo "  files_touched: $ft"
@@ -876,6 +1030,8 @@ mk_qa_dec_bullet() {
     echo '---'
     echo
     echo '# Development'
+    echo
+    echo '12 tests, 0 failures'
   } > "$WD/two-faults.md"
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/two-faults.md"
   assert_failure 1
@@ -893,11 +1049,14 @@ mk_qa_dec_bullet() {
     echo 'handoff:'
     echo '  stage: DV'
     echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  verdict: ok'
     echo '  summary: "missing fields fixture"'
     echo '---'
     echo
     echo '# Development'
+    echo
+    echo '12 tests, 0 failures'
   } > "$WD/missing-fields.md"
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/missing-fields.md"
   assert_failure 1
@@ -932,6 +1091,7 @@ mk_qa_dec_bullet() {
     echo 'handoff:'
     echo '  stage: DV'
     echo '  tests_executed: 12'
+    echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  verdict: ok'
     echo "  summary: \"budget fixture $pad\""
     echo '  files_touched: [a.md]'
@@ -942,6 +1102,8 @@ mk_qa_dec_bullet() {
     echo '---'
     echo
     echo '# Development'
+    echo
+    echo '12 tests, 0 failures'
   } > "$WD/broken-stub-budget.md"
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/broken-stub-budget.md"
   assert_failure 1

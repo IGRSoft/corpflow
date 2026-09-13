@@ -1,0 +1,449 @@
+{
+  "run_id": "live-20260910T185926Z-954783e",
+  "timestamp_utc": "2026-09-10T18:59:27Z",
+  "mode": "live",
+  "git_sha": "954783e",
+  "budget_usd": 80.0,
+  "paths": {
+    "with": {
+      "tokens": {
+        "in": 525,
+        "out": 193584,
+        "total": 194109,
+        "cache_read": 20381450,
+        "cache_creation": 829301
+      },
+      "cost_usd": 25.63477065,
+      "wall_clock_s": 3167.9258,
+      "loc_produced": 2242,
+      "test_count": 74,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 10,
+      "pass_fail": "pass",
+      "app_path": "benchmark/workdirs/live-20260910T185926Z-954783e/with",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 42,
+        "pass_rate": 1.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 9,
+            "pass_rate": 1.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 33,
+            "pass_rate": 1.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    },
+    "without": {
+      "tokens": {
+        "in": 317,
+        "out": 183330,
+        "total": 183647,
+        "cache_read": 15047240,
+        "cache_creation": 1018954
+      },
+      "cost_usd": 18.4824063,
+      "wall_clock_s": 2385.0701,
+      "loc_produced": 2495,
+      "test_count": 110,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 10,
+      "pass_fail": "pass",
+      "app_path": "benchmark/workdirs/live-20260910T185926Z-954783e/without",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 42,
+        "pass_rate": 1.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 9,
+            "pass_rate": 1.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 33,
+            "pass_rate": 1.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    }
+  },
+  "comparison": {
+    "loc_produced": {
+      "with": 2242,
+      "without": 2495,
+      "delta": -253
+    },
+    "test_count": {
+      "with": 74,
+      "without": 110,
+      "delta": -36
+    },
+    "coverage_pct": {
+      "with": null,
+      "without": null,
+      "delta": null
+    },
+    "wall_clock_s": {
+      "with": 3167.9258,
+      "without": 2385.0701,
+      "delta": 782.8557000000001
+    },
+    "estimate_complexity_score": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "stage_count": {
+      "with": 10,
+      "without": 10,
+      "delta": 0
+    },
+    "tokens_total": {
+      "with": 194109,
+      "without": 183647,
+      "delta": 10462
+    },
+    "cost_usd": {
+      "with": 25.63477065,
+      "without": 18.4824063,
+      "delta": 7.152364349999999
+    }
+  },
+  "stages": [
+    {
+      "stage": "PL",
+      "fresh_in": 64,
+      "cache_creation": 87635,
+      "cache_read": 1741288,
+      "out": 26829,
+      "cost_usd": 2.4180390000000003,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 37
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 2,
+      "cache_creation": 3266,
+      "cache_read": 119569,
+      "out": 596,
+      "cost_usd": 5.723642749999999,
+      "coverage": {
+        "agents": [
+          "apple-developer:apple-architector"
+        ],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 40
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 20,
+      "cache_creation": 43663,
+      "cache_read": 341196,
+      "out": 5543,
+      "cost_usd": 0.2983612,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 9
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 134,
+      "cache_creation": 240268,
+      "cache_read": 11821118,
+      "out": 97509,
+      "cost_usd": 10.751634000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 66
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "DR",
+      "fresh_in": 38,
+      "cache_creation": 93346,
+      "cache_read": 1216362,
+      "out": 20559,
+      "cost_usd": 2.0558060000000005,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 29
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "SR",
+      "fresh_in": 70,
+      "cache_creation": 100070,
+      "cache_read": 2422057,
+      "out": 18594,
+      "cost_usd": 2.6769285,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 34
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "QA",
+      "fresh_in": 36,
+      "cache_creation": 77831,
+      "cache_read": 1154329,
+      "out": 7310,
+      "cost_usd": 0.6153618000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 17
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "DC",
+      "fresh_in": 97,
+      "cache_creation": 32591,
+      "cache_read": 268848,
+      "out": 5119,
+      "cost_usd": 0.11775880000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 11
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "FN",
+      "fresh_in": 26,
+      "cache_creation": 37743,
+      "cache_read": 388438,
+      "out": 4971,
+      "cost_usd": 0.2784216,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 12
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "ST",
+      "fresh_in": 38,
+      "cache_creation": 112888,
+      "cache_read": 908245,
+      "out": 6554,
+      "cost_usd": 0.6988170000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [
+          "corpflow:self-improvement"
+        ],
+        "commands": [],
+        "tool_calls": 18
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "PL",
+      "fresh_in": 14,
+      "cache_creation": 78542,
+      "cache_read": 498936,
+      "out": 12456,
+      "cost_usd": 1.346358,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 6
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 22,
+      "cache_creation": 99579,
+      "cache_read": 969155,
+      "out": 27595,
+      "cost_usd": 2.1703525,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 10
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 10,
+      "cache_creation": 98361,
+      "cache_read": 423188,
+      "out": 3714,
+      "cost_usd": 0.5152416,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 116,
+      "cache_creation": 191889,
+      "cache_read": 8423185,
+      "out": 88870,
+      "cost_usd": 8.3528125,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 57
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DR",
+      "fresh_in": 30,
+      "cache_creation": 137501,
+      "cache_read": 1649619,
+      "out": 20433,
+      "cost_usd": 2.7107945,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 19
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "SR",
+      "fresh_in": 20,
+      "cache_creation": 105552,
+      "cache_read": 885228,
+      "out": 10767,
+      "cost_usd": 1.7674089999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 15
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "QA",
+      "fresh_in": 22,
+      "cache_creation": 84601,
+      "cache_read": 1021895,
+      "out": 4652,
+      "cost_usd": 0.5893470000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 10
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DC",
+      "fresh_in": 65,
+      "cache_creation": 72496,
+      "cache_read": 488906,
+      "out": 10296,
+      "cost_usd": 0.24542760000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 10
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "FN",
+      "fresh_in": 8,
+      "cache_creation": 75054,
+      "cache_read": 305432,
+      "out": 2662,
+      "cost_usd": 0.38793839999999996,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 3
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "ST",
+      "fresh_in": 10,
+      "cache_creation": 75379,
+      "cache_read": 381696,
+      "out": 1885,
+      "cost_usd": 0.39672519999999994,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without"
+    }
+  ],
+  "era": {
+    "harness": "python-1",
+    "prompt_contract": "scripted-cli-v3",
+    "model_pins": {
+      "PL": "claude-opus-5",
+      "AR": "claude-opus-5",
+      "TL": "claude-sonnet-5",
+      "DV": "claude-opus-5",
+      "DR": "claude-opus-5",
+      "SR": "claude-opus-5",
+      "QA": "claude-sonnet-5",
+      "DC": "claude-haiku-4-5",
+      "FN": "claude-sonnet-5",
+      "ST": "claude-sonnet-5"
+    },
+    "cli_version": "2.1.265 (Claude Code)",
+    "plugin_version": null
+  }
+}

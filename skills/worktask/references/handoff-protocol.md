@@ -284,7 +284,7 @@ under its own stage id.
 | PL | next_stage_focus, key_decisions, open_questions | files_touched | ok / blocked / escalate |
 | AR | key_decisions, next_stage_focus, open_questions | files_touched, subagents_spawned | ok / blocked / escalate |
 | TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
-| DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
+| DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_summary_line (REQUIRED when tests_executed is non-zero), test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
 | DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
 
 #### Stages SR–ET
@@ -292,7 +292,7 @@ under its own stage id.
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
 | SR | key_decisions (= findings), open_questions | files_touched | pass / fail |
-| QA | files_touched (= tests added), key_decisions (= results), open_questions | — | go / no-go |
+| QA | files_touched (= tests added), key_decisions (= results), tests_executed, open_questions | test_summary_line (REQUIRED when tests_executed is non-zero) | go / no-go |
 | DC | files_touched, open_questions | key_decisions | ok / blocked / escalate |
 | RE | files_touched, key_decisions (= version), open_questions | — | ok / blocked |
 | FN | next_stage_focus, files_touched, open_questions | key_decisions, deep_reads | ok / blocked |
@@ -408,6 +408,7 @@ The stage schemas below are printed without it, so the item shape is never resta
   "…continued": "DVHandoff.properties",
   "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
   "tests_executed": { "type": "integer", "minimum": 0 },
+  "test_summary_line": { "type": "string", "minLength": 1, "pattern": "[0-9]" },
   "test_suite_compiles": { "enum": [true, false, "unknown"] },
   "architecture": {
     "type": "object",
@@ -421,6 +422,11 @@ The stage schemas below are printed without it, so the item shape is never resta
 ```
 
 #### DVHandoff — test-evidence field notes
+
+`test_summary_line` is the runner's summary line copied byte-for-byte, required of DV and QA
+whenever `tests_executed` is non-zero and checked against the artifact body or a named
+`.context/logs/` capture; the count-token match inside it is warn-only, since not every formatter
+repeats the number. Contract: `stage-contracts.md#tpl-dv § test_summary_line is the checked half`.
 
 `tests_executed` counts cases that **ran**, never cases a runner enumerated. `test_suite_compiles`
 is required whenever `tests_executed` is `0` and optional otherwise — the distinction between
@@ -484,9 +490,11 @@ fails an undeclared one.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "QAHandoff",
   "type": "object",
-  "required": ["verdict", "tests_passed", "tests_failed", "open_questions"],
+  "required": ["verdict", "tests_executed", "tests_passed", "tests_failed", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["go", "no-go"] },
+    "tests_executed": { "type": "integer", "minimum": 0 },
+    "test_summary_line": { "type": "string", "minLength": 1, "pattern": "[0-9]" },
     "tests_passed": { "type": "integer", "minimum": 0 },
     "tests_failed": { "type": "integer", "minimum": 0 },
     "blocking_defects": { "type": "array", "items": { "type": "string" } },
@@ -833,7 +841,7 @@ split stage's four writers collide on one key. Full grammar: § Field notes — 
       type: object
       required: [status, metadata]
       properties:
-        status: { type: string, enum: [pending, in_progress, completed, blocked, skipped] }
+        status: { type: string, enum: [pending, in_progress, completed, blocked, skipped, failed] }
 ```
 
 ##### tasks — routing & dependencies

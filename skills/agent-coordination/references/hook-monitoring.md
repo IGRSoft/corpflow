@@ -50,8 +50,13 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 ### Compaction recovery & hook-output guards
 
-- `PreCompact` fires **before** automatic compaction and blocks it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization (`context-compression` skill has the paired `PostCompact` recovery pattern). The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and **never blocks** (exit 0 always).
-- Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state.
+- `PreCompact` fires **before** automatic compaction and blocks it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and **never blocks** (exit 0 always).
+- Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state; the managed handler `skills/context-compression/scripts/post-compact-recovery.sh` is registered in `plugin.json` and writes `.context/logs/post-compact-<ts>.json`. **Status: registered and recurrence-guarded** (`manifest-parity.bats` inverse assertion), but never observed firing — a real compaction cannot be simulated in CI. Registered-not-verified, not confirmed-working.
+
+#### SessionEnd finalization
+
+`SessionEnd` fires on session teardown. The managed handler `hooks/session-end-finalize.sh` (registered in `plugin.json`) appends one `session_end_finalize` row to `.context/logs/audit.jsonl` naming any tasks still `in_progress` at teardown — a resume can then tell "still running" apart from "died with the session". It only reports: it never mutates task status, because a teardown hook races the very writer it would need the ledger lock from, and a wrong terminal status is worse than an honest unsettled one. Exit is always `0` so a lost row never delays teardown.
+
 #### Payload, monitor & stall notes
 
 - Hook output over 50K characters is saved to disk with a file path + preview injected instead of the full output, protecting the context budget. A hook or background agent emitting **megabytes** of error output can no longer overflow the conversation and wedge the session on "Prompt is too long".

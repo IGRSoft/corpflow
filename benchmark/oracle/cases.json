@@ -316,6 +316,123 @@
       "tier": "specified"
     },
     {
+      "id": "whitespace-padded-tokens",
+      "description": "whitespace on either side of every token is accepted",
+      "args": [
+        "--moves",
+        " 0 , 4 , 1 "
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "malformed-outranks-invalid-move",
+      "description": "the whole list is parsed before play, so a bad token outranks an earlier occupied cell",
+      "args": [
+        "--moves",
+        "0,0,abc"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "tab-padded-tokens",
+      "description": "a tab around a token is whitespace and is accepted",
+      "args": [
+        "--moves",
+        "0,\t4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "empty-token-between-commas",
+      "description": "an empty token contributes no move rather than failing the parse",
+      "args": [
+        "--moves",
+        "0,,4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "trailing-comma-accepted",
+      "description": "a trailing comma leaves an empty final token, which is ignored",
+      "args": [
+        "--moves",
+        "0,4,"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "newline-is-not-token-whitespace",
+      "description": "only spaces and tabs pad a token, so a newline leaves it unparseable",
+      "args": [
+        "--moves",
+        "0,\n4"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "all-empty-tokens-play-nothing",
+      "description": "an all-empty token list contributes no move, so the board is untouched",
+      "args": [
+        "--moves",
+        ",,,"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " 0 | 1 | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "leading-comma-accepted",
+      "description": "a leading comma leaves an empty first token, which is ignored",
+      "args": [
+        "--moves",
+        ",0,4"
+      ],
+      "expect": {
+        "exit_code": 0,
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+      },
+      "tier": "specified"
+    },
+    {
+      "id": "empty-token-does-not-rescue-malformed",
+      "description": "dropping an empty token does not excuse a malformed one later in the list",
+      "args": [
+        "--moves",
+        ",abc"
+      ],
+      "expect": {
+        "exit_code": 2,
+        "stdout": ""
+      },
+      "tier": "specified"
+    },
+    {
       "id": "after-win-occupied-move-ignored",
       "description": "a move onto an occupied cell after the win is never played, so never rejected",
       "args": [
@@ -381,76 +498,50 @@
       "tier": "implied"
     },
     {
-      "id": "whitespace-padded-tokens",
-      "description": "whitespace on either side of every token is accepted",
+      "id": "whitespace-only-token-is-empty",
+      "description": "a token of only whitespace trims to empty, so it contributes no move",
       "args": [
         "--moves",
-        " 0 , 4 , 1 "
+        "0, ,4"
       ],
       "expect": {
         "exit_code": 0,
-        "stdout": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
       },
       "tier": "implied"
     },
     {
-      "id": "malformed-outranks-invalid-move",
-      "description": "the whole list is parsed before play, so a bad token outranks an earlier occupied cell",
+      "id": "two-digit-out-of-range-is-invalid-not-malformed",
+      "description": "a two-digit integer parses, so it is an invalid move rather than malformed argv",
       "args": [
         "--moves",
-        "0,0,abc"
+        "10"
       ],
       "expect": {
-        "exit_code": 2,
+        "exit_code": 1,
         "stdout": ""
       },
       "tier": "implied"
     },
     {
-      "id": "tab-padded-tokens",
-      "description": "a tab around a token is whitespace and is accepted",
+      "id": "leading-zero-token-parses",
+      "description": "a leading zero still parses as an integer, so the move is played",
       "args": [
         "--moves",
-        "0,\t4"
+        "04,0"
       ],
       "expect": {
         "exit_code": 0,
-        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
+        "stdout": " O | 1 | 2 \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
       },
       "tier": "implied"
     },
     {
-      "id": "empty-token-between-commas",
-      "description": "an empty token contributes no move rather than failing the parse",
+      "id": "internal-whitespace-is-malformed",
+      "description": "whitespace pads a token but never sits inside one, so an inner space is unparseable",
       "args": [
         "--moves",
-        "0,,4"
-      ],
-      "expect": {
-        "exit_code": 0,
-        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
-      },
-      "tier": "implied"
-    },
-    {
-      "id": "trailing-comma-accepted",
-      "description": "a trailing comma leaves an empty final token, which is ignored",
-      "args": [
-        "--moves",
-        "0,4,"
-      ],
-      "expect": {
-        "exit_code": 0,
-        "stdout": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n"
-      },
-      "tier": "implied"
-    },
-    {
-      "id": "newline-is-not-token-whitespace",
-      "description": "only spaces and tabs pad a token, so a newline leaves it unparseable",
-      "args": [
-        "--moves",
-        "0,\n4"
+        "1 2"
       ],
       "expect": {
         "exit_code": 2,
@@ -461,6 +552,7 @@
   ],
   "tiers": {
     "specified": "behaviour the shared stage prompt enumerates; a failure is non-conformance with the contract the arm was handed",
-    "implied": "behaviour the contract's own rules determine but do not spell out; a failure is a gap in reasoning from the spec, not non-conformance"
+    "implied": "behaviour the contract's own rules determine but do not spell out; a failure is a gap in reasoning from the spec, not non-conformance",
+    "audit": "2026-09-10: six cases moved implied -> specified. The contract gained bullets that enumerate token whitespace, parse-before-play and empty tokens, which converted them into conformance checks; leaving them in implied overstated the discriminating tier and is why both arms last scored implied 11/11."
   }
 }

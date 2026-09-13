@@ -158,7 +158,15 @@ realized figure off the record.
   reserving the larger of the next stage's projection and the heaviest stage
   that arm has actually run. Once a stage beats its projection the gate
   reserves the observed figure instead, so only a stage heavier than every
-  predecessor can still overshoot
+  predecessor can still overshoot.
+  **This is what truncates a paired run that is comfortably inside its budget.**
+  DV is an order of magnitude heavier than the six stages after it, so once it
+  lands the gate demands DV-sized headroom to start a $0.20 stage.
+  `live-20260910T160618Z` died on exactly this at `--budget 50`: the WITH arm had
+  spent $16.32 of its $25 share, DR projected $2.70, and the reserve carried DV's
+  $12.35 — $16.32 + $12.35 > $25, so the arm stopped needing ~$7 more. It realized
+  $32.48 of $50. **Budget a paired run at ~$80, not the ~$44 it costs**; the
+  headroom is for the reserve rule, not for spend
 - **Per-arm shares**: `--budget` is divided by the number of arms actually
   dispatched, each with its own tally — halved on a paired run, and given
   **whole** to a single `--arm` run (see below). One shared purse let the arm
@@ -371,7 +379,7 @@ pins read straight from `STAGE_TABLE`:
 record **automatically** and emits a `## validity-caveats` entry naming each
 differing dimension — no `--reference` flag required. A record with no `era`
 block is itself caveated as unverifiable. Bump `PROMPT_CONTRACT` in
-`benchmarklive/dispatch.py` whenever the graded task text changes; a workload
+`benchmarklive/stage_table.py` whenever the graded task text changes; a workload
 change invalidates comparisons just as surely as a model repin.
 
 **Known era boundaries:**
@@ -389,9 +397,24 @@ change invalidates comparisons just as surely as a model repin.
   reasonable arm that printed the board before erroring lost them without ever
   being told. Stamped as an era because it is a prompt change, though it only
   narrows what was already being graded.
+- **`scripted-cli-v3`** — the contract gained three bullets: token whitespace is
+  spaces and tabs only, the whole list is parsed before any move is played, and an
+  empty token contributes no move. The goldens had been grading all three from the
+  reference while the contract said nothing, so arms were losing cases for
+  behaviour nobody had described. Stating the rules also **moves that behaviour
+  into `specified`** — the five cases added alongside them were filed `implied`
+  and stayed there until 2026-09-10, which is how the discriminating tier came to
+  read 11 cases while only 5 discriminated.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.
+
+The oracle case set is a **separate** comparability axis, gated on
+`oracle.cases_digest` rather than the contract version: adding, retiering or
+retiring a case refuses old-vs-new pairings without any contract change. The
+2026-09-10 tier audit moved the digest to `sha256:80652591…` while leaving
+`scripted-cli-v3` intact, so records either side of it compare on era but refuse
+on digest.
 
 ## Held-out oracle (quality metric)
 
@@ -403,13 +426,13 @@ supplies the signal the arm cannot author.
 After measurement (outside the arm's Timer, so it never inflates
 `wall_clock_s`), the harness release-builds the arm's `tictactoe` product and
 drives it through the **scripted CLI contract** — `tictactoe --moves 0,4,1`
-prints a board plus a `result:` line, exit 0/1/2. Each of the 30 cases in
+prints a board plus a `result:` line, exit 0/1/2. Each of the 42 cases in
 `benchmark/oracle/cases.json` is compared on stdout and exit code:
 
 ```json
-"oracle": {"built": true, "cases_total": 30, "cases_passed": 27, "pass_rate": 0.9,
-           "tiers": {"implied":   {"total": 6,  "passed": 3,  "pass_rate": 0.5},
-                     "specified": {"total": 24, "passed": 24, "pass_rate": 1.0}}}
+"oracle": {"built": true, "cases_total": 42, "cases_passed": 39, "pass_rate": 0.9286,
+           "tiers": {"implied":   {"total": 9,  "passed": 6,  "pass_rate": 0.6667},
+                     "specified": {"total": 33, "passed": 33, "pass_rate": 1.0}}}
 ```
 
 ### Two tiers, two questions
@@ -419,21 +442,38 @@ only whether the arm can follow a precise spec — which it can. On the first
 paired live run both arms swept every case, and the metric separated nothing.
 Cases are therefore tiered:
 
-- **`specified`** (24) — behaviour the prompt enumerates. A failure is
+- **`specified`** (33) — behaviour the prompt enumerates. A failure is
   non-conformance with the contract the arm was handed. This is a floor, not a
   discriminator, and **`pass_fail` reads this tier alone** — an arm is never
   failed for behaviour nobody described to it.
-- **`implied`** (6) — behaviour the contract's rules determine without spelling
+- **`implied`** (9) — behaviour the contract's rules determine without spelling
   out, e.g. that a move listed after the game already ended is never played and
-  so is never rejected, or that `--moves` is parsed whole before play so a bad
-  token outranks an early stop. Deriving these is the engineering judgement the
-  benchmark is trying to detect, so this is the discriminating tier — reported
-  beside the verdict, never folded into it.
+  so is never rejected, or that a two-digit index parses and is therefore an
+  invalid move rather than malformed argv. Deriving these is the engineering
+  judgement the benchmark is trying to detect, so this is the discriminating
+  tier — reported beside the verdict, never folded into it.
 
-Two deliberately-wrong reference variants (validating moves before honouring the
-early stop; parsing tokens lazily while playing) both score `specified` 24/24 —
-the untiered set would have called them perfect — and land at `implied` 0.50 and
-0.83. `test_oracle.py` builds the first of them and asserts that separation.
+**A case belongs in `implied` only while a contract-conformant implementation can
+still fail it.** Editing `_cli-contract.txt` can therefore silently demote a case:
+the three bullets that spell out token whitespace, parse-before-play and empty
+tokens converted six `implied` cases into conformance checks, and because their
+tier was not moved with them the discriminating tier read 11 cases while only 5
+still discriminated — which is why both arms scored `implied` 11/11 on
+`live-20260909T152543Z`. Those six are `specified` as of 2026-09-10. When you add
+a contract bullet, re-audit the tier of every case it covers.
+
+`test_oracle.py` holds that line with mutants rather than prose. Four
+deliberately-wrong reference variants each score `specified` 1.0 — an untiered set
+would call them all perfect — and lose only `implied` cases: validating moves
+before honouring the early stop (0.67), testing emptiness before trimming (0.89),
+a single-digit index parser that still admits negatives (0.67), and stripping
+spaces from the whole argument instead of padding each token (0.89). Each of the
+four `implied` cases added on 2026-09-10 is named by one of them.
+
+Two retained cases — `malformed-token-outranks-early-stop` and
+`invalid-move-outranks-later-win` — have no conformant mutant yet, so the rule
+above is asserted for them rather than demonstrated. They are the next tier audit:
+either a mutant names them or they are conformance checks in the wrong tier.
 
 - **Goldens are generated, never hand-written** — `oracle.capture_goldens` runs
   each case against `ttt-template`, the reference implementation. A test
@@ -504,7 +544,7 @@ benchmark/
       bench-analyze              # frozen-argv entrypoint (links benchmarkkit only)
       bench-pair                # join two arm records (benchmarkkit only; 0/64/65)
       bench-live                # frozen-argv entrypoint (only live-world linker)
-    tests/                      # 350 test methods (schema/rotation/generators/report/
+    tests/                      # 383 test methods (schema/rotation/generators/report/
                                 #   history back-compat/import-isolation + live-gate/
                                 #   budget/credentials/prompt-assembly/SSOT/coverage/
                                 #   app-measure/without-arm/analysis)
@@ -513,7 +553,7 @@ benchmark/
       fixtures/history.json     # vendored real history (byte-compat oracle)
       test_*.py                 # 30 test modules
   oracle/
-    cases.json                  # 30 scripted CLI cases (24 specified / 6 implied)
+    cases.json                  # 42 scripted CLI cases (33 specified / 9 implied)
                                 # + goldens captured from ttt-template
                                 # (regenerated, never hand-written)
   ttt-template/                 # Canonical SwiftUI TTT fixture (SwiftPM package
@@ -565,6 +605,12 @@ stamped, and the two arm-split keys only on the records they describe.
 succeeded on a non-degraded run. An arm that dispatched but produced nothing
 measurable records `"fail"` with `app_path: null` — it is never green by default.
 `coverage_pct` is `null` when unmeasured; a literal `0.0` means measured-zero.
+**Nothing in the harness measures coverage today**, so every arm the current code
+writes is `null` — the field is plumbed end to end and reserved, never a signal to
+read. Measuring it needs `swift test --enable-code-coverage` plus an `llvm-cov`
+parse, run outside the arm Timer like the oracle so it cannot inflate
+`wall_clock_s`. Historical `0.0` values are the `--without-arm skip` placeholder,
+which claimed measured-zero for an arm that never dispatched until 2026-09-10.
 Records predating this rule are listed in `results/KNOWN-BAD-RECORDS.md`.
 
 All 5 token keys are ALWAYS emitted (value or null); cache figures are additive
@@ -657,15 +703,15 @@ committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating
 - `benchmark/ttt-template` — 48 Swift Testing fixture tests (engine/AI/
   leaderboard/settings/router/view-model), also run on iOS Simulator via
   `make test-ios` (SKIPs cleanly on hosts without an iOS runtime)
-- `benchmark/harness` — 350 Python harness self-tests (30 modules), zero real
+- `benchmark/harness` — 383 Python harness self-tests (30 modules), zero real
   LLM calls (all dispatchers injected with fakes/tripwires), incl. schema
   byte-compat (vendored real history.json), rotation, generators (real `swift test`
   on generated apps), deterministic/live pipelines, budget/credential gates,
   prompt assembly, stage attribution, app measurement, the paired ±agent arms,
   per-call token accounting, arm symmetry, and offline analysis
 
-**Total:** 48 Swift TTT artifact tests + 350 Python harness tests + 52 Python
-skill-script and skill-eval-engine tests = 450 tests green. The skill-eval share
+**Total:** 48 Swift TTT artifact tests + 383 Python harness tests + 157 Python
+skill-script and skill-eval-engine tests = 588 tests green. The skill-eval share
 covers the assertion engine and the eval-set lint only — no skill's output is
 dispatched or graded here, so this total says nothing about output quality
 (`evals/README.md § Skill eval sets`).
@@ -681,6 +727,10 @@ excluded from the denominator).
 ## References
 
 **Findings & evidence:**
+- `benchmark/results/variance-envelope.md` — **read first.** The measured noise floor
+  (n=2, 2026-09-10). Only `cost_usd` survives it: the plugin costs ~32-39% more, while
+  the token, LOC and test-count deltas are inside run-to-run noise. Every n=1 finding
+  below predates this floor and should be re-read against it.
 - `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
 - `benchmark/results/token-findings-2.md` — live A/B measurement (n=1, honesty rule)
 - `benchmark/results/runs/live/` — raw per-stage live records (token attribution + coverage manifests)

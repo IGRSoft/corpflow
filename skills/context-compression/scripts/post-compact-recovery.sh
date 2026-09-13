@@ -4,12 +4,14 @@
 #              to .context/logs/post-compact-<ts>.json.
 #
 #              Detection is audit.jsonl-based (NOT mtime/ls ordering — those are
-#              unreliable).  The most recent non-advisory subagent_stopped entry
-#              whose result ≠ "ok" (or whose stage task is still in_progress per
-#              background_task_ids) is the interrupted stage.
+#              unreliable).  The selector does NOT filter on result: the most
+#              recent non-advisory subagent_stopped entry is the interrupted
+#              stage whatever its result, so recovery resumes from the last stage
+#              that stopped rather than from the last one that stopped badly.
+#              A stage can stop "ok" and still lose the turn that followed it.
 #
-# @arg --audit-file <path>  Override audit.jsonl path (default: .context/logs/audit.jsonl)
-# @arg --out-dir <path>     Override output directory (default: .context/logs)
+# @arg --audit-file <path>  Override audit.jsonl path (default: $CLAUDE_PROJECT_DIR/.context/logs/audit.jsonl)
+# @arg --out-dir <path>     Override output directory (default: $CLAUDE_PROJECT_DIR/.context/logs)
 # @arg --tail-lines <N>     Lines of audit.jsonl to scan (default: 20)
 # @arg --dry-run            Print JSON to stdout; do NOT write file
 # @arg --self-test          Run fixture-based self-test and exit
@@ -23,8 +25,13 @@ trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' E
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-AUDIT_FILE=".context/logs/audit.jsonl"
-OUT_DIR=".context/logs"
+# Rooted on the declared project dir, never on cwd: this runs as a PostCompact
+# hook whose cwd may be a linked worktree or any subdirectory, and a cwd-relative
+# default would read an empty audit trail and write the pointer where no resume
+# will look for it. Explicit --audit-file / --out-dir still win.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+AUDIT_FILE="$PROJECT_DIR/.context/logs/audit.jsonl"
+OUT_DIR="$PROJECT_DIR/.context/logs"
 TAIL_LINES=20
 DRY_RUN=0
 SELF_TEST=0
@@ -63,8 +70,8 @@ while [[ $# -gt 0 ]]; do
 Usage: bash post-compact-recovery.sh [OPTIONS]
 
 Options:
-  --audit-file <path>   audit.jsonl location (default: .context/logs/audit.jsonl)
-  --out-dir    <path>   output directory   (default: .context/logs)
+  --audit-file <path>   audit.jsonl location (default: $CLAUDE_PROJECT_DIR/.context/logs/audit.jsonl)
+  --out-dir    <path>   output directory   (default: $CLAUDE_PROJECT_DIR/.context/logs)
   --tail-lines <N>      lines to scan      (default: 20)
   --dry-run             print JSON, do not write file
   --self-test           run fixture tests and exit

@@ -140,7 +140,7 @@ FILES_TOUCHED_MAX=10
 DV_REQ="stage verdict summary refs files_touched next_stage_focus tests_executed open_questions"
 DR_REQ="stage verdict summary refs key_decisions open_questions"
 SR_REQ="stage verdict summary refs key_decisions open_questions"
-QA_REQ="stage verdict summary refs files_touched key_decisions open_questions"
+QA_REQ="stage verdict summary refs files_touched key_decisions tests_executed open_questions"
 DC_REQ="stage verdict summary refs files_touched open_questions"
 RE_REQ="stage verdict summary refs files_touched key_decisions open_questions"
 FN_REQ="stage verdict summary refs next_stage_focus files_touched open_questions"
@@ -694,8 +694,9 @@ check_test_evidence() {
 
   executed=$(yq eval '.handoff.tests_executed // ""' "$fmfile")
   [[ "$executed" == "null" ]] && executed=""
-  # An absent or non-numeric value is the required-field loop's business, not
-  # this arm's: reporting it twice would send the stage two failures for one slip.
+  # An absent value is the required-field loop's business and a non-numeric one is
+  # check_summary_line's, which blocks it for both DV and QA: reporting it twice
+  # would send the stage two failures for one slip.
   case "$executed" in
     '' | *[!0-9]*) return 0 ;;
   esac
@@ -715,6 +716,112 @@ check_test_evidence() {
       echo "fail: stage=DV test_suite_compiles is \"$compiles\" — expected true, false or unknown" >&2
       return 1 ;;
   esac
+}
+
+# AD-4 — a non-zero execution count is checked against the words the runner used.
+# Until this arm existed the count was checked against NOTHING: check_test_evidence
+# returns early unless it is zero, so `tests_executed: 4000` validated clean for a
+# stage that ran nothing, which is the same absence-reads-as-success defect the
+# zero arm above closes from the other side.
+#
+# Two tiers, because "verbatim" is not mechanically decidable. Tier 1 asks only
+# that the excerpt EXIST somewhere durable — the artifact body, or a .context/logs/
+# capture the artifact names — which is platform-neutral and decidable. Tier 2, the
+# count-token match, is warn-only: it holds for bats and pytest but not for every
+# Gradle or Xcode formatter this cross-platform contract also governs, and a check
+# that guesses wrong fails honest stages. Same posture as ar_ref_violation above.
+#
+# DV and QA only: they are the two stages holding test-execution authority, so no
+# other stage can produce the line honestly.
+# Contract: stage-contracts.md#tpl-dv § Verification Command carries the runner's
+# verbatim summary line.
+check_summary_line() {  # <artifact> <fmfile> <stage>
+  local artifact="$1" fmfile="$2" stage="$3" executed line
+
+  executed=$(yq eval '.handoff.tests_executed // ""' "$fmfile")
+  [[ "$executed" == "null" ]] && executed=""
+  # Absence is the required-field loop's business — it is the one shape that loop
+  # decides. A PRESENT non-numeric value is this arm's: the loop tests only that a
+  # value is there, so delegating it let `tests_executed: "1841 (scoped)"` skip every
+  # tier below and validate clean for a stage that ran nothing.
+  case "$executed" in
+    '') return 0 ;;
+    *[!0-9]*)
+      echo "fail: stage=$stage tests_executed is \"$executed\" — a count is a whole number and nothing else; a value carrying units, a range or a parenthetical skips the whole evidence contract below it" >&2
+      return 1 ;;
+  esac
+  [[ "$executed" -gt 0 ]] || return 0
+
+  # NOT `// ""`: the alternative operator cannot tell an absent field from an
+  # empty one, and those two get different messages because they are different
+  # mistakes — nothing written versus a placeholder left behind.
+  line=$(yq eval '.handoff.test_summary_line' "$fmfile")
+
+  if [[ "$line" == "null" ]]; then
+    echo "fail: stage=$stage reports tests_executed: $executed with no test_summary_line — copy the runner's own summary line in verbatim; it is the only record downstream that a count was ever observed" >&2
+    return 1
+  fi
+  if [[ -z "${line//[[:space:]]/}" || "$line" != *[0-9]* ]]; then
+    echo "fail: stage=$stage test_summary_line carries no digit: \"$line\" — a runner's summary line reports numbers; a label is not evidence" >&2
+    return 1
+  fi
+
+  if ! summary_line_corroborated "$artifact" "$line"; then
+    echo "fail: stage=$stage test_summary_line is uncorroborated: \"$line\" appears neither in $(basename "$artifact") nor in a .context/logs/ capture it names — an excerpt nobody can check is the unverifiable claim this arm refuses" >&2
+    return 1
+  fi
+
+  if ! printf '%s' "$line" | grep -qE "(^|[^0-9])${executed}([^0-9]|\$)"; then
+    echo "warn: stage=$stage tests_executed: $executed is not a whole-number token of test_summary_line \"$line\" — the excerpt is corroborated, the count is not" >&2
+    summary_line_audit "$artifact" "$stage" "$executed" "$line"
+  fi
+  return 0
+}
+
+# The excerpt must exist in something durable. Body first; then any .context/logs/
+# path the body names, glob included — a scoped bats run is captured as
+# `dv0-bats-*.log`, and a stage that names its capture that way has still put the
+# line somewhere a reader can open.
+summary_line_corroborated() {  # <artifact> <line>
+  local artifact="$1" line="$2" body dir cand path f
+  body=$(awk 'NR==1 && /^---[[:space:]]*$/ { fm=1; next }
+              fm==1 && /^---[[:space:]]*$/ { fm=0; next }
+              fm!=1' "$artifact")
+  if printf '%s\n' "$body" | grep -Fq -- "$line"; then
+    return 0
+  fi
+  dir=$(cd "$(dirname "$artifact")" && pwd)
+  while IFS= read -r cand; do
+    [[ -n "$cand" ]] || continue
+    # Three resolutions, because an artifact names its capture from the repo root
+    # as often as from beside itself, and neither spelling is wrong.
+    for path in "$cand" "$dir/${cand#.context/}" "$dir/../$cand"; do
+      for f in $path; do
+        [[ -f "$f" ]] || continue
+        if grep -Fq -- "$line" "$f"; then
+          return 0
+        fi
+      done
+    done
+  done < <(printf '%s\n' "$body" | grep -oE '[A-Za-z0-9._/*-]*logs/[A-Za-z0-9._/*-]+' | sort -u)
+  return 1
+}
+
+# Warn tier only. The row is evidence that the softer half of the contract fired,
+# so a later reader can tell a formatter this arm cannot parse from a count nobody
+# checked. It rides the shared appender rather than a second writer, and a missing
+# library degrades to silence: an audit row is never a gate.
+summary_line_audit() {  # <artifact> <stage> <executed> <line>
+  local artifact="$1" stage="$2" executed="$3" line="$4" lib
+  lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
+  [[ -r "$lib" ]] || return 0
+  # shellcheck source=../../shared/lib/audit-lib.sh
+  . "$lib" 2> /dev/null || return 0
+  command -v corpflow_audit_row > /dev/null 2>&1 || return 0
+  corpflow_audit_row --file "$(dirname "$artifact")/logs/audit.jsonl" \
+    --actor "handoff-harness" --action "count_corroboration" --result "degraded" \
+    --subject "$stage" --meta-kv "tests_executed=$executed" \
+    --meta-kv "summary_line=$line" || return 0
 }
 
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
@@ -861,6 +968,10 @@ validate_frontmatter() {
 
   if [[ "$stage" == "DV" ]]; then
     check_test_evidence "$fmfile" || rc=1
+  fi
+
+  if [[ "$stage" == "DV" || "$stage" == "QA" ]]; then
+    check_summary_line "$f" "$fmfile" "$stage" || rc=1
   fi
 
   check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || rc=1
@@ -1097,6 +1208,7 @@ handoff:
   verdict: ok
   summary: "Implemented."
   tests_executed: 12
+  test_summary_line: "12 tests, 0 failures"
   files_touched: [a.md, b.md]
   next_stage_focus: "DR reviews"
   open_questions: []
@@ -1106,6 +1218,10 @@ handoff:
 # Development
 
 ## files-changed
+
+## verification-command
+
+12 tests, 0 failures
 
 ## elicitation-sweep
 

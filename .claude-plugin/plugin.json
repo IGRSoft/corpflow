@@ -1,7 +1,7 @@
 {
   "name": "corpflow",
   "description": "Staged worktask pipeline (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, cross-plugin delegation, and /megatask dependency-DAG orchestration of many worktasks across a GitHub milestone.",
-  "version": "4.0.31",
+  "version": "4.0.32",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -148,6 +148,28 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/precompact-checkpoint.sh"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/context-compression/scripts/post-compact-recovery.sh",
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-finalize.sh",
+            "continueOnBlock": true
           }
         ]
       }

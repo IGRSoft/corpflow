@@ -64,8 +64,12 @@ evidence_bundle_basename() {
   # mimic the token's own grammar.
   case "$_base" in *[!A-Za-z0-9._-]*) return 1 ;; esac
   [ "${#_base}" -le "$EVIDENCE_BASENAME_MAX" ] || return 1
+  # `*.log` is deliberately absent: DV writes `.context/logs/build-*.log` for BUILD
+  # verification (skills/shared/stage-contracts.md § DV), and admitting it here cited
+  # a build as a test result at the one rung nothing downstream re-checks. A results
+  # shape is a format a runner emits for RESULTS; a log is a transcript of anything.
   case "$_base" in
-    *.xcresult | *.xcodebuild | *.trx | *.junit | *.xml | *.jsonl | *.log) ;;
+    *.xcresult | *.xcodebuild | *.trx | *.junit | *.xml | *.jsonl) ;;
     *) return 1 ;;
   esac
   printf '%s' "$_base"
@@ -150,10 +154,8 @@ tool_evidence_token() {
          elif ($r | type) == "string" then $r
          else ($r | tojson) end) as $rtext
       | ($rtext + " " + $errtext) as $all
-      | [$all | match("[A-Za-z0-9._/-]+[.](xcresult|xcodebuild|trx|junit|xml|jsonl|log)\\b"; "g")
+      | [$all | match("[A-Za-z0-9._/-]+[.](xcresult|xcodebuild|trx|junit|xml|jsonl)\\b"; "g")
          | .string] as $bundles
-      | ([$all | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"; "g")
-          | .captures[0].string] | first) as $count
       # A count alone does not say the cases RAN. `Executing 49 tests` is a
       # discovery banner, and a scheme with an empty test plan prints it and
       # exits having executed nothing — which is how one run recorded `tests:49`
@@ -162,14 +164,38 @@ tool_evidence_token() {
       # result says one of these words somewhere. `executed` is in the list and
       # `executing` deliberately is not.
       #
-      # Tested against string LEAVES, never the serialised object: an object
+      # Both halves are read off ONE LINE — the line carrying the count. Over the
+      # whole text the discriminator is defeated by its own reproducer: the empty
+      # test plan that prints `Executing 49 tests` is run by `xcodebuild`, which
+      # then prints `** TEST SUCCEEDED **` for the green BUILD, and a vocabulary
+      # test spanning both lines reads the verdict of the BUILD as the verdict of
+      # the enumeration. A summary line carries its own outcome; a verdict one
+      # line away belongs to something else.
+      #
+      # Lines come from string LEAVES, never the serialised object: an object
       # response carrying an `error` or `errors` key — a shape $rflag above
       # already anticipates — would otherwise satisfy `errors?` by its key name
       # alone and hand a bare enumeration back its `tests:` token.
-      | (if ($r | type) == "object" then ([$r | .. | strings] | join(" "))
-         else $rtext end) as $leaftext
-      | (($leaftext + " " + $errtext)
-         | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))
+      | (if ($r | type) == "object" or ($r | type) == "array"
+         then [$r | .. | strings] else [$rtext] end) as $leaves
+      | (($leaves + [$errtext]) | map(split("\n")) | add) as $lines
+      | [$lines[]
+          | select(test("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"))] as $clines
+      # The summary is the count line carrying its own outcome word, wherever it
+      # sits: a runner that prints an enumeration banner ABOVE its tally would
+      # otherwise bind the count to the banner and demote a real run to
+      # `discovered:`. With no such line the first count line stands, so a
+      # banner alone still reads as enumeration.
+      | (([$clines[]
+          | select(test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))]
+         | first) // ($clines | first)) as $cline
+      | (if $cline == null then null
+         else ($cline
+               | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b")
+               | .captures[0].string) end) as $count
+      | ($cline != null
+         and ($cline
+              | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i")))
         as $ran
       | (if $count != null and $ran then "tests:" + $count
          elif $count != null then "discovered:" + $count

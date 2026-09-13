@@ -49,14 +49,14 @@ self_test_collect_all() {
   fi
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  summary: "Two independent violations in one artifact."'
     echo '  files_touched: [a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'
     echo '    - "q1: not a stub"'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'
+    echo '# Development'; echo; echo '12 tests, 0 failures'
   } > "$ctx/dv-two-faults.md"
 
   local out rc=0
@@ -71,7 +71,7 @@ self_test_collect_all() {
   echo "self-test: collect-all: ok"
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  summary: "Filename digits must not be harvested."'
     echo '  files_touched: [a.md]'
     echo '  key_decisions:'
@@ -81,6 +81,7 @@ self_test_collect_all() {
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
     echo '## decisions'; echo
     echo '- **dv-1 — The retry budget for a failing stage is three attempts, per planning-0.md.**'
+    echo; echo '12 tests, 0 failures'
     echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
   } > "$ctx/dv-filename-digit.md"
 
@@ -110,7 +111,7 @@ self_test_ar_gate() {
       echo '---'
       echo 'handoff:'
       echo '  stage: DV'
-      echo '  tests_executed: 12'
+      echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
       echo '  verdict: ok'
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
@@ -120,7 +121,7 @@ self_test_ar_gate() {
       printf '%s\n' "$refs_block"
       echo '---'
       echo
-      echo '# Development'
+      echo '# Development'; echo; echo '12 tests, 0 failures'
       echo
       echo '## elicitation-sweep'
       echo
@@ -181,13 +182,13 @@ self_test_ar_gate() {
   # Sweep ledger parity rides on the same invocation: every stub must be in the
   # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
     echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'
     echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
+    echo '# Development'; echo; echo '12 tests, 0 failures'; echo; echo '## elicitation-sweep'; echo; echo 'q'
   } > "$ctx/dv-stub.md"
   jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
      "$ctx/state-no-ar.json" > "$ctx/state-stub.json"

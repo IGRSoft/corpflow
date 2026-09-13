@@ -180,3 +180,53 @@ _frontmatter_hook_refs() {
 
   [ "$count" -ge 8 ]
 }
+
+# The test above proves registered→exists. Nothing proved the inverse, so a handler
+# that was written, documented and never registered passed the suite for as long as
+# it existed — the class that left PostCompact unwired while four documents assumed
+# it fired. The `-ge 8` floor cannot catch it: an unregistered handler lowers no count.
+
+# Prints every hook handler script that MUST appear in plugin.json, one relpath per
+# line. Executable-only: a non-executable hooks/*.sh is a sourced library, and wiring
+# one as a command is separately refused (AC-14).
+_expected_registered_handlers() {
+  local f
+  for f in "$PLUGIN_ROOT"/hooks/*.sh; do
+    [ -x "$f" ] || continue
+    case "${f##*/}" in
+      # Wired through agent frontmatter by deliberate contract; registering it here
+      # would widen its firing scope to every subagent (pinned two tests above).
+      agent-stop.sh) continue ;;
+    esac
+    printf 'hooks/%s\n' "${f##*/}"
+  done
+  # Handlers that live outside hooks/ are invisible to the sweep above and are the
+  # reason this test exists; each new one is listed here or it is not guarded.
+  printf 'skills/context-compression/scripts/post-compact-recovery.sh\n'
+}
+
+@test "plugin.json hooks: every hook handler on disk is registered (inverse parity)" {
+  local registered handler count=0
+  registered="$(jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+
+  while IFS= read -r handler; do
+    [ -n "$handler" ] || continue
+    [ -f "$PLUGIN_ROOT/$handler" ] || fail "expected handler missing on disk: $handler"
+    printf '%s\n' "$registered" | grep -Fq -- "\${CLAUDE_PLUGIN_ROOT}/$handler" \
+      || fail "handler exists on disk but is registered in no plugin.json hook event: $handler"
+    count=$((count + 1))
+  done < <(_expected_registered_handlers)
+
+  # Non-vacuity: an empty or broken discovery would otherwise pass silently.
+  [ "$count" -ge 14 ] || fail "non-vacuity: only $count handlers checked, expected at least 14"
+}
+
+@test "plugin.json hooks: the continuity events PostCompact and SessionEnd are registered" {
+  # Named rather than swept: four documents and a six-edge state model assume
+  # PostCompact fires, and the SessionEnd row is the only completion record
+  # background work gets when a session tears down. Both were absent for releases.
+  local events
+  events="$(jq -r '.hooks | keys[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  printf '%s\n' "$events" | grep -qx 'PostCompact' || fail "PostCompact is not a registered hook event"
+  printf '%s\n' "$events" | grep -qx 'SessionEnd' || fail "SessionEnd is not a registered hook event"
+}

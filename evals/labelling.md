@@ -173,12 +173,13 @@ explicit `--held-out-from`. Select the tranche with `--stratum test/held-out`, n
 `--min-id`: under `--sample` an id floor is refused, because it cuts inside strata whose
 populations are the draw's and cannot be narrowed.
 
-**The key is absent right now, and that is the correct state.** It was pinned to 213 for the
-two 0.4.0 captures, which ran against it; the 0.4.0 labelling pass then drew batch 6's `test`
-cases whole (23 of 23) and spent them, so the deleting edit is that pass's own. Nothing in the
-manifest is held out today and both tools stop instead of guessing. A new cut needs a batch 7
-appended and its first id pinned as `held_out_from` in the same edit -- not 213, and not a
-`--min-id` read off the newest `-sample.json`, which names the tranche that pass just spent.
+**It is pinned to 271 -- batch 7's first id -- as of 2026-09-10, and nothing has read that
+tranche.** It was 213 for the two 0.4.0 captures, which ran against it; the 0.4.0 labelling pass
+then drew batch 6's `test` cases whole (23 of 23) and spent them, so the deleting edit was that
+pass's own, and for a time nothing in the manifest was held out and both tools stopped instead
+of guessing. Batch 7 (ids 271-315, 18 `test` cases) restored it in the edit that appended it.
+Do not re-point it at 213, nor at a `--min-id` read off the newest `-sample.json`, which names
+the tranche its pass just spent.
 
 Pin `held_out_from` in the edit that appends a batch and delete it in the pass that spends
 one. A floor left pointing at a spent tranche re-samples read cases and labels the result

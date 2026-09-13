@@ -1,9 +1,16 @@
 # Variance study — procedure
 
-`token-findings-2.md` names this as its own top follow-up and it has never been
-run; `token-findings-3.md` is another n=1, and partial. Until it exists, every
-comparison in this directory is a single sample, and findings-2's own argument
-stands: a ~0.25% effect is invisible against swings of 10–20% in metrics the
+**RUN on 2026-09-10 at n=2 — results in [`variance-envelope.md`](variance-envelope.md).**
+Read that first; this file is the procedure it followed. The headline: of the five
+metrics recorded, only `cost_usd` survives its own noise floor, and findings-2's
+argument is confirmed — token swings between identical runs are 13–18%, so a ~0.25%
+lever is not visible. `test_count` moved 62% with no input changed.
+
+The original framing, kept because it is still why this procedure exists:
+`token-findings-2.md` names this as its own top follow-up and it had never been
+run; `token-findings-3.md` is another n=1, and partial. Until it existed, every
+comparison in this directory was a single sample, and findings-2's own argument
+stood: a ~0.25% effect is invisible against swings of 10–20% in metrics the
 levers do not control.
 
 **This is the only step in the eval work that spends real money.** Everything
