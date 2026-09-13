@@ -52,6 +52,18 @@ out-of-scope.
   Both run by default on every invocation. Version Source now names the real README carriers (badge
   line + Requirements row) instead of a `claude-code min version:` token that never existed; the
   `curl`/`jq` fetch fallback and `claude agents --json` are granted in `allowed-tools`.
+- **Requires Claude Code 2.1.270** (was 2.1.251). The resume loop now trusts signals older builds
+  got wrong: a reattach `ok` could land in a phantom `ListAgents` twin (2.1.260), a send to an
+  offline remote peer read as delivered (2.1.261), and a headless session running background agents
+  reported "waiting for your input" (2.1.269). `/megatask` fan-out also relies on concurrent sessions
+  no longer reverting `~/.claude.json`, which reset workspace trust (2.1.259). 2.1.270 rather than
+  2.1.269, which regressed read-only git commands into permission prompts.
+- **CC 2.1.252→2.1.270 band integrated.** The `SessionEnd` hook entry carries an explicit 5 s
+  `timeout`; the reattach result table handles `queued` (stay parked, never re-send); PL0 raises a
+  `decision` item when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` would override every stage model pin. Docs
+  cover Fable 5.1, `maxEffortLevel`, the 2.1.270 `claude agents --json` key set, permission-mode CLI
+  choices, `plugin validate`/`list --json`, and a security hardening table. `claude agents run` is not
+  a subcommand at 2.1.270; recorded as drift, the headless dispatch one-liner is a follow-up.
 
 ### Fixed
 
