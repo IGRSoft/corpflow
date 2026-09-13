@@ -16,7 +16,7 @@ The contract mapping `task.metadata` to `claude agents run` CLI flags, for exter
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
 | `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` (benchmark-parity snapshots — § Alias note). Caveat: a managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` constrains the Default model — a requested id may silently down-resolve; audit, don't assume |
-| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium`. `ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` and delivered to the dispatched session — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max` |
+| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low`. `ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` and delivered to the dispatched session — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max` |
 
 ### Translation table — permission, workspace & MCP
 
@@ -50,17 +50,17 @@ claude agents run --cwd "$WORKTREE" --model "$MODEL" --effort "$EFFORT" \
 
 | Stage | `$AGENT` | `$MODEL` | `$EFFORT` | `$MODE` |
 |---|---|---|---|---|
-| **DV** | `corpflow:developer` | `claude-opus-5` | `xhigh` | `bypassPermissions` |
-| **DR** | `corpflow:technical-lead` | `claude-opus-5` | `xhigh` | `acceptEdits` |
+| **DV** | `corpflow:developer` | `claude-opus-5` | `high` | `bypassPermissions` |
+| **DR** | `corpflow:technical-lead` | `claude-opus-5` | `high` | `acceptEdits` |
 | **SR** | `corpflow:security-reviewer` | `claude-opus-5` | `xhigh` | `default` |
-| **QA** | `corpflow:qa-engineer` | `claude-sonnet-5` | `high` | `acceptEdits` |
+| **QA** | `corpflow:qa-engineer` | `claude-sonnet-5` | `medium` | `acceptEdits` |
 | **FN** | `corpflow:project-manager` | `claude-sonnet-5` | `medium` | `default` |
-| **RE** | `corpflow:release-engineer` | `claude-sonnet-5` | `medium` | `default` |
+| **RE** | `corpflow:release-engineer` | `claude-sonnet-5` | `low` | `default` |
 | **ST** | `corpflow:stakeholder` | `claude-sonnet-5` | `low` | `acceptEdits` |
 
 ### Model & effort defaults
 
-Defaults track `skills/shared/model-selection.md`; override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh**, matching `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/benchmarklive/dispatch.py` (the machine-checked SSOT); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
+Defaults track `skills/shared/model-selection.md`; override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/high**, matching `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/benchmarklive/stage_table.py` (the machine-checked SSOT); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
 
 ### Alias note
 
@@ -95,7 +95,7 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
 
 ### Usage patterns
 
-- **Resume pre-check** — before respawning a subagent during resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, reattach via `SendMessage` instead of re-delegating (`skills/worktask/SKILL.md § Resume Procedure` step 0). Kills the "blind respawn of an already-working subagent" waste class.
+- **Resume pre-check** — before respawning a subagent during resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, reattach via `SendMessage` instead of re-delegating (`skills/worktask/references/resume.md § Resume Procedure` step 0). Kills the "blind respawn of an already-working subagent" waste class.
 - **Parallel track health** — `claude agents --json | jq '[.[] | select(.tag=="corpflow-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / status-bar widgets showing the active stage without polluting `.context/`.
 
@@ -114,7 +114,7 @@ Rows additionally render a `done/total` progress count in the human-readable (no
 
 #### `--all` semantics
 
-> `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out); **blocked** and **just-dispatched** sessions are always listed. Combined with `state`, a resume scan can distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class (`skills/worktask/SKILL.md § Resume Procedure` step 0).
+> `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out); **blocked** and **just-dispatched** sessions are always listed. Combined with `state`, a resume scan can distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class (`skills/worktask/references/resume.md § Resume Procedure` step 0).
 
 #### "Needs input" status axis
 

@@ -198,7 +198,7 @@ proceeds with the other unblocked issues.
 
 Parking rides the monitor's existing failure path, so it needs no new state: the per-issue worktask
 writes `workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"` and
-an `escalation_parked` audit row (`commands/worktask.md § Step A.4 Escalation guard`);
+an `escalation_parked` audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`);
 `hooks/megatask-monitor.sh` settles it like any failed issue — track freed, dependents stay
 `blocked`. The batch summary lists each parked issue with its unanswered escalate questions (told
 apart by `execution.reason`) so the user can re-run it interactively, re-scope, or drop it.

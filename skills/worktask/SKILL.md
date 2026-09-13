@@ -1591,7 +1591,7 @@ spend-authorizing) are NEVER auto-decided — they return as `escalate` items an
 even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row. An
 unattended `/megatask` per-issue run has no user, so the issue PARKS instead: settled
 `execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
-audit row (`commands/worktask.md § Step A.4 Escalation guard`).
+audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
 
 ## FN Gate
 

@@ -151,7 +151,7 @@ is a no-op, never a regression.
 re-read the 5.1 page in full and revisit this section — in particular the
 `max_tokens` headroom note for `xhigh`/`max`, which is 5.1-specific and deliberately omitted
 here. The live consumer today is the `--auto=[decision]` pass
-(`commands/worktask.md § Auto-Decision Delegation`).
+(`skills/worktask/SKILL.md § Auto-Decision Delegation (decision_gate)`).
 
 ## haiku
 

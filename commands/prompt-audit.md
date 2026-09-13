@@ -165,8 +165,10 @@ Read the asset's `model:`, then check its body against that alias's row in
 that model is a finding whose Fix line is deletion, and whose evidence is the vendor page the canon
 file cites — not the auditor's judgement.
 
-The reliable greps, run against the asset body (kept out of a table so the `|` alternations
-survive a verbatim copy):
+##### Body rule 5 — the reliable greps
+
+Run against the asset body. They are kept out of a table so the `|` alternations survive a
+verbatim copy:
 
 - `opus` — over-verification; Opus 5 already does this, and the instruction compounds it:
 
