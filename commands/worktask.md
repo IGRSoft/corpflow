@@ -82,6 +82,7 @@ carrier on PL0.
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
+| `--with-design` | Invoke `corpflow:designer` during PL. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. Replaces the former `emergency:` prefix. |

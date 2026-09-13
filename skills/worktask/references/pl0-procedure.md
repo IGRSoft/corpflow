@@ -659,7 +659,7 @@ so the plan amendments are your only writes.
 description, security-posture-weakening changes, or spend authorization — return those as
 `escalate` items. The orchestrator stops for the user on exactly those, even under
 `plan_gate: "bypass"`; an unattended `/megatask` per-issue run parks the issue instead
-(`commands/worktask.md § Step A.4 Escalation guard`).
+(`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
 
 ## Version Bump Planning
 

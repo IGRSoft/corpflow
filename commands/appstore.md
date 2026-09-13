@@ -64,7 +64,7 @@ routing policy has exactly one home (`skills/shared/routing-matrix.md`), and no 
 body against it, so a second copy of the resolution rules here would drift unobserved.
 
 Chain depth is session → `release-engineer` (1) → the platform's release engineer (2), inside the
-depth-3 cap (`skills/agent-coordination/SKILL.md § Three independent ceilings`).
+depth-3 cap (`skills/agent-coordination/SKILL.md § Two independent ceilings`).
 
 ## Where the work happens
 

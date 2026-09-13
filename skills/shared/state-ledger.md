@@ -290,6 +290,7 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `embedded_commands` | orchestrator at `/worktask` parse time → DV agent | Comma-separated `/plugin:command` identifiers detected on the trigger (e.g. `skill-creator`). See `commands/worktask.md § Embedded Command Detection` |
 | `preexisting_plan` | orchestrator → PL agent | Absolute path to a user-approved plan supplied at init; PL0 adopts it verbatim and reuses its anchors |
 | `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
+| `with_design` | `--with-design` → `skills/worktask/references/pl0-procedure.md § Designer Invocation` | When `true`, PL0 invokes `corpflow:designer`; otherwise Designer is skipped even for UI work and the keyword score stays advisory. No component stamps the field, so the gate reads absent on every run. |
 
 ### Issue publishing field
 

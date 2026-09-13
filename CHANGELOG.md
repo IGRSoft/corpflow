@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.33] — unreleased
+
+Correctness pass across agent, command and skill surfaces: seven documented defects fixed
+(divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag
+documentation, stale section citations, lint regressions, and stale version line), two parity test
+methods added, and five distinct stale citations across eleven occurrences repaired. Eleven follow-up items filed
+out-of-scope.
+
+### Fixed
+
+- **headless-dispatch reference**: per-stage effort table now matches `stage-codes.md` canon on all rows
+  (DV/DR corrected from `xhigh` to `high`, QA from `high` to `medium`, RE from `medium` to `low`); module
+  citation corrected to `stage_table.py`; four missing rows (PL, AR, TL, DC) added; test-pinned advisory
+  cell preserved byte-for-byte.
+- **Parity test enforcement**: `test_stage_table_ssot.py` extended with two new methods (`test_efforts_match_stage_codes_md`
+  and `test_headless_dispatch_table_matches_stage_codes`) to catch effort column divergence on future edits;
+  existing model-family test retained unchanged.
+- **Single-source-of-truth routing glob**: restated verbatim in `agents/workflow-engineer.md` replaced
+  with a pointer to its canonical source in `skills/worktask/references/pl0-procedure.md`.
+- **Pipeline flag documentation**: `--with-design` now appears in both `commands/worktask.md` options table
+  and `skills/shared/state-ledger.md` schema, closing documentation gap where flag was live in README
+  and procedure but absent from owning command's table.
+- **Section-length lint regressions**: two branches-introduced sections split or trimmed under 1000-character
+  cap (`commands/prompt-audit.md` and `skills/worktask/references/handoff-protocol.md`).
+- **Stale cross-file section citations**: five distinct broken references repaired across nine files,
+  including resume-procedure path correction, ceiling-count update, auto-delegation file/anchor fix,
+  escalation-guard heading refinement, and four bare `references/` path qualifications.
+- **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
+  status corrected.
+
+### Also in this release
+
+Eleven follow-ups filed out-of-scope (F1–F11 in the architecture stage artifact): redundant-but-agreeing
+mirrored tables pinned by parity tests, compound section-path citation convention, `with_design` writer
+gap, per-stage table's missing-row note, and three cross-file reference style questions.
+
 ## [4.0.32] — 2026-09-11
 
 A control that fails silently is indistinguishable from a control that passed, and an evidence
