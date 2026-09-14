@@ -1,0 +1,4 @@
+{"ts":"2026-01-01T00:00:00Z","actor":"orchestrator","action":"reattach_send_result","subject":"DV0","result":"ok","task_id":"DV0","metadata":{}}
+{"ts":"2026-01-01T00:01:00Z","actor":"orchestrator","action":"reattach_send_result","subject":"DV0","result":"dropped","task_id":"DV0","metadata":{"attempt":1}}
+{"ts":"2026-01-01T00:02:00Z","actor":"orchestrator","action":"reattach_se
+{"ts":"2026-01-01T00:03:00Z","actor":"agent:state-patch","action":"message_ack","subject":"DV0","result":"ok","task_id":"DV0","metadata":{"msg_id":"DV0-m9"}}
