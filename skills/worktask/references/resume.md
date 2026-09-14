@@ -179,6 +179,58 @@ it.
 A delivered nudge advances the stage; every other result leaves it exactly where it was. Treating
 an undelivered send as delivered is how a parked stage silently becomes an abandoned one.
 
+#### Reattach rows — delivered is not acknowledged
+
+A send result says the harness accepted a message; only the stage's own `message_ack` row
+(`state-patch.sh --ack <TASK_ID> <msg_id>`) says the stage read it. Every orchestrator → stage send
+(a nudge, a relayed reply, an amendment, a resend) goes through `skills/worktask/SKILL.md § Step
+6.5a4`. It mints `<TASK_ID>-m<k>` and opens the message with `msg_id:`, plus `supersedes:` when it
+replaces an earlier message, and the exact `--ack` line. Both ids go into the `metadata` of its
+`reattach_send_result` row, together with the dispatch's `run_index`.
+
+At the next boundary run `bash skills/worktask/scripts/ack-check.sh --task <ID> --run-index <N>
+--artifact <stage artifact>`. A message with no ack is **not delivered**, whatever its send result
+said, and is never treated as acted on. Never assume the latest amendment won: the stage followed
+what its ack rows and `handoff.acted_on_msg_id` prove, and message order proves nothing.
+
+#### Reattach rows — one dispatch at a time
+
+`<N>` is the dispatch's `metadata.run_index`. A fix round re-dispatches the same task key with
+`run_index` bumped, so an earlier dispatch's messages must not judge this one. Unscoped, a run-0
+message the stage acked and followed would demand an `acted_on_msg_id` from a run-1 artifact that
+received no message. A run-0 superseding resend left unacked would escalate every later round at its
+first boundary. `--run-index` ignores send rows whose `metadata.run_index` differs, and a row without
+one counts as run 0. Acks still join by msg_id, which stays unique per task key across runs. An ack
+for an out-of-scope message is dropped rather than listed as `orphan-ack`.
+
+#### Reattach rows — one resend, then escalate
+
+| `ack-check.sh` | Action |
+|---|---|
+| exit 0, `verdict: clear` | Proceed |
+| exit 1, a `msg <id> not-delivered send=ok` line | Resend the same instruction once under a new msg_id with `supersedes: <id>`. The stage stays `in_progress` and the check runs again at the next boundary. If `<id>` itself carries `supersedes`, this is the second miss: escalate. No third send |
+| exit 1, `send=` anything else | Result table already applied at send time; at the boundary: escalate, never resend (`queued` included) |
+| exit 3, `acted_on … mismatch` | The same rule: one resend restating `expected=<id>` with `supersedes: <id>`, then escalate. `expected=none` has nothing to restate: escalate |
+| exit 2 | The check failed: escalate, never read it as clear |
+
+#### Reattach rows — judge every id before resending
+
+Read every line of the output before sending anything. If one exit-1 output carries both exit-1
+rows, or any listed id is a second miss, escalate and send nothing: a resend followed by an
+escalation in the same pass is a half-applied action. A resend restates the original message text.
+When that text is no longer in context, as a relayed reply may not be after compaction, escalate
+rather than paraphrase.
+
+#### Reattach rows — retries carry supersedes too
+
+A retry the result table allows (`dropped`, `burst_limited`, a shortened `oversized` send) restates
+a message the stage never read. It goes out under a new msg_id with `supersedes:` naming the one it
+replaces; without that, the original reads not-delivered at every later boundary. Those retries
+count toward the ceiling: a superseding message that misses again, unacked or with any result but
+`ok` or `queued`, escalates. A `queued` send needs no retry, because the queued copy acks itself
+when it lands. Send rows without `metadata.msg_id` predate message ids: `ack-check.sh` ignores them,
+so they are exempt.
+
 ### Reply routing
 
 | Ledger Shape | Audit Tail | Action |
