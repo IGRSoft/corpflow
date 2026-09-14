@@ -10,11 +10,23 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/state-patch.sh"
 
+# Key gate: every non-PL/IR --task-create row needs the five dispatch-shape
+# keys, so fixtures merge them in rather than restating them at every call site.
+# "null" (not literal {}) as the bash default dodges a bash-3.2 brace-matching
+# quirk where "${1:-{}}" leaks a stray "}" onto a non-empty $1.
+_r9_meta() {
+  jq -cn --argjson x "${1:-null}" \
+    '{effort:"high",isolation:"worktree",base_ref:"origin/develop",requires_screenshots:false,workspace_path:"/tmp/wt"} + ($x // {})'
+}
+
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context/logs"
   cp "$FIXTURES/worktask/state.sample.json" "$WD/.context/state.json"
   cp "$FIXTURES/worktask/development-0.sample.md" "$WD/.context/development-0.md"
+  # BATS_TMPDIR is a plain scratch dir, not a git repo: without a declared root the
+  # ladder's rank 5/6 both miss and every case silently no-ops.
+  export WORKSPACE_ROOT="$WD"
 }
 
 # --- C3: a non-canonical artifact name is silently un-linted ----------------------------
@@ -232,8 +244,8 @@ _write_n_decisions() {  # <count> [id-prefix]
 }
 
 # ---------------------------------------------------------------------------
-# Phase 2.0 --prev + B3 bounds (issue #221). --prev writes the handoffs edge the
-# 13 stage agents used to hand-roll; bounds are enforced in atomic_merge (AD-7).
+# --prev writes the handoffs edge every stage agent would otherwise hand-roll;
+# bounds are enforced at the atomic_apply write.
 # ---------------------------------------------------------------------------
 
 @test "prev: --prev writes handoffs[PREV→TASK_ID] from summary + artifact basename" {
@@ -707,7 +719,7 @@ SHIM
 
 @test "lock: EXIT-trap releases the lock even when the jq merge fails (release-on-fail)" {
   cd "$WD"
-  # Corrupt state.json so the jq merge inside atomic_merge() fails (rc=1), then
+  # Corrupt state.json so the jq merge inside atomic_apply() fails (rc=1), then
   # assert the lock the run acquired is still released by _lock_release / EXIT trap.
   printf 'NOT JSON {{{' > .context/state.json
   STATE_LOCK_TIMEOUT_S=2 STATE_LOCK_STALE_S=60 \
@@ -916,7 +928,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: unknown task id refuses with exit 1, ledger byte-unchanged" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV7 --agents-json "$w/gone.json"
   assert_failure 1
   assert_output --partial "unknown task id"
@@ -924,7 +936,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: malformed task id stays exit 2 via usage, ledger byte-unchanged" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   # Exit 2 collides with DISK_HALT. That is pre-existing behaviour shared by all
   # task ops; this test pins it so a future change is a deliberate one.
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay ZZ0 --agents-json "$w/gone.json"
@@ -934,7 +946,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: live agent refuses target-live (exit 4), ledger byte-unchanged" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/busy.json"
   assert_failure 4
   assert_output --partial "replay refused: target-live"
@@ -942,7 +954,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: parked agent refuses target-parked (exit 4), ledger byte-unchanged" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/parked.json"
   assert_failure 4
   assert_output --partial "replay refused: target-parked"
@@ -950,7 +962,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: unreadable agents payload refuses liveness-indeterminate (fail-closed)" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/nope.json"
   assert_failure 4
   assert_output --partial "replay refused: liveness-indeterminate"
@@ -958,7 +970,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: unparseable agents payload refuses liveness-indeterminate" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/garbage.json"
   assert_failure 4
   assert_output --partial "replay refused: liveness-indeterminate"
@@ -966,7 +978,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: incomplete planning refuses plan-incomplete, ledger byte-unchanged" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   jq '.tasks.PL0.status = "in_progress"' .context/state.json > t && mv t .context/state.json
   cp .context/state.json before.json
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
@@ -976,7 +988,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay guard: no audit row is written on any refusal" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/busy.json" || true
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV7 --agents-json "$w/gone.json" || true
   # A refusal row would carry result:"error", which stale-check.sh reads as a real
@@ -985,7 +997,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay: an escalated stage (retry_count 3 + escalation marker) is replayable" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run jq -r '[.tasks.DV1.metadata.retry_count, .tasks.DV1.metadata.error_escalated_to] | @csv' \
     .context/state.json
   assert_output '3,"AR"'
@@ -1006,7 +1018,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay: artifact, verdict and worktree survive the reset" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   run jq -r '[.tasks.DV1.artifact, .tasks.DV1.verdict, .tasks.DV1.worktree.branch] | @csv' \
     .context/state.json
@@ -1014,7 +1026,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay blast radius: replaying DV1 changes DV1's fields and nothing else" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   # Every task except DV1 must be byte-identical, PL0 included.
   run jq -S --slurpfile a before.json '.tasks | with_entries(select(.key != "DV1"))
@@ -1039,7 +1051,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay audit: the row is not matchable as an ordinary retry" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   assert_audit_row stage_replay --file "$w/.context/logs/audit.jsonl" --count 1
   assert_audit_row retry_attempt --file "$w/.context/logs/audit.jsonl" --absent
@@ -1052,7 +1064,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay P1: completed dependents are named as possibly stale, never reset" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   assert_success
   assert_output --partial "replay warning: stale-dependents"
@@ -1062,7 +1074,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: resets the transitive closure, skipping FN with a warning" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --cascade --agents-json "$w/gone.json"
   assert_success
   assert_output --partial "replay warning: side-effect-skipped"
@@ -1076,7 +1088,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: one audit row per member, root first then BFS order" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --cascade --agents-json "$w/gone.json"
   run jq -rs 'map(.subject) | join(",")' .context/logs/audit.jsonl
   assert_output "DV1,DR0,QA0,ST0"
@@ -1089,7 +1101,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: the stale-dependent warning never names a task the same write resets" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   # Non-cascade, DR0 is a completed dependent that is NOT reset ⇒ genuinely stale.
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   assert_output --partial "replay warning: stale-dependents"
@@ -1097,7 +1109,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 
   # Under --cascade the same DR0 IS reset by this write, so calling it stale would assert the
   # opposite of what the command does — and would write that claim into the durable audit row.
-  local v; v="$(mk_replay_wd)"; cd "$v"
+  local v; v="$(mk_replay_wd)"; cd "$v"; export WORKSPACE_ROOT="$v"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --cascade --agents-json "$v/gone.json"
   assert_success
   refute_output --partial "stale-dependents"
@@ -1107,7 +1119,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: an FN root is reset, while a dependent RE is skipped and named stale" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   # The named target is always reset, cascade or not; only DEPENDENT side-effect stages are
   # skipped. RE0 is skipped, stays completed, and is therefore genuinely stale — which is the
   # discriminator between "in the graph" and "in the reset set".
@@ -1127,7 +1139,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay: --cascade and --agents-json are rejected on the other ledger ops" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV1 pending --cascade
   assert_failure 2
   assert_output --partial "apply to --task-replay only"
@@ -1138,7 +1150,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: a blocked member refuses the WHOLE cascade before any write" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   # Park QA0 (a mid-cascade member) rather than the root.
   jq '.tasks.QA0.status = "in_progress"
       | .facts.dispatched_agents += [{"stage":"QA","task_id":"QA0",
@@ -1154,7 +1166,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay cascade: a blocked_by cycle terminates and still resets the closure" {
-  local w; w="$(mk_replay_wd state.cycle.json)"; cd "$w"
+  local w; w="$(mk_replay_wd state.cycle.json)"; cd "$w"; export WORKSPACE_ROOT="$w"
   # DR0 ↔ QA0 point at each other; blocked_by has no acyclicity enforcement, so the
   # walk must terminate on the visited set + task-count bound, not on graph shape.
   # No timeout(1) on macOS: termination is the assertion, so a hang fails the suite
@@ -1167,7 +1179,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay: a directly named FN target is allowed but warns about the side effect" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay FN0 --agents-json "$w/gone.json"
   assert_success
   assert_output --partial "replay warning: side-effect-target"
@@ -1176,7 +1188,7 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
 }
 
 @test "replay: replaying an already-clean task is idempotent" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
   cp .context/state.json snap
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
@@ -1274,14 +1286,164 @@ two_open_dv() {
 # facts.verdicts mirror and sweep-stub defaults.
 # ---------------------------------------------------------------------------
 
-@test "verdicts: a completion mirrors the stage verdict into facts.verdicts[CODE]" {
+@test "verdicts: a completion mirrors the stage verdict into facts.verdicts[TASK_ID] and the derived facts.verdicts[CODE]" {
   # The schema has carried facts.verdicts since v2 with no writer at all, so every
   # consumer reading it saw an empty object no matter how many stages completed.
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0.md
   assert_success
-  run jq -r '.facts.verdicts.DV' .context/state.json
-  assert_output "ok"
+  run jq -r '.facts.verdicts.DV0 + "/" + .facts.verdicts.DV' .context/state.json
+  assert_output "ok/ok"
+}
+
+@test "verdict refused: every caller shape refuses before any write, artifact has handoff: with no verdict" {
+  cd "$WD"
+  cat > .context/no-verdict.md <<'EOART'
+---
+handoff:
+  stage: DV
+  summary: "no verdict fixture"
+---
+
+# Development
+EOART
+  local before; before="$(shasum .context/state.json)"
+  # Every shape below must hit the SAME refusal: the verdict guard fires ahead of --via, --prev,
+  # --allow-missing-artifact and --facts, none of which govern a found-but-invalid artifact.
+  local shapes=(
+    ""
+    "--prev PL"
+    "--via hook"
+    "--via step6_5"
+    "--allow-missing-artifact"
+    '--facts {"files_modified":["x"]}'
+  )
+  local shape extra
+  for shape in "${shapes[@]}"; do
+    extra=()
+    [[ -n "$shape" ]] && read -ra extra <<< "$shape"
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0 --artifact .context/no-verdict.md "${extra[@]}"
+    assert_failure 3
+    assert_output --partial "verdict refused"
+    local after; after="$(shasum .context/state.json)"
+    [ "$before" = "$after" ] || fail "state.json changed for shape [$shape]: $(diff <(printf '%s' "$before") <(printf '%s' "$after"))"
+  done
+}
+
+@test "verdict refused: artifact with no frontmatter block at all still refuses under --stage" {
+  cd "$WD"
+  printf '# Development\n\nNo frontmatter block in this artifact.\n' > .context/plain.md
+  local before; before="$(shasum .context/state.json)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/plain.md
+  assert_failure 3
+  assert_output --partial "verdict refused"
+  local after; after="$(shasum .context/state.json)"
+  [ "$before" = "$after" ]
+}
+
+@test "verdict refused: an unknown verdict string is refused the same as a missing one" {
+  cd "$WD"
+  cat > .context/bad-verdict.md <<'EOART'
+---
+handoff:
+  stage: DV
+  verdict: conditional
+  summary: "unknown verdict fixture"
+---
+
+# Development
+EOART
+  local before; before="$(shasum .context/state.json)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/bad-verdict.md
+  assert_failure 3
+  assert_output --partial "verdict refused"
+  local after; after="$(shasum .context/state.json)"
+  [ "$before" = "$after" ]
+}
+
+@test "verdicts: DR0 stays off SKILL.md's readiness query while DV0 is blocked, escalated or failed" {
+  # Extracted rather than duplicated by hand: a hand-copied query drifts from the doc and
+  # stops testing what an agent actually runs. Anti-vacuity: fail loud if extraction breaks.
+  local query
+  query="$(awk '
+      /^#### Readiness is mechanical/ { found = 1 }
+      found && /^> ```bash/ { infence = 1; next }
+      infence && /^> ```$/ { exit }
+      infence { sub(/^> ?/, ""); print }
+    ' "$PLUGIN_ROOT/skills/worktask/SKILL.md")"
+  [ -n "$query" ] || fail "readiness query extraction from SKILL.md#Readiness-is-mechanical came back empty"
+
+  local w; w="$(mk_tmpworkdir)"
+  mkdir -p "$w/.context/logs"
+  cd "$w"
+  export WORKSPACE_ROOT="$w"
+
+  local verdict
+  for verdict in blocked escalate fail; do
+    jq -n '{version:2, worktask_id:"readiness-fixture", plan_file:".context/planning-0.md",
+        platform:"all", run_index:0,
+        tasks:{DV0:{status:"pending"}, DR0:{status:"pending", blocked_by:["DV0"]}},
+        facts:{files_modified:[],tests_added:[],decisions:[],open_questions:[],verdicts:{}},
+        handoffs:{}}' > .context/state.json
+    cat > .context/development-0.md <<EOART
+---
+handoff:
+  stage: DV
+  verdict: ${verdict}
+  summary: "readiness fixture"
+---
+
+# Development
+EOART
+    run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0 --artifact .context/development-0.md
+    run bash -c "$query"
+    refute_output --partial "DR0"
+  done
+
+  # Control: a passing verdict clears the block and DR0 becomes ready.
+  jq -n '{version:2, worktask_id:"readiness-fixture", plan_file:".context/planning-0.md",
+      platform:"all", run_index:0,
+      tasks:{DV0:{status:"pending"}, DR0:{status:"pending", blocked_by:["DV0"]}},
+      facts:{files_modified:[],tests_added:[],decisions:[],open_questions:[],verdicts:{}},
+      handoffs:{}}' > .context/state.json
+  cat > .context/development-0.md <<'EOART'
+---
+handoff:
+  stage: DV
+  verdict: pass
+  summary: "readiness fixture control"
+---
+
+# Development
+EOART
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0 --artifact .context/development-0.md
+  assert_success
+  run bash -c "$query"
+  assert_output --partial "DR0"
+}
+
+@test "no ledger resolution: cwd is never a fallback, even with a real ledger under ./.context" {
+  local tmp; tmp="$(mk_tmpworkdir)"
+  mkdir -p "$tmp/.context/logs"
+  cp "$FIXTURES/worktask/state.sample.json" "$tmp/.context/state.json"
+  cd "$tmp"
+  local before; before="$(shasum .context/state.json)"
+
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"files_modified":["x"]}'
+  assert_failure 1
+  local after1; after1="$(shasum .context/state.json)"
+  [ "$before" = "$after1" ]
+
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" \
+    bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0
+  # Unresolved-root contract: a stage patch either no-ops (0) or, on the documented
+  # self-patch signature, refuses loudly (3) — never a cwd fallback either way.
+  [[ "$status" -eq 0 || "$status" -eq 3 ]] || fail "unexpected status $status: $output"
+  local after2; after2="$(shasum .context/state.json)"
+  [ "$before" = "$after2" ]
 }
 
 @test "sweep: a stub is stored with stage and status filled, never null" {
@@ -1371,7 +1533,7 @@ two_open_dv() {
   cd "$WD"
   local long; long="$(printf 'x%.0s' $(seq 1 400))"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-create ET0 \
-    --metadata "$(jq -nc --arg d "$long" '{stage:"ET",agent:"corpflow:ethics-reviewer",description:$d}')"
+    --metadata "$(_r9_meta "$(jq -nc --arg d "$long" '{stage:"ET",agent:"corpflow:ethics-reviewer",description:$d}')")"
   assert_success
   run jq -r '.tasks.ET0.metadata.description | length' .context/state.json
   assert_output "240"
@@ -1388,7 +1550,7 @@ two_open_dv() {
 @test "task description: a value inside the cap is stored byte-for-byte" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-create ET1 \
-    --metadata '{"stage":"ET","description":"short and unchanged"}'
+    --metadata "$(_r9_meta '{"stage":"ET","description":"short and unchanged"}')"
   assert_success
   run jq -r '.tasks.ET1.metadata.description' .context/state.json
   assert_output "short and unchanged"
@@ -1412,9 +1574,9 @@ two_open_dv() {
 
 @test "ledger ops: create seeds pending, block unions edges, status transitions" {
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR","agent":"corpflow:technical-lead"}')"
   # Twice on purpose: blocked_by is a union, so the repeat must not duplicate DV0.
   bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0,DV1
   bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0
@@ -1426,26 +1588,67 @@ two_open_dv() {
 
 @test "ledger ops: a duplicate --task-create is a no-op that never clobbers metadata" {
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"clobbered":true}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"clobbered":true}')"
   assert_success
   run jq -c '[.tasks.DV0.metadata.agent, (.tasks.DV0.metadata | has("clobbered"))]' .context/state.json
   assert_output '["corpflow:developer",false]'
 }
 
-@test "ledger ops: --task-create without --metadata defaults to an empty object" {
+@test "task-create: a bare non-PL/IR --task-create is refused for missing metadata keys" {
   cd "$WD"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create QA0
+  local before
+  before="$(shasum .context/state.json | cut -d' ' -f1)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0
+  assert_failure 2
+  assert_output --partial "metadata missing required key(s): effort,isolation,base_ref,requires_screenshots,workspace_path"
+  [ "$(shasum .context/state.json | cut -d' ' -f1)" = "$before" ] \
+    || fail "a refused --task-create must leave state.json byte-identical"
+}
+
+@test "task-create: bare PL0/IR0 --task-create is exempt and defaults to an empty object" {
+  cd "$WD"
+  jq -n '{version:2, worktask_id:"fresh", plan_file:".context/planning-0.md",
+      platform:"all", run_index:0, tasks:{},
+      facts:{files_modified:[],tests_added:[],decisions:[],open_questions:[],verdicts:{}},
+      handoffs:{}}' > .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create PL0
   assert_success
-  run jq -c '[.tasks.QA0.status, .tasks.QA0.metadata]' .context/state.json
+  run jq -c '[.tasks.PL0.status, .tasks.PL0.metadata]' .context/state.json
   assert_output '["pending",{}]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create IR0
+  assert_success
+  run jq -c '[.tasks.IR0.status, .tasks.IR0.metadata]' .context/state.json
+  assert_output '["pending",{}]'
+}
+
+@test "task-create: a DV0 row missing only base_ref is refused, naming just that key" {
+  cd "$WD"
+  local before
+  before="$(shasum .context/state.json | cut -d' ' -f1)"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 \
+    --metadata '{"effort":"high","isolation":"worktree","requires_screenshots":false,"workspace_path":"/tmp/wt"}'
+  assert_failure 2
+  assert_output --partial "metadata missing required key(s): base_ref"
+  [[ "$output" != *"base_ref,"* ]] || fail "named more than base_ref: $output"
+  [ "$(shasum .context/state.json | cut -d' ' -f1)" = "$before" ] \
+    || fail "a refused --task-create must leave state.json byte-identical"
+}
+
+@test "task-create: requires_screenshots:false counts as present, workspace_path:\"\" counts as missing" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 \
+    --metadata "$(_r9_meta '{"workspace_path":""}')"
+  assert_failure 2
+  assert_output --partial "metadata missing required key(s): workspace_path"
+  [[ "$output" != *"requires_screenshots"* ]] || fail "requires_screenshots:false must count as present: $output"
 }
 
 @test "ledger ops: --task-unblock subtracts exactly the named edge" {
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata '{"stage":"DV"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV1 --metadata "$(_r9_meta '{"stage":"DV"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR"}')"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0,DV1
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-unblock DR0 --off DV1
   assert_success
@@ -1455,8 +1658,8 @@ two_open_dv() {
 
 @test "ledger ops: --task-unblock of an edge that was never set is a no-op success" {
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata '{"stage":"DR"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR"}')"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-block DR0 --on DV0
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-unblock DR0 --off ST0
   assert_success
@@ -1478,7 +1681,7 @@ two_open_dv() {
   # autovivify a ghost through its .tasks[\$id] assignment. The stderr match pins WHICH
   # guard fired — a bare non-zero exit would also be satisfied by a parse error.
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata '{"stage":"DV"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV"}')"
   cp .context/state.json snap
   local op
   for op in "--task-status FN0 pending" "--task-block FN0 --on DV0" \
@@ -1720,7 +1923,7 @@ exit 0'
 # carried the guard, which is why the two disagreed. Regression for that split.
 @test "regression: a --state with no directory component still writes (atomic_apply)" {
   cd "$WD/.context"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --state state.json --task-create ET0 --metadata '{"agent":"x"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state state.json --task-create ET0 --metadata "$(_r9_meta '{"agent":"x"}')"
   assert_success
   refute_output --partial "Not a directory"
   run jq -r '.tasks.ET0.status' state.json
@@ -1731,8 +1934,8 @@ exit 0'
   cd "$WD/.context"
   cp state.json bare.json
   cp state.json dotted.json
-  bash "$PLUGIN_ROOT/$SCRIPT" --state bare.json     --task-create ET0 --metadata '{"agent":"x"}'
-  bash "$PLUGIN_ROOT/$SCRIPT" --state ./dotted.json --task-create ET0 --metadata '{"agent":"x"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --state bare.json     --task-create ET0 --metadata "$(_r9_meta '{"agent":"x"}')"
+  bash "$PLUGIN_ROOT/$SCRIPT" --state ./dotted.json --task-create ET0 --metadata "$(_r9_meta '{"agent":"x"}')"
   run diff <(jq -S . bare.json) <(jq -S . dotted.json)
   assert_success
 }
@@ -1817,7 +2020,7 @@ exit 0'
 }
 
 @test "SR: --task-replay refuses a symlinked audit.jsonl and still applies the reset" {
-  local w; w="$(mk_replay_wd)"; cd "$w"
+  local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   mkdir -p "$w/target-dir"
   ln -s "$w/target-dir/escaped.txt" "$w/.context/logs/audit.jsonl"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV1 --agents-json "$w/gone.json"
@@ -1840,7 +2043,7 @@ exit 0'
   i=0
   for tier in $EFFORT_ENUM; do
     run bash "$PLUGIN_ROOT/$SCRIPT" --task-create "QA$i" \
-      --metadata "{\"stage\":\"QA\",\"model\":\"sonnet\",\"effort\":\"$tier\"}"
+      --metadata "$(_r9_meta "$(jq -cn --arg t "$tier" '{stage:"QA",model:"sonnet",effort:$t}')")"
     assert_success
     run jq -r ".tasks.QA$i.metadata.effort" .context/state.json
     assert_output "$tier"
@@ -1851,7 +2054,7 @@ exit 0'
 @test "task-create refuses an effort that is not on the ladder" {
   cd "$WD"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-create AR9 \
-    --metadata '{"stage":"AR","model":"opus","effort":"ultra"}'
+    --metadata "$(_r9_meta '{"stage":"AR","model":"opus","effort":"ultra"}')"
   assert_failure 2
   assert_output --partial "invalid effort: ultra"
   # The refusal must leave nothing behind, or a retry hits the idempotent-create short-circuit.
@@ -1862,7 +2065,7 @@ exit 0'
 @test "task-meta refuses an off-ladder effort and leaves the row untouched" {
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR9 \
-    --metadata '{"stage":"DR","model":"opus","effort":"high"}'
+    --metadata "$(_r9_meta '{"stage":"DR","model":"opus","effort":"high"}')"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR9 --set '{"effort":"turbo"}'
   assert_failure 2
   assert_output --partial "invalid effort: turbo"
@@ -1874,7 +2077,7 @@ exit 0'
   # `.effort // empty` treated both as a missing key, which let a required field be erased.
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-create DR8 \
-    --metadata '{"stage":"DR","model":"opus","effort":"high"}'
+    --metadata "$(_r9_meta '{"stage":"DR","model":"opus","effort":"high"}')"
   for bad in null false; do
     run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR8 --set "{\"effort\":$bad}"
     assert_failure 2
@@ -1886,7 +2089,7 @@ exit 0'
 
 @test "a metadata write without an effort key is unaffected by the gate" {
   cd "$WD"
-  bash "$PLUGIN_ROOT/$SCRIPT" --task-create SR9 --metadata '{"stage":"SR","model":"opus"}'
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create SR9 --metadata "$(_r9_meta '{"stage":"SR","model":"opus"}')"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta SR9 --set '{"model":"sonnet"}'
   assert_success
   run jq -r '.tasks.SR9.metadata.model' .context/state.json
@@ -1897,7 +2100,7 @@ exit 0'
   # --task-status/--task-block parse --set globally; the gate must not reach them.
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --task-create DC9 \
-    --metadata '{"stage":"DC","model":"haiku","effort":"low"}'
+    --metadata "$(_r9_meta '{"stage":"DC","model":"haiku","effort":"low"}')"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DC9 completed
   assert_success
   run jq -r '.tasks.DC9.status' .context/state.json
@@ -1910,7 +2113,7 @@ exit 0'
   . "$PLUGIN_ROOT/skills/worktask/scripts/effort-ladder.sh"
   bumped=$(effort_for_resolver high opus)
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV9 \
-    --metadata "{\"stage\":\"DV\",\"model\":\"opus\",\"effort\":\"$bumped\"}"
+    --metadata "$(_r9_meta "$(jq -cn --arg e "$bumped" '{stage:"DV",model:"opus",effort:$e}')")"
   assert_success
   run jq -r '.tasks.DV9.metadata.effort' .context/state.json
   assert_output "xhigh"

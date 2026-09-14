@@ -22,12 +22,22 @@ run_self_test() {
 
   cd "$td"
   mkdir -p .context/logs
+  # Fixtures are non-git temp dirs: without a declared root the ladder's rank 5/6 both
+  # miss (no enclosing git repo, no resolver hit), and every case silently no-ops.
+  export WORKSPACE_ROOT="$td"
 
   # ---- Fixture helpers ----
   make_state() {
     cat > .context/state.json << 'EOSTATE'
 {"version":2,"worktask_id":"selftest","plan_file":".context/planning-0.md","platform":"all","run_index":0,"tasks":{"PL0":{"status":"completed","verdict":"ok"}},"facts":{"files_modified":[],"tests_added":[],"decisions":[],"open_questions":[],"verdicts":{"PL":"ok"}},"handoffs":{}}
 EOSTATE
+  }
+
+  # Every non-PL/IR --task-create row needs the five dispatch-shape keys, so
+  # fixtures merge them in rather than restating them at every call site.
+  _r9_meta() {
+    jq -cn --argjson x "${1:-null}" \
+      '{effort:"high",isolation:"worktree",base_ref:"origin/develop",requires_screenshots:false,workspace_path:"/tmp/wt"} + ($x // {})'
   }
 
   # ---- T1: explicit --artifact path, frontmatter present ----
@@ -247,7 +257,7 @@ EOART
 
   # ---- T9: B3 bounds — decisions clamp to newest-8 PER TASK, dispatched_agents to 6 ----
   # Seed 10 PL0 decisions + 10 AR0 decisions + 8 dispatched_agents (mix launched/completed),
-  # then patch any stage; atomic_merge must clamp at the single chokepoint, and the two
+  # then patch any stage; atomic_apply must clamp at the single chokepoint, and the two
   # decision buckets must survive each other — a global ring keeps 8 of the 20 in total.
   jq -n '
     {version:2, worktask_id:"selftest", plan_file:".context/planning-0.md",
@@ -395,11 +405,11 @@ EOART
   # id) moved to state-patch.bats — the seven "ledger ops:" arms. Only the state
   # they left behind is kept, because T15 reads it and never seeds its own.
   make_state
-  bash "$SELF" --task-create DV0 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
-    && bash "$SELF" --task-create DV1 --metadata '{"stage":"DV","agent":"corpflow:developer"}' \
-    && bash "$SELF" --task-create DR0 --metadata '{"stage":"DR","agent":"corpflow:technical-lead"}' \
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" \
+    && bash "$SELF" --task-create DV1 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" \
+    && bash "$SELF" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR","agent":"corpflow:technical-lead"}')" \
     && bash "$SELF" --task-block DR0 --on DV0,DV1 \
-    && bash "$SELF" --task-create QA0 \
+    && bash "$SELF" --task-create QA0 --metadata "$(_r9_meta)" \
     && bash "$SELF" --task-unblock DR0 --off DV1 \
     && bash "$SELF" --task-status DV0 in_progress \
     || {
@@ -538,7 +548,7 @@ EOSTATE
   printf '%s\n' '[{"id":"sess-dv0","sessionId":"sess-dv0deadbeef","name":"dv","state":"active"}]' \
     > agents-busy.json
   bash "$SELF" --task-create DV0 \
-    --metadata '{"stage":"DV","agent":"corpflow:developer","retry_count":3,"error_escalated_to":"AR"}' \
+    --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer","retry_count":3,"error_escalated_to":"AR"}')" \
     > /dev/null
   bash "$SELF" --task-status DV0 in_progress > /dev/null
   # An in_progress task with no dispatch row classifies no-dispatch-record, which the guard
@@ -765,7 +775,7 @@ EOSTATE
   # ---- T26: metadata.description is capped on the two ledger write paths ----
   make_state
   T26_LONG=$(printf 'x%.0s' $(seq 1 400))
-  bash "$SELF" --task-create DV9 --metadata "$(jq -nc --arg d "$T26_LONG" '{stage:"DV",description:$d}')" > /dev/null
+  bash "$SELF" --task-create DV9 --metadata "$(_r9_meta "$(jq -nc --arg d "$T26_LONG" '{stage:"DV",description:$d}')")" > /dev/null
   bash "$SELF" --task-meta DV9 --set "$(jq -nc --arg d "$T26_LONG" '{description:$d}')" > /dev/null
   if jq -e '(.tasks.DV9.metadata.description | length) == 240
             and (.tasks.DV9.metadata.description | endswith("…"))
@@ -774,6 +784,370 @@ EOSTATE
   else
     printf 'T26: description cap did not apply: FAIL\n' >&2
     jq -c '.tasks.DV9' .context/state.json >&2
+    exit 1
+  fi
+
+  # ---- T27: verdict → status seam matches a literal table, across all 9 verdicts ----
+  # The table is retyped here rather than calling verdict_status(): reusing the function
+  # under test cannot catch a regression in its own map.
+  make_state
+  t27_write_art() {
+    cat > ".context/t27-${1}.md" << EOART
+---
+handoff:
+  stage: DV
+  verdict: ${2}
+  summary: "self-test T27 ${2}"
+  files_touched: [a.md]
+  next_stage_focus: "n/a"
+  refs: { dev: development.md#files-changed }
+---
+
+# T27 ${2}
+EOART
+  }
+  t27_n=0
+  for t27_v in ok pass go approve blocked escalate fail reject no-go; do
+    t27_n=$((t27_n + 1))
+    t27_id="V${t27_n}"
+    t27_write_art "$t27_id" "$t27_v"
+    bash "$SELF" --stage DV --task-id "$t27_id" --artifact ".context/t27-${t27_id}.md" > /dev/null \
+      || {
+        printf 'T27: state-patch failed for verdict %s\n' "$t27_v" >&2
+        exit 1
+      }
+  done
+  if jq -e --argjson seam '
+      {"ok":"completed","pass":"completed","go":"completed","approve":"completed",
+       "blocked":"blocked","escalate":"blocked",
+       "fail":"pending","reject":"pending","no-go":"pending"}' '
+      ([.tasks[] | select(.verdict) | select(.status != $seam[.verdict])] | length == 0)
+      and ([.tasks[] | select(.verdict == "fail" or .verdict == "reject" or .verdict == "no-go")
+            | select((.metadata.gate_from_stage // "") == "")] | length == 0)
+    ' .context/state.json > /dev/null; then
+    printf 'T27: 9-verdict seam matches the literal table, pending rows carry gate_from_stage: ok\n'
+  else
+    printf 'T27: seam mismatch: FAIL\n' >&2
+    jq -c '.tasks' .context/state.json >&2
+    exit 1
+  fi
+
+  # An unrecognized verdict string (legacy or typo) refuses whole, never guesses a status.
+  t27_write_art cond conditional
+  cp .context/state.json .context/state.json.snap27
+  t27c_rc=0
+  bash "$SELF" --stage DV --task-id Vcond --artifact .context/t27-cond.md > /dev/null 2>&1 \
+    || t27c_rc=$?
+  if [[ "$t27c_rc" == "3" ]] && diff -q .context/state.json .context/state.json.snap27 > /dev/null; then
+    printf 'T27: an unrecognized verdict ("conditional") refuses with exit 3, state byte-unchanged: ok\n'
+  else
+    printf 'T27: unrecognized verdict must refuse (rc=%s): FAIL\n' "$t27c_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap27
+
+  # ---- T28: a missing verdict refuses whole, exit 3, state byte-unchanged ----
+  cat > .context/t28.md << 'EOART'
+---
+handoff:
+  stage: DV
+  summary: "self-test T28 missing verdict"
+  files_touched: [a.md]
+  next_stage_focus: "n/a"
+  refs: { dev: development.md#files-changed }
+---
+
+# T28
+EOART
+  cp .context/state.json .context/state.json.snap28
+  t28_rc=0
+  bash "$SELF" --stage DV --task-id V28 --artifact .context/t28.md > /dev/null 2>&1 || t28_rc=$?
+  if [[ "$t28_rc" == "3" ]] && diff -q .context/state.json .context/state.json.snap28 > /dev/null; then
+    printf 'T28: missing verdict refuses with exit 3, state byte-unchanged: ok\n'
+  else
+    printf 'T28: missing verdict must refuse (rc=%s): FAIL\n' "$t28_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap28
+
+  # ---- T29: derived worst-verdict key across a split stage's instances ----
+  make_state
+  t27_write_art dva pass
+  bash "$SELF" --stage DV --task-id DV0 --artifact .context/t27-dva.md > /dev/null
+  if jq -e '.facts.verdicts.DV0 == "pass" and .facts.verdicts.DV == "pass"' \
+    .context/state.json > /dev/null; then
+    printf 'T29: single reporting instance: DV0 and derived DV both pass: ok\n'
+  else
+    printf 'T29: DV0-only derivation wrong: FAIL\n' >&2
+    exit 1
+  fi
+
+  t27_write_art dvb fail
+  bash "$SELF" --stage DV --task-id DV1 --artifact .context/t27-dvb.md > /dev/null
+  if jq -e '.facts.verdicts.DV0 == "pass" and .facts.verdicts.DV1 == "fail"
+            and .facts.verdicts.DV == "fail"' .context/state.json > /dev/null; then
+    printf 'T29: DV1 fail outranks DV0 pass in the derived DV key: ok\n'
+  else
+    printf 'T29: worst-of-two derivation wrong: FAIL\n' >&2
+    jq -c '.facts.verdicts' .context/state.json >&2
+    exit 1
+  fi
+
+  t27_write_art dvc escalate
+  bash "$SELF" --stage DV --task-id DV1 --artifact .context/t27-dvc.md > /dev/null
+  if jq -e '.facts.verdicts.DV1 == "escalate" and .facts.verdicts.DV == "escalate"' \
+    .context/state.json > /dev/null; then
+    printf 'T29: DV1 escalate outranks fail and pass in the derived DV key: ok\n'
+  else
+    printf 'T29: escalate-outranks derivation wrong: FAIL\n' >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-create DV2 --metadata "$(_r9_meta '{"stage":"DV"}')" > /dev/null
+  if jq -e '.facts.verdicts.DV == "escalate" and (.tasks.DV2.verdict // "") == ""' \
+    .context/state.json > /dev/null; then
+    printf 'T29: a verdict-less DV2 row is ignored by the derivation: ok\n'
+  else
+    printf 'T29: verdict-less row must not affect the derived key: FAIL\n' >&2
+    exit 1
+  fi
+
+  # A fail row is a PENDING status; re-patching it at the same verdict must still be a no-op.
+  t27_write_art fail2 fail
+  bash "$SELF" --stage DV --task-id V29 --artifact .context/t27-fail2.md > /dev/null
+  cp .context/state.json .context/state.json.snap29
+  bash "$SELF" --stage DV --task-id V29 --artifact .context/t27-fail2.md > /dev/null
+  if diff -q .context/state.json .context/state.json.snap29 > /dev/null; then
+    printf 'T29: re-patching a fail artifact twice is idempotent on the second run: ok\n'
+  else
+    printf 'T29: re-patching a fail artifact was not idempotent: FAIL\n' >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap29
+
+  # ---- T30: --claim maps pending/blocked -> in_progress + claimed_at, refuses settled rows ----
+  make_state
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --claim DV0 || {
+    printf 'T30: --claim returned non-zero\n' >&2
+    exit 1
+  }
+  if jq -e '.tasks.DV0.status == "in_progress"
+            and (.tasks.DV0.claimed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
+    .context/state.json > /dev/null; then
+    printf 'T30: pending -> in_progress + claimed_at stamp: ok\n'
+  else
+    printf 'T30: claim stamp: FAIL\n' >&2
+    jq -c '.tasks.DV0' .context/state.json >&2
+    exit 1
+  fi
+  cp .context/state.json .context/state.json.snap30
+  bash "$SELF" --claim DV0 > /dev/null
+  if diff -q .context/state.json .context/state.json.snap30 > /dev/null; then
+    printf 'T30: re-claim is byte-identical: ok\n'
+  else
+    printf 'T30: re-claim must not change claimed_at: FAIL\n' >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap30
+  bash "$SELF" --task-status DV0 completed > /dev/null
+  cp .context/state.json .context/state.json.snap30b
+  st30_rc=0
+  bash "$SELF" --claim DV0 > /dev/null 2>&1 || st30_rc=$?
+  if [[ "$st30_rc" -eq 4 ]] && diff -q .context/state.json .context/state.json.snap30b > /dev/null; then
+    printf 'T30: claim on a settled row refuses with exit 4, state byte-unchanged: ok\n'
+  else
+    printf 'T30: claim-on-settled guard (rc=%s): FAIL\n' "$st30_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap30b
+  st30c_rc=0
+  bash "$SELF" --claim ET9 > /dev/null 2>&1 || st30c_rc=$?
+  if [[ "$st30c_rc" -eq 1 ]]; then
+    printf 'T30: claim on an unknown id exits 1: ok\n'
+  else
+    printf 'T30: claim unknown-id guard (rc=%s): FAIL\n' "$st30c_rc" >&2
+    exit 1
+  fi
+
+  # ---- T31: --dispatch upserts facts.dispatched_agents by task_id, clamps 6-launched-newest ----
+  make_state
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --dispatch DV0 sess-dv0 launched || {
+    printf 'T31: --dispatch returned non-zero\n' >&2
+    exit 1
+  }
+  if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched"}]' \
+    .context/state.json > /dev/null; then
+    printf 'T31: first dispatch appends the row: ok\n'
+  else
+    printf 'T31: dispatch append: FAIL\n' >&2
+    jq -c '.facts.dispatched_agents' .context/state.json >&2
+    exit 1
+  fi
+  bash "$SELF" --dispatch DV0 sess-dv0 completed > /dev/null
+  if jq -e '(.facts.dispatched_agents | length) == 1
+            and .facts.dispatched_agents[0].status == "completed"
+            and .facts.dispatched_agents[0].agent_id == "sess-dv0"' \
+    .context/state.json > /dev/null; then
+    printf 'T31: same agent_id updates status in place: ok\n'
+  else
+    printf 'T31: same-agent update: FAIL\n' >&2
+    exit 1
+  fi
+  bash "$SELF" --dispatch DV0 sess-dv0b launched > /dev/null
+  if jq -e '(.facts.dispatched_agents | length) == 1
+            and .facts.dispatched_agents[0].agent_id == "sess-dv0b"
+            and .facts.dispatched_agents[0].status == "launched"' \
+    .context/state.json > /dev/null; then
+    printf 'T31: a different agent_id replaces the row at the tail: ok\n'
+  else
+    printf 'T31: agent_id replacement: FAIL\n' >&2
+    exit 1
+  fi
+
+  make_state
+  for t31_i in 0 1 2 3 4 5 6; do
+    bash "$SELF" --task-create "DV${t31_i}" --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+    bash "$SELF" --dispatch "DV${t31_i}" "sess-dv${t31_i}" launched > /dev/null
+  done
+  if jq -e '(.facts.dispatched_agents | length) == 6
+            and ([.facts.dispatched_agents[].task_id] == ["DV1","DV2","DV3","DV4","DV5","DV6"])' \
+    .context/state.json > /dev/null; then
+    printf 'T31: 7 distinct launched task ids clamp to the 6 newest: ok\n'
+  else
+    printf 'T31: launched clamp: FAIL\n' >&2
+    jq -c '.facts.dispatched_agents | map(.task_id)' .context/state.json >&2
+    exit 1
+  fi
+
+  st31a_rc=0
+  bash "$SELF" --dispatch DV0 sess-x bogus > /dev/null 2>&1 || st31a_rc=$?
+  if [[ "$st31a_rc" -eq 2 ]]; then
+    printf 'T31: an invalid dispatch status exits 2: ok\n'
+  else
+    printf 'T31: bad-status guard (rc=%s): FAIL\n' "$st31a_rc" >&2
+    exit 1
+  fi
+
+  bash "$SELF" --task-create QA0 --metadata "$(_r9_meta)" > /dev/null
+  st31b_rc=0
+  bash "$SELF" --dispatch QA0 sess-qa0 launched > /dev/null 2>&1 || st31b_rc=$?
+  if [[ "$st31b_rc" -eq 2 ]]; then
+    printf 'T31: a row without metadata.agent exits 2: ok\n'
+  else
+    printf 'T31: missing-metadata.agent guard (rc=%s): FAIL\n' "$st31b_rc" >&2
+    exit 1
+  fi
+
+  st31c_rc=0
+  bash "$SELF" --dispatch ET9 sess-x launched > /dev/null 2>&1 || st31c_rc=$?
+  if [[ "$st31c_rc" -eq 1 ]]; then
+    printf 'T31: dispatch on an unknown id exits 1: ok\n'
+  else
+    printf 'T31: dispatch unknown-id guard (rc=%s): FAIL\n' "$st31c_rc" >&2
+    exit 1
+  fi
+
+  # ---- T32: --files-read upserts facts.files_read, clamps to newest 30, rejects bad paths ----
+  make_state
+  bash "$SELF" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR","agent":"corpflow:technical-lead"}')"
+  bash "$SELF" --files-read DR0 a.sh b.sh || {
+    printf 'T32: --files-read returned non-zero\n' >&2
+    exit 1
+  }
+  bash "$SELF" --files-read DR0 b.sh c.sh > /dev/null
+  if jq -e '(.facts.files_read | length) == 3
+            and ([.facts.files_read[].path] == ["a.sh","b.sh","c.sh"])
+            and (([.facts.files_read[].stage] | unique) == ["DR"])' \
+    .context/state.json > /dev/null; then
+    printf 'T32: an overlapping path collapses to one entry at the newest position, stage from id: ok\n'
+  else
+    printf 'T32: files-read overlap/positioning: FAIL\n' >&2
+    jq -c '.facts.files_read' .context/state.json >&2
+    exit 1
+  fi
+
+  make_state
+  bash "$SELF" --task-create DR1 --metadata "$(_r9_meta '{"stage":"DR","agent":"corpflow:technical-lead"}')" > /dev/null
+  t32_paths=()
+  for t32_i in $(seq 1 31); do t32_paths+=("file${t32_i}.sh"); done
+  bash "$SELF" --files-read DR1 "${t32_paths[@]}" > /dev/null || {
+    printf 'T32: 31-path --files-read returned non-zero\n' >&2
+    exit 1
+  }
+  if jq -e '(.facts.files_read | length) == 30
+            and (.facts.files_read[0].path == "file2.sh")
+            and (.facts.files_read[-1].path == "file31.sh")' \
+    .context/state.json > /dev/null; then
+    printf 'T32: 31 paths in one call clamp to the last 30: ok\n'
+  else
+    printf 'T32: files-read 30-clamp: FAIL\n' >&2
+    jq -c '.facts.files_read | map(.path)' .context/state.json >&2
+    exit 1
+  fi
+
+  cp .context/state.json .context/state.json.snap32
+  st32_rc=0
+  bash "$SELF" --files-read DR1 "$(printf 'bad\tpath.sh')" > /dev/null 2>&1 || st32_rc=$?
+  if [[ "$st32_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap32 > /dev/null; then
+    printf 'T32: a path containing a TAB exits 2, state byte-unchanged: ok\n'
+  else
+    printf 'T32: bad-path guard (rc=%s): FAIL\n' "$st32_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap32
+
+  # ---- T33: --facts branch is stored at facts.branch, last writer wins; non-string is fatal ----
+  make_state
+  bash "$SELF" --facts '{"branch":"feature/x"}' || {
+    printf 'T33: branch --facts returned non-zero\n' >&2
+    exit 1
+  }
+  if jq -e '.facts.branch == "feature/x"' .context/state.json > /dev/null; then
+    printf 'T33: a branch-only payload is stored: ok\n'
+  else
+    printf 'T33: branch storage: FAIL\n' >&2
+    exit 1
+  fi
+  cp .context/state.json .context/state.json.snap33
+  st33_rc=0
+  bash "$SELF" --facts '{"branch": 5}' > /dev/null 2>&1 || st33_rc=$?
+  if [[ "$st33_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap33 > /dev/null; then
+    printf 'T33: a non-string branch is a fatal whole-payload refusal, state byte-unchanged: ok\n'
+  else
+    printf 'T33: non-string-branch guard (rc=%s): FAIL\n' "$st33_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap33
+
+  # ---- T34: task-create key gate — bare non-PL/IR refused, PL0/IR0 exempt on a fresh ledger ----
+  make_state
+  cp .context/state.json .context/state.json.snap34
+  st34_rc=0
+  bash "$SELF" --task-create DV0 > /dev/null 2>&1 || st34_rc=$?
+  if [[ "$st34_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap34 > /dev/null; then
+    printf 'T34: a bare non-PL/IR task-create is refused, state byte-unchanged: ok\n'
+  else
+    printf 'T34: bare task-create guard (rc=%s): FAIL\n' "$st34_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snap34
+
+  jq -n '{version:2, worktask_id:"selftest", plan_file:".context/planning-0.md",
+      platform:"all", run_index:0, tasks:{},
+      facts:{files_modified:[],tests_added:[],decisions:[],open_questions:[],verdicts:{}},
+      handoffs:{}}' > .context/state.json
+  bash "$SELF" --task-create PL0 > /dev/null \
+    && bash "$SELF" --task-create IR0 > /dev/null \
+    || {
+      printf 'T34: bare PL0/IR0 create on a fresh ledger returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.PL0.metadata == {} and .tasks.IR0.metadata == {}' .context/state.json > /dev/null; then
+    printf 'T34: bare PL0/IR0 on a fresh ledger accepted with empty metadata: ok\n'
+  else
+    printf 'T34: bare PL0/IR0 metadata: FAIL\n' >&2
     exit 1
   fi
 
