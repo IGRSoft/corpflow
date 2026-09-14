@@ -17,7 +17,10 @@
 #                    own `sanitise_body`, then requires a `Test plan` heading and,
 #                    on a screenshot-requiring run, the visual-evidence helper's
 #                    audit row for THIS run index. Then runs pr-body-lint.sh over
-#                    the sanitised body (warn-only; never changes this verdict).
+#                    the sanitised body: warn-only by default; under --strict a lint
+#                    that finds, errors or cannot run blocks with a `pr_body_gate`
+#                    `blocked` row (reason pr_body_lint_findings | pr_body_lint_error |
+#                    pr_body_lint_unavailable).
 #     continuity     the worktree HEAD is an ancestor of the integration branch, else
 #                    log a diverged→cherry-pick diagnostic + audit row (never blocks).
 #                    It does NOT discriminate a wrong base: `diverged` is the normal state
@@ -72,8 +75,12 @@
 # @arg --state <path>     state.json path (default: .context/state.json).
 # @arg --context <dir>    .context dir (default: .context).
 # @arg --body <path>      Composed PR body file (required by validate-pr / pr-body / all).
+# @arg --strict           Export CORPFLOW_PR_BODY_STRICT=1: a pr-body-lint.sh failure blocks
+#                         `pr-body` (and so `all`) outside batch and incident routing.
 # @arg -h | --help        Show this header.
 #
+# @env CORPFLOW_PR_BODY_STRICT
+#                         1 => same as --strict; also read by pr-body-lint.sh itself.
 # @env FN_BASE_REF        Highest-priority integration-branch override (see resolve_base_ref).
 # @env FN_BASE_SANITY_OVERRIDE
 #                         The one sanctioned downgrade: any value other than unset/empty/
@@ -87,7 +94,8 @@
 #               scope-disabled).
 # @exitcode 1   Blocking failure (missing attachment; a file both staged and re-modified; body missing the closing keyword;
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
-#               visual-evidence evidence, or an unreachable sanitiser library;
+#               visual-evidence evidence, an unreachable sanitiser library, or under
+#               --strict a pr-body-lint.sh that found, errored or could not run;
 #               `base-sanity`: the PR diff dwarfs this run's own record of it).
 # @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body).
 # @exitcode 3   branch-lib.sh unreachable — no dispatch runs (plugin install broken).
@@ -182,6 +190,11 @@ while [[ $# -gt 0 ]]; do
     --body)
       shift
       BODY_FILE="${1:-}"
+      shift
+      ;;
+    --strict)
+      # Exported so the pr-body-lint.sh child process sees the same mode.
+      export CORPFLOW_PR_BODY_STRICT=1
       shift
       ;;
     -h | --help) usage ;;
