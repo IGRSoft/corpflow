@@ -17,7 +17,8 @@
 # @arg --assigned <path>  The workspace DV was dispatched against. When omitted, falls
 #                         back to state.json `.metadata.workspace_path`, then to
 #                         $WORKSPACE_ROOT. Unresolved ⇒ warn, never block.
-# @arg --state <path>     state.json path (default: .context/state.json).
+# @arg --state <path>     state.json path (default: resolved via
+#                         corpflow_context_dir(), never the invoking cwd).
 # @arg --quiet            Suppress advisory warnings; a mismatch still prints and blocks.
 # @arg --self-test        Run the built-in self-test and exit.
 # @arg -h | --help        Show this header.
@@ -189,7 +190,8 @@ $_wt_parent" ;;
 }
 
 ASSIGNED_ARG=""
-STATE_PATH=".context/state.json"
+STATE_PATH=""
+STATE_GIVEN=""
 QUIET=""
 CMD="check"
 
@@ -203,6 +205,7 @@ while [[ $# -gt 0 ]]; do
     --state)
       shift
       STATE_PATH="${1:-}"
+      STATE_GIVEN="1"
       shift
       ;;
     --quiet)
@@ -220,6 +223,35 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# No --state given: resolve it through the shared ladder rather than a cwd-relative
+# guess, which named the wrong tree's ledger whenever DV's cwd was not the repo root.
+# Fail CLOSED (exit 2) only on a broken install (lib unreachable / resolver unreachable,
+# rc 2) — that is a plugin defect, not an unresolved ladder. An unresolved ladder (rc 1)
+# leaves STATE_PATH empty and falls into cmd_check's existing "-f" miss, which already
+# degrades to WARN; inventing a second exit code for the same condition would just be two
+# spellings of one outcome. Self-test never reaches here: it always passes --state.
+if [[ "$CMD" == "check" && -z "$STATE_GIVEN" ]]; then
+  STATE_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/state-read-lib.sh"
+  if [ -r "$STATE_LIB_PATH" ]; then
+    # shellcheck source=../../shared/lib/state-read-lib.sh
+    # shellcheck disable=SC1090
+    . "$STATE_LIB_PATH" || {
+      printf >&2 'dv-tree-preflight: failed to source state-read-lib.sh at %s\n' "$STATE_LIB_PATH"
+      exit 2
+    }
+  else
+    printf >&2 'dv-tree-preflight: state-read-lib.sh unreachable at %s — plugin install broken\n' "$STATE_LIB_PATH"
+    exit 2
+  fi
+  CTX_DIR="" CTX_RC=0
+  CTX_DIR=$(corpflow_context_dir) || CTX_RC=$?
+  if [[ "$CTX_RC" -eq 2 ]]; then
+    printf >&2 'dv-tree-preflight: context-dir resolver unreachable — plugin install broken\n'
+    exit 2
+  fi
+  [[ -n "$CTX_DIR" ]] && STATE_PATH="$CTX_DIR/state.json"
+fi
 
 # Dispatch table rather than a straight-line main: the blocking check is the same predicate
 # a PreToolUse hook would need, so wiring one later is a new arm, not a rewrite.

@@ -614,7 +614,7 @@ fails an undeclared one.
 Each schema field maps onto the ledger (`#state-json-schema`) and the artifact anchor
 (`#anchor-allow-list`). The map is channel-agnostic: the orchestrator applies it to a typed return
 (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6), and populates the same targets
-from the artifact's `handoff:` frontmatter when there is none (F2/F3).
+from the artifact's `handoff:` frontmatter when there is none (F2; an artifact without frontmatter, F3, populates nothing).
 
 #### Map — PL, AR, TL
 
@@ -632,21 +632,26 @@ from the artifact's `handoff:` frontmatter when there is none (F2/F3).
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DV.verdict` | `tasks.DV0.verdict` | development-N.md `## deviations` (summary line) |
+| `DV.verdict` | `tasks.DV0.verdict` + `tasks.DV0.status` (verdict map) + `facts.verdicts.DV0` + derived `facts.verdicts.DV` | development-N.md `## deviations` (summary line) |
 | `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
 | `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
-| `DV.build_status` | `tasks.DV0.status` derivation | development-N.md `## deviations` |
+| `DV.build_status` | (artifact only; status follows the verdict) | development-N.md `## deviations` |
 | `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
 
 #### Map — DR, SR, QA, DC, RE
 
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DR.verdict` | `tasks.DR0.verdict` + `facts.verdicts.DR` | developer-review-N.md `## verdict` |
+| `DR.verdict` | `tasks.DR0.verdict` + `facts.verdicts.DR0` + derived `facts.verdicts.DR` | developer-review-N.md `## verdict` |
 | `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
-| `SR.*` | mirrors DR targets (`facts.verdicts.SR`) | security-review-N.md |
-| `QA.verdict` | `tasks.QA0.verdict` + `facts.verdicts.QA` | testing-N.md `## verdict` |
-| `QA.tests_passed`/`failed` | `facts.verdicts.QA` (count string) | testing-N.md `## results` |
+| `SR.*` | mirrors DR targets (`facts.verdicts.SR0`, derived `facts.verdicts.SR`) | security-review-N.md |
+| `QA.verdict` | `tasks.QA0.verdict` + `facts.verdicts.QA0` + derived `facts.verdicts.QA` | testing-N.md `## verdict` |
+| `QA.tests_passed`/`failed` | (artifact only; `facts.verdicts.*` holds verdicts, never counts) | testing-N.md `## results` |
+
+#### Map — DC, RE
+
+| Schema field | state.json target | Artifact anchor |
+|--------------|-------------------|-----------------|
 | `DC.verdict` | `tasks.DC0.verdict` | documentation-N.md `## files-changed` |
 | `DC.files_modified` | `facts.files_modified` (union) | documentation-N.md `## files-changed` |
 | `RE.verdict` | `tasks.RE0.verdict` | release-N.md `## version` |
@@ -658,10 +663,10 @@ from the artifact's `handoff:` frontmatter when there is none (F2/F3).
 |--------------|-------------------|-----------------|
 | `FN.verdict` | `tasks.FN0.verdict` | complete-summary-N.md `## summary` |
 | `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
-| `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST` | retrospective-N.md `## decision` |
+| `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST0` + derived `facts.verdicts.ST` | retrospective-N.md `## decision` |
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
-| `ET.verdict` | `tasks.ET0.verdict` + `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
+| `ET.verdict` | `tasks.ET0.verdict` + `facts.verdicts.ET0` + derived `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
 | `DV.worktree_path` | `tasks.DV0.worktree.path` | development-N.md (frontmatter `worktree_path`) |
 | `DV.worktree_branch` | `tasks.DV0.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
 
@@ -717,7 +722,9 @@ completion merge, so facts still land when that merge short-circuits as idempote
 
 Two writers, no stage agent among them: the orchestrator at `commands/worktask.md § Step 3c`, and
 `refine-branch-target.sh` at § Step A.4b (at most once per run, pre-commit, ledger-only, no git
-mutation).
+mutation). `state-patch.sh --facts '{"branch": "<name>"}'` accepts the key as a scripted channel for
+either writer: a string matching `^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,199}$`, last writer wins, any
+other value fails the payload (exit 2).
 
 The orchestrator's is an orchestrator-loop write: it parses the final `branch=<name>` stdout line
 of `branch-name.sh` and stamps it directly — `branch-name.sh` never writes state.json (single
@@ -863,7 +870,8 @@ split stage's four writers collide on one key. Full grammar: § Field notes — 
 # …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
         artifact: { type: string }
         complexity: { type: integer, minimum: 0, maximum: 50 }
-        verdict: { type: string }
+        verdict: { type: string, description: "Sets status through the verdict map below" }
+        claimed_at: { type: string, format: date-time, description: "Stamped by state-patch.sh --claim; kept on re-claim" }
         retry_count: { type: integer, minimum: 0, default: 0 }
         error_file: { type: string }
         progress:
@@ -874,6 +882,23 @@ split stage's four writers collide on one key. Full grammar: § Field notes — 
             next_batch: { type: string, description: "id of the next pending sub-batch, or absent when done" }
             updated_at: { type: string, format: date-time }
 ```
+
+##### tasks — verdict → status
+
+A stage patch sets `status` from the artifact's `handoff.verdict`; `state-patch.sh verdict_status` holds the only copy of the map.
+
+| Verdict | `status` | Also written |
+|---|---|---|
+| `ok`, `pass`, `go`, `approve` | `completed` | `metadata.gate_from_stage` deleted |
+| `blocked`, `escalate` | `blocked` | `metadata.gate_from_stage` deleted |
+| `fail`, `reject`, `no-go` | `pending` | `metadata.gate_from_stage` = the patched stage's code, on the patched row |
+| missing, or any other string | — | refused: exit 3, `state.json` byte-identical, on every caller path |
+
+##### tasks — loop-back, claim, create
+
+The patch writes only its own row. Moving a failure back to DV is the orchestrator loop's job: it copies `gate_from_stage` onto the DV row it replays. `--claim <TASK_ID>` moves a `pending`/`blocked` row to `in_progress` and stamps `claimed_at`; a re-claim is a no-op, and a settled row (`completed`/`skipped`/`failed`) exits 4 — use `--task-replay`.
+
+`--task-create` refuses a row whose metadata lacks `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (absent, `null` or `""`; `false` counts as present) with exit 2 and `state.json` untouched. `PL`/`IR` rows are exempt: PL0 is the stage that decides `base_ref` and `requires_screenshots`.
 
 #### tasks — completed_via, last_error
 
@@ -1006,10 +1031,11 @@ migration, no tolerant reader.
       verdicts:
         type: object
         additionalProperties: { type: string }
+        description: "Keyed by task id (DV0, DV1) plus a derived stage-code key (DV) holding the worst verdict among that stage's reported tasks — see field notes"
       files_read:
         type: array
         maxItems: 30
-        description: "Source files read by prior stages; DR/QA prefer git diff — see field notes"
+        description: "Source files read by prior stages; DR/QA prefer git diff. Newest 30 survive, clamped in the state-patch.sh bounds filter — see field notes"
         items:
           type: object
           required: [path, stage]
@@ -1026,7 +1052,7 @@ migration, no tolerant reader.
       dispatched_agents:
         type: array
         maxItems: 6
-        description: "OPTIONAL (additive) — see field notes. Bounded (B3): 6 survive, launched-survive-first. Clamped in state-patch.sh atomic_merge() (AD-7)."
+        description: "OPTIONAL (additive) — see field notes. Bounded (B3): 6 survive — the newest 6 launched first, free slots filled by the newest non-launched, survivors in original order. Clamped in the state-patch.sh bounds filter (AD-7)."
         items:
           type: object
           required: [stage, task_id, subagent_type, status]
@@ -1223,9 +1249,15 @@ One-sentence worktask intent, populated by PL0 from the task description (or the
 
 Source files read by prior stages. Populated by DV; consumed by DR/QA, which SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>` for any file listed. Full reads stay permitted when the diff is insufficient. Absent ⇒ normal reads (backward-compat).
 
+Scripted writer: `state-patch.sh --files-read <TASK_ID> <path>...` unions `{path, stage, lines: "all"}` — `stage` is the code of `<TASK_ID>`, a leading `./` is stripped, and the newest entry wins per path. A path that is empty, longer than 512 characters, or holds a TAB/CR/LF fails the whole call (exit 2). Past 30 entries the oldest are dropped without a spill file: this is a read hint, not a record.
+
+#### Field notes — verdicts
+
+`facts.verdicts.<TASK_ID>` is the verdict each task reported; `facts.verdicts.<CODE>` is derived in the same atomic write as the worst verdict among the `<CODE>N` rows that carry one (rows with no verdict yet are ignored, a tie goes to the highest `N`). Rank, worst first: `escalate` > `blocked` > `fail`|`reject`|`no-go` > `ok`|`pass`|`go`|`approve`; a legacy stored string outside the map ranks with `fail`. `blocked` outranks `fail` because it needs outside input while the loop repairs a `fail` itself. Existing `.DR`/`.QA`/`.DV` readers keep working unchanged. `--task-replay` keeps a row's verdict, so the stage key stays stale until that row is patched again.
+
 #### Field notes — dispatched_agents
 
-OPTIONAL (additive). Writer: the orchestrator loop ONLY. One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code), replaced on re-dispatch; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all`. No dispatch timestamp is stored (`claude agents` rows carry their own). Terminal entries (`status: completed|failed`) are eviction candidates.
+OPTIONAL (additive). Writer: the orchestrator loop ONLY, through `state-patch.sh --dispatch <TASK_ID> <agent_id> <launched|completed|failed>`, which derives `stage` from the id and `subagent_type` (plus `model_requested` when set) from the row's `metadata.agent`/`metadata.model` — a row without `metadata.agent` is refused (exit 2). One entry per `task_id` (NOT per stage — parallel DVN tracks share the stage code): the same `agent_id` updates in place, a different one replaces the entry at the tail; dispatch history stays in `audit.jsonl`. Read by resume (`resume.md` step 0) to reconcile against `claude agents --json --all`. No dispatch timestamp is stored (`claude agents` rows carry their own). Terminal entries (`status: completed|failed`) are eviction candidates.
 
 #### Field notes — capabilities
 
@@ -1304,13 +1336,13 @@ mandatory, and its absence is a hard failure rather than a recoverable mode.
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
-| F2 | state.json **present**, agent ignores it | No penalty. Agent reads the anchors it was given and writes its artifact. Orchestrator's hook patches state.json from frontmatter (or return text on F3). |
+| F2 | state.json **present**, agent ignores it | No penalty. Agent reads the anchors it was given and writes its artifact. Orchestrator's hook patches state.json from frontmatter; with no frontmatter (F3) nothing is patched. |
 
 ### Paths F3–F4
 
 | Path | Trigger | Behavior |
 |------|---------|----------|
-| F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. Derives minimal handoff: `{stage, verdict: ok, summary: <first 200 chars of return>, refs: {artifact: <path>}}`. Worktask proceeds. |
+| F3 | Agent writes artifact **without frontmatter** | Orchestrator logs WARN `frontmatter missing in <artifact>`. No handoff is derived and nothing is written: `state-patch.sh` refuses a missing verdict with exit 3 and `state.json` unchanged. The row stays `in_progress`, and `skills/worktask/SKILL.md § Step 6.5a2` resumes the stage. |
 | F4 | state.json **corrupt** (invalid JSON or schema mismatch) | Back up to `.context/state.json.corrupt.<iso-ts>`. Rebuild the **skeleton only**, then recover **exactly the one stage being patched** by delegating to `state-patch.sh` unchanged. Audit row `state_repair` in `.context/logs/audit.jsonl`. Continue. |
 
 #### F4 — partial recovery, by design {#f4-partial}

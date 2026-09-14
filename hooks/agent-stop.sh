@@ -32,8 +32,6 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 PAYLOAD=$(read_stdin)
-LOG_DIR="${CLAUDE_PROJECT_DIR:-.}/.context/logs"
-mkdir -p "$LOG_DIR"
 
 ROW=$(printf '%s' "$PAYLOAD" | jq -c \
   --arg ts "$(date -u +%FT%TZ)" \
@@ -74,6 +72,32 @@ if [ "$SELF_TEST" -eq 1 ]; then
   echo "agent-stop: self-test OK"
   exit 0
 fi
+
+# Guarded source of the shared root ladder: a truncated library is a
+# syntax error, fatal under `set -eu`, so `-e` is dropped across the source and
+# restored rather than trusting `||` to rescue it.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+if command -v corpflow_context_root > /dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CTX" ] || exit 0
+
+LOG_DIR="$CTX/logs"
+mkdir -p "$LOG_DIR"
 
 # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
 # against an arbitrary target. A lost row never blocks the caller.

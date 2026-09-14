@@ -233,3 +233,14 @@ _run_gate() {
   assert_success
   assert_output --partial "self-test OK"
 }
+
+@test "unresolved root exits 0, no block, no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" \
+    --stdin-string "$(switch_payload to_model=sonnet)" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  [ ! -e "$cwd/.context" ]
+}

@@ -31,6 +31,16 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 command -v gate_classify_payload > /dev/null 2>&1 || exit 0
 command -v dedupe_pending_key > /dev/null 2>&1 || exit 0
 
+# Sourced explicitly rather than relied on as a side effect of --lib-only
+# above, which exists only to share the classifier.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+command -v corpflow_context_root > /dev/null 2>&1 || exit 0
+
 # EVIDENCE_BASENAME_MAX — the bundle rung's own bound, far below the token's
 # outer 120. A genuine results artifact is named like `Run-2026-09-08.xcresult`
 # or `junit.xml`; a sentence needs room. See tool_evidence_token's security note.
@@ -284,5 +294,9 @@ esac
 IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0
 
-run_promote "$PAYLOAD" "${CLAUDE_PROJECT_DIR:-.}/.context"
+# Unresolved: nothing was gated under this root, so no marker to promote.
+CTX=$(corpflow_context_root)
+[ -n "$CTX" ] || exit 0
+
+run_promote "$PAYLOAD" "$CTX"
 exit 0

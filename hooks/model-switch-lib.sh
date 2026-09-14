@@ -36,59 +36,83 @@ _CORPFLOW_HOOK_LIB=1
 # corpflow_workspace_root <mode> — echoes the absolute workspace root and also
 # assigns it to _CORPFLOW_WS_ROOT, so a caller on a hot path can read the value
 # without paying for a command substitution. <mode> is `read` (default) or `write`.
+# Always returns 0; an empty echo IS the unresolved answer, never a cwd guess.
+# Resolves independently of cwd: a worktree checkout gitignores .context/, so
+# these hooks cannot rely on finding it under cwd.
 #
-# Resolves independently of cwd: these hooks fire from isolation:worktree
-# subagents whose cwd is a linked worktree where .context/ does not exist (it is
-# gitignored, never carried into a worktree checkout). The git arm recovers that
-# case — --git-common-dir points at the main checkout's .git, whose parent owns
-# .context/.
-#
-# The probe arms are identical in both modes; only the tail differs, and that
-# difference is the whole reason the flag exists. A WRITER must land its first
-# write in the declared workspace even before .context/ exists, so `write` keeps
-# WORKSPACE_ROOT in the tail. A READER must not: a path with no .context/ is
-# indistinguishable from "no worktask running", which is the gate's silent-pass
-# case. The `read` tail still honours CLAUDE_PROJECT_DIR while dropping
-# WORKSPACE_ROOT — a pre-existing asymmetry, preserved deliberately.
+# Ranks 3-7 of the shared root-resolution ladder; ranks 1-2 are scripts-tree
+# only (see skills/shared/lib/state-read-lib.sh). Only rank 7 differs by mode:
+# a WRITER must land its first write before .context/ exists, so `write`
+# alone reaches it; a READER must not — a missing .context/ there means "no
+# worktask running", the gate's silent-pass case.
 corpflow_workspace_root() {
-  local _cf_mode _cf_common _cf_parent
+  local _cf_mode _cf_libdir _cf_resolver _cf_top _cf_root
   _cf_mode="${1:-read}"
   _CORPFLOW_WS_ROOT=""
+
   if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
     _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
+
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
     _CORPFLOW_WS_ROOT="${CLAUDE_PROJECT_DIR}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
-  _cf_common=""
-  _cf_common=$(git rev-parse --git-common-dir 2> /dev/null) || _cf_common=""
-  if [ -n "$_cf_common" ]; then
-    _cf_parent=$(cd "$(dirname "$_cf_common")" 2> /dev/null && pwd) || _cf_parent=""
-    if [ -n "$_cf_parent" ] && [ -d "$_cf_parent/.context" ]; then
-      _CORPFLOW_WS_ROOT="$_cf_parent"
+
+  # Ranks 5-6 share one resolver lookup and are skipped together when it is not
+  # a readable file: rank 6 cannot run without it, and running rank 5's git probe
+  # alone on an install too broken to locate its own resolver would answer a
+  # plain git question with a plugin-config-shaped confidence it has not earned.
+  # Located from this file, not the plugin-root env var, so the resolver always
+  # comes from the same plugin tree as the library that loaded it.
+  _cf_resolver=""
+  _cf_libdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)"
+  if [ -n "$_cf_libdir" ] \
+    && [ -r "$_cf_libdir/../skills/shared/scripts/resolve-root.sh" ]; then
+    _cf_resolver="$_cf_libdir/../skills/shared/scripts/resolve-root.sh"
+  fi
+
+  if [ -n "$_cf_resolver" ]; then
+    _cf_top=""
+    _cf_top=$(git rev-parse --show-toplevel 2> /dev/null || true)
+    if [ -n "$_cf_top" ] && [ -f "$_cf_top/.context/state.json" ]; then
+      _CORPFLOW_WS_ROOT="$_cf_top"
+      printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
+    fi
+
+    _cf_root=""
+    _cf_root=$(bash "$_cf_resolver" --root 2> /dev/null || true)
+    # Rank 6 requires an existing ledger, not just a git root; --root doesn't
+    # check this itself (existence-unchecked per its own docstring).
+    if [ -n "$_cf_root" ] && [ -d "$_cf_root/.context" ]; then
+      _CORPFLOW_WS_ROOT="$_cf_root"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
     fi
   fi
+
+  # Rank 7 — write mode only; `.context/` has not been created yet.
   if [ "$_cf_mode" = "write" ] && [ -n "${WORKSPACE_ROOT:-}" ]; then
     _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    _CORPFLOW_WS_ROOT="${CLAUDE_PROJECT_DIR}"
-    printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
-  fi
-  _CORPFLOW_WS_ROOT=$(pwd) || _CORPFLOW_WS_ROOT="."
-  printf '%s' "$_CORPFLOW_WS_ROOT"
+
+  printf ''
   return 0
 }
 
-# Echoes an absolute path to .context/. Read view of the resolver above; called
-# as a plain function, not through $( ), so the hot path pays no extra fork.
+# Echoes an absolute path to .context/, or the empty string when
+# corpflow_workspace_root cannot resolve one — never `/.context` or `./.context`,
+# which a caller's mkdir would otherwise plant under whatever cwd it happened to
+# run from. Read view of the resolver above; called as a plain function, not
+# through $( ), so the hot path pays no extra fork.
 corpflow_context_root() {
   corpflow_workspace_root read > /dev/null
-  printf '%s' "${_CORPFLOW_WS_ROOT:-.}/.context"
+  if [ -n "${_CORPFLOW_WS_ROOT:-}" ]; then
+    printf '%s' "${_CORPFLOW_WS_ROOT}/.context"
+  else
+    printf ''
+  fi
   return 0
 }
 

@@ -18,8 +18,8 @@
 # @arg --prev <CODE>        Previous stage code, or USER for the documented USER→PL /
 #                           USER→IR origin edges.  When present, ALSO writes
 #                           handoffs["<PREV>→<TASK_ID>"] = "<summary> ref:<artifact basename>"
-#                           from the parsed frontmatter summary (the ledger edge the 13
-#                           stage agents used to hand-roll in inline jq).  ABSENT = ledger
+#                           from the parsed frontmatter summary — the ledger edge every stage
+#                           agent would otherwise hand-roll in inline jq.  ABSENT = ledger
 #                           patch only, byte-stable; hook callers
 #                           never pass it, so the SubagentStop path is untouched.
 #                           USER is predecessor-only: it never resolves an artifact and is
@@ -48,13 +48,20 @@
 #                           state.json directly (handoff-protocol.md#layer-1-fallback).
 # @arg --facts <json>       Union-merge compressed facts into facts.*.  Object keyed by any
 #                           subset of decisions | open_questions | files_modified |
-#                           tests_added.  COMPOSES with --stage: applied first, in its own
-#                           atomic window, so one call patches both the ledger row and the
-#                           facts a stage recorded; standalone it exits 0 after the merge.
+#                           tests_added | branch.  COMPOSES with --stage: applied after the
+#                           artifact/verdict preflight, in its own atomic window, so one call
+#                           patches both the ledger row and the facts a stage recorded.  A
+#                           refused or skipped stage patch (unresolved artifact, unparsed
+#                           stage, missing state.json, or a refused verdict) drops the paired
+#                           --facts payload too; standalone it exits 0 after the merge.
 #                           Union, never replace — identity rule at § Facts union below.
 #                           open_questions items must be FULL sweep stubs (string .id, .class
 #                           and .ref, boolean .blocks_next_stage); a partial one exits 2 with
-#                           state.json untouched.
+#                           state.json untouched.  branch is a string matching
+#                           ^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,199}$, stored at facts.branch
+#                           (last writer wins, exempt from the array-shape check); any other
+#                           shape is a whole-payload refusal, exit 2. A branch-only payload
+#                           counts as non-empty (no facts-empty no-op).
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -84,6 +91,31 @@
 #                                             blocked_by, skipping FN/RE with a warning.
 # @arg --agents-json <path>                   Passed through to stale-check.sh for the replay
 #                                             liveness guard.  Test/diagnostic seam only.
+# @arg --claim <ID>                          pending|blocked -> in_progress + claimed_at
+#                                             (date -u +%FT%TZ, top-level tasks.<ID>.claimed_at).
+#                                             in_progress with claimed_at is a no-op (timestamp
+#                                             kept); without it, stamps one.  completed|skipped|
+#                                             failed exits 4 untouched: use --task-replay.
+# @arg --dispatch <ID> <agent_id> <status>   Exactly 3 args. status is launched|completed|
+#                                             failed; agent_id matches
+#                                             ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$; the row
+#                                             must carry non-empty metadata.agent — else exit 2.
+#                                             Upserts facts.dispatched_agents[] by task_id: no
+#                                             entry appends {stage, task_id,
+#                                             subagent_type: metadata.agent, agent_id, status}
+#                                             (+ model_requested when metadata.model is set);
+#                                             same agent_id updates status in place; a
+#                                             different agent_id replaces the entry at the tail.
+#                                             Clamped to the last 6 launched, backfilled with
+#                                             the newest non-launched, survivors keep order.
+# @arg --files-read <ID> <path>...           Reads args until the next --flag; needs >= 1 path
+#                                             (else exit 2). Each path: strip a leading ./;
+#                                             non-empty, no TAB/CR/LF, <= 512 chars, or the
+#                                             whole call fails exit 2 before writing. In-call
+#                                             duplicates: last wins. Drops existing same-path
+#                                             entries, appends {path, stage: <code from ID>,
+#                                             lines: "all"} in arg order. Clamped to the
+#                                             newest 30 (facts.files_read); no spill.
 #
 # @arg --resolve-task-id <CODE>
 #                           Print the ledger key a bare stage CODE resolves to and exit.
@@ -97,20 +129,30 @@
 # @exitcode 0   Patch applied (or already idempotent; or artifact absent; or state absent on
 #               every path EXCEPT --facts; or a --facts payload that was legitimately empty).
 # @exitcode 1   Internal error (jq merge failed; use --log to inspect), unsupported ledger
-#               version, a ledger op rejected for an unknown/malformed task id, or --facts
-#               with no ledger at --state (that write landed nothing and says so).
+#               version, a ledger op rejected for an unknown/malformed task id, a frontmatter
+#               staging failure (mktemp), no ledger resolved for --facts or a ledger op, an
+#               unknown id on --claim/--dispatch/--files-read, or --facts with no ledger at
+#               --state (that write landed nothing and says so).
 # @exitcode 2   DISK_MIN_GB hard-halt (caller must remediate before retrying), OR a --facts
-#               payload that was refused whole (bad JSON, unknown key, non-array value) with
-#               state.json byte-unchanged, OR a --facts payload that PARTIALLY succeeded: the
-#               valid items were persisted and the rejected ones are named on stderr. Read
-#               stderr to tell them apart — a partial success is the only exit 2 that wrote.
-# @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent).
-#               An agent patching the artifact it just wrote and finding nothing on disk is a
-#               real failure; every other unresolved case keeps the exit-0 no-op contract.
+#               payload that was refused whole (bad JSON, unknown key, non-array value,
+#               invalid branch) with state.json byte-unchanged, OR a --facts payload that
+#               PARTIALLY succeeded: the valid items were persisted and the rejected ones are
+#               named on stderr. Read stderr to tell them apart — a partial success is the
+#               only exit 2 that wrote. Also: malformed --dispatch/--files-read args,
+#               --dispatch without the row's metadata.agent, an unreachable lib or resolver,
+#               or (--task-create) a row missing a required metadata key.
+# @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent),
+#               OR a missing/unknown handoff.verdict on ANY path (--stage/--artifact,
+#               plain or paired with --facts), state.json unchanged either way. An agent
+#               patching the artifact it just wrote and finding nothing on disk, or finding a
+#               verdict this map does not recognize, is a real failure; every other unresolved
+#               case keeps the exit-0 no-op contract.
 # @exitcode 4   Write refused by a pre-mutation guard, state.json untouched: a replay whose
 #               target is live/parked, of indeterminate liveness, whose planning is
-#               incomplete or whose cascade includes a blocked member; or a stage code that
-#               resolves to more than one open instance with nothing to disambiguate it.  Unknown ids stay 1 and malformed ids stay 2.
+#               incomplete or whose cascade includes a blocked member; a stage code that
+#               resolves to more than one open instance with nothing to disambiguate it; or
+#               --claim on a settled (completed|skipped|failed) row.  Unknown ids stay 1 and
+#               malformed ids stay 2.
 #
 # Note: --task-replay's liveness guard shells out to stale-check.sh, which needs python3.
 # The dependency is out-of-process and fail-closed — without it the replay refuses (exit 4)
@@ -120,7 +162,8 @@
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
 #   DISK_WARN_GB        (default 8)   — hygiene warn threshold in GiB
 #   RUN_INDEX           — override run_index (for callers that know it without reading state.json)
-#   CONTEXT_DIR         (default .context) — root for the audit log written on the --via hook path
+#   CONTEXT_DIR         rank 2 of the root ladder (see state-read-lib.sh); the audit log
+#                       and every derived path otherwise follow dirname(STATE_PATH)
 #   STATE_LOCK_TIMEOUT_S (default 5)  — max seconds to wait for the merge lock before
 #                                       proceeding UNLOCKED + WARN (never a silent no-op)
 #   STATE_LOCK_STALE_S  (default 60)  — a lock dir older than this (by mtime) is treated
@@ -202,6 +245,19 @@ basename_for_stage() {
   esac
 }
 
+# handoff.verdict -> mapped ledger status. The ONLY copy of this map (mirrored in
+# SKILL.md's VERDICT_STATUS for the orchestrator's JS side — see the parity bats test).
+# Exact lowercase match; missing or unrecognized prints nothing, which callers treat as
+# a hard refusal rather than guessing a status.
+verdict_status() {
+  case "$1" in
+    ok | pass | go | approve) printf 'completed' ;;
+    blocked | escalate) printf 'blocked' ;;
+    fail | reject | no-go) printf 'pending' ;;
+    *) printf '' ;;
+  esac
+}
+
 # Stage code → newline-separated fallback basenames, accepted when resolving and NEVER
 # emitted. Deliberately a sibling of basename_for_stage() rather than extra arms inside it:
 # the seven-way parity guard slices that function's body and must keep seeing exactly one
@@ -231,8 +287,10 @@ searched_basenames_for_stage() {
 #   2. Highest-N numbered artifact (newest run_index).
 #   3. Empty (absent) — never yields a literal '*'.
 resolve_artifact() {
-  local base="$1" ctx="${2:-.context}"
-  [[ -z "$base" ]] && {
+  local base="$1" ctx="${2:-}"
+  # No caller-supplied search root — never fall back to cwd's own tree; that is exactly
+  # the ledger-hygiene hazard the root ladder exists to close off.
+  [[ -z "$base" || -z "$ctx" ]] && {
     printf ''
     return 0
   }
@@ -275,7 +333,11 @@ resolve_artifact() {
 # through the full run_index → highest-N ladder. Canonical always wins: an alias is only
 # reached once the primary has failed both tiers.
 resolve_artifact_for_stage() {
-  local stage="$1" ctx="${2:-.context}" base found
+  local stage="$1" ctx="${2:-}" base found
+  [[ -z "$ctx" ]] && {
+    printf ''
+    return 0
+  }
   while IFS= read -r base; do
     [[ -z "$base" ]] && continue
     found=$(resolve_artifact "$base" "$ctx")
@@ -297,28 +359,30 @@ parse_frontmatter() {
 
   local fmfile
   fmfile=$(mktemp -t corpflow-fm-XXXXXX) || {
-    log_msg WARN "cannot stage frontmatter for $art — F3 fallback"
-    PARSED_STAGE="${STAGE_ARG:-}"
-    PARSED_VERDICT="ok"
-    PARSED_SUMMARY="auto-generated by state-patch.sh (frontmatter unreadable)"
-    return 0
+    # A staging failure here is the tool's own disk/tmp, not the artifact's shape — a
+    # different failure class from every other arm below, so it exits directly rather than
+    # returning into a caller that would fold it into the shape-defect exit code.
+    printf >&2 'ERROR: cannot stage frontmatter for %s (mktemp failed); state.json unchanged\n' "$art"
+    log_msg ERROR "cannot stage frontmatter for ${art} (mktemp failed); state.json unchanged"
+    exit 1
   }
 
   if ! corpflow_fm_block "$art" > "$fmfile" 2> /dev/null; then
     rm -f "$fmfile"
-    # No block at all — the F3 contract, unchanged. An artifact that never carried
-    # frontmatter is a different failure from one that carries the WRONG frontmatter, and
-    # only the second is a shape defect.
+    # No block at all — the F3 contract for stage/summary, unchanged. An artifact that
+    # never carried frontmatter is a different failure from one that carries the WRONG
+    # frontmatter, and only the second is a shape defect. The verdict is NOT defaulted:
+    # the artifact-preflight refusal must see it missing and refuse, same as any
+    # other missing verdict.
     log_msg WARN "no frontmatter in $art — F3 fallback"
     PARSED_STAGE="${STAGE_ARG:-}"
-    PARSED_VERDICT="ok"
     PARSED_SUMMARY="auto-generated by state-patch.sh (frontmatter missing)"
     return 0
   fi
 
-  # A block with no `handoff:` key is the FLAT shape this reader used to accept while
-  # handoff-harness.sh refused it — so the stage wrote a healthy ledger row and failed its
-  # own boundary, with nothing connecting the two. Both tools now refuse it.
+  # A block with no `handoff:` key is the FLAT shape neither this reader nor
+  # handoff-harness.sh accepts: refusing it here keeps a stage from writing a healthy
+  # ledger row while failing its own boundary check, with nothing connecting the two.
   if ! corpflow_fm_has_handoff "$fmfile"; then
     rm -f "$fmfile"
     printf >&2 'ERROR: %s has frontmatter with no `handoff:` block — every stage template nests under it (stage-contracts.md#tpl-<CODE>). Rewrite the block; handoff-harness.sh refuses this shape too.\n' \
@@ -328,13 +392,14 @@ parse_frontmatter() {
   fi
 
   PARSED_STAGE=$(corpflow_fm_field "$fmfile" stage "")
-  PARSED_VERDICT=$(corpflow_fm_field "$fmfile" verdict "ok")
+  PARSED_VERDICT=$(corpflow_fm_field "$fmfile" verdict "")
   PARSED_SUMMARY=$(corpflow_fm_field "$fmfile" summary "")
   PARSED_WT_PATH=$(corpflow_fm_field "$fmfile" worktree_path "")
   PARSED_WT_BRANCH=$(corpflow_fm_field "$fmfile" worktree_branch "")
   rm -f "$fmfile"
 
-  [[ -z "$PARSED_VERDICT" ]] && PARSED_VERDICT="ok"
+  # A missing verdict is left empty, never defaulted — the artifact-preflight refusal
+  # is the one place that decides what an absent verdict means.
   [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
   return 0
 }
@@ -520,10 +585,10 @@ replay_liveness_payload() {
   sc="$(dirname "$0")/stale-check.sh"
   [[ -f "$sc" ]] || return 1
   if [[ -n "${AGENTS_JSON_ARG:-}" ]]; then
-    out=$(bash "$sc" --state "$STATE_PATH" --context "${CONTEXT_DIR:-.context}" --json \
+    out=$(bash "$sc" --state "$STATE_PATH" --context "${CTX}" --json \
       --agents-json "$AGENTS_JSON_ARG" 2> /dev/null) || rc=$?
   else
-    out=$(bash "$sc" --state "$STATE_PATH" --context "${CONTEXT_DIR:-.context}" --json \
+    out=$(bash "$sc" --state "$STATE_PATH" --context "${CTX}" --json \
       2> /dev/null) || rc=$?
   fi
   # rc 2 is stale-check's usage/unreadable-input error (and the shape a missing python3
@@ -542,7 +607,7 @@ replay_liveness_payload() {
 # result:"error" row as evidence of a real stage failure, so a refusal row would
 # mis-diagnose every later look at this worktask.  Best-effort, mirroring --via hook.
 replay_audit() {
-  local dir="${CONTEXT_DIR:-.context}/logs" ts
+  local dir="${CTX}/logs" ts
   ts=$(date -u +%FT%TZ)
   # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
   # against an arbitrary target. A lost row never blocks the write that already landed.
@@ -602,7 +667,7 @@ disk_guard() {
 }
 
 # ---------- Merge lock (mkdir-spinlock) ----------
-# Serializes the read → merge → rename window of atomic_merge() so legal sibling
+# Serializes the read → merge → rename window of atomic_apply() so legal sibling
 # overlap (parallel DVN tracks, DC+QA — one writer per stage KEY) cannot drop a
 # patch to last-rename-wins.  mkdir is atomic on POSIX; no flock(1) needed (macOS
 # lacks it).  Timeout ⇒ proceed UNLOCKED + WARN (never worse than the pre-lock
@@ -652,7 +717,7 @@ _lock_audit() {
     . "$lib" || return 0
     command -v corpflow_audit_row > /dev/null 2>&1 || return 0
   fi
-  sp="${STATE_PATH:-.context/state.json}"
+  sp="$STATE_PATH"
   dir="${sp%/*}"
   [ "$dir" = "$sp" ] && dir="."
   local kv=()
@@ -781,8 +846,11 @@ trap '_lock_release' EXIT
 #                              (stage-contracts.md § Ledger bounds), so the transport bound
 #                              and the emission bound are the same number and a conforming
 #                              writer never spills.
-#   facts.dispatched_agents  → 6, launched-survive-first. Not a per-writer field, so it
-#                              keeps its global bound.
+#   facts.dispatched_agents  → last 6 launched survive, free slots backfilled with the
+#                              newest non-launched, survivors keep original relative order.
+#                              Not a per-writer field, so it keeps its global bound.
+#   facts.files_read         → newest 30 GLOBAL (not per-task), a read hint rather than a
+#                              record — no spill.
 #
 # The partition key is the FULL TASK ID (`DV1`), never the bare stage code: the writer is
 # the task, and a four-way DV split is four independent writers who must not be able to
@@ -837,8 +905,15 @@ _STATE_BOUNDS_FILTER='
        else . end)
     | (if ((.facts.dispatched_agents? // []) | length) > 6
        then .facts.dispatched_agents |=
-            (([ .[] | select(.status == "launched") ]
-            + [ .[] | select(.status != "launched") ])[0:6])
+            ( to_entries
+              | ([ .[] | select(.value.status == "launched") ] | .[-6:]) as $l
+              | (6 - ($l | length)) as $free
+              | ([ .[] | select(.value.status != "launched") ]) as $restall
+              | (if $free <= 0 then [] else ($restall | .[-$free:]) end) as $r
+              | ($l + $r | sort_by(.key) | map(.value)) )
+       else . end)
+    | (if ((.facts.files_read? // []) | length) > 30
+       then .facts.files_read |= .[-30:]
        else . end)'
 
 # `stage` and `status` are defaulted, never left null, on incumbents as well as incoming
@@ -913,12 +988,15 @@ _FACTS_UNION_FILTER='
            else . end)
         | (if ($f.tests_added // null) != null
            then .tests_added = (((.tests_added // []) + $f.tests_added) | _union_scalar)
+           else . end)
+        | (if ($f.branch // null) != null
+           then .branch = $f.branch
            else . end))'
 
 # Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
 # refusal, `clean` carries only the items that passed, `rejects` names each dropped item and
-# why. One bad class value used to discard the entire write — decisions, changed files and
-# every valid sweep stub in the same object — which is how a stage lost work it had done.
+# why. A single bad class value must not discard the entire write — decisions, changed
+# files and every valid sweep stub in the same object — costing a stage work it already did.
 #
 # Structural problems stay whole-payload: a non-object, an empty object, an unknown key, or a
 # key whose value is not an array. In those cases the caller is writing to a slot that does
@@ -928,7 +1006,7 @@ _FACTS_UNION_FILTER='
 # Predicates arrive as jq arguments (never spliced into the program text) for the same reason
 # the shape gate did it: a spliced regex would make the program caller-controlled.
 _FACTS_PARTITION_FILTER='
-      def _allowed: ["decisions","files_modified","open_questions","tests_added"];
+      def _allowed: ["decisions","files_modified","open_questions","tests_added","branch"];
       def _label: if (type == "object") and ((.id | type) == "string")
                   then .id else (tojson[0:40]) end;
       def _oq_bad:
@@ -953,10 +1031,15 @@ _FACTS_PARTITION_FILTER='
       elif ((keys - _allowed) | length) > 0
         then _fatal("unknown key(s): " + ((keys - _allowed) | join(", "))
                     + " (allowed: " + (_allowed | join(", ")) + ")")
-      elif ([ to_entries[] | select((.value | type) != "array") | .key ] | length) > 0
+      elif ([ to_entries[] | select(.key != "branch") | select((.value | type) != "array") | .key ]
+            | length) > 0
         then _fatal("bad shape for "
-                    + ([ to_entries[] | select((.value | type) != "array") | .key ] | join(", "))
+                    + ([ to_entries[] | select(.key != "branch")
+                         | select((.value | type) != "array") | .key ] | join(", "))
                     + " (expected an array)")
+      elif (has("branch"))
+           and (((.branch | type) != "string") or ((.branch | test($branchre)) | not))
+        then _fatal("invalid branch: expected a string matching " + $branchre)
       else . as $p
         | { fatal: "",
             clean:
@@ -967,7 +1050,8 @@ _FACTS_PARTITION_FILTER='
               + (if $p | has("files_modified")
                  then {files_modified: [ $p.files_modified[] | select(type == "string") ]} else {} end)
               + (if $p | has("tests_added")
-                 then {tests_added: [ $p.tests_added[] | select(type == "string") ]} else {} end) ),
+                 then {tests_added: [ $p.tests_added[] | select(type == "string") ]} else {} end)
+              + (if $p | has("branch") then {branch: $p.branch} else {} end) ),
             rejects:
               ( [ ($p.decisions // [])[] | select(_dec_bad != "")
                   | {key: "decisions", label: _label, reason: _dec_bad} ]
@@ -1038,7 +1122,8 @@ _spill_evicted_items() {
                 + (if $annotate
                    then {was_resolved: ((.status // "open") == "resolved")} else {} end))
         | .[]' 2> /dev/null) || {
-    # A failed spill computation used to `return 0`, which read as "nothing was evicted".
+    # A failed spill computation must not `return 0` silently — that reads as "nothing was
+    # evicted" when items may in fact be lost, so this warns instead.
     log_msg WARN "${field} spill computation failed; up to $((pre_len - post_len)) evicted item(s) may be unrecorded (merge unaffected)"
     printf >&2 'warn: %s spill computation failed; up to %d evicted item(s) unrecorded\n' \
       "$field" "$((pre_len - post_len))"
@@ -1123,15 +1208,9 @@ atomic_apply() {
   return "$rc"
 }
 
-# Merge a precomputed patch object; both entry points share one lock/rename window.
-atomic_merge() {
-  local state="$1" patch="$2"
-  atomic_apply "$state" '. * $p' --argjson p "$patch"
-}
-
 # A stage completing with sweep ids in its artifact that the ledger does not hold has lost
 # them — to a clamp, to a swallowed rejection, or to a --facts call that was never made.
-# The loss used to surface a whole boundary later, at the harness's parity arm.
+# Left unchecked, the loss would surface later, at the harness's parity arm, as a whole boundary.
 #
 # Runs AFTER the merge, against the WRITTEN state. The same invocation routinely carries
 # --facts, so a pre-write comparison false-warns on every correct combined call — the exact
@@ -1182,8 +1261,10 @@ _warn_unledgered_sweep_ids() {
 STAGE_ARG=""
 ARTIFACT_ARG=""
 PREV_ARG=""
-STATE_PATH=".context/state.json"
-LOG_FILE=".context/logs/state-merge.log"
+STATE_PATH=""
+STATE_ARG_GIVEN=""
+LOG_FILE=""
+LOG_ARG_GIVEN=""
 DISK_CHECK_ROOT=""
 VIA_ARG=""
 ALLOW_MISSING_ARTIFACT=""
@@ -1197,6 +1278,10 @@ READ_DECISIONS=""
 FACTS_ARG=""
 REPLAY_CASCADE="false"
 AGENTS_JSON_ARG=""
+DISPATCH_AGENT_ID=""
+DISPATCH_STATUS=""
+DISPATCH_ARGC=0
+FILES_READ_PATHS=()
 
 while [[ $# -gt 0 ]]; do
   # One line per flag. Every value-taking arm was the same five lines —
@@ -1207,8 +1292,8 @@ while [[ $# -gt 0 ]]; do
     --stage) shift; STAGE_ARG="${1:-}"; shift ;;
     --artifact) shift; ARTIFACT_ARG="${1:-}"; shift ;;
     --prev) shift; PREV_ARG="${1:-}"; shift ;;
-    --state) shift; STATE_PATH="${1:-}"; shift ;;
-    --log) shift; LOG_FILE="${1:-}"; shift ;;
+    --state) shift; STATE_PATH="${1:-}"; STATE_ARG_GIVEN="1"; shift ;;
+    --log) shift; LOG_FILE="${1:-}"; LOG_ARG_GIVEN="1"; shift ;;
     --disk-check)
       shift
       # Optional root value: consume the next token only when it is NOT another flag.
@@ -1230,6 +1315,36 @@ while [[ $# -gt 0 ]]; do
     --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
     --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
+    --claim) shift; TASK_OP="claim"; TASK_OP_ID="${1:-}"; shift ;;
+    --dispatch)
+      shift
+      TASK_OP="dispatch"
+      # Consume up to the next --flag rather than a fixed shift*3: a short call (missing
+      # agent_id or status) must fall through to the argc check below as malformed, not
+      # crash on an out-of-range shift.
+      _DISPATCH_ARGS=()
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        _DISPATCH_ARGS+=("$1")
+        shift
+      done
+      DISPATCH_ARGC="${#_DISPATCH_ARGS[@]}"
+      TASK_OP_ID="${_DISPATCH_ARGS[0]:-}"
+      DISPATCH_AGENT_ID="${_DISPATCH_ARGS[1]:-}"
+      DISPATCH_STATUS="${_DISPATCH_ARGS[2]:-}"
+      ;;
+    --files-read)
+      shift
+      TASK_OP="files_read"
+      TASK_OP_ID="${1:-}"
+      [[ $# -gt 0 ]] && shift
+      # Same "consume to the next --flag" shape as --dispatch; unlike --dispatch this list is
+      # unbounded, so the count is validated in the op arm rather than here.
+      FILES_READ_PATHS=()
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        FILES_READ_PATHS+=("$1")
+        shift
+      done
+      ;;
     --cascade) REPLAY_CASCADE="true"; shift ;;
     --agents-json) shift; AGENTS_JSON_ARG="${1:-}"; shift ;;
     --on | --off | --metadata | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
@@ -1260,8 +1375,57 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ---------- Root ladder (rank 1 here; ranks 2-6 in state-read-lib.sh) ----------
+# --state is verbatim, caller-trusted. Its absence sources the shared ladder rather than
+# defaulting to a path relative to cwd: a bare relative default is exactly the "patched the
+# wrong worktree's ledger" hazard the shared root ladder exists to close.
+STATE_UNRESOLVED=""
+if [[ -z "$STATE_ARG_GIVEN" ]]; then
+  _SRL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/state-read-lib.sh"
+  if [ ! -r "$_SRL_LIB" ]; then
+    printf >&2 'state-patch.sh: plugin install broken — state-read-lib.sh not found at %s\n' "$_SRL_LIB"
+    exit 2
+  fi
+  # shellcheck source=../../shared/lib/state-read-lib.sh
+  . "$_SRL_LIB"
+  _CTX_RC=0
+  _CTX_DIR=$(corpflow_context_dir) || _CTX_RC=$?
+  if [[ "$_CTX_RC" -eq 2 ]]; then
+    printf >&2 'state-patch.sh: root resolver unreachable\n'
+    exit 2
+  elif [[ "$_CTX_RC" -eq 0 ]]; then
+    STATE_PATH="${_CTX_DIR}/state.json"
+  else
+    # Unresolved: leave STATE_PATH empty. Every `-f "$STATE_PATH"` check below then reads
+    # false, which is precisely today's "state absent" behaviour — never a cwd fallback.
+    STATE_UNRESOLVED="1"
+  fi
+fi
+
+if [[ -z "$STATE_PATH" ]]; then
+  CTX=""
+else
+  CTX="${STATE_PATH%/*}"
+  [[ "$CTX" == "$STATE_PATH" ]] && CTX="."
+fi
+
+if [[ -z "$LOG_ARG_GIVEN" ]]; then
+  if [[ -n "$STATE_UNRESOLVED" ]]; then
+    LOG_FILE="/dev/null"
+  else
+    LOG_FILE="${CTX}/logs/state-merge.log"
+  fi
+fi
+
+# A self-patch (the documented `--prev` present, `--via` absent signature) gets a loud,
+# distinct warning: every other caller quietly no-ops on an unresolved root, but an agent
+# calling this on its own artifact needs to know its ledger write landed nowhere.
+if [[ -n "$STATE_UNRESOLVED" && -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
+  printf >&2 'warn: no ledger resolved (checked --state, CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — refusing cwd\n'
+fi
+
 # ---------- Pre-flight ----------
-mkdir -p "$(dirname "$LOG_FILE")" 2> /dev/null || true
+[[ "$LOG_FILE" == "/dev/null" ]] || mkdir -p "$(dirname "$LOG_FILE")" 2> /dev/null || true
 
 # Validate --via (enum hook|step6_5). An unknown value is a caller bug — surface it.
 if [[ -n "$VIA_ARG" && "$VIA_ARG" != "hook" && "$VIA_ARG" != "step6_5" ]]; then
@@ -1493,6 +1657,31 @@ if [[ -n "$TASK_OP" ]]; then
         log_msg INFO "idempotent: tasks.${TASK_OP_ID} already exists"
         exit 0
       fi
+      # PL/IR rows are exempt because PL0 is the stage that decides base_ref and
+      # requires_screenshots: every other row must already be dispatch-ready
+      # (effort/isolation/base_ref/requires_screenshots/workspace_path) before it is
+      # seeded, so a downstream stage never discovers the gap mid-run.
+      _TC_CODE="${TASK_OP_ID%%[0-9]*}"
+      if [[ "$_TC_CODE" != "PL" && "$_TC_CODE" != "IR" ]]; then
+        # bash 3.2's "${TASK_OP_VALUE:-{}}" leaks a stray "}" onto a non-empty
+        # value (brace-matching quirk in the default-word parse), hence the if/else.
+        if [[ -z "$TASK_OP_VALUE" ]]; then
+          _TC_META='{}'
+        else
+          _TC_META="$TASK_OP_VALUE"
+        fi
+        _TC_MISSING=$(printf '%s' "$_TC_META" | jq -r '
+            . as $m
+            | ["effort","isolation","base_ref","requires_screenshots","workspace_path"]
+            | map(select(. as $k | ($m | has($k) | not) or ($m[$k] == null) or ($m[$k] == "")))
+            | join(",")' 2> /dev/null) || _TC_MISSING="effort,isolation,base_ref,requires_screenshots,workspace_path"
+        if [[ -n "$_TC_MISSING" ]]; then
+          printf >&2 'invalid --task-create %s: metadata missing required key(s): %s (required on every non-PL/IR row); state.json unchanged\n' \
+            "$TASK_OP_ID" "$_TC_MISSING"
+          log_msg ERROR "invalid --task-create ${TASK_OP_ID}: metadata missing required key(s): ${_TC_MISSING}; state.json unchanged"
+          exit 2
+        fi
+      fi
       # --metadata is optional; absent ⇒ an empty object, never a parse abort.
       TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
@@ -1606,7 +1795,7 @@ if [[ -n "$TASK_OP" ]]; then
       REPLAY_RUN_IDX=$(jq -r '.run_index' <<< "$REPLAY_SURVEY")
       if ! jq -e --arg s "PL${REPLAY_RUN_IDX}" \
         'select(.action == "approval_received" and .subject == $s)' \
-        "${CONTEXT_DIR:-.context}/logs/audit.jsonl" > /dev/null 2>&1; then
+        "${CTX}/logs/audit.jsonl" > /dev/null 2>&1; then
         replay_warn plan-unapproved \
           "no approval_received row for PL${REPLAY_RUN_IDX} — the plan behind this stage was never approved at the gate"
       fi
@@ -1628,6 +1817,105 @@ if [[ -n "$TASK_OP" ]]; then
           else reduce ($members[]) as $m (.; .tasks[$m] |= blast) end'
       TASK_JQ_ARGS=(--argjson members "$(jq -c '[.members[].id]' <<< "$REPLAY_PLAN")")
       ;;
+    claim)
+      require_task_exists "$TASK_OP_ID" claim
+      _CLAIM_STATUS=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].status // ""' "$STATE_PATH")
+      case "$_CLAIM_STATUS" in
+        completed | skipped | failed)
+          printf >&2 'claim refused: tasks.%s is %s; use --task-replay\n' "$TASK_OP_ID" "$_CLAIM_STATUS"
+          log_msg ERROR "claim refused: tasks.${TASK_OP_ID} is ${_CLAIM_STATUS}; state.json unchanged"
+          exit 4
+          ;;
+      esac
+      # `//` keeps an existing claimed_at on re-claim (byte-identical) and only stamps one
+      # when absent; status re-assignment to its current value is itself a no-op write.
+      TASK_OP_VALUE="$(date -u +%FT%TZ)"
+      TASK_FILTER='
+        .tasks[$id].status = "in_progress"
+        | .tasks[$id].claimed_at = ((.tasks[$id].claimed_at) // $ts)'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg ts "$TASK_OP_VALUE")
+      ;;
+    dispatch)
+      if [[ "${DISPATCH_ARGC:-0}" -ne 3 ]]; then
+        printf >&2 'invalid --dispatch: expected exactly 3 args <ID> <agent_id> <status>\n'
+        usage
+      fi
+      case "$DISPATCH_STATUS" in
+        launched | completed | failed) ;;
+        *)
+          printf >&2 'invalid --dispatch status: %s (expected launched|completed|failed)\n' "$DISPATCH_STATUS"
+          usage
+          ;;
+      esac
+      if ! [[ "$DISPATCH_AGENT_ID" =~ ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
+        printf >&2 'invalid --dispatch agent_id: %s\n' "$DISPATCH_AGENT_ID"
+        usage
+      fi
+      require_task_exists "$TASK_OP_ID" dispatch
+      _DISPATCH_AGENT_META=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].metadata.agent // ""' "$STATE_PATH")
+      if [[ -z "$_DISPATCH_AGENT_META" ]]; then
+        printf >&2 'dispatch refused: tasks.%s has no metadata.agent\n' "$TASK_OP_ID"
+        log_msg ERROR "dispatch refused: tasks.${TASK_OP_ID} missing metadata.agent; state.json unchanged"
+        exit 2
+      fi
+      # Id shape is pinned by the regex above the switch, so stripping the trailing digits is
+      # a safe glob, not a parse.
+      _DISPATCH_STAGE="${TASK_OP_ID%%[0-9]*}"
+      TASK_FILTER='
+        ((.tasks[$id].metadata.model // "")) as $model
+        | (.facts.dispatched_agents // []) as $cur
+        | ($cur | map(.task_id) | index($id)) as $idx
+        | ( { stage: $stage, task_id: $id, subagent_type: $agent, agent_id: $aid, status: $status }
+            + (if $model != "" then { model_requested: $model } else {} end) ) as $entry
+        | .facts.dispatched_agents =
+            ( if $idx == null then
+                $cur + [ $entry ]
+              elif ($cur[$idx].agent_id) == $aid then
+                $cur | .[$idx].status = $status
+              else
+                ( [ $cur[] | select(.task_id != $id) ] ) + [ $entry ]
+              end )'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg stage "$_DISPATCH_STAGE" \
+        --arg agent "$_DISPATCH_AGENT_META" --arg aid "$DISPATCH_AGENT_ID" --arg status "$DISPATCH_STATUS")
+      TASK_OP_VALUE="${DISPATCH_AGENT_ID}:${DISPATCH_STATUS}"
+      ;;
+    files_read)
+      if [[ "${#FILES_READ_PATHS[@]}" -eq 0 ]]; then
+        printf >&2 'invalid --files-read: at least one path required\n'
+        usage
+      fi
+      require_task_exists "$TASK_OP_ID" files-read
+      _FR_STAGE="${TASK_OP_ID%%[0-9]*}"
+      # Ordered de-dupe without arrays (bash 3.2's empty-array expansion under `set -u` is
+      # unreliable): a growing newline list, each new path evicting its own prior line first
+      # so "last wins" also means "moves to the tail".
+      _FR_ORDERED=""
+      for _FR_P in "${FILES_READ_PATHS[@]}"; do
+        case "$_FR_P" in
+          ./*) _FR_P="${_FR_P#./}" ;;
+        esac
+        if [[ -z "$_FR_P" || "${#_FR_P}" -gt 512 ]]; then
+          printf >&2 'invalid --files-read path: empty (after stripping ./) or over 512 chars\n'
+          usage
+        fi
+        case "$_FR_P" in
+          *$'\t'* | *$'\r'* | *$'\n'*)
+            printf >&2 'invalid --files-read path: contains a TAB/CR/LF: %s\n' "$_FR_P"
+            usage
+            ;;
+        esac
+        _FR_ORDERED=$(printf '%s\n' "$_FR_ORDERED" | grep -Fxv -- "$_FR_P") || true
+        _FR_ORDERED="${_FR_ORDERED}"$'\n'"${_FR_P}"
+      done
+      _FR_PATHS_JSON=$(printf '%s\n' "$_FR_ORDERED" | jq -Rs 'split("\n") | map(select(length > 0))')
+      TASK_FILTER='
+        ($paths) as $add
+        | .facts.files_read =
+            ( ((.facts.files_read // []) | map(select((.path as $p | ($add | index($p))) == null)))
+              + [ $add[] | { path: ., stage: $stage, lines: "all" } ] )'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg stage "$_FR_STAGE" --argjson paths "$_FR_PATHS_JSON")
+      TASK_OP_VALUE="$(printf '%s' "$_FR_PATHS_JSON" | jq -r 'length') path(s)"
+      ;;
   esac
 
   if atomic_apply "$STATE_PATH" "$TASK_FILTER" "${TASK_JQ_ARGS[@]}"; then
@@ -1641,6 +1929,139 @@ if [[ -n "$TASK_OP" ]]; then
     "$TASK_OP" "$TASK_OP_ID" "$LOG_FILE"
   log_msg ERROR "jq apply failed for ledger ${TASK_OP} on tasks.${TASK_OP_ID}; state.json unchanged"
   exit 1
+fi
+
+# ---------- Artifact preflight (resolve + parse + verdict refusal) ----------
+# Placed ABOVE the facts union: a doomed completion merge (unresolved artifact, missing or
+# unknown verdict) must refuse before any paired --facts payload lands, so a --stage/--facts
+# call never persists facts.* only to fail the ledger row alone.
+if [[ -n "$STAGE_ARG" || -n "$ARTIFACT_ARG" ]]; then
+  if [[ -n "$ARTIFACT_ARG" ]]; then
+    ART_RECORD="$ARTIFACT_ARG"
+    case "$ARTIFACT_ARG" in
+      /*) ART="$ARTIFACT_ARG" ;;
+      *)
+        # A relative --artifact is a caller-relative path, not a cwd-relative one: it is
+        # resolved against dirname($CTX), i.e. the root the ladder actually found, and
+        # recorded VERBATIM regardless — the ledger's artifact field is the caller's own
+        # naming, never a rewrite.
+        if [[ -n "$CTX" && "$CTX" != "." ]]; then
+          _CTX_PARENT="${CTX%/*}"
+          [[ "$_CTX_PARENT" == "$CTX" ]] && _CTX_PARENT="."
+          ART="${_CTX_PARENT}/${ARTIFACT_ARG}"
+        else
+          ART="$ARTIFACT_ARG"
+        fi
+        ;;
+    esac
+  else
+    ART=""
+  fi
+
+  # `hooks/anchor-preflight.sh` gates its lint on a canonical artifact name and fails OPEN on
+  # anything else — a no-op, not an error. So an artifact one character off canonical is
+  # written, ledgered, harness-passed and never anchor-linted; that hid two missing required
+  # anchors in one run. Failing open is correct for an advisory lint. Failing open SILENTLY is
+  # the defect, and this is the one place that sees the name and the stage together.
+  #
+  # A warning, never a refusal: the name is the caller's, the stage map is advisory here, and
+  # a stage that has already written its artifact must not be blocked from recording it.
+  # Reuses basename_for_stage() rather than adding a fourth copy of the stage→basename map —
+  # state-patch.sh:177, hooks/anchor-preflight.sh's ARTIFACT_RE and handoff-protocol.md are
+  # already three.
+  if [[ -n "$ARTIFACT_ARG" && -n "$STAGE_ARG" ]]; then
+    _CANON_BASE="$(basename_for_stage "$STAGE_ARG")"
+    if [[ -n "$_CANON_BASE" ]]; then
+      _GIVEN_BASE="$(basename -- "$ARTIFACT_ARG")"
+      if ! printf '%s' "$_GIVEN_BASE" | grep -qE "^${_CANON_BASE}-[0-9]+\.md$"; then
+        printf >&2 'warn: --artifact %s is not the canonical name for stage %s (expected %s-<N>.md). It will be ledgered, but hooks/anchor-preflight.sh gates on the canonical name and will SKIP its anchor lint for this file.\n' \
+          "$_GIVEN_BASE" "$STAGE_ARG" "$_CANON_BASE"
+        log_msg WARN "non-canonical --artifact ${_GIVEN_BASE} for stage ${STAGE_ARG} (canonical: ${_CANON_BASE}-<N>.md) — anchor lint will not run"
+      fi
+    fi
+  fi
+
+  if [[ -z "$ART" && -n "$STAGE_ARG" ]]; then
+    # Pull run_index from state.json when available.
+    if [[ -f "$STATE_PATH" ]] && command -v jq > /dev/null 2>&1; then
+      RUN_INDEX=$(jq -r '.run_index // empty' "$STATE_PATH" 2> /dev/null || printf '')
+    fi
+
+    # Searched (and found) in $CTX, the real root the ladder resolved; the RECORDED value
+    # stays the portable ".context/<file>" convention every other ledger reader expects.
+    ART=$(resolve_artifact_for_stage "$STAGE_ARG" "$CTX")
+    [[ -n "$ART" ]] && ART_RECORD=".context/$(basename "$ART")"
+  fi
+
+  if [[ -z "$ART" || ! -f "$ART" ]]; then
+    log_msg WARN "no artifact resolved (stage=${STAGE_ARG:-} artifact=${ARTIFACT_ARG:-}) — no-op"
+    # `--prev` present with `--via` absent is the documented signature of a Layer-1 agent
+    # self-patch (handoff-protocol.md:837,846), i.e. a stage patching the artifact it just
+    # wrote. Finding nothing there is a real failure, so it is the one unresolved case that
+    # must not exit 0. Hook and Step-6.5 callers pass --via and keep the no-op contract.
+    if [[ -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
+      _searched=""
+      if [[ -n "$STAGE_ARG" ]]; then
+        _searched=$(searched_basenames_for_stage "$STAGE_ARG" | sed 's/$/-N.md/' | tr '\n' ' ')
+      fi
+      [[ -n "$ARTIFACT_ARG" ]] && _searched="${_searched}${ARTIFACT_ARG} "
+      printf >&2 'ERROR: self-patch for stage %s found no artifact.\n  searched (in .context/): %s\n  Write the artifact, then re-run. If you cannot, write state.json directly (handoff-protocol.md#layer-1-fallback);\n  --allow-missing-artifact only silences this error and still patches NOTHING.\n' \
+        "${STAGE_ARG:-<unset>}" "${_searched:-<none>}"
+      log_msg ERROR "self-patch unresolved (stage=${STAGE_ARG:-} prev=${PREV_ARG}) — exit 3"
+      exit 3
+    fi
+    # Every no-op return on the paired path still carries a --facts rejection out.
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
+  fi
+
+  if [[ ! -f "$STATE_PATH" ]]; then
+    log_msg INFO "state.json absent — nothing to merge (artifact=$ART)"
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
+  fi
+
+  # Fail closed, per skills/shared/lib/README.md: a missing library under skills/ is a broken
+  # install, not a runtime condition to degrade around — and degrading here would silently
+  # restore the flat-shape acceptance this library exists to remove. Tested before `.`
+  # because the `.` builtin exits the shell on a missing file, bypassing any `||` guard.
+  _FM_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/frontmatter-lib.sh"
+  if [ ! -r "$_FM_LIB" ]; then
+    printf >&2 'state-patch.sh: plugin install broken — frontmatter-lib.sh not found at %s\n' "$_FM_LIB"
+    exit 2
+  fi
+  # shellcheck source=frontmatter-lib.sh
+  . "$_FM_LIB"
+
+  if ! parse_frontmatter "$ART"; then
+    exit 2
+  fi
+
+  if [[ -z "$PARSED_STAGE" ]]; then
+    log_msg WARN "could not extract stage from $ART; aborting merge silently"
+    exit $((FACTS_REJECTED == 1 ? 2 : 0))
+  fi
+
+  # A missing or unknown verdict refuses the WHOLE call — the ledger row, any
+  # paired --facts payload, the handoff edge — regardless of --via, --prev or
+  # --allow-missing-artifact (that flag covers a MISSING artifact only, never a bad one).
+  STATUS_MAPPED=$(verdict_status "$PARSED_VERDICT")
+  if [[ -z "$STATUS_MAPPED" ]]; then
+    if [[ -z "$PARSED_VERDICT" ]]; then
+      _vreason="missing"
+    else
+      _vreason="'${PARSED_VERDICT}' is unknown"
+    fi
+    printf >&2 'ERROR: verdict refused for %s in %s: handoff.verdict %s (allowed: ok pass go approve blocked escalate fail reject no-go); state.json unchanged\n' \
+      "$PARSED_STAGE" "$ART" "$_vreason"
+    log_msg ERROR "verdict refused for ${PARSED_STAGE} in ${ART}: handoff.verdict ${_vreason}; state.json unchanged"
+    exit 3
+  fi
+
+  if ! TASK_ID=$(resolve_task_id "$PARSED_STAGE"); then
+    exit 4
+  fi
+elif [[ -z "$FACTS_ARG" ]]; then
+  log_msg WARN "no artifact resolved (stage= artifact=) — no-op"
+  exit 0
 fi
 
 # ---------- Facts union ----------
@@ -1683,6 +2104,7 @@ if [[ -n "$FACTS_ARG" ]]; then
 
   FACTS_PART=$(printf '%s' "$FACTS_ARG" \
     | jq -c --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
+            --arg branchre '^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,199}$' \
             --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_PARTITION_FILTER" 2> /dev/null) \
     || FACTS_PART=""
   if [[ -z "$FACTS_PART" ]]; then
@@ -1760,8 +2182,8 @@ ${FACTS_REJECT_LIST}"
   if [[ "$FACTS_EMPTY_NOOP" -eq 1 ]]; then
     : # no-op: nothing to write, and an absent ledger is not an error for an empty payload
   elif [[ ! -f "$STATE_PATH" ]]; then
-    # log_msg writes only to $LOG_FILE, so this used to be an INFO line and exit 0 — a write
-    # that landed nothing, indistinguishable at the call site from one that landed.
+    # log_msg writes only to $LOG_FILE, so an INFO line with exit 0 here would be a write
+    # that landed nothing yet is indistinguishable at the call site from one that landed.
     printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
     log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
     exit 1
@@ -1838,107 +2260,34 @@ ${FACTS_REJECT_LIST}"
   fi
 fi
 
-ART="$ARTIFACT_ARG"
-
-# `hooks/anchor-preflight.sh` gates its lint on a canonical artifact name and fails OPEN on
-# anything else — a no-op, not an error. So an artifact one character off canonical is
-# written, ledgered, harness-passed and never anchor-linted; that hid two missing required
-# anchors in one run. Failing open is correct for an advisory lint. Failing open SILENTLY is
-# the defect, and this is the one place that sees the name and the stage together.
-#
-# A warning, never a refusal: the name is the caller's, the stage map is advisory here, and
-# a stage that has already written its artifact must not be blocked from recording it.
-# Reuses basename_for_stage() rather than adding a fourth copy of the stage→basename map —
-# state-patch.sh:177, hooks/anchor-preflight.sh's ARTIFACT_RE and handoff-protocol.md are
-# already three.
-if [[ -n "$ARTIFACT_ARG" && -n "$STAGE_ARG" ]]; then
-  _CANON_BASE="$(basename_for_stage "$STAGE_ARG")"
-  if [[ -n "$_CANON_BASE" ]]; then
-    _GIVEN_BASE="$(basename -- "$ARTIFACT_ARG")"
-    if ! printf '%s' "$_GIVEN_BASE" | grep -qE "^${_CANON_BASE}-[0-9]+\.md$"; then
-      printf >&2 'warn: --artifact %s is not the canonical name for stage %s (expected %s-<N>.md). It will be ledgered, but hooks/anchor-preflight.sh gates on the canonical name and will SKIP its anchor lint for this file.\n' \
-        "$_GIVEN_BASE" "$STAGE_ARG" "$_CANON_BASE"
-      log_msg WARN "non-canonical --artifact ${_GIVEN_BASE} for stage ${STAGE_ARG} (canonical: ${_CANON_BASE}-<N>.md) — anchor lint will not run"
-    fi
-  fi
-fi
-
-if [[ -z "$ART" && -n "$STAGE_ARG" ]]; then
-  # Pull run_index from state.json when available.
-  if [[ -f "$STATE_PATH" ]] && command -v jq > /dev/null 2>&1; then
-    RUN_INDEX=$(jq -r '.run_index // empty' "$STATE_PATH" 2> /dev/null || printf '')
-  fi
-
-  ART=$(resolve_artifact_for_stage "$STAGE_ARG")
-fi
-
-if [[ -z "$ART" || ! -f "$ART" ]]; then
-  log_msg WARN "no artifact resolved (stage=${STAGE_ARG:-} artifact=${ARTIFACT_ARG:-}) — no-op"
-  # `--prev` present with `--via` absent is the documented signature of a Layer-1 agent
-  # self-patch (handoff-protocol.md:837,846), i.e. a stage patching the artifact it just
-  # wrote. Finding nothing there is a real failure, so it is the one unresolved case that
-  # must not exit 0. Hook and Step-6.5 callers pass --via and keep the no-op contract.
-  if [[ -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
-    _searched=""
-    if [[ -n "$STAGE_ARG" ]]; then
-      _searched=$(searched_basenames_for_stage "$STAGE_ARG" | sed 's/$/-N.md/' | tr '\n' ' ')
-    fi
-    [[ -n "$ARTIFACT_ARG" ]] && _searched="${_searched}${ARTIFACT_ARG} "
-    printf >&2 'ERROR: self-patch for stage %s found no artifact.\n  searched (in .context/): %s\n  Write the artifact, then re-run. If you cannot, write state.json directly (handoff-protocol.md#layer-1-fallback);\n  --allow-missing-artifact only silences this error and still patches NOTHING.\n' \
-      "${STAGE_ARG:-<unset>}" "${_searched:-<none>}"
-    log_msg ERROR "self-patch unresolved (stage=${STAGE_ARG:-} prev=${PREV_ARG}) — exit 3"
-    exit 3
-  fi
-  # Every no-op return on the paired path still carries a --facts rejection out.
-  exit $((FACTS_REJECTED == 1 ? 2 : 0))
-fi
-
-if [[ ! -f "$STATE_PATH" ]]; then
-  log_msg INFO "state.json absent — nothing to merge (artifact=$ART)"
-  exit $((FACTS_REJECTED == 1 ? 2 : 0))
-fi
-
-# Fail closed, per skills/shared/lib/README.md: a missing library under skills/ is a broken
-# install, not a runtime condition to degrade around — and degrading here would silently
-# restore the flat-shape acceptance this library exists to remove. Tested before `.`
-# because the `.` builtin exits the shell on a missing file, bypassing any `||` guard.
-_FM_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/frontmatter-lib.sh"
-if [ ! -r "$_FM_LIB" ]; then
-  printf >&2 'state-patch.sh: plugin install broken — frontmatter-lib.sh not found at %s\n' "$_FM_LIB"
-  exit 2
-fi
-# shellcheck source=frontmatter-lib.sh
-. "$_FM_LIB"
-
-if ! parse_frontmatter "$ART"; then
-  exit 2
-fi
-
-if [[ -z "$PARSED_STAGE" ]]; then
-  log_msg WARN "could not extract stage from $ART; aborting merge silently"
-  exit $((FACTS_REJECTED == 1 ? 2 : 0))
-fi
-
-if ! TASK_ID=$(resolve_task_id "$PARSED_STAGE"); then
-  exit 4
-fi
-
 # ---------- Idempotency check ----------
-# One @tsv read for all three fields: this runs on every hook-driven stage completion, so
-# each extra jq spawn is paid per stage per run. Artifact paths never contain a tab.
-CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT=""
+# One @tsv read: this runs on every hook-driven stage completion, so each extra jq spawn is
+# paid per stage per run. Artifact paths never contain a tab. Widened past status/verdict/
+# artifact to the two fields this merge also writes: the mirrored facts.verdicts
+# entry and, on a pending row, the gate_from_stage marker — either drifting from what this
+# call would write means the merge is not actually a no-op.
+CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT="" CURRENT_FACT_VERDICT="" CURRENT_GATE_FROM=""
 if command -v jq > /dev/null 2>&1; then
   IDEM_TSV=$(jq -r --arg s "$TASK_ID" \
-    '[.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // ""] | @tsv' \
-    "$STATE_PATH" 2> /dev/null || printf '\t\t')
-  IFS=$'\t' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT <<< "$IDEM_TSV" || true
+    '[.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // "",
+      .facts.verdicts[$s] // "", .tasks[$s].metadata.gate_from_stage // ""] | @tsv' \
+    "$STATE_PATH" 2> /dev/null || printf '\t\t\t\t')
+  IFS=$'\t' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT CURRENT_FACT_VERDICT \
+    CURRENT_GATE_FROM <<< "$IDEM_TSV" || true
 fi
 
 # A remediation loop re-completes a stage at the same verdict with a fresh artifact and summary,
-# so skip only when the patch would change nothing — verdict, artifact, and handoff edge all current.
-if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT" ]]; then
+# so skip only when the patch would change nothing — status, verdict, artifact, the mirrored
+# facts.verdicts entry, the gate marker (when pending) and the handoff edge all current.
+if [[ "$CURRENT_STATUS" == "$STATUS_MAPPED" && "$CURRENT_VERDICT" == "$PARSED_VERDICT" ]]; then
   PATCH_IS_NOOP=1
-  if [[ "$CURRENT_ARTIFACT" != "$ART" ]]; then
+  if [[ "$CURRENT_ARTIFACT" != "$ART_RECORD" ]]; then
+    PATCH_IS_NOOP=0
+  fi
+  if [[ "$CURRENT_FACT_VERDICT" != "$PARSED_VERDICT" ]]; then
+    PATCH_IS_NOOP=0
+  fi
+  if [[ "$STATUS_MAPPED" == "pending" && "$CURRENT_GATE_FROM" != "$PARSED_STAGE" ]]; then
     PATCH_IS_NOOP=0
   fi
   if [[ -n "$PREV_ARG" ]] && command -v jq > /dev/null 2>&1; then
@@ -1953,39 +2302,39 @@ if [[ "$CURRENT_STATUS" == "completed" && "$CURRENT_VERDICT" == "$PARSED_VERDICT
   fi
 
   if [[ "$PATCH_IS_NOOP" == "1" ]]; then
-    log_msg INFO "idempotent: tasks.${TASK_ID} already completed verdict=${PARSED_VERDICT}"
+    log_msg INFO "idempotent: tasks.${TASK_ID} already ${STATUS_MAPPED} verdict=${PARSED_VERDICT}"
     exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
   log_msg INFO \
-    "re-merge: tasks.${TASK_ID} verdict unchanged (${PARSED_VERDICT}) but artifact/handoff differ"
+    "re-merge: tasks.${TASK_ID} verdict unchanged (${PARSED_VERDICT}) but status/artifact/facts/gate/handoff differ"
 fi
 
-# ---------- Build patch + atomic write ----------
+# ---------- Build filter + atomic write ----------
+# An atomic_apply filter, not a patch object precomputed outside the lock: the gate_from_stage
+# set/delete and the derived worst-verdict key both read tasks.* as it stands INSIDE the
+# lock, so they must run in the same critical section as the row write, not against a
+# pre-lock snapshot a sibling writer could invalidate.
+#
 # Additive keys (completed_via, worktree) fold in only when present, so absence stays
-# absence.  facts.verdicts[<CODE>] is mirrored here because this is the only writer a
-# completed stage passes through: the schema has carried the field since v2 and nothing ever
-# filled it, so every consumer reading it saw an empty object.  Keyed by CODE, not task id,
-# and deliberately NOT re-keyed alongside the handoff edges: a stage has one verdict, and
-# its readers ask whether DV passed, never whether DV2 did.  A split stage's last instance
-# to complete owns the entry.  --prev additionally emits handoffs["<PREV>→<TASK_ID>"]
-# (maxLength 300, must contain "ref:"); absent --prev ⇒ no handoffs key at all.  The
-# destination is the WRITING TASK, so an N-way split writes N edges instead of collapsing to
-# one last-writer-wins entry; the source stays a bare code because it answers which stage
-# this followed, and only the destination ever collided.
+# absence.  facts.verdicts[<TASK_ID>] is mirrored here because this is the only writer a
+# patched stage passes through: the schema has carried the field since v2 and nothing ever
+# filled it, so every consumer reading it saw an empty object.  facts.verdicts[<CODE>] is
+# the worst verdict across every "${CODE}<N>" row that has reported, so a split
+# stage's readers see the harder state rather than whichever instance completed last.
+# --prev additionally emits handoffs["<PREV>→<TASK_ID>"] (maxLength 300, must contain
+# "ref:"); absent --prev ⇒ no handoffs key at all.  The destination is the WRITING TASK, so
+# an N-way split writes N edges instead of collapsing to one last-writer-wins entry; the
+# source stays a bare code because it answers which stage this followed, and only the
+# destination ever collided.
 ART_BASE=$(basename "$ART")
-PATCH=$(jq -cn \
-  --arg stage "$PARSED_STAGE" \
-  --arg taskid "$TASK_ID" \
-  --arg artifact "$ART" \
-  --arg verdict "$PARSED_VERDICT" \
-  --arg via "$VIA_ARG" \
-  --arg wt_path "$PARSED_WT_PATH" \
-  --arg wt_branch "$PARSED_WT_BRANCH" \
-  --arg prev "$PREV_ARG" \
-  --arg summary "$PARSED_SUMMARY" \
-  --arg ref "$ART_BASE" \
-  '
-  ({status: "completed", artifact: $artifact, verdict: $verdict}
+COMPLETION_FILTER='
+  def vrank($v):
+    if $v == "escalate" then 4
+    elif $v == "blocked" then 3
+    elif ($v == "fail" or $v == "reject" or $v == "no-go") then 2
+    elif ($v == "ok" or $v == "pass" or $v == "go" or $v == "approve") then 1
+    else 2 end;
+  ({status: $status, artifact: $artifact, verdict: $verdict}
     + (if $via != "" then {completed_via: $via} else {} end)
     + (if ($wt_path != "" or $wt_branch != "")
        then {worktree: (
@@ -1993,17 +2342,40 @@ PATCH=$(jq -cn \
             + (if $wt_branch != "" then {branch: $wt_branch} else {} end))}
        else {} end)
   ) as $stageObj
-  | {tasks: {($taskid): $stageObj}}
-  + {facts: {verdicts: {($stage): $verdict}}}
-  + (if $prev != ""
-     then {handoffs: {($prev + "→" + $taskid): ((($summary) + " ref:" + $ref) | .[0:300])}}
-     else {} end)')
+  | .tasks[$taskid] = ((.tasks[$taskid] // {}) + $stageObj)
+  | if $status == "pending" then
+      .tasks[$taskid].metadata = ((.tasks[$taskid].metadata // {}) + {gate_from_stage: $code})
+    elif ((.tasks[$taskid].metadata? // {}) | has("gate_from_stage")) then
+      .tasks[$taskid].metadata |= del(.gate_from_stage)
+    else . end
+  | (if $prev != ""
+     then .handoffs[$prev + "→" + $taskid] = ((($summary) + " ref:" + $ref) | .[0:300])
+     else . end)
+  | .facts.verdicts[$taskid] = $verdict
+  | ([ .tasks | to_entries[] | select(.key | test("^" + $code + "[0-9]+$"))
+       | select((.value.verdict // "") != "")
+       | {verdict: .value.verdict, n: (.key | ltrimstr($code) | tonumber)} ]) as $rows
+  | if ($rows | length) > 0
+    then .facts.verdicts[$code] = ($rows | max_by([vrank(.verdict), .n]) | .verdict)
+    else . end
+'
 
-if atomic_merge "$STATE_PATH" "$PATCH"; then
+if atomic_apply "$STATE_PATH" "$COMPLETION_FILTER" \
+  --arg status "$STATUS_MAPPED" \
+  --arg code "$PARSED_STAGE" \
+  --arg taskid "$TASK_ID" \
+  --arg artifact "$ART_RECORD" \
+  --arg verdict "$PARSED_VERDICT" \
+  --arg via "$VIA_ARG" \
+  --arg wt_path "$PARSED_WT_PATH" \
+  --arg wt_branch "$PARSED_WT_BRANCH" \
+  --arg prev "$PREV_ARG" \
+  --arg summary "$PARSED_SUMMARY" \
+  --arg ref "$ART_BASE"; then
   log_msg INFO "merged tasks.${TASK_ID} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"
   _warn_unledgered_sweep_ids "$ART" "$STATE_PATH"
 else
-  log_msg ERROR "jq merge failed for task=${TASK_ID} artifact=${ART}; state.json unchanged"
+  log_msg ERROR "jq apply failed for task=${TASK_ID} artifact=${ART}; state.json unchanged"
   exit 1
 fi
 
@@ -2014,7 +2386,7 @@ fi
 # paths are not double-counted; dedupe_key lets a reader collapse a replayed hook.
 # Best-effort: an unwritable log must never undo a merge that already landed.
 if [[ "$VIA_ARG" == "hook" ]]; then
-  AUDIT_DIR="${CONTEXT_DIR:-.context}/logs"
+  AUDIT_DIR="${CTX}/logs"
   # Refuse a symlinked audit.jsonl: following it makes this append a write primitive
   # against an arbitrary target. A lost row never blocks the write that already landed.
   if mkdir -p "$AUDIT_DIR" 2> /dev/null && [[ ! -L "${AUDIT_DIR}/audit.jsonl" ]]; then
@@ -2024,10 +2396,11 @@ if [[ "$VIA_ARG" == "hook" ]]; then
       --arg ts "$(date -u +%FT%TZ)" \
       --arg subject "$TASK_ID" \
       --arg verdict "$PARSED_VERDICT" \
-      --arg dedupe "${AUDIT_WT_ID}:${AUDIT_RUN_IDX}:${TASK_ID}:completed" \
+      --arg status "$STATUS_MAPPED" \
+      --arg dedupe "${AUDIT_WT_ID}:${AUDIT_RUN_IDX}:${TASK_ID}:${STATUS_MAPPED}" \
       '{ts: $ts, actor: "hook:state-merge", action: "stage_transition", subject: $subject,
          result: "ok", task_id: $subject,
-         metadata: {verdict: $verdict, via: "hook", dedupe_key: $dedupe}}' \
+         metadata: {verdict: $verdict, status: $status, via: "hook", dedupe_key: $dedupe}}' \
       >> "${AUDIT_DIR}/audit.jsonl" 2> /dev/null \
       || log_msg WARN "audit append failed for tasks.${TASK_ID} (merge already applied)"
   fi

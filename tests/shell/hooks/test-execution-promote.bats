@@ -573,3 +573,14 @@ token_of() {
   run cat "$sentinel"
   assert_output --partial "tests:12"
 }
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd payload
+  cwd="$(mk_tmpworkdir)"
+  payload="$(jq -cn '{tool_name:"Bash", tool_input:{command:"./run-tests.sh"},
+                      tool_response:{stdout:"1 test, 0 failures"}}')"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" --stdin-string "$payload" "$PLUGIN_ROOT/$PROMOTE"
+  assert_success
+  [ ! -e "$cwd/.context" ]
+}

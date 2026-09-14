@@ -809,8 +809,9 @@ target. Failure mode prevented: `workspace-modes.md § Conductor Workspace Topol
 #### Post-delegation state.json enforcement (BINDING)
 
 After every `Task()` return (the *completed stage result* — under background-default subagents that
-is the completion notification, not the launch acknowledgement), before the `completed` patch:
-re-read `.context/state.json`; if `tasks.<ID>.status` is NOT `completed`, run
+is the completion notification, not the launch acknowledgement), before Step 7 settles the row:
+re-read `.context/state.json`; if `tasks.<ID>` does not already carry the artifact's
+`handoff.verdict` and the status it maps to (`handoff-protocol.md § tasks — verdict → status`), run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
@@ -821,9 +822,11 @@ re-read `.context/state.json`; if `tasks.<ID>.status` is NOT `completed`, run
 ##### Layer-3 stamp and F3 fallback
 
 `STATE_MERGE_VIA=step6_5` stamps `tasks.<ID>.completed_via=step6_5` so this synchronous Layer-3 path
-is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not
-`completed`, apply the F3 fallback (minimal patch derived from the agent return text; stamps
-`completed_via: "f3"`) — this covers environments where the SubagentStop hook never fired. Full
+is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if the row
+STILL does not match, apply the F3 fallback: it stamps the verdict-mapped status (plus
+`metadata.gate_from_stage` when that status is `pending`) with `completed_via: "f3"`, and writes
+nothing for an absent handoff or an unmapped verdict — this covers environments where the
+SubagentStop hook never fired. Full
 three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ### Step B — AR-reference check at DV completion

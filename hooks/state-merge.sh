@@ -33,6 +33,42 @@
 
 set -euo pipefail
 
+# ---------- Self-test / help ----------
+# Dispatched BEFORE workspace resolution: neither depends on a resolved root
+# (self-test delegates straight to state-patch.sh --self-test; help just prints
+# this header), so gating them behind the ladder would fail a self-test run
+# in exactly the unresolved-root environment a CI sandbox is likely to be.
+#
+# Re-run all original hook self-test cases by delegating to state-patch.sh --self-test.
+# The cases cover: explicit artifact, idempotency, numbered artifact resolution (exact
+# run_index + highest-N), and absent-artifact no-op.
+if [[ "${1:-}" == "--self-test" ]]; then
+  HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
+  # hooks/ sits one level below the plugin root.
+  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
+  if [[ ! -f "$PATCH_SCRIPT" ]]; then
+    PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
+  fi
+  if [[ ! -f "$PATCH_SCRIPT" ]]; then
+    printf 'self-test: state-patch.sh not found at %s\n' "$PATCH_SCRIPT" >&2
+    exit 1
+  fi
+
+  # Run the canonical self-test from state-patch.sh (covers all paths this hook uses).
+  if bash "$PATCH_SCRIPT" --self-test; then
+    printf 'self-test (via state-patch.sh): ALL PASS\n'
+    exit 0
+  else
+    printf 'self-test: state-patch.sh --self-test FAILED\n' >&2
+    exit 1
+  fi
+fi
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
+  exit 0
+fi
+
 # ---------- Workspace resolution ----------
 # Never resolve `.context/` from cwd: this fires on SubagentStop, often for a DV
 # stream, whose cwd is a linked worktree where `.context/` does not exist (it is
@@ -57,10 +93,15 @@ else
   # Library-free last resort. Resolution runs BEFORE $LOG exists, so a degraded
   # root still has to be good enough for this hook to find its own log — which is
   # why this one line stays local while the three probe arms and the git arm move
-  # to the library.
-  WORKSPACE_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
+  # to the library. No cwd fallback: an unresolved declared root means "write
+  # nowhere", never "guess the directory this hook happened to fire from".
+  WORKSPACE_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-}}"
   LIB_DEGRADED=1
 fi
+
+# Unresolved: there is nowhere safe to merge into or log to, so stop before the
+# first mkdir rather than materialize .context/ under a guessed directory.
+[ -n "$WORKSPACE_DIR" ] || exit 0
 
 LOG_DIR="$WORKSPACE_DIR/.context/logs"
 mkdir -p "$LOG_DIR" 2> /dev/null || true
@@ -99,37 +140,6 @@ _basename_for_stage() {
     *) printf '' ;;
   esac
 }
-
-# ---------- Self-test ----------
-# Re-run all original hook self-test cases by delegating to state-patch.sh --self-test.
-# The cases cover: explicit artifact, idempotency, numbered artifact resolution (exact
-# run_index + highest-N), and absent-artifact no-op.
-if [[ "${1:-}" == "--self-test" ]]; then
-  HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
-  # hooks/ sits one level below the plugin root.
-  PATCH_SCRIPT="${CLAUDE_PLUGIN_ROOT:-${HOOK_DIR}/..}/skills/worktask/scripts/state-patch.sh"
-  if [[ ! -f "$PATCH_SCRIPT" ]]; then
-    PATCH_SCRIPT="${HOOK_DIR}/../skills/worktask/scripts/state-patch.sh"
-  fi
-  if [[ ! -f "$PATCH_SCRIPT" ]]; then
-    printf 'self-test: state-patch.sh not found at %s\n' "$PATCH_SCRIPT" >&2
-    exit 1
-  fi
-
-  # Run the canonical self-test from state-patch.sh (covers all paths this hook uses).
-  if bash "$PATCH_SCRIPT" --self-test; then
-    printf 'self-test (via state-patch.sh): ALL PASS\n'
-    exit 0
-  else
-    printf 'self-test: state-patch.sh --self-test FAILED\n' >&2
-    exit 1
-  fi
-fi
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
-  exit 0
-fi
 
 # ---------- Locate state-patch.sh ----------
 HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -276,6 +286,12 @@ PATCH_ARGS+=(--log "$LOG")
 # The orchestrator's synchronous Step-6.5 path overrides via STATE_MERGE_VIA=step6_5
 # so the two layers are distinguishable in state.json. (Additive; absence = Layer 1.)
 PATCH_ARGS+=(--via "${STATE_MERGE_VIA:-hook}")
+# Pass the resolved root down explicitly rather than let state-patch.sh re-derive
+# it from cwd: this hook already paid for rank 5's git probe (WORKSPACE_DIR
+# above), and a second, independent resolution from a different cwd could answer
+# differently. CONTEXT_DIR is exported too, for state-patch.sh's own rank 2.
+PATCH_ARGS+=(--state "$STATE_FILE")
+export CONTEXT_DIR="$WORKSPACE_DIR/.context"
 
 # With neither variable set, state-patch.sh resolves no artifact and no-ops: one
 # WARN into a log nobody reads, exit 0. One run produced 335 of them and every
@@ -305,7 +321,8 @@ if [ -z "${CLAUDE_TASK_METADATA_STAGE:-}" ] && [ -z "${CLAUDE_ARTIFACT_PATH:-}" 
 fi
 
 bash "$PATCH_SCRIPT" "${PATCH_ARGS[@]}" 2>> "$LOG" || {
-  log ERROR "state-patch.sh exited non-zero (stage=${CLAUDE_TASK_METADATA_STAGE:-} art=${CLAUDE_ARTIFACT_PATH:-}); continuing"
+  rc=$?
+  log ERROR "state-patch.sh exited non-zero (rc=$rc stage=${CLAUDE_TASK_METADATA_STAGE:-} art=${CLAUDE_ARTIFACT_PATH:-}); continuing"
 }
 
 # Always exit 0 — MUST NOT block stage transition.

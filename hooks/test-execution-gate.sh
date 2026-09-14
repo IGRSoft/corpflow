@@ -648,10 +648,10 @@ classify_segment() {
 # allow unconditionally: there is no reliable "who is acting" answer, and
 # guessing wrong in the deny direction would deadlock an unrelated session.
 #
-# CTX stays CLAUDE_PROJECT_DIR-only (see the live-invocation block): the shared
-# WORKSPACE ROOT resolver is deliberately NOT used here, because its extra arms
-# would widen the resolution surface of an anti-evasion invariant. Only the pure,
-# ctx-parameterised stage lookup is shared.
+# CTX resolution goes through the shared corpflow_context_root ladder: it is
+# the anti-evasion invariant against cwd/CLAUDE_PROJECT_DIR guesses, so this
+# consumer must not narrow back to CLAUDE_PROJECT_DIR-only. Degraded (library
+# untrustworthy), it falls back to declared roots only.
 # ---------------------------------------------------------------------------
 
 # emit_deny <reason> — the PreToolUse deny document, written once. rc 1 when jq
@@ -1379,8 +1379,6 @@ fi
 IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0  # empty/unreadable stdin — nothing to gate
 
-CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
-
 # Degraded: the gate cannot resolve who is acting, so it enforces nothing and
 # allows. That is announced, not inferred — this is the only consumer with a
 # channel back to the model, so the notice rides in-band on the first allow.
@@ -1396,6 +1394,14 @@ CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
 # is still written, for the consumers that read it.
 if [ "$LIB_DEGRADED" -eq 1 ]; then
   echo "test-execution-gate: shared library unusable at $_LIB — test authority not enforced" >&2
+  # Declared roots only; the ladder's git/resolver ranks live in this library.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+  [ -n "$CTX" ] || exit 0
   _NOTICE_MARK="$CTX/logs/.corpflow-lib-missing.test-execution-gate"
   if [ -f "$CTX/state.json" ] && [ ! -f "$_NOTICE_MARK" ]; then
     mkdir -p "$CTX/logs" 2>/dev/null && : > "$CTX/logs/.corpflow-lib-missing" 2>/dev/null
@@ -1408,6 +1414,10 @@ if [ "$LIB_DEGRADED" -eq 1 ]; then
   fi
   exit 0
 fi
+
+# Unresolved is "no worktask here": allow, enforce nothing, create nothing.
+CTX=$(corpflow_context_root)
+[ -n "$CTX" ] || exit 0
 
 run_gate "$PAYLOAD" "$CTX"
 exit 0

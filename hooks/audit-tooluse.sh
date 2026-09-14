@@ -35,13 +35,35 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 PAYLOAD=$(read_stdin)
-LOG_DIR="${CLAUDE_PROJECT_DIR:-.}/.context/logs"
 
 # The matcher covers all of Bash so stage transitions (state-patch.sh) are seen; every
 # other Bash call is ordinary work and must not reach the audit log. Filtering here
 # rather than in the matcher is what keeps the trail signal-only.
 printf '%s' "$PAYLOAD" | jq -e '.tool_name != "Bash" or ((.tool_input.command // "") | test("state-patch\\.sh"))' \
   >/dev/null 2>&1 || exit 0
+
+# Guarded source of the shared root ladder, deliberately AFTER the
+# filter above: resolving first would fork git/resolve-root.sh on every ordinary
+# Bash call this hook otherwise discards for free.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+if command -v corpflow_context_root >/dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+LOG_DIR="$CTX/logs"
 
 # CONTRACT: .tool_input carries file contents, diffs and full command lines, and
 # audit.jsonl is committed — so task_id and status, captured below, are the only
@@ -78,6 +100,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
+[ -n "$CTX" ] || exit 0
 # Only the write path creates the directory, so a filtered-out call leaves no trace.
 mkdir -p "$LOG_DIR"
 # A symlinked audit.jsonl turns this append into a write primitive against an arbitrary

@@ -14,6 +14,10 @@ SCRIPT="hooks/state-merge.sh"
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context/logs"
+  # The root ladder (hooks/model-switch-lib.sh) never falls back to cwd; declare
+  # the fixture as the workspace root so `corpflow_workspace_root write` (rank 3,
+  # or rank 7 before .context/ exists) resolves it instead of no-op'ing.
+  export WORKSPACE_ROOT="$WD"
 }
 
 # -- helpers --
@@ -273,6 +277,58 @@ _install_project_local() {
   [ "$dv_status" = "completed" ]
 }
 
+# --- root resolution ---------------------------------------------------
+
+@test "unresolved root -> rc 0, no .context materialized under cwd" {
+  local fresh
+  fresh="$(mk_tmpworkdir)"
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CEILING_DIRECTORIES="$fresh" \
+    bash -c "cd '$fresh' && CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  [ ! -d "$fresh/.context" ]
+}
+
+@test "linked-worktree cwd, no declared root -> merge lands in main's ledger" {
+  local base main wt
+  base="$(mk_tmpworkdir)"
+  main="$base/main"
+  wt="$base/wt"
+  mkdir -p "$main"
+  local G=(git -c user.name=t -c user.email=t@t -c commit.gpgsign=false)
+  ( cd "$main" && "${G[@]}" init -q \
+    && "${G[@]}" commit -q --allow-empty -m init \
+    && "${G[@]}" worktree add -q "$wt" -b t ) >/dev/null
+  # Physical path: mktemp -d can hand back a symlinked path (macOS /var), while
+  # the resolver always answers physically — compare physical to physical.
+  main="$(cd "$main" && pwd -P)"
+  mkdir -p "$main/.context"
+  cat > "$main/.context/state.json" <<'EOF'
+{"run_index":0,"worktask_id":"wt-fix","tasks":{"PL0":{"status":"completed","verdict":"ok"},"DV0":{"status":"in_progress"}}}
+EOF
+  cat > "$main/.context/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "widget done"
+---
+
+# Development
+
+Done.
+EOF
+
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    bash -c "cd '$wt' && CLAUDE_ARTIFACT_PATH='$main/.context/development-0.md' CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local dv_status
+  dv_status=$(jq -r '.tasks.DV0.status' "$main/.context/state.json")
+  [ "$dv_status" = "completed" ]
+  [ ! -d "$wt/.context" ]
+}
+
 @test "absent state-patch.sh: exit 0 (never blocks) and the stage is left untouched" {
   _seed_state
   _seed_artifact
@@ -283,4 +339,28 @@ _install_project_local() {
   local dv_status
   dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "in_progress" ]
+}
+
+# --- verdict-refusal is swallowed (meets the "exit 0 ALWAYS" hook contract) -----
+
+@test "SubagentStop: artifact with no verdict is swallowed — exit 0, ledger unchanged, rc logged" {
+  _seed_state
+  cat > "$WD/.context/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  summary: "no verdict fixture"
+---
+
+# Development
+EOF
+  local before; before="$(shasum "$WD/.context/state.json")"
+  run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local after; after="$(shasum "$WD/.context/state.json")"
+  [ "$before" = "$after" ]
+  # state-patch.sh's own exit 3 (verdict refused) must not propagate — the hook's
+  # log line is the only surviving evidence that the write was swallowed, not lost.
+  run grep -c 'rc=3' "$WD/.context/logs/state-merge.log"
+  assert_output "1"
 }

@@ -1668,3 +1668,14 @@ _scanner_launchers() {
   [ "$checked" -ge 8 ] || fail "non-vacuity: only $checked launcher phrases extracted"
   [ -z "$missing" ] || fail "scanner does not skip:$missing"
 }
+
+@test "unresolved root exits 0, no block, no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  [ ! -e "$cwd/.context" ]
+}

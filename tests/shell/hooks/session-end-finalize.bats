@@ -84,3 +84,13 @@ setup() {
   assert_success
   assert_output --partial "self-test OK"
 }
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" \
+    --stdin-string '{"hook_event_name":"SessionEnd","reason":"clear"}' "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$cwd/.context" ]
+}

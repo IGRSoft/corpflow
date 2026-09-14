@@ -178,3 +178,13 @@ _canonical_row() {
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+@test "unresolved root exits 0, no block, no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" --stdin-file "$DEV_PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  [ ! -e "$cwd/.context" ]
+}

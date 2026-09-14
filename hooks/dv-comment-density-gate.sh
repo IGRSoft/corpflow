@@ -288,6 +288,33 @@ if [ "$SELF_TEST" -eq 1 ]; then
 fi
 
 PAYLOAD=$(read_stdin)
-CTX="${CLAUDE_PROJECT_DIR:-$PWD}/.context"
-run_gate "$PAYLOAD" "$CTX" "${CLAUDE_PROJECT_DIR:-$PWD}"
+
+# Guarded source of the shared root ladder.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+REPO="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$REPO" ]; then
+  REPO=$(git rev-parse --show-toplevel 2>/dev/null) || REPO=""
+fi
+[ -n "$REPO" ] || exit 0
+
+if command -v corpflow_context_root >/dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CTX" ] || exit 0
+
+run_gate "$PAYLOAD" "$CTX" "$REPO"
 exit 0

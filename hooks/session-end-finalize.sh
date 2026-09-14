@@ -17,11 +17,6 @@ set -eu
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-CONTEXT_DIR="$PROJECT_DIR/.context"
-LOG_DIR="$CONTEXT_DIR/logs"
-STATE_FILE="$CONTEXT_DIR/state.json"
-
 if [ "$SELF_TEST" -eq 1 ]; then
   TMP=$(mktemp -d)
   mkdir -p "$TMP/.context"
@@ -44,6 +39,32 @@ fi
 # below the self-test branch, whose own stdin is whatever harness invoked it.
 PAYLOAD=""
 [ -t 0 ] || PAYLOAD=$(cat 2> /dev/null || printf '')
+
+# Guarded source of the shared root ladder: resolve BEFORE any
+# mkdir, so an unresolved root leaves no `.context/` trace under whatever cwd
+# this fired from.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+if command -v corpflow_context_root > /dev/null 2>&1; then
+  CONTEXT_DIR=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CONTEXT_DIR=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CONTEXT_DIR="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CONTEXT_DIR="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CONTEXT_DIR" ] || exit 0
+
+LOG_DIR="$CONTEXT_DIR/logs"
+STATE_FILE="$CONTEXT_DIR/state.json"
 
 mkdir -p "$LOG_DIR" 2> /dev/null || true
 
