@@ -8,6 +8,11 @@ PAYLOAD="${FIXTURES}/hooks/audit-tooluse.payload.json"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # The root ladder (hooks/model-switch-lib.sh) only honours a declared
+  # CLAUDE_PROJECT_DIR/WORKSPACE_ROOT when .context/ already exists under it —
+  # it never guesses cwd. Declare that fixture root up front so every test
+  # below is exercising the write path, not the unresolved-root no-op.
+  mkdir -p "$WD/.context"
 }
 
 @test "happy: writes tool_invoked row with tool, duration, effort, dedupe_key" {
@@ -138,4 +143,41 @@ refute_log_contains() {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+# --- root resolution ---------------------------------------------------
+
+@test "unresolved root -> rc 0, no .context materialized under cwd" {
+  local fresh
+  fresh="$(mk_tmpworkdir)"
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CEILING_DIRECTORIES="$fresh" \
+    bash -c "cd '$fresh' && bash '$PLUGIN_ROOT/$SCRIPT'" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t20","duration_ms":10,"session_id":"s1"}'
+  assert_success
+  [ ! -d "$fresh/.context" ]
+}
+
+@test "linked-worktree cwd, no declared root -> row lands in main's ledger" {
+  local base main wt
+  base="$(mk_tmpworkdir)"
+  main="$base/main"
+  wt="$base/wt"
+  mkdir -p "$main"
+  local G=(git -c user.name=t -c user.email=t@t -c commit.gpgsign=false)
+  ( cd "$main" && "${G[@]}" init -q \
+    && "${G[@]}" commit -q --allow-empty -m init \
+    && "${G[@]}" worktree add -q "$wt" -b t ) >/dev/null
+  # Physical path: mktemp -d can hand back a symlinked path (macOS /var), while
+  # the resolver always answers physically — compare physical to physical.
+  main="$(cd "$main" && pwd -P)"
+  mkdir -p "$main/.context"
+
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    bash -c "cd '$wt' && bash '$PLUGIN_ROOT/$SCRIPT'" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t21","duration_ms":10,"session_id":"s1"}'
+  assert_success
+  run jq -e '.subject == "state-patch" and .metadata.task_id == "DV1"' \
+    "$main/.context/logs/audit.jsonl"
+  assert_success
+  [ ! -d "$wt/.context" ]
 }

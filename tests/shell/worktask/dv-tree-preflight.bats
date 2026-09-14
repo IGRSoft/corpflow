@@ -87,6 +87,29 @@ setup() {
   assert_success
 }
 
+@test "resolve: no --state resolves via corpflow_context_dir's WORKSPACE_ROOT rank, never a cwd-relative guess" {
+  local fixture cwd_dir
+  fixture="$(mk_tmpworkdir)"
+  mkdir -p "$fixture/.context"
+  jq -n --arg p "$fixture/elsewhere" '{version:1, metadata:{workspace_path:$p}}' \
+    > "$fixture/.context/state.json"
+
+  # cwd owns no repo and no .context of its own — the old default (".context/state.json",
+  # cwd-relative) and a broken ladder both degrade identically to this same WARN, so this
+  # is not a MISMATCH assertion: it is proof the new lib-sourcing/corpflow_context_dir call
+  # does not fail-closed just because cwd has no git root. `refute_output` for the fail-closed
+  # markers is what actually pins the WORKSPACE_ROOT rank down; ceiling dir keeps cwd from
+  # ever reaching the real repo above it.
+  cwd_dir="$(mk_tmpworkdir)"
+  run env -u GIT_DIR WORKSPACE_ROOT="$fixture" GIT_CEILING_DIRECTORIES="$cwd_dir" \
+    bash -c 'cd "$1" && exec bash "$2"' _ "$cwd_dir" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output --partial "WARN"
+  assert_output --partial "not inside a git work tree"
+  refute_output --partial "unreachable"
+  refute_output --partial "plugin install broken"
+}
+
 @test "contract: --self-test reaches ALL PASS" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success

@@ -31,8 +31,16 @@ case "$_cf_opts" in *e*) set -e ;; esac
 
 if ! command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   echo "model-switch-audit: shared library unusable at $_LIB — switch not recorded" >&2
-  _cf_ctx="${CLAUDE_PROJECT_DIR:-.}/.context"
-  if [ -f "$_cf_ctx/state.json" ]; then
+  # The full ladder lives in the library this branch cannot trust, so the
+  # sentinel is only ever planted under an explicitly DECLARED root, never one
+  # this hook would have to go looking for itself.
+  _cf_ctx=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    _cf_ctx="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    _cf_ctx="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+  if [ -n "$_cf_ctx" ] && [ -f "$_cf_ctx/state.json" ]; then
     { mkdir -p "$_cf_ctx/logs" && : > "$_cf_ctx/logs/.corpflow-lib-missing"; } 2> /dev/null || :
   fi
   exit 0

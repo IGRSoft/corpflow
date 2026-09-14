@@ -12,16 +12,6 @@ set -eu
 SELF_TEST=0
 [ "${1:-}" = "--self-test" ] && SELF_TEST=1
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-CONTEXT_DIR="$PROJECT_DIR/.context"
-LOG_DIR="$CONTEXT_DIR/logs"
-STATE_FILE="$CONTEXT_DIR/state.json"
-
-mkdir -p "$LOG_DIR"
-
-TS=$(date -u +%Y%m%d-%H%M%S)
-CHECKPOINT="$CONTEXT_DIR/state.checkpoint-$TS.json"
-
 if [ "$SELF_TEST" -eq 1 ]; then
   TMP=$(mktemp -d)
   echo '{"run_index":0,"tasks":{}}' > "$TMP/state.json"
@@ -31,6 +21,38 @@ if [ "$SELF_TEST" -eq 1 ]; then
   echo "precompact-checkpoint: self-test OK"
   exit 0
 fi
+
+# Guarded source of the shared root ladder: resolve BEFORE any
+# mkdir, so an unresolved root leaves no `.context/` trace under whatever cwd
+# this fired from.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+if command -v corpflow_context_root > /dev/null 2>&1; then
+  CONTEXT_DIR=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CONTEXT_DIR=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CONTEXT_DIR="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CONTEXT_DIR="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CONTEXT_DIR" ] || exit 0
+
+PROJECT_DIR="${CONTEXT_DIR%/.context}"
+LOG_DIR="$CONTEXT_DIR/logs"
+STATE_FILE="$CONTEXT_DIR/state.json"
+
+mkdir -p "$LOG_DIR"
+
+TS=$(date -u +%Y%m%d-%H%M%S)
+CHECKPOINT="$CONTEXT_DIR/state.checkpoint-$TS.json"
 
 if [ ! -f "$STATE_FILE" ]; then
   # No active worktask state — nothing to checkpoint, but record the event.

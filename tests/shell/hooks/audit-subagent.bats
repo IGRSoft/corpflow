@@ -8,6 +8,7 @@ PAYLOAD="${FIXTURES}/hooks/audit-subagent.payload.json"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  mkdir -p "$WD/.context"
 }
 
 @test "happy: writes subagent_stopped row with duration + dedupe keys" {
@@ -380,4 +381,13 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
     | .metadata.suppressed_count == 1000 and .metadata.truncated == true' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
+}
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" --stdin-file "$PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$cwd/.context" ]
 }

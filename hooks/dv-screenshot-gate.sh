@@ -209,6 +209,27 @@ fi
 # Live invocation.
 # ---------------------------------------------------------------------------
 PAYLOAD=$(read_stdin)
-CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
+
+# Guarded source of the shared root ladder.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+if command -v corpflow_context_root >/dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CTX" ] || exit 0
+
 run_gate "$PAYLOAD" "$CTX"
 exit 0

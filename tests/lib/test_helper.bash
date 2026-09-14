@@ -47,6 +47,10 @@ load "${_TEST_HELPER_VENDOR}/bats-assert/load.bash"
 export PLUGIN_ROOT="$(cd "${_TEST_HELPER_LIB_DIR}/../.." && pwd)"
 export FIXTURES="${PLUGIN_ROOT}/tests/fixtures"
 
+# A runner shell that exported one of these before invoking bats must never steer a
+# fixture-less test into a real ledger; each suite that needs one declares it itself.
+unset CONTEXT_DIR WORKSPACE_ROOT CLAUDE_PROJECT_DIR
+
 # --- run_script: dispatch a target under `run` -------------------------------
 # Usage: run_script skills/foo/scripts/bar.sh --flag value
 # Sets $status/$output/$lines (it wraps bats `run`). The first arg is a path

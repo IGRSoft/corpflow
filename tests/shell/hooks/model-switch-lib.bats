@@ -36,23 +36,23 @@ _ledger() {
   assert_output "$WD/.context"
 }
 
-@test "context_root: an env var pointing at a dir with no .context is skipped for git" {
-  # The worktree case: cwd is a linked checkout with no .context of its own, so
-  # resolution must fall through to the main checkout that owns it.
+@test "context_root: a declared dir with no .context and no git above it is unresolved, not invented" {
+  # No rank 3/4 hit (declared dir has no .context/), no rank 5/6 hit (no git repo
+  # above cwd at all): the ladder answers empty rather than inventing
+  # "$sub/.context" from a bare pwd/CLAUDE_PROJECT_DIR guess.
   local main sub
   main="$(mk_tmpworkdir)"
   mkdir -p "$main/.context"
   sub="$main/sub"
   mkdir -p "$sub"
   run_script_env --cwd "$sub" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$sub" \
+    --env "GIT_CEILING_DIRECTORIES=$sub" \
     --source "$LIB" corpflow_context_root
   assert_success
-  # No .context under $sub and no git repo above it, so it degrades to the
-  # declared dir rather than inventing one.
-  assert_output "$sub/.context"
+  assert_output ""
 }
 
-@test "context_root: git common dir recovers the linked-worktree case" {
+@test "context_root: rank 6 (resolve-root.sh) recovers the linked-worktree case" {
   local repo wt
   repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
   mkdir -p "$repo/.context"
@@ -62,11 +62,53 @@ _ledger() {
   run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
     --source "$LIB" corpflow_context_root
   assert_success
-  # The git arm resolves through `cd && pwd`, so compare physical paths: on macOS
-  # $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
+  # resolve-root.sh resolves through `cd && pwd -P`, so compare physical paths: on
+  # macOS $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
   local want
   want="$(cd "$repo" && pwd -P)/.context"
   [ "$output" = "$want" ]
+}
+
+@test "context_root: rank 6 (resolve-root.sh) with no .context at the resolved root is unresolved" {
+  # AD-6 rank 6 requires an existing ledger; a bare git root with no .context/
+  # must not be handed back as if it were one.
+  local repo wt
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  wt="$repo/wt"
+  git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
+    || skip "git worktree unavailable"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
+}
+
+@test "workspace_root: rank 5 (toplevel/.context/state.json file) outranks rank 6" {
+  local repo
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  mkdir -p "$repo/.context"
+  printf '{}' > "$repo/.context/state.json"
+  run_script_env --cwd "$repo" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  local want
+  want="$(cd "$repo" && pwd -P)"
+  [ "$output" = "$want" ]
+}
+
+@test "workspace_root: no declared root and no git repo above cwd is unresolved" {
+  local outside
+  outside="$(mk_tmpworkdir)"
+  run_script_env --cwd "$outside" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+  run_script_env --cwd "$outside" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
 }
 
 # --- corpflow_active_stage ----------------------------------------------------

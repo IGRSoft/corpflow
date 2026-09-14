@@ -179,3 +179,12 @@ SHIM
              and (.metadata.error | test("symlink"))' "$WD/.context/logs/audit.jsonl"
   assert_success
 }
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$cwd/.context" ]
+}
