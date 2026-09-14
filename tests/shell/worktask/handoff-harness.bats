@@ -1118,3 +1118,157 @@ mk_qa_dec_bullet() {
   assert_success
   assert_output --partial "ok: "
 }
+
+# --- raw control bytes are a gate failure ------------------------------------
+# Bytes are printf-generated; the NUL rides inside an inline-code list of escape spellings,
+# the exact shape a typed escape was decoded into.
+
+@test "control bytes: a raw NUL fails naming the path and byte offset" {
+  local off
+  off=$(( $(wc -c < "$WD/development-0.md") + 19 ))
+  { cat "$WD/development-0.md"; printf 'spellings `\\0` raw \000 end\n'; } > "$WD/nul.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/nul.md"
+  assert_failure 1
+  assert_output --partial "fail: control byte 0x00 at byte offset $off in $WD/nul.md"
+}
+
+@test "control bytes: the same text spelling the escape literally passes" {
+  { cat "$WD/development-0.md"; printf '%s\n' 'spellings `\0` raw \0 end'; } > "$WD/literal.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/literal.md"
+  assert_success
+}
+
+@test "control bytes: --strict fails the same way" {
+  { cat "$WD/development-0.md"; printf 'esc \033 here\n'; } > "$WD/esc.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/esc.md" --strict
+  assert_failure 1
+  assert_output --partial "fail: control byte 0x1B at byte offset"
+}
+
+@test "control bytes: the gate refuses to run when the library is unreachable" {
+  local copy="$WD/scripts"
+  mkdir -p "$copy"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$PLUGIN_ROOT/skills/worktask/scripts/sweep-stub-lib.sh" \
+    "$PLUGIN_ROOT/skills/worktask/scripts/frontmatter-lib.sh" "$copy/"
+  run bash "$copy/handoff-harness.sh" --validate-frontmatter "$WD/development-0.md"
+  assert_failure 1
+  assert_output --partial "control-byte-lib.sh unreachable"
+}
+
+# --- split-stage parity scoped by handoff.task_id -----------------------------
+
+# split_artifact <path> <task_id|-> [stub-yaml] — a DV artifact; no stub means `open_questions: []`.
+split_artifact() {
+  {
+    printf -- '---\nhandoff:\n  stage: DV\n'
+    [ "$2" = "-" ] || printf '  task_id: %s\n' "$2"
+    printf '  tests_executed: 12\n  test_summary_line: "12 tests, 0 failures"\n'
+    printf '  verdict: ok\n  summary: "split fixture"\n  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n'
+    if [ -n "${3:-}" ]; then
+      printf '  open_questions:\n    - %s\n' "$3"
+    else
+      printf '  open_questions: []\n'
+    fi
+    printf '  refs:\n    dev: development.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
+  } > "$1"
+}
+
+# split_state <out> <open-id>... — DV0 and DV1 share the DV slice; each id is an open DV item.
+split_state() {
+  local out="$1"
+  shift
+  # The file precedes --args: every operand after it is a positional string, not an input.
+  jq '.tasks.DV0 = {status:"in_progress"} | .tasks.DV1 = {status:"in_progress"}
+      | .facts.open_questions = [$ARGS.positional[] | {id: ., class: "decision",
+          ref: "#elicitation-sweep", blocks_next_stage: false, stage: "DV", status: "open"}]' \
+    state.json --args "$@" > "$out"
+  jq -e '.tasks.DV1' "$out" > /dev/null || fail "split_state wrote no ledger"
+}
+
+@test "task_id parity: DV0 is not charged DV1's open item" {
+  cd "$WD"
+  split_state split.json sw-DV1-1
+  split_artifact "$WD/dv0.md" DV0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv0.md" --state split.json
+  assert_success
+  refute_output --partial "warn:"
+}
+
+@test "task_id parity: a stub-less DV1 is charged only its own open item" {
+  cd "$WD"
+  split_state split.json sw-DV0-1 sw-DV1-1
+  split_artifact "$WD/dv1.md" DV1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv1.md" --state split.json
+  assert_failure 1
+  assert_output --partial "sweep stub sw-DV1-1 is in ledger, not in frontmatter"
+  refute_output --partial "sw-DV0-1"
+}
+
+@test "task_id parity: DV1 re-emitting its item passes beside DV0's open item" {
+  cd "$WD"
+  split_state split.json sw-DV0-1 sw-DV1-1
+  split_artifact "$WD/dv1.md" DV1 '{ id: sw-DV1-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv1.md" --state split.json
+  assert_success
+}
+
+@test "task_id parity: the mirror passes DV1 and charges DV0" {
+  cd "$WD"
+  split_state split.json sw-DV0-1
+  split_artifact "$WD/dv1.md" DV1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv1.md" --state split.json
+  assert_success
+  split_artifact "$WD/dv0.md" DV0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv0.md" --state split.json
+  assert_failure 1
+  assert_output --partial "sweep stub sw-DV0-1 is in ledger, not in frontmatter"
+}
+
+@test "task_id parity: a sibling's id over this stream's stubs fails instead of escaping" {
+  cd "$WD"
+  split_state split.json sw-DV1-1 sw-DV1-2
+  split_artifact "$WD/dv1.md" DV0 '{ id: sw-DV1-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv1.md" --state split.json
+  assert_failure 1
+  assert_output --partial "fail: sweep stub sw-DV1-1 does not belong to handoff.task_id DV0"
+}
+
+@test "task_id: another stage's id or a lowercase id fails the shape check" {
+  split_artifact "$WD/dr0.md" DR0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dr0.md"
+  assert_failure 1
+  assert_output --partial "fail: handoff.task_id 'DR0' is not a task id of stage DV"
+  split_artifact "$WD/lower.md" dv0
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/lower.md"
+  assert_failure 1
+  assert_output --partial "fail: handoff.task_id 'dv0' is not a task id of stage DV"
+}
+
+@test "task_id: an id missing from tasks{} fails" {
+  cd "$WD"
+  split_state split.json sw-DV1-1
+  split_artifact "$WD/dv7.md" DV7
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv7.md" --state split.json
+  assert_failure 1
+  assert_output --partial "fail: handoff.task_id DV7 is not in tasks{}"
+}
+
+@test "task_id: absent on a split stage warns and keeps today's rule" {
+  cd "$WD"
+  split_state split.json sw-DV0-9
+  split_artifact "$WD/nostub.md" -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/nostub.md" --state split.json
+  assert_success
+  assert_output --partial "warn: nostub.md omits handoff.task_id while stage DV has 2 tasks"
+}
+
+@test "task_id: absent on a single-task stage does not warn" {
+  cd "$WD"
+  jq '.tasks.DV0 = {status:"in_progress"} | .facts.open_questions = []' state.json > single.json
+  split_artifact "$WD/single.md" -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/single.md" --state single.json
+  assert_success
+  refute_output --partial "warn:"
+}

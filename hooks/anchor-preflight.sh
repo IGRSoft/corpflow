@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# anchor-preflight — PostToolUse (Write|Edit) anchor lint for worktask
-# artifacts. Runs cache-lint.sh --anchor-lint on a path matching the canonical
-# .context/<stage>-N.md regex, so a bad H2 anchor surfaces at the producing
-# write rather than at the DR gate.
+# anchor-preflight — PostToolUse (Write|Edit) lint for written files. Every write whose
+# extension is on the control-byte-lib text allowlist is scanned for raw C0 control bytes;
+# a path matching the canonical .context/<stage>-N.md regex also runs cache-lint.sh
+# --anchor-lint, so a bad H2 anchor surfaces at the producing write rather than at the DR gate.
 #
 # Reads tool_input.file_path from the hook stdin JSON, falling back to
-# CLAUDE_TOOL_INPUT_FILE_PATH without jq. A non-zero exit shows the agent the
-# diagnostic; continueOnBlock keeps a non-artifact write unblocked.
+# CLAUDE_TOOL_INPUT_FILE_PATH without jq. Exit 2 on any finding: in PostToolUse only exit 2
+# routes stderr to the model, and continueOnBlock keeps the turn going.
 #
-# Plugin root is env-first ($CLAUDE_PLUGIN_ROOT), else self-located from $0.
-# --self-test asserts the gating regex.
+# Plugin root is env-first ($CLAUDE_PLUGIN_ROOT), else self-located from $0. An empty root
+# skips both lints. --self-test asserts the gating regex and the control-byte scan.
 set -eu
 
 SELF_TEST=0
@@ -47,6 +47,29 @@ if [ "$SELF_TEST" -eq 1 ]; then
     printf '%s' "$p" | grep -qE "$ARTIFACT_RE" && { echo "anchor-preflight: self-test FAIL (should NOT match: $p)"; exit 1; }
     ok=$((ok + 1))
   done
+
+  # An unreachable library is a FAIL here, never a vacuous OK: the hook itself fails open.
+  _ST_LIB="${CLAUDE_PLUGIN_ROOT:-$(dirname -- "$0")/..}/skills/worktask/scripts/control-byte-lib.sh"
+  if [ ! -r "$_ST_LIB" ]; then
+    echo "anchor-preflight: self-test FAIL (control-byte-lib.sh unreachable at $_ST_LIB)"
+    exit 1
+  fi
+  # shellcheck source=skills/worktask/scripts/control-byte-lib.sh
+  . "$_ST_LIB"
+  _st_td=$(mktemp -d "${TMPDIR:-/tmp}/anchor-preflight-selftest.XXXXXX")
+  # shellcheck disable=SC2064  # the path is fixed at set time on purpose
+  trap "rm -rf '$_st_td'" EXIT
+  # shellcheck disable=SC2016  # the backticks are fixture text, not a command substitution
+  printf 'escape spellings `\\0` then a raw \000 byte\n' > "$_st_td/nul.md"
+  printf 'tab\tcr\r\nliteral \\0 \\x00 ^@\n' > "$_st_td/clean.md"
+  _st_rc=0
+  _st_out=$(cb_scan_file "$_st_td/nul.md" nul.md) || _st_rc=$?
+  [ "$_st_rc" -eq 1 ] && [ "$_st_out" = "nul.md:33:0x00" ] \
+    || { echo "anchor-preflight: self-test FAIL (NUL not flagged: rc=$_st_rc out=$_st_out)"; exit 1; }
+  _st_rc=0
+  cb_scan_file "$_st_td/clean.md" clean.md > /dev/null || _st_rc=$?
+  [ "$_st_rc" -eq 0 ] || { echo "anchor-preflight: self-test FAIL (clean file flagged: rc=$_st_rc)"; exit 1; }
+
   echo "anchor-preflight: self-test OK"
   exit 0
 fi
@@ -60,11 +83,7 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 [ -z "$FILE_PATH" ] && FILE_PATH="${CLAUDE_TOOL_INPUT_FILE_PATH:-}"
-
-# Not a worktask artifact write → no-op (success).
 [ -n "$FILE_PATH" ] || exit 0
-printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || exit 0
-[ -f "$FILE_PATH" ] || exit 0
 
 # An explicitly set env var always wins; otherwise derive the root from the shared
 # resolver, which validates the .claude-plugin/plugin.json marker.
@@ -84,8 +103,37 @@ if [ -z "$PLUGIN_ROOT" ]; then
     PLUGIN_ROOT="$(corpflow_plugin_root)" || PLUGIN_ROOT=""
   fi
 fi
-LINT="${PLUGIN_ROOT:-.}/skills/worktask/scripts/cache-lint.sh"
-[ -x "$LINT" ] || [ -f "$LINT" ] || exit 0
+# Never fall back to `.`: an empty root would load skills/ out of the user's project (CWE-427).
+[ -n "$PLUGIN_ROOT" ] || exit 0
 
-# Non-zero exit propagates the diagnostic to the producing agent.
-exec bash "$LINT" --anchor-lint "$FILE_PATH"
+cbrc=0
+CB_LIB="$PLUGIN_ROOT/skills/worktask/scripts/control-byte-lib.sh"
+if [ -f "$FILE_PATH" ] && [ -r "$CB_LIB" ]; then
+  _cf_opts=$-
+  set +e
+  # shellcheck source=skills/worktask/scripts/control-byte-lib.sh
+  . "$CB_LIB"
+  case "$_cf_opts" in *e*) set -e ;; esac
+  if command -v cb_scan_file > /dev/null 2>&1 && cb_is_lintable "$FILE_PATH"; then
+    cbhits=$(cb_scan_file "$FILE_PATH" "$FILE_PATH") || cbrc=$?
+    if [ "$cbrc" -eq 1 ]; then
+      printf >&2 'anchor-preflight: control bytes in %s — a typed escape was decoded into a raw byte; rewrite each named byte\n' "$FILE_PATH"
+      printf >&2 '%s\n' "$cbhits"
+    else
+      cbrc=0
+    fi
+  fi
+fi
+
+if ! printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || [ ! -f "$FILE_PATH" ]; then
+  [ "$cbrc" -eq 0 ] || exit 2
+  exit 0
+fi
+
+arc=0
+LINT="$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh"
+if [ -f "$LINT" ]; then
+  bash "$LINT" --anchor-lint "$FILE_PATH" || arc=$?
+fi
+[ "$cbrc" -eq 0 ] && [ "$arc" -eq 0 ] || exit 2
+exit 0
