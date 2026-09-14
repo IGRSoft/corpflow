@@ -432,7 +432,7 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 #### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
 
-After every `Task()` return and BEFORE the `completed` patch, first read any
+After every `Task()` return and BEFORE Step 7 settles the row, first read any
 `requests_stage_escalation` in the artifact frontmatter (§ Mid-run escalation — the orchestrator
 is the consumer), then run the three-layer check: Layer 1 (agent self-patch) → Layer 2
 (`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and semantics: loop § Step 6.5
@@ -440,7 +440,7 @@ below.
 
 ##### Completion signal (subagents run in the background by default)
 
-> "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `completed` patch that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
+> "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
 
 ###### Dispatch-tracking helpers (steps 6a/6.5 — write only cache section [3])
 
@@ -665,7 +665,8 @@ violated until it was injected at dispatch.
 
 ```typescript
     if (full.metadata.stage === "DV" && (full.metadata.retry_count ?? 0) > 0) {
-      const fromStage = full.metadata.gate_from_stage;    // "DR" | "QA" (set by the loop-back)
+      // "DR" | "QA": copied by the Step 7 loop-back from the gate row, where state-patch.sh writes it
+      const fromStage = full.metadata.gate_from_stage;
       const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[]
       if (fromStage && blockers.length > 0) {
         full.description =
@@ -803,7 +804,18 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
     // 4.8a. DV test-scope enforcement — DV-only, never QA (QA's full-suite run IS the sanctioned
     //       regression gate, agents/qa-engineer.md § Q1 Three-Mode Dispatcher).
     if (full.metadata.stage === "DV") {
-      const mode = full.metadata.test_mode ?? state.metadata?.test_mode ?? "scoped";
+      let mode = full.metadata.test_mode ?? state.metadata?.test_mode;
+      if (mode == null) {  // PL0 stamps test_mode; a silent default would hide the missing stamp
+        appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: "DV",
+                      result: "warn", metadata: { test_mode: "scoped", reason: "test_mode_unstamped" } });
+        mode = "scoped";
+      }
+```
+
+##### Step 4.8a — scope banner
+
+```typescript
+      // …continued: step 4.8a body
       const scope =
         `TEST SCOPE (mode: ${mode}): run ONLY \`Executed Tests (DV)\` per ` +
         `agents/developer.md D2. DO NOT re-run the full suite to reverify a fix between ` +
@@ -1107,7 +1119,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     // 6.5-pre. Read handoff.requests_stage_escalation from the artifact frontmatter BEFORE any
-    //          completed stamp lands (Layer 2/3 below patch unconditionally) — validate, then
+    //          status stamp lands (Layer 2/3 below stamp the verdict-mapped status) — validate, then
     //          accept (--task-create/--task-block + metadata.added_stages) or reject naming the
     //          failed condition. Semantics: § Mid-run escalation — the orchestrator is the consumer.
     // 6.5. Patch state.json from artifact frontmatter if the agent didn't — layer #3 after the
@@ -1212,10 +1224,11 @@ function escalationBookkeeping(state, task, cls) {
 ##### Step 6.5a2 — why a mid-stage yield needs its own arm
 
 An agent that yields mid-sentence with budget remaining has **not** errored, so 6.5a does not fire
-and control falls through to Layer 3, whose fallback hard-codes `status:"completed", verdict:"ok"`
-over a stage that never finished — corrupting the ledger in the one direction nothing downstream
-re-checks. This arm keys on *evidence* (artifact absent, or present with no `handoff.verdict`),
-never on the shape of the return message, so a normally-completed stage still takes Layer 2.
+and control falls through to Layer 3 and Step 7, which settle the row from a verdict written before
+the stage finished — corrupting the ledger in the one direction nothing downstream re-checks — or
+escalate a stage that only needed resuming. This arm keys on *evidence* (artifact absent, or
+present with no `handoff.verdict`), never on the shape of the return message, so a
+normally-completed stage still takes Layer 2.
 
 ##### Step 6.5a2 — incomplete return (mid-stage yield)
 
@@ -1308,10 +1321,24 @@ Check the send result on both legs (`references/resume.md § Reattach rows — t
 result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
 was never asked for.
 
+##### Step 6.5 — verdict → status
+
+```typescript
+// Mirror of state-patch.sh verdict_status, which stays the SSOT — status-enum-parity.bats diffs
+// the two. A verdict absent here is refused by the writer (exit 3); never default one.
+const VERDICT_STATUS = {
+  ok: "completed", pass: "completed", go: "completed", approve: "completed",
+  blocked: "blocked", escalate: "blocked",
+  fail: "pending", reject: "pending", "no-go": "pending",
+};
+const rowMatchesHandoff = (row, h) =>
+  Boolean(h?.verdict) && row?.verdict === h.verdict && row?.status === VERDICT_STATUS[h.verdict];
+```
+
 ##### Step 6.5 — Layer 2 (synchronous patch)
 
 ```typescript
-      if (post.tasks?.[task.id]?.status !== "completed") {
+      if (!rowMatchesHandoff(post.tasks?.[task.id], incHandoff)) {
         const runIndex = full.metadata.run_index ?? 0;
         const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
         // Layer 2 (synchronous): state-patch.sh is the single implementation (hooks/state-merge.sh
@@ -1325,13 +1352,16 @@ was never asked for.
 
 ```typescript
         const post2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
-        if (post2.tasks?.[task.id]?.status !== "completed") {
-          // Layer 3 (F3): derive a minimal patch and stamp completed_via:"f3".
-          const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
-          const patch = handoff
-            ? buildPatchFromHandoff(code, handoff)
-            : { tasks: { [task.id]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
-          if (handoff && !patch.tasks[task.id].completed_via) patch.tasks[task.id].completed_via = "f3";
+        const handoff = parseFrontmatter(artifactPath);
+        const status = VERDICT_STATUS[handoff?.verdict];
+        // Layer 3 (F3): only a mapped verdict is stamped. No handoff, or a verdict the writer
+        // refused, writes nothing — 6.5a2 resumes the first, Step 7 escalates the second.
+        if (status && !rowMatchesHandoff(post2.tasks?.[task.id], handoff)) {
+          const patch = buildPatchFromHandoff(code, handoff);
+          const entry = patch.tasks[task.id];
+          entry.status = status;
+          entry.completed_via ??= "f3";
+          if (status === "pending") entry.metadata = { ...entry.metadata, gate_from_stage: code };
           atomicMergeStateJson(patch);
         }
       }
@@ -1403,8 +1433,17 @@ was never asked for.
 #### Step 7
 
 ```typescript
-    // 7. Mark completed
-    sh(`state-patch.sh --task-status ${task.id} completed`);
+    // 7. Settle by the status Step 6.5 derived from the verdict. Stamping over it would undo
+    //    the writer's map; re-read, since Layers 2/3 wrote after the step-4.0 snapshot.
+    const ledger = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+    const row = ledger.tasks[task.id];
+    if (row.status === "blocked") {
+      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp.
+    } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
+      loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
+    } else if (row.status !== "completed") {
+      // No mapped verdict landed (the writer refused it): escalate per § Error Handling.
+    }
   }
 
   // Refresh from the ledger — TL/DV may have added tasks since the last read.
@@ -1413,9 +1452,44 @@ was never asked for.
 }
 ```
 
+##### Step 7 — loop-back arm
+
+```typescript
+// Re-dispatching the gate row against unchanged code only burns retries, so the DV rows it
+// depends on go back first; Step 4.6 then injects the gate's findings into their prompt.
+function loopBackToDV(ledger, gateId, gateRow) {
+  const h = parseFrontmatter(gateRow.artifact);
+  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR shape | QA shape
+  const deps = new Set(), stack = [...(gateRow.blocked_by ?? [])];
+  while (stack.length) {
+    const id = stack.pop();
+    if (!deps.has(id)) { deps.add(id); stack.push(...(ledger.tasks[id]?.blocked_by ?? [])); }
+  }
+  const dvRows = [...deps].filter(id => /^DV\d+$/.test(id));
+```
+
+##### Step 7 — loop-back, replay then stamp
+
+```typescript
+  // …continued: loopBackToDV body. Counts are read before any replay: --cascade clears
+  // retry_count on every dependent, and one DV row can depend on another.
+  const retries = Object.fromEntries(dvRows.map(dv => [dv, ledger.tasks[dv].metadata?.retry_count ?? 0]));
+  for (const dv of dvRows) {
+    if (spawnSync("state-patch.sh", ["--task-replay", dv, "--cascade"]).status !== 0) {
+      return escalate(gateId);  // § Error Handling — a refused replay is never hand-edited
+    }
+  }
+  for (const dv of dvRows) {  // argv, never sh(): gate_blockers is artifact text
+    spawnSync("state-patch.sh", ["--task-meta", dv, "--set", JSON.stringify({
+      gate_from_stage: gateRow.metadata.gate_from_stage, gate_blockers: blockers,
+      retry_count: retries[dv] + 1 })]);
+  }
+}
+```
+
 #### Key rules
 
-- NEVER skip a status patch (both in_progress and completed)
+- NEVER skip a status patch (in_progress at claim, the verdict-mapped status at completion)
 - NEVER execute a stage before its `blocked_by` dependencies have settled
 - ALWAYS pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); omitting or mismatching is a violation — never rely on frontmatter inheritance
 - ALWAYS stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
@@ -1693,8 +1767,9 @@ Executable helpers (never read into context — invoke via `bash`):
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 
-Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent;
-otherwise exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
+Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
+and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
+exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
 `references/handoff-protocol.md#layer-1-fallback`.
 
 ## Related

@@ -156,7 +156,16 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 |---|---|---|
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
-| `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; consumed by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on DV + QA tasks. |
+| `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; consumed by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on every downstream task. |
+
+##### Propagation fields — base branch & test scope
+
+`--task-create` refuses a non-PL/IR row missing `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (§ Workspace Mode): exit 2, `state.json` untouched.
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.base_ref` | the detected integration branch, `master` included | DV's per-task base override (§ Where to stamp the detected branch). |
+| `metadata.test_mode` | the plan's `test_mode`: `build-only`, `scoped` or `full` | Step 4.8a's DV test-scope banner. An unstamped row gets a `warn` audit row, then `scoped`. |
 
 #### Reader resolution order
 
@@ -266,7 +275,7 @@ would be exactly the silent retarget this reconcile exists to prevent.
 
 Stamp the result in **two** places:
 
-- `task.metadata.base_ref` on PL0 and every downstream task — **only when `$BASE` is not `master`**. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
+- `task.metadata.base_ref` on PL0 and every downstream task — **unconditionally**, `master` included: `--task-create` refuses a downstream row without it. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
 - `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `branch-lib.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader. On a turn that skips the step-4 reset (`plan_revision`), write it with `state-patch.sh --ledger-meta --set '{"base_ref":"<branch>"}'` rather than editing `state.json` by hand — a hand edit bypasses the lock and the bounds filter the single writer applies.
 
 Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.

@@ -195,15 +195,16 @@ Exit 1 = resolved ≠ assigned: stop, do not edit, log `workspace_path_mismatch`
 
 > # ⚠️ FIRST WRITE AFTER THE WORKTREE PIN ⚠️
 >
-> Before D1, before the first edit, run the ledger patch and the sweep stub for what you know
-> right now — an empty `files_modified`, `open_questions: []`, a `summary` that says work has
-> started. One call:
+> Before D1, before the first edit, claim your own ledger row (`DV0`, `DV1`…): it moves `pending`
+> or `blocked` to `in_progress` and stamps `claimed_at`. One call:
 >
 > ```bash
-> state-patch.sh --stage DV --prev <PREV> --facts '{"open_questions":[]}'
+> state-patch.sh --claim <TASK_ID>
 > ```
 >
-> Then re-run it with the real payload at § State Patch when you finish, which unions over this one.
+> Re-claiming an `in_progress` row is a no-op. Exit 4 means the row is already settled: stop and
+> return `verdict: blocked` naming it — replaying a row is the orchestrator's call, whatever the
+> refusal message suggests. The completion patch stays at § State Patch, when you finish.
 
 #### Why this is first, not last (D0.0b)
 

@@ -21,7 +21,7 @@ enum_from_prose() {
     "$PLUGIN_ROOT/$LEDGER_DOC" | sort
 }
 
-# The single `case` arm that closes the set on the write path (AD-1: the sole decode).
+# The single `case` arm that closes the set on the write path (the sole decode).
 enum_from_writer() {
   grep -E '^[[:space:]]+pending \| in_progress \|.*\) ;;$' "$PLUGIN_ROOT/$WRITER" \
     | tr '|' '\n' | sed 's/[^a-z_]//g' | grep -v '^$' | sort
@@ -44,6 +44,44 @@ terminal_from_prose() {
        inside && /^## / { exit }
        inside && /^\| `/ && tolower($0) ~ /terminal/ { gsub(/^\| `/, ""); sub(/` \|.*$/, ""); print }' \
     "$PLUGIN_ROOT/$LEDGER_DOC" | sort
+}
+
+# The loop's JS mirror of the verdict map, one `verdict:status` line per entry. Quotes are
+# stripped so the quoted "no-go" key compares like the bare ones.
+verdict_map_from_loop() {
+  awk '/^const VERDICT_STATUS = \{/ { inside = 1; next }
+       inside && /^\};/ { exit }
+       inside { print }' "$PLUGIN_ROOT/$LOOP_DOC" \
+    | tr ',' '\n' | tr -d ' "' | grep -v '^$' | sort
+}
+
+# Runs the writer's own verdict_status over every verdict its case arms name, so the diff
+# exercises the function rather than a second hand-copied table.
+verdict_map_from_writer() {
+  local fn v
+  fn="$(awk '/^verdict_status\(\) \{/ { inside = 1 } inside { print } inside && /^\}/ { exit }' \
+    "$PLUGIN_ROOT/$WRITER")"
+  for v in $(printf '%s\n' "$fn" | grep -E '^[[:space:]]+[a-z| -]+\) printf' \
+    | sed 's/).*//' | tr '|' '\n' | tr -d ' '); do
+    printf '%s:%s\n' "$v" "$(bash -c "$fn"$'\n''verdict_status "$1"' _ "$v")"
+  done | sort
+}
+
+@test "the loop's VERDICT_STATUS mirrors state-patch.sh verdict_status for every verdict" {
+  local loop writer n fn
+  loop="$(verdict_map_from_loop)"
+  writer="$(verdict_map_from_writer)"
+  n="$(printf '%s\n' "$loop" | grep -c .)"
+  [ "$n" -ge 9 ] || fail "non-vacuity: only $n verdicts extracted from VERDICT_STATUS in $LOOP_DOC"
+  n="$(printf '%s\n' "$writer" | grep -c .)"
+  [ "$n" -ge 9 ] || fail "non-vacuity: only $n verdicts extracted from verdict_status in $WRITER"
+  diff <(printf '%s\n' "$loop") <(printf '%s\n' "$writer")
+  # An unmapped verdict must print nothing: the writer refuses it, so the mirror cannot default it.
+  fn="$(awk '/^verdict_status\(\) \{/ { inside = 1 } inside { print } inside && /^\}/ { exit }' \
+    "$PLUGIN_ROOT/$WRITER")"
+  run bash -c "$fn"$'\n''verdict_status conditional'
+  assert_success
+  assert_output ""
 }
 
 @test "R1c: the prose table and the writer's validating case name the same statuses" {
@@ -97,19 +135,20 @@ terminal_from_prose() {
   [ "$checked" -eq 4 ] || fail "non-vacuity: only $checked copies checked"
 }
 
-@test "AD-1: exactly one status-validating case exists in the writer" {
+@test "exactly one status-validating case exists in the writer" {
   # A second closed set would be a read-side gate, turning the additive change breaking.
   local n
   n="$(grep -cE '^[[:space:]]+pending \| in_progress \|.*\) ;;$' "$PLUGIN_ROOT/$WRITER")"
   [ "$n" -eq 1 ] || fail "expected exactly 1 status-validating case in $WRITER, found $n"
 }
 
-@test "AD-1 back-compat: the new writer loads a real pre-change ledger and loses no field" {
+@test "back-compat: the new writer loads a real pre-change ledger and loses no field" {
   local wd
   wd="$(mk_tmpworkdir)"
   mkdir -p "$wd/.context"
   cp "$FIXTURES/worktask/state.pre-failed-enum.json" "$wd/.context/state.json"
   cd "$wd"
+  export WORKSPACE_ROOT="$wd"
   run bash "$PLUGIN_ROOT/$WRITER" --task-status PL0 completed
   assert_success
   # Field-for-field over every scalar path: nothing the writer does not model may be dropped.
@@ -125,12 +164,13 @@ terminal_from_prose() {
   assert_output completed
 }
 
-@test "AD-1 back-compat: the new writer accepts 'failed' and round-trips a pre-change ledger" {
+@test "back-compat: the new writer accepts 'failed' and round-trips a pre-change ledger" {
   local wd
   wd="$(mk_tmpworkdir)"
   mkdir -p "$wd/.context"
   cp "$FIXTURES/worktask/state.pre-failed-enum.json" "$wd/.context/state.json"
   cd "$wd"
+  export WORKSPACE_ROOT="$wd"
   run bash "$PLUGIN_ROOT/$WRITER" --task-status PL0 failed
   assert_success
   run jq -r '.tasks.PL0.status' .context/state.json
@@ -187,7 +227,7 @@ terminal_from_prose() {
 
 @test "R1e: ESCALATE_TO mirrors the Escalate-to column of the matrix" {
   # The map is data in the orchestration doc; the matrix is the SSOT. Without this diff the
-  # two are a second source for the routing decision — the AD-5 failure mode, one layer over.
+  # two are a second source for the routing decision — the same failure mode, one layer over.
   local coord="$PLUGIN_ROOT/skills/agent-coordination/SKILL.md"
   local map expected checked=0 cls col
   map="$(awk '/^const ESCALATE_TO = \{/ { inside = 1; next }
