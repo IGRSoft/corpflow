@@ -565,6 +565,31 @@ MOCK
       fail=$((fail + 1))
     fi
 
+    # Fixture 09e: two leaks every line rule misses. A path glued to punctuation has
+    # no whitespace anchor, and a home directory outside the mount list is not in the
+    # pattern at all. The final scrub pass must rewrite both and keep the line.
+    local f9e_ok=1 f9e_out
+    f9e_out=$(printf 'Notes (/Users/me/x.md) kept\n' | sanitise_body)
+    if [ "$f9e_out" != 'Notes ([local-path]) kept' ]; then
+      echo "publish-pl-issue: self-test 09e glued path not scrubbed: $f9e_out" >&2
+      f9e_ok=0
+    fi
+    f9e_out=$(
+      export HOME=/data/cf-home
+      printf 'Home at /data/cf-home/proj/x.md kept\n' | sanitise_body
+    )
+    if [ "$f9e_out" != 'Home at [local-path] kept' ]; then
+      echo "publish-pl-issue: self-test 09e custom HOME not scrubbed: $f9e_out" >&2
+      f9e_ok=0
+    fi
+    if [ "$f9e_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09e-token-scrub PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09e-token-scrub FAIL"
+      fail=$((fail + 1))
+    fi
+
     # Fixture 02b: plugin-qualified identifier tokens must not appear in
     # sanitised body (Pass-2 A6 rule), outside code spans.
     local leak_in leak_out
