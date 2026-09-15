@@ -66,10 +66,13 @@ resolve_issue() {
 # preflight. The dummy positional is required — the library iterates `"$@"`, which
 # is an unbound-variable error on bash 3.2 when empty under `set -u`.
 #
-# Exit 97 = library unreachable or refused to source; 98 = symbol missing. Both are
-# blocking: a working-folder path in a published body must be structurally
-# impossible, and a fail-open degrade would turn that into "usually".
-# Batch and incident runs do reach here, but treat both statuses as non-blocking,
+# path-scrub.sh is sourced by name so the PR path does not depend on the library's
+# own sibling lookup; the second scrub pass is idempotent.
+#
+# Exit 97 = library unreachable or refused to source; 98 = sanitise_body or
+# corpflow_path_scrub missing; other non-zero = the library stopped itself. All are
+# blocking: a fail-open degrade would make a leaked path "usually" impossible.
+# Batch and incident runs do reach here, but treat every status as non-blocking,
 # so a broken plugin cache still cannot wedge /megatask.
 sanitise_stream() {
   (
@@ -77,7 +80,14 @@ sanitise_stream() {
     # shellcheck disable=SC1090
     PUBLISH_LIB_ONLY=1 . "$LIB_PATH" --fn-preflight > /dev/null 2>&1 || exit 97
     command -v sanitise_body > /dev/null 2>&1 || exit 98
-    sanitise_body
+    scrub="${SCRIPT_DIR}/../../shared/scripts/path-scrub.sh"
+    [ -r "$scrub" ] || exit 98
+    # shellcheck disable=SC1090
+    . "$scrub" > /dev/null 2>&1
+    command -v corpflow_path_scrub > /dev/null 2>&1 || exit 98
+    # Set after the library prologue so an awk failure in sanitise_body fails the stream.
+    set -o pipefail
+    sanitise_body | corpflow_path_scrub
   )
 }
 
@@ -286,11 +296,26 @@ cmd_pr_body() {
   # Read back what the sanitiser actually produced. Sanitising without inspecting
   # the result is how a body that lost every image and kept a dead local path was
   # audited "ok". Runs here, after the rewrite, so it lints the byte-identical
-  # body that reaches `gh pr create`. Warn-only by contract: it never changes this
-  # gate's verdict, so it can land mid-flight — promote it with --strict.
+  # body that reaches `gh pr create`. Warn-only by default. Under strict, a lint that
+  # fails, errors or cannot run blocks, so a missing checker cannot pass the gate.
+  # Batch and incident routes never block.
+  local lint_rc=0 lint_reason=""
   if [ -x "${SCRIPT_DIR}/pr-body-lint.sh" ]; then
     bash "${SCRIPT_DIR}/pr-body-lint.sh" --body "$BODY_FILE" --state "$STATE_PATH" \
-      --context "$CONTEXT_DIR" || true
+      --context "$CONTEXT_DIR" || lint_rc=$?
+    case "$lint_rc" in
+      0) ;;
+      1) lint_reason="pr_body_lint_findings" ;;
+      *) lint_reason="pr_body_lint_error" ;;
+    esac
+  else
+    lint_reason="pr_body_lint_unavailable"
+  fi
+  if [[ "${CORPFLOW_PR_BODY_STRICT:-0}" == "1" && "$batch" != 1 && -n "$lint_reason" ]]; then
+    printf >&2 'BLOCKED: pr-body-lint did not pass under --strict (%s, rc=%s): %s\n' \
+      "$lint_reason" "$lint_rc" "${SCRIPT_DIR}/pr-body-lint.sh"
+    audit_fn pr_body_gate blocked "$(meta_json reason "$lint_reason" lint_rc "$lint_rc")"
+    return 1
   fi
 
   # Composition requirements below are worktask-FN contracts; batch and incident

@@ -57,6 +57,16 @@ Every stage's output artifact MUST (full checklist: **Completion Verification** 
 2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores), plus the universal `## elicitation-sweep` anchor every artifact carries.
 3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<TASK_ID>"]` edge into `.context/state.json`.
 
+### Orchestrator messages — ack first
+
+A message from the orchestrator to your stage opens with a `msg_id:` line, a `supersedes:` line when it replaces an earlier message, and the exact ack command. When one reaches you:
+
+1. Run that `bash skills/worktask/scripts/state-patch.sh --ack <TASK_ID> <msg_id>` line as your first tool call. The ack row is the only evidence the message reached you.
+2. A `supersedes:` line retires the message it names; follow the replacement.
+3. Set `handoff.acted_on_msg_id` to the newest msg_id you acknowledged and acted on (`skills/worktask/references/handoff-protocol.md § Schema — acted_on_msg_id`).
+
+An unacknowledged message reads as not delivered, and a missing or different `acted_on_msg_id` reads as a mismatch. Either one costs a resend, then escalation (`skills/worktask/references/resume.md § Reattach rows — one resend, then escalate`). If the ack exits non-zero, still follow the message and name the exit code in the artifact.
+
 ## Contract Table
 
 Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-resolution)). Reading the rows:

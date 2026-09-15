@@ -150,7 +150,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 | Actor | Action Examples |
 |-------|-----------------|
 | Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
-| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
+| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 | `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
 
@@ -215,7 +215,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
 ```
 
 #### Schema — remaining fields
