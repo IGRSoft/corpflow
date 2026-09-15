@@ -222,6 +222,57 @@ EOS
   [ ! -e "$WD/ctx/logs/audit.jsonl" ]
 }
 
+# --- renderer binaries --------------------------------------------------------------
+
+# Removes the silicon stub; skips when the fixed PATH tail still holds a real renderer.
+_no_renderer() {
+  local t
+  rm -f "$BIN/silicon"
+  for t in silicon magick convert; do
+    if PATH="/usr/bin:/bin" command -v "$t" > /dev/null 2>&1; then
+      skip "host has $t on /usr/bin:/bin"
+    fi
+  done
+}
+
+@test "renderer: absent binaries fail with one entry each and offer --accept-absent renderer" {
+  _no_renderer
+  _pf -- --auto plan --platform systems
+  [ "$status" -eq 1 ]
+  [ "$(_entries)" -eq 1 ] || fail "want 1 entry, got: $(_block)"
+  _block | grep -q '\] renderer: no silicon, magick or convert on PATH$'
+  _block | grep -qF -- '--accept-absent renderer'
+  run jq -ce '.tools_absent' <<< "$(_rj)"
+  assert_output '[{"tool":"silicon","platform":"systems","accepted":false},{"tool":"magick","platform":"systems","accepted":false},{"tool":"convert","platform":"systems","accepted":false}]'
+}
+
+@test "AC-6: --accept-absent renderer passes and --record stores one entry per binary" {
+  _no_renderer
+  _ledger
+  _pf -- --auto plan --platform backend --accept-absent renderer
+  assert_success
+  assert_line "accepted_absent=silicon,magick,convert"
+  printf '%s\n' "$output" > "$WD/tmp/corpflow-preflight.r6"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --record "$WD/tmp/corpflow-preflight.r6" --context "$WD/ctx"
+  assert_success
+  run jq -e '.metadata.preflight.tools_absent == [
+    {"tool":"silicon","platform":"backend","accepted":true},
+    {"tool":"magick","platform":"backend","accepted":true},
+    {"tool":"convert","platform":"backend","accepted":true}]' "$WD/ctx/state.json"
+  assert_success
+}
+
+@test "renderer: binary names accept one at a time, and a partial list still fails" {
+  _no_renderer
+  _pf -- --auto plan --platform backend --accept-absent silicon
+  [ "$status" -eq 1 ]
+  _block | grep -q '\] renderer: .*not accepted: magick,convert'
+  _pf -- --auto plan --platform backend --accept-absent silicon,magick,convert
+  assert_success
+  run jq -e '.tools_absent | map(.tool) == ["silicon","magick","convert"] and all(.accepted)' <<< "$(_rj)"
+  assert_success
+}
+
 # --- permission rules -------------------------------------------------------------
 
 @test "rules: prefix, space-star, broader prefixes and bare Bash satisfy the merge grant" {

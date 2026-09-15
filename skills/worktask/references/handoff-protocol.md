@@ -890,7 +890,7 @@ evidence tool only when `tools_absent[]` records it `accepted: true`. Change pro
             items:
               required: [tool, platform, accepted]
               properties:
-                tool: { type: string, enum: [renderer, playwright, playwright-browser, adb-device, simulator, xcodebuildmcp] }
+                tool: { type: string, enum: [silicon, magick, convert, playwright, playwright-browser, adb-device, simulator, xcodebuildmcp] }
                 platform: { type: string }
                 accepted: { type: boolean }              # always true on a ledger
 ```
@@ -902,7 +902,9 @@ evidence tool only when `tools_absent[]` records it `accepted: true`. Change pro
   `tools_absent[]` entry is `accepted: true`, and an `accepted: false` entry on a ledger is a
   contract violation.
 - A tool that was present is never listed in `tools_absent[]`, accepted or not.
-- `checks[].id`: `git-push`, `gh-pr-create`, `gh-pr-merge`, `git-reset-hard`, the six tool names,
+- A missing renderer is one entry per binary, as a `tool_missing` row names it (`silicon`,
+  `magick`, `convert`); `renderer` accepts all three.
+- `checks[].id`: `git-push`, `gh-pr-create`, `gh-pr-merge`, `git-reset-hard`, `renderer`, the other five tools,
   `apple-developer-dir`, `apple-sdk-settings`, `apple-showsdks`, `apple-swift-match`,
   `android-compile-sdk`, and `platform-<p>` (a platform with no checks of its own, recorded `skip`).
 - With Playwright itself absent, `playwright-browser` is a `skip` check, not a second absent tool.

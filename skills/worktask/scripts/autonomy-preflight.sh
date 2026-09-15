@@ -26,7 +26,8 @@
 #                                 Neither plan nor finalization => result=skipped.
 # @arg --platform <p[,p]>         Platforms whose evidence/toolchain chain is checked.
 # @arg --harness                  Also require the `git reset --hard` grant.
-# @arg --accept-absent <t[,t]>    Evidence tools allowed to be missing: renderer,
+# @arg --accept-absent <t[,t]>    Evidence tools allowed to be missing: renderer (all of
+#                                 silicon, magick, convert; each also nameable alone),
 #                                 playwright, playwright-browser, adb-device, simulator,
 #                                 xcodebuildmcp. An unknown token exits 2 before any probe.
 # @arg --record <buffer>          Record mode: merge the buffer's passing result_json into
@@ -69,7 +70,8 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$SELF")" 2> /dev/null && pwd -P)" |
 # The self-test re-runs this file after cd-ing into a fixture, so a relative path would break.
 [ -n "$SCRIPT_DIR" ] && SELF="$SCRIPT_DIR/$(basename -- "$SELF")"
 
-readonly KNOWN_TOOLS="renderer playwright playwright-browser adb-device simulator xcodebuildmcp"
+readonly RENDERER_BINS="silicon magick convert"
+readonly KNOWN_TOOLS="renderer $RENDERER_BINS playwright playwright-browser adb-device simulator xcodebuildmcp"
 # Buffers are removed by --record only when their basename carries one of these
 # prefixes, so a mistyped argument can never delete an unrelated file.
 readonly BUFFER_PREFIXES="corpflow-preflight. corpflow-issue-scan."
@@ -443,16 +445,36 @@ _evidence() {
   done
 }
 
+# The capture floor row names every binary it tried and the evidence gate matches each name,
+# so absence and acceptance are recorded per binary; `renderer` accepts all of them at once.
 check_renderer() { # <platform-list>
-  local t
-  for t in silicon magick convert; do
+  local t p acc unaccepted="" detail="no silicon, magick or convert on PATH" IFS=$' \t\n'
+  for t in $RENDERER_BINS; do
     if command -v "$t" > /dev/null 2>&1; then
-      _evidence renderer "$1" 1 "$t found on PATH" ""
+      _add_check renderer evidence pass "$t found on PATH"
       return 0
     fi
   done
-  _evidence renderer "$1" 0 "no silicon, magick or convert on PATH" \
-    "install silicon (cargo install silicon) or ImageMagick (brew install imagemagick)"
+  for t in $RENDERER_BINS; do
+    acc=false
+    if _in_list renderer "$ACCEPT" || _in_list "$t" "$ACCEPT"; then
+      acc=true
+      ACCEPTED_USED[${#ACCEPTED_USED[@]}]="$t"
+    else
+      unaccepted="${unaccepted:+$unaccepted,}$t"
+    fi
+    for p in ${1//,/ }; do
+      ABSENT_ROWS[${#ABSENT_ROWS[@]}]="$t"$'\t'"$p"$'\t'"$acc"
+    done
+  done
+  if [ -z "$unaccepted" ]; then
+    _add_check renderer evidence skip "$detail; accepted absent at launch"
+    return 0
+  fi
+  [ "$unaccepted" = "${RENDERER_BINS// /,}" ] || detail="$detail; not accepted: $unaccepted"
+  _add_check renderer evidence fail "$detail" \
+    "install silicon (cargo install silicon) or ImageMagick (brew install imagemagick)" \
+    "or relaunch with --accept-absent renderer to proceed without it"
 }
 
 _browser_dirs() {
@@ -1015,6 +1037,27 @@ EOS
     && cmp -s "$t/ctx/state.json" "$t/before.json"; then
     ok "--record refuses a failing result and leaves the ledger untouched"
   else bad "--record fail refusal"; fi
+
+  # The evidence gate matches the binary names a tool_missing row lists, so each is recorded.
+  rm -f "$stub/silicon"
+  if PATH="/usr/bin:/bin" command -v silicon > /dev/null 2>&1 || PATH="/usr/bin:/bin" command -v magick > /dev/null 2>&1 \
+    || PATH="/usr/bin:/bin" command -v convert > /dev/null 2>&1; then
+    ok "renderer binaries per entry (skipped: host renderer on /usr/bin:/bin)"
+  else
+    out=$(_st_run "$t/cfg/allow.json" WRITE --auto plan --platform systems 2> /dev/null)
+    rc=$?
+    if [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q '\] renderer: '; then
+      ok "absent renderer without --accept-absent fails"
+    else bad "renderer unaccepted rc=$rc"; fi
+    out=$(_st_run "$t/cfg/allow.json" WRITE --auto plan --platform systems --accept-absent renderer 2> /dev/null)
+    rc=$?
+    if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | sed -n 's/^result_json=//p' | jq -e '.tools_absent == [
+        {"tool":"silicon","platform":"systems","accepted":true},
+        {"tool":"magick","platform":"systems","accepted":true},
+        {"tool":"convert","platform":"systems","accepted":true}]' > /dev/null; then
+      ok "--accept-absent renderer records silicon, magick and convert"
+    else bad "renderer accepted rc=$rc"; fi
+  fi
 
   printf 'autonomy-preflight --self-test: %d passed, %d failed\n' "$pass" "$fail"
   [ "$fail" -eq 0 ]

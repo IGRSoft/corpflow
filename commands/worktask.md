@@ -80,7 +80,8 @@ carrier on PL0.
 `--accept-absent=<tool[,tool]>` names the evidence tools an unattended run may launch without. Only
 § Step 2a-pre reads it, so it does nothing unless `--auto` contains `plan` or `finalization`, and it
 is the only way a missing tool stops counting as a preflight fail. Tools: `renderer` (backend,
-systems, ai, all), `playwright` and `playwright-browser` (web), `adb-device` (android), `simulator`
+systems, ai, all; covers `silicon`, `magick` and `convert`, which may also be named one at a time),
+`playwright` and `playwright-browser` (web), `adb-device` (android), `simulator`
 and `xcodebuildmcp` (apple). Comma-separated; an unknown tool is a parse error that rejects the
 invocation, as for `--auto`. The orchestrator passes the list verbatim and never defaults, extends
 or infers it, so a tool nobody named stays a fail.
