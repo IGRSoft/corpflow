@@ -46,8 +46,9 @@ echo "[run-e2e] swift=${HAS_SWIFT} magick=${HAS_MAGICK}"
 # on audit rows below, not on adapter exit code (adapter exits non-zero in
 # many graceful-degrade scenarios).
 set +e
-"${REPO_ROOT}/skills/dv-screenshot-capture/scripts/apple-canvas.sh" \
+CONTEXT_DIR="${REPO_ROOT}/.context" "${REPO_ROOT}/skills/dv-screenshot-capture/scripts/apple-canvas.sh" \
     --worktask-id "$WORKTASK_ID" \
+    --task-id DV0 \
     --modified-files "$MOD_FILE" \
     --view "FixtureApp.SimpleView" \
     --destination "macos-host" \
@@ -68,7 +69,7 @@ if [[ -f "$DESIGN_REF" ]]; then
     CANDIDATE=$(find "$IMAGES_DIR" -maxdepth 1 -name 'dv-*-canvas-*.png' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n1 || true)
     if [[ -n "$CANDIDATE" ]]; then
         echo "[run-e2e] invoking visual-diff against $DESIGN_REF"
-        "${REPO_ROOT}/skills/dv-screenshot-capture/scripts/visual-diff.sh" \
+        CONTEXT_DIR="${REPO_ROOT}/.context" "${REPO_ROOT}/skills/dv-screenshot-capture/scripts/visual-diff.sh" \
             --reference "$DESIGN_REF" \
             --candidate "$CANDIDATE" \
             --threshold "8" \

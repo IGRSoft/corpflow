@@ -339,6 +339,38 @@ MD
   fi
   rm -rf "$d13"
 
+  # ---- f14: per-task manifests union; a tool_missing row is a bullet, never an embed
+  local d14; d14=$(_mk_sandbox)
+  local i14="$d14/.context/images/wid-test"
+  printf 'x' > "$i14/dv-DV0-01-home.png"
+  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n|---|---|---|---|---|---|---|---|---|\n| 01 | home | dv-DV0-01-home.png | 1 | web | w | stream zero | t | — |\n' > "$i14/screenshots-DV0.md"
+  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n|---|---|---|---|---|---|---|---|---|\n| 01 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent) | t | — |\n' > "$i14/screenshots-DV1.md"
+  local out14
+  out14=$(STATE_FILE="$d14/.context/state.json" WORKSPACE_ROOT="$d14" \
+          ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \
+          bash "$self" --emit pr 2>/dev/null)
+  if printf '%s' "$out14" | grep -q '^!\[dv-01 stream zero\](https://raw.githubusercontent.com/' && \
+     printf '%s' "$out14" | grep -q '^- tool_missing: silicon(absent) — nothing captured' && \
+     ! printf '%s' "$out14" | grep -q '!\[.*tool_missing'; then
+    _ok "f14-union-tool-missing-bullet"
+  else
+    _fail "f14-union-tool-missing-bullet" "$(printf '%s' "$out14" | head -8 | tr '\n' '~')"
+  fi
+  rm -rf "$d14"
+
+  # ---- f15: --validate-manifest --task-id rejects a text file named .png
+  local d15; d15=$(mktemp -d)
+  printf 'not an image' > "$d15/dv-DV0-01-fake.png"
+  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n|---|---|---|---|---|---|---|---|---|\n| 01 | fake | dv-DV0-01-fake.png | 1 | web | w | c | t | — |\n' > "$d15/screenshots-DV0.md"
+  local out15 rc15=0
+  out15=$(bash "$self" --validate-manifest "$d15/screenshots-DV0.md" --task-id DV0 2>/dev/null) || rc15=$?
+  if [ "$rc15" -eq 1 ] && printf '%s' "$out15" | grep -q 'mime:dv-DV0-01-fake.png'; then
+    _ok "f15-task-id-mime"
+  else
+    _fail "f15-task-id-mime" "rc=$rc15 $(printf '%s' "$out15" | tr '\n' '~')"
+  fi
+  rm -rf "$d15"
+
   echo "attach-visual-evidence: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]
 }

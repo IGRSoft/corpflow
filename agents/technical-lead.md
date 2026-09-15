@@ -154,11 +154,11 @@ Confirm `development-N.md § Decisions` records the resolved `test_mode` and tha
 
 #### Visual Evidence Review
 
-Read `.context/images/<worktask_id>/screenshots.md` if present (`worktask_id` from `state.json`). In `developer-review-N.md § Findings` cite (a) the manifest's screenshot count, (b) the first filename, (c) any `Fallbacks invoked` or `Out-of-budget files` notes — signals of silent tool failures and repo bloat. When `metadata.requires_screenshots: false` and the manifest records a skip, record `Visual evidence skipped per plan (metadata.requires_screenshots=false)` and proceed. DR does NOT re-capture; that is DV's job.
+Read each DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` if present (a legacy `screenshots.md`: its `## <TASK_ID>` section; `worktask_id` from `state.json`). In `developer-review-N.md § Findings` cite, per manifest, (a) its screenshot count, (b) the first filename, (c) any `Fallbacks invoked` or `Out-of-budget files` notes — signals of silent tool failures and repo bloat. When `metadata.requires_screenshots: false` and the manifest records a skip, record `Visual evidence skipped per plan (metadata.requires_screenshots=false)` and proceed. DR does NOT re-capture; that is DV's job.
 
 ##### Absent Manifest — Non-Waivable Fail
 
-Manifest absent AND `metadata.requires_screenshots ≠ false` → `verdict: fail` plus a `missing_input` retry block in `.context/errors/developer.md` per DR3.5 (required artifact absent → routes to DV, who owns capture). **Non-waivable**: DR may NOT downgrade it to a QA-deferred item, a "QA gate not a DR blocker", or any non-blocker. `hooks/dv-screenshot-gate.sh` blocks this at the developer SubagentStop, so such a DV should not reach DR; if it does, fail it.
+A DV task's manifest absent AND its `requires_screenshots ≠ false` AND its platform not `backend`/`systems` → `verdict: fail` plus a `missing_input` retry block in `.context/errors/developer.md` per DR3.5 (required artifact absent → routes to DV, who owns capture). **Non-waivable**: DR may NOT downgrade it to a QA-deferred item, a "QA gate not a DR blocker", or any non-blocker. `hooks/dv-screenshot-gate.sh` blocks this at the DV SubagentStop, so such a DV should not reach DR; if it does, fail it.
 
 #### DR Artifact and QA Gate
 
@@ -337,7 +337,7 @@ Assess each by **Likelihood x Impact** (High/Medium/Low); document indicators, m
 ## Completion Verification
 
 Before marking DR complete, verify (supplement to `stage-contracts.md § Completion Verification`):
-- [ ] Visual evidence reviewed: either screenshots.md cited in Findings, or skip-per-plan recorded
+- [ ] Visual evidence reviewed: each DV task's `screenshots-<TASK_ID>.md` cited in Findings, or skip-per-plan recorded
 
 ## Handoff Protocol
 

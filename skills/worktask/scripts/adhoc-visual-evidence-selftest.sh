@@ -77,8 +77,8 @@ run_self_tests() {
     fi
 
     # ---- t4: manifest satisfies the attacher's own schema check
-    local mf; mf=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
-    if bash "$ATTACHER" --validate-manifest "$mf" >/dev/null 2>&1; then
+    local mf; mf=$(find "$d2/.context/images" -name screenshots-AD0.md 2>/dev/null | head -1)
+    if bash "$ATTACHER" --validate-manifest "$mf" --task-id AD0 >/dev/null 2>&1; then
       _ok "t4-manifest-schema"
     else
       _fail "t4-manifest-schema" "$(bash "$ATTACHER" --validate-manifest "$mf" 2>&1 | head -2 | tr '\n' '~')"
@@ -87,7 +87,7 @@ run_self_tests() {
     # ---- t2b: no image tool → no capture is CLAIMED. The regression this replaces:
     # exit 2 was read as success, so a manifest row named a .png that does not exist.
     local ghost=0 mf2 mfdir
-    mf2=$(find "$d2/.context/images" -name screenshots.md 2>/dev/null | head -1)
+    mf2=$(find "$d2/.context/images" -name screenshots-AD0.md 2>/dev/null | head -1)
     if [ -n "$mf2" ]; then
       mfdir=$(dirname "$mf2")
       while IFS='|' read -r _ _ _ pth _; do
@@ -125,7 +125,7 @@ run_self_tests() {
   printf 'x\n' > "$d7/Views/app.css"
   git -C "$d7" add -A >/dev/null 2>&1; git -C "$d7" commit -qm ui >/dev/null 2>&1
   mkdir -p "$d7/.context/images/adhoc-feature"
-  printf 'x' > "$d7/.context/images/adhoc-feature/dv-01-pr-diff.png"
+  printf 'x' > "$d7/.context/images/adhoc-feature/dv-AD0-01-pr-diff.png"
   local o7
   o7=$(WORKSPACE_ROOT="$d7" BASE_REF="master" ADHOC_ID=adhoc-feature \
        ASSET_HOST_MODE=raw ASSET_OWNER_REPO=o/r ASSET_REF=main DRY_RUN=1 \

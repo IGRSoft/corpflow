@@ -11,11 +11,13 @@
 # @arg  --path <file>           PNG to inspect (required)
 # @arg  --worktask-id <id>      for oversize/ dir path + audit subject (required)
 # @arg  --slug <kebab>          slug label in audit row (default: inferred from filename)
-# @arg  --project-root <dir>    root dir where .gitignore lives (default: pwd)
+# @arg  --project-root <dir>    root dir where .gitignore lives (default: the git toplevel
+#                               above the resolved .context; no .gitignore write without one)
 # @arg  --self-test             run built-in fixture tests; no network required
 #
 # @exitcode 0  file within budget (or warn-only)
-# @exitcode 1  argument/write error
+# @exitcode 1  argument/write error, no .context resolved, or the ledger disagrees with the id
+# @exitcode 2  broken plugin install
 # @exitcode 3  file moved to oversize/ (ok=false, error=oversize_unquantizable)
 #
 # Output (single line to stdout on exit 0 or 3):
@@ -49,7 +51,7 @@ usage: size-budget.sh
   --path <file>            PNG to inspect (required)
   --worktask-id <id>       worktask_id (required)
   [--slug <kebab>]         slug label; default inferred from filename
-  [--project-root <dir>]   directory holding .gitignore (default: pwd)
+  [--project-root <dir>]   directory holding .gitignore (default: git toplevel of the .context)
   [--self-test]            run built-in fixture tests; exits 0 on pass
 EOF
   exit 1
@@ -84,6 +86,20 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Slug from a capture file name: both dv-NN-<slug> and dv-<TASK_ID>-NN-<slug> strip to <slug>.
+_infer_slug() {
+  local base re='^dv-([A-Z]{2}[0-9]+-)?[0-9]{2}-(.+)$'
+  base="$(basename -- "$1")"
+  case "$base" in
+    *.png | *.jpg | *.jpeg | *.webp | *.txt) base="${base%.*}" ;;
+  esac
+  if [[ $base =~ $re ]]; then
+    printf '%s' "${BASH_REMATCH[2]}"
+  else
+    printf '%s' "$base"
+  fi
+}
 
 # ---------------------------------------------------------------------------
 # --self-test: no network, no pngquant required
@@ -160,14 +176,12 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     _fail "oversize/ dir or .gitignore guard failed"
   fi
 
-  # --- Test 5: slug inference from filename
-  RAW_NAME="dv-03-my-feature.png"
-  INFERRED="${RAW_NAME#dv-*-}"
-  INFERRED="${INFERRED%.png}"
-  if [[ "$INFERRED" == "my-feature" ]]; then
-    _ok "slug inference from filename works (got: $INFERRED)"
+  # --- Test 5: slug inference strips both name shapes
+  INFERRED="$(_infer_slug "dv-03-my-feature.png")|$(_infer_slug "dv-DV12-04-my-feature.jpg")|$(_infer_slug "other.png")"
+  if [[ "$INFERRED" == "my-feature|my-feature|other" ]]; then
+    _ok "slug inference strips dv-NN- and dv-<TASK_ID>-NN- (got: $INFERRED)"
   else
-    _fail "slug inference failed: expected 'my-feature', got '$INFERRED'"
+    _fail "slug inference failed: expected 'my-feature|my-feature|other', got '$INFERRED'"
   fi
 
   printf '\nself-test: %d passed, %d failed\n' "$PASS" "$FAIL"
@@ -191,38 +205,14 @@ fi
   exit 1
 }
 
-# Infer slug from filename if not provided
+if [[ ! "$WORKTASK_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  printf >&2 'error: --worktask-id must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (got: %s)\n' "$WORKTASK_ID"
+  exit 1
+fi
+
 if [[ -z "$SLUG" ]]; then
-  _base="$(basename -- "$FILE_PATH")"
-  _base="${_base%.png}"
-  _base="${_base%.txt}"
-  # strip leading dv-NN- prefix
-  SLUG="${_base#dv-*-}"
-  # If stripping failed (no dv-NN- prefix), use full base
-  [[ "$SLUG" == "$_base" ]] && SLUG="$_base"
+  SLUG="$(_infer_slug "$FILE_PATH")"
 fi
-
-# Default project root to cwd
-if [[ -z "$PROJECT_ROOT" ]]; then
-  PROJECT_ROOT="$(pwd)"
-fi
-
-# ---------------------------------------------------------------------------
-# Path setup
-# ---------------------------------------------------------------------------
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
-OVERSIZE_DIR="${IMAGES_DIR}/oversize"
-LOGS_DIR=".context/logs"
-AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-GITIGNORE="${PROJECT_ROOT}/.gitignore"
-mkdir -p "$LOGS_DIR"
-
-# ---------------------------------------------------------------------------
-# Portable stat helper (mirrors apple-canvas.sh idiom exactly)
-# ---------------------------------------------------------------------------
-_stat_bytes() {
-  stat -f%z "$1" 2> /dev/null || stat -c%s "$1" 2> /dev/null || echo 0
-}
 
 # Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
 # Fails closed: a missing library is a broken install, not a runtime condition.
@@ -233,6 +223,57 @@ if [ ! -r "$_AUDIT_LIB" ]; then
 fi
 # shellcheck source=../../shared/lib/audit-lib.sh
 . "$_AUDIT_LIB"
+
+_STATE_READ_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'size-budget: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# A ledger for another worktask refuses the write; without a ledger only an explicit CONTEXT_DIR may.
+_CTX_RC=0
+CTX_DIR=$(trap - ERR; corpflow_context_dir) || _CTX_RC=$?
+if [ "$_CTX_RC" -eq 2 ]; then
+  printf >&2 'size-budget: root resolver unreachable\n'
+  exit 2
+elif [ "$_CTX_RC" -ne 0 ]; then
+  printf >&2 'size-budget: no .context resolved; set WORKSPACE_ROOT or run inside a worktask\n'
+  exit 1
+fi
+if [ -f "$CTX_DIR/state.json" ]; then
+  if [ "$(corpflow_worktask_id "$CTX_DIR/state.json" "")" != "$WORKTASK_ID" ]; then
+    printf >&2 'size-budget: --worktask-id %s does not match %s\n' "$WORKTASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+elif [ -z "${CONTEXT_DIR:-}" ] || [ "$CTX_DIR" != "$CONTEXT_DIR" ]; then
+  printf >&2 'size-budget: no ledger at %s; set CONTEXT_DIR to run outside a worktask\n' "$CTX_DIR"
+  exit 1
+fi
+
+# .gitignore belongs to the repository that owns .context; with no such repository, skip the write.
+if [[ -z "$PROJECT_ROOT" ]]; then
+  PROJECT_ROOT=$(trap - ERR; git -C "$(dirname -- "$CTX_DIR")" rev-parse --show-toplevel 2> /dev/null) || PROJECT_ROOT=""
+fi
+
+# ---------------------------------------------------------------------------
+# Path setup
+# ---------------------------------------------------------------------------
+IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
+OVERSIZE_DIR="${IMAGES_DIR}/oversize"
+LOGS_DIR="${CTX_DIR}/logs"
+AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
+GITIGNORE=""
+[[ -z "$PROJECT_ROOT" ]] || GITIGNORE="${PROJECT_ROOT}/.gitignore"
+mkdir -p "$LOGS_DIR"
+
+# ---------------------------------------------------------------------------
+# Portable stat helper (mirrors apple-canvas.sh idiom exactly)
+# ---------------------------------------------------------------------------
+_stat_bytes() {
+  stat -f%z "$1" 2> /dev/null || stat -c%s "$1" 2> /dev/null || echo 0
+}
 
 # audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
 # the shared appender.
@@ -271,9 +312,10 @@ fi
 # ---------------------------------------------------------------------------
 if [[ "$BYTES" -ge "$HARD_BYTES" ]]; then
   mkdir -p "$OVERSIZE_DIR"
-  # Guard .gitignore (idempotent)
-  grep -qxF '.context/images/*/oversize/' "$GITIGNORE" 2> /dev/null \
-    || printf '.context/images/*/oversize/\n' >> "$GITIGNORE"
+  if [[ -n "$GITIGNORE" ]]; then
+    grep -qxF '.context/images/*/oversize/' "$GITIGNORE" 2> /dev/null \
+      || printf '.context/images/*/oversize/\n' >> "$GITIGNORE"
+  fi
 
   DEST="${OVERSIZE_DIR}/$(basename -- "$FILE_PATH")"
   mv -- "$FILE_PATH" "$DEST"

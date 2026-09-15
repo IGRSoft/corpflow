@@ -38,7 +38,8 @@ fi
 . "$_AUDIT_LIB"
 ```
 
-Six adapters under `skills/dv-screenshot-capture/scripts/` plus worktask consumers
+The six adapters under `skills/dv-screenshot-capture/scripts/` and its `resolve-worktask.sh`
+guard, plus worktask consumers
 (`attach-visual-evidence.sh`, `adhoc-visual-evidence.sh`, `attachments-preseed.sh`,
 `publish-pl-issue.sh`) follow this exact shape for `audit-lib.sh` and/or
 `state-read-lib.sh`.

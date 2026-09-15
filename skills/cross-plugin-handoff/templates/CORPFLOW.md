@@ -76,8 +76,8 @@ You run in an isolated git worktree; `task.metadata.workspace_path` is the tree 
 - Never create or move worktrees. Writes outside your tree are never yours — report, do not make.
 - Record it as `worktree: true` in the DV frontmatter. Absent or false is a hard DR fail
   (`worktree_isolation_violation`).
-- Screenshots append to the run's `screenshots.md` manifest, which is the record of authority.
-  Never read or write `state.json facts.screenshots` — it is capped and merged last-writer-wins, so
+- Screenshots go to your task's own `screenshots-<TASK_ID>.md` manifest, which is the record of
+  authority; pass your ledger task id as `--task-id` to every capture script. Never read or write `state.json facts.screenshots` — it is capped and merged last-writer-wins, so
   in a multi-stream run it keeps one stream and silently drops the rest.
 
 ## Artifacts
