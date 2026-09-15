@@ -36,7 +36,7 @@ mk_pr_repo() { # $1=path-to-add
 # silicon/ImageMagick a suite prerequisite.
 seed_capture() { # $1=repo dir
   mkdir -p "$1/.context/images/adhoc-feature"
-  printf '\x89PNG\r\n\x1a\n' > "$1/.context/images/adhoc-feature/dv-01-pr-diff.png"
+  printf '\x89PNG\r\n\x1a\n' > "$1/.context/images/adhoc-feature/dv-AD0-01-pr-diff.png"
 }
 
 @test "happy: a UI-touching diff emits a Visual evidence block" {
@@ -55,7 +55,7 @@ seed_capture() { # $1=repo dir
   run env WORKSPACE_ROOT="$d" BASE_REF=master PATH="/usr/bin:/bin" \
     ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
-  local mf; mf="$(find "$d/.context/images" -name screenshots.md 2>/dev/null | head -1)"
+  local mf; mf="$(find "$d/.context/images" -name screenshots-AD0.md 2>/dev/null | head -1)"
   if [ -n "$mf" ]; then
     local row
     while IFS='|' read -r _ _ _ row _; do
@@ -104,10 +104,24 @@ seed_capture() { # $1=repo dir
   run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
     ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
   assert_success
-  local mf; mf="$(find "$d/.context/images" -name screenshots.md | head -1)"
+  local mf; mf="$(find "$d/.context/images" -name screenshots-AD0.md | head -1)"
   [ -n "$mf" ]
   run bash "$PLUGIN_ROOT/$ATTACHER" --validate-manifest "$mf"
   assert_success
+  run bash "$PLUGIN_ROOT/$ATTACHER" --validate-manifest "$mf" --task-id AD0
+  assert_success
+}
+
+@test "edge: the ad-hoc stream is AD0 — per-task manifest and dv-AD0-NN capture name" {
+  local d; d="$(mk_pr_repo Views/app.css)"
+  seed_capture "$d"
+  run env WORKSPACE_ROOT="$d" BASE_REF=master ADHOC_ID=adhoc-feature \
+    ASSET_HOST_MODE=none DRY_RUN=1 bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  [ -f "$d/.context/images/adhoc-feature/screenshots-AD0.md" ]
+  [ ! -e "$d/.context/images/adhoc-feature/screenshots.md" ]
+  run grep -c '^| 01 | pr-diff | dv-AD0-01-pr-diff.png |' "$d/.context/images/adhoc-feature/screenshots-AD0.md"
+  assert_output "1"
 }
 
 @test "edge: rerunning replays the first emission instead of stacking captures" {

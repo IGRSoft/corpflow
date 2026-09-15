@@ -1,0 +1,9 @@
+{
+  "schema_version": "consultant-return.v1",
+  "verdict": "fail",
+  "severity_counts": {"critical": 1, "high": 1, "medium": 0, "low": 0},
+  "findings": [
+    {"id": "F1", "severity": "high", "summary": "Open redirect on login"},
+    {"id": "F2", "severity": "Critical", "summary": "Private key committed"}
+  ]
+}

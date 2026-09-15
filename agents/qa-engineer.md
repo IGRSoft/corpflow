@@ -142,7 +142,7 @@ The visual gate is independent of `test_mode`: run Design Comparison (below) whe
 
 #### Q1.5 — Visual Evidence Ingestion
 
-Read `.context/images/<worktask_id>/screenshots.md` (path resolves from `state.json.worktask_id`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 writes `requires_screenshots` via `detect-ui-change.sh`; QA only reads it.)
+Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a legacy `screenshots.md` counts only through its `## <TASK_ID>` sections; `worktask_id` from `state.json`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat the manifests as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 writes `requires_screenshots` via `detect-ui-change.sh`; QA only reads it.)
 
 #### Q2–Q3 Completion
 
@@ -167,14 +167,14 @@ Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.contex
 
 ### Visual Evidence (artifact section in testing-N.md)
 
-Required whenever `.context/images/<worktask_id>/screenshots.md` exists; empty is permitted when that manifest records a skip. `AC ref` links each screenshot to the criteria it satisfies (`—` if purely illustrative).
+Required whenever a DV manifest (`screenshots-<TASK_ID>.md`, or a legacy `screenshots.md`) exists under `.context/images/<worktask_id>/`; empty is permitted when every manifest records a skip. `AC ref` links each screenshot to the criteria it satisfies (`—` if purely illustrative).
 
 ```markdown
 ## Visual Evidence
 
 | # | File | Caption | Verdict | AC ref |
 |---|------|---------|---------|--------|
-| 01 | dv-01-<slug>.png | <copied from screenshots.md> | accepted \| flagged \| missing | AC-2, AC-3 |
+| 01 | dv-<TASK_ID>-01-<slug>.png | <copied from the manifest row> | accepted \| flagged \| missing | AC-2, AC-3 |
 ```
 
 ## Boundaries
@@ -209,7 +209,7 @@ Before marking QA stage complete, verify:
 - [ ] Every edge case from `<plan_file>` is covered
 - [ ] `testing-N.md` written to `.context/` (N = `task.metadata.run_index`); new test files created or existing ones updated
 - [ ] If `.context/designs/` holds screenshots, design comparison performed and discrepancies documented in `testing-N.md` with severity
-- [ ] `.context/images/<worktask_id>/screenshots.md` read (or absent + skip documented) and `testing-N.md § Visual Evidence` populated (or skip rationale recorded)
+- [ ] Every `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` read (or absent + skip documented) and `testing-N.md § Visual Evidence` populated (or skip rationale recorded)
 - [ ] Each acceptance criterion with a visual manifestation has ≥1 screenshot ref OR an explicit `no visual evidence` finding
 
 ## Handoff Protocol

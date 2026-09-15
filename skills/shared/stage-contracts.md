@@ -606,6 +606,7 @@ excerpt nobody can complete is the ad-hoc truncation this convention replaces.
 ---
 handoff:
   stage: DV
+  # task_id: DV1               # set only when the stage has more than one task
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   tests_executed: 12          # cases RUN, not discovered; 0 is legal

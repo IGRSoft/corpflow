@@ -1,0 +1,8 @@
+{
+  "schema_version": "consultant-return.v1",
+  "verdict": "needs_changes",
+  "severity_counts": {"critical": 0, "high": 1, "medium": 0, "low": 0},
+  "findings": [
+    {"id": "F1", "severity": "high", "summary": "eval on a value read from the network", "location": "bin/fetch.sh:40"}
+  ]
+}
