@@ -1,0 +1,8 @@
+{
+  "schema_version": "consultant-return.v1",
+  "verdict": "fail",
+  "severity_counts": {"P0": 0, "P1": 1, "P2": 0, "P3": 0},
+  "findings": [
+    {"id": "F1", "severity": "high", "summary": "Race on shared cache map"}
+  ]
+}

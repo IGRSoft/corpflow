@@ -59,6 +59,8 @@ LOG_DIR="$WORKSPACE_ROOT/.context/logs"
 AUDIT_FILE="$LOG_DIR/audit.jsonl"
 BASE_REF="${BASE_REF:-}"
 FORCE=0
+# Fixed stream id: an ad-hoc PR has no ledger task, and the capture scripts require one.
+STREAM_ID="AD0"
 
 # ---------- audit -----------------------------------------------------------
 # Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
@@ -146,8 +148,9 @@ adhoc_id() {
 capture_one() {
   local id="$1" base="$2" files="$3"
   local out rc path bytes
-  out=$(cd "$WORKSPACE_ROOT" && bash "$CAPTURER" \
-          --worktask-id "$id" --slug pr-diff --base-ref "$base" \
+  mkdir -p "$WORKSPACE_ROOT/.context" 2>/dev/null || return 1
+  out=$(cd "$WORKSPACE_ROOT" && CONTEXT_DIR="$WORKSPACE_ROOT/.context" bash "$CAPTURER" \
+          --worktask-id "$id" --task-id "$STREAM_ID" --slug pr-diff --base-ref "$base" \
           --platform all --run-index 0 --files "$files" 2>/dev/null)
   rc=$?
   [ "$rc" -eq 0 ] || return 1
@@ -163,15 +166,19 @@ capture_one() {
 # index is load-bearing, and a row that misses it makes the attach step a silent
 # no-op. Rewritten whole, never edited piecemeal.
 write_manifest() {
-  local mf="$1" id="$2" file="$3" bytes="$4" adapter="$5" count="$6"
+  local mf="$1" id="$2" file="$3" bytes="$4" adapter="$5" count="$6" name nn
   mkdir -p "$(dirname "$mf")" 2>/dev/null || return 1
+  name=$(basename "$file")
+  nn="${name#dv-"$STREAM_ID"-}"
+  nn="${nn%%-*}"
+  case "$nn" in [0-9][0-9]) ;; *) nn=01 ;; esac
   {
-    printf '# Screenshots — %s\n\n' "$id"
+    printf '# Screenshots — %s / %s\n\n' "$id" "$STREAM_ID"
     printf '> Authored by the ad-hoc PR flow via `adhoc-visual-evidence.sh`. Run index: 0.\n\n'
     printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
     printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
-    printf '| 01 | pr-diff | %s | %s | all | %s | ad-hoc PR diff — %s UI file(s) | %s | — |\n' \
-      "$(basename "$file")" "$bytes" "$adapter" "$count" "$(date -u +%FT%TZ)"
+    printf '| %s | pr-diff | %s | %s | all | %s | ad-hoc PR diff — %s UI file(s) | %s | — |\n' \
+      "$nn" "$name" "$bytes" "$adapter" "$count" "$(date -u +%FT%TZ)"
   } > "$mf" 2>/dev/null
 }
 
@@ -200,13 +207,13 @@ emit_pr() {
   local id img_dir mf
   id=$(adhoc_id)
   img_dir="$WORKSPACE_ROOT/.context/images/$id"
-  mf="$img_dir/screenshots.md"
+  mf="$img_dir/screenshots-$STREAM_ID.md"
 
   # Reuse an existing capture unless forced: cli-fallback.sh derives its NN from
-  # the files already in the dir, so re-capturing every run would leave dv-02,
-  # dv-03… beside a manifest that only ever names dv-01.
+  # the files already in the dir, so re-capturing every run would stack
+  # dv-AD0-02, dv-AD0-03… beside a manifest that names only one of them.
   local existing="" path bytes adapter cap
-  [ "$FORCE" = "1" ] || existing=$(find "$img_dir" -maxdepth 1 -type f -name 'dv-01-pr-diff.*' 2>/dev/null | head -1)
+  [ "$FORCE" = "1" ] || existing=$(find "$img_dir" -maxdepth 1 -type f -name "dv-$STREAM_ID-[0-9][0-9]-pr-diff.*" 2>/dev/null | LC_ALL=C sort | head -1)
   if [ -n "$existing" ]; then
     path="$existing"
     bytes=$(stat -f%z "$existing" 2>/dev/null || stat -c%s "$existing" 2>/dev/null || printf '0')

@@ -75,13 +75,15 @@ Its `plugin.json` entry carries `"timeout": 5`, and that is what bounds the run.
 
 Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to feed remediation text back to the model **without** being labeled an error. Unlike a bare `{"decision":"block"}`, the `additionalContext` rides into the re-run's context as actionable guidance, turning a dead-end block into a fix instruction.
 
+`dv-screenshot-gate.sh` reads the stopping task's `screenshots-<TASK_ID>.md` and blocks missing or invalid evidence; no captures passes only on `backend`/`systems` or `requires_screenshots=false`:
+
 ```json
 {
   "decision": "block",
-  "reason": "missing screenshots.md …",
+  "reason": "no_captures — task <TASK_ID> on platform web has no capture rows",
   "hookSpecificOutput": {
     "hookEventName": "SubagentStop",
-    "additionalContext": "run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots.md"
+    "additionalContext": "run the dv-screenshot-capture skill with this task_id; … headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots-<TASK_ID>.md"
   }
 }
 ```

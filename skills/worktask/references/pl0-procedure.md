@@ -63,7 +63,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 #### `requires_screenshots` — DV screenshot capture gate (REQUIRED)
 
-Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ DV MUST produce `.context/images/<worktask_id>/screenshots.md`, whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
+Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ each DV task MUST leave valid evidence in `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (on `backend`/`systems` the gate also passes no captures, or an operator-accepted `tool_missing` row), whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
 
 **PL0 is the sole WRITER of this flag.** The downstream `?? true` defaults are defense-in-depth for ad-hoc runs only — stamp it deterministically per the steps below.
 
@@ -544,7 +544,7 @@ Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` reques
 
 ##### Placement guard (non-negotiable)
 
-> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`.
+> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots-<TASK_ID>.md`.
 
 ### Figma Design Capture
 
