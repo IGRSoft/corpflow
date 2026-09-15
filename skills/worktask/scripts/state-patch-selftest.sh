@@ -1151,6 +1151,98 @@ EOART
     exit 1
   fi
 
+  # ---- T-ack: --ack appends exactly one message_ack audit row; every refusal adds none ----
+  make_state
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  rm -f .context/logs/audit.jsonl
+  cp .context/state.json .context/state.json.snapack
+  _tack_rows() {
+    if [[ -f .context/logs/audit.jsonl ]]; then
+      jq -s '[.[] | select(.action == "message_ack")] | length' .context/logs/audit.jsonl
+    else
+      printf '0'
+    fi
+  }
+  bash "$SELF" --ack DV0 DV0-m1 || {
+    printf 'T-ack: --ack returned non-zero\n' >&2
+    exit 1
+  }
+  if [[ "$(_tack_rows)" -eq 1 ]] \
+    && jq -s -e '[.[] | select(.action == "message_ack")][0]
+          | .task_id == "DV0" and .subject == "DV0" and .result == "ok"
+            and .metadata.msg_id == "DV0-m1"' .context/logs/audit.jsonl > /dev/null \
+    && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
+    printf 'T-ack: one message_ack row carries the msg_id, state byte-unchanged: ok\n'
+  else
+    printf 'T-ack: ack row or state: FAIL\n' >&2
+    exit 1
+  fi
+
+  tack_rc=0
+  bash "$SELF" --ack ET9 x > /dev/null 2>&1 || tack_rc=$?
+  if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 ]]; then
+    printf 'T-ack: an unknown id exits 1 with no row: ok\n'
+  else
+    printf 'T-ack: unknown-id guard (rc=%s): FAIL\n' "$tack_rc" >&2
+    exit 1
+  fi
+
+  tack_rc=0
+  tack_rc3=0
+  bash "$SELF" --ack DV0 > /dev/null 2>&1 || tack_rc=$?
+  bash "$SELF" --ack DV0 a b > /dev/null 2>&1 || tack_rc3=$?
+  if [[ "$tack_rc" -eq 2 && "$tack_rc3" -eq 2 && "$(_tack_rows)" -eq 1 ]]; then
+    printf 'T-ack: one or three args exit 2 with no row: ok\n'
+  else
+    printf 'T-ack: arg-count guard (rc=%s/%s): FAIL\n' "$tack_rc" "$tack_rc3" >&2
+    exit 1
+  fi
+
+  tack_rc=0
+  bash "$SELF" --ack DV0 "$(printf 'DV0\tm1')" > /dev/null 2>&1 || tack_rc=$?
+  if [[ "$tack_rc" -eq 2 && "$(_tack_rows)" -eq 1 ]] \
+    && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
+    printf 'T-ack: a msg_id containing a TAB exits 2 with no row: ok\n'
+  else
+    printf 'T-ack: msg_id grammar guard (rc=%s): FAIL\n' "$tack_rc" >&2
+    exit 1
+  fi
+
+  # Zero args reach the task-id guard before the argc check; either way it is exit 2.
+  tack_rc=0
+  bash "$SELF" --ack > /dev/null 2>&1 || tack_rc=$?
+  if [[ "$tack_rc" -eq 2 && "$(_tack_rows)" -eq 1 ]]; then
+    printf 'T-ack: zero args exit 2 with no row: ok\n'
+  else
+    printf 'T-ack: zero-arg guard (rc=%s): FAIL\n' "$tack_rc" >&2
+    exit 1
+  fi
+
+  tack_rc=0
+  bash "$SELF" --state .context/absent.json --ack DV0 DV0-m1 > /dev/null 2>&1 || tack_rc=$?
+  if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 && ! -e .context/absent.json ]]; then
+    printf 'T-ack: a missing ledger exits 1 with no row: ok\n'
+  else
+    printf 'T-ack: missing-ledger guard (rc=%s): FAIL\n' "$tack_rc" >&2
+    exit 1
+  fi
+
+  # corpflow_audit_row refuses a symlinked log, so the row is lost; the op must say so.
+  mv .context/logs/audit.jsonl .context/audit.real.jsonl
+  ln -s ../audit.real.jsonl .context/logs/audit.jsonl
+  tack_rc=0
+  bash "$SELF" --ack DV0 DV0-m2 > /dev/null 2>&1 || tack_rc=$?
+  rm -f .context/logs/audit.jsonl
+  mv .context/audit.real.jsonl .context/logs/audit.jsonl
+  if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 ]] \
+    && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
+    printf 'T-ack: a lost audit row (symlinked log) exits 1: ok\n'
+  else
+    printf 'T-ack: lost-row guard (rc=%s): FAIL\n' "$tack_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapack
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }

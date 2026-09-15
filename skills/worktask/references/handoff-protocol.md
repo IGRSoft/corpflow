@@ -145,6 +145,20 @@ constraints:
   total_tokens: { max: 200, tokenizer: cl100k_base-proxy }
 ```
 
+### Schema — acted_on_msg_id
+
+```yaml
+# …continued: handoff.properties, beside cross_session_ask
+      acted_on_msg_id:
+        type: string
+        maxLength: 200
+        pattern: '^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$'
+        description: >
+          OPTIONAL, every stage. The newest orchestrator msg_id this stage acknowledged with
+          `state-patch.sh --ack <ID> <msg_id>` and followed. Absent: no msg_id-bearing message
+          reached this dispatch. Checked at the boundary by ack-check.sh, not by the harness.
+```
+
 ### Schema — blocked_on
 
 ```yaml
@@ -384,7 +398,11 @@ JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's
 
 Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`.
 
+##### Conventions — the optional fields
+
 `cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. `blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
+
+`acted_on_msg_id` is optional on every stage with the same absent-means-none reading: absent, no message carrying a `msg_id` reached this dispatch. Once one did, it names the newest id the stage acked (`state-patch.sh --ack`) and followed; `ack-check.sh` enforces that, not the validator.
 
 ###### Conventions — the $defs pointer is an obligation
 

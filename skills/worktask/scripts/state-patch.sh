@@ -116,6 +116,13 @@
 #                                             entries, appends {path, stage: <code from ID>,
 #                                             lines: "all"} in arg order. Clamped to the
 #                                             newest 30 (facts.files_read); no spill.
+# @arg --ack <ID> <msg_id>                   Exactly 2 args; msg_id matches the --dispatch
+#                                             agent_id grammar, else exit 2. Appends one
+#                                             message_ack row {subject, task_id: ID,
+#                                             metadata.msg_id} to <dir of --state>/logs/
+#                                             audit.jsonl through audit-lib.sh. Takes no
+#                                             merge lock and never writes state.json: the
+#                                             ledger is read only to reject an unknown id.
 #
 # @arg --resolve-task-id <CODE>
 #                           Print the ledger key a bare stage CODE resolves to and exit.
@@ -131,14 +138,15 @@
 # @exitcode 1   Internal error (jq merge failed; use --log to inspect), unsupported ledger
 #               version, a ledger op rejected for an unknown/malformed task id, a frontmatter
 #               staging failure (mktemp), no ledger resolved for --facts or a ledger op, an
-#               unknown id on --claim/--dispatch/--files-read, or --facts with no ledger at
-#               --state (that write landed nothing and says so).
+#               unknown id on --claim/--dispatch/--files-read/--ack, an --ack row that failed
+#               to append, or --facts with no ledger at --state (that write landed nothing
+#               and says so).
 # @exitcode 2   DISK_MIN_GB hard-halt (caller must remediate before retrying), OR a --facts
 #               payload that was refused whole (bad JSON, unknown key, non-array value,
 #               invalid branch) with state.json byte-unchanged, OR a --facts payload that
 #               PARTIALLY succeeded: the valid items were persisted and the rejected ones are
 #               named on stderr. Read stderr to tell them apart — a partial success is the
-#               only exit 2 that wrote. Also: malformed --dispatch/--files-read args,
+#               only exit 2 that wrote. Also: malformed --dispatch/--files-read/--ack args,
 #               --dispatch without the row's metadata.agent, an unreachable lib or resolver,
 #               or (--task-create) a row missing a required metadata key.
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent),
@@ -1345,6 +1353,19 @@ while [[ $# -gt 0 ]]; do
         shift
       done
       ;;
+    --ack)
+      shift
+      TASK_OP="ack"
+      # Consumed like --dispatch so a short or long call reaches the argc check as exit 2.
+      _ACK_ARGS=()
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        _ACK_ARGS+=("$1")
+        shift
+      done
+      ACK_ARGC="${#_ACK_ARGS[@]}"
+      TASK_OP_ID="${_ACK_ARGS[0]:-}"
+      ACK_MSG_ID="${_ACK_ARGS[1]:-}"
+      ;;
     --cascade) REPLAY_CASCADE="true"; shift ;;
     --agents-json) shift; AGENTS_JSON_ARG="${1:-}"; shift ;;
     --on | --off | --metadata | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
@@ -1915,6 +1936,43 @@ if [[ -n "$TASK_OP" ]]; then
               + [ $add[] | { path: ., stage: $stage, lines: "all" } ] )'
       TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --arg stage "$_FR_STAGE" --argjson paths "$_FR_PATHS_JSON")
       TASK_OP_VALUE="$(printf '%s' "$_FR_PATHS_JSON" | jq -r 'length') path(s)"
+      ;;
+    ack)
+      # Exits inside the arm: an audit append, not a ledger merge, so atomic_apply must never
+      # run with an empty filter. Every refusal precedes the append, so a refusal adds no row.
+      if [[ "${ACK_ARGC:-0}" -ne 2 ]]; then
+        printf >&2 'invalid --ack: expected exactly 2 args <ID> <msg_id>\n'
+        usage
+      fi
+      if ! [[ "$ACK_MSG_ID" =~ ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
+        printf >&2 'invalid --ack msg_id: %q\n' "$ACK_MSG_ID"
+        usage
+      fi
+      require_task_exists "$TASK_OP_ID" ack
+      _ACK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
+      if ! command -v corpflow_audit_row > /dev/null 2>&1 && [ -r "$_ACK_LIB" ]; then
+        # shellcheck source=../../shared/lib/audit-lib.sh
+        . "$_ACK_LIB"
+      fi
+      if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+        printf >&2 'ack refused: audit lib unreachable at %s\n' "$_ACK_LIB"
+        log_msg ERROR "ack refused on tasks.${TASK_OP_ID}: audit lib unreachable; no row written"
+        exit 2
+      fi
+      _ACK_DIR="${STATE_PATH%/*}"
+      if [[ "$_ACK_DIR" == "$STATE_PATH" ]]; then _ACK_DIR="."; fi
+      # No merge lock: one bounded line appended with O_APPEND is atomic, and state.json is
+      # never written, so queueing behind ledger merges buys nothing.
+      corpflow_audit_row --file "${_ACK_DIR}/logs/audit.jsonl" \
+        --actor "${VIA_ARG:-agent}:state-patch" --action message_ack --result ok \
+        --subject "$TASK_OP_ID" --task-id "$TASK_OP_ID" --meta-kv "msg_id=${ACK_MSG_ID}"
+      if [[ "${CORPFLOW_AUDIT_LAST_RC:-1}" -ne 0 ]]; then
+        printf >&2 'ack not recorded: tasks.%s %s\n' "$TASK_OP_ID" "$ACK_MSG_ID"
+        log_msg ERROR "ack not recorded: tasks.${TASK_OP_ID} ${ACK_MSG_ID}"
+        exit 1
+      fi
+      log_msg INFO "ledger ack: tasks.${TASK_OP_ID} ${ACK_MSG_ID}"
+      exit 0
       ;;
   esac
 
