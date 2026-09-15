@@ -38,7 +38,7 @@ ensure_previews(
 
 ### Invocation sequence
 
-`Skill("dv-screenshot-capture", platform="apple", args.force_canvas=true)` → adapter selection picks apple-canvas → `Skill("preview-ensurer", modified_files, auto_add=true)` → empty `errors` continues, non-empty throws `missing_input` (the DV completion gate appends it to `.context/errors/developer.md`) → `swift run --package-path tools/SnapshotHost SnapshotHost …` → PNG → screenshots.md manifest row + `state.json` `facts.screenshots`.
+`Skill("dv-screenshot-capture", task_id=<TASK_ID>, platform="apple", args.force_canvas=true)` → adapter selection picks apple-canvas → `Skill("preview-ensurer", modified_files, auto_add=true)` → empty `errors` continues, non-empty throws `missing_input` (the DV completion gate appends it to `.context/errors/developer.md`) → `swift run --package-path tools/SnapshotHost SnapshotHost …` → PNG → `screenshots-<TASK_ID>.md` manifest row + `state.json` `facts.screenshots`.
 
 ### State sharing
 
@@ -136,7 +136,7 @@ swift run SnapshotHost
 
 `scripts/apple-canvas.sh` is the bash driver; its flags are listed in `../SKILL.md § Script usage`. Steps, matching the cascade above:
 
-1. Resolve the output path `.context/images/<worktask_id>/dv-NN-canvas-<slug>.png` (`NN` per the storage-layout rules).
+1. Resolve the context root (`../SKILL.md § Root resolution`; unresolved or ledger mismatch → exit 1) and the output path `<ctx>/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png` (`NN` per `../SKILL.md § Numbering`; default slug `canvas-preview`).
 2. Copy `templates/SnapshotHost-template/` when `tools/SnapshotHost/Package.swift` is absent.
 3. Invoke preview-ensurer; abort on errors with `missing_input`.
 4. Update the `PreviewBridge.swift` viewRegistry (idempotent).

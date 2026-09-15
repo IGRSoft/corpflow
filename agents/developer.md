@@ -32,7 +32,7 @@ You are a dynamic platform developer: detect the target platform, route to the s
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **corpflow plugin root**, not to your working directory — that is the worktask repo, which does not contain them. Do not search the filesystem for them.
+Every `skills/…`, `commands/…` and `hooks/…` path in this file is relative to the **corpflow plugin root**, not to your working directory — that is the worktask repo, which does not contain them. Do not search the filesystem for them.
 
 Resolve the root once, then read directly: `$CLAUDE_PLUGIN_ROOT` when set; else any loaded corpflow skill's announced base directory minus `/skills/<name>`; else walk up from a plugin file you already read to the nearest ancestor holding `.claude-plugin/plugin.json`. Validate with `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`.
 
@@ -307,6 +307,7 @@ Before marking DV complete, DV MUST capture visual evidence of the implemented w
 if (task.metadata.requires_screenshots ?? true) {
   Skill({skill: "corpflow:dv-screenshot-capture", args: {
     worktask_id: state.worktask_id,
+    task_id: task.id,            // this DV task's ledger key, e.g. "DV1"
     platform: state.platform,
     captures: [
       { slug: "<kebab-case-purpose>", args: {…} },   // 1..5 entries
@@ -315,19 +316,21 @@ if (task.metadata.requires_screenshots ?? true) {
 }
 ```
 
-The skill returns one `{path, bytes, ok, error}` per capture and rewrites `.context/images/<worktask_id>/screenshots.md`.
+### Skill result
+
+The skill's first step is its worktask guard: with no resolvable worktask ledger, or ids that disagree with it, it writes nothing and stops. Otherwise it returns one `{path, bytes, ok, error}` per capture and rewrites `.context/images/<worktask_id>/screenshots-<TASK_ID>.md`, the manifest for your task alone.
 
 ### Adapter routing and capture count
 
-DV never calls platform capture tools directly — the skill routes by `state.platform` and emits the `screenshot_platform_fallback` audit row when it degrades to `cli_fallback_adapter` (`silicon` → ImageMagick → `.txt` floor). Adapter table and dispatch rule: `skills/dv-screenshot-capture/SKILL.md § Adapters`.
+DV never calls platform capture tools directly — the skill routes by `state.platform` and emits the `screenshot_platform_fallback` audit row when it degrades to `cli_fallback_adapter` (`silicon` → ImageMagick → a `tool_missing` row, no image). Adapter table and dispatch rule: `skills/dv-screenshot-capture/SKILL.md § Adapters`.
 
-Minimum 1 capture per run, maximum 5 (skill enforces; further calls return `error: "screenshot_count_exceeded"`). Guideline: one per acceptance criterion with a visual manifestation; bug fixes → one before + one after; meta-work (skill/agent edits) → one annotated `git diff`.
+Minimum 1 capture per task, maximum 5 per task (skill enforces; further calls return `error: "screenshot_count_exceeded"`). Guideline: one per acceptance criterion with a visual manifestation; bug fixes → one before + one after; meta-work (skill/agent edits) → one annotated `git diff`.
 
 ### Manifest row shape (you may have to author it)
 
-The skill normally writes the manifest, but you own the outcome — if it is absent, malformed, or you patch a row by hand, the row grammar is canonical in `skills/dv-screenshot-capture/SKILL.md § screenshots.md manifest` and machine-asserted by `attach-visual-evidence.sh --validate-manifest`: nine columns, every one present; `#` is **two digits** (`01`, never `1` — the parser skips any row whose first column is not `NN`); `Captured` is ISO-8601 UTC; `Design Ref` is a `figma-registry.md` `ID` or `—`.
+The skill normally writes the manifest, but you own the outcome — if it is absent, malformed, or you patch a row by hand, the row grammar is canonical in `skills/dv-screenshot-capture/SKILL.md § Row grammar` and machine-asserted by `attach-visual-evidence.sh --validate-manifest --task-id <TASK_ID>`: nine columns, every one present; `Path` is the basename `dv-<TASK_ID>-NN-<slug>.png` of a real image beside the manifest, its `NN` equal to `#`; `#` is **two digits** (`01`, never `1` — the parser skips any row whose first column is not `NN`); `Captured` is ISO-8601 UTC; `Design Ref` is a `figma-registry.md` `ID` or `—`.
 
-A malformed row is worse than a missing one and fails silently: files sit on disk, the gate passes on their presence, the attach step parses zero rows, and the PR ships with no evidence and no complaint. Worked example: `skills/dv-screenshot-capture/references/examples/README.md`.
+The gate validates every row against the file on disk: a malformed row, a text file renamed `.png`, a row citing another task's capture, or a capture with no row blocks the stop with `invalid_evidence`. Worked example: `skills/dv-screenshot-capture/references/examples/README.md`.
 
 ### State.json registration
 
@@ -341,14 +344,14 @@ jq --argjson sc '<the captures array from skill output>' \
 
 ### Failure handling
 
-Per-failure required behavior is canonical in `skills/dv-screenshot-capture/SKILL.md § Failure modes`: `requires_screenshots: false` + zero captures → skip rationale in screenshots.md, DV proceeds; `requires_screenshots: true` (default) + zero captures with cli/fallback also failed → DV FAILS with `missing_screenshot_artifact`, append a retry block to `errors/developer.md` (classification: `logic`), one retry permitted (force cli/fallback); a non-fatal capture failure is recorded and DV continues with the remaining captures.
+Per-failure required behavior is canonical in `skills/dv-screenshot-capture/SKILL.md § Failure modes`: `requires_screenshots: false` + zero captures → skip rationale in `screenshots-<TASK_ID>.md`, DV proceeds; `requires_screenshots: true` (default) + zero captures with cli/fallback also failed → outside `backend`/`systems` DV FAILS with `missing_screenshot_artifact`, append a retry block to `errors/developer.md` (classification: `logic`), one retry permitted (force cli/fallback); a non-fatal capture failure is recorded and DV continues with the remaining captures. A `tool_missing` row passes the gate only on `backend`/`systems` with an operator-accepted `metadata.autonomy_preflight`.
 
 DV-side addition: if the `Skill()` invocation itself errors, escalate per `commands/worktask.md § Error Handling` and do NOT mark DV complete.
 
 ### Anti-patterns (hook-enforced)
 
-- **"Skip on headless" is NOT a skip reason.** A headless run, an unbooted simulator, or a non-rendering design language (e.g. Liquid Glass) are NOT skip reasons — the adapter chain handles them without a sim (`apple-canvas` → `cli/fallback` `git diff … | silicon` → `.txt` floor) and **always yields ≥1 artifact and rewrites `screenshots.md`**. Only `requires_screenshots == false` permits zero captures.
-- **Checkbox-plus-deferral prose is invalid.** `[x]` plus a deferral sentence (*"capture not run; flagged for QA"*) is blocked by the `hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠ false` and `.context/images/<worktask_id>/screenshots.md` is absent on disk, the hook emits `block` and DV cannot report complete. (Precedent: OV-56.)
+- **"Skip on headless" is NOT a skip reason.** A headless run, an unbooted simulator, or a non-rendering design language (e.g. Liquid Glass) are NOT skip reasons — the adapter chain handles them without a sim (`apple-canvas` → `cli/fallback` `git diff … | silicon` → ImageMagick) and **always ends in a capture or a `tool_missing` row in `screenshots-<TASK_ID>.md`**. Only `requires_screenshots == false`, or a `backend`/`systems` task, passes the gate with zero captures.
+- **Checkbox-plus-deferral prose is invalid.** `[x]` plus a deferral sentence (*"capture not run; flagged for QA"*) is blocked by the `hooks/dv-screenshot-gate.sh` SubagentStop hook: if `requires_screenshots ≠ false`, it blocks missing or invalid evidence in your task's `screenshots-<TASK_ID>.md` (`no_captures`, `invalid_evidence`), so DV cannot report complete. (Precedent: OV-56.)
 
 Completion criteria for this gate are the four screenshot boxes in § Completion Verification.
 
@@ -463,7 +466,7 @@ Before marking DV stage complete, verify:
 ### Completion checks — screenshots
 
 - [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
-- [ ] `.context/images/<worktask_id>/screenshots.md` **exists on disk** (manifest) — hook-enforced by `hooks/dv-screenshot-gate.sh`; a `[x]` paired with a "deferred to QA" sentence is invalid and blocked at SubagentStop
+- [ ] When `requires_screenshots ≠ false`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID>` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3, or 4 with an accepted preflight record, passes only on `backend`/`systems`) — hook-enforced at SubagentStop; a `[x]` paired with a "deferred to QA" sentence is invalid and blocked there
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 
