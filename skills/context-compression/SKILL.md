@@ -214,7 +214,7 @@ The example above is the project-local form. Installing the plugin already regis
 
 ### `scripts/post-compact-recovery.sh` — canonical implementation
 
-Parses the `audit.jsonl` tail (non-advisory `subagent_stopped` entries only — NOT mtime/ls ordering, which is unreliable) to resolve the interrupted stage, its Task System handle, and its per-agent error file, then writes a compact JSON pointer to `.context/logs/post-compact-<ts>.json`. The selector does not filter on `result`: the last stage that stopped is the interrupted one whatever its outcome. Both default paths are rooted on `$CLAUDE_PROJECT_DIR`, never on the hook's cwd. Only that path is reported, on stderr; the body is never echoed, keeping the hook's token footprint near zero.
+Parses the `audit.jsonl` tail (non-advisory `subagent_stopped` entries only — NOT mtime/ls ordering, which is unreliable) to resolve the interrupted stage, its Task System handle, and its per-agent error file, then writes a compact JSON pointer to `.context/logs/post-compact-<ts>.json`. With the default output directory and no `$CLAUDE_PROJECT_DIR/.context/state.json`, it exits 0 and writes nothing: without a ledger there is no worktask to recover, and creating `.context/logs` would plant a `.context/` in a clean checkout. The selector does not filter on `result`: the last stage that stopped is the interrupted one whatever its outcome. Both default paths are rooted on `$CLAUDE_PROJECT_DIR`, never on the hook's cwd. Only that path is reported, on stderr; the body is never echoed, keeping the hook's token footprint near zero.
 
 #### Invocation
 

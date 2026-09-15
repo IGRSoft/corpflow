@@ -33,29 +33,27 @@ fi
 [ -n "${_CORPFLOW_HOOK_LIB:-}" ] && return 0
 _CORPFLOW_HOOK_LIB=1
 
-# corpflow_workspace_root <mode> — echoes the absolute workspace root and also
+# corpflow_workspace_root — echoes the absolute workspace root and also
 # assigns it to _CORPFLOW_WS_ROOT, so a caller on a hot path can read the value
-# without paying for a command substitution. <mode> is `read` (default) or `write`.
+# without paying for a command substitution. Arguments are ignored.
 # Always returns 0; an empty echo IS the unresolved answer, never a cwd guess.
 # Resolves independently of cwd: a worktree checkout gitignores .context/, so
 # these hooks cannot rely on finding it under cwd.
 #
-# Ranks 3-7 of the shared root-resolution ladder; ranks 1-2 are scripts-tree
-# only (see skills/shared/lib/state-read-lib.sh). Only rank 7 differs by mode:
-# a WRITER must land its first write before .context/ exists, so `write`
-# alone reaches it; a READER must not — a missing .context/ there means "no
-# worktask running", the gate's silent-pass case.
+# Ranks 3-6 of the shared root-resolution ladder; ranks 1-2 are scripts-tree
+# only (see skills/shared/lib/state-read-lib.sh). Every rank demands
+# .context/state.json: a bare folder is what a stray mkdir leaves, and no hook
+# may create the first .context/ — only the seed does.
 corpflow_workspace_root() {
-  local _cf_mode _cf_libdir _cf_resolver _cf_top _cf_root
-  _cf_mode="${1:-read}"
+  local _cf_libdir _cf_resolver _cf_top _cf_root
   _CORPFLOW_WS_ROOT=""
 
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
 
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     _CORPFLOW_WS_ROOT="${CLAUDE_PROJECT_DIR}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
@@ -85,16 +83,10 @@ corpflow_workspace_root() {
     _cf_root=$(bash "$_cf_resolver" --root 2> /dev/null || true)
     # Rank 6 requires an existing ledger, not just a git root; --root doesn't
     # check this itself (existence-unchecked per its own docstring).
-    if [ -n "$_cf_root" ] && [ -d "$_cf_root/.context" ]; then
+    if [ -n "$_cf_root" ] && [ -f "$_cf_root/.context/state.json" ]; then
       _CORPFLOW_WS_ROOT="$_cf_root"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
     fi
-  fi
-
-  # Rank 7 — write mode only; `.context/` has not been created yet.
-  if [ "$_cf_mode" = "write" ] && [ -n "${WORKSPACE_ROOT:-}" ]; then
-    _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
-    printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
 
   printf ''
@@ -107,7 +99,7 @@ corpflow_workspace_root() {
 # run from. Read view of the resolver above; called as a plain function, not
 # through $( ), so the hot path pays no extra fork.
 corpflow_context_root() {
-  corpflow_workspace_root read > /dev/null
+  corpflow_workspace_root > /dev/null
   if [ -n "${_CORPFLOW_WS_ROOT:-}" ]; then
     printf '%s' "${_CORPFLOW_WS_ROOT}/.context"
   else
