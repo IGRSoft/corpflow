@@ -398,7 +398,7 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 - **Task**: the `task_id` of the `facts.dispatched_agents[]` row for the payload `agent_id`; with no row, the one in_progress DV task whose `metadata.agent` is the payload `agent_type` (`corpflow:developer` matches any in_progress DV task). No DV task in progress, or none naming that agent type, is a no-op. Any other miss blocks `task_unresolved`, unless the ledger flag is `false`.
 - **Flag**: `requires_screenshots` from the task's metadata, then the ledger's, else `true`. `false` passes unclassified.
 - **Platform**: `tasks.<TASK_ID>.metadata.platform`, else the ledger `platform`.
-- **Accepted preflight record**: ledger `metadata.autonomy_preflight` is an object with a non-empty `recorded_at`, `accepted_by: "operator"`, and string arrays `tools_absent` and `accepted_absent` that both name every tool the row lists. Absent, malformed or partial blocks.
+- **Accepted preflight record**: ledger `metadata.preflight` is an object with `version` 1 whose `tools_absent` array holds, for every tool the row lists, an entry `{tool, platform, accepted}` naming that tool, the task platform and the boolean `true`. Absent, malformed, another version or unmatched blocks.
 
 ### Gate and tool failures
 

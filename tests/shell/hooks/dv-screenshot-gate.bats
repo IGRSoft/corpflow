@@ -38,10 +38,10 @@ one_dv() { # <platform> [agent] [metadata-json]
   ledger "{\"DV0\": $(task "${2:-$BASH_DEV}" "$1")}" "" "${3:-}" "$1"
 }
 
-preflight_meta() { # <tools_absent> <accepted_absent> <accepted_by> [recorded_at]
-  jq -cn --argjson a "$1" --argjson c "$2" --arg by "$3" --arg at "${4-2026-01-01T00:00:00Z}" \
-    '{requires_screenshots: true, autonomy_preflight: {recorded_at: $at, platform: "backend",
-      tools_absent: $a, accepted_absent: $c, accepted_by: $by}}'
+preflight_meta() { # <entry-platform> <tools-json> [accepted-json] [version-json]
+  jq -cn --arg p "$1" --argjson t "$2" --argjson ok "${3:-true}" --argjson v "${4:-1}" \
+    '{requires_screenshots: true, preflight: {version: $v, result: "pass", ran_at: "2026-01-01T00:00:00Z",
+      platforms: [$p], checks: [], tools_absent: [$t[] | {tool: ., platform: $p, accepted: $ok}]}}'
 }
 
 png() {
@@ -180,28 +180,39 @@ assert_noop() {
 
 # --- tool_missing and the preflight record --------------------------------------
 
-@test "backend tool_missing passes with a complete operator-accepted preflight record" {
-  ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "$(preflight_meta "$FULL_TOOLS" "$FULL_TOOLS" operator)" backend
+@test "backend tool_missing passes when metadata.preflight v1 accepts every tool on backend" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "$(preflight_meta backend "$FULL_TOOLS")" backend
   manifest DV0 "$TOOLS_ROW"
   gate_file "$BASH_PAYLOAD"
   assert_pass tool_missing_only
 }
 
-@test "tool_missing blocks when the record is absent, partial, not operator-accepted, or off backend" {
-  local short='["silicon","magick"]' variant
-  for variant in absent short auto no-recorded-at web; do
+@test "tool_missing blocks on an absent, partial, unaccepted, off-platform, wrong-version or malformed record" {
+  local short='["silicon","magick"]' be variant
+  be="{\"DV0\": $(task "$BASH_DEV" backend)}"
+  for variant in absent short not-accepted accepted-string wrong-platform wrong-version \
+    version-string flat-strings not-object legacy-key web; do
     rm -rf "$WD/.context/logs"
     case "$variant" in
-      absent) ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "" backend ;;
-      short) ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "$(preflight_meta "$FULL_TOOLS" "$short" operator)" backend ;;
-      auto) ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "$(preflight_meta "$FULL_TOOLS" "$FULL_TOOLS" auto)" backend ;;
-      no-recorded-at) ledger "{\"DV0\": $(task "$BASH_DEV" backend)}" "" "$(preflight_meta "$FULL_TOOLS" "$FULL_TOOLS" operator "")" backend ;;
-      web) ledger "{\"DV0\": $(task "$BASH_DEV" web)}" "" "$(preflight_meta "$FULL_TOOLS" "$FULL_TOOLS" operator)" web ;;
+      absent) ledger "$be" "" "" backend ;;
+      short) ledger "$be" "" "$(preflight_meta backend "$short")" backend ;;
+      not-accepted) ledger "$be" "" "$(preflight_meta backend "$FULL_TOOLS" false)" backend ;;
+      accepted-string) ledger "$be" "" "$(preflight_meta backend "$FULL_TOOLS" '"true"')" backend ;;
+      wrong-platform) ledger "$be" "" "$(preflight_meta web "$FULL_TOOLS")" backend ;;
+      wrong-version) ledger "$be" "" "$(preflight_meta backend "$FULL_TOOLS" true 2)" backend ;;
+      version-string) ledger "$be" "" "$(preflight_meta backend "$FULL_TOOLS" true '"1"')" backend ;;
+      flat-strings) ledger "$be" "" "{\"preflight\":{\"version\":1,\"tools_absent\":$FULL_TOOLS}}" backend ;;
+      not-object) ledger "$be" "" '{"preflight":"pass"}' backend ;;
+      legacy-key)
+        ledger "$be" "" "$(preflight_meta backend "$FULL_TOOLS" | jq -c '{autonomy_preflight: .preflight}')" backend
+        ;;
+      web) ledger "{\"DV0\": $(task "$BASH_DEV" web)}" "" "$(preflight_meta web "$FULL_TOOLS")" web ;;
     esac
     manifest DV0 "$TOOLS_ROW"
     gate_file "$BASH_PAYLOAD"
     assert_success
-    echo "$output" | jq -e '.decision == "block" and (.reason | startswith("tool_missing_unaccepted"))' > /dev/null \
+    echo "$output" | jq -e '.decision == "block" and (.reason | startswith("tool_missing_unaccepted"))
+      and (.hookSpecificOutput.additionalContext | test("metadata[.]preflight has version 1"))' > /dev/null \
       || fail "variant $variant did not block: $output"
   done
 }
@@ -211,7 +222,7 @@ assert_noop() {
   for p in web android apple ai unknown backend systems; do
     for shape in none tools; do
       rm -rf "$WD/.context/logs" "$IMG"
-      ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "$(preflight_meta "$FULL_TOOLS" "$FULL_TOOLS" operator)" "$p"
+      ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "$(preflight_meta "$p" "$FULL_TOOLS")" "$p"
       [ "$shape" = none ] || manifest DV0 "$TOOLS_ROW"
       gate_file "$BASH_PAYLOAD"
       assert_success

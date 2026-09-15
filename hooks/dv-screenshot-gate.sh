@@ -18,8 +18,9 @@
 # No-op when no DV task is in progress or no DV task names that agent_type; any other miss blocks.
 # Evidence: images/<worktask_id>/screenshots-<TASK_ID>.md, else the `## <TASK_ID>` section of the
 # legacy screenshots.md. Row grammar is owned by attach-visual-evidence.sh --validate-manifest.
-# Class 3 passes only on backend/systems; class 4 additionally needs an operator-accepted
-# metadata.autonomy_preflight listing every absent tool. jq absent: live exit 0, --check exit 2.
+# Class 3 passes only on backend/systems; class 4 additionally needs metadata.preflight with
+# version 1 and, for every absent tool, a tools_absent entry {tool, platform: <task platform>,
+# accepted: true}. jq absent: live exit 0, --check exit 2.
 set -eu
 
 MODE=live
@@ -213,16 +214,19 @@ FLAG_JQ='
                then (o.requires_screenshots|tostring) else empty end;
   [ (if $t != "" then flag(.tasks[$t].metadata?) else empty end), flag(.metadata?), "true" ] | .[0]'
 
+# One expression: a parse error, a type error or an empty result is a non-zero jq -e exit, which blocks.
+# `accepted == true` is strict, so a string "true" does not accept.
 # shellcheck disable=SC2016
 PREFLIGHT_JQ='
   ($platform == "backend" or $platform == "systems")
-  and (.metadata.autonomy_preflight? | type) == "object"
-  and (.metadata.autonomy_preflight as $r
-       | ($r.recorded_at|type) == "string" and ($r.recorded_at|length) > 0
-       and ($r.tools_absent|type) == "array" and all($r.tools_absent[]; type == "string")
-       and ($r.accepted_absent|type) == "array" and all($r.accepted_absent[]; type == "string")
-       and $r.accepted_by == "operator"
-       and all($tools[]; . as $x | any($r.tools_absent[]; . == $x) and any($r.accepted_absent[]; . == $x)))'
+  and ($tools|length) > 0
+  and (.metadata.preflight? | type) == "object"
+  and (.metadata.preflight as $r
+       | $r.version == 1
+       and ($r.tools_absent|type) == "array"
+       and all($tools[]; . as $x
+             | any($r.tools_absent[]; type == "object" and .tool == $x
+                   and .accepted == true and .platform == $platform)))'
 
 preflight_accepts() { # <state> <platform> <comma-separated tools>
   local tools
@@ -353,8 +357,8 @@ Fix the rows for $tid in $G_MANIFEST: Path is a basename dv-$tid-NN-<slug>.<png|
         gate_pass "$payload" "$ctx" "$wid" "$tid" "$G_CLASS" "$platform" "tool_missing accepted at autonomy preflight"
       else
         gate_block "$payload" "$ctx" "$wid" "$tid" "$G_CLASS" "$platform" tool_missing_unaccepted \
-          "tool_missing_unaccepted — $tid has only tool_missing rows ($G_TOOLS) and no operator acceptance covers them" \
-          "A tool_missing row passes only on backend/systems when metadata.autonomy_preflight records every tool as absent and accepted_by operator. Install a capture tool and $capture."
+          "tool_missing_unaccepted — $tid has only tool_missing rows ($G_TOOLS) and no accepted preflight record covers them" \
+          "A tool_missing row passes only on backend/systems when metadata.preflight has version 1 and a tools_absent entry {tool, platform: $platform, accepted: true} for every tool named in the row. Install a capture tool and $capture."
       fi
       ;;
     *)

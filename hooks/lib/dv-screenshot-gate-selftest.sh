@@ -55,9 +55,9 @@ printf '# Screenshots\n\nHeadless, nothing captured.\n' > "$_c/images/wid-st/scr
 _st_png "$_c/images/wid-st/dv-DV0-01-x.png"
 _st_expect_block images-beside "$(run_gate "$_bash_dev" "$_c")" "$_c" invalid_evidence
 
-# Backend tool_missing row with a complete operator-accepted preflight record.
+# Backend tool_missing row with a version 1 preflight record accepting every absent tool.
 _c=$(_st_ctx backend backend '{"DV0":{"status":"in_progress","metadata":{"agent":"system-developer:bash-developer","platform":"backend"}}}' '[]' \
-  '{"autonomy_preflight":{"recorded_at":"2026-01-01T00:00:00Z","platform":"backend","tools_absent":["silicon","magick","convert"],"accepted_absent":["silicon","magick","convert"],"accepted_by":"operator"}}')
+  '{"preflight":{"version":1,"result":"pass","ran_at":"2026-01-01T00:00:00Z","platforms":["backend"],"checks":[],"tools_absent":[{"tool":"silicon","platform":"backend","accepted":true},{"tool":"magick","platform":"backend","accepted":true},{"tool":"convert","platform":"backend","accepted":true}]}}')
 _st_row "$_c/images/wid-st/screenshots-DV0.md" '| 01 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent), magick(absent), convert(absent) | 2026-01-01T00:00:00Z | — |'
 _st_expect_pass tool-missing-accepted "$(run_gate "$_bash_dev" "$_c")" "$_c"
 

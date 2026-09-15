@@ -344,7 +344,7 @@ jq --argjson sc '<the captures array from skill output>' \
 
 ### Failure handling
 
-Per-failure required behavior is canonical in `skills/dv-screenshot-capture/SKILL.md § Failure modes`: `requires_screenshots: false` + zero captures → skip rationale in `screenshots-<TASK_ID>.md`, DV proceeds; `requires_screenshots: true` (default) + zero captures with cli/fallback also failed → outside `backend`/`systems` DV FAILS with `missing_screenshot_artifact`, append a retry block to `errors/developer.md` (classification: `logic`), one retry permitted (force cli/fallback); a non-fatal capture failure is recorded and DV continues with the remaining captures. A `tool_missing` row passes the gate only on `backend`/`systems` with an operator-accepted `metadata.autonomy_preflight`.
+Per-failure required behavior is canonical in `skills/dv-screenshot-capture/SKILL.md § Failure modes`: `requires_screenshots: false` + zero captures → skip rationale in `screenshots-<TASK_ID>.md`, DV proceeds; `requires_screenshots: true` (default) + zero captures with cli/fallback also failed → outside `backend`/`systems` DV FAILS with `missing_screenshot_artifact`, append a retry block to `errors/developer.md` (classification: `logic`), one retry permitted (force cli/fallback); a non-fatal capture failure is recorded and DV continues with the remaining captures. A `tool_missing` row passes the gate only on `backend`/`systems` when ledger `metadata.preflight` (`version` 1) has an `accepted: true` `tools_absent` entry for each named tool on that platform.
 
 DV-side addition: if the `Skill()` invocation itself errors, escalate per `commands/worktask.md § Error Handling` and do NOT mark DV complete.
 
