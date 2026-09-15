@@ -330,3 +330,56 @@ JSON
   assert_output --partial "result=none"
   assert_output --partial "reason=no_candidates"
 }
+
+# --- scrub: candidate and prior text passes through skills/shared/scripts/path-scrub.sh --
+
+# _scan_tree <missing|failing> -> path of a plugin-shaped copy of the scan whose
+# path-scrub.sh is absent, or present but failing, so the fail-closed arm runs
+# without an env seam that could point the scan at an arbitrary file to source.
+_scan_tree() {
+  local root="$WD/tree-$1"
+  mkdir -p "$root/skills/worktask/scripts" "$root/skills/shared/scripts"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$root/skills/worktask/scripts/"
+  if [ "$1" = "failing" ]; then
+    printf '%s\n' 'CORPFLOW_HOST_PATH_ERE="/(Users)/"' 'corpflow_path_scrub() { return 1; }' \
+      > "$root/skills/shared/scripts/path-scrub.sh"
+  fi
+  printf '%s' "$root/skills/worktask/scripts/preflight-issue-scan.sh"
+}
+
+@test "scrub: a host path in a candidate or prior title leaves the scan as [local-path]" {
+  cat > "$WD/issues.json" <<'JSON'
+[{"number":42,"title":"Duplicate GitHub issues opened by overlapping worktasks in /Users/alice/src/app","url":"https://github.com/o/r/issues/42"},
+ {"number":9,"title":"Duplicate GitHub issues from worktasks under /home/bob/work","url":"https://github.com/o/r/issues/9","state":"CLOSED"}]
+JSON
+  RUN -- --goal "$GOAL"
+  assert_success
+  [ "$(KV result)" = "shown" ]
+  [ "$(KV priors)" = "1" ]
+  assert_output --partial '[local-path]'
+  refute_output --partial '/Users/alice'
+  refute_output --partial '/home/bob'
+  assert_output --partial '"url":"https://github.com/o/r/issues/42"'
+}
+
+@test "scrub: path-scrub.sh missing -> skipped/scrub_unavailable, no candidate or prior lines" {
+  local s
+  s="$(_scan_tree missing)"
+  cd "$WD"
+  run env PATH="$WD/bin:$PATH" ISSUES_JSON="$WD/issues.json" bash "$s" --goal "$GOAL"
+  assert_success
+  [ "$(KV result)" = "skipped" ]
+  [ "$(KV reason)" = "scrub_unavailable" ]
+  refute_output --partial 'candidate='
+  refute_output --partial 'prior='
+}
+
+@test "scrub: a scrub that fails at runtime also prints no candidates" {
+  local s
+  s="$(_scan_tree failing)"
+  cd "$WD"
+  run env PATH="$WD/bin:$PATH" ISSUES_JSON="$WD/issues.json" bash "$s" --goal "$GOAL"
+  assert_success
+  [ "$(KV reason)" = "scrub_unavailable" ]
+  refute_output --partial 'candidate='
+}
