@@ -8,10 +8,10 @@
 #   sanitiser actually ran, rather than assuming it did.
 #
 #   Rules (each reports file line numbers):
-#     P1  local-path leak — .context/, an absolute host path under any mount
-#         convention (/Users, /home, /tmp, /var, /opt, /etc, /root, /Volumes,
-#         /mnt, /media, /private, /srv), a Windows drive letter (C:\), ~/,
-#         ../, conductor/workspaces/. Matched on a BACKTICK-NEUTRALISED copy of
+#     P1  local-path leak — .context/, an absolute host path or a Windows drive
+#         letter as defined once by skills/shared/scripts/path-scrub.sh
+#         (CORPFLOW_HOST_PATH_ERE, CORPFLOW_DRIVE_PATH_ERE — the sanitiser reads the
+#         same two), ~/, ../, conductor/workspaces/. Matched on a BACKTICK-NEUTRALISED copy of
 #         the line, because a code span used to defeat the sanitiser's own
 #         (^|[[:space:]]) anchors and that is precisely how a `.context/` path
 #         reached a published PR.
@@ -48,7 +48,8 @@
 # @exitcode 0   Clean, or findings in warn-only mode, or scope-disabled.
 # @exitcode 1   Findings while --strict is in effect.
 # @exitcode 2   Usage error (no --body, unknown flag) or --self-test failure.
-# @exitcode 3   branch-lib.sh unreachable — no dispatch runs (plugin install broken).
+# @exitcode 3   branch-lib.sh or path-scrub.sh unreachable — no dispatch runs (plugin
+#               install broken).
 #
 # Minimum shell: bash 3.2+ (macOS default). Mirrors fn-preflight.sh conventions.
 
@@ -86,6 +87,18 @@ if [ -n "$BRANCH_LIB_PATH" ] && [ -r "$BRANCH_LIB_PATH" ]; then
 else
   printf >&2 'pr-body-lint.sh: branch-lib.sh unreachable at %s — plugin install broken\n' \
     "$BRANCH_LIB_PATH"
+  exit 3
+fi
+
+# P1 without the shared pattern would report a body clean that the sanitiser never
+# checked for host paths, so its absence is the same broken install as above.
+PATH_SCRUB_PATH="${SCRIPT_DIR}/../../shared/scripts/path-scrub.sh"
+if [ -r "$PATH_SCRUB_PATH" ]; then
+  # shellcheck disable=SC1090
+  . "$PATH_SCRUB_PATH"
+else
+  printf >&2 'pr-body-lint.sh: path-scrub.sh unreachable at %s — plugin install broken\n' \
+    "$PATH_SCRUB_PATH"
   exit 3
 fi
 
@@ -145,17 +158,23 @@ issue_anchor() {
 # ---------- per-line rules (P1, P3) ----------
 # One awk pass. Emits "<rule>\t<lineno>\t<text>" for each finding.
 scan_lines() {
-  LC_ALL=C awk '
+  # ENVIRON, not -v: BSD awk rewrites backslash escapes in -v values, and the
+  # drive-letter ERE ends in one.
+  CORPFLOW_HOST_PATH_ERE="$CORPFLOW_HOST_PATH_ERE" \
+    CORPFLOW_DRIVE_PATH_ERE="$CORPFLOW_DRIVE_PATH_ERE" \
+    LC_ALL=C awk '
+    BEGIN {
+      host_re = "(^|[[:space:]])" ENVIRON["CORPFLOW_HOST_PATH_ERE"]
+      drive_re = "(^|[[:space:]])" ENVIRON["CORPFLOW_DRIVE_PATH_ERE"]
+    }
     {
       # Backtick -> space, mirroring publish-pl-issue.sh sanitise_body pass 1.
       # A code span must not hide a leak from the reader-facing check either.
       probe = $0; gsub(/`/, " ", probe)
 
       if (probe ~ /(^|[[:space:]])\.context\//)                                  emit("P1", $0)
-      # MUST stay byte-identical to the L2,L3 copy in publish-pl-issue.sh
-      # sanitise_body — pinned by tests/shell/worktask/local-path-regex-parity.bats.
-      else if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root|Volumes|mnt|media|private|srv)\//) emit("P1", $0)
-      else if (probe ~ /(^|[[:space:]])[A-Za-z]:\\/)                             emit("P1", $0)
+      else if (probe ~ host_re)                                                  emit("P1", $0)
+      else if (probe ~ drive_re)                                                 emit("P1", $0)
       else if (probe ~ /(^|[[:space:]])~\//)                                     emit("P1", $0)
       else if (probe ~ /(^|[[:space:]])\.\.\//)                                  emit("P1", $0)
       else if (probe ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/)                  emit("P1", $0)
