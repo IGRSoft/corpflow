@@ -273,6 +273,59 @@ _no_renderer() {
   assert_success
 }
 
+# --- seam: hooks/dv-screenshot-gate.sh consumes the record --------------------------
+
+# A systems DV0 ledger whose only evidence is the floor row cli-fallback.sh writes.
+_gate_ledger() {
+  local ctx="$WD/gw/.context"
+  mkdir -p "$ctx/images/wt-pf"
+  jq -n '{version: 2, worktask_id: "wt-pf", platform: "systems", metadata: {requires_screenshots: true},
+    tasks: {DV0: {status: "in_progress", metadata: {stage: "DV", agent: "system-developer:bash-developer", platform: "systems"}}},
+    facts: {dispatched_agents: []}}' > "$ctx/state.json"
+  printf '%s\n' '# Screenshots — wt-pf / DV0' '' \
+    '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |' \
+    '|---|------|------|-------|----------|---------|---------|----------|------------|' \
+    '| 01 | diff | — | 0 | systems | cli_fallback | tool_missing: silicon(absent), magick(absent), convert(absent) | 2026-01-01T00:00:00Z | — |' \
+    > "$ctx/images/wt-pf/screenshots-DV0.md"
+}
+
+_gate() {
+  run_script_env --env "WORKSPACE_ROOT=$WD/gw" --env "CLAUDE_PROJECT_DIR=$WD/gw" \
+    --stdin-file "$FIXTURES/hooks/dv-screenshot-gate-bash-developer.payload.json" hooks/dv-screenshot-gate.sh
+}
+
+@test "seam: a --record from --platform systems --accept-absent renderer passes the gate's tool_missing row" {
+  _no_renderer
+  _gate_ledger
+  _pf -- --auto plan --platform systems --accept-absent renderer
+  assert_success
+  printf '%s\n' "$output" > "$WD/tmp/corpflow-preflight.seam"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --record "$WD/tmp/corpflow-preflight.seam" --context "$WD/gw/.context"
+  assert_success
+  _gate
+  assert_success
+  assert_output ''
+  run jq -se 'map(select(.action == "screenshot_gate_pass")) | length == 1
+    and (.[0].metadata.class == "tool_missing_only")' "$WD/gw/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "seam: without --accept-absent the check exits 1, nothing is recorded, and the gate blocks" {
+  _no_renderer
+  _gate_ledger
+  cp "$WD/gw/.context/state.json" "$WD/before.json"
+  _pf -- --auto plan --platform systems
+  [ "$status" -eq 1 ]
+  printf '%s\n' "$output" > "$WD/tmp/corpflow-preflight.seamfail"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --record "$WD/tmp/corpflow-preflight.seamfail" --context "$WD/gw/.context"
+  [ "$status" -eq 1 ]
+  cmp -s "$WD/gw/.context/state.json" "$WD/before.json" || fail "a failing preflight reached the ledger"
+  _gate
+  assert_success
+  jq -e '.decision == "block" and (.reason | startswith("tool_missing_unaccepted"))' <<< "$output" > /dev/null \
+    || fail "gate did not block tool_missing_unaccepted: $output"
+}
+
 # --- permission rules -------------------------------------------------------------
 
 @test "rules: prefix, space-star, broader prefixes and bare Bash satisfy the merge grant" {
