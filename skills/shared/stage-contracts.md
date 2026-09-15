@@ -57,6 +57,35 @@ Every stage's output artifact MUST (full checklist: **Completion Verification** 
 2. Use H2 anchors from the per-stage allow-list in `handoff-protocol.md#anchor-allow-list` (kebab-case, no spaces, no underscores), plus the universal `## elicitation-sweep` anchor every artifact carries.
 3. Atomically patch `tasks.<ID>` and the `handoffs["<PREV>→<TASK_ID>"]` edge into `.context/state.json`.
 
+### A permission denial is returned, not worked around
+
+When Claude Code's auto-mode classifier denies a tool call, stop at that step and return
+`verdict: blocked` carrying `blocked_on` (`handoff-protocol.md § Schema — blocked_on`), with
+`command` and `classifier_reason` copied verbatim from the denial (shape below).
+
+The same holds on pass/fail, go/no-go and approve/reject stages, whose vocabularies list no
+`blocked`. The cross-stage blocked exception (`handoff-protocol.md § Per-stage required-field
+matrix`) makes `blocked` with a `blocked_on` legal on every stage, so a denial is
+never returned as fail, no-go or reject. Each of those loops the pipeline back and spends a retry
+on work that did not fail.
+
+#### A permission denial — the blocked_on shape
+
+```yaml
+  blocked_on:
+    kind: permission
+    detail: { tool: Bash, command: "gh pr merge 412 --squash", classifier_reason: "Blocked by classifier", allow_rule: "Bash(gh pr merge 412 --squash)" }
+    resume_with: decision_ref
+```
+
+#### A permission denial — never worked around
+
+Never retry the denied call, and never reach its effect another way — a different command, tool or
+script doing what the denied one would have done. That lands an action the session's permission
+posture refused, with no grant on record. List the steps that already completed in the artifact
+body so a resumed dispatch can skip them. The orchestrator parks the task without spending a retry
+and asks the user (`skills/worktask/SKILL.md § Step 6.5a4`).
+
 ## Contract Table
 
 Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-resolution)). Reading the rows:

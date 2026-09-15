@@ -145,6 +145,55 @@ constraints:
   total_tokens: { max: 200, tokenizer: cl100k_base-proxy }
 ```
 
+### Schema — blocked_on
+
+```yaml
+# …continued: handoff.properties — the megatask Shared Seams registry entry, verbatim
+      blocked_on:
+        kind: user_decision | user_action | permission | peer_session | artifact | correction | host_environment
+        detail: {…kind-specific…}   # permission: {tool, command, classifier_reason, allow_rule}
+        resume_with: decision_ref | artifact_path | reply_ref
+```
+
+OPTIONAL, and legal only alongside `verdict: "blocked"`, which every stage may return with it under
+the cross-stage blocked exception (§ Per-stage required-field matrix). It is the typed reason a
+stage cannot continue, in the shape the megatask Shared Seams registry declares
+(`skills/megatask/SKILL.md § Registry location`). Both enums are copied whole, so the other kinds need no second schema edit, but only
+the `permission` arm is defined here; every other kind keeps its `{…kind-specific…}` placeholder
+until its own arm is specified.
+
+#### Schema — blocked_on, the permission arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is permission
+        detail:
+          type: object
+          required: [tool, command, classifier_reason, allow_rule]
+          properties:
+            tool: { type: string, maxLength: 64 }
+            command: { type: string, maxLength: 512 }
+            classifier_reason: { type: string, maxLength: 512 }
+            allow_rule: { type: string, maxLength: 600 }
+        resume_with: { const: decision_ref }
+```
+
+A stage fills it on an auto-mode classifier denial (`skills/shared/stage-contracts.md § A permission
+denial is returned, not worked around`). `allow_rule` is informational: the rule a user could add
+themselves, which corpflow never writes. The ledger copy is `tasks.<ID>.metadata.blocked_on`,
+written by `permission-park.sh park` and set to `null` by `resume` — `--task-meta` merges and has
+no unset, so a cleared park reads `blocked_on == null`, not an absent key.
+
+##### Schema — blocked_on, what decision_ref points at
+
+`resume_with: decision_ref` names the `permission_resumed` audit row that `permission-park.sh
+resume` appends once the user has answered (`skills/agent-coordination/SKILL.md § Writers —
+permission resumes`). Its `metadata.decision_ref` is `permission_resumed:<task_id>:<dedupe_key>:<n>`,
+and `resume` returns the same value as `resume_block.decision_ref`. `n` is 1 plus the earlier
+resumes with that task and key, so a call that is denied and parked again gets a distinct ref.
+`truncated: true` on a `batch` need or on `resume_block` marks a command cut at 512 characters. That
+text is context only: it is never offered as a `!` line, and the full command is in Claude Code's
+denial notice. The stored `blocked_on` carries no `truncated` key.
+
 ### Schema — $defs: SweepItem and SweepStub
 
 Closing elicitation sweep item, defined once for all three transports (contract:
@@ -277,6 +326,12 @@ under its own stage id.
 
 ### Per-stage required-field matrix
 
+Cross-stage blocked exception: any stage may return `verdict: blocked` when the return carries a
+`blocked_on` (§ Schema — blocked_on), whether or not its row's vocabulary lists `blocked`. It holds
+on both channels, so a typed `verdict` enum without `blocked` still accepts it alongside
+`blocked_on`. A `blocked` with no `blocked_on` stays illegal on a row that lacks it, and no row's
+own vocabulary changes.
+
 #### Stages PL–DR
 
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
@@ -286,6 +341,9 @@ under its own stage id.
 | TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
 | DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_summary_line (REQUIRED when tests_executed is non-zero), test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
 | DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
+
+DR lists no `blocked`, yet still returns `verdict: blocked` with a `blocked_on` under the
+cross-stage blocked exception above.
 
 #### Stages SR–ET
 
@@ -299,6 +357,12 @@ under its own stage id.
 | ST | key_decisions (= rationale), open_questions | — | approve / reject |
 | IR | key_decisions (= root cause), next_stage_focus, open_questions | files_touched | ok / escalate |
 | ET | key_decisions (= ethics findings), open_questions | — | pass / fail |
+
+##### Stages SR–ET — where the exception bites
+
+SR, QA, ST, IR and ET list no `blocked`. Each still returns `verdict: blocked` with a `blocked_on`
+under the cross-stage blocked exception (§ Per-stage required-field matrix), so a permission denial
+is never returned as `fail`, `no-go` or `reject`.
 
 ### Token budget
 
@@ -314,13 +378,14 @@ Two parallel channels, neither replacing the other: the typed return is *validat
 
 ### Schema conventions
 
-JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
+JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels, plus `blocked` alongside a `blocked_on` under that section's cross-stage blocked exception. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
 #### Conventions — the sweep field
 
 Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`.
 
-`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. 
+`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. `blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
+
 ###### Conventions — the $defs pointer is an obligation
 
 The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.

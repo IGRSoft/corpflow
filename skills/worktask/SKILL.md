@@ -347,9 +347,10 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 > free, so "an agent is working" is never a reason to stop, and that misconception is what makes an
 > idle turn feel justified from the inside. Ending a turn with "next: DC → RE → FN" when those stages
 > are dispatchable is idle time, not a handoff: the pipeline sits until a human asks whether anything
-> is happening. Exactly three things justify stopping mid-pipeline — the plan gate
-> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, and the FN gate (§ FN Gate).
-> Nothing else does.
+> is happening. Exactly four things justify stopping mid-pipeline — the plan gate
+> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the prompt for a parked
+> permission denial (§ Step 7a, asked only after every ready stage is dispatched), and the FN gate
+> (§ FN Gate). Nothing else does.
 
 #### Readiness is mechanical, not a judgement call
 
@@ -1321,6 +1322,62 @@ Check the send result on both legs (`references/resume.md § Reattach rows — t
 result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
 was never asked for.
 
+##### Step 6.5a4 — why a permission denial needs its own arm
+
+An auto-mode classifier denial is not a stage failure: the stage stopped where it should, and the
+session's permission posture said no. Read as an ordinary blocked or errored return it spends a
+retry or escalates a stage that never failed; left to the orchestrator it becomes an ad-hoc stop
+and a hand-landed command that no stage, review or audit row records. One observed run met three
+denials that way and logged none of them. This arm parks the task, § Step 7a asks the user once
+per boundary, and only the denied step resumes.
+
+##### Step 6.5a4 — detect and park (permission denial)
+
+```typescript
+      // …continued: after 6.5a3; PARK = scripts/permission-park.sh.
+      // A completing or failing verdict never reaches classify (next section).
+      const parkable = !incomplete && ["blocked","escalate"].includes(incHandoff?.verdict);
+      const typed = parkable && Boolean(incHandoff?.blocked_on);
+      const pd = !parkable ? null : spawnSync("bash",
+        [PARK, "classify", ...(typed ? ["--payload", JSON.stringify(incHandoff)] : [])],
+        { input: typed ? "" : stageReturnText });
+      if (pd?.status === 0) {
+        // Ledger via state-patch.sh plus one deduped permission_denied row; retry_count,
+        // escalation_counts and last_error stay untouched.
+        spawnSync("bash", [PARK, "park", "--task-id", task.id, "--detail", pd.stdout.trim()]);
+        continue;   // siblings keep moving; § Step 7a asks
+      }
+```
+
+###### Step 6.5a4 — which returns reach classify
+
+Only a `blocked` or `escalate` verdict reaches the arm, and a handoff that carries `blocked_on`
+passes it as `--payload`. A completing verdict (`ok`, `pass`, `go`, `approve`) or a failing one
+(`fail`, `reject`, `no-go`) never reaches classify, even when its text quotes classifier wording:
+that return settles through § Step 6.5 as usual. The returned text is the fallback, since
+PermissionDenied firing inside a subagent is unverified. `--tool` and `--command` are optional on
+that path, because classify recovers both from the return's first Tool(...) line. If it cannot
+recover a tool it exits 1, and the return stays an ordinary blocked return for § Step 7.
+
+##### Step 6.5a4 — what the orchestrator never does with a denial
+
+- Never land the denied command yourself, nor anything with the same effect. § Delegation-only
+  already forbids it, and a hand-landed command carries no grant: it is the workaround the stage
+  was told not to take, moved up one level.
+- Never spend a retry on it: no `retry_count` increment, no `last_error`, no `classifyError`, no
+  Escalate-to edge (`agent-coordination § Retry / Escalate Matrix`, row `permission_denied`).
+- Never grant. "Grant and continue" means the user grants in Claude Code's own permission UI;
+  corpflow writes no allow rule or setting, and if the resumed call is denied again the stage
+  simply parks again.
+
+##### Step 6.5a4 — rationalizations
+
+| Excuse | Reality |
+|---|---|
+| "One merge; landing it myself beats asking" | The classifier refused it for this session. Landed by hand it is the same action with no grant, no reviewer and no stage record. |
+| "Re-dispatch and let it try again" | The denial stands until the user acts, and a retry walks a stage that never failed toward `exhausted`. |
+| "Ask first, dispatch the ready stages after" | The question waits on a human. Dispatch first (§ Dispatch on the same turn), then ask. |
+
 ##### Step 6.5 — verdict → status
 
 ```typescript
@@ -1438,19 +1495,84 @@ const rowMatchesHandoff = (row, h) =>
     const ledger = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
     const row = ledger.tasks[task.id];
     if (row.status === "blocked") {
-      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp.
+      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp. A
+      // permission park never reaches here: 6.5a4 continued past it, and § Step 7a asks.
     } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
       loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
     } else if (row.status !== "completed") {
       // No mapped verdict landed (the writer refused it): escalate per § Error Handling.
     }
   }
+```
 
-  // Refresh from the ledger — TL/DV may have added tasks since the last read.
+##### Step 7a — permission batch, at the boundary
+
+```typescript
+  // …continued: after the for-loop, inside the while
+  // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
+  //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
+  //     permission prompt).
+  const batch = JSON.parse(spawnSync("bash", [PARK, "batch"]).stdout);
+  if (batch.mode === "megatask_park" && batch.park) return stopParked(batch.park);
+  const answers = batch.payloads.flatMap(p => AskUserQuestion(p));
+  for (const need of batch.needs) {
+    const answer = answerFor(answers, need.task_id);
+    if (answer === "manual") waitForUserRun(need);   // until the user reports having run it
+    resumeDeniedStep(need, answer);
+  }
+
+  // Refresh — TL/DV may have added tasks since the last read.
   state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
   tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 }
 ```
+
+##### Step 7a — the megatask arm
+
+Under a `/megatask` per-issue run `batch` asks nothing. It writes `execution.status: "failed"` and
+`execution.reason: "parked_escalation"` to `workspace.json` plus one `escalation_parked` row, and
+leaves `blocked_on` set — the existing PARK path (§ Escalation class), so nothing more dispatches.
+
+```typescript
+// park.workspace_written is false when workspace.json was missing, malformed or a symlink. The
+// monitor settles a track only on "failed" or "completed", so a bare STOP would hang this one.
+function stopParked(park) {
+  // The PARK guard's own write: commands/worktask.md § Escalation guard — unattended
+  // `/megatask` per-issue runs (PARK).
+  if (!park.workspace_written) writeWorkspaceParked();   // execution: failed, parked_escalation
+  return;   // STOP: nothing more dispatches
+}
+```
+
+##### Step 7a — resume only the denied step
+
+```typescript
+// resume re-claims the row, sets blocked_on to null and appends the permission_resumed row that
+// rb.decision_ref names. Its answer is the user's own; no delegate or resolver supplies one.
+function resumeDeniedStep(need, answer) {
+  const r = spawnSync("bash", [PARK, "resume", "--task-id", need.task_id, "--answer", answer]);
+  if (r.status !== 0) return;   // no longer parked, or the claim was refused: leave the row
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  // rb.instruction names only the denied command and forbids re-running completed steps.
+  // Liveness: references/resume.md § Live-agent rows. A re-dispatch carries it as suffix [7].
+  const agentId = dispatchEntry(state, rb.task_id).agent_id;
+  if (isLive(agentId)) SendMessage({ to: agentId, message: rb.instruction });
+  else redispatch(rb.task_id, { suffix: rb.instruction });
+}
+```
+
+###### Step 7a — the two answers, and the record they leave
+
+- "grant and continue" → `grant`, resumed at once. The user grants in Claude Code's own permission
+  UI when the resumed call prompts; corpflow grants nothing.
+- "run it yourself" → `manual`. The `! <command>` line is in the question text. The answer is not
+  the run: resume only after the user reports having run it, with their `! <command>` output in
+  this conversation.
+- `truncated: true` on a need marks a command cut at 512 characters. Its question offers no `!`
+  line and points at the denial notice or `/permissions` recent denials; `rb.instruction` treats
+  the recorded text as context only.
+- `rb.decision_ref`, `permission_resumed:<task_id>:<dedupe_key>:<n>`, names the `permission_resumed`
+  audit row `resume` appended: the record `blocked_on.resume_with: decision_ref` points at.
 
 ##### Step 7 — loop-back arm
 
@@ -1666,6 +1788,8 @@ even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<
 unattended `/megatask` per-issue run has no user, so the issue PARKS instead: settled
 `execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
 audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
+A parked permission need is escalation-class by construction — granting is security posture — so
+no delegate answers it: § Step 7a asks the user, and a megatask per-issue run PARKs by this path.
 
 ## FN Gate
 
@@ -1766,11 +1890,47 @@ Executable helpers (never read into context — invoke via `bash`):
 | Script | One-line invocation | Purpose |
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
+| `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
 
 Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
 and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
 exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
 `references/handoff-protocol.md#layer-1-fallback`.
+
+### permission-park.sh — CLI
+
+```
+permission-park.sh classify [--payload <json|text>] [--tool <t>] [--command <c>]   # stdin when --payload absent
+permission-park.sh park     --task-id <ID> --detail <json> [--state <state.json>]
+permission-park.sh batch    [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
+permission-park.sh resume   --task-id <ID> --answer grant|manual [--state <state.json>]
+permission-park.sh --self-test
+```
+
+Exit `0` success (for classify, the payload is a permission denial); `1` classify found no denial
+or no recoverable tool, or park/resume had a ledger write refused or a task not parked; `2` usage
+error, missing or unparseable ledger, or broken install. On the text path `--tool`/`--command` are
+optional: classify recovers both from the first `Tool(...)` line. It grants nothing, writes no
+Claude Code configuration, and emits no retry decision.
+
+### permission-park.sh — stdout
+
+| Subcommand | stdout (one JSON line) |
+|---|---|
+| `classify` | `{"tool","command","classifier_reason","allow_rule"}` |
+| `park` | `{"blocked_on":{"kind":"permission","detail":{…4 keys},"resume_with":"decision_ref"},"dedupe_key":"<16 hex>","truncated":true\|false,"audit_row_written":true\|false}` |
+| `batch` | `{"mode":"ask","needs":[{"task_id","tool","command","classifier_reason","allow_rule","truncated"}…],"payloads":[{"questions":[…≤4]}]}`; megatask per-issue run: `{"mode":"megatask_park","needs":[…],"payloads":[],"park":{"boundary","execution","escalated","workspace_written","audit_row_written"}}`, `"park":null` when nothing is parked |
+| `resume` | `{"resume_block":{"task_id","tool","command","answer","truncated","do_not_rerun":true,"decision_ref","instruction"},"cleared":true,"audit_row_written":true\|false}` |
+
+### permission-park.sh — the resume audit row
+
+`resume` appends one `permission_resumed` row per successful resume and none on a refusal:
+`actor: "orchestrator"`, `subject: <task_id>`, `result: "ok"`,
+`metadata.{answer, dedupe_key, tool, command, decision_ref}`. `decision_ref` is
+`permission_resumed:<task_id>:<dedupe_key>:<n>`, where `n` is 1 plus the earlier rows with that
+subject and key. It is the record `blocked_on.resume_with: decision_ref` points at, and it comes
+back as `resume_block.decision_ref` (§ Step 7a). `truncated: true` marks a command cut at 512
+characters.
 
 ## Related
 
