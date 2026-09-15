@@ -1,11 +1,8 @@
-<!--
-TEMPLATE. Copy to the root of an integrating plugin as CORPFLOW.md and replace every
+<!-- TEMPLATE. Copy to the root of an integrating plugin as CORPFLOW.md and replace every
 <PLACEHOLDER>. Normative contract: corpflow skills/cross-plugin-handoff/references/plugin-contract.md.
-
 Keep it one self-contained file; splitting it into references/ rebuilds the coupling it replaced.
 Never add a `## Routing` heading — that one is reserved for a CORPFLOW.md at a *user project* root
-(override template: corpflow templates/PROJECT-CORPFLOW.md).
--->
+(override template: corpflow templates/PROJECT-CORPFLOW.md). -->
 
 # corpflow Integration — <PLUGIN>
 
@@ -37,12 +34,11 @@ stage ran — read `state.json`.
 
 #### Who owns the artifact
 
-**DV is the only stage ownership transfers for.** Read `tasks.DV0.agent`: a `<PLUGIN>:` id
-means you own `development-N.md`, patch the ledger, and your frontmatter is what the harness
-validates; routed via
-`corpflow:developer` it owns the artifact and you return implementation plus a ≤500-token summary.
-Every other stage is **consultation** — corpflow writes the artifact and every `state.json` entry.
-DV-support owns no stage, writes under `.context/logs/`, never patches.
+**DV is the only stage ownership transfers for.** Read `tasks.DV0.agent`: a `<PLUGIN>:` id means you
+own `development-N.md`, patch the ledger, and your frontmatter is what the harness validates; routed
+via `corpflow:developer` it owns the artifact and you return implementation plus a ≤500-token
+summary. Every other stage is **consultation** — corpflow writes the artifact and every `state.json`
+entry. DV-support owns no stage, writes under `.context/logs/`, never patches.
 
 ## Evidence declaration
 
@@ -83,9 +79,8 @@ You run in an isolated git worktree; `task.metadata.workspace_path` is the tree 
 ## Artifacts
 
 Write to `.context/`; in DV you also own the source paths corpflow assigned you inside your
-worktree, and nothing else. `<N>` is `run_index`. Basenames are a convenience for the
-`SubagentStop` hook — the frontmatter is the contract. Errors go to
-`.context/errors/<agent-basename>.md`.
+worktree, and nothing else. `<N>` is `run_index`. Basenames are a convenience for the `SubagentStop`
+hook — the frontmatter is the contract. Errors go to `.context/errors/<agent-basename>.md`.
 
 | Stage | Artifact |
 |---|---|
@@ -194,10 +189,9 @@ yours to resolve, not the user's — cost is not an exemption.
 - `id` is `sw-<TASK_ID>-<n>` — the ledger unions on `.id`, so an unscoped `q1` overwrites another
   stage's question. Max 4 per stage; more is handing the user your triage.
 - `escalate` is never auto-answered, `decision` may be; the orchestrator raises your label, never
-  lowers it. `blocks_next_stage` is REQUIRED on every
-  stub and on BOTH stub transports — `handoff.open_questions[]` **and** the
-  `state-patch.sh --facts` payload — and the two copies must agree — `true` costs a round trip at your
-  own boundary, `false` batches at the final gate.
+  lowers it. `blocks_next_stage` is REQUIRED on every stub and on BOTH stub transports —
+  `handoff.open_questions[]` **and** the `state-patch.sh --facts` payload — and the two copies must
+  agree — `true` costs a round trip at your own boundary, `false` batches at the final gate.
 - Re-emitting after a rework or retry carries `status` and `resolution` forward.
 - You never ask — no plugin agent holds an ask tool; the orchestrator renders every item.
 - Not the sweep, each already has a channel: runtime evidence (`requests_test_evidence:`), a skipped
@@ -247,6 +241,12 @@ On re-dispatch after a DR or QA rejection, `metadata.gate_blockers[]` carries th
 review artifact's `## blockers`. **Fix those and nothing else**: address every entry or say in the
 artifact why one is not actionable, and dispute via `error_escalated_to:` rather than by ignoring.
 
+### Consultant return — consultant-return.v1
+
+DR and SR consultations end the return with exactly one `json` fence, placed last, holding one
+`consultant-return.v1` object (`schema_version`, `verdict`, `severity_counts`, `findings[]`) with
+lowercase severities. A rejected return is re-dispatched once and never hand-fixed.
+
 ## Orchestrator agent roles
 
 This plugin's own multi-stage commands name a **role**, never an id, so this table is the only place
@@ -295,5 +295,6 @@ fork a standard's text into this plugin; a copy drifts silently.
 | | |
 |---|---|
 | Targets corpflow | `<version>` |
+| Consultant return | `consultant-return.v1` |
 | Size budget | ≤300 lines |
 | Contract source | `corpflow skills/cross-plugin-handoff/references/plugin-contract.md` |
