@@ -72,6 +72,13 @@ setup() {
   assert_output --partial "tokens="
 }
 
+@test "happy: --validate-frontmatter accepts the optional acted_on_msg_id (exit 0)" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$FIXTURES/worktask/ack/development-acted-m2.md"
+  assert_success
+  assert_output --partial "ok:"
+  assert_output --partial "stage=DV"
+}
+
 @test "edge: --validate-state on a valid state.json passes (exit 0, idempotent=yes)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-state "$WD/state.json"
   assert_success

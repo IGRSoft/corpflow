@@ -1445,3 +1445,147 @@ _rgr_fork_repo() {
   [[ "$stderr" == *"cherry-pick"* ]]
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+# ---------- strict PR-body lint gate ----------
+# Under strict, the lint's verdict is the gate's verdict; with strict off the lint
+# stays advisory and every row matches the pre-strict gate.
+
+# A body complete in every structural rule whose only lint finding is P1: a checkout
+# outside the mount list survives every line rule and rebases to `.context/` in the
+# final scrub, which the lint then reads back.
+mk_p1_body() {
+  cat > "$WD/body.md" <<'EOF'
+## Motivation
+
+Why.
+
+## Changes
+
+- Scratch notes live at /nonexistent-cf/wt/.context/notes.txt now.
+
+## Test plan
+
+- bats tests/shell/worktask/fn-preflight.bats
+
+Closes #221
+EOF
+}
+
+# Copies the scripts tree so a test can remove or replace one sibling.
+mk_tree() {
+  mkdir -p "$WD/tree/skills/worktask"
+  cp -R "$PLUGIN_ROOT/skills/worktask/scripts" "$WD/tree/skills/worktask/scripts"
+  cp -R "$PLUGIN_ROOT/skills/shared" "$WD/tree/skills/shared"
+}
+
+gate_rows() {
+  jq -r 'select(.action | test("^pr_body")) | "\(.action):\(.result)"' .context/logs/audit.jsonl
+}
+
+@test "F-strict-1: CORPFLOW_PR_BODY_STRICT=1 blocks a P1 finding with a pr_body_lint_findings row" {
+  cd "$WD"
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt CORPFLOW_PR_BODY_STRICT=1 \
+    bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_failure 1
+  assert_output --partial "BLOCKED: pr-body-lint did not pass under --strict"
+  run grep -F '.context/notes.txt' body.md
+  assert_success
+  run jq -r 'select(.action=="pr_body_gate") | "\(.result):\(.metadata.reason)"' .context/logs/audit.jsonl
+  assert_output "blocked:pr_body_lint_findings"
+}
+
+@test "F-strict-1b: --strict is equivalent to the environment variable" {
+  cd "$WD"
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt bash "$PLUGIN_ROOT/$SCRIPT" --strict pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | "\(.result):\(.metadata.reason)"' .context/logs/audit.jsonl
+  assert_output "blocked:pr_body_lint_findings"
+}
+
+@test "F-strict-1c: --strict aborts all before validate-pr" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt bash "$PLUGIN_ROOT/$SCRIPT" --strict all --body body.md
+  assert_failure 1
+  refute_output --partial "closes #221"
+}
+
+@test "F-strict-2: strict off, a lint finding stays advisory and the rows are unchanged" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  run bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  assert_output --partial "composition gate passed"
+  run gate_rows
+  assert_output "$(printf 'pr_body_sanitised:unchanged\npr_body_lint:warned\npr_body_gate:ok')"
+}
+
+@test "F-strict-3: MILESTONE_MODE=1 with strict on never blocks" {
+  cd "$WD"
+  mk_p1_body
+  run env MILESTONE_MODE=1 WORKSPACE_ROOT=/nonexistent-cf/wt CORPFLOW_PR_BODY_STRICT=1 \
+    bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  run jq -r 'select(.action=="pr_body_gate") | .result' .context/logs/audit.jsonl
+  assert_output "skipped"
+}
+
+@test "F-strict-4: a punctuation-glued host path is scrubbed from the final body" {
+  cd "$WD"
+  no_screenshots
+  cat > body.md <<'EOF'
+Logs (/Users/korich/secret/run.log) kept.
+
+## Test plan
+
+- bats tests/shell/worktask/fn-preflight.bats
+
+Closes #221
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  run cat body.md
+  assert_output --partial "Logs ([local-path]) kept."
+  refute_output --partial "/Users/"
+}
+
+@test "F-strict-5: strict blocks a lint that errors or cannot run" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  mk_tree
+  local lint="$WD/tree/skills/worktask/scripts/pr-body-lint.sh"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$lint"
+  chmod +x "$lint"
+  run env CORPFLOW_PR_BODY_STRICT=1 bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "pr_body_lint_error"
+
+  rm -f .context/logs/audit.jsonl
+  chmod -x "$lint"
+  run env CORPFLOW_PR_BODY_STRICT=1 bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "pr_body_lint_unavailable"
+}
+
+@test "F12b: a missing path-scrub.sh blocks the PR path as an unavailable sanitiser" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  mk_tree
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  assert_output --partial "sanitiser unavailable"
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "sanitiser_unavailable"
+}

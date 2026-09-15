@@ -240,6 +240,7 @@ _write_n_decisions() {  # <count> [id-prefix]
   assert_output --partial "T12: unresolved self-patch exits 3"
   assert_output --partial "T13: --prev USER writes"
   assert_output --partial "T18: replay resets the target"
+  assert_output --partial "T-ack:"
   assert_output --partial "ALL PASS"
 }
 
