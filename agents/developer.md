@@ -154,6 +154,44 @@ Fall back through: the override target (if any) → the alias's default target �
 
 > Delegated builds past ~2 min auto-background — await the completion notification before reading `.context/logs/build-developer-*.log` / `test-developer-*.log`; the returned handle is not the result (`agent-coordination § MCP Auto-Background`).
 
+### Sibling tooling — listed, not granted
+
+These are names this route can reach, not tools this agent holds: its `tools:` grant carries no
+platform build or MCP tool and never gains one (`skills/worktask/SKILL.md § Platform tooling
+ownership`). A build-test entry point is reached through `Skill` or the platform's implementation
+agent. An XcodeBuildMCP tool is reached only by delegating to an Apple implementation agent, which
+inherits the server (`skills/cross-plugin-handoff/SKILL.md § MCP Dynamic Server Inheritance`).
+
+#### Build-test entry points
+
+`Skill` names, one per plugin in `skills/shared/compatible-plugins.md § Registry`:
+`apple-developer:build-test`, `system-developer:build-test`, `android-developer:build-test`,
+`frontend-developer:build-test`, `backend-developer:build-test`, `ai-engineer:build-test`.
+
+#### XcodeBuildMCP — project and simulator
+
+Source: the `tools:` union of apple-developer 1.30.2 `ios-developer`, `macos-developer`,
+`tvos-developer`, `watchos-developer` and `visionos-developer`. Re-check it when that plugin updates.
+
+`mcp__XcodeBuildMCP__session_show_defaults`, `mcp__XcodeBuildMCP__session_set_defaults`,
+`mcp__XcodeBuildMCP__discover_projs`, `mcp__XcodeBuildMCP__list_schemes`,
+`mcp__XcodeBuildMCP__show_build_settings`, `mcp__XcodeBuildMCP__clean`,
+`mcp__XcodeBuildMCP__build_sim`, `mcp__XcodeBuildMCP__build_run_sim`, `mcp__XcodeBuildMCP__test_sim`,
+`mcp__XcodeBuildMCP__list_sims`, `mcp__XcodeBuildMCP__boot_sim`, `mcp__XcodeBuildMCP__screenshot`,
+`mcp__XcodeBuildMCP__snapshot_ui`, `mcp__XcodeBuildMCP__get_app_bundle_id`.
+
+#### XcodeBuildMCP — device and macOS
+
+Same source and agents as the project and simulator list.
+
+`mcp__XcodeBuildMCP__build_device`, `mcp__XcodeBuildMCP__test_device`,
+`mcp__XcodeBuildMCP__install_app_device`, `mcp__XcodeBuildMCP__launch_app_device`,
+`mcp__XcodeBuildMCP__list_devices`, `mcp__XcodeBuildMCP__get_device_app_path`,
+`mcp__XcodeBuildMCP__build_macos`, `mcp__XcodeBuildMCP__build_run_macos`,
+`mcp__XcodeBuildMCP__test_macos`, `mcp__XcodeBuildMCP__launch_mac_app`,
+`mcp__XcodeBuildMCP__stop_mac_app`, `mcp__XcodeBuildMCP__get_mac_bundle_id`,
+`mcp__XcodeBuildMCP__get_mac_app_path`.
+
 ## Example Interactions
 
 - "Implement the DV0 task described in `development-0.md`"
