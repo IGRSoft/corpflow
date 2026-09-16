@@ -41,6 +41,11 @@
 #                 table. Writes nothing, posts nothing, loads no state. exit 0 valid,
 #                 1 schema violation (diagnostic on stdout), 2 manifest not found,
 #                 3 no capture rows at all (caller decides whether that is legitimate).
+#   --validate-manifest <path> --task-id <ID> [--images-dir <dir>]
+#                 Per-task grammar: dv-<ID>-NN-<slug> basenames whose NN equals `#`, image
+#                 magic bytes matching the extension, well-formed tool_missing rows, and the
+#                 legacy `## <ID>` section when <path> is not screenshots-<ID>.md. Exits as
+#                 above plus 4 = only tool_missing rows (prints `tool_missing_only tools=<a,b>`).
 #                 Called by hooks/dv-screenshot-gate.sh so the grammar has one owner.
 #
 # Image hosting (REQ-5, ad7): reuse publish-pl-issue.sh's host-tier degradation
@@ -123,8 +128,8 @@ audit_av() {
 # ---------- state accessors -------------------------------------------------
 state_get() { jq -r "$1 // \"\"" "$STATE_FILE" 2>/dev/null || printf ''; }
 
-# requires_screenshots from state.json with the SAME has()-presence semantics the
-# gate uses (literal false must survive — see hooks/dv-screenshot-gate.sh:78).
+# Ledger-level requires_screenshots with the same has()-presence semantics as the
+# ledger step of the gate's FLAG_JQ: a literal false must survive.
 state_requires_screenshots() {
   jq -r 'if (.metadata|type=="object") and (.metadata|has("requires_screenshots"))
          then (.metadata.requires_screenshots|tostring) else "true" end' \
@@ -145,7 +150,7 @@ manifest_path() {
 parse_manifest() {
   local mf="$1"
   [ -f "$mf" ] || return 0
-  # Table rows look like: | 01 | slug | dv-01-slug.png | 187234 | apple | adapter | caption | ts | ref |
+  # Table rows look like: | 01 | slug | dv-DV0-01-slug.png | 187234 | apple | adapter | caption | ts | ref |
   # Header + separator rows are filtered (col1 not two-digit; separator has ---).
   LC_ALL=C awk -F'|' '
     /^[[:space:]]*\|/ {
@@ -156,6 +161,7 @@ parse_manifest() {
       if (path ~ /^-+$/ || path=="") next        # skip separator
       kind="png"
       if (path ~ /\.txt$/) kind="placeholder"
+      if ($7 == "cli_fallback" && index(cap, "tool_missing:") == 1) kind="tool_missing"
       printf "%s\t%s\t%s\t%s\n", num, path, cap, kind
     }
   ' "$mf"
@@ -237,6 +243,176 @@ validate_manifest() {
   return 0
 }
 
+_TASK_ID_RE='^[A-Z]{2}[0-9]+$'
+
+# The rows one task owns: its whole per-task file, or only the legacy `## <ID>` section.
+# The id is compared as a string, never spliced into a regex. rc 3 = no such section.
+manifest_task_body() {
+  local mf="$1" id="$2"
+  if [ "$(basename -- "$mf")" = "screenshots-$id.md" ]; then
+    cat -- "$mf"
+    return 0
+  fi
+  LC_ALL=C awk -v id="$id" '
+    { line = $0; sub(/\r$/, "", line); head = line; sub(/[[:space:]]+$/, "", head) }
+    insec && line ~ /^##?[[:space:]]/ { exit }
+    insec { print line; next }
+    head == "## " id { insec = 1; found = 1 }
+    END { exit(found ? 0 : 3) }
+  ' "$mf"
+}
+
+# Content type from the first 12 bytes: png, jpeg, webp, or nothing.
+image_kind() {
+  local sig
+  sig=$(LC_ALL=C od -An -tx1 -N12 -- "$1" 2>/dev/null | tr -d ' \n') || sig=""
+  case "$sig" in
+    89504e470d0a1a0a*) printf 'png' ;;
+    ffd8ff*) printf 'jpeg' ;;
+    52494646????????57454250*) printf 'webp' ;;
+  esac
+}
+
+# "silicon(absent), magick(absent)" -> "silicon,magick"; rc 1 unless every tool says (absent).
+tool_missing_names() {
+  local rest="$1" item names="" re='^([A-Za-z0-9._+-]+)\(absent\)$'
+  while :; do
+    item="${rest%%,*}"
+    item="${item#"${item%%[![:space:]]*}"}"
+    item="${item%"${item##*[![:space:]]}"}"
+    [[ $item =~ $re ]] || return 1
+    names="${names:+$names,}${BASH_REMATCH[1]}"
+    case "$rest" in
+      *,*) rest="${rest#*,}" ;;
+      *) break ;;
+    esac
+  done
+  printf '%s' "$names"
+}
+
+validate_task_manifest() {
+  local mf="$1" id="$2" img="$3" body rows bad="" n_img=0 n_tools=0 tools="" names
+  local tag f1 f2 f3 f4 slug want kind file us slug_re='^[a-z0-9][a-z0-9-]*$'
+  us=$(printf '\037')
+  if ! [[ $id =~ $_TASK_ID_RE ]]; then
+    printf 'invalid --task-id: %s\n' "$id"
+    return 1
+  fi
+  if [ -z "$mf" ] || [ ! -f "$mf" ]; then
+    printf 'manifest not found: %s\n' "${mf:-<unset>}"
+    return 2
+  fi
+  [ -n "$img" ] || img=$(dirname -- "$mf")
+  if ! body=$(manifest_task_body "$mf" "$id"); then
+    printf 'manifest not found: %s has no ## %s section\n' "$mf" "$id"
+    return 2
+  fi
+
+  rows=$(printf '%s\n' "$body" | LC_ALL=C awk -F'|' -v us="$us" '
+    /^[[:space:]]*\|/ {
+      for (i=1;i<=NF;i++){ gsub(/^[[:space:]]+|[[:space:]]+$/,"",$i) }
+      if ($2 == "#" || tolower($2) == "no.") next
+      if ($2 ~ /^:?-+:?$/ || $3 ~ /^:?-+:?$/) next
+      if ($2 == "" && $3 == "") next
+      if (NF - 2 != 9) { printf "ERR%sline %d: %d columns, expected 9\n", us, NR, NF - 2; next }
+      if ($2 !~ /^[0-9][0-9]$/) { printf "ERR%sline %d: index \"%s\" is not a two-digit ordinal\n", us, NR, $2; next }
+      if ($7 == "cli_fallback" && index($8, "tool_missing:") == 1) {
+        printf "TM%s%d%s%s%s%s%s%s\n", us, NR, us, $4, us, $5, us, substr($8, 14); next
+      }
+      printf "IMG%s%d%s%s%s%s\n", us, NR, us, $2, us, $4
+    }')
+
+  while IFS="$us" read -r tag f1 f2 f3 f4; do
+    case "$tag" in
+      ERR) bad="${bad}${f1}"$'\n' ;;
+      TM)
+        if [ "$f2" != "—" ] || [ "$f3" != "0" ] || ! names=$(tool_missing_names "$f4"); then
+          bad="${bad}line $f1: malformed tool_missing row (Path —, Bytes 0, caption tool_missing: <tool>(absent), ...)"$'\n'
+          continue
+        fi
+        n_tools=$((n_tools + 1))
+        tools="${tools:+$tools,}$names"
+        ;;
+      IMG)
+        case "$f3" in
+          */* | .* | "")
+            bad="${bad}line $f1: name:$f3 is not a basename"$'\n'
+            continue
+            ;;
+          dv-"$id"-[0-9][0-9]-*.png | dv-"$id"-[0-9][0-9]-*.jpg | dv-"$id"-[0-9][0-9]-*.jpeg | dv-"$id"-[0-9][0-9]-*.webp) ;;
+          *)
+            bad="${bad}line $f1: name:$f3 is not dv-$id-NN-<slug>.<png|jpg|jpeg|webp>"$'\n'
+            continue
+            ;;
+        esac
+        want="${f3#dv-"$id"-}"
+        slug="${want#??-}"
+        slug="${slug%.*}"
+        want="${want%%-*}"
+        if ! [[ $slug =~ $slug_re ]] || [ "$want" != "$f2" ]; then
+          bad="${bad}line $f1: name:$f3 needs a kebab slug and NN equal to # ($f2)"$'\n'
+          continue
+        fi
+        file="$img/$f3"
+        if [ -L "$file" ]; then
+          bad="${bad}line $f1: symlink:$f3"$'\n'
+        elif [ ! -f "$file" ]; then
+          bad="${bad}line $f1: missing:$f3"$'\n'
+        elif [ ! -s "$file" ]; then
+          bad="${bad}line $f1: empty:$f3"$'\n'
+        else
+          kind=$(image_kind "$file")
+          case "$kind:${f3##*.}" in
+            png:png | jpeg:jpg | jpeg:jpeg | webp:webp) n_img=$((n_img + 1)) ;;
+            *) bad="${bad}line $f1: mime:$f3"$'\n' ;;
+          esac
+        fi
+        ;;
+    esac
+  done <<EOF
+$rows
+EOF
+
+  if [ -n "$bad" ]; then
+    printf 'manifest violation(s) in %s for %s:\n%s' "$mf" "$id" "$bad"
+    return 1
+  fi
+  [ "$n_img" -gt 0 ] && return 0
+  if [ "$n_tools" -gt 0 ]; then
+    printf 'tool_missing_only tools=%s\n' "$tools"
+    return 4
+  fi
+  printf 'manifest %s carries no canonical capture rows for %s\n' "$mf" "$id"
+  return 3
+}
+
+# screenshots-<ID>.md paths in one images dir, ordered by stage code then task number.
+task_manifests() {
+  local f b id tab
+  tab=$(printf '\t')
+  for f in "$1"/screenshots-*.md; do
+    [ -f "$f" ] || continue
+    b="${f##*/}"; id="${b#screenshots-}"; id="${id%.md}"
+    [[ $id =~ $_TASK_ID_RE ]] || continue
+    printf '%s\t%s\t%s\n' "${id:0:2}" "${id:2}" "$f"
+  done | LC_ALL=C sort -t "$tab" -k1,1 -k2,2n | cut -f3-
+}
+
+# MANIFEST_FILE pins one file; otherwise every per-task manifest, then the legacy file.
+parse_manifests() {
+  local mf="$1" f
+  if [ -n "${MANIFEST_FILE:-}" ]; then
+    parse_manifest "$mf"
+    return 0
+  fi
+  while IFS= read -r f; do
+    [ -n "$f" ] && parse_manifest "$f"
+  done <<EOF
+$(task_manifests "$(dirname -- "$mf")")
+EOF
+  parse_manifest "$mf"
+}
+
 # ---------- block builder ---------------------------------------------------
 # Build the "## Visual evidence" block from a parsed manifest.
 #   stdout: the block (may be empty)
@@ -246,7 +422,7 @@ validate_manifest() {
 # Returns the chosen host tier via the HOST_TIER global (set by select_host_tier).
 build_block() {
   local mf="$1" heading="$2"
-  local rows; rows=$(parse_manifest "$mf")
+  local rows; rows=$(parse_manifests "$mf")
   # No capture rows at all → empty emission (skip-rationale manifest / no captures).
   if [ -z "$rows" ]; then
     return 1   # signal "no captures" to caller
@@ -311,6 +487,9 @@ build_block() {
         ;;
       placeholder)
         bullets="${bullets}- ${path} — placeholder (tool_missing); see manifest."$'\n'
+        ;;
+      tool_missing)
+        bullets="${bullets}- ${cap} — nothing captured; see manifest."$'\n'
         ;;
       oversize)
         bullets="${bullets}- ${path} — ${cap}; see manifest."$'\n'
@@ -400,7 +579,7 @@ EOF
 # audit distinguishably instead of reporting it as "no captures".
 manifest_diagnosis() {
   local mf="$1"
-  [ -f "$mf" ] || { printf 'no_captures'; return 0; }
+  [ -f "$mf" ] || [ -n "$(task_manifests "$(dirname -- "$mf")")" ] || { printf 'no_captures'; return 0; }
   local dir imgs
   dir=$(dirname "$mf")
   imgs=$(find "$dir" -maxdepth 1 -type f \
@@ -410,7 +589,7 @@ manifest_diagnosis() {
     echo "attach-visual-evidence: WARNING — $mf has $imgs image file(s) beside it but zero parseable table rows." >&2
     echo "attach-visual-evidence: the manifest must use the canonical 9-column schema with a TWO-DIGIT index:" >&2
     echo "attach-visual-evidence:   | # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |" >&2
-    echo "attach-visual-evidence:   | 01 | header | dv-01-header.png | 78683 | apple | apple_sim | after | <ts> | — |" >&2
+    echo "attach-visual-evidence:   | 01 | header | dv-DV0-01-header.png | 78683 | apple | apple_sim | after | <ts> | — |" >&2
     echo "attach-visual-evidence: evidence was NOT attached. See skills/dv-screenshot-capture/references/examples/README.md" >&2
     return 0
   fi
@@ -741,7 +920,21 @@ fi
 # gate can call it in a tree with no state.json and so nothing about the publishing
 # modes' exit-0 contract is reachable from this path.
 if [ "${1:-}" = "--validate-manifest" ]; then
-  validate_manifest "${2:-}"
+  _vm_path="${2:-}"; _vm_task=""; _vm_task_set=0; _vm_img=""
+  shift; [ "$#" -gt 0 ] && shift
+  # Unknown extras stay ignored so the task-less form keeps its old argv tolerance.
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --task-id) _vm_task="${2:-}"; _vm_task_set=1 ;;
+      --images-dir) _vm_img="${2:-}" ;;
+    esac
+    shift; [ "$#" -gt 0 ] && shift
+  done
+  if [ "$_vm_task_set" = "1" ]; then
+    validate_task_manifest "$_vm_path" "$_vm_task" "$_vm_img"
+    exit $?
+  fi
+  validate_manifest "$_vm_path"
   exit $?
 fi
 

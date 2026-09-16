@@ -5,6 +5,7 @@
 #               Applies redaction grep before piping diff to any image tool.
 #
 # @arg  --worktask-id <id>           state.json worktask_id (required)
+# @arg  --task-id <TASK_ID>          DV task id naming the evidence stream (required)
 # @arg  --slug <kebab>               kebab-case slug ≤40 chars (required)
 # @arg  --base-ref <ref>             git base ref (default: origin/master)
 # @arg  --platform <platform>        platform value recorded in manifest row
@@ -13,8 +14,11 @@
 # @arg  --self-test                  run built-in fixture tests; no network/git required
 #
 # @exitcode 0  success — path to produced file printed to stdout
-# @exitcode 1  hard error (bad args, write failure)
-# @exitcode 2  tool_missing — no image tool on PATH; no file is written
+# @exitcode 1  hard error (bad args, no .context resolved, ledger disagrees with the ids)
+# @exitcode 2  tool_missing — no image tool on PATH; no image is written. When silicon, magick
+#              and convert are all absent, a tool_missing row is upserted into
+#              <ctx>/images/<id>/screenshots-<TASK_ID>.md. Exit 2 also means a broken install,
+#              so consumers key on stdout error=tool_missing, never the bare code.
 # @exitcode 3  render_failed — a tool was present but produced no usable PNG
 #
 # Contract (uniform adapter shape):
@@ -33,10 +37,10 @@ trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' E
 # Argument parsing
 # ---------------------------------------------------------------------------
 WORKTASK_ID=""
+TASK_ID=""
 SLUG=""
 BASE_REF="origin/master"
 PLATFORM="all"
-# shellcheck disable=SC2034  # see the --run-index arm below
 RUN_INDEX="0"
 FILES_PATH=""
 SELF_TEST=0
@@ -45,6 +49,7 @@ usage() {
   cat >&2 << 'EOF'
 usage: cli-fallback.sh
   --worktask-id <id>        worktask_id from state.json (required)
+  --task-id <TASK_ID>       DV task id, e.g. DV0 (required)
   --slug <kebab>            kebab-case slug ≤40 chars (required)
   [--base-ref <ref>]        git base ref (default: origin/master)
   [--platform <platform>]   platform label for manifest (default: all)
@@ -61,6 +66,10 @@ while [[ $# -gt 0 ]]; do
       WORKTASK_ID="${2:-}"
       shift 2
       ;;
+    --task-id)
+      TASK_ID="${2:-}"
+      shift 2
+      ;;
     --slug)
       SLUG="${2:-}"
       shift 2
@@ -74,8 +83,6 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --run-index)
-      # shellcheck disable=SC2034  # accepted for argv parity with the sibling capture
-      # scripts, which DO name their output by run index; nothing here reads it yet.
       RUN_INDEX="${2:-}"
       shift 2
       ;;
@@ -94,6 +101,94 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Task ids name the evidence stream and sit inside file names, so the grammar has no glob characters.
+_task_id_ok() {
+  local re='^[A-Z]{2}[0-9]+$'
+  [[ $1 =~ $re ]]
+}
+
+# Ids that become path segments or manifest cells: no `/`, `|`, whitespace or leading dot.
+_field_ok() {
+  local re='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+  [[ $1 =~ $re ]]
+}
+
+# Next NN for one task: 1 + the highest NN on disk (incl. oversize/) or in its manifest.
+# The max, not a count, so a deleted capture never recycles a number; 10# keeps 08 and 09 decimal.
+_next_nn() {
+  local dir="$1" task="$2" max=0 f nn
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    f="${f##*/}"
+    nn="${f#dv-"$task"-}"
+    nn="${nn%%-*}"
+    if [ "$((10#$nn))" -gt "$max" ]; then
+      max="$((10#$nn))"
+    fi
+  done << EOF
+$(find "$dir" "$dir/oversize" -maxdepth 1 -type f -name "dv-$task-[0-9][0-9]-*" 2> /dev/null || true)
+$(LC_ALL=C awk -F'|' -v t="$task" '/^[[:space:]]*\|/ { gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9][0-9]$/) print "dv-" t "-" $2 "-row" }' "$dir/screenshots-$task.md" 2> /dev/null || true)
+EOF
+  if [ "$max" -ge 99 ]; then
+    return 1
+  fi
+  printf '%02d\n' "$((max + 1))"
+}
+
+# Replaces (or appends) this slug's tool_missing row in the task manifest through a temp file in
+# the same directory and a rename, so a reader never sees a half-written table.
+_TM_TMP=""
+_upsert_tool_missing_row() { # <manifest> <nn> <slug> <platform> <tools> <worktask> <task> <run-index>
+  local mf="$1" nn="$2" slug="$3" platform="$4" tools="$5" wid="$6" task="$7" run="$8" old="" row
+  if [ -d "$mf" ] || [ -L "$mf" ]; then
+    return 1
+  fi
+  if [ -f "$mf" ]; then
+    old=$(LC_ALL=C awk -F'|' -v s="$slug" '
+      /^[[:space:]]*\|/ {
+        for (i = 1; i <= NF; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i)
+        if ($3 == s && $7 == "cli_fallback" && index($8, "tool_missing:") == 1) { print $2; exit }
+      }' "$mf" 2> /dev/null || true)
+  fi
+  if [ -n "$old" ]; then
+    nn="$old"
+  fi
+  row="| $nn | $slug | — | 0 | $platform | cli_fallback | tool_missing: $tools | $(date -u +%Y-%m-%dT%H:%M:%SZ) | — |"
+  _TM_TMP=$(mktemp "$(dirname -- "$mf")/.screenshots-$task.md.XXXXXX") || return 1
+  if [ -f "$mf" ]; then
+    LC_ALL=C awk -v s="$slug" -v row="$row" '
+      /^[[:space:]]*\|/ {
+        n = split($0, f, "|")
+        for (i = 1; i <= n; i++) gsub(/^[[:space:]]+|[[:space:]]+$/, "", f[i])
+        intable = 1
+        if (f[3] == s && f[7] == "cli_fallback" && index(f[8], "tool_missing:") == 1) next
+        print
+        next
+      }
+      intable && !done { print row; done = 1 }
+      { print }
+      END {
+        if (done) exit
+        if (!intable) {
+          print ""
+          print "| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |"
+          print "|---|------|------|-------|----------|---------|---------|----------|------------|"
+        }
+        print row
+      }' "$mf" > "$_TM_TMP" || return 1
+  else
+    {
+      printf '# Screenshots — %s / %s\n\n> Run index: %s.\n\n' "$wid" "$task" "$run"
+      printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
+      printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
+      printf '%s\n' "$row"
+    } > "$_TM_TMP" || return 1
+  fi
+  chmod 644 "$_TM_TMP" || return 1
+  mv -f -- "$_TM_TMP" "$mf" || return 1
+  _TM_TMP=""
+}
 
 # ---------------------------------------------------------------------------
 # --self-test: no git, no network, no external deps beyond bash + printf
@@ -166,17 +261,29 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     _fail "tools-checked string does not distinguish presence"
   fi
 
-  # --- Test 5: NN counter picks up existing files
-  PNG1="${T4_DIR}/dv-01-foo.png"
-  PNG2="${T4_DIR}/dv-02-bar.png"
-  printf 'x' > "$PNG1"
-  printf 'x' > "$PNG2"
-  existing_count=$(find "$T4_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
-  NN=$(printf '%02d' $((existing_count + 1)))
+  # --- Test 5: NN is per task
+  printf 'x' > "${T4_DIR}/dv-DV0-01-foo.png"
+  printf 'x' > "${T4_DIR}/dv-DV0-02-bar.png"
+  printf 'x' > "${T4_DIR}/dv-DV1-09-other.png"
+  NN=$(_next_nn "$T4_DIR" DV0)
   if [[ "$NN" == "03" ]]; then
-    _ok "NN counter increments correctly (existing=2 → next=03)"
+    _ok "NN is per task (DV0 01,02 → 03; DV1 ignored)"
   else
-    _fail "NN counter wrong: expected 03, got ${NN}"
+    _fail "NN wrong: expected 03, got ${NN}"
+  fi
+
+  # --- Test 6: tool_missing upsert keeps one row per slug and the other rows intact
+  T6_MF="${T4_DIR}/screenshots-DV0.md"
+  _upsert_tool_missing_row "$T6_MF" 01 diff backend "silicon(absent)" wt DV0 0
+  printf '| 02 | home | dv-DV0-02-home.png | 9 | web | web/playwright | home | t | — |\n' >> "$T6_MF"
+  _upsert_tool_missing_row "$T6_MF" 05 diff backend "silicon(absent), magick(absent)" wt DV0 0
+  if [[ "$(grep -c 'tool_missing:' "$T6_MF")" == "1" ]] \
+    && grep -q '^| 01 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent), magick(absent) |' "$T6_MF" \
+    && grep -q 'dv-DV0-02-home.png' "$T6_MF" \
+    && [[ -z "$(find "$T4_DIR" -name '.screenshots-*' 2> /dev/null)" ]]; then
+    _ok "tool_missing upsert replaces its row by slug, keeps its NN and leaves no temp file"
+  else
+    _fail "tool_missing upsert wrong: $(tr '\n' '~' < "$T6_MF")"
   fi
 
   printf '\nself-test: %d passed, %d failed\n' "$PASS" "$FAIL"
@@ -191,29 +298,32 @@ fi
   printf >&2 'error: --worktask-id required\n'
   usage
 }
+[[ -z "$TASK_ID" ]] && {
+  printf >&2 'error: --task-id required\n'
+  usage
+}
 [[ -z "$SLUG" ]] && {
   printf >&2 'error: --slug required\n'
   usage
 }
 
+if ! _task_id_ok "$TASK_ID"; then
+  printf >&2 'error: --task-id must match ^[A-Z]{2}[0-9]+$ (got: %s)\n' "$TASK_ID"
+  exit 1
+fi
+if ! _field_ok "$WORKTASK_ID" || ! _field_ok "$PLATFORM"; then
+  printf >&2 'error: --worktask-id and --platform must match ^[A-Za-z0-9][A-Za-z0-9._-]*$\n'
+  exit 1
+fi
+if [[ ! "$RUN_INDEX" =~ ^[0-9]+$ ]]; then
+  printf >&2 'error: --run-index must be a non-negative integer (got: %s)\n' "$RUN_INDEX"
+  exit 1
+fi
 # Slug safety: kebab-case, ≤40 chars, no injection
 if [[ ! "$SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]; then
   printf >&2 'error: --slug must be kebab-case ≤40 chars (got: %s)\n' "$SLUG"
   exit 1
 fi
-
-# ---------------------------------------------------------------------------
-# Path setup
-# ---------------------------------------------------------------------------
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
-LOGS_DIR=".context/logs"
-AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
-
-# Compute next NN (monotonic, never reset across reruns per SKILL.md)
-existing_count=$(find "$IMAGES_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
-NN=$(printf '%02d' $((existing_count + 1)))
-OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
 
 # Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
 # Fails closed: a missing library is a broken install, not a runtime condition.
@@ -225,11 +335,55 @@ fi
 # shellcheck source=../../shared/lib/audit-lib.sh
 . "$_AUDIT_LIB"
 
+_STATE_READ_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'cli-fallback: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# A ledger for another worktask refuses the write, so a worktree capture never lands in the
+# main checkout; without a ledger only an explicit CONTEXT_DIR may capture.
+_CTX_RC=0
+CTX_DIR=$(trap - ERR; corpflow_context_dir) || _CTX_RC=$?
+if [ "$_CTX_RC" -eq 2 ]; then
+  printf >&2 'cli-fallback: root resolver unreachable\n'
+  exit 2
+elif [ "$_CTX_RC" -ne 0 ]; then
+  printf >&2 'cli-fallback: no .context resolved; set WORKSPACE_ROOT or run inside a worktask\n'
+  exit 1
+fi
+if [ -f "$CTX_DIR/state.json" ]; then
+  if [ "$(corpflow_worktask_id "$CTX_DIR/state.json" "")" != "$WORKTASK_ID" ]; then
+    printf >&2 'cli-fallback: --worktask-id %s does not match %s\n' "$WORKTASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+  if [ "$(jq -r --arg t "$TASK_ID" '(.tasks|type) == "object" and (.tasks|has($t))' "$CTX_DIR/state.json" 2> /dev/null || true)" != "true" ]; then
+    printf >&2 'cli-fallback: task %s is not in %s\n' "$TASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+elif [ -z "${CONTEXT_DIR:-}" ] || [ "$CTX_DIR" != "$CONTEXT_DIR" ]; then
+  printf >&2 'cli-fallback: no ledger at %s; set CONTEXT_DIR to capture outside a worktask\n' "$CTX_DIR"
+  exit 1
+fi
+
+IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
+LOGS_DIR="${CTX_DIR}/logs"
+AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
+mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
+
+if ! NN=$(trap - ERR; _next_nn "$IMAGES_DIR" "$TASK_ID"); then
+  printf >&2 'cli-fallback: task %s already has capture 99\n' "$TASK_ID"
+  exit 1
+fi
+OUTPUT_PNG="${IMAGES_DIR}/dv-${TASK_ID}-${NN}-${SLUG}.png"
+
 # audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
 # the shared appender.
 audit() {
   corpflow_audit_row --file "$AUDIT_LOG" --actor "cli-fallback-adapter" \
-    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --task-id unknown --meta "${3:-}"
+    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --task-id "${TASK_ID:-unknown}" --result "$2" --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------
@@ -409,6 +563,16 @@ audit screenshot_capture_failed fail "$(
     '{tools_checked:$tools_checked,slug:$slug,path:$path,platform:$platform,reason:$reason}' \
     2> /dev/null || printf '{}'
 )" 2> /dev/null || true
+
+# Only a genuine absence of every tool is a tool_missing row; "tools present but not a git
+# repository" also exits 2 and must not be recorded as an accepted skip candidate.
+if [[ "$FAIL_EXIT" -eq 2 ]] && [[ $((HAS_SILICON + HAS_MAGICK + HAS_CONVERT)) -eq 0 ]]; then
+  trap '[[ -z "${_TM_TMP:-}" ]] || rm -f "$_TM_TMP"' EXIT
+  if ! _upsert_tool_missing_row "${IMAGES_DIR}/screenshots-${TASK_ID}.md" "$NN" "$SLUG" "$PLATFORM" \
+    "$TOOLS_CHECKED" "$WORKTASK_ID" "$TASK_ID" "$RUN_INDEX"; then
+    printf >&2 'warn: could not record the tool_missing row in %s\n' "${IMAGES_DIR}/screenshots-${TASK_ID}.md"
+  fi
+fi
 
 printf >&2 'error: capture failed (%s): %s; tools checked: %s\n' \
   "$FAIL_REASON" "$FAIL_DETAIL" "$TOOLS_CHECKED"

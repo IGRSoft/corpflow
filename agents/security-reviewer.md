@@ -6,7 +6,7 @@ color: red
 effort: xhigh
 version: 0.4.0
 maxTurns: 50
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task, Bash(bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh:*)
 # tools: bare Task is deliberate — auditor targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the delegation audit row.
@@ -161,7 +161,7 @@ Read CORPFLOW.md at the root of your plugin and follow it. It is the contract fo
 
 That root `CORPFLOW.md` is a sibling's only corpflow-facing file and its auditor carries no corpflow
 preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and findings come
-back without the `handoff:` frontmatter carrying `severity_counts{}` — leaving the SR gate nothing to evaluate.
+back without the closing `consultant-return.v1` json fence — leaving the SR gate nothing to evaluate.
 
 | Invocation | SR Stage Behavior |
 |------------|-------------------|
@@ -219,6 +219,32 @@ logs; JWT validation (alg, aud, exp) and revocation; encryption in transit and a
 Prompt injection and tool-call gating; data leakage via prompts, traces, logs, eval sets, fine-tuning
 data; model supply chain (provenance, unsafe deserialization, registry integrity); model output treated
 as untrusted input; key scoping, per-tenant quotas, inference rate limits.
+
+### Consultant return (consultant-return.v1)
+
+Every auditor return is validated against `consultant-return.v1`
+(`skills/cross-plugin-handoff/references/consultant-return-v1.md`) before any of it reaches
+`security-review-N.md`.
+
+1. `Write` the return verbatim to `.context/logs/consultant-return-SR0-<agent>-a1.md`, where
+   `<agent>` is the auditor's basename. Never route it through a heredoc or `echo`.
+2. Run `bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <that path>`.
+3. Exit 0: merge **stdout only** into the platform's subsection, and record each `warn:` line as a
+   note on its findings.
+4. Exit 2 with `usage`, `unreadable` or `missing_dependency` is your own call failing: fix it and
+   rerun. Exit 1, or exit 2 with `no_json` or `unparseable`, is a rejected return — § Rejected return.
+
+#### Rejected return
+
+A mismatched `schema_version` or a missing `severity_counts` is rejected. A rejected return is never
+merged, hand-edited, or retyped into shape: hand-normalizing hides which auditor is non-compliant,
+which is the failure this schema exists to end.
+
+- **Reject at `-a1`**: re-dispatch the same auditor once, with the original prompt plus the verbatim
+  `reject:` or `error:` line. Save its answer as `-a2` and validate it the same way.
+- **Reject at `-a2`**: set `verdict: blocked`, make `<agent-id> <a2 path>: <reject line>` the first
+  `blockers` entry, and write the `error_escalated_to:` narrative. Nothing from that auditor is
+  merged.
 
 ## SR1 Checklist
 

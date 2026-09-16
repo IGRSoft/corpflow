@@ -75,8 +75,8 @@ There is no Android build MCP — builds and device interaction run through scop
 
 Per-platform `requires_screenshots` defaults and evidence adapters are canonical in
 `skills/shared/compatible-plugins.md § Handoff defaults` — set or forward that value on DV
-tasks. UI platforms (apple, android, web) also write the screenshot manifest at
-`.context/images/<worktask_id>/screenshots.md`; non-UI platforms (systems, backend, ai)
+tasks. UI platforms (apple, android, web) also write one screenshot manifest per DV task at
+`.context/images/<worktask_id>/screenshots-<TASK_ID>.md`; non-UI platforms (systems, backend, ai)
 rely on build/test transcripts under `.context/logs/`.
 
 ### Review-only specialists

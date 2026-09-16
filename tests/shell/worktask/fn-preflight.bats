@@ -1316,6 +1316,64 @@ seed_repo() {
   assert_output --partial "staged then modified again"
 }
 
+@test "staging: a staged control byte blocks, naming the file and offset" {
+  cd "$WD"
+  seed_repo
+  printf 'a\033b\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "control bytes in staged files"
+  assert_output --partial "c.txt:1:0x1B"
+}
+
+@test "staging: a clean staged file keeps the existing line" {
+  cd "$WD"
+  seed_repo
+  printf 'clean\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output "staging: no file is both staged and modified again"
+}
+
+@test "staging: an empty index reports no control-byte hit and writes no blocked row" {
+  cd "$WD"
+  seed_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output "staging: no file is both staged and modified again"
+  refute_output --partial "control bytes"
+  [ ! -s .context/logs/audit.jsonl ] || ! grep -q '"action":"staging"' .context/logs/audit.jsonl
+}
+
+@test "staging: a control-byte check that cannot run blocks and writes an audit row" {
+  cd "$WD"
+  seed_repo
+  printf 'clean\n' > c.txt
+  git add c.txt
+  local sha
+  sha="$(git rev-parse :c.txt)"
+  rm -f ".git/objects/${sha:0:2}/${sha:2}"
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "staged control-byte check could not run"
+  run jq -r 'select(.action=="staging") | .result + " " + .metadata.reason' .context/logs/audit.jsonl
+  assert_output "blocked control_byte_check_failed"
+}
+
+@test "staging: the composite command fails on a staged NUL" {
+  cd "$WD"
+  seed_repo
+  mk_attachments
+  mk_body
+  printf 'x\000\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  assert_failure
+  assert_output --partial "control bytes in staged files"
+}
+
 # ---------------------------------------------------------------------------
 # resolve_git_ref divergence (AC-4a). The resolver used to try the bare name
 # first, so a base branch name resolved to a STALE LOCAL branch whenever one

@@ -183,6 +183,18 @@ fi
 # shellcheck source=frontmatter-lib.sh
 . "$_FM_LIB"
 
+# Fail closed like the two libraries above: a gate that cannot scan for raw bytes must not
+# hand yq an artifact it may silently truncate at a NUL.
+_CB_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/control-byte-lib.sh"
+if [ -r "$_CB_LIB" ]; then
+  # shellcheck source=control-byte-lib.sh
+  . "$_CB_LIB"
+fi
+if ! command -v cb_scan_file > /dev/null 2>&1; then
+  printf >&2 'fail: control-byte-lib.sh unreachable at %s — the control-byte gate cannot run\n' "$_CB_LIB"
+  exit 1
+fi
+
 # A yq failure inside a sweep check is a gate FAILURE, never a skip: the gate has no advisory
 # tier, so a read that cannot be trusted must not yield a pass. First error line is surfaced.
 _sweep_yq() {  # <expr> <fmfile>
@@ -393,6 +405,27 @@ state_unreadable_reason() {
   fi
 }
 
+# report_task_id_fallback <fmfile> <artifact> -> stderr note only; always returns 0.
+#
+# On a split stage an artifact without handoff.task_id leaves check_sweep_ledger to infer
+# its task from stub prefixes, which cannot see a stub-less stream's items. That is worth
+# saying, but it is not a sweep verdict: the sweep checks have no advisory tier, so the note
+# lives here and the exit code stays whatever the checks decide.
+report_task_id_fallback() {
+  local fmfile="$1" artifact="${2:-}" stage_code stage_tasks
+  [[ -r "$STATE_ARG" ]] || return 0
+  [[ -z "$(corpflow_fm_field "$fmfile" task_id)" ]] || return 0
+  stage_code=$(yq eval '.handoff.stage // ""' "$fmfile" 2> /dev/null || printf '')
+  [[ -n "$stage_code" && "$stage_code" != "null" ]] || return 0
+  stage_tasks=$(jq -r --arg st "$stage_code" \
+      '(.tasks // {}) | keys[] | select(test("^" + $st + "[0-9]+$"))' \
+    "$STATE_ARG" 2> /dev/null | grep -c . || true)
+  if [[ "${stage_tasks:-0}" -ge 2 ]]; then
+    echo "warn: $(basename "${artifact:-the artifact}") omits handoff.task_id while stage $stage_code has $stage_tasks tasks — parity falls back to stub prefixes" >&2
+  fi
+  return 0
+}
+
 # Sweep-stub ledger parity. The frontmatter stub and facts.open_questions[] are two
 # transports with two writers and no derivation between them, so a stage that writes
 # the stub but omits it from `state-patch.sh --facts` produces a schema-valid artifact
@@ -420,10 +453,46 @@ check_sweep_ledger() {
   # Resolved items are excluded: a rework round re-emits only what is still open, so charging
   # it with an already-answered id fails the round, and Step B.1 reads that as missing_input
   # and burns a whole stage re-dispatch. A missing status reads as open, matching state-patch.sh.
-  local stage_code ledger_ids extra artifact_tasks stage_tasks
+  #
+  # handoff.task_id, when set, IS the task identity and replaces the prefix inference: the
+  # artifact is charged every open item of its own task whether or not it carries stubs. A
+  # malformed id was already failed by validate_frontmatter, so it charges nothing here.
+  local stage_code ledger_ids extra artifact_tasks stage_tasks task_id
   stage_code=$(yq eval '.handoff.stage // ""' "$fmfile" 2> /dev/null || printf '')
+  task_id=$(corpflow_fm_field "$fmfile" task_id)
   ledger_ids=""
-  if [[ -n "$stage_code" && "$stage_code" != "null" ]] && [[ -r "$STATE_ARG" ]]; then
+  if [[ -n "$stage_code" && "$stage_code" != "null" ]] && [[ -r "$STATE_ARG" ]] && [[ -n "$task_id" ]]; then
+    if [[ "$task_id" =~ ^${stage_code}[0-9]+$ ]]; then
+      # Only a readable `false` is a missing task; a ledger jq cannot parse is the unreadable
+      # arm's to report, not a claim about tasks{}.
+      local has_task
+      has_task=$(jq -r --arg t "$task_id" '(.tasks // {}) | has($t)' "$STATE_ARG" 2> /dev/null || printf '')
+      if [[ "$has_task" == "false" ]]; then
+        echo "fail: handoff.task_id $task_id is not in tasks{}" >&2
+        return 1
+      fi
+      # A sibling's valid id would charge that sibling's items and none of this stream's; a
+      # stub under another prefix is the one trace of that mislabel the artifact itself holds.
+      local foreign='' fid=''
+      foreign=$(printf '%s\n' "$ids" | sed -n 's/^sw-\([A-Z][A-Z][0-9][0-9]*\)-[0-9][0-9]*$/& \1/p' \
+        | awk -v t="$task_id" '$2 != t { print $1 }')
+      if [[ -n "$foreign" ]]; then
+        while IFS= read -r fid; do
+          echo "fail: sweep stub $fid does not belong to handoff.task_id $task_id — stamp the task that asked it" >&2
+        done <<< "$foreign"
+        return 1
+      fi
+      ledger_ids=$(jq -r --arg st "$stage_code" --arg t "$task_id" '
+          (.facts.open_questions? // [])
+          | map(select((.stage // "") == $st and (.status // "open") != "resolved"))
+          | .[].id // empty
+          | select(startswith("sw-" + $t + "-"))' \
+        "$STATE_ARG" 2> /dev/null || printf '')
+    fi
+  elif [[ -n "$stage_code" && "$stage_code" != "null" ]] && [[ -r "$STATE_ARG" ]]; then
+    stage_tasks=$(jq -r --arg st "$stage_code" \
+        '(.tasks // {}) | keys[] | select(test("^" + $st + "[0-9]+$"))' \
+      "$STATE_ARG" 2> /dev/null | grep -c . || true)
     artifact_tasks=$(printf '%s\n' "$ids" \
       | sed -n 's/^sw-\([A-Z][A-Z][0-9][0-9]*\)-[0-9][0-9]*$/\1/p' | sort -u)
     if [[ -n "$artifact_tasks" ]]; then
@@ -435,9 +504,6 @@ check_sweep_ledger() {
           | select(. as $i | $tasks | any(. as $t | $i | startswith("sw-" + $t + "-")))' \
         "$STATE_ARG" 2> /dev/null || printf '')
     else
-      stage_tasks=$(jq -r --arg st "$stage_code" \
-          '(.tasks // {}) | keys[] | select(test("^" + $st + "[0-9]+$"))' \
-        "$STATE_ARG" 2> /dev/null | grep -c . || true)
       if [[ "${stage_tasks:-0}" -le 1 ]]; then
         ledger_ids=$(jq -r --arg st "$stage_code" '
             (.facts.open_questions? // [])
@@ -899,6 +965,23 @@ validate_frontmatter() {
   local f="$1"
   [[ -f "$f" ]] || { echo "frontmatter: file not found: $f" >&2; return 1; }
 
+  # Raw bytes first: awk and yq must never see a NUL, which each may truncate at silently.
+  local cbrc=0 cbhits cbline cbhex cboff
+  cbhits=$(cb_scan_file "$f" "$f") || cbrc=$?
+  if [[ "$cbrc" -eq 1 ]]; then
+    while IFS= read -r cbline; do
+      [[ -n "$cbline" ]] || continue
+      cbhex="${cbline##*:}"
+      cboff="${cbline%:*}"
+      cboff="${cboff##*:}"
+      echo "fail: control byte $cbhex at byte offset $cboff in $f — rewrite it as text" >&2
+    done <<< "$cbhits"
+    return 1
+  elif [[ "$cbrc" -ne 0 ]]; then
+    echo "fail: cannot scan $f for control bytes" >&2
+    return 1
+  fi
+
   # Extract just the frontmatter block (between first two ^---$ lines) to a tmp,
   # so yq can parse it as pure YAML (the rest of the markdown is not YAML).
   local fmfile
@@ -963,6 +1046,13 @@ validate_frontmatter() {
     fi
   done
 
+  local task_id
+  task_id=$(corpflow_fm_field "$fmfile" task_id)
+  if [[ -n "$task_id" ]] && ! [[ "$task_id" =~ ^${stage}[0-9]+$ ]]; then
+    echo "fail: handoff.task_id '$task_id' is not a task id of stage $stage" >&2
+    rc=1
+  fi
+
   if [[ "$stage" == "DV" && -n "$STATE_ARG" ]]; then
     check_ar_ref "$f" "$fmfile" || rc=1
   fi
@@ -982,6 +1072,7 @@ validate_frontmatter() {
   check_sweep_ref_anchor "$f" "$fmfile" || rc=1
   check_empty_sweep_prose "$f" "$fmfile" || rc=1
   if [[ -n "$STATE_ARG" ]]; then
+    report_task_id_fallback "$fmfile" "$f"
     check_sweep_ledger "$fmfile" "$f" || rc=1
   fi
 

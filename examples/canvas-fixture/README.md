@@ -54,7 +54,7 @@ a working location, invokes the apple-canvas adapter (via
 
 - `Sources/FixtureApp/Views/SimpleView.swift` — preview-ensurer appends a
   `#Preview { SimpleView() }` block in-source (per ad4).
-- `.context/images/canvas-fixture-smoke/dv-NN-canvas-fixture.png` — rendered PNG
+- `.context/images/canvas-fixture-smoke/dv-DV0-NN-canvas-fixture.png` — rendered PNG
   (when the swift toolchain is present).
 - `.context/logs/audit.jsonl` — appended `canvas_render` + `preview_added` rows.
 

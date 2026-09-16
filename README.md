@@ -428,7 +428,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
-| `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion when the screenshot manifest is missing |
+| `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion on missing or invalid evidence in a task's `screenshots-<TASK_ID>.md`; no captures passes only on backend/systems or `requires_screenshots=false` |
 | `dv-comment-density-gate.sh` | SubagentStop | **Blocks** DV completion when a change's comment density breaches the standard |
 | `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |

@@ -16,17 +16,21 @@
 # § Failure cascade ladder.
 #
 # Usage:
-#   apple-canvas.sh --worktask-id <id> --modified-files <file-with-paths> \
+#   apple-canvas.sh --worktask-id <id> --task-id <TASK_ID> --modified-files <file-with-paths> \
 #                   [--view <ModuleName.TypeName>] \
 #                   [--destination macos-host|ios-sim] \
 #                   [--size 393x852] [--scheme light|dark]
 #
+# Writes <ctx>/images/<id>/dv-<TASK_ID>-NN-<slug>.png, <ctx> from the root ladder; the SwiftPM
+# host lives under the git toplevel, which is a different root from <ctx>.
+#
 # Exit codes:
 #   0 — success (PNG produced)
-#   2 — preview-ensurer returned errors (missing_input)
+#   1 — no .context resolved, or the ledger disagrees with --worktask-id
+#   2 — preview-ensurer returned errors (missing_input), or a broken plugin install
 #   3 — SnapshotHost render failed (cascade should escalate to apple/sim)
 #   4 — scaffold failed
-#   5 — argument error
+#   5 — argument error (incl. a task id the ledger does not hold, or no git toplevel)
 
 set -euo pipefail
 
@@ -34,6 +38,7 @@ set -euo pipefail
 # Argument parsing
 # -----------------------------------------------------------------------------
 WORKTASK_ID=""
+TASK_ID=""
 MODIFIED_FILES_PATH=""
 VIEW_ARG=""
 DESTINATION="macos-host"
@@ -41,12 +46,12 @@ SIZE="393x852"
 SCHEME="light"
 SLUG="canvas-preview"
 PLUGIN_DIR="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}"
-PROJECT_ROOT="$(pwd)"
 
 usage() {
     cat >&2 <<EOF
 usage: apple-canvas.sh
   --worktask-id <id>             state.json.worktask_id (required)
+  --task-id <TASK_ID>            DV task id, e.g. DV0 (required)
   --modified-files <path>        newline-separated file list, OR newline content (required)
   [--view <ModuleName.TypeName>] target view key
   [--destination macos-host|ios-sim]   default macos-host
@@ -60,6 +65,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --worktask-id)     WORKTASK_ID="${2:-}"; shift 2 ;;
+        --task-id)         TASK_ID="${2:-}"; shift 2 ;;
         --modified-files)  MODIFIED_FILES_PATH="${2:-}"; shift 2 ;;
         --view)            VIEW_ARG="${2:-}"; shift 2 ;;
         --destination)     DESTINATION="${2:-}"; shift 2 ;;
@@ -71,26 +77,49 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Task ids name the evidence stream and sit inside file names, so the grammar has no glob characters.
+_task_id_ok() {
+  local re='^[A-Z]{2}[0-9]+$'
+  [[ $1 =~ $re ]]
+}
+
+# Ids that become path segments or manifest cells: no `/`, `|`, whitespace or leading dot.
+_field_ok() {
+  local re='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+  [[ $1 =~ $re ]]
+}
+
+# Next NN for one task: 1 + the highest NN on disk (incl. oversize/) or in its manifest.
+# The max, not a count, so a deleted capture never recycles a number; 10# keeps 08 and 09 decimal.
+_next_nn() {
+  local dir="$1" task="$2" max=0 f nn
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    f="${f##*/}"
+    nn="${f#dv-"$task"-}"
+    nn="${nn%%-*}"
+    if [ "$((10#$nn))" -gt "$max" ]; then
+      max="$((10#$nn))"
+    fi
+  done << EOF
+$(find "$dir" "$dir/oversize" -maxdepth 1 -type f -name "dv-$task-[0-9][0-9]-*" 2> /dev/null || true)
+$(LC_ALL=C awk -F'|' -v t="$task" '/^[[:space:]]*\|/ { gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9][0-9]$/) print "dv-" t "-" $2 "-row" }' "$dir/screenshots-$task.md" 2> /dev/null || true)
+EOF
+  if [ "$max" -ge 99 ]; then
+    return 1
+  fi
+  printf '%02d\n' "$((max + 1))"
+}
+
 [[ -z "$WORKTASK_ID" ]] && { echo "error: --worktask-id required" >&2; exit 5; }
+[[ -z "$TASK_ID" ]] && { echo "error: --task-id required" >&2; exit 5; }
 [[ -z "$MODIFIED_FILES_PATH" ]] && { echo "error: --modified-files required" >&2; exit 5; }
+_task_id_ok "$TASK_ID" || { echo "error: --task-id must match ^[A-Z]{2}[0-9]+\$ (got: $TASK_ID)" >&2; exit 5; }
+_field_ok "$WORKTASK_ID" || { echo "error: --worktask-id must match ^[A-Za-z0-9][A-Za-z0-9._-]*\$" >&2; exit 5; }
+[[ "$SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || { echo "error: --slug must be kebab-case ≤40 chars (got: $SLUG)" >&2; exit 5; }
 
-# -----------------------------------------------------------------------------
-# Path setup
-# -----------------------------------------------------------------------------
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
-LOGS_DIR=".context/logs"
-ERRORS_DIR=".context/errors"
-AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-mkdir -p "$IMAGES_DIR" "$LOGS_DIR" "$ERRORS_DIR"
-
-TS="$(date -u +%Y%m%d-%H%M%S)"
-RENDER_LOG="${LOGS_DIR}/canvas-render-${TS}.log"
-BUILD_LOG="${LOGS_DIR}/build-developer-${TS}.log"
-
-# Compute next NN
-existing_count=$(find "$IMAGES_DIR" -maxdepth 1 -type f -name 'dv-*.png' 2>/dev/null | wc -l | tr -d ' ')
-NN=$(printf '%02d' $((existing_count + 1)))
-OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2> /dev/null) || PROJECT_ROOT=""
+[[ -n "$PROJECT_ROOT" ]] || { echo "error: apple-canvas needs a git toplevel to host tools/SnapshotHost" >&2; exit 5; }
 
 # Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
 # Fails closed: a missing library is a broken install, not a runtime condition.
@@ -102,17 +131,66 @@ fi
 # shellcheck source=../../shared/lib/audit-lib.sh
 . "$_AUDIT_LIB"
 
+_STATE_READ_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'apple-canvas: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# A ledger for another worktask refuses the write, so a worktree capture never lands in the
+# main checkout; without a ledger only an explicit CONTEXT_DIR may capture.
+_CTX_RC=0
+CTX_DIR=$(trap - ERR; corpflow_context_dir) || _CTX_RC=$?
+if [ "$_CTX_RC" -eq 2 ]; then
+  printf >&2 'apple-canvas: root resolver unreachable\n'
+  exit 2
+elif [ "$_CTX_RC" -ne 0 ]; then
+  printf >&2 'apple-canvas: no .context resolved; set WORKSPACE_ROOT or run inside a worktask\n'
+  exit 1
+fi
+if [ -f "$CTX_DIR/state.json" ]; then
+  if [ "$(corpflow_worktask_id "$CTX_DIR/state.json" "")" != "$WORKTASK_ID" ]; then
+    printf >&2 'apple-canvas: --worktask-id %s does not match %s\n' "$WORKTASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+  if [ "$(jq -r --arg t "$TASK_ID" '(.tasks|type) == "object" and (.tasks|has($t))' "$CTX_DIR/state.json" 2> /dev/null || true)" != "true" ]; then
+    printf >&2 'apple-canvas: task %s is not in %s\n' "$TASK_ID" "$CTX_DIR/state.json"
+    exit 5
+  fi
+elif [ -z "${CONTEXT_DIR:-}" ] || [ "$CTX_DIR" != "$CONTEXT_DIR" ]; then
+  printf >&2 'apple-canvas: no ledger at %s; set CONTEXT_DIR to capture outside a worktask\n' "$CTX_DIR"
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Path setup
+# -----------------------------------------------------------------------------
+IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
+LOGS_DIR="${CTX_DIR}/logs"
+ERRORS_DIR="${CTX_DIR}/errors"
+AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
+mkdir -p "$IMAGES_DIR" "$LOGS_DIR" "$ERRORS_DIR"
+
+TS="$(date -u +%Y%m%d-%H%M%S)"
+RENDER_LOG="${LOGS_DIR}/canvas-render-${TS}.log"
+BUILD_LOG="${LOGS_DIR}/build-developer-${TS}.log"
+
+NN=$(_next_nn "$IMAGES_DIR" "$TASK_ID") || { echo "error: task $TASK_ID already has capture 99" >&2; exit 1; }
+OUTPUT_PNG="${IMAGES_DIR}/dv-${TASK_ID}-${NN}-${SLUG}.png"
+
 # audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
 # the shared appender.
 audit() {
     corpflow_audit_row --file "$AUDIT_LOG" --actor "apple-canvas-adapter" \
-      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --task-id unknown --meta "${3:-}"
+      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --task-id "${TASK_ID:-unknown}" --result "$2" --meta "${3:-}"
 }
 
 # -----------------------------------------------------------------------------
 # Step 1 — Scaffold-if-missing
 # -----------------------------------------------------------------------------
-SCAFFOLD_DIR="tools/SnapshotHost"
+SCAFFOLD_DIR="${PROJECT_ROOT}/tools/SnapshotHost"
 TEMPLATE_DIR="${PLUGIN_DIR}/skills/dv-screenshot-capture/templates/SnapshotHost-template"
 
 if [[ ! -f "${SCAFFOLD_DIR}/Package.swift" ]]; then

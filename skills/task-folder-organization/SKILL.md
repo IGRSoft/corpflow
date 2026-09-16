@@ -74,7 +74,7 @@ Each artifact opens with a header (task id, date, author agent), then purpose, s
 
 - **Writer**: `product-manager` (PL) persists PNGs in-turn via `Bash(curl:*)` and writes `figma-registry.md` — `skills/worktask/references/pl0-procedure.md § Figma Design Capture`.
 - **Reader**: `qa-engineer` (QA) reads `figma-registry.md` and compares it against each persisted frame — `agents/qa-engineer.md § Design Comparison (Visual QA)`.
-- **Never write Figma assets to `.context/images/`** — that directory holds user-attached screenshots/diagrams and DV implementation screenshots (`screenshots.md` manifest).
+- **Never write Figma assets to `.context/images/`** — that directory holds user-attached screenshots/diagrams and DV implementation screenshots (per-task `screenshots-<TASK_ID>.md` manifests).
 
 #### Figma Filename Grammar
 

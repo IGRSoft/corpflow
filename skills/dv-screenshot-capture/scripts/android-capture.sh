@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # @description  Android platform adapter for dv-screenshot-capture.
 #               Verifies an online device/emulator, then streams
-#               `adb exec-out screencap -p` into the canonical
-#               .context/images/<id>/dv-NN-<slug>.png path.
+#               `adb exec-out screencap -p` into
+#               <ctx>/images/<id>/dv-<TASK_ID>-NN-<slug>.png, <ctx> from the root ladder.
 #               Pure CLI — needs no MCP grant, so the delegated platform agent
 #               (or a direct caller) can run it unchanged.
 #
@@ -12,6 +12,7 @@
 #               (capture_failed), same route. Neither is a hard DV failure.
 #
 # @arg  --worktask-id <id>       state.json worktask_id (required)
+# @arg  --task-id <TASK_ID>      DV task id naming the evidence stream (required)
 # @arg  --slug <kebab>           kebab-case slug ≤40 chars (required)
 # @arg  --serial <serial>        adb serial; required when >1 device is online
 # @arg  --platform <platform>    platform value recorded in manifest row
@@ -19,7 +20,7 @@
 # @arg  --self-test              run built-in fixture tests; no device required
 #
 # @exitcode 0  success — PNG produced
-# @exitcode 1  hard error (bad args)
+# @exitcode 1  hard error (bad args, no .context resolved, ledger disagrees with the ids)
 # @exitcode 2  tool_missing — adb not on PATH; route to cli_fallback
 # @exitcode 3  capture_failed — no/ambiguous device or corrupt stream; route to cli_fallback
 #
@@ -40,6 +41,7 @@ trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' E
 # Argument parsing
 # ---------------------------------------------------------------------------
 WORKTASK_ID=""
+TASK_ID=""
 SLUG=""
 SERIAL=""
 PLATFORM="android"
@@ -50,6 +52,7 @@ usage() {
   cat >&2 << 'EOF'
 usage: android-capture.sh
   --worktask-id <id>        worktask_id from state.json (required)
+  --task-id <TASK_ID>       DV task id, e.g. DV0 (required)
   --slug <kebab>            kebab-case slug ≤40 chars (required)
   [--serial <serial>]       adb serial; required when more than one device is online
   [--platform <platform>]   platform label for manifest (default: android)
@@ -63,6 +66,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --worktask-id)
       WORKTASK_ID="${2:-}"
+      shift 2
+      ;;
+    --task-id)
+      TASK_ID="${2:-}"
       shift 2
       ;;
     --slug)
@@ -103,11 +110,38 @@ _stat_bytes() {
   stat -f%z "$1" 2> /dev/null || stat -c%s "$1" 2> /dev/null || echo 0
 }
 
-# Next monotonic two-digit NN for an images dir (never resets across reruns).
+# Task ids name the evidence stream and sit inside file names, so the grammar has no glob characters.
+_task_id_ok() {
+  local re='^[A-Z]{2}[0-9]+$'
+  [[ $1 =~ $re ]]
+}
+
+# Ids that become path segments or manifest cells: no `/`, `|`, whitespace or leading dot.
+_field_ok() {
+  local re='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+  [[ $1 =~ $re ]]
+}
+
+# Next NN for one task: 1 + the highest NN on disk (incl. oversize/) or in its manifest.
+# The max, not a count, so a deleted capture never recycles a number; 10# keeps 08 and 09 decimal.
 _next_nn() {
-  local count
-  count=$(find "$1" -maxdepth 1 -type f -name 'dv-*.png' 2> /dev/null | wc -l | tr -d ' ')
-  printf '%02d\n' $((count + 1))
+  local dir="$1" task="$2" max=0 f nn
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    f="${f##*/}"
+    nn="${f#dv-"$task"-}"
+    nn="${nn%%-*}"
+    if [ "$((10#$nn))" -gt "$max" ]; then
+      max="$((10#$nn))"
+    fi
+  done << EOF
+$(find "$dir" "$dir/oversize" -maxdepth 1 -type f -name "dv-$task-[0-9][0-9]-*" 2> /dev/null || true)
+$(LC_ALL=C awk -F'|' -v t="$task" '/^[[:space:]]*\|/ { gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9][0-9]$/) print "dv-" t "-" $2 "-row" }' "$dir/screenshots-$task.md" 2> /dev/null || true)
+EOF
+  if [ "$max" -ge 99 ]; then
+    return 1
+  fi
+  printf '%02d\n' "$((max + 1))"
 }
 
 _valid_serial() {
@@ -232,16 +266,17 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     _fail "serial validation misclassified a fixture"
   fi
 
-  # --- Test 7: NN counter picks up existing captures
+  # --- Test 7: NN is per task and never recycles a deleted number
   NN_DIR="${TMPDIR_TEST}/images/self-test-wt"
   mkdir -p "$NN_DIR"
-  printf 'x' > "${NN_DIR}/dv-01-foo.png"
-  printf 'x' > "${NN_DIR}/dv-02-bar.png"
-  NN=$(_next_nn "$NN_DIR")
-  if [[ "$NN" == "03" ]]; then
-    _ok "NN counter increments correctly (existing=2 → next=03)"
+  printf 'x' > "${NN_DIR}/dv-DV0-01-foo.png"
+  printf 'x' > "${NN_DIR}/dv-DV0-03-bar.png"
+  printf 'x' > "${NN_DIR}/dv-DV1-07-other.png"
+  NN=$(_next_nn "$NN_DIR" DV0)
+  if [[ "$NN" == "04" ]]; then
+    _ok "NN is the per-task max + 1 (DV0 01,03 → 04; DV1 ignored)"
   else
-    _fail "NN counter wrong: expected 03, got ${NN}"
+    _fail "NN wrong: expected 04, got ${NN}"
   fi
 
   # --- Test 8: tool_missing stdout line matches the adapter contract
@@ -265,11 +300,23 @@ fi
   printf >&2 'error: --worktask-id required\n'
   usage
 }
+[[ -z "$TASK_ID" ]] && {
+  printf >&2 'error: --task-id required\n'
+  usage
+}
 [[ -z "$SLUG" ]] && {
   printf >&2 'error: --slug required\n'
   usage
 }
 
+if ! _task_id_ok "$TASK_ID"; then
+  printf >&2 'error: --task-id must match ^[A-Z]{2}[0-9]+$ (got: %s)\n' "$TASK_ID"
+  exit 1
+fi
+if ! _field_ok "$WORKTASK_ID" || ! _field_ok "$PLATFORM"; then
+  printf >&2 'error: --worktask-id and --platform must match ^[A-Za-z0-9][A-Za-z0-9._-]*$\n'
+  exit 1
+fi
 if [[ ! "$SLUG" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]; then
   printf >&2 'error: --slug must be kebab-case ≤40 chars (got: %s)\n' "$SLUG"
   exit 1
@@ -286,17 +333,6 @@ fi
 # ---------------------------------------------------------------------------
 # Path setup
 # ---------------------------------------------------------------------------
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
-LOGS_DIR=".context/logs"
-AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
-
-TS="$(date -u +%Y%m%d-%H%M%S)"
-CAPTURE_LOG="${LOGS_DIR}/android-capture-${TS}.log"
-
-NN=$(_next_nn "$IMAGES_DIR")
-OUTPUT_PNG="${IMAGES_DIR}/dv-${NN}-${SLUG}.png"
-
 # Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
 # Fails closed: a missing library is a broken install, not a runtime condition.
 _AUDIT_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/audit-lib.sh"
@@ -307,11 +343,58 @@ fi
 # shellcheck source=../../shared/lib/audit-lib.sh
 . "$_AUDIT_LIB"
 
+_STATE_READ_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'android-capture: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# A ledger for another worktask refuses the write, so a worktree capture never lands in the
+# main checkout; without a ledger only an explicit CONTEXT_DIR may capture.
+_CTX_RC=0
+CTX_DIR=$(trap - ERR; corpflow_context_dir) || _CTX_RC=$?
+if [ "$_CTX_RC" -eq 2 ]; then
+  printf >&2 'android-capture: root resolver unreachable\n'
+  exit 2
+elif [ "$_CTX_RC" -ne 0 ]; then
+  printf >&2 'android-capture: no .context resolved; set WORKSPACE_ROOT or run inside a worktask\n'
+  exit 1
+fi
+if [ -f "$CTX_DIR/state.json" ]; then
+  if [ "$(corpflow_worktask_id "$CTX_DIR/state.json" "")" != "$WORKTASK_ID" ]; then
+    printf >&2 'android-capture: --worktask-id %s does not match %s\n' "$WORKTASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+  if [ "$(jq -r --arg t "$TASK_ID" '(.tasks|type) == "object" and (.tasks|has($t))' "$CTX_DIR/state.json" 2> /dev/null || true)" != "true" ]; then
+    printf >&2 'android-capture: task %s is not in %s\n' "$TASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+elif [ -z "${CONTEXT_DIR:-}" ] || [ "$CTX_DIR" != "$CONTEXT_DIR" ]; then
+  printf >&2 'android-capture: no ledger at %s; set CONTEXT_DIR to capture outside a worktask\n' "$CTX_DIR"
+  exit 1
+fi
+
+IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
+LOGS_DIR="${CTX_DIR}/logs"
+AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
+mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
+
+TS="$(date -u +%Y%m%d-%H%M%S)"
+CAPTURE_LOG="${LOGS_DIR}/android-capture-${TS}.log"
+
+if ! NN=$(trap - ERR; _next_nn "$IMAGES_DIR" "$TASK_ID"); then
+  printf >&2 'android-capture: task %s already has capture 99\n' "$TASK_ID"
+  exit 1
+fi
+OUTPUT_PNG="${IMAGES_DIR}/dv-${TASK_ID}-${NN}-${SLUG}.png"
+
 # audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
 # the shared appender.
 audit() {
   corpflow_audit_row --file "$AUDIT_LOG" --actor "android-capture-adapter" \
-    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --task-id unknown --meta "${3:-}"
+    --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --task-id "${TASK_ID:-unknown}" --result "$2" --meta "${3:-}"
 }
 
 # Emit the platform-fallback audit row + the contract line, then hand the
