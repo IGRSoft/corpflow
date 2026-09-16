@@ -1589,3 +1589,235 @@ EOF
   run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
   assert_output "sanitiser_unavailable"
 }
+
+# ---------- unresolved-decisions ----------
+# One escalate item shipped unprompted under a bypassed FN gate. The row is logged twice so
+# the dedupe is exercised, and the question names a host path so the scrub is.
+mk_ud_fixture() {
+  jq '.tasks.PL0 = {status:"completed", metadata:{fn_gate:"bypass"}}' "$WD/.context/state.json" > "$WD/s" \
+    && mv "$WD/s" "$WD/.context/state.json"
+  local i
+  for i in 1 2; do
+    ud_row sw-SR0-1 security-review-0.md#elicitation-sweep '{}'
+  done
+  cat > "$WD/.context/security-review-0.md" <<'EOF'
+# Security review
+
+## elicitation-sweep
+
+- id: sw-SR0-1
+  class: escalate
+  summary: "Ship with the debug token written to /Users/korich/secret/token.json?"
+EOF
+}
+
+ud_row() {  # <id> <ref> <extra-metadata-json>
+  jq -cn --arg id "$1" --arg ref "$2" --argjson x "$3" \
+    '{ts:"2026-01-01T00:00:00Z", actor:"orchestrator", action:"sweep_escalation_unprompted",
+      subject:"FN0", result:"recorded", metadata:({id:$id, stage:"SR", ref:$ref} + $x)}' \
+    >> "$WD/.context/logs/audit.jsonl"
+}
+
+ud_expected() {
+  printf '%s\n' '## Unresolved decisions' '' \
+    'These escalation-class questions shipped without a decision in an unattended run.' '' \
+    '- **sw-SR0-1** (SR0): Ship with the debug token written to [local-path]?'
+}
+
+ud_result() {
+  jq -r 'select(.action=="unresolved_decisions_emitted")
+         | "\(.result):\(if .result == "blocked" then .metadata.reason else .metadata.count end)"' \
+    .context/logs/audit.jsonl
+}
+
+@test "UD1: unresolved-decisions writes the scrubbed block at byte 0 and lists the item once" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  { ud_expected; printf '\n'; cat orig.md; } > want.md
+  cmp -s body.md want.md || fail "body differs from block + original:
+$(diff want.md body.md)"
+  run grep -c 'Users/' body.md
+  assert_output "0"
+  run ud_result
+  assert_output "ok:1"
+}
+
+@test "UD2: a second run over its own output is byte-identical" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  cp body.md once.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  cmp -s body.md once.md || fail "second run changed the body:
+$(diff once.md body.md)"
+}
+
+@test "UD3: --print emits the same scrubbed block and leaves the body alone" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md --print
+  assert_success
+  [ "$output" = "$(ud_expected)" ] || fail "print output: $output"
+  cmp -s body.md orig.md || fail "--print modified the body"
+  bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  [ "$(head -5 body.md)" = "$output" ] || fail "--print and --body rendered different blocks"
+}
+
+@test "UD4: rows marked for another run are not listed; unmarked rows are" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  ud_row sw-SR0-8 security-review-0.md#elicitation-sweep '{"run_index":1}'
+  ud_row sw-SR0-9 security-review-0.md#elicitation-sweep '{"dedupe_key":"wt-demo:1:sweep_escalation_unprompted"}'
+  ud_row sw-QA0-2 '#elicitation-sweep' '{"dedupe_key":"wt-demo:2:sweep_escalation_unprompted"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  run cat body.md
+  refute_output --partial "sw-SR0-8"
+  refute_output --partial "sw-SR0-9"
+  # An anchor-only ref names no file to read, so the bullet falls back to the id alone.
+  assert_line "- **sw-QA0-2** (QA0)"
+  run ud_result
+  assert_output "ok:2"
+}
+
+@test "UD5: all runs unresolved-decisions before every other check" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  run jq -rs 'map(.action) | map(select(. == "unresolved_decisions_emitted" or . == "pr_body_sanitised")) | join(",")' \
+    .context/logs/audit.jsonl
+  assert_output "unresolved_decisions_emitted,pr_body_sanitised"
+}
+
+@test "UD6: an unreadable path-scrub.sh publishes nothing: exit 1, body byte-identical" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  mk_tree
+  cp body.md orig.md
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+  assert_failure 1
+  assert_output --partial "nothing published"
+  cmp -s body.md orig.md || fail "body changed on a blocked run"
+  run ud_result
+  assert_output "blocked:scrub_unavailable"
+}
+
+@test "UD7: a scrub missing its function or an ERE, or exiting non-zero, publishes nothing on either route" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  mk_tree
+  cp body.md orig.md
+  local lib="$WD/tree/skills/shared/scripts/path-scrub.sh" variant
+  for variant in \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=y' \
+    'CORPFLOW_HOST_PATH_ERE=; CORPFLOW_DRIVE_PATH_ERE=y; corpflow_path_scrub() { cat; }' \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=; corpflow_path_scrub() { cat; }' \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=y; corpflow_path_scrub() { cat > /dev/null; return 1; }'; do
+    printf '%s\n' "$variant" > "$lib"
+    run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+    [ "$status" -eq 1 ] || fail "--body exit $status for: $variant"
+    cmp -s body.md orig.md || fail "body changed for: $variant"
+    run --separate-stderr bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --print
+    [ "$status" -eq 1 ] || fail "--print exit $status for: $variant"
+    [ -z "$output" ] || fail "--print published for: $variant: $output"
+  done
+}
+
+@test "UD8: zero rows leave the body untouched, exit 0, and never source the scrub" {
+  cd "$WD"
+  mk_body
+  mk_tree
+  cp body.md orig.md
+  # A scrub that would fail if sourced: the zero-row path must not reach it.
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+  assert_success
+  cmp -s body.md orig.md || fail "zero-row run changed the body"
+  run ud_result
+  assert_output "none:0"
+}
+
+@test "UD9: unresolved-decisions without --body or --print is a usage error" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions
+  assert_failure 2
+  assert_output --partial "requires --body"
+}
+
+@test "UD10: a question naming a context path or stage artifact survives pr-body as an id-only bullet" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  # pr-body's sanitiser drops whole lines naming `.context/` or `<stage>-N.md`.
+  cat > "$WD/.context/security-review-0.md" <<'EOF'
+# Security review
+
+## elicitation-sweep
+
+- id: sw-SR0-1
+  class: escalate
+  summary: "Ship with the token logged in .context/logs/x.json, per security-review-0.md?"
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  run grep -cFx -- '- **sw-SR0-1** (SR0)' body.md
+  assert_output "1"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --print
+  assert_success
+  [ "$output" = "$(head -5 body.md)" ] || fail "--print differs from the published block:
+$output
+---
+$(head -5 body.md)"
+}
+
+@test "UD11: --print with any other command is a usage error and runs nothing" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md --print
+  assert_failure 2
+  assert_output --partial "--print applies only to unresolved-decisions"
+  cmp -s body.md orig.md || fail "a rejected --print still changed the body"
+  run bash -c "grep -c unresolved_decisions_emitted .context/logs/audit.jsonl || true"
+  assert_output "0"
+}
+
+@test "UD12: the question cap counts characters, so a multibyte character is never split" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  local head299
+  head299="$(printf 'a%.0s' $(seq 1 299))"
+  printf '# Security review\n\n## elicitation-sweep\n\n- id: sw-SR0-1\n  class: escalate\n  summary: "%s\xe2\x80\x94bbb?"\n' \
+    "$head299" > "$WD/.context/security-review-0.md"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --print
+  assert_success
+  assert_line "- **sw-SR0-1** (SR0): ${head299}"$'\xe2\x80\x94'
+}
