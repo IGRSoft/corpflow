@@ -74,10 +74,10 @@ resolve_ctx() {
     corpflow_context_root
     return 0
   fi
-  # Degraded: declared roots only, requiring an existing .context — never cwd.
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+  # Degraded: declared roots only, requiring an existing ledger — never cwd.
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     printf '%s' "${WORKSPACE_ROOT}/.context"
-  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     printf '%s' "${CLAUDE_PROJECT_DIR}/.context"
   fi
 }
