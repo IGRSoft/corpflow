@@ -684,7 +684,9 @@ stop for, so instead of holding the checkpoint, **PARK the issue**: write
 without dispatching any stage. Parking rides the monitor's failure path
 (`hooks/megatask-monitor.sh` settles only `completed`/`failed`): the track is freed, dependents stay
 `blocked`, and the batch summary lists the issue with its unanswered questions for a follow-up
-interactive `/worktask`.
+interactive `/worktask`. A parked permission need takes this same path; its escalated list holds
+each need's redacted `{tool, command_head, truncated}`, never the command (§ Boundary permission
+prompt — only the user answers).
 
 #### Presentation in the gate summary
 
@@ -1185,6 +1187,38 @@ otherwise build on a guess, which is the whole reason the flag exists.
 This creates **no new gate**: it is the same render the FN gate performs, moved earlier for items
 whose answers the next stage needs. Under a bypassed lane it degrades exactly as C.5 specifies —
 record, never prompt — so no unattended run can deadlock on it.
+
+#### Boundary permission prompt — after Step C.0, not a sweep item
+
+A task parked with `blocked_on.kind == "permission"` (`skills/worktask/SKILL.md § Step 6.5a4`) has
+no `class` and never enters `facts.open_questions[]`, so neither C.0a nor C.0 sees it. Once C.0 has
+run and every ready stage is dispatched, `permission-park.sh batch` renders every parked need — one
+AskUserQuestion call per `payloads[]` entry, so a single call for up to four needs — each offering
+"grant and continue" and "run it yourself". The `! <command>` line to enter sits in the question
+text inside a fenced block. A need with `truncated: true` gets no such line; its question points the
+user at Claude Code's denial notice or `/permissions` recent denials. It never merges into a C.0
+render. Answer handling, including the wait for the user's own run, and the step-only resume:
+`skills/worktask/SKILL.md § Step 7a`.
+
+##### Boundary permission prompt — only the user answers
+
+Granting is security posture, so no delegate answers a parked need under any `decision_gate`, and a
+bypassed `plan_gate` or `fn_gate` does not silence the prompt. A `/megatask` per-issue run has no
+user: `batch` asks nothing and PARKs the issue through § Escalation guard — unattended `/megatask`
+per-issue runs (PARK), with `execution.reason: "parked_escalation"` and one `escalation_parked` row
+whose `metadata.escalated[]` holds each need's redacted `{tool, command_head, truncated}`; the full
+command stays in `blocked_on`. Nothing is granted. When `park.workspace_written` is false,
+`park.workspace_reason` decides: on `missing` or `malformed` the orchestrator makes that guard's
+write itself before it stops; any other reason is reported per
+`skills/worktask/SKILL.md § Step 7a — the megatask arm`. The orchestrator
+never Writes or Edits a symlinked `workspace.json`: it refuses, audits and reports instead.
+
+##### Boundary permission prompt — where the `!` line runs
+
+A `!` line runs in the main session's working directory, not in the parked stage's tree. The
+question therefore shows that tree as a `cwd:` data line inside its fenced info block, and the user
+runs the `! <command>` line from that directory. No `cd <dir> && <command>` is ever composed: the
+`!` line holds the denied command only (`skills/worktask/SKILL.md § Step 7a — where the ! line runs`).
 
 #### Step C.1 — collect everything not already answered
 
