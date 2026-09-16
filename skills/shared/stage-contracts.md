@@ -202,7 +202,7 @@ Two destinations, selected per item by `blocks_next_stage` — never by stage:
 
 A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`. Why a tier and not a model, how that tier travels, and where it is clamped: § Resolver Effort Tier.
 
-The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR are recorded rather than prompted already, so there is nothing for a resolver to unblock.
+The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR `decision` items are recorded rather than prompted already, so there is nothing for a resolver to unblock.
 
 ##### What the resolver is given
 
@@ -374,7 +374,8 @@ Every code in `stage-codes.md § Primary Stages`, unioned with the `handoff-prot
 Schemas` titles, owes a sweep. No stage is exempt and there is no lower tier: a missing sweep fails
 the run. The default, which twelve of the thirteen once restated as identical table rows, is: an
 item is **surfaced at the FN gate when non-blocking and at this stage's own boundary when blocking**,
-and in an unattended lane it is **recorded, not prompted**.
+and in an unattended lane a `decision` item is **recorded, not prompted**, while an `escalate` item
+still stops at its boundary unless § Unattended fallbacks gives its lane nobody to stop for.
 
 Which side applies is decided per item by `blocks_next_stage` (§ Where an item is answered), never by
 the stage code. `commands/worktask.md § Step C` renders the non-blocking side; § Step C.0 renders the
@@ -388,9 +389,9 @@ does with it — never in whether the sweep is owed:
 | Code | Obligation | Surfaced by (non-blocking / blocking) | Unattended fallback |
 |---|---|---|---|
 | PL | Required | plan gate / plan gate (PL's boundary IS the plan gate) | auto-decided at § Step A.4, else recorded — unresolved `escalate` items still force the checkpoint stop |
-| FN | Required | recorded for ST / FN's own boundary, before ST | recorded, not prompted |
-| ST | Required | recorded as follow-ups / ST's own boundary | recorded, not prompted |
-| IR | Required | FN gate / this stage's own boundary | `--emergency` bypasses both gates: recorded |
+| FN | Required | recorded for ST / FN's own boundary, before ST | `decision` items recorded, not prompted; `escalate` items stop at FN's boundary unless their lane parks or records (§ Unattended fallbacks) |
+| ST | Required | recorded as follow-ups / ST's own boundary | `decision` items recorded, not prompted; `escalate` items as FN |
+| IR | Required | FN gate / this stage's own boundary | `--emergency` bypasses both gates: `decision` items recorded; `escalate` items still stop |
 
 #### Why those four depart
 
@@ -428,24 +429,24 @@ The sweep carries decisions a person would want to make. Four cases already own 
 
 ### Unattended fallbacks
 
-Recording never stops; only prompting does. One behaviour row per carrier, each carrier detected from its own defining field.
+Recording never stops; only prompting does. A bypass records `decision` items only. An `escalate` item stops at its boundary on every row that does not say otherwise; the rule and its lane order live at `commands/worktask.md § Escalation guard — escalate stops at every boundary`. One behaviour row per carrier, each carrier detected from its own defining field.
 
 #### Fallbacks — gate carriers
 
 | Carrier | Detected by | Sweep behaviour |
 |---|---|---|
-| plan gate bypassed | `PL0.metadata.plan_gate == "bypass"` | PL's sweep recorded, not prompted — **except** unresolved `escalate` items, which still force the plan-gate checkpoint stop; non-PL sweeps still batch at FN |
-| FN gate bypassed | `PL0.metadata.fn_gate == "bypass"` | collect and audit `sweep_recorded`; escalate-class items also audit `sweep_escalation_unprompted`. Subject is the boundary that would have rendered — `FN<N>` for a batched item, `<CODE><N>` for a blocking one |
+| plan gate bypassed | `PL0.metadata.plan_gate == "bypass"` | PL's `decision` items recorded, not prompted; unresolved `escalate` items still force the plan-gate checkpoint stop; non-PL sweeps still batch at FN |
+| FN gate bypassed | `PL0.metadata.fn_gate == "bypass"` | collect and audit `sweep_recorded` for `decision` items; `escalate` items stop for a checkpoint-style render at the boundary they surface on. Subject is that boundary — `FN<N>` for a batched item, `<CODE><N>` for a blocking one |
 | auto decision gate | `PL0.metadata.decision_gate == "auto"` | `decision` items answered by the delegate; `escalate` items hold their own checkpoint — the plan gate for planning-stage items, finalization otherwise |
 
 #### Fallbacks — unattended lanes
 
 | Carrier | Detected by | Sweep behaviour |
 |---|---|---|
-| `--emergency` | no PL task in `tasks` | both gates bypass, so every sweep is record-only |
+| `--emergency` | no PL task in `tasks` | both gates bypass: `decision` items recorded, `escalate` items still stop at their boundary |
 | `/megatask` per issue | `PL0.metadata.megatask_group` | PARK on any escalate item, at whichever boundary it surfaces: `workspace.json.execution.status: "failed"`, `execution.reason: "parked_escalation"`, `escalation_parked` audit row with that boundary's `<CODE><N>` subject |
-| `CORPFLOW_NONINTERACTIVE=1` | environment | record, never prompt |
-| headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool |
+| `CORPFLOW_NONINTERACTIVE=1` | environment | no reachable human: `decision` items recorded; each `escalate` item audits `sweep_escalation_unprompted` with `metadata: {id, stage, ref}`, the run continues, and FN lists it atop the PR body (`fn-preflight.sh unresolved-decisions`) |
+| headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool; `escalate` items recorded as the row above |
 
 ## Resolver Effort Tier
 

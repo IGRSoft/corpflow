@@ -783,7 +783,14 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
     printf '  refs: { dev: development-0.md#files-changed }\n'
     printf -- '---\n\n# Documentation\n'
     # The anchor the stub points at: present by default so each test isolates one contract.
-    if [ "${3:-with-anchor}" = "with-anchor" ]; then printf '\n## elicitation-sweep\n\nq\n'; fi
+    # Each item carries two options, so the harness's item-body check never decides a verdict here.
+    if [ "${3:-with-anchor}" = "with-anchor" ]; then
+      printf '\n## elicitation-sweep\n\n'
+      for id in sw-DC0-1 sw-DC0-2; do
+        printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$id"
+        printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+      done
+    fi
   } > "$d/documentation-0.md"
 }
 
