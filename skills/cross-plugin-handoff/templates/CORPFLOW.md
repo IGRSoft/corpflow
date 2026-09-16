@@ -34,12 +34,11 @@ stage ran — read `state.json`.
 
 #### Who owns the artifact
 
-**DV is the only stage ownership transfers for.** Read your DV row's `agent`: a `<PLUGIN>:` id means
-you own that row's artifact (`metadata.artifact` — one file per DV row, never a file assembled
-from the other rows), patch the ledger by row id, and your frontmatter is what the harness validates; routed
-via `corpflow:developer` it owns the artifact and you return implementation plus a ≤500-token
-summary. Every other stage is **consultation** — corpflow writes the artifact and every `state.json`
-entry. DV-support owns no stage, writes under `.context/logs/`, never patches.
+**DV is the only stage ownership transfers for.** Read your DV row's `agent`: a `<PLUGIN>:` id means you
+own that row's own `metadata.artifact`, patch the ledger by row id, and your frontmatter is what the
+harness validates; routed via `corpflow:developer` it owns the artifact and you return implementation
+plus a ≤500-token summary. Every other stage is **consultation** — corpflow writes the artifact and
+every `state.json` entry. DV-support owns no stage, writes under `.context/logs/`, never patches.
 
 ## Evidence declaration
 
