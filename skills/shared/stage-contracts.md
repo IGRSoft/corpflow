@@ -73,6 +73,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 - Every Validation cell implicitly requires that the named output artifact exists on disk; only the extra conditions are listed.
 - **`<plan_file>`** resolves via `task.metadata.plan_file`; fallback newest `.context/planning-*.md`.
+- **this row's artifact** (DV) and **every DV task artifact** (downstream) both resolve from the ledger's DV rows, in ascending task-id order — `handoff-protocol.md § DV fan-out — ledger tasks` (naming, seam S1) and § Iterating the DV tasks (seam S3). Never a filename composed by hand.
 - **†** = frontmatter-first read (`Read <artifact> limit:30`); deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0`.
 - Agent, model and error file per stage: **How to Read a Contract** above.
 
@@ -88,17 +89,17 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + the summary line is quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
-| **DR** | `development-N.md` + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
-| **SR** | `development-N.md` + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
+| **DR** | every DV task artifact + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
+| **SR** | every DV task artifact + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
 
 ### QA–RE
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **QA** | `development-N.md`, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`: Test Plan, Results, Design Comparison (if UI), Regression Check | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
-| **DC** | `development-N.md`, `architecture-N.md` (when AR ran) † | `documentation-N.md`: Doc Changes, README Updates, API Docs | Docs diff present |
-| **RE** | `development-N.md`, `testing-N.md`, `documentation-N.md` | `release-N.md`: Version Bump, Changelog, Deployment Checklist | Version bump proposed + changelog entry drafted |
+| **QA** | every DV task artifact, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`: Test Plan, Results, Design Comparison (if UI), Regression Check | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
+| **DC** | every DV task artifact, `architecture-N.md` (when AR ran) † | `documentation-N.md`: Doc Changes, README Updates, API Docs | Docs diff present |
+| **RE** | every DV task artifact, `testing-N.md`, `documentation-N.md` | `release-N.md`: Version Bump, Changelog, Deployment Checklist | Version bump proposed + changelog entry drafted |
 
 ### FN–ST
 
@@ -144,7 +145,7 @@ With **no** typed return (the dispatch primitive takes no `schema` argument, or 
 9. At DV completion, if `.context/state.json` has a `tasks.AR0` entry, run:
 
    ```bash
-   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter .context/development-N.md \
+   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter <the DV row's artifact> \
      --state .context/state.json
    ```
 
@@ -163,15 +164,7 @@ When AR completed, the DV0, DR0 **and** QA0 tasks MUST each carry `metadata.arch
 When a stage is delegated to a qualified agent (e.g., `apple-developer:ios-developer` takes over DV):
 
 - `metadata.agent` keeps the full qualified name; `metadata.error_file` derives from its last segment, collisions joined with `-` (`state-ledger` § error_file derivation).
-- The output artifact path is unchanged — `.context/development-N.md` regardless of which plugin implemented DV.
-
-## Multi-Run Within a Stage
-
-When TL splits DV into DV0/DV1/DV2 (parallel streams):
-
-- Each sub-task has its own `retry_count`
-- All write to the same `.context/errors/developer.md` with distinct section headers (`## DV0 Retry 1 — …`, `## DV1 Retry 1 — …`)
-- Output artifact is a single `.context/development-N.md` — each sub-task appends its "Files Changed" block
+- The output artifact path is the one on the stage's own ledger row (`metadata.artifact`) regardless of which plugin implemented it — a qualified DV agent writes its row's artifact exactly as `corpflow:developer` would.
 
 ## Closing Elicitation Sweep
 
@@ -606,7 +599,7 @@ excerpt nobody can complete is the ad-hoc truncation this convention replaces.
 ---
 handoff:
   stage: DV
-  # task_id: DV1               # set only when the stage has more than one task
+  task_id: DV0                # your own ledger row id; REQUIRED once the run has >1 DV row
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   tests_executed: 12          # cases RUN, not discovered; 0 is legal
@@ -619,6 +612,17 @@ handoff:
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
 ---
+```
+
+#### Your artifact and row id come from the ledger (tpl-dv)
+
+You write **one** artifact — the one your ledger row names (`tasks.<ID>.metadata.artifact`), not a
+canonical file assembled from other DV rows. Naming grammar, the per-row `stream`/`artifact` keys
+and the single-DV case: `handoff-protocol.md § DV fan-out — ledger tasks`. Patch that row by id and
+path, since the orchestrator's basename guess cannot see a stream suffix:
+
+```bash
+state-patch.sh --stage DV --task-id <ID> --prev <PREV> --artifact <your row's artifact path>
 ```
 
 #### The refs and architecture half (tpl-dv)
@@ -736,12 +740,22 @@ handoff:
   open_questions:
     - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     findings: developer-review-N.md#findings
 ---
 ```
 
 Prev→this label: `DV→DR`.
+
+#### refs.dev is a list, one element per DV row (tpl-dr … tpl-re)
+
+`refs.dev` is ALWAYS a YAML list: a single-DV run yields a **one-element** list, never a scalar.
+Each element is `<artifact basename>#files-changed`, one per DV ledger row, in ascending numeric
+task-id order. Resolve them from the ledger rather than composing a filename — the idiom and the
+naming grammar are `handoff-protocol.md § Iterating the DV tasks` (seam S3). The same field, shape
+and rule apply to `#tpl-sr`, `#tpl-qa`, `#tpl-dc` and `#tpl-re`.
 
 ### #tpl-sr — Security Review (security-reviewer)
 
@@ -756,7 +770,9 @@ handoff:
   open_questions:
     - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     findings: security-review-N.md#findings
 ---
 ```
@@ -780,7 +796,9 @@ handoff:
   open_questions:
     - { id: sw-QA0-1, class: decision, ref: "testing-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     results: testing-N.md#results
 ---
 ```
@@ -814,7 +832,9 @@ handoff:
   open_questions:
     - { id: sw-DC0-1, class: decision, ref: "documentation-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     docs: documentation-N.md#files-changed
 ---
 ```
@@ -833,7 +853,7 @@ stage established, and it will be believed.
 
 #### Under fan-out, DC reads a tree that does not exist yet (tpl-dc)
 
-In fan-out mode DC runs before the streams are merged, so a cross-stream claim — a path, a command,
+In fan-out mode each DV row lands in its own tree, so a cross-stream claim — a path, a command,
 an integration — describes an **assembled tree DC cannot see**. Three of four paths one payload's
 README documented were absent from the tree DC was reading. The README was right; DC's method could
 not have established that.
@@ -858,6 +878,9 @@ handoff:
   open_questions:
     - { id: sw-RE0-1, class: decision, ref: "release-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     artifacts: release-N.md#artifacts
     version: release-N.md#version
 ---

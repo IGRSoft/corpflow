@@ -108,6 +108,14 @@ Base-ref, background, and lifecycle rules for the DV stage worktree. `agents/dev
 
 All DV operations use the worktree path prefix — isolation is always active. `EnterWorktree`/`ExitWorktree` enter and leave worktree contexts; `EnterWorktree` takes a `path` to target a specific worktree and can **switch between Claude-managed worktrees mid-session** (re-target without `ExitWorktree` first). Build/test with `--package-path {workdir}`, git with `git -C {workdir}`. For large repos, `worktree.sparsePaths` reduces checkout size. See `skills/megatask/SKILL.md`.
 
+##### The tree is pinned at dispatch
+
+Each DV ledger row's tree is fixed before `Task()`: the row's agent enters exactly `tasks.DV<k>.metadata.workspace_path`, which the orchestrator re-pins to a stream worktree at dispatch when parallel streams share it (rule: `handoff-protocol.md § Pinning a row's tree`). Nothing else selects it: not agent frontmatter `isolation`, not the Agent tool's `isolation: "worktree"`, not a glob convention. Each of those hands the stage a harness-created tree that is not the assigned one, which `dv-tree-preflight.sh --assigned` (`agents/developer.md § D0.0a`) then correctly blocks.
+
+##### Absolute-path mode when EnterWorktree is refused
+
+A refusal is never licence to write somewhere else. The agent works the pinned tree by absolute path instead: every path under `WORKSPACE_ROOT`, every git call as `git -C "$WORKSPACE_ROOT"`, and the pre-flight run from inside that tree with `--assigned "$WORKSPACE_ROOT"`. The tree is still isolated, so `worktree:` stays `true`. Contract: `agents/developer.md § D0.0`.
+
 ##### Do not rely on auto-cleanup
 
 A fresh worktree per delegation is the *intent*, not a guarantee: one run pinned a DV stage to a prior session's worktree, of a different clone, and wrote nothing for a full stage cycle. Assert it — run `dv-tree-preflight.sh --assigned` (D0.0a).

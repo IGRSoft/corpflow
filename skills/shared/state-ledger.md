@@ -110,6 +110,17 @@ otherwise `git rev-parse --show-toplevel` at init
 (`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`). Never leave it
 unset: three assigned-tree guards read it and each degrades to a silent pass when it is absent.
 
+### Fan-out fields (DV rows)
+
+Set on DV rows only. Canonical model, naming grammar and the single-DV case:
+`skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`.
+
+| Field | Purpose |
+|-------|---------|
+| `stream` | Kebab slug naming this row's artifact, unique among the run's DV rows. Assigned by the row's creator (PL0, or TL when TL runs) — DV never invents one. Mandatory once a run carries ≥2 DV rows; omittable for a lone DV row |
+| `artifact` | The path this row writes, `.context/development-<N>-<stream>.md` (`.context/development-<N>.md` for a lone row). Planned value only: `tasks.<ID>.artifact`, stamped by `state-patch.sh --artifact` at completion, outranks it |
+| `landed_paths` | Reserved (#399): paths this task's outputs landed at. DR's untracked-file check excludes the union across **every** task row, so neither side has to agree on which row is the consumer. Empty until #399 populates it |
+
 ### Dispatch metadata (optional)
 
 Optional, additive fields — `permission_mode`, `add_dirs`, `mcp_config_path`,
@@ -177,7 +188,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — run & context properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 2 of 5)
+// …continued: task.metadata JSON Schema "properties" (part 2 of 6)
     "run_index": {
       "type": "integer",
       "minimum": 0,
@@ -198,7 +209,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — error & retry properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 3 of 5)
+// …continued: task.metadata JSON Schema "properties" (part 3 of 6)
     "error_file": {
       "type": "string",
       "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
@@ -221,7 +232,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — worktask properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 4 of 5)
+// …continued: task.metadata JSON Schema "properties" (part 4 of 6)
     "track": {
       "type": "integer",
       "minimum": 1,
@@ -244,10 +255,30 @@ uncapped; capping post-append would silently strip those banners from the prompt
     },
 ```
 
+#### Schema — DV fan-out properties
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 5 of 6)
+    "stream": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "DV rows only: kebab slug naming this row's artifact, unique among the run's DV rows. See § Fan-out fields (DV rows)."
+    },
+    "artifact": {
+      "type": "string",
+      "description": "DV rows only: the .context/ path this row writes. Planned value; tasks.<ID>.artifact outranks it once stamped at completion."
+    },
+    "landed_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Reserved (#399): paths this task's outputs landed at. DR excludes the union across every task row from its untracked check. Empty until #399."
+    },
+```
+
 #### Schema — requires_screenshots + required-fields rule
 
 ```json
-// …continued: task.metadata JSON Schema (part 5 of 5, closes "properties")
+// …continued: task.metadata JSON Schema (part 6 of 6, closes "properties")
     "requires_screenshots": {
       "type": "boolean",
       "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
