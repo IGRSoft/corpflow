@@ -13,6 +13,8 @@ LIB="${BATS_TEST_DIRNAME}/../../../hooks/model-switch-lib.sh"
 # skills/shared/lib/ and consumer suites source it twice per process — so it supplies
 # symbols to P1/P4 but is outside the readonly -f isolation contract P2/P3 police.
 BASE_LIB="${BATS_TEST_DIRNAME}/../../../hooks/lib/corpflow-base.sh"
+# Sourced lazily by hooks/lib/command-head-lib.sh, so its symbol counts as defined for P1.
+SCRUB_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/scripts/path-scrub.sh"
 HOOKDIR="${BATS_TEST_DIRNAME}/../../../hooks"
 
 # Every corpflow_* token any hook mentions, libraries included.
@@ -26,7 +28,7 @@ _defined_in() {
 
 # Every corpflow_* any hook library defines, by definition syntax alone.
 _defined() {
-  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; } | sort -u
+  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; _defined_in "$SCRUB_LIB"; } | sort -u
 }
 
 # Every corpflow_* the library freezes with readonly -f.

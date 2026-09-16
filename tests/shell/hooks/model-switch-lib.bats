@@ -389,30 +389,58 @@ _ledger() {
 
 _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
-@test "audit_row: the subject-bearing and subject-less shapes keep their key order" {
-  # Pinned with keys_unsorted: three byte-compatible shapes come out of one
-  # writer, and jq's default sort would silently renumber every existing row.
+@test "audit_row: key order is ts, actor, action, subject, result, task_id, metadata" {
+  # Pinned with keys_unsorted: jq's default sort would silently reorder every row.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
-    --result block --subject DV0 --meta '{"k":1}'
+    --result block --subject DV0 --task-id DV0 --meta '{"k":1}'
   assert_success
-  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,subject,result,metadata" ]
-
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:test-execution-gate --action test_execution_blocked \
-    --result ok --meta '{"k":2}'
-  assert_success
-  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,result,metadata" ]
+  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,subject,result,task_id,metadata" ]
 }
 
-@test "audit_row: an empty subject is ABSENT, never a blank key" {
-  # A contract, not an optimisation: it forecloses subject:\"\" ever meaning
-  # \"blank\" to a future consumer that meant \"absent\".
+@test "audit_row: a missing or empty subject or task_id writes nothing, once, survivably" {
+  local c want args
+  for c in "subject|--task-id DV0" "task_id|--subject DV0" "subject|--subject '' --task-id DV0" \
+    "task_id|--subject DV0 --task-id ''"; do
+    want="${c%%|*}"
+    args="${c#*|}"
+    rm -rf "$WD/.context/logs"
+    run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'
+      corpflow_hook_audit_row --ctx '$WD/.context' --actor hook:state-merge --action state_merge_noop \
+        --result skipped --meta '{}' $args 2> '$WD/err'
+      echo survived"
+    assert_success
+    assert_output survived
+    [ ! -f "$WD/.context/logs/audit.jsonl" ] || fail "a row was written for: $args"
+    [ "$(wc -l < "$WD/err" | tr -d ' ')" = "1" ] || fail "expected one stderr line for: $args"
+    grep -q "$want" "$WD/err" || fail "stderr does not name $want for: $args"
+  done
+}
+
+@test "audit_row: skipped is in the closed result set" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:model-switch-audit --action model_switched \
-    --result ok --subject "" --meta '{}'
+    --ctx "$WD/.context" --actor hook:state-merge --action state_merge_noop \
+    --result skipped --subject none --task-id none --meta '{}'
   assert_success
-  _row_of | jq -e 'has("subject") | not'
+  _row_of | jq -e '.result == "skipped" and .subject == "none" and .task_id == "none"'
+}
+
+@test "audit_task_id: the one in-progress key, else none, else unknown" {
+  rm -f "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output none
+  printf '%s' '{"tasks":{"PL0":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output none
+  printf '%s' '{"tasks":{"PL0":{"status":"completed"},"DV1":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output DV1
+  printf '%s' '{"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output unknown
+  printf 'NOT JSON' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output unknown
 }
 
 @test "audit_row: a transposed action/result drops the row instead of recording a lie" {
@@ -420,14 +448,14 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   # turn a transposition into a missing row, which is loud, not plausible.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action ok \
-    --result model_switch_blocked --meta '{}'
+    --result model_switch_blocked --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
 }
 
 @test "audit_row: a non-hook actor is refused" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor "attacker" --action x --result ok --meta '{}'
+    --ctx "$WD/.context" --actor "attacker" --action x --result ok --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
 }
@@ -436,7 +464,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   # Losing metadata beats losing a result:"block" row.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
-    --result block --meta 'not json' --subject DV0
+    --result block --meta 'not json' --subject DV0 --task-id DV0
   assert_success
   _row_of | jq -e '.result == "block" and .metadata._meta_invalid == true'
 }
@@ -454,7 +482,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   : > "$WD/elsewhere/target"
   ln -s "$WD/elsewhere/target" "$WD/.context/logs/audit.jsonl"
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok --meta '{}'
+    --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok \
+    --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -s "$WD/elsewhere/target" ]
 }
@@ -468,7 +497,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   local opts fn
   local fns="corpflow_workspace_root corpflow_context_root corpflow_active_stage
     corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family
-    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_hook_audit_row"
+    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_audit_task_id
+    corpflow_hook_audit_row"
   for opts in 'set -eu' 'set -u; set -f' 'set -euo pipefail'; do
     for fn in $fns; do
       run bash -c "cd '$WD'; $opts; . '$PLUGIN_ROOT/$LIB'; $fn" 
@@ -491,7 +521,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
 @test "authoring: the library survives its dependencies being hidden" {
   local fn
-  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_hook_audit_row; do
+  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_audit_task_id \
+    corpflow_hook_audit_row; do
     run_script_env --cwd "$WD" --hide jq --hide git --hide date \
       --source "$LIB" "$fn" "$WD/.context" ""
     assert_success

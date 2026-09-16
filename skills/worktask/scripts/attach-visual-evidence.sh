@@ -117,7 +117,7 @@ audit_av() {
   # emitter has never written one on a jq-less host and nothing downstream expects it.
   command -v jq >/dev/null 2>&1 || return 0
   corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
-    --action "$1" --result "$2" --meta "$3"
+    --action "$1" --subject "FN${RUN_INDEX:-0}" --result "$2" --task-id unknown --meta "$3"
 }
 
 # ---------- state accessors -------------------------------------------------
@@ -431,7 +431,7 @@ emit_pr_already_emitted() {
   [ -s "$cache" ] || return 1
   [ -f "$AUDIT_FILE" ] || return 1
   grep -F "\"dedupe_key\":\"$dk\"" "$AUDIT_FILE" 2>/dev/null \
-    | grep -qF '"action":"visual_evidence_pr_emitted","result":"ok"'
+    | grep -F '"action":"visual_evidence_pr_emitted"' | grep -qF '"result":"ok"'
 }
 
 emit_pr() {

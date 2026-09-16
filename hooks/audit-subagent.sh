@@ -143,6 +143,7 @@ flush_suppressed() {
     --actor "hook:audit-subagent" \
     --action "subagent_stops_suppressed" \
     --subject "$_session" \
+    --task-id "$(corpflow_audit_task_id "$CTX")" \
     --result "ok" \
     --meta "$(jq -cn --argjson n "$_n" --argjson t "$_trunc" --arg from "$_first" --arg to "$_last" \
       '{suppressed_count: $n, truncated: $t, window_start: $from, window_end: $to}' \

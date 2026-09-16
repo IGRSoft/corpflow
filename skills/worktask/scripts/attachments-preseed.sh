@@ -94,7 +94,7 @@ fi
 audit_failed() {
   corpflow_audit_row --file "$WORKDIR/.context/logs/audit.jsonl" --actor orchestrator \
     --action fn_attachments_preseed_failed --subject "FN${RUN_INDEX:-0}" \
-    --result error --meta-kv "reason=$1"
+    --result error --task-id unknown --meta-kv "reason=$1"
 }
 
 # ------------------------------------------------------------ resolvers ----

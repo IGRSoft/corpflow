@@ -16,7 +16,7 @@
 #   Symbols: corpflow_workspace_root, corpflow_context_root, corpflow_active_stage,
 #   corpflow_resolve_pin, corpflow_stage_and_pin, corpflow_model_family,
 #   corpflow_switch_dest, corpflow_switch_origin, corpflow_switch_fields,
-#   corpflow_hook_audit_row.
+#   corpflow_audit_task_id, corpflow_hook_audit_row.
 #
 # Minimum shell: bash 3.2+ (macOS default). Correct under the union of its
 # consumers' option sets, `set -euf -o pipefail`, while setting none of them.
@@ -299,7 +299,29 @@ corpflow_stage_and_pin() {
   return 0
 }
 
-# corpflow_hook_audit_row --ctx C --actor A --action ACT --result R --meta JSON [--subject S]
+# corpflow_audit_task_id <ctx> — the task_id for a row whose caller holds no ledger key
+# of its own: the one in_progress key; "none" with no ledger or nothing in progress;
+# "unknown" when the ledger cannot say which. Never empty, unlike every other symbol
+# here, because an empty task_id is exactly what the appender below refuses.
+corpflow_audit_task_id() {
+  local _cf_state="${1:-}/state.json" _cf_keys
+  [ -f "$_cf_state" ] || { printf 'none'; return 0; }
+  command -v jq > /dev/null 2>&1 || { printf 'unknown'; return 0; }
+  _cf_keys=$(jq -r '
+    if (.tasks|type=="object") then
+      [.tasks | to_entries[] | select(.value.status=="in_progress") | .key
+        | select(test("^[A-Z]{2}[0-9]+$"))] | join(",")
+    else "" end
+  ' "$_cf_state" 2> /dev/null) || { printf 'unknown'; return 0; }
+  case "$_cf_keys" in
+    "") printf 'none' ;;
+    *,*) printf 'unknown' ;;
+    *) printf '%s' "$_cf_keys" ;;
+  esac
+  return 0
+}
+
+# corpflow_hook_audit_row --ctx C --actor A --action ACT --result R --subject S --task-id T --meta JSON
 #
 # Named apart from the row appender in skills/shared/lib/audit-lib.sh on purpose: the two
 # shared one name until 4.0.29. They take incompatible flags (--ctx here, a file path there)
@@ -311,23 +333,21 @@ corpflow_stage_and_pin() {
 # Appends one row to <ctx>/logs/audit.jsonl. Returns 0 always, including on every
 # refusal — an audit failure must never become a hook's exit code.
 #
-# Flag-parsed rather than positional on purpose: the three call-site shapes differ
-# only in whether `subject` is present, and two adjacent free-form strings
+# Flag-parsed rather than positional on purpose: two adjacent free-form strings
 # (`action`, `result`) in a positional signature make a transposition produce a
 # VALID ROW THAT LIES, which is the worst failure an audit log has. `result` and
 # `actor` are held to closed sets for the same reason: a transposition then drops
 # the row loudly instead of recording a plausible falsehood.
 #
-# `subject` is emitted only when given and non-empty. That is a contract, not an
-# optimisation: it forecloses `subject: ""` ever meaning "blank" rather than
-# "absent", and it is what lets one writer serve test-execution-gate's
-# subject-less rows and the model-switch hooks' subject-bearing ones.
+# `subject` and `task_id` are required and non-empty: a row no reader can attribute
+# to a task is a gap that looks like a record. A call missing either writes nothing
+# and names the key on one stderr line. `skipped` records a no-op that still happened.
 #
 # Malformed `--meta` degrades to {"_meta_invalid":true} rather than dropping the
 # row: losing metadata beats losing a result:"block" row.
 corpflow_hook_audit_row() {
   local _cf_ctx="" _cf_actor="" _cf_action="" _cf_result="" _cf_meta="" _cf_subject=""
-  local _cf_dir _cf_file _cf_ts _cf_row
+  local _cf_task_id="" _cf_missing="" _cf_dir _cf_file _cf_ts _cf_row
   while [ "$#" -gt 0 ]; do
     case "${1:-}" in
       --ctx)     _cf_ctx="${2:-}" ;;
@@ -336,6 +356,7 @@ corpflow_hook_audit_row() {
       --result)  _cf_result="${2:-}" ;;
       --meta)    _cf_meta="${2:-}" ;;
       --subject) _cf_subject="${2:-}" ;;
+      --task-id) _cf_task_id="${2:-}" ;;
       *) shift; continue ;;
     esac
     # Never `shift 2` blind: a flag given with no value would shift past $# and
@@ -345,10 +366,17 @@ corpflow_hook_audit_row() {
 
   [ -n "$_cf_ctx" ] || return 0
   [ -n "$_cf_action" ] || return 0
-  command -v jq > /dev/null 2>&1 || return 0
-
   case "$_cf_actor" in hook:?*) : ;; *) return 0 ;; esac
-  case "$_cf_result" in ok | block | degraded) : ;; *) return 0 ;; esac
+  case "$_cf_result" in ok | block | degraded | skipped) : ;; *) return 0 ;; esac
+
+  [ -n "$_cf_subject" ] || _cf_missing="subject"
+  [ -n "$_cf_task_id" ] || _cf_missing="${_cf_missing:+$_cf_missing and }task_id"
+  if [ -n "$_cf_missing" ]; then
+    printf >&2 'corpflow_hook_audit_row: %s row not written, missing %s\n' \
+      "${_cf_action//[^A-Za-z0-9_.:-]/_}" "$_cf_missing" || :
+    return 0
+  fi
+  command -v jq > /dev/null 2>&1 || return 0
 
   [ -n "$_cf_meta" ] || _cf_meta="{}"
   printf '%s' "$_cf_meta" | jq -e . > /dev/null 2>&1 || _cf_meta='{"_meta_invalid":true}'
@@ -365,10 +393,10 @@ corpflow_hook_audit_row() {
   # Key order is pinned by construction, not by jq's sort: assert with
   # keys_unsorted, never keys.
   _cf_row=$(jq -cn --arg ts "$_cf_ts" --arg actor "$_cf_actor" --arg action "$_cf_action" \
-    --arg subject "$_cf_subject" --arg result "$_cf_result" --argjson meta "$_cf_meta" '
-    {ts: $ts, actor: $actor, action: $action}
-    + (if ($subject | length) > 0 then {subject: $subject} else {} end)
-    + {result: $result, metadata: $meta}
+    --arg subject "$_cf_subject" --arg result "$_cf_result" --arg task_id "$_cf_task_id" \
+    --argjson meta "$_cf_meta" '
+    {ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result,
+     task_id: $task_id, metadata: $meta}
   ' 2> /dev/null) || return 0
   { printf '%s\n' "$_cf_row" >> "$_cf_file"; } 2> /dev/null || return 0
   return 0
@@ -380,4 +408,4 @@ corpflow_hook_audit_row() {
 readonly -f corpflow_workspace_root corpflow_context_root corpflow_active_stage \
   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-  corpflow_hook_audit_row
+  corpflow_audit_task_id corpflow_hook_audit_row

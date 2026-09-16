@@ -198,8 +198,35 @@ else
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     wid=$(jq -r '.worktask_id // "unknown"' "$STATE_PATH" 2> /dev/null || printf 'unknown')
     ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
-    jq -cn --arg ts "$ts" --arg wid "$wid" --arg ri "$ri" \
-      '{ts:$ts, actor:"product-manager", action:"branch_renamed", subject:("PL" + $ri),
+    # The branch-lib.sh branch_audit_actor ladder, which this path cannot source.
+    owner=""
+    case "${CLAUDE_TASK_METADATA_STAGE:-}" in
+      PL) owner=product-manager ;;
+      AR) owner=software-architector ;;
+      TL) owner=team-lead ;;
+      DV) owner=developer ;;
+      DR) owner=technical-lead ;;
+      SR) owner=security-reviewer ;;
+      QA) owner=qa-engineer ;;
+      DC) owner=technical-writer ;;
+      RE) owner=release-engineer ;;
+      FN) owner=project-manager ;;
+      ST) owner=stakeholder ;;
+      IR) owner=incident-responder ;;
+    esac
+    actor="${CORPFLOW_AUDIT_ACTOR:-}"
+    actor_set=" orchestrator product-manager software-architector team-lead developer"
+    actor_set="$actor_set technical-lead security-reviewer qa-engineer technical-writer"
+    actor_set="$actor_set release-engineer project-manager stakeholder incident-responder "
+    case "$actor" in '' | *[[:space:]]*) actor="" ;; esac
+    case "$actor_set" in *" $actor "*) : ;; *) actor="" ;; esac
+    if [ -n "$actor" ] && [ -n "$owner" ] && [ "$actor" != "$owner" ] \
+      && [ "$actor" != "orchestrator" ]; then
+      actor=""
+    fi
+    [ -n "$actor" ] || actor="${owner:-orchestrator}"
+    jq -cn --arg ts "$ts" --arg wid "$wid" --arg ri "$ri" --arg actor "$actor" \
+      '{ts:$ts, actor:$actor, action:"branch_renamed", subject:("PL" + $ri),
         result:"noop", task_id:"PL0",
         metadata:{reason:"branch_lib_unreachable", origin_stage:"PL",
                   dedupe_key:($wid + ":" + $ri + ":branch_renamed")}}' \
@@ -407,7 +434,7 @@ cmd_rename() {
   # Identity for audit_fn's call-time read — this is the PL-stage row, distinct
   # from the FN-stage defaults audit_fn falls back to when unset.
   # shellcheck disable=SC2034  # the three below are read by branch-lib.sh audit_fn
-  AUDIT_ACTOR="product-manager"
+  AUDIT_ACTOR=$(branch_audit_actor)
   local ri
   ri=$(jq -r '.run_index // 0' "$STATE_PATH" 2> /dev/null || printf '0')
   # shellcheck disable=SC2034

@@ -106,7 +106,7 @@ fi
 # the shared appender.
 audit() {
     corpflow_audit_row --file "$AUDIT_LOG" --actor "apple-canvas-adapter" \
-      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
+      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --task-id unknown --meta "${3:-}"
 }
 
 # -----------------------------------------------------------------------------

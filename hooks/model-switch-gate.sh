@@ -109,6 +109,7 @@ run_gate() {
       { mkdir -p "$_ctx/logs" && : > "$_sentinel"; } 2> /dev/null || :
       corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
         --subject "CORPFLOW_MODEL_SWITCH_GATE" --action "model_switch_gate_disabled" \
+        --task-id "$(corpflow_audit_task_id "$_ctx")" \
         --result ok --meta '{"vector":"CORPFLOW_MODEL_SWITCH_GATE"}'
     fi
     return 0
@@ -154,7 +155,7 @@ run_gate() {
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
     corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
-      --subject "$_task_id" --action "model_switch_annotated" --result ok \
+      --subject "${_task_id:-unknown}" --task-id "${_task_id:-unknown}" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         '{stage:$s, task_id:$t, pinned:$p, kind:"destination_unresolved"}')"
     return 0
@@ -178,7 +179,7 @@ run_gate() {
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
     corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
-      --subject "$_task_id" --action "model_switch_annotated" --result ok \
+      --subject "${_task_id:-unknown}" --task-id "${_task_id:-unknown}" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
         '{stage:$s, task_id:$t, pinned:$p, requested:$d, origin:$o, kind:"fallback"}')"
@@ -195,7 +196,7 @@ run_gate() {
       hookSpecificOutput: {hookEventName: "PreModelSwitch", permissionDecision: "ask", additionalContext: $r}
     }' 2> /dev/null || return 0
     corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
-      --subject "$_task_id" --action "model_switch_confirm_requested" --result ok \
+      --subject "${_task_id:-unknown}" --task-id "${_task_id:-unknown}" --action "model_switch_confirm_requested" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
         '{stage:$s, task_id:$t, pinned:$p, requested:$d, origin:$o, kind:"user"}')"
@@ -213,7 +214,7 @@ run_gate() {
       hookSpecificOutput: {hookEventName: "PreModelSwitch", additionalContext: $r}
     }' 2> /dev/null || return 0
     corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
-      --subject "$_task_id" --action "model_switch_annotated" --result ok \
+      --subject "${_task_id:-unknown}" --task-id "${_task_id:-unknown}" --action "model_switch_annotated" --result ok \
       --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
         --arg d "$_dest" --arg o "$_origin" \
         '{stage:$s, task_id:$t, pinned:$p, requested:$d, origin:$o, kind:"trigger_unobserved"}')"
@@ -230,7 +231,7 @@ run_gate() {
     hookSpecificOutput: {hookEventName: "PreModelSwitch", permissionDecision: "deny", additionalContext: $r}
   }' 2> /dev/null || return 0
   corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-gate \
-    --subject "$_task_id" --action "model_switch_blocked" --result block \
+    --subject "${_task_id:-unknown}" --task-id "${_task_id:-unknown}" --action "model_switch_blocked" --result block \
     --meta "$(jq -cn --arg s "$_stage" --arg t "$_task_id" --arg p "$_pin" \
       --arg d "$_dest" --arg o "$_origin" --arg tr "$_trigger_raw" \
       '{stage:$s, task_id:$t, pinned:$p, requested:$d, origin:$o, trigger_raw:$tr, kind:"unrecognized_trigger"}')"

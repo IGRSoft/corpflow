@@ -52,6 +52,44 @@ set +e
 [ -f "$_DEDUPE_LIB" ] && . "$_DEDUPE_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
+# The assignment strip the Bash classifier runs lives beside the audit redaction it
+# shares a threat with. The include guard is cleared first: inherited from the environment
+# it would stop the real library loading.
+_CMDHEAD_LIB="${_DEDUPE_LIB%/dedupe-lib.sh}/command-head-lib.sh"
+unset _CORPFLOW_CMDHEAD_LIB
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/lib/command-head-lib.sh
+[ -f "$_CMDHEAD_LIB" ] && . "$_CMDHEAD_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+# Fallback, not a second source of truth: with the library absent the gate keeps classifying
+# rather than failing open, so deleting one file is no off-switch outside the documented
+# CORPFLOW_TEST_GATE hatch. Its pattern must stay identical to the library's _ASSIGN_RE: a
+# looser one leaves a quoted value's fragment in head position, hiding the runner behind it
+# and turning a deny into an allow (test-execution-gate.bats pins the parity). The
+# degradation is announced once the context root is known, below.
+CMDHEAD_FALLBACK=0
+if ! command -v strip_assignments > /dev/null 2>&1; then
+  CMDHEAD_FALLBACK=1
+  strip_assignments() {
+    local _s _next
+    local _re='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:blank:]]+'
+    _s="$1"
+    while :; do
+      case "$_s" in
+        env\ *) _s="${_s#env }" ;;
+        *)
+          [[ $_s =~ $_re ]] || break
+          _next="${_s#"${BASH_REMATCH[0]}"}"
+          [ "$_next" != "$_s" ] || break
+          _s="$_next"
+          ;;
+      esac
+    done
+    printf '%s' "$_s"
+  }
+fi
+
 # Remediation prose for the three denial classes lives in references/, not inline: it is
 # operator guidance rather than logic, and every constraint on its wording is recorded beside
 # it. Read on a deny path only, so the allow path stays fork-free. Sections are delimited by
@@ -108,43 +146,6 @@ _trim() {
   local _t="$1"
   _t="${_t#"${_t%%[![:space:]]*}"}"
   TRIMMED="${_t%"${_t##*[![:space:]]}"}"
-}
-
-# ---------------------------------------------------------------------------
-# strip_assignments <segment> -> echoes the segment with leading VAR=value /
-# `env [VAR=value...]` wrappers removed. Shared by classify_segment
-# (classification) and run_gate (command_head derivation) so a secret in a
-# leading env assignment (e.g. `API_KEY=sk-... pytest x`) can never reach
-# either the classifier's runner-name check or the audit log.
-#
-# A quoted value containing a space (`FOO="a b" pytest x`) is not one
-# space-delimited word, so a naive strip-to-next-space leaves a fragment in head
-# position — which either drops the invocation out of RUNNERS (the gate never
-# fires) or collides with a real runner name and denies something that was never
-# a test. The pattern consumes a quoted or bare value as one unit; `[[ =~ ]]`
-# keeps it fork-free.
-#
-# The separator is [[:blank:]], never [[:space:]]: this runs against a whole
-# multi-line command, and matching a newline would consume an assignment on the
-# FIRST line and promote the second line's runner into head position — changing
-# which invocations get a redacted command_head.
-# ---------------------------------------------------------------------------
-_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:blank:]]+'
-strip_assignments() {
-  local _s _next
-  _s="$1"
-  while :; do
-    case "$_s" in
-      env\ *) _s="${_s#env }" ;;
-      *)
-        [[ $_s =~ $_ASSIGN_RE ]] || break
-        _next="${_s#"${BASH_REMATCH[0]}"}"
-        [ "$_next" != "$_s" ] || break
-        _s="$_next"
-        ;;
-    esac
-  done
-  printf '%s' "$_s"
 }
 
 # ---------------------------------------------------------------------------
@@ -1329,11 +1330,13 @@ first_runner_token() {
 # a logging failure (unwritable dir, no `date`, disk full) can never swallow a
 # legitimate deny. Never logs the full command — command_head only, since the
 # full command can carry a secret token or a path that shouldn't land in a
-# committed log file. These rows carry no `subject`, and the appender omits the
-# key entirely rather than emitting an empty one, so the shape is unchanged.
+# committed log file. Subject and task_id are both the in-progress ledger key, or
+# the none/unknown sentinel when there is no single one.
 write_audit_row() {
+  local _tid
+  _tid=$(corpflow_audit_task_id "${1:-}")
   corpflow_hook_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
-    --action "${2:-}" --result ok --meta "${3:-}"
+    --action "${2:-}" --result ok --subject "$_tid" --task-id "$_tid" --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------
@@ -1418,6 +1421,14 @@ fi
 # Unresolved is "no worktask here": allow, enforce nothing, create nothing.
 CTX=$(corpflow_context_root)
 [ -n "$CTX" ] || exit 0
+
+# A degraded strip still enforces, so it is announced rather than blocked on. Library-free and
+# gated on an existing ledger, like the degraded branch above, and it writes the same shared
+# sentinel the other degraded hooks do.
+if [ "$CMDHEAD_FALLBACK" -eq 1 ] && [ -f "$CTX/state.json" ]; then
+  echo "test-execution-gate: $_CMDHEAD_LIB unusable — assignment strip degraded to the inline fallback" >&2
+  mkdir -p "$CTX/logs" 2>/dev/null && : > "$CTX/logs/.corpflow-lib-missing" 2>/dev/null
+fi
 
 run_gate "$PAYLOAD" "$CTX"
 exit 0

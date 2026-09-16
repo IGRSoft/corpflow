@@ -15,6 +15,10 @@ setup() {
   mkdir -p "$WD/.context"
 }
 
+bash_payload() {
+  jq -cn --arg c "$1" '{tool_name:"Bash", tool_input:{command:$c}, tool_use_id:"tb", duration_ms:1, session_id:"s1"}'
+}
+
 @test "happy: writes tool_invoked row with tool, duration, effort, dedupe_key" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"
   assert_success
@@ -50,7 +54,7 @@ setup() {
   # that a stage advanced.
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t1","duration_ms":10,"session_id":"s1","effort":{"level":"high"}}'
   assert_success
-  run jq -e '.subject == "state-patch" and .metadata.task_id == "DV1"
+  run jq -e '.subject == "state-patch" and .task_id == "DV1" and .metadata.task_id == "DV1"
              and .metadata.status == "in_progress"' "$WD/.context/logs/audit.jsonl"
   assert_success
 }
@@ -65,17 +69,28 @@ setup() {
 @test "ledger: a non-status state-patch call still audits, without task fields" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-create QA0 --metadata {}"},"tool_use_id":"t4","duration_ms":9,"session_id":"s1"}'
   assert_success
-  run jq -e '.subject == "state-patch" and (.metadata | has("task_id") | not)' \
+  run jq -e '.subject == "state-patch" and .task_id == "none" and (.metadata | has("task_id") | not)' \
     "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "row: every row carries a top-level subject and task_id, the active stage when one runs" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"
+  assert_success
+  printf '%s' '{"tasks":{"DV0":{"status":"in_progress"},"PL0":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/x"},"tool_use_id":"t3","session_id":"s1"}'
+  assert_success
+  run jq -rs 'map(.task_id) | join(",")' "$WD/.context/logs/audit.jsonl"
+  assert_output "none,DV0"
+  run jq -s -e 'all(.[]; (.subject // "") != "" and (.task_id // "") != "")' "$WD/.context/logs/audit.jsonl"
   assert_success
 }
 
 # --- tool_input non-disclosure ----------------------------------------------
 # audit.jsonl is committed and read by every downstream stage, while tool_input
-# carries file contents, diffs and full shell command lines. The script derives
-# only task_id/status from it today; these cases exist so that adding any other
-# .tool_input field to the jq transform — a debugging convenience, typically —
-# goes red instead of quietly shipping secrets into the trail.
+# carries file contents, diffs and full shell command lines. Only the task-status
+# pair, a redacted command_head and scrubbed targets may be derived from it; these
+# cases go red if any other .tool_input field — or more of the command — reaches a row.
 #
 # CANARY is chosen so it cannot arise from any field the row legitimately emits,
 # which is what stops these assertions from passing by accident.
@@ -89,10 +104,10 @@ refute_log_contains() {
   assert_failure
 }
 
-@test "leak: a Write payload's file content and path never reach the row" {
+@test "leak: a Write payload's file content and host path never reach the row" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/${CANARY}/.env\",\"content\":\"AWS_SECRET_ACCESS_KEY=${CANARY}\"},\"tool_use_id\":\"t10\",\"duration_ms\":7,\"session_id\":\"s1\"}"
   assert_success
-  run jq -e '.subject == "Write"' "$WD/.context/logs/audit.jsonl"
+  run jq -e '.subject == "Write" and .metadata.targets == ["[local-path]"]' "$WD/.context/logs/audit.jsonl"
   assert_success
   refute_log_contains
 }
@@ -100,7 +115,7 @@ refute_log_contains() {
 @test "leak: an Edit payload's old_string and new_string never reach the row" {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/tmp/config.yml\",\"old_string\":\"token: old_${CANARY}\",\"new_string\":\"token: new_${CANARY}\"},\"tool_use_id\":\"t11\",\"duration_ms\":8,\"session_id\":\"s1\"}"
   assert_success
-  run jq -e '.subject == "Edit"' "$WD/.context/logs/audit.jsonl"
+  run jq -e '.subject == "Edit" and .metadata.targets == ["[local-path]"]' "$WD/.context/logs/audit.jsonl"
   assert_success
   refute_log_contains
 }
@@ -112,16 +127,112 @@ refute_log_contains() {
   refute_log_contains
 }
 
-@test "leak: a state-patch call still emits task fields but not its payload" {
-  # The positive control for the three cases above: this row MUST carry task_id
-  # and status, so an assertion broad enough to forbid every tool_input-derived
-  # field — or a "fix" that stopped auditing Bash entirely — fails here.
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"bash skills/worktask/scripts/state-patch.sh --task-status DV1 done --note ${CANARY}\"},\"tool_use_id\":\"t13\",\"duration_ms\":11,\"session_id\":\"s1\"}"
+@test "leak: a --note value never reaches the row, while the redacted head does" {
+  # The positive control for the cases around it: this row MUST carry the task
+  # fields, a non-empty command_head and its script target, so an assertion broad
+  # enough to forbid every tool_input-derived field — or a "fix" that stopped
+  # auditing Bash entirely — fails here.
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash skills/worktask/scripts/state-patch.sh --task-status DV1 done --note ${CANARY}")"
   assert_success
-  run jq -e '.subject == "state-patch" and .metadata.task_id == "DV1"
-             and .metadata.status == "done"' "$WD/.context/logs/audit.jsonl"
+  run jq -e '.subject == "state-patch" and .metadata.task_id == "DV1" and .metadata.status == "done"
+             and .metadata.command_head == "state-patch.sh --task-status DV1 [redacted]"
+             and .metadata.targets == ["skills/worktask/scripts/state-patch.sh"]' "$WD/.context/logs/audit.jsonl"
   assert_success
   refute_log_contains
+}
+
+@test "leak: a secret in a leading assignment never reaches the row" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "API_TOKEN=${CANARY} bash skills/worktask/scripts/state-patch.sh --task-status DV1 done")"
+  assert_success
+  run jq -e '.task_id == "DV1" and (.metadata.command_head | startswith("state-patch.sh "))' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  refute_log_contains
+}
+
+@test "leak: an Authorization header inside a filtered-in command never reaches the row" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash skills/worktask/scripts/state-patch.sh --task-status QA0 done --note 'Authorization: Bearer ${CANARY}'")"
+  assert_success
+  run jq -e '.task_id == "QA0" and (.metadata.command_head | length) <= 120' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  refute_log_contains
+  run grep -ci 'bearer' "$WD/.context/logs/audit.jsonl"
+  assert_failure
+}
+
+@test "leak: an absolute file_path outside the scrub's own pattern never reaches the row" {
+  local c tool fp
+  for c in Write:/data/u1/secrets/prod.env Edit:/usr/local/acme/licence.key; do
+    tool="${c%%:*}"
+    fp="${c#*:}"
+    rm -f "$WD/.context/logs/audit.jsonl"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(jq -cn --arg t "$tool" --arg p "$fp" '{tool_name:$t, tool_input:{file_path:$p, old_string:"a", new_string:"b"}, tool_use_id:"ta", session_id:"s1"}')"
+    assert_success
+    run jq -c '.metadata.targets' "$WD/.context/logs/audit.jsonl"
+    assert_output '["[local-path]"]'
+    run grep -cF "$fp" "$WD/.context/logs/audit.jsonl"
+    assert_failure
+  done
+}
+
+@test "leak: a path-shaped credential in a command never reaches targets" {
+  local key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash skills/worktask/scripts/state-patch.sh --task-status DV1 done --note $key")"
+  assert_success
+  run jq -e '.task_id == "DV1" and (.metadata.targets | index("skills/worktask/scripts/state-patch.sh") != null)' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run grep -cF 'wJalrXUtnFEMI' "$WD/.context/logs/audit.jsonl"
+  assert_failure
+}
+
+@test "leak: a status word is read from the first line only, and only from the closed set" {
+  local pass=correct_horse_battery_staple_passphrase_lowercase
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$(printf 'bash skills/worktask/scripts/state-patch.sh --help\necho x --task-status DV1 %s' "$pass")")"
+  assert_success
+  run jq -e '(.metadata | has("status") | not) and (.metadata | has("task_id") | not)' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run grep -cF "$pass" "$WD/.context/logs/audit.jsonl"
+  assert_failure
+
+  rm -f "$WD/.context/logs/audit.jsonl"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash skills/worktask/scripts/state-patch.sh --task-status DV1 $pass")"
+  assert_success
+  run jq -e '.metadata | has("status") | not' "$WD/.context/logs/audit.jsonl"
+  assert_success
+  run grep -cF "$pass" "$WD/.context/logs/audit.jsonl"
+  assert_failure
+}
+
+@test "targets: a Write under the workspace records its repo-relative path" {
+  mkdir -p "$WD/src"
+  run env WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(jq -cn --arg p "$WD/src/app.sh" '{tool_name:"Write", tool_input:{file_path:$p, content:"x"}, tool_use_id:"tw", session_id:"s1"}')"
+  assert_success
+  run jq -c '.metadata.targets' "$WD/.context/logs/audit.jsonl"
+  assert_output '["src/app.sh"]'
+}
+
+@test "targets: a file_path outside the path grammar is dropped whole, never split" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(jq -cn --arg p "$WD/my docs/a.sh" '{tool_name:"Write", tool_input:{file_path:$p}, tool_use_id:"tw", session_id:"s1"}')"
+  assert_success
+  run jq -c '.metadata.targets' "$WD/.context/logs/audit.jsonl"
+  assert_output '[]'
+}
+
+@test "redaction: with the path scrub or the redaction library unreachable nothing raw is published" {
+  local plug="$WD/plug" mode
+  for mode in no-scrub no-lib; do
+    rm -rf "$plug" "$WD/.context/logs"
+    mkdir -p "$plug"
+    cp -R "$PLUGIN_ROOT/hooks" "$plug/hooks"
+    [ "$mode" = no-scrub ] || rm -f "$plug/hooks/lib/command-head-lib.sh"
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$plug/hooks/audit-tooluse.sh" <<< "$(bash_payload "API_TOKEN=${CANARY} bash /Users/alice/state-patch.sh --task-status DV1 done")"
+    assert_success
+    run jq -e '.metadata.command_head == "[redacted]" and .metadata.targets == []
+               and .metadata.redaction == "scrub_unavailable" and .task_id == "DV1"' "$WD/.context/logs/audit.jsonl"
+    assert_success
+    refute_log_contains
+    run grep -c '/Users/' "$WD/.context/logs/audit.jsonl"
+    assert_failure
+  done
 }
 
 @test "failure: malformed JSON exits 0 and writes no row" {
