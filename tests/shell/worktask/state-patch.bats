@@ -1139,6 +1139,34 @@ $(diff "$1/before.json" "$1/.context/state.json" || true)"
   assert_output "RE0 / RE0"
 }
 
+# The DR→DV loop-back as Step 7 performs it: a replay that clears retry_count, then a
+# --task-meta re-stamp of prior + 1. A fix round is the same run, so run_index must not move.
+@test "loop-back: replay then the retry re-stamp keeps run_index and counts the retry" {
+  local w; w="$(mk_tmpworkdir)"; mkdir -p "$w/.context/logs"; cd "$w"; export WORKSPACE_ROOT="$w"
+  printf '%s\n' '[]' > "$w/gone.json"
+  jq -n '{version: 2, worktask_id: "wt-loop", run_index: 1, plan_file: ".context/planning-1.md",
+          platform: "all",
+          tasks: {PL0: {status: "completed", blocked_by: null, metadata: {stage: "PL"}},
+                  DV0: {status: "completed", blocked_by: ["PL0"],
+                        metadata: {stage: "DV", agent: "corpflow:developer", retry_count: 1}},
+                  DR0: {status: "pending", blocked_by: ["DV0"],
+                        metadata: {stage: "DR", agent: "corpflow:technical-lead", gate_from_stage: "DR"}}},
+          facts: {}, handoffs: {}}' > .context/state.json
+  local prior
+  prior="$(jq -r '.tasks.DV0.metadata.retry_count' .context/state.json)"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --cascade --agents-json "$w/gone.json"
+  assert_success
+  run jq -r '.tasks.DV0.metadata | has("retry_count")' .context/state.json
+  assert_output "false"
+
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DV0 --set "{\"retry_count\":$((prior + 1))}"
+  assert_success
+  run jq -r '[.run_index, .tasks.DV0.metadata.retry_count, .tasks.DV0.status] | map(tostring) | join(" ")' \
+    .context/state.json
+  assert_output "1 2 pending"
+}
+
 @test "replay: --cascade and --agents-json are rejected on the other ledger ops" {
   local w; w="$(mk_replay_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
   run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV1 pending --cascade
