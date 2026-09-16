@@ -465,3 +465,139 @@ EOS
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+# --- --validate-manifest --task-id: per-task grammar ---------------------------
+
+_task_hdr() {
+  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
+  printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
+}
+
+_task_manifest() { # <task> <row>...
+  local t="$1"; shift
+  { _task_hdr; printf '%s\n' "$@"; } > "$WD/screenshots-$t.md"
+}
+
+_png() { printf '\x89PNG\r\n\x1a\nfixture' > "$WD/$1"; }
+
+@test "task-id: a real PNG row whose name and index match exits 0" {
+  _png dv-DV0-01-home.png
+  _task_manifest DV0 '| 01 | home | dv-DV0-01-home.png | 15 | web | web/playwright | home | 2026-01-01T00:00:00Z | — |'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_success
+  assert_output ''
+}
+
+@test "task-id: magic bytes decide the type — text and JPEG behind .png exit 1 with mime:" {
+  printf 'plain text' > "$WD/dv-DV0-01-text.png"
+  printf '\xff\xd8\xff\xe0JFIF' > "$WD/dv-DV0-02-jpeg.png"
+  printf 'RIFF\x10\x00\x00\x00WEBPVP8 ' > "$WD/dv-DV0-03-ok.webp"
+  _task_manifest DV0 \
+    '| 01 | text | dv-DV0-01-text.png | 10 | web | w | c | t | — |' \
+    '| 02 | jpeg | dv-DV0-02-jpeg.png | 10 | web | w | c | t | — |' \
+    '| 03 | ok | dv-DV0-03-ok.webp | 16 | web | w | c | t | — |'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_failure 1
+  assert_output --partial 'mime:dv-DV0-01-text.png'
+  assert_output --partial 'mime:dv-DV0-02-jpeg.png'
+  refute_output --partial 'dv-DV0-03-ok.webp'
+}
+
+@test "task-id: another task's name, a mismatched index, a path and a missing file exit 1" {
+  _png dv-DV1-01-home.png
+  _png dv-DV0-02-home.png
+  _task_manifest DV0 \
+    '| 01 | home | dv-DV1-01-home.png | 15 | web | w | c | t | — |' \
+    '| 03 | home | dv-DV0-02-home.png | 15 | web | w | c | t | — |' \
+    '| 04 | home | ../dv-DV0-04-home.png | 15 | web | w | c | t | — |' \
+    '| 05 | gone | dv-DV0-05-gone.png | 15 | web | w | c | t | — |'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_failure 1
+  assert_output --partial 'name:dv-DV1-01-home.png'
+  assert_output --partial 'name:dv-DV0-02-home.png needs a kebab slug and NN equal to # (03)'
+  assert_output --partial 'name:../dv-DV0-04-home.png is not a basename'
+  assert_output --partial 'missing:dv-DV0-05-gone.png'
+}
+
+@test "task-id: well-formed tool_missing rows alone exit 4 and name the tools" {
+  _task_manifest DV0 '| 01 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent), magick(absent) | t | — |'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_failure 4
+  assert_output 'tool_missing_only tools=silicon,magick'
+}
+
+@test "task-id: a tool_missing row with a dash path or an unmarked tool exits 1" {
+  _task_manifest DV0 \
+    '| 01 | diff | - | 0 | backend | cli_fallback | tool_missing: silicon(absent) | t | — |' \
+    '| 02 | diff2 | — | 0 | backend | cli_fallback | tool_missing: silicon | t | — |'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_failure 1
+  assert_output --partial 'line 3: malformed tool_missing row'
+  assert_output --partial 'line 4: malformed tool_missing row'
+}
+
+@test "task-id: the legacy file is read only through its ## <TASK_ID> section" {
+  _png dv-DV0-01-home.png
+  {
+    printf '# Screenshots — t\n\n## DV1\n\n'
+    _task_hdr
+    printf '| 01 | home | dv-DV0-01-home.png | 15 | web | w | c | t | — |\n\n## DV0 \n\n'
+    _task_hdr
+    printf '| 01 | home | dv-DV0-01-home.png | 15 | web | w | c | t | — |\n'
+  } > "$WD/screenshots.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots.md" --task-id DV0
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots.md" --task-id DV1
+  assert_failure 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots.md" --task-id DV2
+  assert_failure 2
+  assert_output --partial 'has no ## DV2 section'
+}
+
+@test "task-id: prose only exits 3; a bad task id exits 1" {
+  printf '# Screenshots\n\nnothing\n' > "$WD/screenshots-DV0.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id DV0
+  assert_failure 3
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-manifest "$WD/screenshots-DV0.md" --task-id dv0
+  assert_failure 1
+}
+
+# --- --emit pr over per-task manifests ---------------------------------------------
+
+_union_tree() {
+  local img="$WD/.context/images/t"
+  mkdir -p "$img"
+  printf '\x89PNG\r\n\x1a\n' > "$img/dv-DV0-01-a.png"
+  printf '\x89PNG\r\n\x1a\n' > "$img/dv-DV1-01-b.png"
+  printf '\x89PNG\r\n\x1a\n' > "$img/dv-01-legacy.png"
+  { _task_hdr; printf '| 01 | b | dv-DV1-01-b.png | 8 | web | w | Stream one | t | — |\n'; } > "$img/screenshots-DV1.md"
+  { _task_hdr; printf '| 01 | a | dv-DV0-01-a.png | 8 | web | w | Stream zero | t | — |\n'
+    printf '| 02 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent) | t | — |\n'; } > "$img/screenshots-DV0.md"
+  { _task_hdr; printf '| 01 | legacy | dv-01-legacy.png | 8 | web | w | Legacy shot | t | — |\n'; } > "$img/screenshots.md"
+}
+
+@test "emit: per-task manifests union in task order, then legacy, with tool_missing as a bullet" {
+  _union_tree
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  local zero one legacy
+  zero=$(printf '%s\n' "$output" | grep -n 'Stream zero' | cut -d: -f1)
+  one=$(printf '%s\n' "$output" | grep -n 'Stream one' | cut -d: -f1)
+  legacy=$(printf '%s\n' "$output" | grep -n 'Legacy shot' | cut -d: -f1)
+  [ -n "$zero" ] && [ -n "$one" ] && [ -n "$legacy" ]
+  [ "$zero" -lt "$one" ] && [ "$one" -lt "$legacy" ]
+  assert_output --partial '- tool_missing: silicon(absent) — nothing captured; see manifest.'
+  refute_output --partial '](https://mock.gist/raw/—'
+}
+
+@test "emit: the embed cap spans the union of per-task and legacy manifests" {
+  _union_tree
+  run env STATE_FILE="$WD/state-true.json" WORKSPACE_ROOT="$WD" MAX_EMBED=2 \
+    ASSET_HOST_MODE=gist GIST_RAW_URL_BASE="https://mock.gist/raw" GIST_VERIFY_FORCE=pass \
+    bash "$PLUGIN_ROOT/$SCRIPT" --emit pr
+  assert_success
+  run grep -c '^!\[' <<< "$output"
+  assert_output "2"
+}

@@ -607,6 +607,7 @@ excerpt nobody can complete is the ad-hoc truncation this convention replaces.
 ---
 handoff:
   stage: DV
+  # task_id: DV1               # set only when the stage has more than one task
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   tests_executed: 12          # cases RUN, not discovered; 0 is legal
@@ -841,6 +842,60 @@ not have established that.
 Mark every cross-stream claim `consistency-checked, not executed`, naming what was compared and why
 execution was impossible. An unmarked claim reads as verified, which is the failure: DC's verdict
 then carries a confidence its evidence does not support, and the next reader has no way to tell.
+
+#### DC runs the option-existence gate before handoff (tpl-dc)
+
+Before handoff DC runs `doc-option-check.sh` (`skills/worktask/scripts/`) over every documentation
+file it wrote or edited, with one `--tree` per assigned tree: `metadata.workspace_path`, plus each
+worktree the dispatch names. The script checks two things. Every documented env var and long flag
+must appear in a tracked or untracked, not-ignored file of some tree, the docs under check and `.context/` excluded. Every
+link target and backticked relative path must resolve inside a tree and exist. It prints one JSON
+line per finding and exits 0 clean, 1 on a finding, 2 on bad usage, 3 when a tree or doc cannot
+be read.
+
+Exit 1 is a gate failure, not a warning, and neither 2 nor 3 is a pass. `--allow` suppresses a name
+the host sets, and each use names that host in `documentation-N.md`. The steady-path steps live in
+`agents/technical-writer.md § Option-existence gate (DC2)`.
+
+#### A finding routes by who wrote the line (tpl-dc)
+
+The first arm that matches wins:
+
+1. DC wrote the flagged line this run: DC fixes the doc and re-runs the check. The finding is not
+   returned.
+2. An upstream task's handoff `files_touched` lists the doc: DC leaves the line and returns
+   `verdict: blocked` with `blocked_on.kind: correction`, naming the latest such task.
+3. Neither: the line predates this run, so DC fixes it as in arm 1 and names it in
+   `documentation-N.md`.
+
+`blocked_on` holds one finding, the first arm-2 finding in stdout order. `documentation-N.md` lists
+every finding with its arm, so a rework round is not left to rediscover the rest one gate run at a
+time.
+
+#### The correction return (tpl-dc)
+
+<example>
+
+```yaml
+# …continued: handoff, a DC return carrying one arm-2 finding
+  verdict: blocked
+  summary: "doc-option-check.sh: 1 finding in a doc DV0 owns"
+  blocked_on:
+    kind: correction
+    detail:
+      target_task: DV0
+      finding: "README.md:42: env API_BIND undefined"
+      evidence_ref: "README.md:42"
+      severity: blocking
+    resume_with: artifact_path
+```
+
+</example>
+
+`kind`, `detail` and `resume_with` are the three keys of the `handoff.blocked_on` return contract,
+and `correction` is its kind for this case. The `detail` keys are `target_task`, `finding`,
+`evidence_ref`, `severity`, in that order. `finding` is the stderr line verbatim, because the rework
+brief quotes it. `evidence_ref` is `<doc>:<line>`, and DC always sets `severity` to `blocking`.
 
 ### #tpl-re — Release Engineering (release-engineer)
 

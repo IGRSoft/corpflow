@@ -34,8 +34,31 @@ self_test() {
 
   self_test_ar_gate "$td"
   self_test_collect_all "$td"
+  self_test_control_bytes "$td"
 
   echo "self-test: ALL PASS"
+}
+
+# A raw NUL is a gate failure naming the path; the same text spelling the escape passes.
+self_test_control_bytes() {
+  local ctx="$1/.context" out rc=0
+
+  # shellcheck disable=SC2016  # the backticks are fixture text, not a command substitution
+  { cat "$ctx/planning-0.md"; printf 'escape spellings `\\0` then \000 raw\n'; } > "$ctx/planning-nul.md"
+  out=$(validate_frontmatter "$ctx/planning-nul.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF "control byte 0x00 at byte offset" \
+     || ! printf '%s\n' "$out" | grep -qF "$ctx/planning-nul.md"; then
+    echo "self-test: control-bytes: FAIL (raw NUL: rc=$rc)" >&2; exit 1
+  fi
+
+  # shellcheck disable=SC2016  # the backticks are fixture text, not a command substitution
+  { cat "$ctx/planning-0.md"; printf '%s\n' 'escape spellings `\0` then \0 literal'; } > "$ctx/planning-literal.md"
+  rc=0
+  validate_frontmatter "$ctx/planning-literal.md" > /dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "self-test: control-bytes: FAIL (literal escape text: rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: control-bytes: ok"
 }
 
 # The frontmatter body reports every failure per invocation, and the divergence check no

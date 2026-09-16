@@ -8,7 +8,9 @@
 #     staging        no payload file is BOTH staged and modified again in the worktree;
 #                    such a file ships its staged bytes while every report describes the
 #                    worktree. Names the offending files. A merely-unstaged file is the
-#                    normal pre-`git add` state and never fires.
+#                    normal pre-`git add` state and never fires. Then runs
+#                    control-byte-lint.sh --staged: a raw C0 control byte in the index
+#                    bytes of a staged text file blocks, naming the path and byte offset.
 #     resolve-issue  print the issue number from ranked sources (first-match-wins).
 #     validate-pr    the composed PR body carries `Closes #<n>` for the resolved issue,
 #                    OR (no issue resolvable) append an audit-defer row and pass.
@@ -111,7 +113,9 @@
 #
 # @exitcode 0   Check passed (or a non-blocking degrade: no issue resolvable / diverged /
 #               scope-disabled).
-# @exitcode 1   Blocking failure (missing attachment; a file both staged and re-modified; body missing the closing keyword;
+# @exitcode 1   Blocking failure (missing attachment; a file both staged and re-modified;
+#               a raw control byte in a staged text file, or a staged control-byte check
+#               that could not run; body missing the closing keyword;
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
 #               visual-evidence evidence, an unreachable sanitiser library, or under
 #               --strict a pr-body-lint.sh that found, errored or could not run;
@@ -121,7 +125,8 @@
 # @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body;
 #               `unresolved-decisions` without --body or --print; --print with any
 #               other command).
-# @exitcode 3   branch-lib.sh unreachable — no dispatch runs (plugin install broken).
+# @exitcode 3   branch-lib.sh unreachable — no dispatch runs; or `staging` cannot read
+#               control-byte-lint.sh (plugin install broken).
 #
 # Minimum shell: bash 3.2+ (macOS default). Mirrors state-patch.sh conventions.
 

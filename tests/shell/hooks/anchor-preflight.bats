@@ -140,3 +140,80 @@ EOF
   assert_success
   assert_output --partial "self-test OK"
 }
+
+# --- control-byte lint (bytes are printf-generated) ---------------------------
+
+# mk_compliant_dv <path> — a DV artifact carrying the full anchor allow-list.
+mk_compliant_dv() {
+  printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "all anchors"\n---\n\n# Development\n' > "$1"
+  printf '\n## %s\n\nbody\n' files-changed tests-added deviations follow-ups elicitation-sweep >> "$1"
+}
+
+payload() {
+  printf '{"tool_input":{"file_path":"%s"}}' "$1"
+}
+
+@test "control bytes: a NUL in a compliant artifact exits non-zero naming path and offset" {
+  mkdir -p "$WD/.context"
+  mk_compliant_dv "$WD/.context/development-3.md"
+  local off
+  off=$(wc -c < "$WD/.context/development-3.md" | tr -d ' ')
+  printf '\000\n' >> "$WD/.context/development-3.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(payload "$WD/.context/development-3.md")"
+  assert_failure 2
+  assert_output --partial "control bytes in $WD/.context/development-3.md"
+  assert_output --partial "$WD/.context/development-3.md:$off:0x00"
+}
+
+@test "control bytes: a NUL in a non-artifact text file exits non-zero" {
+  printf 'spellings `\\0` raw \000\n' > "$WD/notes.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/notes.md")"
+  assert_failure 2
+  assert_output --partial "$WD/notes.md:19:0x00"
+}
+
+@test "control bytes: a clean non-artifact write is a no-op" {
+  printf 'clean\ttext\r\n' > "$WD/notes.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/notes.md")"
+  assert_success
+  assert_output ""
+}
+
+@test "control bytes: a non-text extension is not linted" {
+  printf 'png\000data' > "$WD/logo.png"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/logo.png")"
+  assert_success
+}
+
+@test "control bytes: an artifact with a NUL and a missing anchor shows both diagnostics" {
+  mkdir -p "$WD/.context"
+  printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "no anchor"\n---\n\n# Development\n\nraw \001 byte\n' \
+    > "$WD/.context/development-4.md"
+  local anchor_line
+  anchor_line="$(bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" --anchor-lint "$WD/.context/development-4.md" 2>&1 | head -1 || true)"
+  [ -n "$anchor_line" ] || fail "anchor lint printed nothing for a missing-anchor artifact"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(payload "$WD/.context/development-4.md")"
+  assert_failure 2
+  assert_output --partial "control bytes in $WD/.context/development-4.md"
+  assert_output --partial "$anchor_line"
+}
+
+@test "control bytes: an empty plugin root never sources skills/ from the cwd" {
+  mkdir -p "$WD/hookcopy" "$WD/skills/worktask/scripts"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hookcopy/anchor-preflight.sh"
+  printf 'cb_is_lintable() { return 0; }\ncb_scan_file() { echo PLANTED; return 1; }\n' \
+    > "$WD/skills/worktask/scripts/control-byte-lib.sh"
+  printf 'x\000\n' > "$WD/notes.md"
+  cd "$WD"
+  run env -u CLAUDE_PLUGIN_ROOT bash "$WD/hookcopy/anchor-preflight.sh" <<< "$(payload "$WD/notes.md")"
+  assert_success
+  refute_output --partial "PLANTED"
+}
+
+@test "control bytes: --self-test fails when the library is unreachable" {
+  run env CLAUDE_PLUGIN_ROOT="/nonexistent_plugin_root_$$" bash "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_failure
+  assert_output --partial "control-byte-lib.sh unreachable"
+}
