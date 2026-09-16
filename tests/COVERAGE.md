@@ -198,6 +198,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`, `base-sanity`) | — | — | — |
 | `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
+| `skills/worktask/scripts/workspace-root-banner.sh` | `tests/shell/worktask/workspace-root-banner.bats` | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
 

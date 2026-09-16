@@ -54,6 +54,17 @@ setup() {
   [[ "$output" != *"is not the canonical name"* ]] || fail "false positive: $output"
 }
 
+@test "artifact: a DV per-stream name is canonical, a malformed slug still warns" {
+  cd "$WD"
+  cp .context/development-0.md .context/development-0-service.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0-service.md
+  assert_success
+  [[ "$output" != *"is not the canonical name"* ]] || fail "false positive on a stream name: $output"
+  cp .context/development-0.md .context/development-0-Service.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --artifact .context/development-0-Service.md
+  [[ "$output" == *"is not the canonical name for stage DV"* ]] || fail "malformed slug not flagged: $output"
+}
+
 # --- B1/B2: the decisions ring's recovery path and its casualty reporting ---------------
 
 _write_n_decisions() {  # <count> [id-prefix]
