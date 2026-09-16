@@ -195,17 +195,40 @@ cmd_staging() {
   local staged unstaged both
   staged=$(git diff --cached --name-only 2> /dev/null || printf '')
   unstaged=$(git diff --name-only 2> /dev/null || printf '')
-  if [[ -z "$staged" || -z "$unstaged" ]]; then
-    printf 'staging: no file is both staged and modified again\n'
-    return 0
+  if [[ -n "$staged" && -n "$unstaged" ]]; then
+    both=$(printf '%s\n' "$staged" | grep -Fxf <(printf '%s\n' "$unstaged") 2> /dev/null || true)
+    if [[ -n "$both" ]]; then
+      printf >&2 'BLOCKED: staged then modified again — the PR would ship the staged bytes, not these:\n'
+      printf >&2 '  %s\n' $both
+      audit_fn staging blocked "$(meta_json files "$(printf '%s' "$both" | tr '\n' ' ')")"
+      return 1
+    fi
   fi
-  both=$(printf '%s\n' "$staged" | grep -Fxf <(printf '%s\n' "$unstaged") 2> /dev/null || true)
-  if [[ -n "$both" ]]; then
-    printf >&2 'BLOCKED: staged then modified again — the PR would ship the staged bytes, not these:\n'
-    printf >&2 '  %s\n' $both
-    audit_fn staging blocked "$(meta_json files "$(printf '%s' "$both" | tr '\n' ' ')")"
-    return 1
+
+  # The index bytes are what the PR ships, so the lint reads staged blobs, not the worktree.
+  local lint="${SCRIPT_DIR}/control-byte-lint.sh" out lrc=0 first
+  if [[ ! -r "$lint" ]]; then
+    printf >&2 'BLOCKED: control-byte-lint.sh unreachable at %s — plugin install broken\n' "$lint"
+    audit_fn staging blocked "$(meta_json reason control_byte_lint_unavailable lib "$lint")"
+    return 3
   fi
+  out=$(bash "$lint" --staged 2>&1) || lrc=$?
+  case "$lrc" in
+    0) ;;
+    1)
+      printf >&2 'BLOCKED: control bytes in staged files — the PR would ship them:\n'
+      printf '%s\n' "$out" | grep -v '^control-byte-lint: ' | sed 's/^/  /' >&2
+      audit_fn staging blocked "$(meta_json files "$(printf '%s\n' "$out" | grep -v '^control-byte-lint: ' \
+        | sed 's/:[0-9]*:0x[0-9A-F][0-9A-F]$//' | LC_ALL=C sort -u | tr '\n' ' ')")"
+      return 1
+      ;;
+    *)
+      first=$(printf '%s\n' "$out" | grep -m1 '^control-byte-lint: ' || printf '%s' "${out%%$'\n'*}")
+      printf >&2 'BLOCKED: staged control-byte check could not run: %s\n' "$first"
+      audit_fn staging blocked "$(meta_json reason control_byte_check_failed detail "$first")"
+      return 1
+      ;;
+  esac
   printf 'staging: no file is both staged and modified again\n'
   return 0
 }

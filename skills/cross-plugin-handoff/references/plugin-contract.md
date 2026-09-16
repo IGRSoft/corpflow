@@ -47,7 +47,9 @@ ship a documented exception — `ai-engineer` is the precedent — recorded in t
 Agents taking over a stage adopt the **full** frontmatter schema from
 `skills/worktask/references/handoff-protocol.md § frontmatter-schema` (per-stage required fields,
 `state.json` patching). Artifacts land in `.context/`; error narratives in
-`.context/errors/<agent-basename>.md`.
+`.context/errors/<agent-basename>.md`. Findings-bearing consultations (SR, DR) end their return with
+one `consultant-return.v1` object (`skills/cross-plugin-handoff/references/consultant-return-v1.md`),
+and any other version is rejected.
 
 ### 4. A root `CORPFLOW.md`
 
@@ -162,6 +164,9 @@ their own `SKILL.md` are listed in `skills[]`.
 - `claude plugin validate --json` emits a machine-readable report (CC 2.1.259). Observed on this repo
   at CLI 2.1.270: top-level keys `success`, `strict`, `target`, `manifest`, `contents`, with
   `success: true`. Tooling reads `success` rather than scraping the text output.
+
+#### Listing, loading and eval
+
 - `claude plugin list --json` rows carry `errorDetails`/`noteDetails`, which tell a sibling that is
   installed but failed to load apart from one that is absent; `claude plugin install`, `uninstall`,
   `update`, `enable` and `disable` accept `--json` too (CC 2.1.268).

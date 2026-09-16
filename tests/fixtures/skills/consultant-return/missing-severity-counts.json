@@ -1,0 +1,7 @@
+{
+  "schema_version": "consultant-return.v1",
+  "verdict": "fail",
+  "findings": [
+    {"id": "F1", "severity": "critical", "summary": "Hardcoded token in source", "location": "src/config.ts:7"}
+  ]
+}

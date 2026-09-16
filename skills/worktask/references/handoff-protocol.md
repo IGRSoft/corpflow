@@ -95,6 +95,12 @@ properties:
       summary:
         type: string
         maxLength: 200
+      task_id:
+        type: string
+        pattern: '^[A-Z]{2}[0-9]+$'
+        description: >
+          OPTIONAL. The writing task's own id; its stage prefix must equal handoff.stage. Set it
+          whenever the stage has more than one task, so sweep parity charges only this task's stubs.
 ```
 
 ### Schema — key_decisions, files_touched, next_stage_focus
@@ -1687,7 +1693,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 
 ### Anchor Pre-Flight (PostToolUse hook)
 
-The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces only after AR/TL/DV have paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint also runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)**, not an opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which gates on the artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
+The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces only after AR/TL/DV have paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint also runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)**, not an opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which first scans every write whose extension is on the control-byte text allowlist for raw C0 control bytes, then gates on the artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
 
 #### Managed hook entry (plugin.json)
 
@@ -1703,7 +1709,7 @@ The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces on
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` matches only the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit is a no-op. On a non-zero exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
+`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
 
 **Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

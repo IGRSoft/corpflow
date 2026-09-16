@@ -19,6 +19,8 @@ SCRIPT="skills/dv-screenshot-capture/scripts/visual-diff.sh"
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context/logs" "$WD/.context/images/wt-test"
+  printf '%s' '{"version":2,"worktask_id":"wt-test","tasks":{}}' > "$WD/.context/state.json"
+  export WORKSPACE_ROOT="$WD"
   REF="$WD/reference.png"
   CAND="$WD/candidate.png"
   printf 'ref' > "$REF"
@@ -73,7 +75,8 @@ diff_pngs() { ls "$WD/.context/images/wt-test/"diff-*.png 2>/dev/null | wc -l | 
   recorded="$(jq -r 'select(.action=="visual_diff_run") | .metadata.diff_path' \
     "$WD/.context/logs/audit.jsonl" | tail -1)"
   [ -n "$recorded" ]
-  [ -f "$WD/$recorded" ]
+  [ -f "$recorded" ]
+  [[ "$recorded" == "$WD/.context/images/wt-test/"* ]]
 }
 
 @test "value exactly at the threshold is a pass (boundary is inclusive)" {
@@ -188,4 +191,30 @@ diff_pngs() { ls "$WD/.context/images/wt-test/"diff-*.png 2>/dev/null | wc -l | 
     --worktask-id wt-test --reference "$REF" --candidate "$CAND"
   assert_failure 1
   [[ "$stderr" != *"plugin install broken"* ]]
+}
+
+# --- root resolution -----------------------------------------------------------
+
+@test "root: an omitted --worktask-id is read from the ledger" {
+  run_script_env --cwd "$WD" --stub-path --env RMSE_NORM=0.0100 -- "$SCRIPT" \
+    --reference "$REF" --candidate "$CAND" --slug diff-test
+  assert_success
+  assert_audit_row visual_diff_run --file "$WD/.context/logs/audit.jsonl" --subject wt-test/diff-test
+}
+
+@test "root: a --worktask-id the ledger disagrees with exits 1 before any comparison" {
+  run_script_env --cwd "$WD" --stub-path -- "$SCRIPT" \
+    --reference "$REF" --candidate "$CAND" --worktask-id other --slug diff-test
+  [ "$status" -eq 1 ]
+  [ "$(stub_log --count magick)" -eq 0 ]
+}
+
+@test "root: no declared root exits 1 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --stub-path --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --unset CONTEXT_DIR --env "GIT_CEILING_DIRECTORIES=$cwd" -- "$SCRIPT" \
+    --reference "$REF" --candidate "$CAND" --worktask-id wt-test
+  [ "$status" -eq 1 ]
+  [ ! -e "$cwd/.context" ]
 }

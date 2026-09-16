@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # visual-diff.sh — RMSE visual-diff wrapper for QA stage.
 #
-# Compares a candidate PNG (typically a `dv-NN-canvas-*.png` produced by the
+# Compares a candidate PNG (typically a `dv-<TASK_ID>-NN-canvas-*.png` produced by the
 # apple-canvas adapter) against a design reference using ImageMagick's
 # `magick compare -metric RMSE`. Emits a `visual_diff_run` audit row.
 #
@@ -15,14 +15,15 @@
 # Usage:
 #   visual-diff.sh
 #     --reference <design-ref.png>      reference image (required)
-#     --candidate <dv-NN-*.png>         candidate to compare (required)
+#     --candidate <dv-<TASK_ID>-NN-*.png>  candidate to compare (required)
 #     [--threshold 8]                   RMSE percent threshold (default 8.0)
 #     [--worktask-id <id>]              worktask_id (for audit subject + diff path)
 #     [--slug <kebab>]                  slug used in diff filename if saved
 #
 # Exit codes:
 #   0  — success (regardless of verdict — verdict carried in audit row)
-#   2  — argument error
+#   1  — no .context resolved (root ladder, never cwd), or --worktask-id disagrees with the ledger
+#   2  — argument error, or a broken plugin install
 #   3  — magick invocation failed unexpectedly
 
 set -euo pipefail
@@ -30,7 +31,7 @@ set -euo pipefail
 REFERENCE=""
 CANDIDATE=""
 THRESHOLD="8.0"
-WORKTASK_ID="default"
+WORKTASK_ID=""
 SLUG="diff"
 
 usage() {
@@ -58,11 +59,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$REFERENCE" || -z "$CANDIDATE" ]] && usage
-
-LOGS_DIR=".context/logs"
-IMAGES_DIR=".context/images/${WORKTASK_ID}"
-AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
+[[ -z "$WORKTASK_ID" || "$WORKTASK_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage
+[[ "$SLUG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage
 
 # Shared audit-row appender — one key order, one symlink refusal for every audit.jsonl.
 # Fails closed: a missing library is a broken install, not a runtime condition.
@@ -73,6 +71,42 @@ if [ ! -r "$_AUDIT_LIB" ]; then
 fi
 # shellcheck source=../../shared/lib/audit-lib.sh
 . "$_AUDIT_LIB"
+
+_STATE_READ_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)/state-read-lib.sh"
+if [ ! -r "$_STATE_READ_LIB" ]; then
+  printf >&2 'visual-diff: plugin install broken — state-read-lib.sh not found\n'
+  exit 2
+fi
+# shellcheck source=../../shared/lib/state-read-lib.sh
+. "$_STATE_READ_LIB"
+
+# The ledger names the worktask when --worktask-id is omitted; a different explicit id is refused.
+_CTX_RC=0
+CTX_DIR=$(trap - ERR; corpflow_context_dir) || _CTX_RC=$?
+if [ "$_CTX_RC" -eq 2 ]; then
+  printf >&2 'visual-diff: root resolver unreachable\n'
+  exit 2
+elif [ "$_CTX_RC" -ne 0 ]; then
+  printf >&2 'visual-diff: no .context resolved; set WORKSPACE_ROOT or run inside a worktask\n'
+  exit 1
+fi
+if [ -f "$CTX_DIR/state.json" ]; then
+  _LEDGER_WID="$(corpflow_worktask_id "$CTX_DIR/state.json" "")"
+  [[ -n "$WORKTASK_ID" ]] || WORKTASK_ID="$_LEDGER_WID"
+  if [[ -z "$WORKTASK_ID" || "$WORKTASK_ID" != "$_LEDGER_WID" ]]; then
+    printf >&2 'visual-diff: --worktask-id %s does not match %s\n' "$WORKTASK_ID" "$CTX_DIR/state.json"
+    exit 1
+  fi
+elif [ -z "${CONTEXT_DIR:-}" ] || [ "$CTX_DIR" != "$CONTEXT_DIR" ]; then
+  printf >&2 'visual-diff: no ledger at %s; set CONTEXT_DIR to run outside a worktask\n' "$CTX_DIR"
+  exit 1
+fi
+[[ -n "$WORKTASK_ID" ]] || WORKTASK_ID="default"
+
+LOGS_DIR="${CTX_DIR}/logs"
+IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
+AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
+mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
 
 # audit <action> <result> <metadata-json> — binds this adapter's actor and subject onto
 # the shared appender.

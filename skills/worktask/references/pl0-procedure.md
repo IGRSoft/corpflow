@@ -63,7 +63,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 #### `requires_screenshots` — DV screenshot capture gate (REQUIRED)
 
-Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ DV MUST produce `.context/images/<worktask_id>/screenshots.md`, whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
+Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ each DV task MUST leave valid evidence in `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (on `backend`/`systems` the gate also passes no captures, or an operator-accepted `tool_missing` row), whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
 
 **PL0 is the sole WRITER of this flag.** The downstream `?? true` defaults are defense-in-depth for ad-hoc runs only — stamp it deterministically per the steps below.
 
@@ -140,7 +140,7 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages` | Passed to `Task()`; never inherited from frontmatter. |
+| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages`, or from its § Secure overrides when the row's condition matches | Passed to `Task()`; never inherited from frontmatter. |
 | `metadata.effort` | that table's tier, or the override actually dispatched | **Mandatory, not optional** since Step C.0a began reading it. The resolver bumps it one rung, and frontmatter is the wrong fallback — DV sub-tasks dispatched at `xhigh` run at a tier `developer.md`'s `effort: high` never mentions. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`) and its blocking items go back to asking a human. |
 
 ##### Propagation fields — gates
@@ -186,9 +186,11 @@ Apply on trigger match; leave unset otherwise so downstream falls back to agent 
 | `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full` | `"default"` |
 | `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
 | `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
+| `model` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"sonnet"` |
+| `effort` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"medium"` |
 | `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
 
-Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth.
+Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth. The two `DC` rows mirror `stage-codes.md § Secure overrides`.
 
 ##### Notation
 
@@ -542,7 +544,7 @@ Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` reques
 
 ##### Placement guard (non-negotiable)
 
-> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`.
+> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots-<TASK_ID>.md`.
 
 ### Figma Design Capture
 
