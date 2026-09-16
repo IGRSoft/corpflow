@@ -103,10 +103,16 @@ self_test_ar_gate() {
 
   jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
 
+  # The item the harness requires under a stub's anchor: at least two options[].
+  _two_option_item() {  # <id>
+    printf -- '- id: %s\n  summary: "Which way?"\n  options:\n    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n' "$1"
+  }
+
   # The shared preamble every gate fixture needs; only refs differ per case.
   # $3 replaces the default empty sweep array, so a case can plant a rejected item shape.
+  # $4 replaces the body under `## elicitation-sweep`.
   _dv_artifact() {
-    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}"
+    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}" sweep_body="${4:-nothing to elicit}"
     {
       echo '---'
       echo 'handoff:'
@@ -125,7 +131,7 @@ self_test_ar_gate() {
       echo
       echo '## elicitation-sweep'
       echo
-      echo 'nothing to elicit'
+      printf '%s\n' "$sweep_body"
     } > "$path"
   }
 
@@ -188,7 +194,7 @@ self_test_ar_gate() {
     echo '  open_questions:'
     echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'; echo; echo '12 tests, 0 failures'; echo; echo '## elicitation-sweep'; echo; echo 'q'
+    echo '# Development'; echo; echo '12 tests, 0 failures'; echo; echo '## elicitation-sweep'; echo; _two_option_item sw-DV0-1
   } > "$ctx/dv-stub.md"
   jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
      "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
@@ -250,6 +256,31 @@ self_test_ar_gate() {
   # same file: it resolves rather than failing as missing.
   _dv_artifact "$ctx/dv-ctx-ref.md" '    dev: development.md#files-changed' \
     "  open_questions:
-    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }"
+    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }" \
+    "$(_two_option_item sw-DV0-1)"
   _ar_case "sweep/dir-prefixed-ref" - 0 0 - "$ctx/dv-ctx-ref.md"
+
+  # The anchor resolving is not enough: the item under it must be something the FN gate can
+  # put to a human. Each fixture differs only in class and in the body under the anchor.
+  local dstub='  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  local estub='  open_questions:
+    - { id: sw-DV0-1, class: escalate, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  local dev='    dev: development.md#files-changed'
+  _dv_artifact "$ctx/dv-item-note.md" "$dev" "$dstub" '- sw-DV0-1 — reviewed, nothing to decide'
+  _dv_artifact "$ctx/dv-item-options.md" "$dev" "$dstub" "$(_two_option_item sw-DV0-1)"
+  _dv_artifact "$ctx/dv-item-escalate-q.md" "$dev" "$estub" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"'
+  _dv_artifact "$ctx/dv-item-escalate-note.md" "$dev" "$estub" '- sw-DV0-1 — token still in the log'
+  _dv_artifact "$ctx/dv-item-decision-q.md" "$dev" "$dstub" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"
+  options:
+    - { label: "Ship", detail: "only one option" }'
+  _dv_artifact "$ctx/dv-item-missing.md" "$dev" "$dstub" "$(_two_option_item sw-DV0-12)"
+  _ar_case "sweep-item/status-note"         - 0 1 "fail: sweep stub sw-DV0-1 is a status note, not a question" "$ctx/dv-item-note.md"
+  _ar_case "sweep-item/decision+2-options"  - 0 0 - "$ctx/dv-item-options.md"
+  _ar_case "sweep-item/escalate+question"   - 0 0 - "$ctx/dv-item-escalate-q.md"
+  _ar_case "sweep-item/escalate+no-question" - 0 1 "fail: sweep stub sw-DV0-1 is a status note, not a question" "$ctx/dv-item-escalate-note.md"
+  _ar_case "sweep-item/decision+question+1-option" - 0 1 "only an escalate item may stand on a bare question" "$ctx/dv-item-decision-q.md"
+  _ar_case "sweep-item/id-missing"          - 0 1 "fail: sweep stub sw-DV0-1 has no item under" "$ctx/dv-item-missing.md"
 }

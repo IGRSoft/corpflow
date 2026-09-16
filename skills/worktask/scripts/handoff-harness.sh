@@ -378,6 +378,105 @@ check_sweep_ref_anchor() {
   return 0
 }
 
+# A resolvable anchor proves only that the heading exists. What sits under it is what the
+# FN gate renders, and a bare status note ("q", "done", "see below") renders as a prompt with
+# nothing to pick, so the gate either skips the item or invents options. The item block must
+# carry at least two options[] (`label:` entries). An escalate item is asked rather than chosen,
+# so it may instead stand on an explicit question ending in `?`.
+#
+# The block runs from the first line in the anchor section naming the id to the next line
+# that starts another item (a line opening on a different sw- id, optionally after `-`, `{`
+# or `id:`), or the next `## ` heading. A mere mention such as "follow-up to sw-PL0-1" in a
+# summary does not end the block. A missing file or heading is
+# check_sweep_ref_anchor's failure and is skipped here so one slip yields one line. Unlike that
+# check, every stub is reported: Step B.1 re-dispatches with the `fail:` lines verbatim, and a
+# stage fixing one note at a time costs a round each.
+check_sweep_item_body() {
+  local artifact="$1" fmfile="$2"
+  local dir rows flags line id ref file anchor target cls verdict where rc=0
+  dir=$(dirname "$artifact")
+  _sweep_load "$fmfile" || return 1
+  rows=$(_sweep_rows STUB)
+  flags=$(_sweep_rows FLAGS)
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    id="${line%% *}"
+    ref="${line#* }"
+    [[ -n "$ref" && "$ref" != "$id" ]] || continue
+    anchor="${ref##*#}"
+    file="${ref%%#*}"
+    [[ -n "$anchor" && "$anchor" != "$ref" ]] || continue
+    target="$dir/$file"
+    [[ -n "$file" ]] || target="$artifact"
+    if [[ ! -f "$target" && "$file" == "$(basename "$dir")/"* ]]; then
+      target="$dir/${file#*/}"
+    fi
+    [[ -f "$target" ]] || continue
+    cls=$(printf '%s\n' "$flags" | awk -v want="$id" '$1 == want { print $2; exit }')
+    verdict=$(_sweep_item_verdict "$target" "$anchor" "$id" "$cls")
+    where="'## $anchor' in $(basename "$target")"
+    case "$verdict" in
+      missing)
+        echo "fail: sweep stub $id has no item under $where — write the full item there (summary, options[]) on lines that start by naming $id" >&2
+        rc=1 ;;
+      note)
+        if [[ "$cls" == "escalate" ]]; then
+          echo "fail: sweep stub $id is a status note, not a question — its item under $where has fewer than 2 options[] (label:) and no explicit question ending in '?'" >&2
+        else
+          echo "fail: sweep stub $id is a status note, not a question — its item under $where has fewer than 2 options[] (label:); only an escalate item may stand on a bare question" >&2
+        fi
+        rc=1 ;;
+    esac
+  done <<< "$rows"
+  return $rc
+}
+
+# <file> <anchor> <id> <class> -> ok | note | missing | noanchor
+# Values reach awk through ENVIRON, never `-v`: BSD awk rewrites backslash escapes in -v values.
+# An id match must not run on into more digits, or sw-DV0-1 would claim sw-DV0-12's block.
+_sweep_item_verdict() {
+  _SIB_ANCHOR="$2" _SIB_ID="$3" _SIB_CLASS="$4" awk '
+    function names_id(s,    i, nc) {
+      while ((i = index(s, ID)) > 0) {
+        nc = substr(s, i + length(ID), 1)
+        if (nc !~ /[0-9]/) return 1
+        s = substr(s, i + length(ID))
+      }
+      return 0
+    }
+    function starts_other(s,    t) {
+      if (!match(s, /^[[:space:]]*(-[[:space:]]*)?([{][[:space:]]*)?(id:[[:space:]]*)?sw-[A-Z][A-Z][0-9]+-[0-9]+/)) return 0
+      t = substr(s, RSTART, RLENGTH)
+      sub(/.*sw-/, "sw-", t)
+      return t != ID
+    }
+    BEGIN { ID = ENVIRON["_SIB_ID"]; ANCHOR = ENVIRON["_SIB_ANCHOR"]; CLS = ENVIRON["_SIB_CLASS"] }
+    /^## / {
+      insec = 0
+      h = $0
+      sub(/^## +/, "", h)
+      sub(/[[:space:]]+$/, "", h)
+      if (h == ANCHOR && !seen) { insec = 1; seen = 1 }
+      next
+    }
+    !insec { next }
+    inblk && starts_other($0) { inblk = 0 }
+    !inblk && !found && names_id($0) { inblk = 1; found = 1 }
+    inblk {
+      s = $0
+      labels += gsub(/(^|[^A-Za-z0-9_])label:/, "", s)
+      if ($0 ~ /\?["\047]?[[:space:]]*$/ || $0 ~ /summary:[[:space:]]*"[^"]*\?"/ || $0 ~ /summary:[[:space:]]*\047[^\047]*\?\047/) q = 1
+    }
+    END {
+      if (!seen) print "noanchor"
+      else if (!found) print "missing"
+      else if (labels >= 2) print "ok"
+      else if (CLS == "escalate" && q) print "ok"
+      else print "note"
+    }
+  ' "$1"
+}
+
 # state_unreadable_reason -> echoes why $STATE_ARG cannot be trusted, or nothing.
 #
 # Detection only. The two callers deliberately DISAGREE on the verdict — check_ar_ref
@@ -979,6 +1078,7 @@ validate_frontmatter() {
   local stub_shape_ok=1
   check_sweep_stub_shape "$fmfile" || { rc=1; stub_shape_ok=0; }
   check_sweep_ref_anchor "$f" "$fmfile" || rc=1
+  check_sweep_item_body "$f" "$fmfile" || rc=1
   check_empty_sweep_prose "$f" "$fmfile" || rc=1
   if [[ -n "$STATE_ARG" ]]; then
     check_sweep_ledger "$fmfile" "$f" || rc=1
@@ -1198,7 +1298,11 @@ Listed.
 
 ## elicitation-sweep
 
-- sw-AR0-1 — hook language: Bash or Python?
+- id: sw-AR0-1
+  summary: "Which language do the hooks use?"
+  options:
+    - { label: "Bash", detail: "Matches every existing hook", recommended: true }
+    - { label: "Python", detail: "Richer parsing, new runtime dependency" }
 EOF
 
   cat > "$d/.context/development.md" <<'EOF'
