@@ -175,6 +175,18 @@
         ]
       }
     ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-denied.sh",
+            "timeout": 5,
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": ".*corpflow:product-manager.*|.*corpflow:project-manager.*",

@@ -22,12 +22,13 @@ setup() {
   assert_success
 }
 
-@test "edge: absent state.json logs a skipped row and writes no checkpoint" {
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+@test "edge: absent state.json is a silent no-op — no logs dir, no row, no checkpoint" {
+  # Pinned outside any git repo: with no ledger declared, the git ranks would
+  # otherwise answer whatever checkout the suite happens to run from.
+  run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$WD" \
+    --env "GIT_CEILING_DIRECTORIES=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  run jq -e '.result == "skipped" and .metadata.reason == "no state.json"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+  [ ! -e "$WD/.context/logs" ]
   run bash -c "ls $WD/.context/state.checkpoint-*.json 2>/dev/null"
   assert_failure
 }

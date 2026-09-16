@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "worktask_id": "wt-permission-park-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "all",
+  "run_index": 0,
+  "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
+  "handoffs": {},
+  "metadata": {},
+  "tasks": {
+    "PL0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "PL" } },
+    "QA0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "QA", "effort": "medium", "isolation": "worktree", "base_ref": "develop", "requires_screenshots": false, "workspace_path": "/tmp/wt" } },
+    "FN0": {
+      "status": "in_progress",
+      "claimed_at": "2026-09-14T00:00:00Z",
+      "blocked_by": ["QA0"],
+      "metadata": {
+        "stage": "FN",
+        "effort": "medium",
+        "isolation": "worktree",
+        "base_ref": "develop",
+        "requires_screenshots": false,
+        "workspace_path": "/tmp/wt",
+        "retry_count": 1,
+        "escalation_counts": { "FN": 0 },
+        "last_error": "none",
+        "fn_steps": [
+          { "step": "commit", "command": "git commit -m 'feat: park denials'", "status": "completed" },
+          { "step": "push", "command": "git push -u origin feature/393-park", "status": "completed" },
+          { "step": "merge", "command": "gh pr merge 412 --squash --delete-branch", "status": "denied" }
+        ]
+      }
+    },
+    "DR0": {
+      "status": "in_progress",
+      "metadata": { "stage": "DR", "effort": "high", "isolation": "worktree", "base_ref": "develop", "requires_screenshots": false, "workspace_path": "/tmp/wt", "retry_count": 0 }
+    }
+  }
+}

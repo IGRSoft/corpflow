@@ -1,0 +1,7 @@
+Bash(git push -u origin feature/393-park)
+  To github.com:o/r.git
+   * [new branch]      feature/393-park -> feature/393-park
+Bash(gh pr merge 412 --squash --delete-branch)
+  Error: Permission for this action has been denied. Reason: Blocked by classifier
+Bash(git log --oneline -1)
+  commit and push already completed; the merge did not run.

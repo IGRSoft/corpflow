@@ -99,6 +99,7 @@ FIX_AUDIT="${FIXTURES}/skills/post-compact-audit.jsonl"
   elsewhere="$(mk_tmpworkdir)"
   mkdir -p "$wd/.context/logs"
   cp "$FIX_AUDIT" "$wd/.context/logs/audit.jsonl"
+  printf '%s' '{"version":2,"tasks":{}}' > "$wd/.context/state.json"
 
   # Run from an unrelated cwd with no .context/ of its own.
   run bash -c 'cd "$2" && CLAUDE_PROJECT_DIR="$1" bash "$3" >/dev/null 2>&1' \
