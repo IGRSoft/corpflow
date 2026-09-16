@@ -96,16 +96,16 @@ Versioning/changelog/readiness canon: `skills/release-engineering/SKILL.md`.
 ### Output Artifact
 
 Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob
-`release-*.md`), H2 `## Release Preparation Summary` over these H3s in order:
+`release-*.md`). H2 set: § Artifact anchors (end of file); these H3s go under it, in order:
 
-| Section | Content |
-|---------|---------|
-| Version | Previous / New / Bump Type (`major\|minor\|patch`) / Rationale |
-| Changelog | H4 per Keep-a-Changelog section — Added, Changed, Deprecated, Removed, Fixed, Security |
-| Breaking Changes | Each breaking change + migration guide (link or inline) |
-| Deployment Checklist | Boxes: tests, security review (if applicable), docs, feature flags, DB migrations, env vars, monitoring/alerting |
-| Rollback Plan | Triggers / steps / data recovery — `skills/release-engineering/references/rollback-template.md` |
-| Platform-Specific | Boxes from § Platform-Specific Checklists: listing metadata, store assets, release notes, privacy / data-safety |
+| H2 | H3 | Content |
+|----|----|---------|
+| `## version` | Version | Previous / New / Bump Type (`major\|minor\|patch`) / Rationale |
+| `## version` | Breaking Changes | Each breaking change + migration guide (link or inline) |
+| `## artifacts` | Changelog | H4 per Keep-a-Changelog section — Added, Changed, Deprecated, Removed, Fixed, Security |
+| `## artifacts` | Deployment Checklist | Boxes: tests, security review (if applicable), docs, feature flags, DB migrations, env vars, monitoring/alerting |
+| `## artifacts` | Platform-Specific | Boxes from § Platform-Specific Checklists: listing metadata, store assets, release notes, privacy / data-safety |
+| `## rollback-plan` | — | Triggers / steps / data recovery — `skills/release-engineering/references/rollback-template.md` |
 
 ### Invocation
 
@@ -250,3 +250,13 @@ state-patch.sh --stage RE --prev <PREV> --facts '{
 ```
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=RE -->
+### Artifact anchors
+
+`release-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## artifacts`, `## version`, `## rollback-plan`, `## elicitation-sweep`
+- Optional for RE: `## Release Preparation Summary`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=RE -->

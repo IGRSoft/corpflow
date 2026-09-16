@@ -392,7 +392,7 @@ Required anchors (kebab-case, no underscores, no spaces):
 
 #### Anchor-lint enforcement
 
-PostToolUse anchor-lint (`handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend a missing anchor. Without the hook, validation falls to DR-stage `cache-lint.sh --anchor-lint` — same cost, discovered late; prefer the proactive check.
+At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list and flags a missing anchor after the write (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
 
 #### Workspace Mode
 

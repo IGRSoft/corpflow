@@ -33,6 +33,19 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/test-execution-gate.sh"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh",
+            "args": [
+              "--event",
+              "pre"
+            ]
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -56,6 +69,10 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh",
+            "args": [
+              "--event",
+              "post"
+            ],
             "continueOnBlock": true
           }
         ]

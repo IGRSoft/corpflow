@@ -645,3 +645,83 @@ mk_agent_repo() {   # $1 = agent basename, $2… = file body lines
   assert_success
   assert_output --partial "ALL PASS"
 }
+
+# --- --allow-list / --anchor-diff: the read-only core ------------------------
+
+@test "allow-list: TSV rows per stage, sweep as universal, any-optional rows last" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --allow-list --stage QA
+  assert_success
+  assert_line "$(printf 'QA\tqa-engineer\ttesting\trequired\tresults')"
+  assert_line "$(printf 'QA\tqa-engineer\ttesting\tuniversal\telicitation-sweep')"
+  assert_line "$(printf 'QA\tqa-engineer\ttesting\toptional\tVisual Evidence')"
+  [ "${lines[${#lines[@]}-1]}" = "$(printf '*\t\t\tany-optional\ttest-strategy')" ]
+  run bash "$PLUGIN_ROOT/$SCRIPT" --allow-list
+  assert_success
+  [ "$(cut -f1 <<< "$output" | grep -v '^\*$' | sort -u | wc -l | tr -d ' ')" -eq 13 ]
+}
+
+@test "allow-list: an unknown stage exits 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --allow-list --stage ZZ
+  assert_failure 2
+}
+
+@test "anchor-diff: missing rows in allow-list order, unexpected in document order, fences skipped" {
+  printf '## Zeta\n```\n## fenced\n```\n## files-changed\n## Alpha\n## Zeta\n' > "$WD/d.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --stage DV "$WD/d.md"
+  assert_failure 1
+  [ "$output" = "$(printf 'missing\ttests-added\nmissing\tdeviations\nmissing\tfollow-ups\nmissing\telicitation-sweep\nunexpected\tZeta\nunexpected\tAlpha')" ]
+}
+
+@test "anchor-diff: --for-path resolves only an exact canonical basename" {
+  printf '## results\n' > "$WD/d.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --for-path /x/.context/testing-4.md "$WD/d.md"
+  assert_failure 1
+  assert_output --partial "missing	coverage"
+  for p in /x/.context/testing.md /x/.context/testing-4-ui.md /x/.context/arch-0.md; do
+    run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --for-path "$p" "$WD/d.md"
+    assert_failure 2
+  done
+}
+
+@test "anchor-diff: --baseline headings are never unexpected; stdin is accepted" {
+  printf '## Notes\n' > "$WD/base.md"
+  run bash -c 'printf "## Notes\n## Extra\n" | bash "$1" --anchor-diff --stage QA --baseline "$2" -' _ "$PLUGIN_ROOT/$SCRIPT" "$WD/base.md"
+  assert_failure 1
+  refute_output --partial "unexpected	Notes"
+  assert_output --partial "unexpected	Extra"
+}
+
+@test "anchor-diff: a clean artifact exits 0 with no rows; usage errors exit 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --stage DV "$WD/development-0.md"
+  assert_success
+  assert_output ""
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff "$WD/development-0.md"
+  assert_failure 2
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --stage DV --for-path x/.context/testing-0.md "$WD/development-0.md"
+  assert_failure 2
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --stage DV "$WD/nope.md"
+  assert_failure 2
+}
+
+@test "optional: title-case optionals are scoped to their owning stage" {
+  cp "$FIXTURES/worktask/anchors/developer-review-0.md" "$WD/dr.md"
+  printf '\n## Blockers\n\nx\n' >> "$WD/dr.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/dr.md"
+  assert_failure 1
+  [[ "$stderr" == *"unexpected: Blockers"* ]]
+  cp "$FIXTURES/worktask/anchors/development-0.md" "$WD/dv.md"
+  printf '\n## Blockers\n\nx\n\n## rework-2\n\nx\n' >> "$WD/dv.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/dv.md"
+  assert_success
+}
+
+# team-lead.md logs a rejected TC under coordination-N.md § Blockers.
+@test "optional: TL may carry ## Blockers in coordination-0.md" {
+  cp "$FIXTURES/worktask/anchors/coordination-0.md" "$WD/coordination-0.md"
+  printf '\n## Blockers\n\nx\n' >> "$WD/coordination-0.md"
+  run_script_env --separate-stderr -- "$SCRIPT" --anchor-lint "$WD/coordination-0.md"
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --anchor-diff --for-path x/.context/coordination-0.md "$WD/coordination-0.md"
+  assert_success
+  assert_output ""
+}

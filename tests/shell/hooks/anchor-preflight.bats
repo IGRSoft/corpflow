@@ -217,3 +217,153 @@ payload() {
   assert_failure
   assert_output --partial "control-byte-lib.sh unreachable"
 }
+
+# --- PreToolUse deny arm ------------------------------------------------------
+# A JSON deny on stdout with exit 0 blocks the write; empty stdout with exit 0 allows it.
+
+# pre_payload <tool> <file_path> <content-or-new_string> [old_string]
+pre_payload() {
+  if [ "$1" = Write ]; then
+    jq -cn --arg p "$2" --arg c "$3" '{hook_event_name:"PreToolUse", tool_name:"Write", tool_input:{file_path:$p, content:$c}}'
+  else
+    jq -cn --arg p "$2" --arg n "$3" --arg o "${4:-}" '{hook_event_name:"PreToolUse", tool_name:"Edit", tool_input:{file_path:$p, new_string:$n, old_string:$o}}'
+  fi
+}
+
+with_ledger() { mkdir -p "$WD/.context"; : > "$WD/.context/state.json"; }
+
+run_pre() { run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$1"; }
+
+@test "pre: a Write adding an H2 outside the DV allow-list is denied, naming it and the allowed set" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/development-0.md" $'## files-changed\n\n## Approach\n')"
+  assert_success
+  local decision reason
+  decision="$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")"
+  reason="$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<< "$output")"
+  [ "$decision" = deny ] || fail "not denied: $output"
+  [[ "$reason" == *"development-0.md (stage=DV) adds H2 outside the allow-list: ## Approach."* ]]
+  [[ "$reason" == *"Allowed: ## files-changed, ## tests-added"* ]]
+  [[ "$reason" == *"optional: ## verification-command, ## decisions"* ]]
+}
+
+@test "pre: a conforming Write, and one missing required H2s, are both allowed" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/development-0.md" $'## files-changed\n\n## verification-command\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: the same bad content to a non-artifact path is allowed" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/notes.md" $'## Approach\n')"
+  assert_success
+  assert_output ""
+  run_pre "$(pre_payload Write "$WD/docs/development-0.md" $'## Approach\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: no state.json beside the artifact means no deny" {
+  mkdir -p "$WD/.context"
+  run_pre "$(pre_payload Write "$WD/.context/development-0.md" $'## Approach\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: a per-stream development file is never linted against the carrier set" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/development-0-backend.md" $'## commits\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: an Edit whose new_string adds a bad H2 is denied; keeping an existing one is not" {
+  with_ledger
+  run_pre "$(pre_payload Edit "$WD/.context/testing-2.md" $'## Notes\nbody' 'old body')"
+  assert_success
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ]
+  [[ "$output" == *"(stage=QA)"* ]]
+  run_pre "$(pre_payload Edit "$WD/.context/testing-2.md" $'## Notes\nnew body' $'## Notes\nold body')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: a stage's title-case optional is allowed there and denied in another stage" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/testing-0.md" $'## Visual Evidence\n')"
+  assert_output ""
+  run_pre "$(pre_payload Write "$WD/.context/developer-review-0.md" $'## Visual Evidence\n')"
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ]
+}
+
+@test "pre: an unreachable plugin root fails open" {
+  with_ledger
+  run env CLAUDE_PLUGIN_ROOT="/nonexistent_plugin_root_$$" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "$(pre_payload Write "$WD/.context/development-0.md" $'## Approach\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "pre: the Pre arm never runs the PostToolUse control-byte scan or lint" {
+  with_ledger
+  printf 'x\000\n' > "$WD/.context/development-0.md"
+  run_pre "$(pre_payload Write "$WD/.context/development-0.md" $'## files-changed\n')"
+  assert_success
+  assert_output ""
+}
+
+@test "manifest: anchor-preflight is registered under PreToolUse Write|Edit and PostToolUse" {
+  run jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("anchor-preflight"))) | .matcher' \
+    "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output "Write|Edit"
+  run jq -r '.hooks.PostToolUse[] | select(any(.hooks[]; .command | test("anchor-preflight"))) | .matcher' \
+    "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_output "Write|Edit"
+}
+
+@test "manifest: each registration names its event in argv" {
+  run jq -r '[.hooks.PreToolUse[].hooks[], .hooks.PostToolUse[].hooks[]]
+    | map(select(.command | test("anchor-preflight")) | (.args // []) | join(" ")) | join(",")' \
+    "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output "--event pre,--event post"
+}
+
+# The Pre call fires before the write, so a Post lint of the on-disk file must never gate it.
+@test "event: no jq + a legacy file-path env var + --event pre exits 0; without --event it exits 2" {
+  with_ledger
+  printf 'no anchors\n' > "$WD/.context/development-0.md"
+  run_script_env --hide jq --env "CLAUDE_PLUGIN_ROOT=$PLUGIN_ROOT" \
+    --env "CLAUDE_TOOL_INPUT_FILE_PATH=$WD/.context/development-0.md" -- "$SCRIPT" --event pre
+  assert_success
+  assert_output ""
+  run_script_env --hide jq --env "CLAUDE_PLUGIN_ROOT=$PLUGIN_ROOT" \
+    --env "CLAUDE_TOOL_INPUT_FILE_PATH=$WD/.context/development-0.md" -- "$SCRIPT"
+  assert_failure 2
+}
+
+@test "event: --event post lints a PreToolUse-shaped payload as Post; an unknown event fails open" {
+  mkdir -p "$WD/.context"
+  printf 'no anchors\n' > "$WD/.context/development-0.md"
+  local payload
+  payload="$(jq -cn --arg p "$WD/.context/development-0.md" '{hook_event_name:"PreToolUse", tool_input:{file_path:$p}}')"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" --event post <<< "$payload"
+  assert_failure 2
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" --event bogus <<< "$payload"
+  assert_success
+  assert_output ""
+}
+
+# RK-A1: an Edit is judged on new_string alone, so a heading the file keeps inside a fence
+# still reads as an H2 and is denied; the reason carries the H3 workaround.
+@test "pre: an Edit fragment that lands inside a fence in the file is still denied" {
+  with_ledger
+  printf '## files-changed\n\n```md\nold\n```\n' > "$WD/.context/development-0.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" --event pre \
+    <<< "$(pre_payload Edit "$WD/.context/development-0.md" $'## Example\nold' 'old')"
+  assert_success
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ] || fail "not denied: $output"
+  [[ "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<< "$output")" == *"## Example."*"Nest other headings as H3." ]]
+}

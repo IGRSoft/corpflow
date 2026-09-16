@@ -163,7 +163,7 @@ Gate open → compare during Q1, after functional testing, per `skills/worktask/
 
 ### Output Budget (QA)
 
-Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok. Progressive loading and compression per `skills/context-compression/SKILL.md`.
+Artifact ≤250 lines, H2 set per § Artifact anchors: `§ Notes` and `§ Selected Tests (QA additions)` are H3s under `## results`. Failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok. Progressive loading and compression per `skills/context-compression/SKILL.md`.
 
 ### Visual Evidence (artifact section in testing-N.md)
 
@@ -234,3 +234,13 @@ state-patch.sh --stage QA --prev DR --facts '{
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=QA -->
+### Artifact anchors
+
+`testing-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## results`, `## coverage`, `## regressions`, `## verdict`, `## elicitation-sweep`
+- Optional for QA: `## Visual Evidence`, `## Design Comparison`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=QA -->

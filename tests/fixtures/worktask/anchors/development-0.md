@@ -1,0 +1,34 @@
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "Conforming DV anchor fixture"
+  files_touched: [a.sh]
+  next_stage_focus: "DR reviews"
+  tests_executed: 3
+  test_summary_line: "3 tests, 0 failures"
+  open_questions: []
+  refs: { plan: planning-0.md#requirements }
+---
+
+# DV fixture
+
+## files-changed
+
+x
+
+## tests-added
+
+3 tests, 0 failures
+
+## deviations
+
+x
+
+## follow-ups
+
+x
+
+## elicitation-sweep
+
+x

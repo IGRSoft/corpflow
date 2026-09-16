@@ -608,7 +608,7 @@ Combinations: API endpoint, data model → Security + Performance + Architecture
 
 TL can split DV0 into parallel streams (DV0, DV1, DV2…) during coordination; each runs in its own worktree after TL completes, and the orchestrator picks up the new tasks on its next ledger re-read — no loop changes needed.
 
-**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split in `.context/coordination-N.md § Parallel Streams` — per-stream scope, file ownership, interface contracts.
+**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split as a `### Parallel Streams` H3 under `## fan-out` in `.context/coordination-N.md` — per-stream scope, file ownership, interface contracts.
 
 **Anti-patterns**: splitting tightly coupled files across streams (merge conflicts); splitting small scope (coordination overhead exceeds time saved); missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0).
 

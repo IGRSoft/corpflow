@@ -61,12 +61,26 @@
 #      For every stage, resolves that stage's agent file and asserts each `## X`
 #      section its prose instructs it to write into the stage artifact is already
 #      accepted by this lint (stage allow-list row, UNIVERSAL_ANCHORS, or
-#      OPTIONAL_ANCHOR_RE). Catches contradiction shape (iv): an agent mandating a
+#      _STAGE_OPTIONAL for that stage or `*`). Catches contradiction shape (iv): an agent mandating a
 #      heading anchor_lint rejects, which no artifact can satisfy. Names both files.
 #      Extraction under-matches by design — see agent_mandated_sections.
 #      Exits 1 on any unaccepted mandate.
 #
-#   6. Self-test:
+#   6. Allow-list print (read-only; the generator and the preflight hook read the
+#      allow-list only through this mode):
+#        cache-lint.sh --allow-list [--stage <CODE>]
+#      TSV <stage> <agent> <basename> <kind> <heading>, kind one of required|universal|
+#      optional|any-optional; any-optional rows carry stage `*` and empty agent/basename
+#      and close every listing. Placeholders stay literal. Exit 2 on an unknown stage.
+#
+#   7. Anchor diff (the one H2 comparison behind --anchor-lint, the hook and the harness):
+#        cache-lint.sh --anchor-diff (--stage <CODE> | --for-path <path>) [--baseline <file>] <file|->
+#      TSV `missing\t<h>` rows (allow-list order), then `unexpected\t<h>` rows (document
+#      order). --for-path resolves only an exact <canonical>-<N>.md basename. A heading
+#      present in --baseline is never unexpected. Exit 0 clean, 1 diff, 2 usage, unknown
+#      stage or unreadable input.
+#
+#   8. Self-test:
 #        cache-lint.sh --self-test   (alias: --selftest)
 #      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
@@ -167,25 +181,83 @@ agent_basename_to_stage() {
 #                      explicit empty statement. Mandatory for all 13 stages, no grace.
 UNIVERSAL_ANCHORS='elicitation-sweep'
 
-# Anchors ALLOWED in any stage artifact but required in none, so neither retroactively
-# fails an older artifact nor is reported as unexpected in a newer one:
-#   rework-<N>         the scope-addition re-entry section agents/technical-lead.md reads
-#                      at the DR gate — a shipped convention this lint used to reject.
-#   re-review          the DR second-pass section, same class as rework-<N>: a review that
-#                      re-runs after rework records it here rather than rewriting its verdict.
-#   design-preview     PL's Figma capture block, written only when a Figma URL is present.
-#   test-strategy      PL's test-strategy section; pl0-procedure.md never mandates it.
-#   <Platform> App Architecture, Test Architecture
-#                      the two H2s agents/software-architector.md mandates in every AR artifact,
-#                      the first named for the detected platform. Title-case by that agent's own
-#                      template, so they are matched literally rather than as kebab anchors.
-#   Blockers, DV Completion Checklist, Incident Report, Release Preparation Summary,
-#   Self-Improvement    the same class as the two above: an H2 its stage agent's prose MANDATES
-#                      into the stage artifact while anchors_for_stage never listed it. Each is
-#                      ACCEPTED, never required, so no existing artifact retroactively fails —
-#                      agent_section_lint below is what stops the next one from being added
-#                      silently.
-OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture|Blockers|DV Completion Checklist|Incident Report|Release Preparation Summary|Self-Improvement)$'
+# Anchors ALLOWED but required in none, so neither retroactively fails an older artifact nor
+# is reported as unexpected in a newer one. One `|`-delimited row per stage (title-case
+# headings carry spaces); the `*` row applies to every stage. Placeholders: `<N>` is a run
+# number, `<Platform>` a platform name; every other character is literal.
+#   *   rework-<N>, re-review   rework and second-pass review sections the DR gate reads.
+#       design-preview, test-strategy   PL-written, but any stage may carry them.
+#   AR  the two H2s agents/software-architector.md mandates.
+#   TL  agents/team-lead.md logs a rejected TC under coordination-N.md § Blockers.
+#   DV  verification-command and decisions are contract-mandated; the title-case two are
+#       agent-mandated.
+#   QA  the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
+#   RE, IR, ST   legacy wrappers and the retrospective's self-improvement note.
+# Title-case entries sit on their owning stage's row, so another stage writing one is
+# unexpected there.
+_STAGE_OPTIONAL='*|rework-<N>|re-review|design-preview|test-strategy
+AR|<Platform> App Architecture|Test Architecture
+TL|Blockers
+DV|verification-command|decisions|Blockers|DV Completion Checklist
+QA|Visual Evidence|Design Comparison
+RE|Release Preparation Summary
+IR|Incident Report
+ST|Self-Improvement'
+
+# _optional_headings <stage|*> — the row's headings, one per line; empty for no row.
+_optional_headings() {
+  local row
+  while IFS= read -r row; do
+    case "$row" in
+      "$1|"*) printf '%s\n' "${row#*|}" | tr '|' '\n'; return 0 ;;
+    esac
+  done <<< "$_STAGE_OPTIONAL"
+}
+
+# _heading_ere <heading> — sets _ERE to the heading as an unanchored ERE. Pure bash: it
+# runs at load time on every invocation, including every hooked artifact write.
+_heading_ere() {
+  local s="$1" c
+  _ERE=""
+  while [ -n "$s" ]; do
+    case "$s" in
+      '<N>'*) _ERE="${_ERE}[0-9]+"; s="${s#<N>}"; continue ;;
+      '<Platform>'*) _ERE="${_ERE}[A-Za-z][A-Za-z0-9+ -]*"; s="${s#<Platform>}"; continue ;;
+    esac
+    c="${s:0:1}"
+    s="${s:1}"
+    case "$c" in
+      '.' | '*' | '+' | '?' | '(' | ')' | '{' | '|' | '$' | '[') _ERE="${_ERE}[$c]" ;;
+      "\\" | '^') _ERE="${_ERE}\\$c" ;;
+      *) _ERE="$_ERE$c" ;;
+    esac
+  done
+}
+
+# _optional_alt <stage|*> — sets _ALT to the row's headings as one ERE alternation.
+_optional_alt() {
+  local h
+  _ALT=""
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    _heading_ere "$h"
+    _ALT="${_ALT:+$_ALT|}$_ERE"
+  done <<< "$(_optional_headings "$1")"
+}
+
+_optional_alt '*'
+# The `^(` prefix of this line is a contract: elicitation-sweep-contracts.bats plants into it.
+OPTIONAL_ANCHOR_RE='^('"$_ALT"')$'
+
+# optional_re_for_stage <stage> — sets _OPT_RE to OPTIONAL_ANCHOR_RE widened by the stage's
+# own row. Built from OPTIONAL_ANCHOR_RE rather than the `*` row so a planted edit to that
+# variable reaches every caller.
+optional_re_for_stage() {
+  _optional_alt "$1"
+  _OPT_RE="$OPTIONAL_ANCHOR_RE"
+  [ -n "$_ALT" ] && _OPT_RE="${OPTIONAL_ANCHOR_RE%)\$}|$_ALT)\$"
+  return 0
+}
 
 # ---------- Frontmatter stage extractor ----------
 # The frontmatter block alone (between the first two `---` lines), empty if absent.
@@ -231,6 +303,111 @@ extract_stage() {
   printf '%s\n' "$fm" | _stage_via_awk
 }
 
+# ---------- Anchor diff core ----------
+# H2 headings of <file|-> in document order, fenced blocks skipped.
+h2_headings() {
+  awk '
+    BEGIN { in_fence = 0 }
+    /^```/ { in_fence = !in_fence; next }
+    !in_fence && /^## / {
+      sub(/^## +/, "")
+      sub(/[[:space:]]+$/, "")
+      print
+    }
+  ' "$1"
+}
+
+# The stage whose canonical artifact is exactly <basename>-<N>.md; empty otherwise, so a
+# per-stream or aliased name never resolves.
+stage_for_path() {
+  local base row code
+  base="${1##*/}"
+  case "$base" in *-[0-9]*.md) ;; *) return 0 ;; esac
+  local stem="${base%.md}"
+  local num="${stem##*-}"
+  case "$num" in '' | *[!0-9]*) return 0 ;; esac
+  stem="${stem%-*}"
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+    set -- $row
+    code="$1"
+    if [ "$3" = "$stem" ]; then printf '%s\n' "$code"; return 0; fi
+  done <<< "$_STAGE_TABLE"
+}
+
+# anchor_diff <stage> <file|-> [baseline-file] — TSV `missing\t<h>` rows in allow-list order,
+# then `unexpected\t<h>` rows in document order, deduplicated. A heading also present in the
+# baseline is never unexpected. rc 0 clean, 1 on any row, 2 unknown stage or unreadable input.
+anchor_diff() {
+  local stage="$1" src="$2" baseline="${3:-}"
+  local expected
+  expected=$(anchors_for_stage "$stage")
+  [[ -n "$expected" ]] || return 2
+  # Appended AFTER the unknown-stage check so an unrecognised stage still reports as such
+  # rather than as a missing sweep heading. Both the missing loop and the unexpected loop read
+  # $expected, so one append makes the anchor required and accepted in a single stroke.
+  expected="$expected $UNIVERSAL_ANCHORS"
+
+  local found base_found=""
+  if [[ "$src" == "-" ]]; then
+    found=$(h2_headings -) || return 2
+  else
+    [[ -r "$src" ]] || return 2
+    found=$(h2_headings "$src") || return 2
+  fi
+  if [[ -n "$baseline" ]]; then
+    [[ -r "$baseline" ]] || return 2
+    base_found=$(h2_headings "$baseline") || return 2
+  fi
+
+  optional_re_for_stage "$stage"
+  local rc=0 exp h seen=$'\n'
+  local nl=$'\n'
+  for exp in $expected; do
+    case "$nl$found$nl" in
+      *"$nl$exp$nl"*) ;;
+      *) printf 'missing\t%s\n' "$exp"; rc=1 ;;
+    esac
+  done
+  while IFS= read -r h; do
+    [[ -n "$h" ]] || continue
+    case "$seen" in *"$nl$h$nl"*) continue ;; esac
+    seen="$seen$h$nl"
+    case "$nl${expected// /$nl}$nl" in *"$nl$h$nl"*) continue ;; esac
+    [[ "$h" =~ $_OPT_RE ]] && continue
+    case "$nl$base_found$nl" in *"$nl$h$nl"*) continue ;; esac
+    printf 'unexpected\t%s\n' "$h"
+    rc=1
+  done <<< "$found"
+  return $rc
+}
+
+# ---------- Allow-list print ----------
+# allow_list [stage] — TSV `<stage>\t<agent>\t<basename>\t<kind>\t<heading>`, stages in
+# _STAGE_TABLE order, then the `*` rows with empty agent and basename. rc 2 unknown stage.
+allow_list() {
+  local want="${1:-}" row code agent base h
+  if [[ -n "$want" ]]; then
+    _stage_row "$want" || return 2
+  fi
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+    set -- $row
+    code="$1" agent="$2" base="$3"
+    shift 3
+    [[ -z "$want" || "$want" == "$code" ]] || continue
+    for h in "$@"; do printf '%s\t%s\t%s\trequired\t%s\n' "$code" "$agent" "$base" "$h"; done
+    for h in $UNIVERSAL_ANCHORS; do printf '%s\t%s\t%s\tuniversal\t%s\n' "$code" "$agent" "$base" "$h"; done
+    while IFS= read -r h; do
+      [[ -n "$h" ]] && printf '%s\t%s\t%s\toptional\t%s\n' "$code" "$agent" "$base" "$h"
+    done <<< "$(_optional_headings "$code")"
+  done <<< "$_STAGE_TABLE"
+  while IFS= read -r h; do
+    [[ -n "$h" ]] && printf '*\t\t\tany-optional\t%s\n' "$h"
+  done <<< "$(_optional_headings '*')"
+  return 0
+}
+
 # ---------- Anchor lint ----------
 anchor_lint() {
   local artifact="$1"
@@ -242,50 +419,55 @@ anchor_lint() {
     echo "anchor-lint: $artifact: no stage in handoff frontmatter (possibly path F3 — frontmatter missing)" >&2
     exit 1
   fi
-
-  local expected
-  expected=$(anchors_for_stage "$stage")
-  if [[ -z "$expected" ]]; then
+  if [[ -z "$(anchors_for_stage "$stage")" ]]; then
     echo "anchor-lint: $artifact: unknown stage '$stage' (no anchor allow-list)" >&2
     exit 1
   fi
-  # Appended AFTER the unknown-stage check so an unrecognised stage still reports as such
-  # rather than as a missing sweep heading. Both the missing loop and the `comm` below read
-  # $expected, so one append makes the anchor required and accepted in a single stroke.
-  expected="$expected $UNIVERSAL_ANCHORS"
 
-  # Extract H2 headings (skip H2 inside fenced code blocks).
-  local found
-  found=$(awk '
-    BEGIN { in_fence = 0 }
-    /^```/ { in_fence = !in_fence; next }
-    !in_fence && /^## / {
-      sub(/^## +/, "")
-      sub(/[[:space:]]+$/, "")
-      print
-    }
-  ' "$artifact" | sort -u)
+  local rows drc=0
+  rows=$(anchor_diff "$stage" "$artifact") || drc=$?
+  [[ "$drc" -le 1 ]] || { echo "anchor-lint: $artifact: unreadable" >&2; exit 2; }
 
-  local missing=()
-  local exp
-  for exp in $expected; do
-    if ! grep -qx -- "$exp" <<< "$found"; then
-      missing+=("$exp")
-    fi
-  done
-
-  local extras
-  extras=$(comm -23 <(echo "$found" | grep -Ev "$OPTIONAL_ANCHOR_RE" || true) \
-                    <(printf '%s\n' $expected | sort -u))
-
-  if [[ ${#missing[@]} -gt 0 || -n "$extras" ]]; then
+  if [[ "$drc" -eq 1 ]]; then
+    local missing extras
+    missing=$(awk -F'\t' '$1 == "missing" { printf "%s%s", (n++ ? " " : ""), $2 }' <<< "$rows")
+    # Sorted, space-terminated: the report shape predates the diff core and callers grep it.
+    extras=$(awk -F'\t' '$1 == "unexpected" { print $2 }' <<< "$rows" | sort -u | tr '\n' ' ')
     echo "anchor-lint: $artifact (stage=$stage) FAIL" >&2
-    [[ ${#missing[@]} -gt 0 ]] && echo "  missing: ${missing[*]}" >&2
-    [[ -n "$extras" ]] && echo "  unexpected: $(echo "$extras" | tr '\n' ' ')" >&2
+    [[ -n "$missing" ]] && echo "  missing: $missing" >&2
+    [[ -n "$extras" ]] && echo "  unexpected: $extras" >&2
     exit 1
   fi
 
   echo "anchor-lint: $artifact (stage=$stage) ok"
+}
+
+# --anchor-diff CLI: argument parsing and exit mapping around anchor_diff.
+anchor_diff_cli() {
+  local stage="" for_path="" baseline="" src=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --stage) stage="${2:-}"; shift 2 || return 2 ;;
+      --for-path) for_path="${2:-}"; shift 2 || return 2 ;;
+      --baseline) baseline="${2:-}"; shift 2 || return 2 ;;
+      --) shift; src="${1:-}"; break ;;
+      -) src="-"; shift ;;
+      -*) echo "anchor-diff: unknown flag: $1" >&2; return 2 ;;
+      *) src="$1"; shift ;;
+    esac
+  done
+  if [[ -n "$stage" && -n "$for_path" ]] || [[ -z "$stage" && -z "$for_path" ]] || [[ -z "$src" ]]; then
+    echo "anchor-diff: usage: --anchor-diff (--stage <CODE> | --for-path <path>) [--baseline <file>] <file|->" >&2
+    return 2
+  fi
+  if [[ -n "$for_path" ]]; then
+    stage=$(stage_for_path "$for_path")
+    [[ -n "$stage" ]] || { echo "anchor-diff: not a canonical stage artifact path: $for_path" >&2; return 2; }
+  fi
+  local rc=0
+  anchor_diff "$stage" "$src" "$baseline" || rc=$?
+  [[ "$rc" -ne 2 ]] || echo "anchor-diff: unknown stage '$stage' or unreadable input" >&2
+  return $rc
 }
 
 # ---------- Agent-section cross-check (#16 letter b) ----------
@@ -334,14 +516,15 @@ agent_section_lint() {
     [[ -f "$agent" ]] || continue
     checked=$((checked + 1))
     expected="$(anchors_for_stage "$stage") $UNIVERSAL_ANCHORS"
+    optional_re_for_stage "$stage"
     while IFS= read -r sect; do
       [[ -n "$sect" ]] || continue
-      if grep -qE "$OPTIONAL_ANCHOR_RE" <<< "$sect"; then continue; fi
+      if [[ "$sect" =~ $_OPT_RE ]]; then continue; fi
       if grep -qx -- "$sect" <<< "$(printf '%s\n' $expected)"; then continue; fi
       echo "agent-section-lint: FAIL stage=$stage" >&2
       echo "  agents/$agent_base.md mandates '## $sect' into its artifact" >&2
       echo "  skills/worktask/scripts/cache-lint.sh accepts neither anchors_for_stage $stage" \
-        "nor UNIVERSAL_ANCHORS nor OPTIONAL_ANCHOR_RE" >&2
+        "nor UNIVERSAL_ANCHORS nor _STAGE_OPTIONAL ($stage or *)" >&2
       rc=1
     done <<< "$(agent_mandated_sections "$agent")"
   done
@@ -756,6 +939,18 @@ filename_lint() {
 # ---------- main ----------
 case "${1:-}" in
   --anchor-lint) shift; [[ $# -ge 1 ]] || usage; anchor_lint "$1" ;;
+  --anchor-diff) shift; anchor_diff_cli "$@"; exit $? ;;
+  --allow-list)
+    shift
+    if [[ "${1:-}" == "--stage" ]]; then
+      [[ -n "${2:-}" ]] || usage
+      allow_list "$2" || { echo "allow-list: unknown stage '$2'" >&2; exit 2; }
+    else
+      [[ $# -eq 0 ]] || usage
+      allow_list
+    fi
+    exit 0
+    ;;
   --frontmatter-template-lint)
     shift; [[ $# -ge 1 ]] || usage
     frontmatter_template_lint "$@"; exit $?

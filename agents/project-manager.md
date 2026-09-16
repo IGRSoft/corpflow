@@ -205,7 +205,7 @@ evidence is invisible; `probe_timeout`/`token_invalid` is resolved by exporting
 - **Close the issue explicitly on a non-default integration branch**: GitHub honours a
   `Closes #N` trailer only on a merge into the DEFAULT branch. Post-merge run
   `fn-preflight.sh issue-close-required`; on `yes` run the `gh issue close <N>` it printed and
-  record it in `complete-summary-N.md § Issue`. On `no`, do nothing.
+  record it as an `### Issue` H3 under `complete-summary-N.md ## artifacts`. On `no`, do nothing.
 - **F3**: mark technical complete.
 
 ##### Check for an external rename before pushing
@@ -253,7 +253,9 @@ measurement — derive it per `skills/cost-optimization/SKILL.md § Cost Estimat
 so. Omit any column the ledger cannot support rather than inventing a number for it.
 
 ```markdown
-## Stage Timings
+## metrics
+
+### Stage Timings
 
 | Stage | Agent | Model | Tokens (in/out) | Duration | Cost | Retries |
 |-------|-------|-------|-----------------|----------|------|---------|
@@ -350,8 +352,17 @@ Pass `--facts` in the **same call** to union this stage's facts into `state.json
 ```bash
 state-patch.sh --stage FN --prev RE --facts '{
   "files_modified": ["CHANGELOG.md"],
-  "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#decisions"}],
+  "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#summary"}],
   "open_questions": [{"id":"sw-FN0-1","class":"decision","ref":"complete-summary-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=FN -->
+### Artifact anchors
+
+`complete-summary-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## summary`, `## artifacts`, `## followups`, `## metrics`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=FN -->
