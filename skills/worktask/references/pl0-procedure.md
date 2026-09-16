@@ -140,7 +140,7 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages` | Passed to `Task()`; never inherited from frontmatter. |
+| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages`, or from its § Secure overrides when the row's condition matches | Passed to `Task()`; never inherited from frontmatter. |
 | `metadata.effort` | that table's tier, or the override actually dispatched | **Mandatory, not optional** since Step C.0a began reading it. The resolver bumps it one rung, and frontmatter is the wrong fallback — DV sub-tasks dispatched at `xhigh` run at a tier `developer.md`'s `effort: high` never mentions. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`) and its blocking items go back to asking a human. |
 
 ##### Propagation fields — gates
@@ -196,9 +196,11 @@ Apply on trigger match; leave unset otherwise so downstream falls back to agent 
 | `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full` | `"default"` |
 | `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
 | `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
+| `model` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"sonnet"` |
+| `effort` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"medium"` |
 | `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
 
-Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth.
+Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth. The two `DC` rows mirror `stage-codes.md § Secure overrides`.
 
 ##### Notation
 

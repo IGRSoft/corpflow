@@ -54,14 +54,29 @@ Single source of truth for worktask stage codes.
 
 The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and
 stamp both onto `tasks.<ID>.metadata`. The **Model** and **Effort** columns in § Primary
-Stages are that lookup; support agents use § Support Agents below. Deliberately no third
-copy — a duplicate table had already drifted from the agents' shipped frontmatter.
+Stages are that lookup, and § Secure overrides replaces a stage's pair under `--secure`/`--full`;
+support agents use § Support Agents below. Deliberately no third copy — a duplicate table had
+already drifted from the agents' shipped frontmatter.
 
 > `effort` is stamped for the same reason `model` is, plus one of its own: the Step C.0a
 > resolver dispatches one rung above the stage that raised the item
 > (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`), and agent
 > frontmatter is the wrong fallback for that — a stage dispatched at an override runs at a
 > tier its frontmatter never mentions. Only the ledger holds the value that actually ran.
+
+### Secure overrides
+
+> Under `--secure` or `--full`, a row here replaces its stage's § Primary Stages model and
+> effort, and a stage with no row keeps its primary pair. PL0 stamps the override through its
+> default-writer rows (`skills/worktask/references/pl0-procedure.md § Default writer rules`);
+> no script resolves a model at runtime. Agent frontmatter keeps the primary pair, so the
+> primary table still equals frontmatter and a dispatch outside a worktask runs the default.
+> DC is here because a secure run's DC turns option-gate findings into typed corrections,
+> which takes judgement the default tier is not sized for.
+
+| Code | Condition | Model | Effort |
+|------|-----------|-------|--------|
+| DC | `--secure` / `--full` | sonnet | medium |
 
 ## Support Agents (On-Demand)
 
