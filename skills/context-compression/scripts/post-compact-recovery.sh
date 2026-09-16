@@ -348,6 +348,12 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
+# The default output dir is a hook's write into the project: without a ledger there is
+# no worktask to recover, and the mkdir below would plant a .context/ in a clean checkout.
+if [[ "$OUT_DIR" == "$PROJECT_DIR/.context/logs" && ! -f "$PROJECT_DIR/.context/state.json" ]]; then
+  exit 0
+fi
+
 mkdir -p -- "$OUT_DIR"
 TS=$(date -u +%Y%m%d-%H%M%S)
 OUT_FILE="${OUT_DIR}/post-compact-${TS}.json"

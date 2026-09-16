@@ -8,7 +8,9 @@ PAYLOAD="${FIXTURES}/hooks/agent-stop.payload.json"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # The root ladder answers only a context holding a ledger.
   mkdir -p "$WD/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$WD/.context/state.json"
 }
 
 @test "happy: appends a stage_completion_hook row with stage + dedupe keys" {

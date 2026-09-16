@@ -320,6 +320,16 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 > download step — it collides with the Phase-1 Bash prohibition in `commands/worktask.md` and races
 > the expiring URL. See `skills/shared/figma-capture.md § Capture Workflow`.
 
+### Before this loop — autonomy preflight (Phase 1)
+
+An unattended launch (`--auto` containing `plan` or `finalization`) runs
+`scripts/autonomy-preflight.sh` before Step 3 creates `.context/`, with its output buffered under
+`$TMPDIR`. Any failed permission grant, evidence tool or toolchain check stops the run there, in a
+single message, before anything is seeded; a pass is recorded after the Step 3a seed as
+`metadata.preflight` (`references/handoff-protocol.md § metadata.preflight`). Megatask per-issue
+runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a scan:
+`commands/worktask.md § Step 2a-pre` and `§ Step 3a — record the autonomy preflight`.
+
 ### Delegation-only (BINDING)
 
 > **The orchestrator never writes code, tests or docs during a worktask.** Every change is made by

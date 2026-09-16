@@ -1396,9 +1396,9 @@ if [ "$LIB_DEGRADED" -eq 1 ]; then
   echo "test-execution-gate: shared library unusable at $_LIB — test authority not enforced" >&2
   # Declared roots only; the ladder's git/resolver ranks live in this library.
   CTX=""
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     CTX="${WORKSPACE_ROOT}/.context"
-  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     CTX="${CLAUDE_PROJECT_DIR}/.context"
   fi
   [ -n "$CTX" ] || exit 0

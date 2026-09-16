@@ -22,7 +22,8 @@ _ledger() {
 
 # --- corpflow_context_root ----------------------------------------------------
 
-@test "context_root: WORKSPACE_ROOT wins when it holds a .context" {
+@test "context_root: WORKSPACE_ROOT wins when it holds a ledger" {
+  _ledger
   run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
     --source "$LIB" corpflow_context_root
   assert_success
@@ -30,6 +31,7 @@ _ledger() {
 }
 
 @test "context_root: CLAUDE_PROJECT_DIR is used when WORKSPACE_ROOT is unset" {
+  _ledger
   run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$WD" \
     --source "$LIB" corpflow_context_root
   assert_success
@@ -56,6 +58,7 @@ _ledger() {
   local repo wt
   repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
   mkdir -p "$repo/.context"
+  printf '{}' > "$repo/.context/state.json"
   wt="$repo/wt"
   git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
     || skip "git worktree unavailable"
@@ -264,44 +267,59 @@ _ledger() {
   assert_output --partial "source it, do not execute it directly"
 }
 
-# --- corpflow_workspace_root: the read/write tail split -----------------------
+# --- corpflow_workspace_root: every rank demands a ledger ---------------------
 
-@test "workspace_root: read and write agree while .context/ exists" {
-  local m
-  for m in read write; do
-    run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
-      --source "$LIB" corpflow_workspace_root "$m"
+@test "workspace_root: a declared root holding state.json resolves" {
+  _ledger
+  run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output "$WD"
+}
+
+@test "workspace_root: ANTI-VACUITY — a bare .context folder resolves at no rank" {
+  # A folder alone is what a stray mkdir leaves behind; answering it kept hooks
+  # writing into checkouts nobody seeded. Declared ranks and the git ranks all miss.
+  local bare repo
+  bare="$(mk_tmpworkdir)"
+  mkdir -p "$bare/.context"
+  run_script_env --cwd "$bare" --env "WORKSPACE_ROOT=$bare" --env "CLAUDE_PROJECT_DIR=$bare" \
+    --env "GIT_CEILING_DIRECTORIES=$bare" --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  mkdir -p "$repo/.context"
+  run_script_env --cwd "$repo" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+}
+
+@test "workspace_root: no argument revives a write tail for an unseeded declared root" {
+  local bare elsewhere m
+  bare="$(mk_tmpworkdir)"
+  elsewhere="$(mk_tmpworkdir)"
+  for m in write read nonsense; do
+    run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
+      --env "GIT_CEILING_DIRECTORIES=$elsewhere" --source "$LIB" corpflow_workspace_root "$m"
     assert_success
-    assert_output "$WD"
+    assert_output ""
   done
 }
 
-@test "workspace_root: ANTI-VACUITY — the tails diverge when .context/ is absent" {
-  # This is the whole reason the flag exists. A WRITER must land its first write
-  # in the declared workspace; a READER must not, because a path with no .context/
-  # is indistinguishable from "no worktask running" — the gate's silent-pass case.
-  local bare elsewhere
-  bare="$(mk_tmpworkdir)"        # declared workspace, no .context/ yet
-  elsewhere="$(mk_tmpworkdir)"   # where the hook happens to be running
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root write
+@test "workspace_root: a linked worktree's own ledger wins over a main checkout without one" {
+  local repo wt
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  wt="$repo/wt"
+  git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
+    || skip "git worktree unavailable"
+  mkdir -p "$wt/.context"
+  printf '{}' > "$wt/.context/state.json"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
   assert_success
-  assert_output "$bare"
-
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root read
-  assert_success
-  refute_output "$bare"
-}
-
-@test "workspace_root: an unknown mode reads, it does not write" {
-  local bare elsewhere
-  bare="$(mk_tmpworkdir)"
-  elsewhere="$(mk_tmpworkdir)"
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root nonsense
-  assert_success
-  refute_output "$bare"
+  [ "$output" = "$(cd "$wt" && pwd -P)" ]
 }
 
 # --- corpflow_switch_fields ---------------------------------------------------
