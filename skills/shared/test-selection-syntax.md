@@ -68,7 +68,7 @@ DV's D2 step:
 1. `changed_symbols` = top-level symbols (types, funcs, enums) extracted from every source file in `git diff --name-only <base>...HEAD`.
 2. Parse markers on each test in the test source roots; select it if **any** holds: it carries `@test-required` or tag `smoke`; one `@depends-on` symbol is in `changed_symbols`; it *covers* a changed file (below).
 3. Union in `metadata.always_required_tests` (plan-level override).
-4. Write the result to `development-N.md § Selected Tests`.
+4. Write the result to `§ Selected Tests` in the DV row's artifact (`metadata.artifact`).
 
 ### "Covers" rule — exact specification
 
@@ -244,7 +244,7 @@ An unwired platform (every row except Apple in § Identifier grammar by platform
 
 #### Recording the auto-promotion
 
-`development-N.md § Decisions` records `auto_promoted_mode: module-scope` so QA and DR see the deviation — a DV-artifact execution value, never a `test_mode` value; the plan-level `test_mode` is **not** rewritten. If module scope cannot be computed, DV runs the smoke set and records `deferred_to_qa: full_regression` instead.
+The DV artifact's `§ Decisions` records `auto_promoted_mode: module-scope` so QA and DR see the deviation — a DV-artifact execution value, never a `test_mode` value; the plan-level `test_mode` is **not** rewritten. If module scope cannot be computed, DV runs the smoke set and records `deferred_to_qa: full_regression` instead.
 
 ## Reader matrix
 
@@ -253,7 +253,7 @@ An unwired platform (every row except Apple in § Identifier grammar by platform
 | Reader | What it does with markers/Selected Tests |
 |--------|------------------------------------------|
 | **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests and warnings. Builds in every mode. Executes only `Executed Tests (DV)` = `Selected ∩ test files Added/Modified` (`git diff --diff-filter=AMR`) ∪ `metadata.always_required_tests`; empty set → smoke set with `auto_executed: smoke_set` (`testing-strategy.md § DV Executed vs Selected`). |
-| **QA** (`agents/qa-engineer.md` Q1) | Reads `development-N.md § Selected Tests` (full list, not DV's Executed subset); runs it (build-only/scoped) or the full suite (full); copies WARN lines from the warning log into `testing-N.md § Notes`. |
+| **QA** (`agents/qa-engineer.md` Q1) | Reads `§ Selected Tests` from every DV artifact (`refs.dev[]`; `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), the union of full lists, not DV's Executed subsets; runs it (build-only/scoped) or the full suite (full); copies WARN lines from the warning log into `testing-N.md § Notes`. |
 
 ### DR and PL
 

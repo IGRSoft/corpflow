@@ -414,7 +414,10 @@ const ARTIFACT_BASE: Record<string, string> = {
 
 ```typescript
 // …continued: uses ARTIFACT_BASE above
-function stageArtifactPath(code: string, runIndex: number): string {
+function stageArtifactPath(code: string, runIndex: number, row?: TaskRow): string {
+  // A row naming its artifact wins: a DV stream's suffix cannot be composed from `code`.
+  const named = row?.artifact ?? row?.metadata?.artifact;
+  if (named) return named;
   const base = ARTIFACT_BASE[code];
   const numbered = `.context/${base}-${runIndex}.md`;
   if (fs.existsSync(numbered)) return numbered;
@@ -682,25 +685,33 @@ violated until it was injected at dispatch.
 #### Step 4.7
 
 ```typescript
-    // 4.7. DV checkpoint resume — a budget-exhausted DV run left a partial development-N.md
-    //      (+ `## Blockers`) and completed sub-batches at tasks.DV0.progress
-    //      (agents/developer.md § Budget-Aware Checkpointing). Carry it forward so the re-run
-    //      resumes from next_batch instead of redoing applied work.
+    // 4.7. DV checkpoint resume, per DV row — a budget-exhausted run left a partial artifact
+    //      at that row's artifact path (+ `## Blockers`) and completed sub-batches at
+    //      tasks.<ID>.progress (agents/developer.md § Budget-Aware Checkpointing). Carry it
+    //      forward so the re-run resumes from next_batch instead of redoing applied work.
 ```
 
-##### Step 4.7 — resume injection & audit
+##### Step 4.7 — resume injection
 
 ```typescript
     if (full.metadata.stage === "DV") {
-      const dvProgress = state.tasks?.[task.id]?.progress;  // {completed_batches, next_batch, updated_at}
+      const dvRow = state.tasks?.[task.id];
+      const dvProgress = dvRow?.progress;  // {completed_batches, next_batch, updated_at}
       if (dvProgress && (dvProgress.completed_batches?.length ?? 0) > 0) {
+        const partial = stageArtifactPath("DV", full.metadata.run_index ?? 0, dvRow);
         full.description =
           `RESUME (DV checkpoint — prior run completed batches ` +
           `[${dvProgress.completed_batches.join(", ")}]; resume from ` +
           `${dvProgress.next_batch ?? "the next pending batch"}). Do NOT redo applied ` +
-          `batches — read the partial development-N.md and continue forward.` +
+          `batches — read the partial ${partial} and continue forward.` +
           "\n\n" + full.description;
-        appendAudit({ actor: "orchestrator", action: "dv_checkpoint_resume", subject: "DV",
+```
+
+##### Step 4.7 — resume audit
+
+```typescript
+        // …continued: step 4.7 body — keyed by the row, so sibling DV rows resume independently
+        appendAudit({ actor: "orchestrator", action: "dv_checkpoint_resume", subject: task.id,
                       result: "ok",
                       metadata: { completed: dvProgress.completed_batches,
                                   next_batch: dvProgress.next_batch ?? null } });
@@ -780,21 +791,58 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
       full.description = full.description + "\n\n" + enforce;
 ```
 
+##### Step 4.8 — pin the tree
+
+The row's tree is fixed here, before `Task()`, so this banner and the Step 6 dispatch read one path.
+The code implements `references/handoff-protocol.md § Pinning a row's tree`.
+
+```typescript
+      // …continued: step 4.8 body. Concurrent = no transitive blocked_by path either way.
+      const reaches = (from, to) => {
+        const seen = new Set(), stack = [...(state.tasks[from]?.blocked_by ?? [])];
+        while (stack.length) {
+          const id = stack.pop();
+          if (id === to) return true;
+          if (!seen.has(id)) { seen.add(id); stack.push(...(state.tasks[id]?.blocked_by ?? [])); }
+        }
+        return false;
+      };
+      const sharedWithConcurrent = Object.entries(state.tasks ?? {}).some(([id, t]) =>
+        id !== task.id && t.metadata?.stage === "DV" &&
+        t.metadata?.workspace_path === full.metadata.workspace_path &&
+        !reaches(task.id, id) && !reaches(id, task.id));
+```
+
+##### Step 4.8 — re-stamp, then read the banner path
+
+```typescript
+      // …continued: step 4.8 body. Argv form, never a shell string: a path may contain `'`.
+      if (full.metadata.stream && sharedWithConcurrent) {
+        const tree = ensureStreamWorktree(task);  // this stream's own worktree, off metadata.base_ref
+        execFileSync("bash", ["skills/worktask/scripts/state-patch.sh", "--task-meta", task.id,
+                              "--set", JSON.stringify({ workspace_path: tree })]);
+      }
+      // After the re-stamp: the script reads the row's path, falling back to the orchestrator
+      // root, never the ledger-level path, which would hand a stream row the orchestrator's tree.
+      const assigned = execFileSync("bash", ["skills/worktask/scripts/workspace-root-banner.sh",
+                                             "--task", task.id], { encoding: "utf8" })
+                         .trim().replace(/^WORKSPACE_ROOT=/, "");
+```
+
 ##### Step 4.8 — assigned-tree banner & audit
 
 ```typescript
       // …continued: step 4.8 body
-      const assigned = state.metadata?.workspace_path ?? full.metadata.workspace_path;
       const assertTree =
         `ASSIGNED TREE REQUIRED: before your first Edit/Write run ` +
         `\`bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"\` ` +
-        `(WORKSPACE_ROOT = ${assigned ?? "the banner value below"}). ` +
+        `(WORKSPACE_ROOT = ${assigned}). ` +
         `Exit 1 is BLOCKING: do not edit, log workspace_path_mismatch, return verdict:blocked ` +
         `quoting both paths it printed. Warnings are advisory. Isolation (above) is a different ` +
         `claim — a stale worktree passes it and is still the wrong tree.`;
       full.description = full.description + "\n\n" + assertTree;
-      appendAudit({ actor: "orchestrator", action: "dv_worktree_enforced", subject: "DV",
-                    result: "ok", metadata: { isolation: "worktree" } });
+      appendAudit({ actor: "orchestrator", action: "dv_worktree_enforced", subject: task.id,
+                    result: "ok", metadata: { isolation: "worktree", workspace_path: assigned } });
     }
 ```
 
@@ -806,7 +854,7 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
     if (full.metadata.stage === "DV") {
       let mode = full.metadata.test_mode ?? state.metadata?.test_mode;
       if (mode == null) {  // PL0 stamps test_mode; a silent default would hide the missing stamp
-        appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: "DV",
+        appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: task.id,
                       result: "warn", metadata: { test_mode: "scoped", reason: "test_mode_unstamped" } });
         mode = "scoped";
       }
@@ -822,7 +870,7 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
         `iterations — full-suite regression is QA's gate, not DV's. Apple test identifiers ` +
         `are suite-terminal (\`-only-testing:<Target>/<Suite>\`); per-function identifiers ` +
         `are forbidden — they select nothing and degrade to a full run. Record the resolved ` +
-        `mode in \`development-N.md § Decisions\`.`;
+        `mode in your artifact's \`§ Decisions\` (your row's \`metadata.artifact\`).`;
 ```
 
 ##### Step 4.8a — inject & audit
@@ -830,7 +878,7 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 ```typescript
       // …continued: step 4.8a body
       full.description = full.description + "\n\n" + scope;
-      appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: "DV",
+      appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: task.id,
                     result: "ok", metadata: { test_mode: mode } });
     }
 ```
@@ -1069,6 +1117,11 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
+    // A DV row's tree is fixed at dispatch by the dispatcher: Step 4.8 settled
+    // tasks.<ID>.metadata.workspace_path (re-pinned if a concurrent row shared it) before this
+    // call, and the banner carries it. No
+    // `isolation: "worktree"` argument — the Agent tool's fork is a tree the ledger never
+    // recorded, and dv-tree-preflight.sh --assigned blocks every edit inside it.
     const launchAck = Task({
       subagent_type: subagentType,
       model: effectiveModel,
@@ -1081,36 +1134,47 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 #### Step 6a
 
 ```typescript
-    // 6a. dispatched_agents[] — record/replace the entry keyed by task_id; writer = orchestrator
-    //     ONLY. status:"launched" now, flipped to completed/failed by Step 6.5. No dispatch
-    //     timestamp (no consumer). agent_id/name populated when the runtime surfaces them
-    //     (bg-default launch-ack; named spawns via metadata.spawn_name). Read by resume.md
-    //     step 0. Cache section [3].
+    // 6a. dispatched_agents[] — one entry per task_id; writer = orchestrator ONLY, through
+    //     `state-patch.sh --dispatch <TASK_ID> <agent_id> <status>` (upserts by task_id, clamps
+    //     the array). status:"launched" now, flipped to completed/failed by Step 6.5. Read by
+    //     resume.md step 0. Cache section [3]. The dispatched agent claims its own row with
+    //     `state-patch.sh --claim <TASK_ID>` (agents/developer.md § D0.0b), never the orchestrator.
     if (fs.existsSync(".context/state.json")) {
-      const entry = {
-        stage: full.metadata.stage,
-        task_id: task.id,
-        subagent_type: subagentType,
-        ...(launchAck?.agent_id ? { agent_id: launchAck.agent_id } : {}),
-        ...(full.metadata.spawn_name ? { name: full.metadata.spawn_name } : {}),
-        model_requested: modelRequested,
-        ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
-        status: "launched",
-      };
+      if (launchAck?.agent_id) {
+        execFileSync("bash", ["skills/worktask/scripts/state-patch.sh", "--dispatch",
+                              task.id, launchAck.agent_id, "launched"]);
 ```
 
-##### Step 6a — replace-array merge
+##### Step 6a — id-less entry
 
 ```typescript
-      // Replace any prior entry for this task_id (re-dispatch); history stays in audit.jsonl.
-      // dispatched_agents is a REPLACE-array: jq `. * $patch` overwrites arrays (deep-merges
-      // only objects), so this swaps in the filtered+appended list. See handoff-protocol.md#atomic-write.
-      atomicMergeStateJson({
-        facts: {
-          dispatched_agents:
-            [...(state.facts?.dispatched_agents ?? []).filter(a => a.task_id !== task.id), entry],
-        },
-      });
+      // …continued: step 6a body. No agent_id surfaced → --dispatch cannot run (exit 2), so the
+      // entry is merged without one: resume.md step 0 adopts an id-less row by subagent_type,
+      // and a missing row would re-delegate a stage that may still be live.
+      } else {
+        const cur = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).facts?.dispatched_agents ?? [];
+        atomicMergeStateJson({ facts: { dispatched_agents: [...cur.filter(a => a.task_id !== task.id),
+          { stage: full.metadata.stage, task_id: task.id, subagent_type: subagentType,
+            model_requested: modelRequested, status: "launched" }] } });
+      }
+```
+
+##### Step 6a — keys --dispatch does not write
+
+```typescript
+      // --dispatch writes stage, task_id, subagent_type, agent_id, status, model_requested.
+      // `name` and `model_resolved` are merged onto that entry only when they apply;
+      // dispatched_agents is a REPLACE-array (jq `. * $patch` overwrites arrays), so the whole
+      // mapped list is swapped in. See handoff-protocol.md#atomic-write.
+      const extra = {
+        ...(full.metadata.spawn_name ? { name: full.metadata.spawn_name } : {}),
+        ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
+      };
+      if (Object.keys(extra).length > 0) {
+        const agents = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).facts.dispatched_agents;
+        atomicMergeStateJson({ facts: { dispatched_agents:
+          agents.map(a => (a.task_id === task.id ? { ...a, ...extra } : a)) } });
+      }
     }
 
 ```
@@ -1235,7 +1299,7 @@ normally-completed stage still takes Layer 2.
 ```typescript
       // 6.5a2. The stage yielded without finishing its handoff. Precondition — the agent is NOT
       //        live (Step 6.5's liveness rule forbids this block while agent_id is live).
-      const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0);
+      const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0, post.tasks?.[task.id]);
       const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
       const selfPatched = post.tasks?.[task.id]?.status === "completed"
                           && Boolean(post.tasks[task.id].verdict);
@@ -1436,7 +1500,7 @@ const rowMatchesHandoff = (row, h) =>
 ```typescript
       if (!rowMatchesHandoff(post.tasks?.[task.id], incHandoff)) {
         const runIndex = full.metadata.run_index ?? 0;
-        const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
+        const artifactPath = stageArtifactPath(code, runIndex, post.tasks?.[task.id]);  // the row's artifact when it names one
         // Layer 2 (synchronous): state-patch.sh is the single implementation (hooks/state-merge.sh
         // is a thin wrapper); `--via step6_5` stamps completed_via=step6_5 vs the hook default:
         //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
@@ -1700,7 +1764,7 @@ to the project's own build command with a `plugin_unavailable` audit row.
 
 When one DV agent executes multiple non-separable batches in a single run (a multi-batch
 coordination plan with no separable file ownership — e.g. a 6-batch / 49-file refactor), it MUST
-append a one-line checkpoint to `development-N.md` (or a scratch `.context/dv-checkpoint-N.log`)
+append a one-line checkpoint to its row's artifact (`metadata.artifact`; or a scratch `.context/dv-checkpoint-N.log`)
 immediately after EACH completed batch and BEFORE starting the next: batch id, files-touched count,
 and the gate result if one ran (e.g. a residual-grep). Append-only, one entry per batch boundary.
 

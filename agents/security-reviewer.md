@@ -74,7 +74,7 @@ software-architector = security architecture (AR).
 
 | Phase | Description |
 |-------|-------------|
-| **SR0** | Review development.md, then threat-model the diff — it scopes SR1 |
+| **SR0** | Review every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), then threat-model the diff — it scopes SR1 |
 | **SR1** | Checklist over the surface SR0 identified, plus the always-on passes |
 | **SR2** | Document findings and remediation |
 | **SR3** | Sign off or escalate blockers |

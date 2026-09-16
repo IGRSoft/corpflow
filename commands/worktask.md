@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -802,9 +802,17 @@ fi
 
 ##### Banner injection
 
-The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage
+The orchestrator MUST also append the task's `WORKSPACE_ROOT=` line as the first line of every stage
 prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to
-target. Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
+target. The value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root —
+never the ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
+
+```bash
+bash skills/worktask/scripts/workspace-root-banner.sh --task "<TASK_ID>" --orch-root "$_orch_root"
+# stdout is the banner line verbatim; exit 2 (unknown task id) means do not call Task()
+```
+
+Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
 
 #### Post-delegation state.json enforcement (BINDING)
 
@@ -833,13 +841,17 @@ three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Ste
 
 The AR-reference arm fires only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
 `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). The invocation itself is the
-§ Step B.1 call every stage makes; at DV completion, before dispatching DR0, it is:
+§ Step B.1 call every stage makes. It runs once per DV row, on that row's own artifact, as the row
+completes; DR0 is dispatched only after every DV row has passed it:
 
 ```bash
 STRICT_FLAG=""
 [ "${CORPFLOW_AR_REF_STRICT:-0}" = "1" ] && STRICT_FLAG="--strict"
+# The completing row names its artifact; a stream suffix cannot be composed from N.
+DEV_ARTIFACT=$(jq -r --arg id "$TASK_ID" \
+  '.tasks[$id] | .artifact // .metadata.artifact // empty' .context/state.json)
 # shellcheck disable=SC2086
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/development-${N}.md" \
+skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$DEV_ARTIFACT" \
   --state .context/state.json $STRICT_FLAG
 ```
 
@@ -850,7 +862,7 @@ each as an audit row and carry it into the DR dispatch prompt so DR checks the l
 **not** a `missing_input` block and never stops the transition.
 
 ```json
-{"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<N>","result":"warn"}
+{"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<k>","result":"warn"}
 ```
 
 ##### Step B — what the sweep checks do to this rollout

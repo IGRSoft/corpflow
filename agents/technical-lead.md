@@ -103,18 +103,21 @@ Stage owner **DR** (Developer Review, 5/11); support agent **TC** (Technical Rev
 
 Execute the review by reading and following `commands/tech-code-review.md` (resolve per `## Plugin paths`) — the **canonical methodology** for this gate: read-only recall-first review (no fixes; DV applies them), mandatory read-beyond-the-diff context gathering, P0/P1/P2 severity routing, and the Escalation-to-DV loop. Do not duplicate it here. The checks below are DR-specific additions on top, covering code quality, patterns, and platform best practices.
 
+#### Reading the DV tasks
+
+DV is one or more ledger tasks, each with its own artifact and tree. Take the artifacts from `refs.dev[]` in your dispatch, or from the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`, and run every check below once per DV task, naming its task id in `§ Findings`. "The DV artifact" below means each of them in turn; "the DV tree" is that row's `metadata.workspace_path`, or the orchestrator root when unset.
+
 #### Scope-addition re-entry checklist
 
-A rework round that ADDS scope (a `## rework-N` section appearing in `development-N.md` after that artifact's original sign-off) re-opens the delivery surface, not just the code. Verify both mechanically first:
+A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifact after its original sign-off) re-opens the delivery surface, not just the code. Verify it mechanically first, in each DV tree:
 
-1. **No untracked files** — `git status --porcelain | grep -c '^??'` returns `0`. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
-2. **CHANGELOG names the new scope** — a bullet in the release block; a commit footer never reaches an upgrading user.
+**No untracked files outside the landed set** — every `??` path from `git -C <DV tree> status --porcelain` is in the landed set: the union of `metadata.landed_paths` across every task row, `jq -r '[.tasks[] | .metadata.landed_paths // [] | .[]] | unique | .[]' .context/state.json`. The set is empty until landing populates it, so today any `??` line is a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
 
-Either gap is `verdict: fail` back to DV, anchored on the criterion the scope addition was accepted under.
+A gap is `verdict: fail` back to the DV task owning that tree, anchored on the criterion the scope addition was accepted under. Release-notes coverage of the added scope is RE's check (`agents/release-engineer.md`).
 
 #### DR3.5 — Warning Escalation
 
-Read `.context/development-N.md § Selected Tests § Warnings` and `.context/logs/test-selection-warnings.md`; surface every warning (silent test drops, missing markers, malformed `@depends-on:`) in `developer-review-N.md § Findings` so silent regressions don't reach QA (`skills/shared/test-selection-syntax.md § Reader matrix`). When any `WARN:` line exists, also do both of:
+Read `§ Selected Tests § Warnings` in every DV artifact (§ Reading the DV tasks) and `.context/logs/test-selection-warnings.md`; surface every warning (silent test drops, missing markers, malformed `@depends-on:`) in `developer-review-N.md § Findings` so silent regressions don't reach QA (`skills/shared/test-selection-syntax.md § Reader matrix`). When any `WARN:` line exists, also do both of:
 
 1. Append one `## DR[N] Retry [0/0] — <ts>` section to `.context/errors/developer.md` with `**Classification**: missing_input` and a `### Resolution Path` listing each `WARN:` line verbatim (one bullet each). This makes an advisory drop a tracked escalation: `missing_input` routes to the previous stage, DV, which owns the marker/selection fix; `ambiguous_requirements` would mis-route to PL. See `skills/agent-coordination/SKILL.md § Error Handling`.
 
@@ -128,18 +131,18 @@ Modified production files need a `// MARK: - Test Info` footer (`@test-file:`, `
 
 #### Worktree Isolation Check
 
-Read `worktree:` in the DV handoff frontmatter (`.context/development-N.md`). Isolation is **always required**: `worktree: false` means DV wrote to the shared checkout → `verdict: fail` and record `worktree_isolation_violation` in `§ Findings`, UNLESS the orchestrator waived it for this run via a `worktree_isolation_waived` audit row or `task.metadata.worktree_waived === true` (the only escape valve). DV-side enforcement: `agents/developer.md § D0.0`.
+Read `worktree:` in each DV artifact's handoff frontmatter (§ Reading the DV tasks). Isolation is **always required**: `worktree: false` on any row means that DV task wrote to the shared checkout → `verdict: fail` and record `worktree_isolation_violation` with its task id in `§ Findings`, UNLESS the orchestrator waived it for this run via a `worktree_isolation_waived` audit row or `task.metadata.worktree_waived === true` (the only escape valve). DV-side enforcement: `agents/developer.md § D0.0`.
 
 #### Architecture-Application Check
 
 Runs only when `.context/state.json` has a `tasks.AR0` entry; with no AR entry, skip entirely — never synthesise an architecture expectation from the plan. When AR ran:
 
-1. Read `architecture.applied` from the DV handoff frontmatter (`.context/development-N.md`). With AR run, `#tpl-dv` requires BOTH `refs.decisions` and the `architecture` object, so an absent `architecture` object is `missing_input` back to DV, not a pass. Reference precedence: `refs.decisions`, then `architecture.ref`.
+1. Read `architecture.applied` from each DV artifact's handoff frontmatter (§ Reading the DV tasks). With AR run, `#tpl-dv` requires BOTH `refs.decisions` and the `architecture` object, so an absent `architecture` object is `missing_input` back to DV, not a pass. Reference precedence: `refs.decisions`, then `architecture.ref`.
 2. Read AR's `key_decisions` from `architecture-N.md` frontmatter and spot-check the diff against each — verify decisions were *applied*, not merely referenced; classify every departure.
 
 ##### Classifying a departure
 
-- **Declared** — appears in `development-N.md ## decisions` with a rationale: acceptable, record in `§ Findings` and pass.
+- **Declared** — appears in that DV artifact's `## decisions` with a rationale: acceptable, record in `§ Findings` and pass.
 - **Undeclared** — departs from an AR decision with no `## decisions` entry: `verdict: fail`, route back to DV citing the AR decision id.
 
 The orchestrator's warn-only `ar_ref_check` audit row surfaces in your dispatch prompt when the DV artifact's architecture reference was missing or dangling — a signal to check the linkage yourself, not a pass.
@@ -150,7 +153,7 @@ Every rejection, undeclared-deviation fails included, MUST cite a **resolvable r
 
 #### Test-Scope Check (advisory)
 
-Confirm `development-N.md § Decisions` records the resolved `test_mode` and that DV's logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for this DV dispatch means the injection loop was bypassed. Record either gap in `§ Findings`; **never** `verdict: fail` — the orchestrator writes that row, so a stale plugin cache would otherwise block a blameless DV (`worktask/SKILL.md` Step 4.8a).
+Confirm each DV artifact's `§ Decisions` records the resolved `test_mode` and that its logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for a DV task's dispatch means the injection loop was bypassed. Record either gap in `§ Findings`; **never** `verdict: fail` — the orchestrator writes that row, so a stale plugin cache would otherwise block a blameless DV (`worktask/SKILL.md` Step 4.8a).
 
 #### Visual Evidence Review
 
@@ -280,7 +283,7 @@ Score the six quality dimensions — correctness, readability, maintainability, 
 | PR size | Small, focused | Faster feedback loops |
 | Comment density | ≤40% of a file's **added** lines | `skill: corpflow:code-comment-standard` — well below 1:1 |
 
-**Comment density is a finding, not taste.** Measure the comment share of each file's *added* lines — the author owns what they added. Over 40%, flag the kind: `///` essays, defect history, AC-/REQ- IDs, caller enumeration, QA runbooks, and justification answering one of your own findings (that belongs in `.context/development-N.md`). The gate sees density; you see the kind.
+**Comment density is a finding, not taste.** Measure the comment share of each file's *added* lines — the author owns what they added. Over 40%, flag the kind: `///` essays, defect history, AC-/REQ- IDs, caller enumeration, QA runbooks, and justification answering one of your own findings (that belongs in the DV artifact). The gate sees density; you see the kind.
 
 ### Quality Gates
 
