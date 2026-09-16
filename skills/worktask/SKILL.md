@@ -665,7 +665,7 @@ violated until it was injected at dispatch.
 
 ```typescript
     // 4.6. Gate-feedback injection — DR→DV / QA→DV loop-back. A prior DR `verdict:fail` /
-    //      QA `verdict:no-go` re-dispatches DV (run_index bumped, retry_count++) carrying the
+    //      QA `verdict:no-go` re-dispatches DV (run_index unchanged, retry_count up by 1) carrying the
     //      upstream remediation VERBATIM. Source for N = the failing upstream run_index:
     //      `.context/developer-review-N.md` (DRHandoff.blockers[]) and/or `.context/testing-N.md`
     //      (QAHandoff.blocking_defects[]). Hook surface: hookSpecificOutput.additionalContext —
@@ -955,9 +955,12 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 ```typescript
       // …continued: step 4.9 else-arm
       } else {  // "bypass" — --auto=[finalization] / --emergency, or per-issue by /megatask
-        // (e0) Record-only sweep: audit `sweep_recorded` for the collected items and, for any
-        //      effective-escalate item, `sweep_escalation_unprompted`. NEVER prompt here —
-        //      recording never stops, only prompting does.
+        // (e0) Bypass records decision-class items only: audit `sweep_recorded` for them.
+        //      Effective-escalate items take the lane order in commands/worktask.md
+        //      § Escalation guard — escalate stops at every boundary: /megatask per-issue
+        //      PARKS and STOPs (no FN); a no-human lane (CORPFLOW_NONINTERACTIVE=1, headless)
+        //      audits `sweep_escalation_unprompted` {id, stage, ref} per item; any other lane
+        //      renders them as (c+) does and records the answers before (e).
         // (e) fn_gate_bypass, then delegate FN unattended (commit/push/PR).
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
                       subject: `FN${N}`, result: "ok", reason: "unattended" });
@@ -1599,7 +1602,9 @@ const rowMatchesHandoff = (row, h) =>
     //      everything the resolver declined, and every item on the four exception stages. It
     //      reuses C.2-C.5 verbatim, audit subject `<CODE><N>` rather than `FN<N>`.
     //      Not a gate: the same render, moved earlier for items whose answers the next
-    //      stage needs. Bypassed lanes record and never prompt, so nothing can deadlock.
+    //      stage needs. Bypass records decision items only; escalate items stop, park, or —
+    //      in a no-human lane only — are recorded (commands/worktask.md § Escalation guard —
+    //      escalate stops at every boundary), so nothing deadlocks.
 ```
 
 #### Step 7

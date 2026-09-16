@@ -660,6 +660,21 @@ any exist, Step A.5 runs as a **`checkpoint`** gate for those items even under `
 "bypass"` — the user answers only the escalated questions, the batch amendment pass applies their
 answers, then the bypass path resumes. Auto-decision never widens what runs unattended.
 
+##### Escalation guard — escalate stops at every boundary
+
+**Escalate always stops at any boundary; bypass records decision-class items only.** A stop is the
+checkpoint-style render above, scoped to that boundary's escalate items: the user answers them,
+§ Step C.5 records the answers, and the bypass path resumes. At the plan gate every lane keeps the
+checkpoint stop (`/megatask` parks; § Plan gate bypass path). At a stage's own boundary
+(§ Step C.0) or the FN gate, the first matching lane wins:
+
+1. `/megatask` per-issue run (`PL0.metadata.megatask_group`): PARK, per § Escalation guard —
+   unattended `/megatask` per-issue runs (PARK).
+2. No reachable human (`CORPFLOW_NONINTERACTIVE=1`, or § Headless Dispatch): record each item and
+   continue (§ Step C.5 — the unattended lanes). FN lists it atop the PR body, and the final
+   message repeats it (§ Output Format).
+3. Any other lane, including `--emergency`, `--auto=[finalization]` and a bypassed plan gate: stop.
+
 ##### Escalation guard — raise-only self-labels
 
 A closing-sweep item arrives carrying its emitting stage's own `class`. At § Step C.2, strictly
@@ -1185,8 +1200,9 @@ otherwise build on a guess, which is the whole reason the flag exists.
 ##### Step C.0 — no new gate, and no deadlock
 
 This creates **no new gate**: it is the same render the FN gate performs, moved earlier for items
-whose answers the next stage needs. Under a bypassed lane it degrades exactly as C.5 specifies —
-record, never prompt — so no unattended run can deadlock on it.
+whose answers the next stage needs. Under a bypassed gate it follows § Step C.5 — the unattended
+lanes, and nothing deadlocks: a lane with nobody to answer parks or records, and every other lane
+has a user to stop for.
 
 #### Boundary permission prompt — after Step C.0, not a sweep item
 
@@ -1331,10 +1347,13 @@ here, and the emitting stage's artifact frontmatter stub. The two copies have on
 
 ##### Step C.5 — the unattended lanes
 
-Recording never stops; only prompting does. Under `fn_gate: "bypass"` skip C.4 and record only —
-`sweep_recorded`, plus `sweep_escalation_unprompted` for every effective-`escalate` item. Under a
-`/megatask` per-issue run an effective-`escalate` item PARKS the issue exactly as § Escalation
-guard — unattended `/megatask` per-issue runs (PARK) specifies. Every one of those audit subjects is
+Recording never stops; only prompting does. Under `fn_gate: "bypass"` or any bypassed gate, skip C.4
+for effective-`decision` items and audit `sweep_recorded` for them. Effective-`escalate` items take
+the lane § Escalation guard — escalate stops at every boundary picks. A stop renders them at C.4 and
+records the answers here. A `/megatask` per-issue run PARKS the issue exactly as § Escalation
+guard — unattended `/megatask` per-issue runs (PARK) specifies. Only a lane with no reachable human
+records them unanswered: one `sweep_escalation_unprompted` audit row per item, with
+`metadata: {id, stage, ref}`, and the run continues. Every one of those audit subjects is
 the rendering boundary, `<CODE><N>` — `FN<N>` for a batched item, the emitting stage's own id for a
 blocking one. Full carrier table: `skills/shared/stage-contracts.md § Unattended fallbacks`.
 
@@ -1435,6 +1454,15 @@ One block per stage as it settles, then the run summary:
 
 A blocked or escalated stage replaces `## Result` with `## Blocker — what stopped, at which stage,
 and the decision the user owes`. The ledger stays resumable either way: `/worktask --resume <ID>`.
+
+### Output Format — unresolved decisions open the final message
+
+After FN, the final message opens with the stdout of
+`bash skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
+non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN wrote at the top of
+the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
+nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the
+scrub is what keeps host paths out of it.
 
 ## See Also
 

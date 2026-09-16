@@ -334,6 +334,16 @@ mk_te() {
 
 # --- the sweep stub's ref must be anchor-shaped, not merely present ----------
 
+# The item under the anchor for the first id in <stub-yaml>: two options, so only what a
+# test plants decides the verdict.
+sweep_item_for() {  # <stub-yaml>
+  local id
+  id="$(printf '%s\n' "$1" | sed -n 's/.*id: *\(sw-[A-Z][A-Z][0-9]*-[0-9]*\).*/\1/p' | head -1)"
+  [ -n "$id" ] || { printf 'body\n'; return 0; }
+  printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$id"
+  printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+}
+
 # A DV artifact whose only variable is the one sweep stub.
 sweep_artifact() {  # <path> <stub-yaml>
   {
@@ -350,8 +360,17 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf '    - %s\n' "$2"
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    sweep_item_for "$2"
   } > "$1"
+}
+
+# sweep_artifact with the body under the anchor replaced by <sweep-body>.
+item_artifact() {  # <path> <stub-yaml> <sweep-body>
+  sweep_artifact "$1" "$2"
+  sed '/^## elicitation-sweep$/q' "$1" > "$1.tmp"
+  printf '\n%s\n' "$3" >> "$1.tmp"
+  mv "$1.tmp" "$1"
 }
 
 @test "sweep: an empty ref fails the shape gate" {
@@ -395,6 +414,86 @@ sweep_artifact() {  # <path> <stub-yaml>
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-noflag.md"
   assert_failure 1
   assert_output --partial "sw-DV0-1 carries no blocks_next_stage"
+}
+
+# --- the item under the anchor must be a question, not a status note ----------
+
+DSTUB='{ id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+ESTUB='{ id: sw-DV0-1, class: escalate, ref: "#elicitation-sweep", blocks_next_stage: false }'
+
+@test "sweep item: a bare status note under the anchor fails, naming the stub id" {
+  item_artifact "$WD/dv-note.md" "$DSTUB" '- sw-DV0-1 — reviewed, nothing to decide'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-note.md"
+  assert_failure 1
+  assert_output --partial "fail: sweep stub sw-DV0-1 is a status note, not a question"
+}
+
+@test "sweep item: a decision item with two options passes" {
+  item_artifact "$WD/dv-two.md" "$DSTUB" "$(sweep_item_for "$DSTUB")"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-two.md"
+  assert_success
+}
+
+@test "sweep item: an escalate item standing on an explicit question passes" {
+  item_artifact "$WD/dv-esc.md" "$ESTUB" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-esc.md"
+  assert_success
+}
+
+@test "sweep item: a question mark does not rescue a decision item with one option" {
+  item_artifact "$WD/dv-decq.md" "$DSTUB" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"
+  options:
+    - { label: "Ship", detail: "the only option" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-decq.md"
+  assert_failure 1
+  assert_output --partial "only an escalate item may stand on a bare question"
+}
+
+@test "sweep item: an id absent from the anchor section fails, and sw-DV0-12 does not stand in for sw-DV0-1" {
+  item_artifact "$WD/dv-missing.md" "$DSTUB" "$(sweep_item_for 'id: sw-DV0-12')"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-missing.md"
+  assert_failure 1
+  assert_output --partial "fail: sweep stub sw-DV0-1 has no item under '## elicitation-sweep'"
+}
+
+@test "sweep item: options after the next ## heading do not belong to the item" {
+  item_artifact "$WD/dv-cut.md" "$DSTUB" '- id: sw-DV0-1
+  summary: "Which way?"
+
+## follow-ups
+
+  options:
+    - { label: "A", detail: "first" }
+    - { label: "B", detail: "second" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-cut.md"
+  assert_failure 1
+  assert_output --partial "sw-DV0-1 is a status note"
+}
+
+@test "sweep item: every note is reported on its own fail line" {
+  item_artifact "$WD/dv-two-notes.md" "$DSTUB
+    - { id: sw-DV0-2, class: escalate, ref: \"#elicitation-sweep\", blocks_next_stage: false }" \
+    '- sw-DV0-1 — done
+- sw-DV0-2 — also done'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-two-notes.md"
+  assert_failure 1
+  [ "$(printf '%s\n' "$output" | grep -c 'is a status note, not a question')" -eq 2 ] || fail "$output"
+}
+
+@test "sweep item: a mention of another sweep id inside the item does not end its block" {
+  # Only a line that starts another item ends the block; a cross-reference in the summary
+  # must not strand the options below it.
+  item_artifact "$WD/dv-xref.md" "$DSTUB" '- id: sw-DV0-1
+  summary: "Follow-up to sw-DV0-2: which way?"
+  options:
+    - { label: "A", detail: "first" }
+    - { label: "B", detail: "second" }
+- id: sw-DV0-2
+  summary: "Unrelated"'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-xref.md"
+  assert_success
 }
 
 # --- stub parity: id agreement is not agreement -------------------------------
@@ -658,7 +757,10 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     done
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    for ((i = 1; i <= stubs; i++)); do
+      sweep_item_for "id: sw-DV0-$i"
+    done
   } > "$path"
 }
 
@@ -1165,7 +1267,14 @@ mk_qa_dec_bullet() {
 # --- split-stage parity scoped by handoff.task_id -----------------------------
 
 # split_artifact <path> <task_id|-> [stub-yaml] — a DV artifact; no stub means `open_questions: []`.
+# A stub's anchor carries a two-option item naming its id, so the harness's item-body check
+# never decides a verdict here and each case isolates task_id parity.
 split_artifact() {
+  local stub_id=""
+  if [ -n "${3:-}" ]; then
+    stub_id="${3#*id: }"
+    stub_id="${stub_id%%,*}"
+  fi
   {
     printf -- '---\nhandoff:\n  stage: DV\n'
     [ "$2" = "-" ] || printf '  task_id: %s\n' "$2"
@@ -1178,7 +1287,13 @@ split_artifact() {
       printf '  open_questions: []\n'
     fi
     printf '  refs:\n    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    if [ -n "$stub_id" ]; then
+      printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$stub_id"
+      printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+    else
+      printf 'body\n'
+    fi
   } > "$1"
 }
 
