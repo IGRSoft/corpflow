@@ -209,7 +209,9 @@ cmd_park() {
   # Metadata before status: a crash between the two leaves blocked_on on a task that is not
   # blocked, which batch skips because it selects blocked tasks only, instead of a blocked task
   # with no reason attached.
-  ledger --task-meta "$TASK_ARG" --set "$blocked" || die 1 "state-patch refused --task-meta $TASK_ARG"
+  # --log /dev/null: state-patch logs every --set value verbatim to .context/logs/state-merge.log,
+  # and this one alone carries the unmasked denied command.
+  ledger --log /dev/null --task-meta "$TASK_ARG" --set "$blocked" || die 1 "state-patch refused --task-meta $TASK_ARG"
   ledger --task-status "$TASK_ARG" blocked || die 1 "state-patch refused --task-status $TASK_ARG blocked"
 
   key=$(pd_dedupe_key "$TASK_ARG" "$tool" "$kcmd")

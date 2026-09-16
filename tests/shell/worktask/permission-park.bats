@@ -35,6 +35,21 @@ _rows() {
   grep -c "\"action\":\"${1:-permission_denied}\"" "$AUDIT" || true
 }
 
+# _assert_logs_clean <needle>... — no file ANYWHERE under the audit log's directory may hold a
+# needle. The sweep is deliberately dir-wide rather than a list of known log files: a named subset
+# only ever covers the writers that existed when it was written, and that gap is what let
+# state-patch's generic `--set` logger copy an unmasked denied command into state-merge.log.
+_assert_logs_clean() {
+  local needle hits
+  for needle in "$@"; do
+    hits="$(grep -rlF -- "$needle" "$(dirname "$AUDIT")" 2> /dev/null || true)"
+    if [ -n "$hits" ]; then
+      fail ".context/logs leaks: $needle (in $(printf '%s' "$hits" | tr '\n' ' '))"
+      return 1
+    fi
+  done
+}
+
 _merge_detail() {
   bash "$PLUGIN_ROOT/$SCRIPT" classify --payload "$(cat "$FIX/fn-merge-denied.handoff.json")"
 }
@@ -233,6 +248,37 @@ _section() {
     'allow_rule' '"command"'; do
     ! grep -qF -- "$needle" "$AUDIT" || fail "audit.jsonl leaks: $needle"
   done
+  _assert_logs_clean "$GH_TOK" "$SECRET_CMD"
+}
+
+@test "B3: hook, park, megatask batch and resume write no token and no unmasked command under .context/logs" {
+  local payload detail
+  payload="$(jq -c --arg c "$SECRET_CMD" '.tool_input.command = $c' \
+    "$FIXTURES/hooks/permission-denied/merge-denied.payload.json")"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$HOOK" <<< "$payload"
+  assert_success
+  _pp classify --payload "$payload"
+  assert_success
+  detail="$output"
+  _pp park --state "$STATE" --task-id FN0 --detail "$detail"
+  assert_success
+  _ledger_jq '.tasks.PL0.metadata.megatask_group = "milestone-1"'
+  printf '%s' '{"version":"2.0","execution":{"current_stage":null,"retry_count":0,"status":"in_progress","pr":null}}' \
+    > "$WD/workspace.json"
+  _pp batch --state "$STATE" --boundary FN0
+  assert_success
+  jq -e '.mode == "megatask_park" and .payloads == []' <<< "$output"
+  _pp resume --state "$STATE" --task-id FN0 --answer manual
+  assert_success
+  jq -e --arg c "$SECRET_CMD" '.resume_block.command == $c' <<< "$output"
+
+  # Every sanctioned full copy lives outside this directory: state.json's blocked_on, the stage
+  # artifact's handoff.blocked_on, the resume instruction and batch's own stdout.
+  _assert_logs_clean "$GH_TOK" "$SECRET_CMD"
+  # --log /dev/null is scoped to the one --set that carries the command, not to the whole run:
+  # the sibling --task-status write must still be logged, or the flag silenced too much.
+  grep -qF -- 'ledger status: tasks.FN0 blocked' "$WD/.context/logs/state-merge.log" \
+    || fail "state-merge.log lost its ledger status line; --log /dev/null is not scoped to one call"
 }
 
 @test "park: a second park of the same denial writes no second row" {
@@ -438,6 +484,7 @@ _section() {
   for needle in "$GH_TOK" "$SECRET_CMD" "Bash($MERGE_CMD)" 'allow_rule' 'classifier_reason' '"command"'; do
     ! grep -qF -- "$needle" "$AUDIT" || fail "audit.jsonl leaks: $needle"
   done
+  _assert_logs_clean "$GH_TOK" "$SECRET_CMD"
   run jq -e --arg c "$SECRET_CMD" '.tasks.FN0.metadata.blocked_on.kind == "permission"
     and .tasks.DR0.metadata.blocked_on.detail.command == $c' "$STATE"
   assert_success
