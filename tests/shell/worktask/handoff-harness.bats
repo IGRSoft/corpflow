@@ -1267,7 +1267,14 @@ mk_qa_dec_bullet() {
 # --- split-stage parity scoped by handoff.task_id -----------------------------
 
 # split_artifact <path> <task_id|-> [stub-yaml] — a DV artifact; no stub means `open_questions: []`.
+# A stub's anchor carries a two-option item naming its id, so the harness's item-body check
+# never decides a verdict here and each case isolates task_id parity.
 split_artifact() {
+  local stub_id=""
+  if [ -n "${3:-}" ]; then
+    stub_id="${3#*id: }"
+    stub_id="${stub_id%%,*}"
+  fi
   {
     printf -- '---\nhandoff:\n  stage: DV\n'
     [ "$2" = "-" ] || printf '  task_id: %s\n' "$2"
@@ -1280,7 +1287,13 @@ split_artifact() {
       printf '  open_questions: []\n'
     fi
     printf '  refs:\n    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nbody\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    if [ -n "$stub_id" ]; then
+      printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$stub_id"
+      printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+    else
+      printf 'body\n'
+    fi
   } > "$1"
 }
 
