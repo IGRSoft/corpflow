@@ -169,6 +169,10 @@ Closes #<N>
   none does — § No issue anchor holds both arms, and `pr-body-lint.sh` P4 reports a missing
   closing keyword only on the first. `Visual evidence` appears only on runs that captured
   screenshots.
+- `Unresolved decisions` appears only when a run with no reachable human shipped escalate items
+  undecided. `fn-preflight.sh unresolved-decisions` writes it at byte 0 of the body; never write or
+  edit it by hand. Each item is `- **sw-SR0-1** (SR0): <question>`, or the id alone when the
+  question would not survive the sanitiser.
 - **Never paste a local path into a PR body** — `.context/`, `/Users/…`, `~/…` and `../…` are
   per-workspace and gitignored: meaningless to a reviewer, and they leak host layout. A code
   span is not an escape hatch; `pr-body-lint.sh` checks it.

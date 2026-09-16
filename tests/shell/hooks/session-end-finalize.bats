@@ -43,12 +43,13 @@ setup() {
   assert_success
 }
 
-@test "edge: absent state.json logs a skipped row and still exits 0" {
-  run_script_env --env "CLAUDE_PROJECT_DIR=$WD" "$PLUGIN_ROOT/$SCRIPT"
+@test "edge: absent state.json is a silent no-op that still exits 0" {
+  # Pinned outside any git repo: with no ledger declared, the git ranks would
+  # otherwise answer whatever checkout the suite happens to run from.
+  run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$WD" \
+    --env "GIT_CEILING_DIRECTORIES=$WD" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  run jq -e '.result == "skipped" and .metadata.reason == "no state.json"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+  [ ! -e "$WD/.context/logs" ]
 }
 
 @test "edge: a corrupt ledger neither aborts teardown nor invents a task list" {

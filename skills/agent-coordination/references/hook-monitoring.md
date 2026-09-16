@@ -8,7 +8,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 |------------|------------|---------|----------------|
 | `SubagentStart` | Stage agent spawned | Agent type name (e.g., `corpflow:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
-| `PermissionDenied` | Auto-mode classifier denies a tool call | — | Tool name, denial reason |
+| `PermissionDenied` | Auto-mode classifier denies a tool call | — | `tool_name`, `tool_input`, `tool_use_id`, `reason` |
 | `StopFailure` | API error causes turn end | — | Error details |
 | `CwdChanged` | Working directory changes | — | New cwd path |
 | `FileChanged` | Monitored file modified | — | File path |
@@ -199,7 +199,10 @@ Hyphenated matchers **exact-match** rather than substring-match, so the Stop mat
 - Returning `"defer"` pauses a headless (`-p`) session at the tool call for later `-p --resume` re-evaluation — the CI/CD approval-gate mechanism.
 - JSON on stdout with exit code 2 blocks the call, and the block holds even when that JSON fails schema validation: a malformed payload cannot silently downgrade an intended block to a pass.
 - `permissions.deny` rules override a hook's `permissionDecision: "ask"`; in the other direction auto mode cannot override an `ask` — a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
-- The `PermissionDenied` hook fires after auto-mode classifier denials; return `{retry: true}` to tell the model it may retry the call.
+### PermissionDenied decision
+
+- The `PermissionDenied` hook fires after an auto-mode classifier denial. Its one decision output is `hookSpecificOutput.retry`, and corpflow never returns `retry: true`: `hooks/permission-denied.sh` leaves the denial standing, appends one redacted `permission_denied` audit row (`tool`, `dedupe_key` and a masked, path-scrubbed `command_head`; never the command, reason or allow rule) and prints nothing.
+- The stage returns `verdict: blocked` with a permission `blocked_on`, which holds the full detail; the orchestrator parks the task, asks the user, and resumes only the denied step (`skills/worktask/SKILL.md § Step 6.5a4`). The user grants in Claude Code's own permission UI or runs `! <command>` from the `cwd:` directory the question shows; corpflow writes no allow rule.
 
 ### PostToolUse behaviors
 

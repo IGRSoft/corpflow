@@ -1,0 +1,3 @@
+Bash(gh pr merge 412 --squash --delete-branch)
+  Error: Permission for this action has been denied. Reason: Blocked by classifier
+  commit and push already completed; the merge did not run.
