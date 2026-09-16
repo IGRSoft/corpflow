@@ -1374,7 +1374,7 @@ per boundary, and only the denied step resumes.
         [PARK, "classify", ...(typed ? ["--payload", JSON.stringify(incHandoff)] : [])],
         { input: typed ? "" : stageReturnText });
       if (pd?.status === 0) {
-        // Ledger via state-patch.sh plus one deduped permission_denied row; retry_count,
+        // Ledger via state-patch.sh plus one deduped, redacted permission_denied row; retry_count,
         // escalation_counts and last_error stay untouched.
         spawnSync("bash", [PARK, "park", "--task-id", task.id, "--detail", pd.stdout.trim()]);
         continue;   // siblings keep moving; § Step 7a asks
@@ -1388,8 +1388,17 @@ passes it as `--payload`. A completing verdict (`ok`, `pass`, `go`, `approve`) o
 (`fail`, `reject`, `no-go`) never reaches classify, even when its text quotes classifier wording:
 that return settles through § Step 6.5 as usual. The returned text is the fallback, since
 PermissionDenied firing inside a subagent is unverified. `--tool` and `--command` are optional on
-that path, because classify recovers both from the return's first Tool(...) line. If it cannot
+that path, because classify recovers both from the last Tool(...) line at or before the classifier
+wording, so a completed call quoted above the denied one never names the command. If it cannot
 recover a tool it exits 1, and the return stays an ordinary blocked return for § Step 7.
+
+###### Step 6.5a4 — a resumed stage meets the ack check first
+
+§ Step 7a resumes a live stage through `sendStageMessage`, so the resume carries a `msg_id` like
+every other stage message. The stage's next return passes the ack check above before it reaches
+this arm: denied again after acknowledging, it parks again here; a resume it never acknowledged
+reads not delivered and takes one resend, then escalation, without reaching classify. A
+re-dispatched stage gets the instruction as prompt suffix [7], which is not a message.
 
 ##### Step 6.5a4 — what the orchestrator never does with a denial
 
@@ -1444,7 +1453,7 @@ function resendOnceOrEscalate(state, task, subagentType, ack) {
 
 ```typescript
 // The one path for every orchestrator → stage SendMessage: the 6.5a2 nudge, the 6.5a3 relay,
-// resume-time reattaches, amendments and resends. A resend or retry that omits `supersedes`
+// the 7a permission resume, resume-time reattaches, amendments and resends. A resend or retry that omits `supersedes`
 // leaves the message it replaces reading not-delivered at every later boundary.
 function sendStageMessage(state, task, subagentType, body, supersedes = null) {
   // k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
@@ -1629,16 +1638,34 @@ Under a `/megatask` per-issue run `batch` asks nothing. It writes `execution.sta
 `execution.reason: "parked_escalation"` to `workspace.json` plus one `escalation_parked` row, and
 leaves `blocked_on` set — the existing PARK path (§ Escalation class), so nothing more dispatches.
 
+###### Step 7a — stopParked checks the path batch resolved
+
+`stopParked` checks the file `batch` itself tried, `$(dirname <state dir>)/workspace.json`, where
+`<state dir>` is the `.context/` the helper resolved. A bare `workspace.json` names the session's
+working directory, which can be another tree.
+
 ```typescript
-// park.workspace_written is false when workspace.json was missing, malformed or a symlink. The
-// monitor settles a track only on "failed" or "completed", so a bare STOP would hang this one.
+// The monitor settles a track only on "failed" or "completed", so a bare STOP would hang this one.
 function stopParked(park) {
-  // The PARK guard's own write: commands/worktask.md § Escalation guard — unattended
-  // `/megatask` per-issue runs (PARK).
-  if (!park.workspace_written) writeWorkspaceParked();   // execution: failed, parked_escalation
-  return;   // STOP: nothing more dispatches
+  if (park.workspace_written) return;   // STOP: nothing more dispatches
+  const ws = path.join(path.dirname(contextDir()), "workspace.json");
+  // The PARK guard's own write (commands/worktask.md § Escalation guard — unattended
+  // `/megatask` per-issue runs (PARK)), only for an absent or unparseable file.
+  const reason = isSymlink(ws) ? "symlink" : park.workspace_reason;
+  if (reason === "missing" || reason === "malformed") return writeWorkspaceParked(ws);
+  return refuseParkWrite(park.boundary, ws, reason);   // next section
 }
 ```
+
+###### Step 7a — the megatask arm never writes through a link
+
+The orchestrator never Writes or Edits a symlinked `workspace.json`, and it checks that same
+resolved path again right before a hand-write, because a link can appear after `batch` looked. For `symlink`,
+`not_regular_file`, `unreadable` or `write_failed`, `refuseParkWrite` makes no write: it appends
+one `escalation` row (`result: "blocked"`, `metadata.{kind: "permission", workspace_reason}`),
+reports the issue, the path and the reason per § Error Handling, and stops. It never removes,
+replaces or re-points the link. The track then does not settle by itself; that is the price of not
+writing through a link another process planted.
 
 ##### Step 7a — resume only the denied step
 
@@ -1647,15 +1674,25 @@ function stopParked(park) {
 // rb.decision_ref names. Its answer is the user's own; no delegate or resolver supplies one.
 function resumeDeniedStep(need, answer) {
   const r = spawnSync("bash", [PARK, "resume", "--task-id", need.task_id, "--answer", answer]);
-  if (r.status !== 0) return;   // no longer parked, or the claim was refused: leave the row
+  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
   const { resume_block: rb } = JSON.parse(r.stdout);
   // rb.instruction names only the denied command and forbids re-running completed steps.
   // Liveness: references/resume.md § Live-agent rows. A re-dispatch carries it as suffix [7].
-  const agentId = dispatchEntry(state, rb.task_id).agent_id;
-  if (isLive(agentId)) SendMessage({ to: agentId, message: rb.instruction });
+  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
+  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
+    sendStageMessage(state, task, task.metadata.agent, rb.instruction);
   else redispatch(rb.task_id, { suffix: rb.instruction });
 }
 ```
+
+###### Step 7a — a refused resume is reported
+
+`resume` exits non-zero when the task is no longer parked, its ledger has no usable detail, or the
+claim was refused. Nothing resumes then, and `reportRefusedResume` tells the user so per
+§ Error Handling: the task, their answer, and the helper's one-line reason. It neither re-runs
+`resume` nor dispatches the stage. Any Bash-holding agent can claim a parked row, so a task that stopped being
+parked between the ask and the resume is the visible trace of a raced or forged resume; returning
+silently would hide it.
 
 ###### Step 7a — the two answers, and the record they leave
 
@@ -1669,6 +1706,14 @@ function resumeDeniedStep(need, answer) {
   the recorded text as context only.
 - `rb.decision_ref`, `permission_resumed:<task_id>:<dedupe_key>:<n>`, names the `permission_resumed`
   audit row `resume` appended: the record `blocked_on.resume_with: decision_ref` points at.
+
+###### Step 7a — where the `!` line runs
+
+A `!` line runs in the main session's working directory, not in the stage's tree. So the question
+carries the stage's directory as a `cwd:` data line inside its fenced info block, and the user runs
+the `! <command>` line from that directory. Nothing composes `cd <dir> && <command>`: the `!` line
+holds the denied command only, and the directory stays data. `cwd` comes from the ledger's
+`workspace_path`, never from `blocked_on`; a need without one gets no `cwd:` line.
 
 ##### Step 7 — loop-back arm
 
@@ -2006,8 +2051,8 @@ permission-park.sh --self-test
 Exit `0` success (for classify, the payload is a permission denial); `1` classify found no denial
 or no recoverable tool, or park/resume had a ledger write refused or a task not parked; `2` usage
 error, missing or unparseable ledger, or broken install. On the text path `--tool`/`--command` are
-optional: classify recovers both from the first `Tool(...)` line. It grants nothing, writes no
-Claude Code configuration, and emits no retry decision.
+optional: classify recovers both from the last `Tool(...)` line at or before the classifier-denial
+line. It grants nothing, writes no Claude Code configuration, and emits no retry decision.
 
 ### permission-park.sh — stdout
 
@@ -2015,18 +2060,20 @@ Claude Code configuration, and emits no retry decision.
 |---|---|
 | `classify` | `{"tool","command","classifier_reason","allow_rule"}` |
 | `park` | `{"blocked_on":{"kind":"permission","detail":{…4 keys},"resume_with":"decision_ref"},"dedupe_key":"<16 hex>","truncated":true\|false,"audit_row_written":true\|false}` |
-| `batch` | `{"mode":"ask","needs":[{"task_id","tool","command","classifier_reason","allow_rule","truncated"}…],"payloads":[{"questions":[…≤4]}]}`; megatask per-issue run: `{"mode":"megatask_park","needs":[…],"payloads":[],"park":{"boundary","execution","escalated","workspace_written","audit_row_written"}}`, `"park":null` when nothing is parked |
+| `batch` | `{"mode":"ask","needs":[{"task_id","tool","command","classifier_reason","allow_rule","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`; megatask per-issue run: `{"mode":"megatask_park","needs":[…],"payloads":[],"park":{"boundary","execution","escalated":[{"tool","command_head","truncated"}],"workspace_written","workspace_reason","audit_row_written"}}`, `"park":null` when nothing is parked |
 | `resume` | `{"resume_block":{"task_id","tool","command","answer","truncated","do_not_rerun":true,"decision_ref","instruction"},"cleared":true,"audit_row_written":true\|false}` |
 
 ### permission-park.sh — the resume audit row
 
 `resume` appends one `permission_resumed` row per successful resume and none on a refusal:
 `actor: "orchestrator"`, `subject: <task_id>`, `result: "ok"`,
-`metadata.{answer, dedupe_key, tool, command, decision_ref}`. `decision_ref` is
+`metadata.{tool, dedupe_key, command_head, truncated, answer, decision_ref}`. `decision_ref` is
 `permission_resumed:<task_id>:<dedupe_key>:<n>`, where `n` is 1 plus the earlier rows with that
 subject and key. It is the record `blocked_on.resume_with: decision_ref` points at, and it comes
-back as `resume_block.decision_ref` (§ Step 7a). `truncated: true` marks a command cut at 512
-characters.
+back as `resume_block.decision_ref` (§ Step 7a). The row never holds the command:
+`command_head` is masked, path-scrubbed and cut at 80 characters, its `truncated` marks that cut,
+and both are omitted when the scrub is unavailable. `resume_block.truncated` is a different flag:
+the stored command was cut at 512 characters.
 
 ## Related
 

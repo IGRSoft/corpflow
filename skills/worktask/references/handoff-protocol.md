@@ -208,6 +208,22 @@ resumes with that task and key, so a call that is denied and parked again gets a
 text is context only: it is never offered as a `!` line, and the full command is in Claude Code's
 denial notice. The stored `blocked_on` carries no `truncated` key.
 
+##### Schema — blocked_on, where the full detail lives
+
+The full `command`, `classifier_reason` and `allow_rule` stay out of the audit log, not out of
+`.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one,
+which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`,
+which `resume` sets to `null`; in the resume message or re-dispatch suffix built from
+`resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A
+project that commits `.context/` commits the artifact copy, and a ledger copy committed while the
+task was parked stays in that history.
+
+##### Schema — blocked_on, the redacted audit shape
+
+`.context/logs/audit.jsonl` is treated as committed, so it gets the redacted shape alone: `permission_denied` and `permission_resumed` rows carry `tool`, `dedupe_key`,
+`command_head` and `truncated`, and `escalation_parked` lists `{tool, command_head, truncated}` per
+need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks the 80-character head cut, not the 512-character command cut.
+
 ### Schema — $defs: SweepItem and SweepStub
 
 Closing elicitation sweep item, defined once for all three transports (contract:

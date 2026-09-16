@@ -162,18 +162,30 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| `PermissionDenied` hook (`hook:permission-denied`, plugin) | `permission_denied` (auto-mode classifier blocks a tool) — `result: "block"`, `metadata.{tool, command, classifier_reason, allow_rule, source: "hook", dedupe_key}` |
-| Orchestrator fallback (`permission-park.sh park`, worktask Step 6.5a4) | `permission_denied`, same shape with `source: "orchestrator"`, from the stage's returned `blocked_on` or tool result |
+| `PermissionDenied` hook (`hook:permission-denied`, plugin) | `permission_denied` (auto-mode classifier blocks a tool) — `result: "block"`, `metadata.{tool, dedupe_key, command_head, truncated}` |
+| Orchestrator fallback (`permission-park.sh park`, worktask Step 6.5a4) | `permission_denied`, same redacted shape, actor `orchestrator`, from the stage's returned `blocked_on` or tool result |
 
-The fallback exists because hook firing inside a subagent is unverified. Both writers skip the append when the log already holds the same `dedupe_key` — the first 16 hex of `sha256("task_id:tool:command")` — or a same-tool, same-command row the hook wrote as `subject: "unknown"`, so each denial yields one row whichever lands first. Known limit: re-denying the same command in the same task after a grant writes no second row; the task still parks.
+The fallback exists because hook firing inside a subagent is unverified. Both writers skip the append when the log already holds the same `dedupe_key` — the first 16 hex of `sha256("task_id:tool:command")` of the command after secret masking, never the unmasked text — or its twin under the other writer's subject (§ Writers — redacted permission rows), so each denial yields one row whichever lands first.
+
+#### Writers — permission denials, a repeat after a grant
+
+Known limit: re-denying the same command in the same task after a grant writes no second row, because the masked command and so the key are unchanged; the task still parks.
 
 #### Writers — permission resumes (the decision_ref row)
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator (`permission-park.sh resume`, worktask Step 7a) | `permission_resumed`: one row per successful resume and none on a refusal. `result: "ok"`, `metadata.{answer: grant\|manual, dedupe_key, tool, command, decision_ref}` |
+| Orchestrator (`permission-park.sh resume`, worktask Step 7a) | `permission_resumed`: one row per successful resume and none on a refusal. `result: "ok"`, `metadata.{tool, dedupe_key, command_head, truncated, answer: grant\|manual, decision_ref}` |
 
 `metadata.decision_ref` is `permission_resumed:<task_id>:<dedupe_key>:<n>`. It is what a permission `blocked_on.resume_with: decision_ref` points at, and `resume` returns it as `resume_block.decision_ref`. The `dedupe_key` pairs the row with the task's `permission_denied` row. `n` is 1 plus the earlier `permission_resumed` rows with the same subject and key, so a call that is denied and parked again gets a distinct ref. The row records the user's own answer to the boundary prompt, so the orchestrator calls `resume` only with that answer. No delegate or resolver answers for the user.
+
+#### Writers — redacted permission rows
+
+`.context/logs/audit.jsonl` is committed, so the `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only a redacted head of the denied command: masked for secret shapes, path-scrubbed through `skills/shared/scripts/path-scrub.sh`, cut at 80 characters, with `truncated: true` when cut. `command_head` and `truncated` are both omitted when the scrub is unavailable. No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
+
+#### Writers — where the full permission detail lives
+
+The full command, `classifier_reason` and `allow_rule` stay out of the audit log, not out of `.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one, which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`; in the resume message or re-dispatch suffix built from `resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A project that commits `.context/` commits the artifact copy, and a ledger copy committed while the task was parked stays in that history.
 
 #### Test-run counter rows
 

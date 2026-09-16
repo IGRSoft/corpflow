@@ -6,9 +6,10 @@
 # never break the session it observes.
 #
 # Row: actor hook:permission-denied, subject <task id|unknown>, result block, metadata
-# {tool, command, classifier_reason, allow_rule, source:"hook", dedupe_key}. The orchestrator
-# fallback (skills/worktask/scripts/permission-park.sh) writes the same row when this event
-# never fires; the shared key in hooks/lib/permission-denied-lib.sh keeps the count at one.
+# {tool, dedupe_key, command_head, truncated} from pd_audit_meta. The committed log never gets
+# the command, classifier_reason, allow_rule or tool_input. The orchestrator fallback
+# (skills/worktask/scripts/permission-park.sh) writes the same row when this event never fires;
+# the shared key in hooks/lib/permission-denied-lib.sh keeps the count at one.
 #
 # Self-test: hooks/permission-denied.sh --self-test
 set -u
@@ -32,8 +33,10 @@ if [ "$SELF_TEST" -eq 1 ]; then
   _st_log="$_st_tmp/.context/logs/audit.jsonl"
   _st_rows=$(grep -c '"action":"permission_denied"' "$_st_log" 2> /dev/null || true)
   if [ -z "$_st_out" ] && [ "${_st_rows:-0}" = "1" ] \
-    && jq -e '.subject == "FN0" and .result == "block" and .metadata.source == "hook"
-      and (.metadata | has("tool") and has("command") and has("classifier_reason") and has("allow_rule"))' \
+    && ! grep -qF 'Blocked by classifier' "$_st_log" \
+    && jq -e '.subject == "FN0" and .result == "block"
+      and (.metadata | keys_unsorted) == ["tool", "dedupe_key", "command_head", "truncated"]
+      and .metadata.command_head == "gh pr merge 1" and .metadata.truncated == false' \
       "$_st_log" > /dev/null 2>&1; then
     echo "permission-denied: self-test OK"
     exit 0
@@ -69,6 +72,11 @@ DETAIL=$(pd_detail_from_event "$PAYLOAD")
 [ -n "$DETAIL" ] || exit 0
 TOOL=$(printf '%s' "$DETAIL" | jq -r '.tool' 2> /dev/null) || exit 0
 CMD=$(printf '%s' "$DETAIL" | jq -r '.command' 2> /dev/null) || exit 0
+# The row shows every character around each [masked] in command_head, so a key hashed over the
+# raw command would let a guessed secret be confirmed offline. A non-empty command that masks to
+# nothing gets no row: the only key left to write would be over the unmasked text.
+KCMD=$(pd_key_command "$CMD")
+[ -n "$KCMD" ] || [ -z "$CMD" ] || exit 0
 AGENT_ID=$(printf '%s' "$PAYLOAD" | jq -r '.agent_id // "" | tostring' 2> /dev/null) || AGENT_ID=""
 
 # The payload names no task, so the subject is inferred: the launched dispatch for this agent,
@@ -88,13 +96,24 @@ case "$TASK" in
 esac
 
 AUDIT="$CTX/logs/audit.jsonl"
-KEY=$(pd_dedupe_key "$TASK" "$TOOL" "$CMD")
+KEY=$(pd_dedupe_key "$TASK" "$TOOL" "$KCMD")
 pd_audit_has_key "$AUDIT" "$KEY" && exit 0
 if [ "$TASK" = "unknown" ]; then
-  pd_audit_has_twin "$AUDIT" "$TOOL" "$CMD" && exit 0
+  # An unnamed subject may be a denial the fallback already logged under its own task; rows
+  # carry no command, so each ledger task's key is re-derived and looked up.
+  _ids=()
+  while IFS= read -r _id; do
+    case "$_id" in
+      PL[0-9]* | AR[0-9]* | TL[0-9]* | DV[0-9]* | DR[0-9]* | SR[0-9]* | QA[0-9]* | DC[0-9]* | RE[0-9]* | FN[0-9]* | ST[0-9]* | IR[0-9]* | ET[0-9]*)
+        _ids[${#_ids[@]}]="$_id"
+        ;;
+    esac
+  done <<< "$(jq -r '(.tasks // {}) | if type == "object" then keys[] else empty end' "$CTX/state.json" 2> /dev/null)"
+  pd_audit_has_twin "$AUDIT" "$TOOL" "$KCMD" ${_ids[@]+"${_ids[@]}"} && exit 0
 fi
 
-META=$(jq -cn --argjson d "$DETAIL" --arg key "$KEY" '$d + {source: "hook", dedupe_key: $key}' 2> /dev/null) || exit 0
+META=$(pd_audit_meta "$TOOL" "$CMD" "$KEY")
+[ -n "$META" ] || exit 0
 corpflow_hook_audit_row --ctx "$CTX" --actor "hook:permission-denied" --action permission_denied \
   --result block --subject "$TASK" --meta "$META"
 exit 0

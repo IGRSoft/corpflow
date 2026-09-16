@@ -7,8 +7,15 @@
 #   Symbol names carry no corpflow_ prefix: that namespace is the model-switch-lib surface
 #   tests/shell/meta/hook-symbol-parity.bats enumerates.
 #
-#   Symbols: pd_detail_from_event, pd_normalize_detail, pd_dedupe_key, pd_audit_has_key,
-#   pd_audit_has_twin, PD_JQ_DEFS (pd_bound, pd_truncated, pd_fence, pd_rule, pd_detail).
+#   Symbols: pd_detail_from_event, pd_normalize_detail, pd_key_command, pd_dedupe_key,
+#   pd_command_head, pd_audit_meta, pd_audit_has_key, pd_audit_has_twin, PD_HEAD_MAX,
+#   PD_JQ_DEFS (pd_bound, pd_truncated, pd_fence, pd_rule, pd_detail, pd_mask).
+#
+#   Audit rows never carry the denied command, classifier_reason, allow_rule or tool_input:
+#   audit.jsonl is committed, and a denied call is the one most likely to hold a credential.
+#   Rows carry pd_audit_meta's redacted shape. The full detail stays outside the log, in the
+#   ledger's and the stage artifact's blocked_on, the resume instruction and the user prompt.
+#   The dedupe key is derived from the masked command (pd_key_command), never the unmasked text.
 #
 # Minimum shell: bash 3.2+. Sets no shell options; every symbol returns 0 with empty stdout
 # on failure, except the pd_audit_has_* predicates.
@@ -19,6 +26,8 @@ if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
 fi
 [ -n "${_PD_LIB:-}" ] && return 0
 _PD_LIB=1
+_PD_LIB_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2> /dev/null && pwd -P)" || _PD_LIB_DIR=""
+PD_HEAD_MAX=80
 
 # Denied-command text is untrusted and reaches both a user prompt and the committed audit
 # log, so every field is bounded before either sees it. Control characters and the U+2028/2029
@@ -45,6 +54,25 @@ def pd_detail($tool; $cmd; $reason; $rule):
   | ($cmd | pd_bound(512)) as $c
   | {tool: $t, command: $c, classifier_reason: ($reason | pd_bound(512)),
      allow_rule: ((if ($rule // "") == "" then pd_rule($t; $c) else $rule end) | pd_bound(600))};
+# pd_mask: a value is a double-quoted run, a single-quoted run or a bare run, and a quoted value
+# is masked whole, quotes included, because agents quote passwords that hold spaces. A quote
+# with no closing partner runs to the end, since a 512 bound can cut the closer off. Userinfo
+# runs to the last @ before a /, whitespace or quote, as a password may itself contain @. The
+# runs beside the keyword alternation are capped at 64: unbounded, they backtrack polynomially
+# on a crafted 512-character command, and the hook has 5 s to mask it twice.
+def pd_mask:
+  gsub("(?<p>[a-z][a-z0-9+.-]*://)[^\\s/\"\u0027`]+@"; "\(.p)[masked]@"; "i")
+  | gsub("(?<k>(?:proxy-)?authorization[\"\u0027]?\\s*[:=]\\s*)(?:(?<s>bearer|basic|token|digest|negotiate)\\s+)?[^\\s\"\u0027`]+";
+      "\(.k)\(if .s then .s + " " else "" end)[masked]"; "i")
+  | gsub("\\b(?<s>bearer|basic)\\s+[A-Za-z0-9._~+/=-]{8,}"; "\(.s) [masked]"; "i")
+  | gsub("(?<f>(?:^|\\s)(?:-u|--user|--proxy-user))(?<e>\\s+|=)(?:\"[^\"]*:[^\"]*(?:\"|$)|\u0027[^\u0027]*:[^\u0027]*(?:\u0027|$)|[^\\s\"\u0027`]*:[^\\s\"\u0027`]*)";
+      "\(.f)\(.e)[masked]")
+  | gsub("(?<f>--?[a-z0-9_-]{0,64}(?:token|password|passwd|secret|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credentials?)[a-z0-9_-]{0,64})(?<e>=|\\s+)(?:\"[^\"]*(?:\"|$)|\u0027[^\u0027]*(?:\u0027|$)|[^\\s\"\u0027`]+)";
+      "\(.f)\(.e)[masked]"; "i")
+  | gsub("(?<k>[a-z0-9_.-]{0,64}(?:token|password|passwd|secret|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?|session[_-]?id|cookie)[a-z0-9_.-]{0,64}[\"\u0027]?\\s*[:=]\\s*)(?:\"[^\"]*(?:\"|$)|\u0027[^\u0027]*(?:\u0027|$)|[^\\s\"\u0027`&;,]+)";
+      "\(.k)[masked]"; "i")
+  | gsub("\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b|\\bgh[pousr]_[A-Za-z0-9]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}|\\bglpat-[A-Za-z0-9_-]{20,}|\\bsk-[A-Za-z0-9_-]{16,}|\\bxox[abprs]-[A-Za-z0-9-]{10,}|\\bAIza[0-9A-Za-z_-]{30,}|\\bnpm_[A-Za-z0-9]{30,}|\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}";
+      "[masked]");
 '
 
 # pd_detail_from_event <payload> — the four-key detail from a Claude Code PermissionDenied
@@ -100,6 +128,18 @@ pd_dedupe_key() {
   return 0
 }
 
+# pd_key_command <command> — the command as every dedupe key hashes it: bounded to 512, then
+# masked. A row's command_head shows everything around each [masked], so a key over the raw text
+# would let a guessed secret be confirmed offline. Empty on failure; a caller holding a non-empty
+# command must then write no key at all.
+pd_key_command() {
+  command -v jq > /dev/null 2>&1 || return 0
+  local _pd_k
+  _pd_k=$(printf '%s' "${1:-}" | jq -Rrs "$PD_JQ_DEFS"'pd_bound(512) | pd_mask' 2> /dev/null) || _pd_k=""
+  printf '%s' "$_pd_k"
+  return 0
+}
+
 # pd_audit_has_key <audit.jsonl> <key> — 0 when a permission_denied row already carries key.
 # A fixed-string grep, not a parse: one malformed line elsewhere must not hide the match.
 pd_audit_has_key() {
@@ -108,15 +148,62 @@ pd_audit_has_key() {
     | grep -Fq "\"dedupe_key\":\"$2\"" 2> /dev/null
 }
 
-# pd_audit_has_twin <audit.jsonl> <tool> <command> [unknown] — 0 when a permission_denied row
-# for the same tool and command exists; with `unknown`, only a row whose subject was never
-# resolved to a task. That unresolved row keys on "unknown", so the key alone cannot pair it.
+# pd_audit_has_twin <audit.jsonl> <tool> <key_command> <task_id>... — 0 when a permission_denied
+# row carries the key this tool and pd_key_command output derive under any of the given
+# subjects; the caller masks once, before the loop, rather than once per subject. Rows hold
+# no command to compare, so a twin written under another subject (a hook row that resolved to
+# `unknown`, or a fallback row for the task the hook could not name) is found by re-deriving
+# its key.
 pd_audit_has_twin() {
-  [ -f "${1:-}" ] || return 1
-  command -v jq > /dev/null 2>&1 || return 1
-  jq -nRe --arg tool "${2:-}" --arg cmd "${3:-}" --arg only "${4:-any}" '
-    [inputs | fromjson? | select(type == "object" and .action == "permission_denied"
-      and .metadata.tool == $tool and .metadata.command == $cmd
-      and ($only != "unknown" or .subject == "unknown"))] | length > 0
-  ' "$1" > /dev/null 2>&1
+  local _pd_audit="${1:-}" _pd_tool="${2:-}" _pd_cmd="${3:-}" _pd_id
+  [ -f "$_pd_audit" ] || return 1
+  [ "$#" -ge 4 ] || return 1
+  shift 3
+  for _pd_id in "$@"; do
+    [ -n "$_pd_id" ] || continue
+    pd_audit_has_key "$_pd_audit" "$(pd_dedupe_key "$_pd_id" "$_pd_tool" "$_pd_cmd")" && return 0
+  done
+  return 1
+}
+
+# pd_command_head <command> — `{"command_head":"…","truncated":bool}` for an audit row, or `{}`
+# when no head may be written. Secret shapes are masked, then host paths are scrubbed, and only
+# then is the text cut to PD_HEAD_MAX: masking first keeps the literal out of the scrub's
+# pipeline and lets the patterns see the original token boundaries, and cutting last means a
+# bound can never leave half a secret that the patterns would no longer recognise.
+#
+# path-scrub.sh is consumed per its sourcing contract: `[ -r ]` before `.`, because `.` on a
+# missing file exits the caller. A missing file, function or pattern, or a non-zero scrub,
+# yields `{}`: an unscrubbed head would carry the host paths the scrub exists to remove.
+pd_command_head() {
+  command -v jq > /dev/null 2>&1 || { printf '{}'; return 0; }
+  local _pd_head
+  _pd_head=$(
+    set -o pipefail
+    _pd_scrub="${_PD_LIB_DIR:-}/../../skills/shared/scripts/path-scrub.sh"
+    [ -n "${_PD_LIB_DIR:-}" ] && [ -r "$_pd_scrub" ] || exit 1
+    # shellcheck source=/dev/null
+    . "$_pd_scrub" > /dev/null 2>&1 || exit 1
+    command -v corpflow_path_scrub > /dev/null 2>&1 || exit 1
+    [ -n "${CORPFLOW_HOST_PATH_ERE:-}" ] && [ -n "${CORPFLOW_DRIVE_PATH_ERE:-}" ] || exit 1
+    _pd_masked=$(pd_key_command "${1:-}")
+    [ -n "$_pd_masked" ] || [ -z "${1:-}" ] || exit 1
+    _pd_clean=$(printf '%s\n' "$_pd_masked" | corpflow_path_scrub) || exit 1
+    printf '%s' "$_pd_clean" | jq -Rsc --argjson n "$PD_HEAD_MAX" "$PD_JQ_DEFS"'
+      pd_bound(4096) | {command_head: pd_bound($n), truncated: (length > $n)}'
+  ) || _pd_head=""
+  case "$_pd_head" in
+    '{"command_head":'*) printf '%s' "$_pd_head" ;;
+    *) printf '{}' ;;
+  esac
+  return 0
+}
+
+# pd_audit_meta <tool> <command> <dedupe_key> — the one redacted metadata object every
+# permission audit row starts from: {tool, dedupe_key} plus pd_command_head's fields.
+pd_audit_meta() {
+  command -v jq > /dev/null 2>&1 || return 0
+  jq -cn --arg t "${1:-}" --arg k "${3:-}" --argjson h "$(pd_command_head "${2:-}")" "$PD_JQ_DEFS"'
+    {tool: ($t | pd_bound(64)), dedupe_key: $k} + $h' 2> /dev/null || true
+  return 0
 }

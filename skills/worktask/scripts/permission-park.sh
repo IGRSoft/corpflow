@@ -17,22 +17,29 @@
 #
 # @arg classify  Reads --payload or stdin. A typed handoff `blocked_on` wins; a Claude Code
 #                PermissionDenied event is next; classifier-denial text is last, and there the
-#                tool and command come from --tool/--command or else the return's first
-#                `Tool(command)` line. Prints {tool, command, classifier_reason, allow_rule}.
+#                tool and command come from --tool/--command or else the last `Tool(command)`
+#                line at or before the classifier-denial line. Prints {tool, command,
+#                classifier_reason, allow_rule}.
 # @arg park      blocked_on via state-patch.sh --task-meta, then --task-status blocked; appends
-#                one deduped permission_denied row (source orchestrator). Prints
-#                {blocked_on, dedupe_key, truncated, audit_row_written}.
-# @arg batch     Every blocked task whose blocked_on.kind is permission. Interactive: {mode:"ask",
-#                needs, payloads:[AskUserQuestion input, <=4 questions each]}. Under a megatask
-#                per-issue run: no question; parks the issue (workspace.json execution failed /
-#                parked_escalation, one escalation_parked row). Prints {mode:"megatask_park", ...}.
+#                one deduped permission_denied row with the redacted metadata {tool, dedupe_key,
+#                command_head, truncated}. Prints {blocked_on, dedupe_key, truncated,
+#                audit_row_written}.
+# @arg batch     Every blocked task whose blocked_on.kind is permission; each need carries the
+#                ledger's workspace_path as cwd. Interactive: {mode:"ask", needs, payloads:
+#                [AskUserQuestion input, <=4 questions each]}. Under a megatask per-issue run: no
+#                question; parks the issue (workspace.json execution failed / parked_escalation,
+#                one escalation_parked row whose escalated[] is {tool, command_head, truncated}).
+#                A symlinked workspace.json is refused: workspace_written false, workspace_reason
+#                "symlink". Prints {mode:"megatask_park", ...}.
 # @arg resume    --claim, clears blocked_on to null, appends one permission_resumed row recording
-#                the answer. Prints {resume_block, cleared, audit_row_written}.
+#                the answer under the same redacted metadata. Prints {resume_block, cleared,
+#                audit_row_written}.
 #
 # @exitcode 0 success; for classify, the payload is a permission denial
 # @exitcode 1 classify: not a parkable permission denial; park/resume: ledger write refused or
 #             task not parked
-# @exitcode 2 usage error, missing ledger, or broken install
+# @exitcode 2 usage error, missing ledger, broken install, or (park/resume) a non-empty command
+#             that cannot be masked for its dedupe key; the ledger is left untouched
 #
 # Minimum shell: bash 3.2+. Requires jq.
 set -euo pipefail
@@ -109,29 +116,31 @@ ledger() {
   bash "$STATE_PATCH" --state "$STATE_PATH" "$@" 1>&2
 }
 
-# parse_tool_line <text> — sets PP_LINE_TOOL and PP_LINE_CMD from the first line shaped like
-# Claude Code's echo of a tool call, `Tool(command)`. An `mcp__*` name counts with or without
-# arguments (its names may carry `-`, which the general shape excludes). Returns 1 on no match.
+# parse_tool_line <text> <last_line> — sets PP_LINE_TOOL and PP_LINE_CMD from the LAST line at
+# or before line <last_line> shaped like Claude Code's echo of a tool call, `Tool(command)`. The
+# denied call is the one echoed nearest above the classifier's wording: an earlier line is a call
+# that already ran, and a later one never reached the classifier, so either would park, show and
+# re-run the wrong command. An `mcp__*` name counts with or without arguments (its names may
+# carry `-`, which the general shape excludes). Returns 1 on no match.
 parse_tool_line() {
-  local line
+  local line n=0 max="${2:-0}"
   local call_re='^[[:space:]]*([A-Za-z][A-Za-z0-9_]*)\((.*)\)[[:space:]]*$'
   local mcp_re='^[[:space:]]*(mcp__[A-Za-z0-9_-]+)(\((.*)\))?[[:space:]]*$'
   PP_LINE_TOOL="" PP_LINE_CMD=""
   while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    [ "$n" -le "$max" ] || break
     if [[ "$line" =~ $mcp_re ]]; then
       PP_LINE_TOOL="${BASH_REMATCH[1]}" PP_LINE_CMD="${BASH_REMATCH[3]}"
-      return 0
-    fi
-    if [[ "$line" =~ $call_re ]]; then
+    elif [[ "$line" =~ $call_re ]]; then
       PP_LINE_TOOL="${BASH_REMATCH[1]}" PP_LINE_CMD="${BASH_REMATCH[2]}"
-      return 0
     fi
   done <<< "$1"
-  return 1
+  [ -n "$PP_LINE_TOOL" ]
 }
 
 cmd_classify() {
-  local payload="$PAYLOAD_ARG" typed detail reason tool cmd
+  local payload="$PAYLOAD_ARG" typed detail hit reason tool cmd
   if [ "$PAYLOAD_GIVEN" -eq 0 ] && [ ! -t 0 ]; then
     payload=$(cat)
   fi
@@ -160,13 +169,14 @@ cmd_classify() {
 
   # Free text is the weakest signal: only Claude Code's classifier wording counts, because a
   # user rejecting an ordinary prompt reads alike and must stay a plain blocked return.
-  reason=$(printf '%s' "$payload" | grep -Ei -m1 \
+  hit=$(printf '%s' "$payload" | grep -n -Ei -m1 \
     'Blocked by classifier|Auto mode could not evaluate this action|Classifier unavailable|auto[- ]mode classifier' \
     2> /dev/null || true)
-  [ -n "$reason" ] || return 1
+  [ -n "$hit" ] || return 1
+  reason="${hit#*:}"
 
   tool="$TOOL_ARG" cmd="$COMMAND_ARG"
-  if parse_tool_line "$payload"; then
+  if parse_tool_line "$payload" "${hit%%:*}"; then
     [ -n "$tool" ] || tool="$PP_LINE_TOOL"
     if [ -z "$cmd" ] && [ "$tool" = "$PP_LINE_TOOL" ]; then cmd="$PP_LINE_CMD"; fi
   fi
@@ -181,12 +191,18 @@ cmd_classify() {
 }
 
 cmd_park() {
-  local detail blocked key tool cmd meta written=false
+  local detail blocked key tool cmd kcmd meta written=false
   is_task_id "$TASK_ARG" || die 2 "park needs --task-id <STAGE><N>"
   [ -n "$DETAIL_ARG" ] || die 2 "park needs --detail <json>"
   resolve_state
   detail=$(pd_normalize_detail "$DETAIL_ARG")
   [ -n "$detail" ] || die 2 "--detail must be a JSON object with a non-empty string tool"
+  tool=$(printf '%s' "$detail" | jq -r '.tool')
+  cmd=$(printf '%s' "$detail" | jq -r '.command')
+  # Before any ledger write: a command that cannot be masked leaves the task untouched rather
+  # than parked with no row, and its key is never taken over the unmasked text.
+  kcmd=$(pd_key_command "$cmd")
+  [ -n "$kcmd" ] || [ -z "$cmd" ] || die 2 "cannot mask the denied command for its dedupe key"
   blocked=$(jq -cn --argjson d "$detail" \
     '{blocked_on: {kind: "permission", detail: $d, resume_with: "decision_ref"}}')
 
@@ -196,18 +212,14 @@ cmd_park() {
   ledger --task-meta "$TASK_ARG" --set "$blocked" || die 1 "state-patch refused --task-meta $TASK_ARG"
   ledger --task-status "$TASK_ARG" blocked || die 1 "state-patch refused --task-status $TASK_ARG blocked"
 
-  tool=$(printf '%s' "$detail" | jq -r '.tool')
-  cmd=$(printf '%s' "$detail" | jq -r '.command')
-  key=$(pd_dedupe_key "$TASK_ARG" "$tool" "$cmd")
-  if ! pd_audit_has_key "$AUDIT" "$key" && ! pd_audit_has_twin "$AUDIT" "$tool" "$cmd" unknown; then
-    meta=$(jq -cn --argjson d "$detail" --arg key "$key" '$d + {source: "orchestrator", dedupe_key: $key}')
-    # The kv pairs duplicate --meta so the four keys survive a jq-less host's degraded row.
+  key=$(pd_dedupe_key "$TASK_ARG" "$tool" "$kcmd")
+  # A hook row whose subject never resolved keys on "unknown", so that key is re-derived too.
+  if ! pd_audit_has_key "$AUDIT" "$key" && ! pd_audit_has_twin "$AUDIT" "$tool" "$kcmd" unknown; then
+    meta=$(pd_audit_meta "$tool" "$cmd" "$key")
+    # The kv pairs keep a degraded row pairable by key; none carries command text.
     corpflow_audit_row --file "$AUDIT" --actor orchestrator --action permission_denied \
       --result block --subject "$TASK_ARG" --meta "$meta" \
-      --meta-kv "tool=$tool" --meta-kv "command=$cmd" \
-      --meta-kv "classifier_reason=$(printf '%s' "$detail" | jq -r '.classifier_reason')" \
-      --meta-kv "allow_rule=$(printf '%s' "$detail" | jq -r '.allow_rule')" \
-      --meta-kv "source=orchestrator" --meta-kv "dedupe_key=$key"
+      --meta-kv "tool=$tool" --meta-kv "dedupe_key=$key"
     [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ] && written=true
   fi
   jq -cn --argjson b "$blocked" --arg key "$key" --argjson w "$written" "$PD_JQ_DEFS"'
@@ -215,23 +227,37 @@ cmd_park() {
      truncated: ($b.blocked_on.detail.command | pd_truncated(512)), audit_row_written: $w}'
 }
 
-# write_workspace_parked <workspace.json> — merges the PARK execution state; 0 when written.
-# The temp file is created exclusively beside the target, so a pre-planted name cannot redirect
-# the write, and the rename replaces the path itself rather than anything it points at.
+# write_workspace_parked <workspace.json> — merges the PARK execution state; 0 when written,
+# else 1 with WS_REASON naming why (symlink, missing, not_regular_file, unreadable, malformed,
+# write_failed). A symlink is refused, never read, merged or replaced: whoever planted it chose
+# the target. The file is read once and the link check repeats after the read and before the
+# rename, so a link swapped in mid-write costs a refusal rather than a write through it. The
+# temp file is created exclusively beside the target and the rename replaces the path itself.
 write_workspace_parked() {
-  local ws="$1" tmp
-  [ -f "$ws" ] && [ ! -L "$ws" ] || return 1
-  tmp=$(mktemp "$(dirname -- "$ws")/.workspace.json.XXXXXX" 2> /dev/null) || return 1
-  if jq '.execution = ((.execution // {}) + {status: "failed", reason: "parked_escalation"})' \
-    "$ws" > "$tmp" 2> /dev/null && [ ! -L "$ws" ] && mv -f -- "$tmp" "$ws"; then
+  local ws="$1" tmp body
+  WS_REASON=""
+  if [ -L "$ws" ]; then
+    WS_REASON="symlink"
+    return 1
+  fi
+  [ -e "$ws" ] || { WS_REASON="missing"; return 1; }
+  [ -f "$ws" ] || { WS_REASON="not_regular_file"; return 1; }
+  body=$(cat -- "$ws" 2> /dev/null) || { WS_REASON="unreadable"; return 1; }
+  [ ! -L "$ws" ] || { WS_REASON="symlink"; return 1; }
+  body=$(printf '%s' "$body" \
+    | jq '.execution = ((.execution // {}) + {status: "failed", reason: "parked_escalation"})' 2> /dev/null) \
+    || { WS_REASON="malformed"; return 1; }
+  tmp=$(mktemp "$(dirname -- "$ws")/.workspace.json.XXXXXX" 2> /dev/null) || { WS_REASON="write_failed"; return 1; }
+  if printf '%s\n' "$body" > "$tmp" && [ ! -L "$ws" ] && mv -f -- "$tmp" "$ws"; then
     return 0
   fi
   rm -f -- "$tmp"
+  if [ -L "$ws" ]; then WS_REASON="symlink"; else WS_REASON="write_failed"; fi
   return 1
 }
 
 cmd_batch() {
-  local id needs megatask payloads boundary ws escalated ws_written=false row_written=false
+  local id needs megatask payloads boundary ws escalated need ws_written=false row_written=false
   local ids=()
   if [ -n "$TASKS_ARG" ]; then
     IFS=, read -r -a ids <<< "$TASKS_ARG"
@@ -240,15 +266,19 @@ cmd_batch() {
     done
   fi
   resolve_state
+  # cwd is the stage's tree from the ledger, never from blocked_on: the four-key detail is the
+  # stage's own report, and the directory a user runs a command in must not be its to choose.
   needs=$(jq -c --arg ids "$TASKS_ARG" "$PD_JQ_DEFS"'
-    ($ids | if . == "" then null else split(",") end) as $want
+    . as $s
+    | ($ids | if . == "" then null else split(",") end) as $want
     | [(.tasks // {}) | to_entries[]
        | select($want == null or (.key as $k | $want | index($k)) != null)
        | select(.value.status == "blocked"
            and (.value.metadata.blocked_on.kind? // "") == "permission")
        | (.value.metadata.blocked_on.detail // {}) as $d
+       | ((.value.metadata.workspace_path? // $s.metadata.workspace_path? // "") | pd_bound(600)) as $cwd
        | {task_id: .key} + pd_detail($d.tool; $d.command; $d.classifier_reason; $d.allow_rule)
-       | . + {truncated: (.command | pd_truncated(512))}]' \
+       | . + {truncated: (.command | pd_truncated(512)), cwd: $cwd}]' \
     "$STATE_PATH")
   megatask=$(jq -r '(.tasks["PL\(.run_index // 0)"].metadata.megatask_group // "") | tostring' "$STATE_PATH")
 
@@ -256,14 +286,20 @@ cmd_batch() {
     # Every untrusted field sits inside a fenced block one backtick longer than its longest
     # backtick run, so no command text can close the fence or render as markup. Labels are
     # fixed strings. A truncated command is never offered as a `!` line: pasted, it would run
-    # something other than what was denied.
+    # something other than what was denied. The stage's directory is a `cwd:` data line inside
+    # the same fence and is never spliced into the `!` line: a `! ` line runs in the main
+    # session's directory, and composing `cd <dir> && …` would build shell text from ledger data.
     payloads=$(printf '%s' "$needs" | jq -c "$PD_JQ_DEFS"'
-      map({
+      map((.cwd != "") as $has_cwd | {
         header: (.task_id | .[0:12]),
         question: ("\(.task_id) was denied a tool call by the auto-mode classifier. How should it continue?\n\n"
-          + ("tool: \(.tool)\ncommand: \(.command)\nreason: \(.classifier_reason)" | pd_fence)
+          + ("tool: \(.tool)\ncommand: \(.command)\nreason: \(.classifier_reason)"
+             + (if $has_cwd then "\ncwd: \(.cwd)" else "" end) | pd_fence)
           + (if .truncated
              then "\n\nThe command was truncated to 512 characters, so it is not offered as a line to run. Read the full command in the Claude Code denial notice or under /permissions recent denials."
+               + (if $has_cwd then " Run it from that directory (the cwd line above)." else "" end)
+             elif $has_cwd
+             then "\n\nTo run it yourself, run it from that directory (the cwd line above) and enter:\n\n" + ("! \(.command)" | pd_fence)
              else "\n\nTo run it yourself, enter:\n\n" + ("! \(.command)" | pd_fence) end)),
         multiSelect: false,
         options: [
@@ -272,6 +308,8 @@ cmd_batch() {
           {label: "run it yourself",
            description: (if .truncated
              then "Run the full command from the denial notice; the step then continues without running it again."
+             elif $has_cwd
+             then "Run the ! line shown above from the cwd shown there; the step then continues without running it again."
              else "Run the ! line shown above; the step then continues without running it again." end)}
         ]})
       | [range(0; length; 4) as $i | {questions: .[$i:($i + 4)]}]')
@@ -286,10 +324,17 @@ cmd_batch() {
   boundary="$BOUNDARY_ARG"
   [ -n "$boundary" ] || boundary=$(printf '%s' "$needs" | jq -r '.[0].task_id')
   is_task_id "$boundary" || die 2 "invalid --boundary: $boundary"
-  escalated=$(printf '%s' "$needs" | jq -c 'map({tool, command, allow_rule})')
+  # The row names each need by tool and redacted head only; the full detail stays in blocked_on.
+  escalated="[]"
+  while IFS= read -r need; do
+    [ -n "$need" ] || continue
+    escalated=$(jq -cn --argjson e "$escalated" --arg t "$(printf '%s' "$need" | jq -r '.tool')" \
+      --argjson h "$(pd_command_head "$(printf '%s' "$need" | jq -r '.command')")" '$e + [{tool: $t} + $h]')
+  done <<< "$(printf '%s' "$needs" | jq -c '.[]')"
 
   ws="$WS_JSON_ARG"
   [ -n "$ws" ] || ws="$(dirname -- "${STATE_PATH%/*}")/workspace.json"
+  WS_REASON=""
   write_workspace_parked "$ws" && ws_written=true
 
   if ! jq -nRe --arg b "$boundary" --argjson e "$escalated" '
@@ -303,14 +348,15 @@ cmd_batch() {
   fi
 
   jq -cn --argjson n "$needs" --arg b "$boundary" --argjson e "$escalated" \
-    --argjson ww "$ws_written" --argjson rw "$row_written" '
+    --argjson ww "$ws_written" --arg wr "$WS_REASON" --argjson rw "$row_written" '
     {mode: "megatask_park", needs: $n, payloads: [],
      park: {boundary: $b, execution: {status: "failed", reason: "parked_escalation"},
-            escalated: $e, workspace_written: $ww, audit_row_written: $rw}}'
+            escalated: $e, workspace_written: $ww,
+            workspace_reason: (if $ww then null else $wr end), audit_row_written: $rw}}'
 }
 
 cmd_resume() {
-  local blocked detail tool cmd key seq ref written=false
+  local blocked detail tool cmd kcmd key seq ref meta written=false
   is_task_id "$TASK_ARG" || die 2 "resume needs --task-id <STAGE><N>"
   case "$ANSWER_ARG" in grant | manual) : ;; *) die 2 "resume needs --answer grant|manual" ;; esac
   resolve_state
@@ -319,6 +365,11 @@ cmd_resume() {
     || die 1 "tasks.$TASK_ARG is not parked for a permission"
   detail=$(pd_normalize_detail "$(printf '%s' "$blocked" | jq -c '.detail // {}')")
   [ -n "$detail" ] || die 1 "tasks.$TASK_ARG blocked_on carries no usable detail"
+  tool=$(printf '%s' "$detail" | jq -r '.tool')
+  cmd=$(printf '%s' "$detail" | jq -r '.command')
+  # Before --claim, for the same reason as park: an unmaskable command leaves the task parked.
+  kcmd=$(pd_key_command "$cmd")
+  [ -n "$kcmd" ] || [ -z "$cmd" ] || die 2 "cannot mask the denied command for its dedupe key"
 
   ledger --claim "$TASK_ARG" || die 1 "state-patch refused --claim $TASK_ARG"
   # `null`, not deletion: --task-meta is a recursive merge and has no unset, so a cleared
@@ -327,21 +378,21 @@ cmd_resume() {
 
   # The row is what blocked_on.resume_with: decision_ref points at. The sequence number keeps
   # the ref unique when the same call is denied, parked and resumed again in one task.
-  tool=$(printf '%s' "$detail" | jq -r '.tool')
-  cmd=$(printf '%s' "$detail" | jq -r '.command')
-  key=$(pd_dedupe_key "$TASK_ARG" "$tool" "$cmd")
+  key=$(pd_dedupe_key "$TASK_ARG" "$tool" "$kcmd")
   seq=0
   if [ -f "$AUDIT" ]; then
     seq=$(grep -F '"action":"permission_resumed"' -- "$AUDIT" 2> /dev/null \
       | grep -F "\"subject\":\"$TASK_ARG\"" 2> /dev/null | grep -Fc "\"dedupe_key\":\"$key\"" 2> /dev/null) || seq=0
   fi
   ref="permission_resumed:$TASK_ARG:$key:$((seq + 1))"
+  meta=$(pd_audit_meta "$tool" "$cmd" "$key")
+  [ -n "$meta" ] || meta='{}'
   corpflow_audit_row --file "$AUDIT" --actor orchestrator --action permission_resumed \
     --result ok --subject "$TASK_ARG" \
-    --meta "$(jq -cn --arg a "$ANSWER_ARG" --arg k "$key" --arg t "$tool" --arg c "$cmd" --arg r "$ref" \
-      '{answer: $a, dedupe_key: $k, tool: $t, command: $c, decision_ref: $r}')" \
-    --meta-kv "answer=$ANSWER_ARG" --meta-kv "dedupe_key=$key" --meta-kv "tool=$tool" \
-    --meta-kv "command=$cmd" --meta-kv "decision_ref=$ref"
+    --meta "$(jq -cn --argjson m "$meta" --arg a "$ANSWER_ARG" --arg r "$ref" \
+      '$m + {answer: $a, decision_ref: $r}')" \
+    --meta-kv "tool=$tool" --meta-kv "dedupe_key=$key" \
+    --meta-kv "answer=$ANSWER_ARG" --meta-kv "decision_ref=$ref"
   [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ] && written=true
 
   # Built by concatenation, never sub(): the command is data, and a regex replacement would

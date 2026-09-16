@@ -61,10 +61,11 @@ self_test() {
   _st_run park --state "$state" --task-id FN0 --detail "$out" > /dev/null || true
   if jq -e '.tasks.FN0.status == "blocked" and .tasks.FN0.metadata.retry_count == 2
       and .tasks.FN0.metadata.blocked_on.kind == "permission"' "$state" > /dev/null 2>&1 \
-    && [ "$(grep -c '"action":"permission_denied"' "$td/.context/logs/audit.jsonl")" = "1" ]; then
-    _st_pass "park: blocked, retry_count untouched, one row across two parks"
+    && [ "$(grep -c '"action":"permission_denied"' "$td/.context/logs/audit.jsonl")" = "1" ] \
+    && ! grep -qF 'classifier' "$td/.context/logs/audit.jsonl"; then
+    _st_pass "park: blocked, retry_count untouched, one redacted row across two parks"
   else
-    _st_fail "park: blocked, retry_count untouched, one row across two parks"
+    _st_fail "park: blocked, retry_count untouched, one redacted row across two parks"
   fi
 
   out=$(_st_run batch --state "$state") || true

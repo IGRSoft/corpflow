@@ -199,8 +199,8 @@ Hyphenated matchers **exact-match** rather than substring-match, so the Stop mat
 - `permissions.deny` rules override a hook's `permissionDecision: "ask"`; in the other direction auto mode cannot override an `ask` — a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
 ### PermissionDenied decision
 
-- The `PermissionDenied` hook fires after an auto-mode classifier denial. Its one decision output is `hookSpecificOutput.retry`, and corpflow never returns `retry: true`: `hooks/permission-denied.sh` leaves the denial standing, appends one `permission_denied` audit row and prints nothing.
-- The stage returns `verdict: blocked` with a permission `blocked_on`; the orchestrator parks the task, asks the user, and resumes only the denied step (`skills/worktask/SKILL.md § Step 6.5a4`). The user grants in Claude Code's own permission UI or runs `! <command>`; corpflow writes no allow rule.
+- The `PermissionDenied` hook fires after an auto-mode classifier denial. Its one decision output is `hookSpecificOutput.retry`, and corpflow never returns `retry: true`: `hooks/permission-denied.sh` leaves the denial standing, appends one redacted `permission_denied` audit row (`tool`, `dedupe_key` and a masked, path-scrubbed `command_head`; never the command, reason or allow rule) and prints nothing.
+- The stage returns `verdict: blocked` with a permission `blocked_on`, which holds the full detail; the orchestrator parks the task, asks the user, and resumes only the denied step (`skills/worktask/SKILL.md § Step 6.5a4`). The user grants in Claude Code's own permission UI or runs `! <command>` from the `cwd:` directory the question shows; corpflow writes no allow rule.
 
 ### PostToolUse behaviors
 
