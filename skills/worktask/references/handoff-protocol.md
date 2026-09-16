@@ -549,7 +549,8 @@ shared by the harness, this schema and the DR rule: `refs.decisions`, then `arch
 `handoff-harness.sh --validate-frontmatter <artifact> --state <state.json>` enforces it (warn-only
 in 3.42.0, blocking under `--strict`) and its inverse guard warns when an `architecture-*`
 reference appears without a `tasks.AR0` entry. `applied` is DV's truthful statement that AR's
-decisions were followed; deviations go in `development-N.md ## decisions` with rationale, and DR
+decisions were followed; deviations go in the row's artifact (`development-<N>[-<stream>].md`)
+`## decisions` with rationale, and DR
 fails an undeclared one.
 
 ### DRHandoff
@@ -735,13 +736,16 @@ from the artifact's `handoff:` frontmatter when there is none (F2; an artifact w
 
 #### Map — DV
 
+Rows apply **per DV ledger task**: `<DV>` is the row's own id (`DV0`, `DV1`, …) and `<dev-artifact>`
+its own artifact (§ DV fan-out — ledger tasks).
+
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DV.verdict` | `tasks.DV0.verdict` + `tasks.DV0.status` (verdict map) + `facts.verdicts.DV0` + derived `facts.verdicts.DV` | development-N.md `## deviations` (summary line) |
-| `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
-| `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
-| `DV.build_status` | (artifact only; status follows the verdict) | development-N.md `## deviations` |
-| `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
+| `DV.verdict` | `tasks.<DV>.verdict` + `tasks.<DV>.status` (verdict map) + `facts.verdicts.<DV>` + derived `facts.verdicts.DV` | `<dev-artifact>` `## deviations` (summary line) |
+| `DV.files_modified` | `facts.files_modified` (union) | `<dev-artifact>` `## files-changed` |
+| `DV.tests_added` | `facts.tests_added` (union) | `<dev-artifact>` `## tests-added` |
+| `DV.build_status` | (artifact only; status follows the verdict) | `<dev-artifact>` `## deviations` |
+| `DV.decisions` | `facts.decisions[]` | `<dev-artifact>` (inline) |
 
 #### Map — DR, SR, QA, DC, RE
 
@@ -772,8 +776,8 @@ from the artifact's `handoff:` frontmatter when there is none (F2; an artifact w
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
 | `ET.verdict` | `tasks.ET0.verdict` + `facts.verdicts.ET0` + derived `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
-| `DV.worktree_path` | `tasks.DV0.worktree.path` | development-N.md (frontmatter `worktree_path`) |
-| `DV.worktree_branch` | `tasks.DV0.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
+| `DV.worktree_path` | `tasks.<DV>.worktree.path` | `<dev-artifact>` (frontmatter `worktree_path`) |
+| `DV.worktree_branch` | `tasks.<DV>.worktree.branch` | `<dev-artifact>` (frontmatter `worktree_branch`) |
 
 #### Additive-field writers
 
@@ -1569,7 +1573,7 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | PL | `planning-N.md` (N starts at 0) | yes |
 | AR | `architecture-N.md` | yes |
 | TL | `coordination-N.md` | yes |
-| DV | `development-N.md` (per-stream: `development-N-<stream>.md`) | yes |
+| DV | `development-N.md` (per DV ledger task: `development-N-<stream>.md`) | yes |
 | DR | `developer-review-N.md` | yes |
 | SR | `security-review-N.md` | yes |
 | QA | `testing-N.md` | yes |
@@ -1580,13 +1584,84 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
 
-### Per-stream DV artifacts
+### DV fan-out — ledger tasks
 
-Under TL fan-out the DV entry agent spawns one sub-agent per workstream; each writes only
-`development-N-<stream>.md`, `<stream>` being the kebab slug the coordination plan assigned. The
-entry agent alone merges them into the canonical `development-N.md` at fan-in. That merged file
-stays the documented DR/QA input and the one the DV0 handoff and state patch describe — the
-per-stream files are merge inputs, not handoff carriers.
+DV fans out as **ledger tasks**, never as sub-agents. `DV0`, `DV1`, … are rows in `state.json`: the
+orchestrator dispatches each on its own `Task()`, each writes its own artifact, each patches its own
+row. No entry agent assembles a canonical file afterwards — every DV artifact is a handoff carrier
+in its own right, and downstream stages reach them by iterating the rows.
+
+Retries are per row (`retry_count`); every row appends to the shared
+`.context/errors/developer.md` under its own `## DV<k> Retry <n> — …` heading.
+
+#### Pinning a row's tree
+
+Every DV row carries `metadata.workspace_path` from creation (`state-patch.sh --task-create` refuses
+one without it; a TL stream clones DV0's), and the row's agent enters that path and no other.
+
+At dispatch the orchestrator pins a DV row to its own stream worktree when the row carries
+`metadata.stream` AND its `metadata.workspace_path` is also held by another DV row that can run
+concurrently with it (neither row reaches the other through `blocked_by`). The orchestrator creates
+the worktree, re-stamps that row's `metadata.workspace_path` with `state-patch.sh --task-meta`, and
+only then renders the banner. Rows whose streams are serialized by `blocked_by` may share one tree.
+That is legal and is not re-pinned. It is the mode a /megatask per-issue run uses.
+
+#### Artifact naming (S1)
+
+```text
+artifact  := ".context/development-" N [ "-" stream ] ".md"
+N         := tasks.<ID>.metadata.run_index          # integer >= 0
+stream    := ^[a-z0-9]+(-[a-z0-9]+)*$               # kebab, <= 40 chars, unique among the DV rows
+source    := assigned by the row's creator: PL0, TL when TL runs, or the DV agent that splits its
+             own row (it stamps that row too); a stamped stream never changes
+row keys  := tasks.DV<k>.metadata.stream   = "<stream>"
+             tasks.DV<k>.metadata.artifact = ".context/development-<N>-<stream>.md"  # planned
+             tasks.DV<k>.artifact          # recorded at completion; beats the planned value
+rule      := >= 2 DV rows -> every DV row carries stream + artifact
+             exactly 1 DV row -> stream MAY be omitted, artifact development-<N>.md
+location  := the ledger's .context/ (the dir holding state.json), never a stream tree's
+```
+
+##### Finding the ledger from a stream tree
+
+A DV working in a separate stream tree finds the ledger's `.context/` through
+`skills/shared/scripts/resolve-root.sh` once no declared root (`--state`, `CONTEXT_DIR`) names it:
+with no flag the script prints the main worktree's `.context` directory (exit 1 outside any
+repository, 3 when the main worktree is bare).
+
+##### The bare name is a grammar output
+
+`development-<N>.md` is what the grammar emits for a single-DV run; it is not a name other text may
+spell. Downstream templates and readers take DV artifacts from `refs.dev[]` or from the ledger
+(§ Iterating the DV tasks), so that name reaches them only as an already-resolved list element.
+
+#### Completing a DV row
+
+The completion patch names both the row id and the path, because the orchestrator's basename guess
+cannot see a stream suffix:
+
+```bash
+state-patch.sh --stage DV --task-id DV<k> --prev <PREV> \
+  --artifact .context/development-<N>-<stream>.md
+```
+
+#### Iterating the DV tasks
+
+Every downstream reader resolves its DV inputs from the ledger, in ascending numeric task-id order:
+
+```bash
+jq -r '.tasks | to_entries
+  | map(select(.value.metadata.stage == "DV" and (.key | test("^DV[0-9]+$"))))
+  | sort_by(.key | ltrimstr("DV") | tonumber)
+  | .[] | (.value.artifact // .value.metadata.artifact // empty)' .context/state.json
+```
+
+A `refs.dev[]` element (`stage-contracts.md#tpl-dr`) is that path's basename plus `#files-changed` —
+replace the last line with:
+
+```bash
+  | .[] | ((.value.artifact // .value.metadata.artifact // empty) | split("/") | last) + "#files-changed"
+```
 
 ### Run-index resolution
 
@@ -1730,7 +1805,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
 | AR | architecture-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
-| DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
+| DV | development-<N>[-<stream>].md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
 
 ### Anchors — SR to ET
@@ -1751,7 +1826,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 1. H2 only. H1 is the artifact's title (exempt from anchor lint).
 2. Kebab-case. No spaces, no underscores, no camelCase.
 3. Anchor IDs come from GitHub-style slugify, but the H2 title MUST already be the kebab-case form — do not rely on slugify.
-4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <development-N.md> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
+4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
 ### Anchor Pre-Flight (PostToolUse hook)
 

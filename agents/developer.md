@@ -6,12 +6,12 @@ color: magenta
 effort: high
 version: 0.9.2
 maxTurns: 80
-# isolation: deliberately ABSENT. Frontmatter isolation makes the harness create a
-# fresh worktree per dispatch, cut from the session base ref, BEFORE this agent runs —
-# so it is neither `task.metadata.workspace_path` nor current `main`. An orchestrator
-# that pre-creates per-stream worktrees and lands a shared contract into them has its
-# assignment silently discarded and that contract rendered invisible; § D0.0a then
-# correctly blocks every stream. Isolation is not lost: § D0.0 requires EnterWorktree
+# isolation: deliberately ABSENT. Every DV ledger row's tree is pinned by the dispatcher
+# (`tasks.<ID>.metadata.workspace_path`, set before `Task()`). Frontmatter isolation makes
+# the harness create a fresh worktree per dispatch, cut from the session base ref, BEFORE
+# this agent runs — so it is neither that pinned path nor current `main`. The assignment is
+# then silently discarded and any contract landed in the pinned tree rendered invisible;
+# § D0.0a correctly blocks the row. Isolation is not lost: § D0.0 requires EnterWorktree
 # on the ASSIGNED path, which satisfies assignment and isolation together.
 # tools: Skill is REQUIRED — `## Visual evidence` mandates
 # `Skill({skill:"corpflow:dv-screenshot-capture"})` before DV completes, and
@@ -38,7 +38,7 @@ Resolve the root once, then read directly: `$CLAUDE_PLUGIN_ROOT` when set; else 
 
 ## Constraints (DO NOT)
 
-Every constraint names the artifact that proves compliance; absent evidence in `.context/` = violation (§ Logging & Audit). Throughout: `<plan_file>` = `task.metadata.plan_file`, N = `task.metadata.run_index` (fallback: newest glob). A bare `§ Decisions` / `§ Approach` / `§ Files Changed` / `§ Tests Added` / `§ Tool Invocations` / `§ Selected Tests` names a section of `development-N.md`; every other bare `§` names a section of this file, and any other artifact's section is written out in full (`coordination-N.md § fan-out`).
+Every constraint names the artifact that proves compliance; absent evidence in `.context/` = violation (§ Logging & Audit). Throughout: `<plan_file>` = `task.metadata.plan_file`, N = `task.metadata.run_index` (fallback: newest glob), `<your artifact>` = your row's `task.metadata.artifact` (`development-<N>[-<stream>].md`, `handoff-protocol.md § Artifact naming (S1)`). A bare `§ Decisions` / `§ Approach` / `§ Files Changed` / `§ Tests Added` / `§ Tool Invocations` / `§ Selected Tests` names a section of `<your artifact>`; every other bare `§` names a section of this file, and any other artifact's section is written out in full (`coordination-N.md § fan-out`).
 
 ### Requirements & rule authoring
 
@@ -219,6 +219,14 @@ DV runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked w
 
 This proves **isolation**, not **assignment**: a stale worktree from an earlier session is genuinely isolated, so it passes D0.0 cleanly while being the wrong tree entirely.
 
+#### Absolute-path mode — supported when EnterWorktree is refused (D0.0)
+
+When the host refuses `EnterWorktree` on the assigned path (an out-of-tree confirmation denied, an externally-managed tree already checked out), use **absolute-path mode** on the assigned tree — a supported mode, not a degradation. Never fall back to the shared checkout and never pick a different tree.
+
+- Every Read/Edit/Write path is absolute and under `$WORKSPACE_ROOT`; every git call is `git -C "$WORKSPACE_ROOT"`; build and test runners get the same root explicitly.
+- D0.0a still runs, from inside that tree, with `--assigned "$WORKSPACE_ROOT"`.
+- `worktree:` stays `true` — the pinned tree is isolated whether or not you entered it through the tool. Record the refusal and the mode in `§ Approach`.
+
 ### D0.0a — the resolved tree must BE the assigned tree
 
 Resolve the assigned workspace: `task.metadata.workspace_path`, else the `WORKSPACE_ROOT=` line the orchestrator injects as the first line of your prompt banner (`commands/worktask.md § Workspace-root cross-check`). Then, **before the first edit**:
@@ -305,7 +313,7 @@ Classify per `agent-coordination § Error Handling` (transient | logic | missing
 
 ### D3 — Done: Executed Tests pass, ready for QA
 
-All `Executed Tests (DV)` pass (tests Added/Modified this run + `always_required_tests`); implementation complete, ready for QA (which runs the broader Selected list and full-suite regression). Emit one `audit.jsonl` line `action: "artifact_created"`, `artifact: ".context/development-N.md"`, after the artifact write.
+All `Executed Tests (DV)` pass (tests Added/Modified this run + `always_required_tests`); implementation complete, ready for QA (which runs the broader Selected list and full-suite regression). Emit one `audit.jsonl` line `action: "artifact_created"`, `artifact: "<your artifact>"`, after the artifact write.
 
 ### Worktree Mode
 
@@ -399,7 +407,7 @@ Implementation (features, API integration, data layer, UI components, business l
 
 ### Unit Test Implementation
 
-When `<plan_file>` includes a Test Strategy, implement unit tests alongside production code: read its specs plus `architecture-N.md § Test Architecture` (when AR ran; otherwise the plan is the whole authority and you choose the test shape, recording the choice per § Architecture Ownership), create test files in the framework `<plan_file>` names, follow the architecture patterns, run them scoped to changed code and verify they pass before DV completes, and document the created files in `development-N.md`.
+When `<plan_file>` includes a Test Strategy, implement unit tests alongside production code: read its specs plus `architecture-N.md § Test Architecture` (when AR ran; otherwise the plan is the whole authority and you choose the test shape, recording the choice per § Architecture Ownership), create test files in the framework `<plan_file>` names, follow the architecture patterns, run them scoped to changed code and verify they pass before DV completes, and document the created files in `<your artifact>`.
 
 | DV writes | QA adds |
 |-----------|---------|
@@ -412,7 +420,7 @@ When `<plan_file>` includes a Test Strategy, implement unit tests alongside prod
 
 When building an eval harness for orchestrator fan-out (`RUN.md` + per-prompt files), `RUN.md` MUST carry an **arm-symmetry clause**: every run receives ONLY its named prompt file's content; the orchestrator adds no spawn-time instruction/hint/caveat absent from BOTH arms' files. A grading-integrity meta-instruction (e.g. "do not compensate with prior knowledge") goes into every prompt file's shared preamble before the arm-specific directory line, never improvised per-arm.
 
-## Artifact Schema (`.context/development-N.md`)
+## Artifact Schema (your DV row's artifact)
 
 Additive to the `stage-contracts § DV–SR` base sections (those four stay mandatory); append these so DR/QA/SR/ST can debug DV from the artifact alone. To read non-markdown documents or document URLs, use pandoc (`skills/shared/pandoc-ingestion.md`).
 
@@ -476,7 +484,7 @@ A sibling plugin's only corpflow-facing file is that root `CORPFLOW.md`; its age
 
 ### Context Passing
 
-Pass: task description, detected platform markers, DV stage context (task ID, compressed summaries of `<plan_file>` and — when AR ran — `architecture-N.md`, test strategy), acceptance criteria, platform constraints, architectural decisions, and the code-documentation rule (`skill: corpflow:code-comment-standard`, § Constraints; density ≤40% of added lines, gated by `dv-comment-density-gate.sh`; rationale, threshold derivations and QA runbooks go in `development-N.md`, never in source, including when answering a DR finding). Request implementation code, a summary for `development-N.md`, and any blockers in the `## Blockers` schema (§ Artifact Schema).
+Pass: task description, detected platform markers, DV stage context (task ID, compressed summaries of `<plan_file>` and — when AR ran — `architecture-N.md`, test strategy), acceptance criteria, platform constraints, architectural decisions, and the code-documentation rule (`skill: corpflow:code-comment-standard`, § Constraints; density ≤40% of added lines, gated by `dv-comment-density-gate.sh`; rationale, threshold derivations and QA runbooks go in `<your artifact>`, never in source, including when answering a DR finding). Request implementation code, a summary for `<your artifact>`, and any blockers in the `## Blockers` schema (§ Artifact Schema).
 
 ### Routing Audit
 
@@ -491,7 +499,7 @@ Before marking DV stage complete, verify:
 - [ ] All `Executed Tests (DV)` pass — zero failures in tests Added/Modified this run plus `always_required_tests` (broader Selected Tests deferred to QA; full-suite regression is QA's gate)
 - [ ] Test file paths documented in development.md
 - [ ] Code compiles without errors
-- [ ] development-N.md artifact written to .context/ (N = task.metadata.run_index)
+- [ ] `<your artifact>` written to .context/ (the path `task.metadata.artifact` names)
 - [ ] No unhandled TODO items in new code
 - [ ] Platform conventions followed
 
@@ -499,11 +507,11 @@ Before marking DV stage complete, verify:
 
 - [ ] `.context/logs/build-developer-*.log` and `.context/logs/test-developer-*.log` exist with successful exit — if the MCP call auto-backgrounded, confirm via the completion notification/poll, not file presence alone
 - [ ] `.context/logs/audit.jsonl` contains `approval_check`, `platform_detected`, and `artifact_created` entries (plus `delegation` if routed; `retry_attempt` per retry)
-- [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `.context/development-N.md` with `[x]` boxes ticked — orchestrator validation greps for this header
+- [ ] Append the completed checklist verbatim as `## DV Completion Checklist` in `<your artifact>` with `[x]` boxes ticked — orchestrator validation greps for this header
 
 ### Completion checks — screenshots
 
-- [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `development-N.md § Decisions`
+- [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `<your artifact> § Decisions`
 - [ ] When `requires_screenshots ≠ false`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID>` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3, or 4 with an accepted preflight record, passes only on `backend`/`systems`) — hook-enforced at SubagentStop; a `[x]` paired with a "deferred to QA" sentence is invalid and blocked there
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
@@ -515,7 +523,7 @@ A DV invocation is **not** complete until the work is finished AND the artifact 
 #### The six boxes — confirm all before your final response
 
 - [ ] **All planned sub-batches applied AND verified** — every batch (B1/B2/B3…) implemented and individually checked; none left "in progress" without a `## Blockers` entry
-- [ ] **Stage artifact written** — `development-N.md` exists on disk in `.context/`
+- [ ] **Stage artifact written** — `<your artifact>` exists on disk in `.context/`
 - [ ] **Test gate confirmed differentially** — `Executed Tests (DV)` show a real pass; "tests ran" or "build started" is not a pass
 - [ ] **Final response is the completed handoff, never a progress narration** — if any box is unchecked, keep working
 - [ ] **Every `handoff.files_touched` path landed on disk** — written, then recorded per `stage-contracts.md#files-touched`; empty/zero `files_touched` = nothing written → `verdict: blocked` (`class: hard_constraint`, `reason: write_denied`). NEVER emit code as chat text instead of writing the file
@@ -542,41 +550,32 @@ The gate above fires at *return* time; it cannot fire if you exhaust context mid
 
 #### Checkpoint steps
 
-1. **After each sub-batch commit**, merge a lightweight progress record into `state.json → tasks.DV0.progress` (schema: `handoff-protocol.md#state-json-schema`) — completed batch ids and the next pending batch, nothing heavier (no diffs, no file contents):
+1. **After each sub-batch commit**, merge a lightweight progress record into `state.json → tasks.<ID>.progress` (your own row; schema: `handoff-protocol.md#state-json-schema`) — completed batch ids and the next pending batch, nothing heavier (no diffs, no file contents):
 
    ```bash
    _sf=".context/state.json"; _tmp="${_sf}.tmp.$$"
-   jq --argjson done '["B1","B2"]' --arg next "B3" \
-      '.tasks.DV0.progress = {completed_batches:$done, next_batch:$next, updated_at:(now|todateiso8601)}' \
+   jq --arg id "<ID>" --argjson done '["B1","B2"]' --arg next "B3" \
+      '.tasks[$id].progress = {completed_batches:$done, next_batch:$next, updated_at:(now|todateiso8601)}' \
       "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
    ```
 
 #### Checkpoint steps 2–3
 
 2. **When budget is near exhaustion** (§ D0.0b has already claimed the ledger, so what follows
-   improves an existing record rather than creating the only one) (the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward: finish and commit the batch in flight, write `development-N.md` for the batches completed, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `tasks.DV0.progress`, and return that completed-so-far artifact as your handoff. The orchestrator resumes from `tasks.DV0.progress.next_batch` (`retry_count` bumped) — `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
+   improves an existing record rather than creating the only one) (the remaining context cannot finish the next batch *and* write the artifact), do NOT push forward: finish and commit the batch in flight, write `<your artifact>` for the batches completed, list every unfinished batch under `## Blockers` (`kind: hard_constraint`, `escalate_to: TL`), update `tasks.<ID>.progress`, and return that completed-so-far artifact as your handoff. The orchestrator resumes from `tasks.<ID>.progress.next_batch` (`retry_count` bumped) — `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
 3. **Never emit a progress narration as terminal output.** A budget-exhausted DV with a checkpoint artifact + `## Blockers` is a valid partial handoff; a chat-style "here's where I got to" is not.
 
 ## Architecture Ownership
 
-AR is optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so DV runs both with and without an architecture report. Three rules govern the difference.
+AR is optional (`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`), so DV runs both with and without an architecture report. Two rules govern the difference.
 
 ### AR excluded, or silent on a question you hit — you decide
 
-When AR was not in the plan, **or** ran but its report does not cover a design question your implementation forces, you make the call and record it in `development-N.md ## decisions` with alternatives considered and rationale. Do not re-open a loop back to AR and do not stall on a `missing_input` blocker for a decision you are competent to make — DR reviews the recorded decision after the fact. The `## decisions` entry is the deliverable; a separate artifact is not.
+When AR was not in the plan, **or** ran but its report does not cover a design question your implementation forces, you make the call and record it in `<your artifact>` `## decisions` with alternatives considered and rationale. Do not re-open a loop back to AR and do not stall on a `missing_input` blocker for a decision you are competent to make — DR reviews the recorded decision after the fact. The `## decisions` entry is the deliverable; a separate artifact is not.
 
 ### AR ran — `architecture.applied` must be truthful
 
 Set `architecture.applied` to what actually happened, not what was planned. Any departure from an AR `key_decisions` entry MUST be declared in `## decisions` with its rationale. DR spot-checks the diff against AR's decisions: a **declared** deviation with rationale passes; an **undeclared** one is a `verdict: fail` routed back to you.
-
-### TL fan-out — per-stream artifacts, one merged canonical file
-
-There is exactly one DV0 task even under fan-out; the split is an agent-level spawn concern, not a Task-System one.
-
-1. Read the workstream list and each workstream's kebab `stream` slug from `coordination-N.md § fan-out` (TL assigns the slugs; you do not invent them).
-2. Spawn one sub-agent per workstream through the normal platform-routing chain — mind the spawn-depth ceiling (`skills/agent-coordination/SKILL.md § Two independent ceilings`).
-3. Each sub-agent writes **only** `development-N-<stream>.md`; none writes the canonical file, so there is no contention.
-4. At fan-in **you alone** write the canonical `development-N.md`: a summary, a ref to each per-stream artifact, and the union of every stream's `files_touched`. That merged file is what DR and QA consume and what the DV0 handoff frontmatter and state patch describe.
 
 ## Handoff Protocol
 
@@ -586,7 +585,7 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 ### DV frontmatter block
 
-Paste at the top of `.context/development-N.md`; N per `stage-contracts.md#run-index-resolution`.
+Paste at the top of **your row's artifact** — the path `tasks.<ID>.metadata.artifact` names, one per DV ledger row. You write that file and no other: naming grammar, the per-row `stream` key and the single-DV case are `handoff-protocol.md § DV fan-out — ledger tasks`.
 
 #### The block
 
@@ -594,26 +593,26 @@ Paste at the top of `.context/development-N.md`; N per `stage-contracts.md#run-i
 ---
 handoff:
   stage: DV
+  task_id: DV0                 # your ledger row id; REQUIRED with >1 DV row
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files changed, M tests added>"
   tests_executed: 12
   test_suite_compiles: true
-  worktree: true               # true — DR hard-fails on false; notes below
-  worktree_path: <abs path>    # OPTIONAL — field notes
-  worktree_branch: <branch>    # OPTIONAL — field notes
+  worktree: true               # DR hard-fails on false
+  worktree_path: <abs path>    # OPTIONAL
+  worktree_branch: <branch>    # OPTIONAL
   files_touched:
     - path/to/file1.md
-    - path/to/file2.md
   next_stage_focus: "<imperative: what DR/QA focuses on>"
   open_questions:
-    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
+    - { id: sw-DV0-1, class: decision, ref: "<this artifact>#elicitation-sweep", blocks_next_stage: false }
   refs:
     decisions: architecture-N.md#decisions    # ONLY when AR ran
     coordination: coordination-N.md#fan-out   # ONLY when TL ran
-    tests: development-N.md#tests-added
+    tests: <this artifact>#tests-added
   architecture:                # ONLY when AR ran; else omit
     ref: architecture-N.md#decisions
-    applied: true              # truthful; architecture field notes below
+    applied: true              # truthful; field notes below
 ---
 ```
 
@@ -650,19 +649,23 @@ looking at gate-blocked work or work that never compiled. `handoff-harness.sh` f
 #### Field notes — worktree fields
 
 - `worktree`: MUST be true. DR treats `false` as a hard fail (`worktree_isolation_violation`) unless an explicit waiver exists (`worktree_isolation_waived` audit row or `task.metadata.worktree_waived`) — § D0.0.
-- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `tasks.DV0.worktree.path`, letting resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set it to the worktree confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
-- `worktree_branch` (OPTIONAL, additive): maps to `tasks.DV0.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
+- `worktree_path` (OPTIONAL, additive): the isolated worktree's absolute path — `state-patch.sh` maps it to `tasks.<ID>.worktree.path`, letting resume re-enter via `EnterWorktree(path)` and DR/QA run in the right dir. Set it to the worktree confirmed in D0.0 (WORKSPACE_ROOT when the workspace IS the worktree).
+- `worktree_branch` (OPTIONAL, additive): maps to `tasks.<ID>.worktree.branch`; gives fn-gate the branch without shelling `git rev-parse`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. It atomically patches `tasks.DV0` + the corresponding handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. It atomically patches `tasks.<ID>` + the corresponding handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+
+#### Name the row id and the path, every time (state patch)
+
+`<ID>` is your own ledger row (`DV0`, `DV1`, …) and `<your artifact>` the path that row carries. Pass both: the fallback basename guess resolves `development-<N>.md` and cannot see a stream suffix, so an unnamed patch settles the wrong row or ledgers a file you never wrote.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --prev <PREV> --facts '{
+state-patch.sh --stage DV --task-id <ID> --prev <PREV> --facts '{
   "files_modified": ["Sources/Foo.swift"],
   "tests_added": ["Tests/FooTests.swift"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],

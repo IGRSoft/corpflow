@@ -204,6 +204,7 @@ setup() {
     printf 'A clean requirement sentence that must survive sanitisation.\n'
     printf 'architecture-0.md\n'
     printf 'development-3.md\n'
+    printf 'development-3-web.md\n'
     for i in 1 2 3 4 5 6 7 8 9 10; do
       printf 'Clean narrative line %s carrying no forbidden token at all.\n' "$i"
     done
@@ -225,6 +226,8 @@ setup() {
     echo "current artifact name leaked into the issue body"; return 1; }
   printf '%s' "$body" | grep -q 'development-3.md' && {
     echo "artifact name leaked into the issue body"; return 1; }
+  printf '%s' "$body" | grep -q 'development-3-web.md' && {
+    echo "per-stream artifact name leaked into the issue body"; return 1; }
   printf '%s' "$body" | grep -q 'Clean narrative line 1' || {
     echo "sanitiser over-stripped: clean prose did not survive"; return 1; }
   return 0

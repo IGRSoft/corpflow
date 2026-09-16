@@ -731,9 +731,9 @@ filename_lint() {
     actual_name=$(basename "$artifact")
     name_re="^${expected_base}-[0-9]+\\.md\$"
     expected_desc="${expected_base}-N.md"
-    # DV fans out one sub-agent per TL-assigned workstream, each writing
-    # development-N-<stream>.md; the entry agent merges them into the canonical
-    # development-N.md. Both names are legal on disk simultaneously.
+    # DV fans out onto ledger tasks, one per stream, each writing its own
+    # development-N-<stream>.md handoff; a run with a single DV row may omit the
+    # stream and write development-N.md (handoff-protocol.md § DV fan-out).
     if [[ "$expected_base" == "development" ]]; then
       name_re="^development-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\\.md\$"
       expected_desc="development-N.md or development-N-<stream>.md"

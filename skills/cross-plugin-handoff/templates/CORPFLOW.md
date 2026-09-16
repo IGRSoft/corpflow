@@ -34,11 +34,11 @@ stage ran — read `state.json`.
 
 #### Who owns the artifact
 
-**DV is the only stage ownership transfers for.** Read `tasks.DV0.agent`: a `<PLUGIN>:` id means you
-own `development-N.md`, patch the ledger, and your frontmatter is what the harness validates; routed
-via `corpflow:developer` it owns the artifact and you return implementation plus a ≤500-token
-summary. Every other stage is **consultation** — corpflow writes the artifact and every `state.json`
-entry. DV-support owns no stage, writes under `.context/logs/`, never patches.
+**DV is the only stage ownership transfers for.** Read your DV row's `agent`: a `<PLUGIN>:` id means you
+own that row's own `metadata.artifact`, patch the ledger by row id, and your frontmatter is what the
+harness validates; routed via `corpflow:developer` it owns the artifact and you return implementation
+plus a ≤500-token summary. Every other stage is **consultation** — corpflow writes the artifact and
+every `state.json` entry. DV-support owns no stage, writes under `.context/logs/`, never patches.
 
 ## Evidence declaration
 
@@ -85,7 +85,7 @@ hook — the frontmatter is the contract. Errors go to `.context/errors/<agent-b
 | Stage | Artifact |
 |---|---|
 | AR | `.context/<platform>-architecture.md` (consultation output, ≤500-token return summary) |
-| DV | `.context/development-<N>.md` |
+| DV | your row's `metadata.artifact` — `.context/development-<N>-<stream>.md`, or `.context/development-<N>.md` when the run has one DV row |
 | DR | `.context/developer-review-<N>.md` (written by corpflow:technical-lead) |
 | SR | `.context/security-review-<N>.md` (written by corpflow:security-reviewer) |
 | QA | `.context/testing-<N>.md` (written by corpflow:qa-engineer) |
@@ -119,10 +119,10 @@ handoff:
 ```yaml
 # …continued: the same handoff: mapping, second half.
   open_questions:              # REQUIRED — [] when nothing to elicit, never omitted
-    - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
+    - { id: sw-DV0-1, class: decision, ref: "<this artifact>#elicitation-sweep", blocks_next_stage: false }
   refs:
     decisions: architecture-N.md#decisions    # ONLY when AR ran; omit otherwise
-    tests: development-N.md#tests-added
+    tests: <this artifact>#tests-added
   architecture:                # ONLY when AR ran; omit the whole object otherwise
     ref: architecture-N.md#decisions
     applied: true              # your truthful statement that AR's decisions were followed
@@ -209,11 +209,11 @@ frontmatter. Exit 3 means your artifact is not on disk — write it and re-run.
 Pass `--facts` on the **same** call. Arrays union on identity, so send only your own entries:
 
 ```bash
-state-patch.sh --stage DV --prev <PREV> --facts '{
+state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
   "files_modified": ["<path>"], "tests_added": ["<path>"],
-  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#decisions"}],
+  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-<N>[-<stream>].md#decisions"}],
   "open_questions": [{"id":"sw-DV0-1","stage":"DV","class":"decision",
-                      "ref":"development-0.md#elicitation-sweep",
+                      "ref":"development-<N>[-<stream>].md#elicitation-sweep",
                       "blocks_next_stage":false,"status":"open"}]
 }'
 ```
