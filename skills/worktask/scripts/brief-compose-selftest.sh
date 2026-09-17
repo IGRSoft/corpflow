@@ -158,10 +158,15 @@ EOF
   check "refs: every [5] ref independently resolves " [ -z "$resolve_fail" ]
 
   # ---- refs: context_refs as a JSON-encoded string (state-ledger.md's preferred
-  # shape) decodes into the same ref line the plain-array shape would emit ----
+  # shape) decodes; the ref is one only context_refs can produce ----
   local d5="$td/ac1b"
   mkdir -p "$d5/.context"
   cp "$d1/.context/planning-0.md" "$d5/.context/planning-0.md"
+  cat > "$d5/.context/research-0.md" << 'EOF'
+## findings
+
+Fixture findings text.
+EOF
   cat > "$d5/.context/state.json" << EOF
 {
   "worktask_id": "brief-compose-selftest",
@@ -174,7 +179,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d5",
-        "context_refs": "[\"planning-0.md#requirements\"]"
+        "context_refs": "[\"research-0.md#findings\"]"
       }
     }
   }
@@ -184,7 +189,7 @@ EOF
   out5=$(bash "$SELF" DV0 --state "$d5/.context/state.json" --orch-root "$d5" 2>/dev/null) || rc5=$?
   check "refs: context_refs JSON-string shape composes (exit 0)" [ "$rc5" -eq 0 ]
   check "refs: context_refs JSON-string shape decodes its ref" \
-    has_line "ref: planning-0.md#requirements" "$out5"
+    has_line "ref: research-0.md#findings" "$out5"
 
   # ---- refs: a plain-path context_refs entry (the
   # consultant-return channel) is emitted only when the file exists ----
@@ -220,6 +225,33 @@ EOF
     has_line "ref: .context/logs/consultant-return-DR0-x-a1.md" "$out6"
   check "refs: a missing plain-path context_refs entry is not emitted" \
     not_grep "consultant-return-DR0-y-a1" "$out6"
+
+  # ---- refs: a JSON-string context_refs that is not an array exits 2 ----
+  local d10="$td/ac1d"
+  mkdir -p "$d10/.context"
+  cp "$d1/.context/planning-0.md" "$d10/.context/planning-0.md"
+  cat > "$d10/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d10",
+        "context_refs": "{\"a\":1}"
+      }
+    }
+  }
+}
+EOF
+  local out10 rc10=0
+  out10=$(bash "$SELF" DV0 --state "$d10/.context/state.json" --orch-root "$d10" 2>/dev/null) || rc10=$?
+  check "refs: context_refs non-array JSON string exits 2" [ "$rc10" -eq 2 ]
+  check "refs: context_refs non-array JSON string prints no stdout" [ -z "$out10" ]
 
   # ---- guard: absolute-path guard — off-root fails closed, on-root passes ----
   local d2="$td/ac2"
@@ -388,6 +420,176 @@ EOF
   out9b=$(bash "$SELF" DV0 --state "$d9b/.context/state.json" --orch-root "$d9b" 2>/dev/null) || rc9b=$?
   check "guard: a file:// off-root path exits 1" [ "$rc9b" -eq 1 ]
   check "guard: a file:// off-root path prints no stdout" [ -z "$out9b" ]
+
+  # ---- guard: a parked sibling's blocked_on and preflight check detail are ledger
+  # data, so an off-root path there does not fail another row's compose ----
+  local d11="$td/ac4a"
+  mkdir -p "$d11/.context"
+  cp "$d1/.context/planning-0.md" "$d11/.context/planning-0.md"
+  cat > "$d11/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "metadata": {
+    "preflight": {
+      "version": 1,
+      "result": "pass",
+      "ran_at": "unknown",
+      "platforms": ["systems"],
+      "checks": [
+        {"id": "xcrun", "kind": "toolchain", "status": "pass", "detail": "found at /opt/homebrew/bin/xcrun"}
+      ],
+      "tools_absent": []
+    }
+  },
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d11"
+      }
+    },
+    "DV1": {
+      "status": "blocked",
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d11",
+        "blocked_on": {
+          "kind": "user_action",
+          "detail": {
+            "request": "Boot the iPhone 16 simulator; capture needs a running device",
+            "command": "xcrun simctl boot iPhone-16 --password=hunter2hunter2 /Users/alice/devices.json",
+            "verify": "xcrun simctl list devices booted"
+          },
+          "resume_with": "decision_ref"
+        }
+      }
+    }
+  }
+}
+EOF
+  local out11 rc11=0
+  out11=$(bash "$SELF" DV0 --state "$d11/.context/state.json" --orch-root "$d11" 2>/dev/null) || rc11=$?
+  check "guard: a parked sibling's blocked_on/preflight detail does not fail DV0 (exit 0)" [ "$rc11" -eq 0 ]
+  check "guard: the ledger is still inlined verbatim, parked path included" \
+    has_line "/Users/alice/devices.json" "$out11"
+
+  # ---- guard: the same path in DV0's own description still fails, so the
+  # exemption is by ledger path, not by token ----
+  local d12="$td/ac4b"
+  mkdir -p "$d12/.context"
+  cp "$d1/.context/planning-0.md" "$d12/.context/planning-0.md"
+  cat > "$d12/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "metadata": {
+    "preflight": {
+      "version": 1,
+      "result": "pass",
+      "ran_at": "unknown",
+      "platforms": ["systems"],
+      "checks": [
+        {"id": "xcrun", "kind": "toolchain", "status": "pass", "detail": "found at /opt/homebrew/bin/xcrun"}
+      ],
+      "tools_absent": []
+    }
+  },
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d12",
+        "description": "touches /Users/alice/devices.json"
+      }
+    },
+    "DV1": {
+      "status": "blocked",
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d12",
+        "blocked_on": {
+          "kind": "user_action",
+          "detail": {
+            "request": "Boot the iPhone 16 simulator; capture needs a running device",
+            "command": "xcrun simctl boot iPhone-16 --password=hunter2hunter2 /Users/alice/devices.json",
+            "verify": "xcrun simctl list devices booted"
+          },
+          "resume_with": "decision_ref"
+        }
+      }
+    }
+  }
+}
+EOF
+  local out12 rc12=0
+  out12=$(bash "$SELF" DV0 --state "$d12/.context/state.json" --orch-root "$d12" 2>/dev/null) || rc12=$?
+  check "guard: DV0's own description with the same path exits 1" [ "$rc12" -eq 1 ]
+  check "guard: DV0's own description with the same path prints no stdout" [ -z "$out12" ]
+
+  # ---- guard: "**/x" and "src/*/x" globs are not off-root paths ----
+  local d13="$td/ac4c"
+  mkdir -p "$d13/.context"
+  cp "$d1/.context/planning-0.md" "$d13/.context/planning-0.md"
+  cat > "$d13/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d13",
+        "description": "globs **/Package.swift and src/*/x.md"
+      }
+    }
+  }
+}
+EOF
+  local out13 rc13=0
+  out13=$(bash "$SELF" DV0 --state "$d13/.context/state.json" --orch-root "$d13" 2>/dev/null) || rc13=$?
+  check "guard: glob text passes (exit 0)" [ "$rc13" -eq 0 ]
+  check "guard: glob text fixture is non-empty" [ -n "$out13" ]
+
+  # ---- guard: an off-root path inside "*" emphasis is still flagged ----
+  local d14="$td/ac4d"
+  mkdir -p "$d14/.context"
+  cp "$d1/.context/planning-0.md" "$d14/.context/planning-0.md"
+  cat > "$d14/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d14",
+        "description": "see */opt/elsewhere/z.md* here"
+      }
+    }
+  }
+}
+EOF
+  local out14 rc14=0
+  out14=$(bash "$SELF" DV0 --state "$d14/.context/state.json" --orch-root "$d14" 2>/dev/null) || rc14=$?
+  check "guard: an emphasis-star off-root path exits 1" [ "$rc14" -eq 1 ]
+  check "guard: an emphasis-star off-root path prints no stdout" [ -z "$out14" ]
 
   # ---- fan-out: a two-stream DV fan-out — refs.dev in ascending task-id order, no override text ----
   local d4="$td/ac3"

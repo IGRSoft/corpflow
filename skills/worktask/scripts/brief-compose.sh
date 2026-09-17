@@ -22,10 +22,11 @@
 #
 # @stdout The composed brief (exit 0 only). Empty on exit 1 and exit 2.
 # @exitcode 0  Brief printed.
-# @exitcode 1  Guard failure: an absolute path outside the allowed roots, or an unresolved
+# @exitcode 1  Guard failure: an absolute path outside the allowed roots (tasks.*.metadata.
+#              blocked_on and metadata.preflight.checks[].detail exempt), or an unresolved
 #              `ref:` line. One `brief-compose: <reason>: <token>` stderr line per finding.
 # @exitcode 2  Usage error, malformed/unknown task id, unreadable ledger, malformed
-#              metadata.context_refs, missing jq, or a canon source file/section absent.
+#              metadata.context_refs (incl. a non-string entry), missing jq, or a canon source file/section absent.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -86,6 +87,16 @@ regex_escape() {
   printf '%s' "$1" | sed -e 's/[][\\.^$*+?(){}|]/\\&/g'
 }
 
+# Ledger-recorded runtime data, not orchestrator prose: redacted from the path scan only, so
+# one parked row's blocked_on cannot fail every other row. Add further subtrees here.
+# shellcheck disable=SC2016  # single-quoted on purpose: $p is jq's own variable, not bash's
+readonly LEDGER_DATA_REDACT_JQ='
+def ledger_data_path:
+  (length >= 5 and .[0] == "tasks" and .[2] == "metadata" and .[3] == "blocked_on")
+  or (length == 5 and .[0] == "metadata" and .[1] == "preflight" and .[2] == "checks" and (.[3] | type) == "number" and .[4] == "detail");
+reduce (paths(type == "string") | select(ledger_data_path)) as $p (.; setpath($p; "<ledger-data>"))
+'
+
 # --- guard state -------------------------------------------------------------------
 # Newline-delimited strings, not arrays: bash 3.2 raises "unbound variable" on
 # "${arr[@]}" for an array that never received an element, under `set -u`. A string
@@ -124,16 +135,17 @@ record_issue() {
 }
 
 # scan_abs_paths <buffer-file> — flags every absolute-path token in the whole brief
-# (section [3] included) that is not under an allowed root. A token opens at start-of-line
-# or after one of: space, double-quote, single-quote, backtick, "(", "=", ":", tab, "[",
-# ",", "<", "*", "|", "{" — the shapes a path is actually introduced by in prose, JSON and
-# fenced YAML — and is a run of path characters starting with "/". A bare "/dev/null" is
-# never flagged, and a single-segment "/name" or "/plugin:cmd" token that does not exist on
-# disk reads as a slash command, not a path. URLs are stripped first so "https://" is never
-# read as a filesystem path (its scheme colon would otherwise satisfy the boundary class);
-# "file://" loses only its scheme, so its path is still scanned. Allowed roots are masked
-# out first (literal match, longest first, whole path components only) so a root holding a
-# space or "@" is never cut into a false off-root prefix.
+# (section [3] included, minus the LEDGER_DATA_REDACT_JQ subtrees) that is not under an
+# allowed root. A token opens at start-of-line or after one of: space, double-quote,
+# single-quote, backtick, "(", "=", ":", tab, "[", ",", "<", "|", "{" — optionally followed
+# by one "*", so emphasis still flags but "**/x" and "src/*/x" globs do not — and is a run of
+# path characters starting with "/". A bare "/dev/null" is never flagged, and a single-segment "/name" or "/plugin:cmd"
+# token that does not exist on disk reads as a slash command, not a path. URLs are stripped
+# first so "https://" is never read as a filesystem path (its scheme colon would otherwise
+# satisfy the boundary class); "file://" loses only its scheme, so its path is still
+# scanned. Allowed roots are masked out first (literal match, longest first, whole path
+# components only) so a root holding a space or "@" is never cut into a false off-root
+# prefix.
 scan_abs_paths() {
   local buf="$1" scrubbed masked roots_file dq sq bt tb cls boundary pattern lineno match token
   scrubbed=$(mktemp)
@@ -185,15 +197,12 @@ scan_abs_paths() {
   fi
   rm -f "$roots_file"
 
-  boundary="[ ${dq}${sq}${bt}(=:,[<*|{${tb}]"
-  pattern="(^|${boundary})/[A-Za-z0-9_.+~%-]+(/[A-Za-z0-9_.+~%-]*)*"
+  boundary="[ ${dq}${sq}${bt}(=:,[<|{${tb}]"
+  pattern="(^|${boundary})[*]?/[A-Za-z0-9_.+~%-]+(/[A-Za-z0-9_.+~%-]*)*"
   while IFS=: read -r lineno match; do
     [[ -n "$match" ]] || continue
-    case "$match" in
-      /*) token="$match" ;;
-      ?*) token="${match#?}" ;;
-      *) continue ;;
-    esac
+    # The matched prefix never contains "/", so the first "/" opens the token.
+    token="/${match#*/}"
     if [[ "$token" == "/dev/null" ]]; then continue; fi
     if [[ "${token#/}" != */* && "$token" =~ ^/[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$ && ! -e "$token" ]]; then
       continue
@@ -435,6 +444,14 @@ cmd_render() {
   case "$ctxrefs_type" in
     null) : ;;
     array)
+      local ok_array bad_entry
+      ok_array=$(jq -r --arg id "$TASK_ID" \
+        '.tasks[$id].metadata.context_refs | all(.[]; type == "string")' "$STATE")
+      if [[ "$ok_array" != "true" ]]; then
+        bad_entry=$(jq -c --arg id "$TASK_ID" \
+          '.tasks[$id].metadata.context_refs | map(select(type != "string")) | .[0]' "$STATE")
+        die2 "tasks.$TASK_ID.metadata.context_refs has a non-string entry: $bad_entry"
+      fi
       while IFS= read -r r; do
         if [[ -n "$r" ]]; then RAW_CTXREFS_STR="${RAW_CTXREFS_STR}${r}"$'\n'; fi
       done < <(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs[]' "$STATE")
@@ -442,9 +459,14 @@ cmd_render() {
     string)
       local ctxrefs_raw ctxrefs_decoded
       ctxrefs_raw=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs' "$STATE")
+      # jq exits 0 on empty stdin, so a blank string would silently decode to zero refs.
+      [[ -n "$ctxrefs_raw" ]] \
+        || die2 "tasks.$TASK_ID.metadata.context_refs is an empty string, expected a JSON array"
       ctxrefs_decoded=$(printf '%s' "$ctxrefs_raw" | jq -r \
-        'if type == "array" then .[] else error("not a JSON array") end' 2> /dev/null) \
-        || die2 "tasks.$TASK_ID.metadata.context_refs is a string but not a JSON array: $ctxrefs_raw"
+        'if type != "array" then error("not a JSON array")
+         elif (all(.[]; type == "string") | not) then error("non-string entry")
+         else .[] end' 2> /dev/null) \
+        || die2 "tasks.$TASK_ID.metadata.context_refs is a string but not a JSON array of strings: $ctxrefs_raw"
       while IFS= read -r r; do
         if [[ -n "$r" ]]; then RAW_CTXREFS_STR="${RAW_CTXREFS_STR}${r}"$'\n'; fi
       done <<< "$ctxrefs_decoded"
@@ -466,10 +488,12 @@ cmd_render() {
   done <<< "$RAW_CTXREFS_STR"
 
   # ---- Assemble: buffer the whole brief before anything reaches stdout ----
+  # SCAN_BUF = BUF with LEDGER_DATA_REDACT_JQ applied to [3]; only the path scan reads it.
   BUF=$(mktemp)
-  # shellcheck disable=SC2064  # expand now: BUF is a plain path, gone by EXIT time otherwise
-  trap "rm -f '$BUF'" EXIT
-  emit() { printf '%s\n' "$1" >> "$BUF"; }
+  SCAN_BUF=$(mktemp)
+  # shellcheck disable=SC2064  # expand now: BUF/SCAN_BUF are plain paths, gone by EXIT time otherwise
+  trap "rm -f '$BUF' '$SCAN_BUF'" EXIT
+  emit() { printf '%s\n' "$1" >> "$BUF"; printf '%s\n' "$1" >> "$SCAN_BUF"; }
 
   emit "<<<contract-reminder>>>"
   emit "Every \`ref:\` line below is a fact this brief did not verify for you. Resolve a"
@@ -488,13 +512,19 @@ cmd_render() {
   emit "<<<state-json>>>"
   emit '```json'
   jq '.' "$STATE" >> "$BUF"
+  jq "$LEDGER_DATA_REDACT_JQ" "$STATE" >> "$SCAN_BUF" \
+    || die2 "ledger redaction for absolute-path scan failed"
   emit '```'
 
   emit "<<<stage-contract>>>"
   printf '%s\n' "$tpl_block" >> "$BUF"
+  printf '%s\n' "$tpl_block" >> "$SCAN_BUF"
 
   emit "<<<model-discipline>>>"
-  if [[ -n "$model_block" ]]; then printf '%s\n' "$model_block" >> "$BUF"; fi
+  if [[ -n "$model_block" ]]; then
+    printf '%s\n' "$model_block" >> "$BUF"
+    printf '%s\n' "$model_block" >> "$SCAN_BUF"
+  fi
 
   emit "<<<task-description>>>"
   emit "task_id: ${TASK_ID}"
@@ -529,7 +559,7 @@ cmd_render() {
         ;;
     esac
   done < "$BUF"
-  scan_abs_paths "$BUF"
+  scan_abs_paths "$SCAN_BUF"
 
   if [[ -n "$ISSUES" ]]; then
     printf '%s' "$ISSUES" >&2
