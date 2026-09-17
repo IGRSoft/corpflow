@@ -1,8 +1,7 @@
 ---
 handoff:
   stage: DV
-  tests_executed: 12
-  test_summary_line: "12 tests, 0 failures"
+  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]
   verdict: ok
   summary: "DV0a fixture development artifact"
   files_touched: [tests/shell/worktask/state-patch.bats]

@@ -128,9 +128,10 @@ _fm_temp_count() {
   assert_failure 2
 }
 
-# A DV artifact with the given tests_executed / test_suite_compiles pair, and
-# nothing else that could fail — so a failure here is this arm and no other.
-_dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
+# A DV artifact with one bats entry of the given count (or `[]` for an empty list) and an
+# optional test_suite_compiles, and nothing else that could fail — so a failure here is
+# this arm and no other.
+_dv_test_evidence_artifact() {  # <path> <count|[]> [test_suite_compiles]
   local _compiles="${3:-}"
   {
     printf -- '---\n'
@@ -138,8 +139,12 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
     printf '  stage: DV\n'
     printf '  verdict: ok\n'
     printf '  summary: "test evidence fixture"\n'
-    printf '  tests_executed: %s\n' "$2"
-    printf '  test_summary_line: "%s tests, 0 failures"\n' "$2"
+    if [ "$2" = "[]" ]; then
+      printf '  tests_executed: []\n'
+    else
+      printf '  tests_executed:\n'
+      printf '    - { runner: bats, count: %s, summary_line: "%s tests, 0 failures" }\n' "$2" "$2"
+    fi
     if [ -n "$_compiles" ]; then printf '  test_suite_compiles: %s\n' "$_compiles"; fi
     printf '  files_touched: [a.md]\n'
     printf '  next_stage_focus: "DR reviews"\n'
@@ -150,15 +155,27 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
   } > "$1"
 }
 
-@test "test-evidence: tests_executed: 0 with no test_suite_compiles fails (F-02)" {
+@test "test-evidence: every count 0 with no test_suite_compiles fails (F-02)" {
   # The ambiguity the field exists to remove: a stage denied a run and a stage
   # whose suite never compiled both reported nothing, and the two were
   # indistinguishable to every reader downstream for ten hours of one run.
   local a="$WD/te-0.md"
   _dv_test_evidence_artifact "$a" 0
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
-  assert_failure
-  [[ "$output" == *"tests_executed: 0 with no test_suite_compiles"* ]] || fail "$output"
+  assert_failure 1
+  assert_output --partial "fail: stage=DV reports no executed tests (an empty tests_executed list or every count 0) with no test_suite_compiles"
+}
+
+@test "test-evidence: an empty list with no test_suite_compiles fails; unknown clears it" {
+  local a="$WD/te-empty.md"
+  _dv_test_evidence_artifact "$a" "[]"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_failure 1
+  assert_output --partial "reports no executed tests (an empty tests_executed list or every count 0) with no test_suite_compiles"
+
+  _dv_test_evidence_artifact "$a" "[]" unknown
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_success
 }
 
 @test "test-evidence: all three legal values clear a zero count" {
@@ -188,20 +205,37 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
   [[ "$output" == *"expected true, false or unknown"* ]] || fail "$output"
 }
 
-# --- AD-4: a non-zero count is checked against the runner's own words ---------
+@test "test-evidence: an invalid entry is reported once, not again as missing compile evidence" {
+  local a="$WD/te-4.md"
+  _dv_test_evidence_artifact "$a" x
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$a"
+  assert_failure 1
+  assert_output --partial 'tests_executed[0] runner=bats count is "x"'
+  [[ "$output" != *"no test_suite_compiles"* ]] || fail "double report: $output"
+}
 
-# mk_te <path> <stage> <count> <summary-line-yaml> <body-line>
-# `-` in either slot omits it, so one generator covers absent, malformed and
-# corroborated without a second fixture shape to drift.
+# --- per-runner entries: each count is checked against its runner's own words ---
+
+# mk_te <path> <stage> <entries-yaml> [body-line]...
+# <entries-yaml> is the indented list under `tests_executed:`, or `[]`; every further
+# argument is one body line under the verification heading, so corroborated and
+# uncorroborated lines come from the same generator.
 mk_te() {
+  local out="$1" stage="$2" entries="$3" line
+  shift 3
   {
     echo '---'
     echo 'handoff:'
-    echo "  stage: $2"
+    echo "  stage: $stage"
     echo '  verdict: ok'
     echo '  summary: "ad4 fixture"'
-    echo "  tests_executed: $3"
-    [ "$4" = "-" ] || echo "  test_summary_line: $4"
+    if [ "$entries" = "[]" ]; then
+      echo '  tests_executed: []'
+    else
+      echo '  tests_executed:'
+      printf '%s\n' "$entries"
+    fi
+    echo '  test_suite_compiles: true'
     echo '  files_touched: [a.sh]'
     echo '  key_decisions: []'
     echo '  next_stage_focus: "next stage"'
@@ -213,6 +247,33 @@ mk_te() {
     echo
     echo '## verification-command'
     echo
+    for line in "$@"; do echo "$line"; done
+    echo
+    echo '## elicitation-sweep'
+    echo
+    echo 'nothing to ask'
+  } > "$out"
+}
+
+# mk_te_legacy <path> <stage> <scalar> <legacy-top-level-line-yaml|-> <body-line|->
+mk_te_legacy() {
+  {
+    echo '---'
+    echo 'handoff:'
+    echo "  stage: $2"
+    echo '  verdict: ok'
+    echo '  summary: "legacy fixture"'
+    echo "  tests_executed: $3"
+    [ "$4" = "-" ] || echo "  test_summary_line: $4  # legacy shape"
+    echo '  files_touched: [a.sh]'
+    echo '  key_decisions: []'
+    echo '  next_stage_focus: "next stage"'
+    echo '  open_questions: []'
+    echo '  refs: { dev: development.md#files-changed }'
+    echo '---'
+    echo
+    echo '# Artifact'
+    echo
     [ "$5" = "-" ] || echo "$5"
     echo
     echo '## elicitation-sweep'
@@ -221,71 +282,150 @@ mk_te() {
   } > "$1"
 }
 
-@test "ad4: a non-zero count with no test_summary_line fails (R2d)" {
-  # The hole in one line: the old arm returned early unless the count was zero,
-  # so `tests_executed: 4000` validated clean for a stage that ran nothing.
-  mk_te "$WD/ad4-absent.md" DV 4000 - -
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-absent.md"
-  assert_failure
-  [[ "$output" == *"tests_executed: 4000 with no test_summary_line"* ]] || fail "$output"
+@test "entries: a two-runner list with both lines in the body passes" {
+  mk_te "$WD/te-two.md" DV '    - { runner: bats, count: 12, summary_line: "1..12" }
+    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }' '1..12' '3 passed in 0.4s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-two.md"
+  assert_success
+  [[ "$output" != *"warn: stage=DV tests_executed"* ]] || fail "a clean list warned: $output"
 }
 
-@test "ad4: an empty or digitless summary line fails with its own message" {
-  local v
-  for v in '"   "' '"all green"'; do
-    mk_te "$WD/ad4-malformed.md" DV 12 "$v" -
-    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-malformed.md"
-    assert_failure
-    [[ "$output" == *"carries no digit"* ]] || fail "$v: $output"
+@test "entries: a scalar count fails without the legacy opt-in and names the scalar" {
+  local stage
+  for stage in DV QA; do
+    mk_te_legacy "$WD/te-scalar-$stage.md" "$stage" 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-scalar-$stage.md"
+    assert_failure 1
+    assert_output --partial "fail: stage=$stage tests_executed is a scalar (\"12\") — record one entry per runner: tests_executed: [{runner, count, summary_line}]; a legacy scalar validates only under --legacy-tests-executed"
+    [[ "$output" != *"is a legacy scalar"* ]] || fail "deprecation warn without the opt-in: $output"
   done
 }
 
-@test "ad4: a summary line corroborated nowhere fails — an excerpt must be checkable" {
-  mk_te "$WD/ad4-uncorr.md" DV 12 '"12 tests, 0 failures"' -
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-uncorr.md"
-  assert_failure
-  [[ "$output" == *"uncorroborated"* ]] || fail "$output"
+@test "entries: a map fails in every mode" {
+  mk_te "$WD/te-map.md" DV '    runner: bats
+    count: 12
+    summary_line: "1..12"' '1..12'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-map.md"
+  assert_failure 1
+  assert_output --partial "fail: stage=DV tests_executed is a map, not a list — record one entry per runner"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-map.md" --legacy-tests-executed
+  assert_failure 1
+  assert_output --partial "tests_executed is a map, not a list"
 }
 
-@test "ad4: the body quoting the line passes, and so does a named log capture" {
-  mk_te "$WD/ad4-body.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-body.md"
-  assert_success
+@test "entries: a non-map entry fails and the entries after it are still checked" {
+  mk_te "$WD/te-nonmap.md" DV '    - 12
+    - { count: 3, summary_line: "3 passed" }' '3 passed'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-nonmap.md"
+  assert_failure 1
+  assert_output --partial "fail: stage=DV tests_executed[0] is not a map — each entry is {runner, count, summary_line}"
+  assert_output --partial "fail: stage=DV tests_executed[1] has no runner"
+}
 
-  # The second legal home: a runner whose tally reaches only a terminal is
-  # captured to .context/logs/ and the artifact names the capture, glob included.
+@test "entries: a missing or blank runner fails and names runner" {
+  local r
+  for r in '' 'runner: "   ", ' 'runner: 7, '; do
+    mk_te "$WD/te-norunner.md" DV "    - { ${r}count: 12, summary_line: \"1..12\" }" '1..12'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-norunner.md"
+    assert_failure 1
+    assert_output --partial "fail: stage=DV tests_executed[0] has no runner — name the runner that produced this count as a non-empty string (bats, pytest, swift, …)"
+  done
+}
+
+@test "entries: runner and count faults in one entry are reported independently" {
+  mk_te "$WD/te-both.md" DV '    - { count: "x" }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-both.md"
+  assert_failure 1
+  assert_output --partial "tests_executed[0] has no runner"
+  assert_output --partial 'tests_executed[0] runner= count is "x"'
+}
+
+@test "entries: a count that is not plain digits fails" {
+  local c
+  for c in '"12"' '-1' '1e3' '"1841 (scoped)"'; do
+    mk_te "$WD/te-count.md" DV "    - { runner: bats, count: $c, summary_line: \"1..12\" }" '1..12'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-count.md"
+    assert_failure 1
+    assert_output --partial "tests_executed[0] runner=bats count is"
+    assert_output --partial "a count is a whole number and nothing else"
+  done
+}
+
+@test "entries: every bad entry gets its own failure line in one run" {
+  # Collect-all: four independent faults, one per entry, and the good entry stays silent.
+  mk_te "$WD/te-many.md" DV '    - { runner: bats, count: 12, summary_line: "1..12" }
+    - { runner: pytest, count: "1841 (scoped)", summary_line: "1841 passed" }
+    - { runner: swift, count: 4000 }
+    - { runner: gradle, count: 7, summary_line: "all green" }
+    - { runner: vitest, count: 9, summary_line: "9 passed" }' '1..12' '1841 passed'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-many.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[1] runner=pytest count is "1841 (scoped)"'
+  assert_output --partial "fail: stage=DV tests_executed[2] runner=swift reports count: 4000 with no summary_line — copy the runner's own summary line in verbatim"
+  assert_output --partial 'fail: stage=DV tests_executed[3] runner=gradle summary_line carries no digit: "all green"'
+  assert_output --partial 'fail: stage=DV tests_executed[4] runner=vitest summary_line is uncorroborated: "9 passed" appears neither in te-many.md nor in a .context/logs/ capture it names'
+  [[ "$output" != *"tests_executed[0]"* ]] || fail "the valid entry was reported: $output"
+  [ "$(printf '%s\n' "$output" | grep -c '^fail: stage=DV tests_executed\[')" -eq 4 ] || fail "$output"
+}
+
+@test "entries: a blank summary line carries no digit" {
+  mk_te "$WD/te-blank.md" DV '    - { runner: bats, count: 12, summary_line: "   " }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-blank.md"
+  assert_failure 1
+  assert_output --partial "tests_executed[0] runner=bats summary_line carries no digit"
+}
+
+@test "entries: a named log capture corroborates the line" {
+  # The second legal home: a runner whose tally reaches only a terminal is captured to
+  # .context/logs/ and the artifact names the capture, glob included.
   mkdir -p "$WD/logs"
   printf 'run 1\n12 tests, 0 failures\n' > "$WD/logs/dv-bats-1.log"
-  mk_te "$WD/ad4-log.md" DV 12 '"12 tests, 0 failures"' 'capture: .context/logs/dv-bats-*.log'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-log.md"
+  mk_te "$WD/te-log.md" DV '    - { runner: bats, count: 12, summary_line: "12 tests, 0 failures" }' \
+    'capture: .context/logs/dv-bats-*.log'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-log.md"
   assert_success
 }
 
-@test "ad4: a count the line does not name warns, it does not block (sw-AR0-2)" {
-  # Warn-only because `verbatim` is not mechanically decidable: a TAP plan line
-  # is the whole summary a scoped bats run prints, and blocking on the token
-  # would fail a stage that satisfies the contract. Same posture as ar_ref.
-  mk_te "$WD/ad4-tap.md" DV 1814 '"1..840"' '1..840'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-tap.md"
+@test "entries: a count the line does not name warns once with one audit row, not a block" {
+  # Warn-only because `verbatim` is not mechanically decidable: a TAP plan line is the
+  # whole summary a scoped bats run prints, and blocking on the token would fail a stage
+  # that satisfies the contract.
+  mkdir -p "$WD/logs"
+  mk_te "$WD/te-tap.md" DV '    - { runner: bats, count: 1814, summary_line: "1..840" }
+    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }' '1..840' '3 passed in 0.4s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-tap.md"
   assert_success
-  [[ "$output" == *"warn:"* && "$output" == *"is not a whole-number token"* ]] || fail "$output"
+  assert_output --partial 'warn: stage=DV tests_executed[0] runner=bats count: 1814 is not a whole-number token of summary_line "1..840" — the excerpt is corroborated, the count is not'
   [[ "$output" != *"fail:"* ]] || fail "the soft tier blocked: $output"
+  assert_audit_row count_corroboration --file "$WD/logs/audit.jsonl" --subject DV \
+    --count 1 --meta tests_executed=1814 --meta runner=bats --meta summary_line=1..840
 }
 
-@test "ad4: QA carries the count and the line too (R2e)" {
-  # QA is the sole holder of full-suite authority and reported no count at all,
-  # so the arm that checks counts could never reach the one stage that has one.
-  mk_te "$WD/ad4-qa.md" QA 840 '"1..840"' '1..840'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-qa.md"
+@test "entries: a zero count needs no summary_line" {
+  mk_te "$WD/te-zero.md" DV '    - { runner: bats, count: 0 }
+    - { runner: pytest, count: 3, summary_line: "3 passed" }' '3 passed'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-zero.md"
+  assert_success
+}
+
+@test "entries: QA carries the list too, and an empty QA list needs no compile evidence" {
+  # QA is the sole holder of full-suite authority, so the arm that checks counts must
+  # reach it.
+  mk_te "$WD/te-qa.md" QA '    - { runner: bats, count: 840, summary_line: "1..840" }' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-qa.md"
   assert_success
 
-  mk_te "$WD/ad4-qa-absent.md" QA 840 - -
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-qa-absent.md"
-  assert_failure
-  [[ "$output" == *"stage=QA"* ]] || fail "$output"
+  mk_te "$WD/te-qa-absent.md" QA '    - { runner: bats, count: 840 }'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-qa-absent.md"
+  assert_failure 1
+  assert_output --partial "stage=QA tests_executed[0] runner=bats reports count: 840 with no summary_line"
+
+  mk_te "$WD/te-qa-empty.md" QA '[]'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-qa-empty.md"
+  assert_success
 }
 
-@test "ad4: a QA artifact with no tests_executed at all fails the required set (R2e)" {
+@test "entries: a QA artifact with no tests_executed at all fails the required set" {
   {
     echo '---'
     echo 'handoff:'
@@ -305,25 +445,67 @@ mk_te() {
   [[ "$output" == *"missing required field: tests_executed"* ]] || fail "$output"
 }
 
-@test "ad4: a present non-numeric tests_executed is refused, not delegated (sw-DR0-3)" {
-  # The required-field loop tests non-emptiness only, so a count carrying units or
-  # a parenthetical used to satisfy it and then skip every tier of the evidence
-  # contract below it.
-  local stage
-  for stage in DV QA; do
-    mk_te "$WD/ad4-nonnum-$stage.md" "$stage" '"1841 (scoped)"' '"1..1841"' '1..1841'
-    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-nonnum-$stage.md"
-    assert_failure
-    [[ "$output" == *"stage=$stage tests_executed is"* ]] || fail "$stage: $output"
-  done
+@test "entries: a stray top-level summary line beside a list warns and is never evidence" {
+  mk_te "$WD/te-stray.md" DV '    - { runner: bats, count: 12, summary_line: "1..12" }
+  test_summary_line: "1..12"  # legacy key beside a list' '1..12'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-stray.md"
+  assert_success
+  assert_output --partial "warn: stage=DV carries a legacy top-level test_summary_line next to a tests_executed list — it is ignored as evidence; move it into that runner's summary_line and delete the top-level key"
+  [ "$(printf '%s\n' "$output" | grep -c 'carries a legacy top-level')" -eq 1 ] || fail "$output"
+
+  # Never evidence: the top-level line cannot stand in for an entry's missing one.
+  mk_te "$WD/te-stray2.md" DV '    - { runner: bats, count: 12 }
+  test_summary_line: "1..12"  # legacy key beside a list' '1..12'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-stray2.md"
+  assert_failure 1
+  assert_output --partial "tests_executed[0] runner=bats reports count: 12 with no summary_line"
 }
 
-@test "ad4: a zero count is untouched — test_suite_compiles still owns it" {
-  mk_te "$WD/ad4-zero.md" DV 0 - -
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/ad4-zero.md"
-  assert_failure
-  [[ "$output" == *"no test_suite_compiles"* ]] || fail "$output"
-  [[ "$output" != *"test_summary_line"* ]] || fail "the zero path asked for a summary line: $output"
+# --- legacy scalar opt-in ------------------------------------------------------
+
+@test "legacy: the flag validates a corroborated scalar with exactly one deprecation warn" {
+  mk_te_legacy "$WD/te-legacy.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy.md" --legacy-tests-executed
+  assert_success
+  assert_output --partial "warn: stage=DV tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated, removed in the next minor release; rewrite it as tests_executed: [{runner, count, summary_line}]"
+  [ "$(printf '%s\n' "$output" | grep -c '^warn:.*is a legacy scalar')" -eq 1 ] || fail "$output"
+}
+
+@test "legacy: CORPFLOW_LEGACY_TESTS_EXECUTED=1 turns the opt-in on; any other value does not" {
+  mk_te_legacy "$WD/te-legacy-env.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
+  run env CORPFLOW_LEGACY_TESTS_EXECUTED=1 bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-env.md"
+  assert_success
+  [ "$(printf '%s\n' "$output" | grep -c 'is a legacy scalar')" -eq 1 ] || fail "$output"
+
+  run env CORPFLOW_LEGACY_TESTS_EXECUTED=true bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-env.md"
+  assert_failure 1
+  assert_output --partial 'tests_executed is a scalar ("12")'
+}
+
+@test "legacy: the integer rules still apply under the opt-in" {
+  mk_te_legacy "$WD/te-legacy-nonnum.md" DV '"1841 (scoped)"' '"1..1841"' '1..1841'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-nonnum.md" --legacy-tests-executed
+  assert_failure 1
+  assert_output --partial 'stage=DV legacy tests_executed is "1841 (scoped)"'
+
+  mk_te_legacy "$WD/te-legacy-noline.md" QA 4000 - -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-noline.md" --legacy-tests-executed
+  assert_failure 1
+  assert_output --partial "stage=QA reports legacy tests_executed: 4000 with no test_summary_line"
+
+  mk_te_legacy "$WD/te-legacy-zero.md" DV 0 - -
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-zero.md" --legacy-tests-executed
+  assert_failure 1
+  assert_output --partial "stage=DV reports legacy tests_executed: 0 with no test_suite_compiles"
+  [ "$(printf '%s\n' "$output" | grep -c 'is a legacy scalar')" -eq 1 ] || fail "$output"
+}
+
+@test "legacy: the opt-in never relaxes a list" {
+  mk_te "$WD/te-legacy-list.md" DV '    - { count: 12, summary_line: "1..12" }' '1..12'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy-list.md" --legacy-tests-executed
+  assert_failure 1
+  assert_output --partial "tests_executed[0] has no runner"
+  [[ "$output" != *"is a legacy scalar"* ]] || fail "a list was treated as legacy: $output"
 }
 
 @test "contract: --self-test passes (smoke, NON-counting)" {
@@ -340,8 +522,7 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
-    printf '  tests_executed: 12\n'
-    printf '  test_summary_line: "12 tests, 0 failures"\n'
+    printf '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]\n'
     printf '  verdict: ok\n'
     printf '  summary: "sweep fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -474,8 +655,7 @@ dv_artifact() {
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
-    printf '  tests_executed: 12\n'
-    printf '  test_summary_line: "12 tests, 0 failures"\n'
+    printf '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]\n'
     printf '  verdict: ok\n'
     printf '  summary: "gate fixture"\n'
     printf '  files_touched: [a.md]\n'
@@ -633,21 +813,29 @@ spill_state() {  # <path> <run_index> <ids-json>
 }
 
 # ---------------------------------------------------------------------------
-# Frontmatter token budget (AD-2): discretionary = total - min(stub block, 64),
-# fail > 200, advisory warn > 264. Sweep stubs are mandatory and fixed-shape, so
-# excluding them stops the budget from penalising a stage for asking questions.
+# Frontmatter token budget (AD-2): discretionary = total - min(stub block, 64)
+# - min(tests_executed block, 96), fail > 200, advisory warn > 360. Sweep stubs and
+# runner entries are mandatory evidence, so excluding them stops the budget from
+# penalising a stage for asking questions or for recording every runner it ran.
 # ---------------------------------------------------------------------------
 
-# A DV artifact padded to an approximate total token count, with <stubs> sweep stubs.
-budget_artifact() {  # <path> <filler-words> <stubs>
-  local path="$1" fill="$2" stubs="$3" i pad=""
+# A DV artifact padded to an approximate total token count, with <stubs> sweep stubs and
+# <runners> list entries (default 1); `bad` emits one entry with an invalid count.
+budget_artifact() {  # <path> <filler-words> <stubs> [runners|bad]
+  local path="$1" fill="$2" stubs="$3" runners="${4:-1}" i pad=""
   for ((i = 0; i < fill; i++)); do pad="$pad w"; done
   {
     printf -- '---\n'
     printf 'handoff:\n'
     printf '  stage: DV\n'
-    printf '  tests_executed: 12\n'
-    printf '  test_summary_line: "12 tests, 0 failures"\n'
+    printf '  tests_executed:\n'
+    if [ "$runners" = "bad" ]; then
+      printf '    - { runner: bats, count: "x" }\n'
+    else
+      for ((i = 1; i <= runners; i++)); do
+        printf '    - { runner: r%s, count: 12, summary_line: "12 tests, 0 failures" }\n' "$i"
+      done
+    fi
     printf '  verdict: ok\n'
     printf '  summary: "budget fixture%s"\n' "$pad"
     printf '  files_touched: [a.md]\n'
@@ -683,6 +871,17 @@ budget_artifact() {  # <path> <filler-words> <stubs>
   assert_output --partial "tokens=2"
 }
 
+@test "budget: four runner entries cannot push a compliant artifact over" {
+  # Same prose, one runner versus four: folding runners into one entry must never be
+  # the way to fit the budget.
+  budget_artifact "$WD/dv-run1.md" 120 1 1
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-run1.md"
+  assert_success
+  budget_artifact "$WD/dv-run4.md" 120 1 4
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-run4.md"
+  assert_success
+}
+
 @test "budget: the exclusion is capped, so extra stubs cannot buy prose room" {
   # Twelve stubs is three times the per-stage cap; the exclusion still stops at 64
   # tokens, so an artifact this size fails on its prose exactly as it would at four.
@@ -691,14 +890,30 @@ budget_artifact() {  # <path> <filler-words> <stubs>
   assert_failure 1
   assert_output --partial "discretionary tokens > 200 budget"
   # The excluded amount is the cap, not the measured 12-stub block.
-  assert_output --partial "- 64 sweep-stub tokens excluded"
+  assert_output --partial "- 64 sweep-stub tokens -"
 }
 
-@test "budget: the 264 absolute ceiling is reported alongside the failure" {
+@test "budget: the tests_executed exclusion is capped at 96 tokens" {
+  budget_artifact "$WD/dv-gamed-te.md" 200 1 12
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-gamed-te.md"
+  assert_failure 1
+  assert_output --partial "discretionary tokens > 200 budget"
+  assert_output --partial "- 96 tests_executed tokens excluded)"
+}
+
+@test "budget: an invalid tests_executed list is counted in full and says so" {
+  budget_artifact "$WD/dv-bad-te.md" 200 1 bad
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-bad-te.md"
+  assert_failure 1
+  assert_output --partial "(tests_executed invalid: counted in full) stage=DV frontmatter"
+  assert_output --partial "- 0 tests_executed tokens excluded)"
+}
+
+@test "budget: the 360 absolute ceiling is reported alongside the failure" {
   budget_artifact "$WD/dv-huge.md" 260 4
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/dv-huge.md"
   assert_failure 1
-  assert_output --partial "> 264 absolute ceiling"
+  assert_output --partial "> 360 absolute ceiling"
 }
 
 @test "budget: every stage artifact this repo ships passes the promoted gate" {
@@ -721,8 +936,7 @@ mk_dv_ft() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  verdict: ok'
     echo '  summary: "cap fixture"'
     echo "  files_touched: $ft"
@@ -773,8 +987,7 @@ mk_qa_dec() {
     echo 'handoff:'
     echo '  stage: QA'
     echo '  verdict: ok'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "divergence fixture"'
     echo '  files_touched: [a.sh]'
     echo '  key_decisions:'
@@ -905,8 +1118,7 @@ mk_qa_dec_bullet() {
     echo 'handoff:'
     echo '  stage: QA'
     echo '  verdict: ok'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "divergence fixture"'
     echo '  files_touched: [a.sh]'
     echo '  key_decisions:'
@@ -1025,8 +1237,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  verdict: ok'
     echo '  summary: "collect-all fixture"'
     echo "  files_touched: $ft"
@@ -1055,8 +1266,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  verdict: ok'
     echo '  summary: "missing fields fixture"'
     echo '---'
@@ -1097,8 +1307,7 @@ mk_qa_dec_bullet() {
     echo '---'
     echo 'handoff:'
     echo '  stage: DV'
-    echo '  tests_executed: 12'
-    echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  verdict: ok'
     echo "  summary: \"budget fixture $pad\""
     echo '  files_touched: [a.md]'
@@ -1116,7 +1325,7 @@ mk_qa_dec_bullet() {
   assert_failure 1
   assert_output --partial "is not a sweep stub"
   assert_output --partial "(stub-shape invalid: sweep stubs counted in full)"
-  assert_output --partial "- 0 sweep-stub tokens excluded"
+  assert_output --partial "- 0 sweep-stub tokens -"
 }
 
 @test "collect-all: a clean artifact still reports one ok: line and exit 0" {
@@ -1169,7 +1378,7 @@ split_artifact() {
   {
     printf -- '---\nhandoff:\n  stage: DV\n'
     [ "$2" = "-" ] || printf '  task_id: %s\n' "$2"
-    printf '  tests_executed: 12\n  test_summary_line: "12 tests, 0 failures"\n'
+    printf '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]\n'
     printf '  verdict: ok\n  summary: "split fixture"\n  files_touched: [a.md]\n'
     printf '  next_stage_focus: "DR reviews"\n'
     if [ -n "${3:-}" ]; then

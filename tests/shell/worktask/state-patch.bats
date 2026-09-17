@@ -1908,12 +1908,14 @@ exit 0'
   command -v yq > /dev/null 2>&1 || skip "yq not installed"
   cd "$WD"
   bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --prev PL --artifact .context/development-0.md
-  jq -c '[.tasks.DV0, .handoffs]' .context/state.json > with-yq.json
+  # tests_executed is excluded: the mirror is yq-only by design, and a host without yq
+  # leaves it untouched rather than reading the list as gone.
+  jq -c '[(.tasks.DV0 | del(.tests_executed)), .handoffs]' .context/state.json > with-yq.json
   cp "$FIXTURES/worktask/state.sample.json" .context/state.json
   run_script_env --cwd "$WD" --hide yq "$SCRIPT" \
     --stage DV --prev PL --artifact .context/development-0.md
   assert_success
-  jq -c '[.tasks.DV0, .handoffs]' .context/state.json > without-yq.json
+  jq -c '[(.tasks.DV0 | del(.tests_executed)), .handoffs]' .context/state.json > without-yq.json
   run diff -u with-yq.json without-yq.json
   assert_success
 }
@@ -2505,4 +2507,132 @@ _mk_mkdir_shim() { # <post-mkdir-body>
     .context/logs/audit.jsonl
   assert_output "256"
   [ -d .context/state.json.lock.d ] || fail "the foreign lock was removed"
+}
+
+# ---------------------------------------------------------------------------
+# tests_executed mirror and rework_runs. The row mirrors the current artifact's list; a
+# --task-replay marks a row holding evidence, and the next completion merge files the
+# prior list as a new round before overwriting the mirror. Needs the real yq: the list is
+# read only on the yq branch.
+# ---------------------------------------------------------------------------
+
+# _te_round <count> — the DV0 artifact for one round, one bats entry.
+_te_round() {
+  printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "round with %s"\n  tests_executed:\n    - { runner: bats, count: %s, summary_line: "1..%s" }\n  test_suite_compiles: true\n---\n\n1..%s\n' \
+    "$1" "$1" "$1" "$1" > .context/development-0.md
+}
+
+# _te_seed — a DV0 row the replay guard accepts, with no agent alive.
+_te_seed() {
+  printf '%s\n' '[]' > gone.json
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-create DV0 \
+    --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+}
+
+_te_merge() {
+  bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0 --artifact .context/development-0.md
+}
+
+@test "tests_executed: the completion merge mirrors the artifact list onto the task row" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  _te_round 12
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0.tests_executed' .context/state.json
+  assert_output '[{"runner":"bats","count":12,"summary_line":"1..12"}]'
+  run jq -r '.tasks.DV0 | [has("rework_runs"), has("rework_pending")] | @csv' .context/state.json
+  assert_output "false,false"
+}
+
+@test "tests_executed: a replay marks only a row that holds evidence" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  # A row without tests_executed resets exactly as it did before the marker existed.
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  run jq -r '.tasks.DV0 | has("rework_pending")' .context/state.json
+  assert_output "false"
+
+  _te_round 12
+  _te_merge > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  run jq -r '.tasks.DV0.rework_pending' .context/state.json
+  assert_output "true"
+}
+
+@test "rework_runs: round 2 files round 1, a re-merge is a no-op, round 3 keeps round 1 byte-identical" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  local l1='[{"runner":"bats","count":12,"summary_line":"1..12"}]'
+  local l2='[{"runner":"bats","count":14,"summary_line":"1..14"}]'
+  local l3='[{"runner":"bats","count":16,"summary_line":"1..16"}]'
+  _te_seed
+
+  _te_round 12
+  _te_merge > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  _te_round 14
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0.tests_executed' .context/state.json
+  assert_output "$l2"
+  run jq -c '.tasks.DV0.rework_runs' .context/state.json
+  assert_output "[{\"round\":1,\"tests_executed\":$l1}]"
+  run jq -r '.tasks.DV0 | has("rework_pending")' .context/state.json
+  assert_output "false"
+
+  # Idempotent: the same round-two artifact merged again finds no marker and appends nothing.
+  cp .context/state.json snap-r2
+  run _te_merge
+  assert_success
+  cmp -s .context/state.json snap-r2 || fail "re-merge mutated state.json
+$(diff snap-r2 .context/state.json || true)"
+
+  local round1_before
+  round1_before="$(jq -c '.tasks.DV0.rework_runs[0]' .context/state.json)"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  _te_round 16
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0.rework_runs[0]' .context/state.json
+  assert_output "$round1_before"
+  run jq -c '.tasks.DV0.rework_runs' .context/state.json
+  assert_output "[{\"round\":1,\"tests_executed\":$l1},{\"round\":2,\"tests_executed\":$l2}]"
+  run jq -c '.tasks.DV0.tests_executed' .context/state.json
+  assert_output "$l3"
+}
+
+@test "tests_executed: an artifact without a list drops the mirror; a replayed round is still filed" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  _te_round 12
+  _te_merge > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "no list"\n---\n' \
+    > .context/development-0.md
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0 | [has("tests_executed"), has("rework_pending"), (.rework_runs | length)]' \
+    .context/state.json
+  assert_output '[false,false,1]'
+}
+
+@test "tests_executed: without yq the mirror and the rework marker are left untouched" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  _te_round 12
+  _te_merge > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-replay DV0 --agents-json gone.json > /dev/null
+  _te_round 14
+  run_script_env --cwd "$WD" --hide yq "$SCRIPT" \
+    --stage DV --task-id DV0 --artifact .context/development-0.md
+  assert_success
+  # An unreadable list is not an absent one: the round waits for a merge that can read it.
+  run jq -c '.tasks.DV0 | [.tests_executed[0].count, .rework_pending, has("rework_runs")]' \
+    .context/state.json
+  assert_output '[12,true,false]'
 }

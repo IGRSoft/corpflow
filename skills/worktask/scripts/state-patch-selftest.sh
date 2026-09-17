@@ -1243,6 +1243,38 @@ EOART
   fi
   rm -f .context/state.json.snapack
 
+  # ---- T35: tests_executed mirror; a replayed round is filed under rework_runs[] ----
+  if command -v yq > /dev/null 2>&1; then
+    make_state
+    printf '[]\n' > agents-gone.json
+    bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" \
+      > /dev/null
+    _t35_art() {  # <count>
+      printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "round with %s"\n  tests_executed:\n    - { runner: bats, count: %s, summary_line: "1..%s" }\n---\n' \
+        "$1" "$1" "$1" > .context/development-0.md
+    }
+    _t35_art 12
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    bash "$SELF" --task-replay DV0 --agents-json agents-gone.json > /dev/null 2>&1 || true
+    _t35_art 14
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    cp .context/state.json .context/state.json.snap35
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    if jq -e '.tasks.DV0.tests_executed == [{runner:"bats",count:14,summary_line:"1..14"}]
+              and .tasks.DV0.rework_runs == [{round:1,tests_executed:[{runner:"bats",count:12,summary_line:"1..12"}]}]
+              and (.tasks.DV0 | has("rework_pending") | not)' .context/state.json > /dev/null \
+      && diff -q .context/state.json .context/state.json.snap35 > /dev/null; then
+      printf 'T35: replayed round filed once under rework_runs, re-merge is a no-op: ok\n'
+    else
+      printf 'T35: rework_runs append: FAIL\n' >&2
+      jq '.tasks.DV0' .context/state.json >&2
+      exit 1
+    fi
+    rm -f .context/state.json.snap35
+  else
+    printf 'T35: rework_runs append: SKIP (yq unavailable)\n'
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }
