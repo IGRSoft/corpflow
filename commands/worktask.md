@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh":*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh":*), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh":*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -170,7 +170,8 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
 > **BINDING 1 — Pre-work Prohibition**: create, edit, or modify NO project files during Phase 1
 > (localization, accessibility IDs, config, sources). Only
-> `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes, the
+> `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes,
+> the Step 3a `seed-state.sh` seed, the
 > Step 2a `.context/gh-issue.json` anchor (reuse path only), the Step 3a
 > `autonomy-preflight.sh --record` call, and the `mktemp` buffers under `$TMPDIR`
 > (`corpflow-preflight.*`, `corpflow-issue-scan.*`) that § Step 2a-pre and § Step 2a write outside
@@ -209,15 +210,17 @@ capture pre-authorization.
 
 #### Step 2a-pre snippet — check mode, output buffered
 
-    ACCEPT_ABSENT="<the --accept-absent= value, verbatim; empty when not given>"
-    PF_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-preflight.XXXXXX")
-    set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,platform] or none>"
-    [ -n "$ACCEPT_ABSENT" ] && set -- "$@" --accept-absent "$ACCEPT_ABSENT"
-    pf_rc=0
-    bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@" > "$PF_BUF" || pf_rc=$?
-    echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
-    if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
-    else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
+```bash
+ACCEPT_ABSENT="<the --accept-absent= value, verbatim; empty when not given>"
+PF_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-preflight.XXXXXX")
+set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,platform] or none>"
+[ -n "$ACCEPT_ABSENT" ] && set -- "$@" --accept-absent "$ACCEPT_ABSENT"
+pf_rc=0
+bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@" > "$PF_BUF" || pf_rc=$?
+echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
+if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
+else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
+```
 
 `$PLUGIN_ROOT` comes from § Snippet preamble below.
 
@@ -253,15 +256,19 @@ the snippet and gate below.
 
 #### Snippet preamble (every snippet in this file)
 
-    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
-    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
+[ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+```
 
 #### Step 2a snippet — invoke the scan, non-blocking
 
-    SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
-    scan_out=""
-    if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
-    scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+```bash
+SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
+scan_out=""
+if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
+scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+```
 
 #### Step 2a — the gate
 
@@ -276,11 +283,13 @@ present each `candidate=<json>` line (number, title, url — at most three, most
 
 #### Step 2a — reusing an existing issue
 
-    jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
-       --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
-       --arg ts "$(date -u +%FT%TZ)" \
-       '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
-         created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+```bash
+jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
+   --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
+   --arg ts "$(date -u +%FT%TZ)" \
+   '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
+     created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+```
 
 Planning still runs, bound to the existing issue. `created_run_index: -1` is the "predates this
 context" value `publish-pl-issue.sh` already uses for a recovered search hit, so Step A comments on
@@ -288,10 +297,12 @@ that issue instead of opening a second one.
 
 #### Step 2a — unattended (`--auto` contains `plan`)
 
-    SCAN_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-issue-scan.XXXXXX")
-    SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
-    if [ -f "$SCAN" ]; then bash "$SCAN" --goal "<task description>" < /dev/null > "$SCAN_BUF" || true; fi
-    echo "SCAN_BUF=$SCAN_BUF"; grep -E '^(result|reason|candidates)=' "$SCAN_BUF"
+```bash
+SCAN_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-issue-scan.XXXXXX")
+SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
+if [ -f "$SCAN" ]; then bash "$SCAN" --goal "<task description>" < /dev/null > "$SCAN_BUF" || true; fi
+echo "SCAN_BUF=$SCAN_BUF"; grep -E '^(result|reason|candidates)=' "$SCAN_BUF"
+```
 
 The same scan with no prompt: stdin is `/dev/null`, there is no `AskUserQuestion`, and
 `result=shown` does not stop the run. Step 3 proceeds as a new worktask; the reuse path is not
@@ -325,38 +336,48 @@ taken, and the exact-title auto-bind in `publish-pl-issue.sh` still applies. Kee
 ### Steps 3–3a — Context folders and state.json seed
 
 3. `mkdir -p .context/designs .context/images .context/errors .context/logs`
-3a. Atomic-write the `.context/state.json` seed (temp+fsync+rename per
-`skills/worktask/references/handoff-protocol.md#atomic-write`, schema per `#state-json-schema`),
-PL0 `in_progress`. **Re-run aware**: compute the next free planning index from any pre-existing
-`.context/planning-*.md` — hard-coding `planning-0.md` pins the old plan and lets PL0 overwrite it.
-If creation fails (e.g. read-only filesystem), STOP and report: there is no correct degraded mode.
+3a. Seed `.context/state.json` by running `skills/worktask/scripts/seed-state.sh`, the seed's only
+definition: next free planning index, `facts.goal` escaped and capped at 240 chars, the
+unconditional `metadata.workspace_path` (`initialization-patterns.md § Seeded workspace_path`), and
+the atomic write. It resolves `.context/` inside this worktree only, never from cwd. Resulting
+shape: `handoff-protocol.md#pl0-seed`; `--help` lists flags and exit codes.
 
-#### Step 3a — the seed payload
+#### Step 3a snippet — seed the ledger
 
-The re-run-aware next-free-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic
-write are canonical in `skills/worktask/references/initialization-patterns.md`. Seed
-`{version:2, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N,
-metadata.workspace_path, tasks.PL0.status:in_progress, facts.goal, plus the otherwise-empty facts
-incl. dispatched_agents:[], handoffs:{}}`. The seeded `plan_file` is the **path** shape, not a bare
-basename — task metadata carries the basename shape; both are legal (`handoff-protocol.md §
-state.json schema`).
+```bash
+set -- --worktask-id "<slug>" --goal "<task description; the issue title under /megatask>"
+PLATFORM="<the --platform value, verbatim; empty when not given>"
+[ -n "$PLATFORM" ] && set -- "$@" --platform "$PLATFORM"
+seed_rc=0
+seed_out=$(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh" "$@") || seed_rc=$?
+printf '%s\nseed_rc=%s\n' "$seed_out" "$seed_rc"
+if [ "$seed_rc" -eq 3 ]; then
+  seed_state=$(printf '%s\n' "$seed_out" | sed -n 's/^state=//p')
+  bash skills/worktask/scripts/state-patch.sh --state "$seed_state" --task-status PL0 in_progress
+fi
+```
+
+#### Step 3a — the exit code decides
+
+- **0**: seeded; continue to § Step 3a — record the autonomy preflight, then Step 3b.
+- **3**: `state.json` already exists (a new run in an existing `.context/`); byte-unchanged, and the
+  script has no overwrite path. The snippet has reopened PL0 so an interruption before Step 5
+  cannot read the previous run's `completed` PL0 as this run's plan (BINDING 2). A non-zero from
+  that call is a ledger write failure: STOP and report. Otherwise continue as for 0;
+  `pl0-procedure.md § Step 4 — state.json reset` is the re-run writer.
+- **4**: no `.context/` resolves inside this worktree; nothing written. STOP and report.
+- **1 or 2**: write failure or usage error; nothing written. STOP and report, since there is no
+  correct degraded mode.
 
 #### Step 3a — `metadata.workspace_path` (UNCONDITIONAL) and `facts.goal`
 
-- **`workspace_path`**: `git rev-parse --show-toplevel`, else `pwd`. Not a megatask-only field:
+- **`workspace_path`**: `seed-state.sh` stamps it on every run. Not a megatask-only field:
   `dv-tree-preflight.sh`, the § Workspace-root cross-check, and `agents/developer.md`'s path-prefix
   check all read it and each degrades to a **silent pass** when it is absent — omitting it disables
   all three at once (`initialization-patterns.md § Seeded workspace_path`).
-- **`facts.goal`**: from the task description, JSON-escaped, truncated to 240 chars. It is the issue
+- **`facts.goal`**: the `--goal` value, which `seed-state.sh` escapes and caps. It is the issue
   title and `## Summary` source for `publish-pl-issue.sh`, and nothing on the PL state-patch path
   writes it. PM refines it later; the seed only guarantees it is never absent.
-
-#### Step 3a field notes
-
-`facts.dispatched_agents: []` is seeded (additive) so the loop appends per-`task_id` dispatch entries
-in place. The other v1 additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`,
-`facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful
-(`handoff-protocol.md#state-json-schema`).
 
 #### Step 3a — record the autonomy preflight
 
@@ -364,12 +385,14 @@ Right after the seed, and only when Step 2a-pre passed with a `result_json=` lin
 nothing and delete any Step 2a buffer. Fill both paths from what those steps printed; leave
 `SCAN_BUF` empty when Step 2a ran with its prompt or not at all.
 
-    PF_BUF="<path Step 2a-pre printed>"; SCAN_BUF="<path Step 2a printed, or empty>"
-    set -- --record "$PF_BUF" --context .context
-    [ -n "$SCAN_BUF" ] && set -- "$@" --candidates "$SCAN_BUF"
-    rec_rc=0
-    rec_out=$(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@") || rec_rc=$?
-    printf '%s\nrec_rc=%s\n' "$rec_out" "$rec_rc"
+```bash
+PF_BUF="<path Step 2a-pre printed>"; SCAN_BUF="<path Step 2a printed, or empty>"
+set -- --record "$PF_BUF" --context .context
+[ -n "$SCAN_BUF" ] && set -- "$@" --candidates "$SCAN_BUF"
+rec_rc=0
+rec_out=$(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@") || rec_rc=$?
+printf '%s\nrec_rc=%s\n' "$rec_out" "$rec_rc"
+```
 
 #### Step 3a — what the record writes
 
@@ -391,14 +414,16 @@ a missing tool only when the preflight recorded it as accepted, reports that too
 
 #### Step 3a — the failed-record continuation
 
-    # …continued: same call as the record snippet
-    if [ "$rec_rc" -ne 0 ]; then
-      w=$(printf '%s\n' "$rec_out" | sed -n 's/^recorded=//p' | paste -sd, -)
-      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg rc "$rec_rc" --arg w "${w:-none}" \
-        '{ts:$ts, actor:"orchestrator", action:"autonomy_preflight_record_failed", subject:"PL0",
-          result:"warn", task_id:"PL0", metadata:{exit:$rc, recorded:$w}}' >> .context/logs/audit.jsonl
-      rm -f -- "$PF_BUF" ${SCAN_BUF:+"$SCAN_BUF"}
-    fi
+```bash
+# …continued: same call as the record snippet
+if [ "$rec_rc" -ne 0 ]; then
+  w=$(printf '%s\n' "$rec_out" | sed -n 's/^recorded=//p' | paste -sd, -)
+  jq -cn --arg ts "$(date -u +%FT%TZ)" --arg rc "$rec_rc" --arg w "${w:-none}" \
+    '{ts:$ts, actor:"orchestrator", action:"autonomy_preflight_record_failed", subject:"PL0",
+      result:"warn", task_id:"PL0", metadata:{exit:$rc, recorded:$w}}' >> .context/logs/audit.jsonl
+  rm -f -- "$PF_BUF" ${SCAN_BUF:+"$SCAN_BUF"}
+fi
+```
 
 ### Step 3b — Verify SubagentStop hook installed
 
@@ -935,7 +960,7 @@ _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
 # so the check passes unconditionally and an unstamped ledger reads as clean — which also
 # leaves dv-tree-preflight.sh and developer.md's path-prefix check inert.
 if [ -z "$_task_root" ]; then
-  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Re-seed per Step 3a." >&2
+  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Set it via state-patch.sh --ledger-meta." >&2
   # Write audit row `workspace_path_unstamped` and STOP — do not call Task()
   exit 1
 fi
