@@ -92,7 +92,8 @@ _lib() {
   assert_success
   jq -e '(keys | length) == 7 and all(.[]; (.owner_issue | type) == "number" and (.landed | type) == "boolean")
     and .user_action.landed and .host_environment.landed and .permission.landed
-    and (.correction.landed | not) and .correction.owner_issue == 404' <<< "$output"
+    and (.correction.landed | not) and .correction.owner_issue == 404
+    and .artifact.landed and .artifact.owner_issue == 399' <<< "$output"
 }
 
 @test "normalize: blocked_on wins, the alias becomes peer_session, neither exits 1" {

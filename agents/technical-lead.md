@@ -113,11 +113,11 @@ Each DV task's diff is its block from `bash skills/worktask/scripts/stream-diff.
 
 #### Scope-addition re-entry checklist
 
-A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifact after its original sign-off) re-opens the delivery surface, not just the code. Verify it mechanically first, in each DV tree:
+A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifact after its original sign-off) re-opens the delivery surface, not just the code. Verify it mechanically first, in each DV tree, with the untracked-file check below. A gap is `verdict: fail` back to the DV task owning that tree, anchored on the criterion the scope addition was accepted under. Release-notes coverage of the added scope is RE's check (`agents/release-engineer.md`).
 
-**No untracked files outside the landed set** — every `?` path from `bash skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` is in the landed set: the union of `metadata.landed_paths` across every task row, `jq -r '[.tasks[] | .metadata.landed_paths // [] | .[]] | unique | .[]' .context/state.json`. The set is empty until landing populates it, so today any `?` line is a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
+##### No untracked files outside the landed set
 
-A gap is `verdict: fail` back to the DV task owning that tree, anchored on the criterion the scope addition was accepted under. Release-notes coverage of the added scope is RE's check (`agents/release-engineer.md`).
+Every `?` path from `bash skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` must be in that DV tree's landed set (`skills/shared/state-ledger.md § The landed set`): `jq -r --arg root "<DV tree>" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' .context/state.json`. `<DV tree>` is the row's `metadata.workspace_path` as the ledger holds it, else the orchestrator's `git rev-parse --show-toplevel` (§ Reading the DV tasks); with no resolvable tree pass `--arg root ""`, the empty set, never the union. An empty set is normal. Subtract from untracked entries only: a landed path staged or modified is a consumer editing a read-only file and stays a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
 
 #### DR3.5 — Warning Escalation
 

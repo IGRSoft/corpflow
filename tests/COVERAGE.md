@@ -205,6 +205,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/workspace-root-banner.sh` | `tests/shell/worktask/workspace-root-banner.bats` | — | — | — |
 | `skills/worktask/scripts/brief-compose.sh` | `tests/shell/worktask/brief-compose.bats` | — | — | — |
 | `skills/worktask/scripts/brief-compose-selftest.sh` | `tests/shell/worktask/brief-compose.bats` (alias; the `--self-test` harness it drives) | — | — | — |
+| `skills/worktask/scripts/land-artifacts.sh` | `tests/shell/worktask/land-artifacts.bats` | — | — | — |
+| `skills/worktask/scripts/land-artifacts-selftest.sh` | `tests/shell/worktask/land-artifacts.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/doc-option-check.sh` | `tests/shell/worktask/doc-option-check.bats` (also `dc-secure-model.bats` for the secure-tier grant/prose parity) | — | — | — |
 | `skills/worktask/scripts/doc-option-check-selftest.sh` | `tests/shell/worktask/doc-option-check.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 

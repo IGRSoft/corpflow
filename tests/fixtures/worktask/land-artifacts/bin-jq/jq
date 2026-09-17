@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# tests/fixtures/worktask/land-artifacts/bin-jq/jq — PATH shim that fails only
+# land-artifacts.sh's candidate-keys read inside collect_pairs, which runs in a
+# command substitution; every other jq call (the ledger validation before it
+# included) is passed to the real jq at $LAND_REAL_JQ unchanged.
+#
+# Minimum shell: bash 3.2+ (macOS default), matching the script under test.
+
+set -euo pipefail
+
+: "${LAND_REAL_JQ:?LAND_REAL_JQ must be set by the test before PATH is shimmed}"
+
+case "$*" in
+  *'keys[]?'*)
+    printf >&2 'jq: simulated failure\n'
+    exit 5
+    ;;
+esac
+
+exec "$LAND_REAL_JQ" "$@"

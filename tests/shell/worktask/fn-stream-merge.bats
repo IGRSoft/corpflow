@@ -108,14 +108,96 @@ refs_snapshot() {
 }
 
 @test "commit: a landed path is excluded from the stream commit" {
-  jq '.tasks.DV0.metadata.landed_paths = ["landed.md"]' "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+  local svc_real
+  svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
+  jq --arg s "$svc_real" \
+    '.tasks.DV0.metadata.landed_paths = ["artifact.yaml"] | .tasks.DV0.metadata.landed_roots = [$s]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
   stream_edits
-  printf 'landed change\n' >> "$WD/wt-service/landed.md"
+  # A new, staged path (git add -u never stages an untracked file): its diff
+  # status is Added, so --diff-filter=A still excludes it.
+  printf 'landed change\n' > "$WD/wt-service/artifact.yaml"
+  git -C "$WD/wt-service" add artifact.yaml
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
   assert_success
   assert_line --index 0 --partial "excluded=1"
   run git -C "$WD/wt-service" show --name-only --format= HEAD
   assert_output "svc.txt"
+}
+
+@test "commit: a landed-set entry matching a tracked modification is still committed, not unstaged" {
+  # landed.md is already tracked from the base commit; declaring it landed
+  # here is a forged/stale entry — land-artifacts.sh itself never overwrites
+  # tracked content (dest_tracked refuses that), so a real landing is always
+  # an add. --diff-filter=A must leave this genuine modification staged.
+  local svc_real
+  svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
+  jq --arg s "$svc_real" \
+    '.tasks.DV0.metadata.landed_paths = ["landed.md"] | .tasks.DV0.metadata.landed_roots = [$s]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+  stream_edits
+  printf 'landed change\n' >> "$WD/wt-service/landed.md"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
+  assert_success
+  assert_line --index 0 --partial "excluded=0"
+  run git -C "$WD/wt-service" show --name-only --format= HEAD
+  assert_line "landed.md"
+  assert_line "svc.txt"
+}
+
+@test "commit: a same-named staged path lands only in one stream's tree, excluded only there" {
+  printf 'shared\n' > "$WD/wt-service/shared.yaml"
+  printf 'shared\n' > "$WD/wt-web/shared.yaml"
+  git -C "$WD/wt-service" add shared.yaml
+  git -C "$WD/wt-web" add shared.yaml
+
+  local web_real
+  web_real="$(cd -P "$WD/wt-web" && pwd -P)"
+  jq --arg w "$web_real" \
+    '.tasks.DV1.metadata.landed_paths = ["shared.yaml"] | .tasks.DV1.metadata.landed_roots = [$w]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+
+  stream_edits
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
+  assert_success
+  assert_line --index 0 --partial "excluded=0"
+  run git -C "$WD/wt-service" show --name-only --format= HEAD
+  assert_line "shared.yaml"
+
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV1 --message-file "$WD/msg.txt"
+  assert_success
+  assert_line --index 0 --partial "excluded=1"
+  run git -C "$WD/wt-web" show --name-only --format= HEAD
+  refute_line "shared.yaml"
+}
+
+@test "commit: an unsafe landed-set entry scoped to the stream's own tree blocks landed_path_unsafe" {
+  local svc_real
+  svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
+  jq --arg s "$svc_real" \
+    '.tasks.DV0.metadata.landed_paths = ["../escape"] | .tasks.DV0.metadata.landed_roots = [$s]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+  stream_edits
+  local head_before
+  head_before=$(git -C "$WD/wt-service" rev-parse HEAD)
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
+  assert_failure 1
+  assert_output "blocked reason=landed_path_unsafe task=DV0 stream=service"
+  [ "$(git -C "$WD/wt-service" rev-parse HEAD)" = "$head_before" ]
+}
+
+@test "commit: untracked= excludes an untracked landed file but counts an unrelated untracked file" {
+  local svc_real
+  svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
+  jq --arg s "$svc_real" \
+    '.tasks.DV0.metadata.landed_paths = ["landed.txt"] | .tasks.DV0.metadata.landed_roots = [$s]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+  stream_edits
+  printf 'x\n' > "$WD/wt-service/landed.txt"
+  printf 'y\n' > "$WD/wt-service/other.txt"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
+  assert_success
+  assert_line --index 0 --partial "untracked=1"
 }
 
 @test "merge: exactly one two-parent --no-ff merge per stream, then continuity passes (AC4)" {
@@ -180,6 +262,30 @@ refs_snapshot() {
   assert_failure
   run git -C "$WD/repo" rev-list --merges --count "origin/develop..${COMBINED}"
   assert_output "1"
+}
+
+@test "merge: landed_path_in_stream blocks only the stream whose own tree holds the landing" {
+  # A same-named path committed on BOTH stream branches, landed only in web's tree —
+  # service's identical commit must not trip the check meant for web alone.
+  printf 'x\n' > "$WD/wt-service/shared.yaml"
+  git -C "$WD/wt-service" add shared.yaml
+  git -C "$WD/wt-service" commit -qm "chore: shared service"
+  printf 'y\n' > "$WD/wt-web/shared.yaml"
+  git -C "$WD/wt-web" add shared.yaml
+  git -C "$WD/wt-web" commit -qm "chore: shared web"
+
+  local web_real
+  web_real="$(cd -P "$WD/wt-web" && pwd -P)"
+  jq --arg w "$web_real" \
+    '.tasks.DV1.metadata.landed_paths = ["shared.yaml"] | .tasks.DV1.metadata.landed_roots = [$w]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+
+  stream_edits
+  commit_both
+  record_branches
+  run --separate-stderr bash -c "cd '$WD/repo' && bash '$PLUGIN_ROOT/$SCRIPT' --state '$L' merge"
+  assert_failure 1
+  assert_output "blocked reason=landed_path_in_stream task=DV1 stream=web"
 }
 
 @test "merge: a stream missing from facts.stream_branches blocks before any ref moves" {

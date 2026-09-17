@@ -10,8 +10,9 @@
 #             or
 #               arm=multi streams=<n>
 #             followed by one "<task>\t<stream>\t<tree>" line per row, task-id order.
-#     commit  In the row's tree: `add -u`, unstage the landed-path union, `commit -F`
-#             (hooks run). New files are not picked up: FN stages them first. Prints
+#     commit  In the row's tree: `add -u`, unstage that tree's own scoped landed set,
+#             `commit -F` (hooks run). New files are not picked up: FN stages them
+#             first. Prints
 #               <committed|already_committed|nothing_to_commit> task=<ID> stream=<s>
 #                 branch=<b> sha=<sha|-> excluded=<n> untracked=<n>
 #             (one line), then
@@ -36,6 +37,9 @@
 #     to start the merge; nothing to abort) stream_is_combined (a stream tree's branch, or a
 #     facts.stream_branches value, is facts.branch: committing there writes the PR head
 #     directly and would make every combined commit look like stream work)
+#     landed_path_unsafe (land-artifacts.sh --strict refused an entry in this tree's landed
+#     set — a hand-edited ledger, not this run's own write) landed_set_unreadable
+#     (land-artifacts.sh could not be run or exited outside 0/1 for this tree)
 #   A combined-branch commit is foreign when it is in <base_ref>..<combined>, is not an
 #   ancestor of any stream branch, and is not a two-parent merge whose second parent is.
 #
@@ -191,20 +195,6 @@ ROWS=$(jq -r '.tasks // {} | to_entries
 ROW_COUNT=0
 [[ -z "$ROWS" ]] || ROW_COUNT=$(printf '%s\n' "$ROWS" | awk 'END { print NR }')
 
-# Landed union, reduced to safe relative paths: each reaches git after `--` as argv.
-LANDED=()
-while IFS= read -r p; do
-  [[ -n "$p" ]] || continue
-  case "$p" in
-    /* | -* | .. | ../* | */.. | */../*)
-      printf >&2 'fn-stream-merge: ignoring unsafe landed path: %s\n' "$p"
-      continue
-      ;;
-  esac
-  LANDED+=("$p")
-done <<< "$(jq -r '[.tasks[]? | .metadata.landed_paths // [] | .[] | strings]
-  | unique | .[]' "$STATE_PATH" 2> /dev/null || printf '')"
-
 # Sets ARM (single|multi) and ARM_REASON; blocks when a multi-row ledger is malformed.
 select_arm() {
   local id stream tree real reals="" distinct
@@ -236,6 +226,27 @@ resolve_base() { # $1=task $2=stream
   [[ -n "$BASE_GIT_REF" ]] || blocked base_unresolvable "$1" "$2"
 }
 
+# landed_for_tree <tree> <task> <stream> — fills LANDED[] from land-artifacts.sh's
+# own --list-landed --strict for that ONE tree, never a global union: the same
+# path landed into a sibling stream's tree must stay visible in this one. A
+# refused (unsafe) or unreadable set blocks rather than silently excluding
+# nothing, because this exclusion is what keeps a landed file out of a commit.
+landed_for_tree() {
+  local tree="$1" task="$2" stream="$3" land="${SCRIPT_DIR}/land-artifacts.sh" line out rc=0
+  [ -r "$land" ] || die_input "land-artifacts.sh unreachable at ${land} — plugin install broken"
+  LANDED=()
+  out=$(bash "$land" --list-landed --tree "$tree" --strict --state "$STATE_PATH" < /dev/null 2> /dev/null) || rc=$?
+  case "$rc" in
+    0) ;;
+    1) blocked landed_path_unsafe "$task" "$stream" ;;
+    *) blocked landed_set_unreadable "$task" "$stream" ;;
+  esac
+  [[ -z "$out" ]] || while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    LANDED+=("$line")
+  done <<< "$out"
+}
+
 cmd_plan() {
   select_arm
   if [[ "$ARM" == "single" ]]; then
@@ -249,7 +260,7 @@ cmd_plan() {
 }
 
 cmd_commit() {
-  local row id stream tree real branch staged unstaged both result sha excluded=0 untracked
+  local row id stream tree real branch staged unstaged both result sha excluded=0 untracked untracked_landed
   local restore=()
   select_arm
   [[ "$ARM" == "multi" ]] || blocked arm_single "$TASK_ARG" "-"
@@ -270,6 +281,8 @@ cmd_commit() {
   resolve_base "$id" "$stream"
   [[ "$branch" != "${BASE_NAME#origin/}" ]] || blocked on_base_branch "$id" "$stream"
 
+  landed_for_tree "$real" "$id" "$stream"
+
   # Same predicate as fn-preflight.sh staging: which bytes were meant is a human call.
   staged=$(git diff --cached --name-only 2> /dev/null || printf '')
   unstaged=$(git diff --name-only 2> /dev/null || printf '')
@@ -286,9 +299,13 @@ cmd_commit() {
 
   git add -u || blocked commit_failed "$id" "$stream"
   if [[ "${#LANDED[@]}" -gt 0 ]]; then
+    # --diff-filter=A: a landed-path entry can only unstage a file THIS run
+    # added, never a genuine tracked modification a forged or stale entry
+    # happens to name — land-artifacts.sh itself never overwrites tracked
+    # content, so a real landing is always an add.
     while IFS= read -r -d '' p; do
       restore+=("$p")
-    done < <(git diff --cached --name-only -z -- "${LANDED[@]}" 2> /dev/null || true)
+    done < <(git diff --cached --name-only -z --diff-filter=A -- "${LANDED[@]}" 2> /dev/null || true)
     if [[ "${#restore[@]}" -gt 0 ]]; then
       git restore --staged -- "${restore[@]}" || blocked commit_failed "$id" "$stream"
       excluded="${#restore[@]}"
@@ -310,6 +327,13 @@ cmd_commit() {
   fi
 
   untracked=$(git ls-files --others --exclude-standard 2> /dev/null | awk 'END { print NR }')
+  if [[ "${#LANDED[@]}" -gt 0 ]]; then
+    # Only the untracked half is dropped: a landed path already staged or
+    # modified on this branch stays visible, exactly like the exclusion above.
+    untracked_landed=$(git ls-files --others --exclude-standard -- "${LANDED[@]}" 2> /dev/null | awk 'END { print NR }')
+    untracked=$((untracked - untracked_landed))
+    [[ "$untracked" -ge 0 ]] || untracked=0
+  fi
   if [[ "$untracked" -gt 0 ]]; then
     printf >&2 'fn-stream-merge: %s untracked path(s) in %s were not committed; stage them first if they belong to the stream\n' \
       "$untracked" "$real"
@@ -331,7 +355,7 @@ is_ancestor_of_any_stream() { # $1=commit; STREAM_REFS global
 }
 
 cmd_merge() {
-  local top combined id stream tree b c _p1 p2 extra current wt_path wt_line merged=()
+  local top combined id stream tree real b c _p1 p2 extra current wt_path wt_line merged=()
   local streams=() branches=()
   STREAM_REFS=()
   select_arm
@@ -360,6 +384,10 @@ cmd_merge() {
     [[ "$b" != "$combined" ]] || blocked stream_is_combined "$id" "$stream"
     git rev-parse --verify --quiet "refs/heads/${b}^{commit}" > /dev/null 2>&1 \
       || blocked stream_branch_unknown "$id" "$stream"
+    # Scoped to THIS row's own tree, never a sibling stream's: two trees can
+    # legitimately land the same-named path, and only one of them may ship it.
+    real=$(realpath_of "$tree") || blocked tree_unresolved "$id" "$stream"
+    landed_for_tree "$real" "$id" "$stream"
     if [[ "${#LANDED[@]}" -gt 0 ]] &&
        [[ -n "$(git diff --name-only "${BASE_GIT_REF}...refs/heads/${b}" -- "${LANDED[@]}" 2> /dev/null || printf '')" ]]; then
       blocked landed_path_in_stream "$id" "$stream"
