@@ -11,8 +11,10 @@ setup() {
   # The root ladder (hooks/model-switch-lib.sh) only honours a declared
   # CLAUDE_PROJECT_DIR/WORKSPACE_ROOT when .context/ already exists under it —
   # it never guesses cwd. Declare that fixture root up front so every test
-  # below is exercising the write path, not the unresolved-root no-op.
+  # below is exercising the write path, not the unresolved-root no-op. The ladder
+  # answers only a context holding a ledger, so the fixture seeds one.
   mkdir -p "$WD/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$WD/.context/state.json"
 }
 
 bash_payload() {
@@ -282,6 +284,7 @@ refute_log_contains() {
   # the resolver always answers physically — compare physical to physical.
   main="$(cd "$main" && pwd -P)"
   mkdir -p "$main/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$main/.context/state.json"
 
   run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
@@ -291,4 +294,42 @@ refute_log_contains() {
     "$main/.context/logs/audit.jsonl"
   assert_success
   [ ! -d "$wt/.context" ]
+}
+
+# _linked_pair -> sets MAIN and WT: a main checkout plus one linked worktree, physical paths.
+_linked_pair() {
+  local base
+  base="$(mk_tmpworkdir)"
+  base="$(cd "$base" && pwd -P)"
+  MAIN="$base/main"
+  WT="$base/wt"
+  mkdir -p "$MAIN"
+  local G=(git -c user.name=t -c user.email=t@t -c commit.gpgsign=false)
+  ( cd "$MAIN" && "${G[@]}" init -q \
+    && "${G[@]}" commit -q --allow-empty -m init \
+    && "${G[@]}" worktree add -q "$WT" -b t ) >/dev/null
+}
+
+@test "AC-5: a linked worktree's own ledger receives the row when main has none" {
+  _linked_pair
+  mkdir -p "$WT/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$WT/.context/state.json"
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    bash -c "cd '$WT' && bash '$PLUGIN_ROOT/$SCRIPT'" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t22","duration_ms":10,"session_id":"s1"}'
+  assert_success
+  run jq -e '.metadata.task_id == "DV1"' "$WT/.context/logs/audit.jsonl"
+  assert_success
+  [ ! -e "$MAIN/.context" ]
+}
+
+@test "AC-5: a declared WORKSPACE_ROOT whose context has no state.json writes nothing anywhere" {
+  _linked_pair
+  mkdir -p "$WT/.context"
+  run env -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR WORKSPACE_ROOT="$WT" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    bash -c "cd '$WT' && bash '$PLUGIN_ROOT/$SCRIPT'" <<< '{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV1 in_progress"},"tool_use_id":"t23","duration_ms":10,"session_id":"s1"}'
+  assert_success
+  [ -z "$(ls -A "$WT/.context")" ] || fail "wrote into a context with no ledger: $(ls -A "$WT/.context")"
+  [ ! -e "$MAIN/.context" ]
 }

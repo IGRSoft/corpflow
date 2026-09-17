@@ -13,8 +13,11 @@ LIB="${BATS_TEST_DIRNAME}/../../../hooks/model-switch-lib.sh"
 # skills/shared/lib/ and consumer suites source it twice per process — so it supplies
 # symbols to P1/P4 but is outside the readonly -f isolation contract P2/P3 police.
 BASE_LIB="${BATS_TEST_DIRNAME}/../../../hooks/lib/corpflow-base.sh"
-# Sourced lazily by hooks/lib/command-head-lib.sh, so its symbol counts as defined for P1.
-SCRUB_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/scripts/path-scrub.sh"
+# The third symbol source. Hook code sources it only where it scrubs — one helper inside a
+# per-call subshell, hooks/lib/command-head-lib.sh lazily on its first redaction — so like
+# BASE_LIB it feeds P1/P4 and stays outside P2/P3. It matters here because both consumers
+# fail open to an empty or redacted result, so a rename is otherwise silent.
+PS_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/scripts/path-scrub.sh"
 HOOKDIR="${BATS_TEST_DIRNAME}/../../../hooks"
 
 # Every corpflow_* token any hook mentions, libraries included.
@@ -28,7 +31,7 @@ _defined_in() {
 
 # Every corpflow_* any hook library defines, by definition syntax alone.
 _defined() {
-  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; _defined_in "$SCRUB_LIB"; } | sort -u
+  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; _defined_in "$PS_LIB"; } | sort -u
 }
 
 # Every corpflow_* the library freezes with readonly -f.
@@ -39,7 +42,7 @@ _frozen() {
 @test "P1: every corpflow_* referenced under hooks/ is defined by the library" {
   local missing
   missing="$(comm -23 <(_referenced) <(_defined))"
-  [ -z "$missing" ] || fail "referenced but defined by neither $LIB nor $BASE_LIB: $missing"
+  [ -z "$missing" ] || fail "referenced but defined by none of $LIB, $BASE_LIB, $PS_LIB: $missing"
 }
 
 @test "P2: every defined symbol is readonly -f'd" {

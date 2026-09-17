@@ -45,6 +45,17 @@ run_self_tests() {
     pass=$((pass + 1))
   fi
 
+  # Inline: a per-stream DV artifact name is dropped like its bare sibling.
+  local streamy
+  streamy=$(printf 'keep this line\nsee development-0-web.md\nand `development-12-swift-app.md`\n' | sanitise_body)
+  if [ "$streamy" = "keep this line" ]; then
+    echo "publish-pl-issue: self-test stream-artifact-name PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test stream-artifact-name FAIL (got: $streamy)"
+    fail=$((fail + 1))
+  fi
+
   # Fixture 03: mostly-paths — strip ratio should be > 50%.
   local pathy pathy_orig pathy_san ratio_num ratio_den
   pathy=$(sanitise_body < "$fixtures_dir/03-mostly-paths.md")

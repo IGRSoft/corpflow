@@ -81,12 +81,13 @@ Every stage reads `exploration.md`; source-file access differs.
 | `design_flaw` | architecture blocks implementation | No | AR |
 | `hard_constraint` | ethics / security / legal block | No | abort + block for human (`"ST"`) |
 | `exhausted` | `retry_count == 3` | No | previous stage per chain |
+| `permission_denied` | auto-mode classifier denies a tool call | No | — (same agent) |
 
 Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset **`retry_count` alone** at handoff.
 
 #### Retry / Escalate Matrix — one ceiling, reachable from every retrying class
 
-Every retrying class carries the same ceiling of **3**, so `exhausted` is reachable from each of them; the non-retrying classes never pass through it because they escalate on their first failure. No class parks below its own trigger. The ceiling is single-sourced in the table above — `skills/worktask/SKILL.md § Retry Logic` and its `retry_count == 3` escalation trigger restate it and must not diverge.
+Every retrying class carries the same ceiling of **3**, so `exhausted` is reachable from each of them; the non-retrying classes never pass through it because they escalate on their first failure, or — `permission_denied` — park for the user. No class parks below its own trigger. The ceiling is single-sourced in the table above — `skills/worktask/SKILL.md § Retry Logic` and its `retry_count == 3` escalation trigger restate it and must not diverge.
 
 #### Retry / Escalate Matrix — the per-edge escalation cap
 
@@ -104,6 +105,10 @@ failing-set **membership** differs between two consecutive runs; no source chang
 **Voiding branch (mandatory exit).** Membership "shifts" means the *set* differs — a member added
 or dropped — not ordering, not duration. If the re-baseline run fails with the same members as the
 previous run, the classification is **void**: reclassify as `logic` and escalate to DV.
+
+#### Retry / Escalate Matrix — permission denials
+
+`permission_denied` never retries and never escalates. The task parks `blocked` with `metadata.blocked_on` until the user answers, then the same stage agent resumes only the denied step — which is why its Escalate-to cell reads `— (same agent)` and why `ESCALATE_TO` has no entry for it. Parking touches none of `retry_count`, `escalation_counts` or `last_error`, so a denial never walks a stage toward `exhausted`. Mechanism: `skills/worktask/SKILL.md § Step 6.5a4`.
 
 ### Escalation Chains
 
@@ -152,7 +157,35 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 | Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
-| `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+
+#### Writers — permission denials (two writers, one row)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| `PermissionDenied` hook (`hook:permission-denied`, plugin) | `permission_denied` (auto-mode classifier blocks a tool) — `result: "block"`, `metadata.{tool, dedupe_key, command_head, truncated}` |
+| Orchestrator fallback (`permission-park.sh park`, worktask Step 6.5a4) | `permission_denied`, same redacted shape, actor `orchestrator`, from the stage's returned `blocked_on` or tool result |
+
+The fallback exists because hook firing inside a subagent is unverified. Both writers skip the append when the log already holds the same `dedupe_key` — the first 16 hex of `sha256("task_id:tool:command")` of the command after secret masking, never the unmasked text — or its twin under the other writer's subject (§ Writers — redacted permission rows), so each denial yields one row whichever lands first.
+
+#### Writers — permission denials, a repeat after a grant
+
+Known limit: re-denying the same command in the same task after a grant writes no second row, because the masked command and so the key are unchanged; the task still parks.
+
+#### Writers — permission resumes (the decision_ref row)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`permission-park.sh resume`, worktask Step 7a) | `permission_resumed`: one row per successful resume and none on a refusal. `result: "ok"`, `metadata.{tool, dedupe_key, command_head, truncated, answer: grant\|manual, decision_ref}` |
+
+`metadata.decision_ref` is `permission_resumed:<task_id>:<dedupe_key>:<n>`. It is what a permission `blocked_on.resume_with: decision_ref` points at, and `resume` returns it as `resume_block.decision_ref`. The `dedupe_key` pairs the row with the task's `permission_denied` row. `n` is 1 plus the earlier `permission_resumed` rows with the same subject and key, so a call that is denied and parked again gets a distinct ref. The row records the user's own answer to the boundary prompt, so the orchestrator calls `resume` only with that answer. No delegate or resolver answers for the user.
+
+#### Writers — redacted permission rows
+
+`.context/logs/audit.jsonl` is committed, so the `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only a redacted head of the denied command: masked for secret shapes, path-scrubbed through `skills/shared/scripts/path-scrub.sh`, cut at 80 characters, with `truncated: true` when cut. `command_head` and `truncated` are both omitted when the scrub is unavailable. No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
+
+#### Writers — where the full permission detail lives
+
+The full command, `classifier_reason` and `allow_rule` stay out of the audit log, not out of `.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one, which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`; in the resume message or re-dispatch suffix built from `resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A project that commits `.context/` commits the artifact copy, and a ledger copy committed while the task was parked stays in that history.
 
 #### Test-run counter rows
 
@@ -215,7 +248,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|permission_resumed|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
 ```
 
 #### Schema — remaining fields
@@ -223,7 +256,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 ```jsonc
 // …continued: the same object
   "subject": "required — task ID or artifact path",
-  "result": "ok|error|deferred|blocked|skipped",
+  "result": "ok|error|deferred|blocked|block|skipped",   // block: hook-tree appender rows, e.g. permission_denied
   "task_id": "required — ledger key, e.g. DV0; \"none\" when no stage is active, \"unknown\" when one is but cannot be resolved",
   "artifact": "optional — .context/ path",
   "metadata": { "...": "action-specific extras" }
@@ -641,7 +674,7 @@ They compose: a DV agent inside a worktask may spin up a native dynamic workflow
 
 ### Gate prompts (AskUserQuestion)
 
-> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with one bounded exception: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess. That is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and it is opt-in per item, so the ordinary transition is unchanged.
+> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with two bounded exceptions: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess; and every permission-parked task is batched into one boundary prompt (`skills/worktask/SKILL.md § Step 7a`), because only the user can grant. Each is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and the first is opt-in per item, so the ordinary transition is unchanged.
 
 #### Gate prompts — idle behaviour
 

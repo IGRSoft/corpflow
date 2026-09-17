@@ -43,6 +43,10 @@
 #         open hit (`{number,url,title,state,score}`). JSON per line because issue titles
 #         contain every plausible field separator.
 #
+#         Every candidate and prior `title`/`url` has passed through
+#         skills/shared/scripts/path-scrub.sh. When that scrub is missing or fails, no
+#         candidate or prior line is printed and the result is `skipped/scrub_unavailable`.
+#
 #         CLOSED hits are reported separately as `priors=<n>` plus one `prior=<json>` line
 #         each, and never as `candidate=`: a closed issue is a "this task ran before"
 #         signal, not something to comment on or bind a fresh context to. `result=prior-run`
@@ -174,6 +178,17 @@ fi
 
 command -v jq > /dev/null 2>&1 || finish_skipped jq_unavailable
 
+# Titles are free text from GitHub and reach the audit trail, so a host path in one
+# must never survive into a candidate line. Loaded before any network call: without
+# the scrub there is nothing this scan may print.
+SCAN_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)" || SCAN_DIR=""
+PATH_SCRUB="$SCAN_DIR/../../shared/scripts/path-scrub.sh"
+[ -n "$SCAN_DIR" ] && [ -r "$PATH_SCRUB" ] || finish_skipped scrub_unavailable
+# shellcheck source=skills/shared/scripts/path-scrub.sh
+. "$PATH_SCRUB" > /dev/null 2>&1 || finish_skipped scrub_unavailable
+command -v corpflow_path_scrub > /dev/null 2>&1 || finish_skipped scrub_unavailable
+[ -n "${CORPFLOW_HOST_PATH_ERE:-}" ] || finish_skipped scrub_unavailable
+
 # ---------- keyword extraction ----------------------------------------------
 # Stemmed to a bare singular, and matched as a word PREFIX below, so "issues"
 # scores against "issue" and "open" against "opened" — morphological drift is the
@@ -273,6 +288,30 @@ MATCHED=$(printf '%s' "$SCORED" | jq -c --argjson lim "$LIMIT" \
   '[ .[] | select(.state != "closed") ] | .[0:$lim]' 2> /dev/null || printf '[]')
 PRIORS=$(printf '%s' "$SCORED" | jq -c --argjson lim "$LIMIT" \
   '[ .[] | select(.state == "closed") ] | .[0:$lim]' 2> /dev/null || printf '[]')
+
+# $1 = JSON array of hits; prints it with title and url scrubbed, or returns 1. One
+# value per line through the scrub, counted back against a trailing marker, so a scrub
+# that drops or merges a line can never shift a title onto another issue.
+scrub_hits() {
+  local arr="$1" n fields out
+  n=$(printf '%s' "$arr" | jq 'length' 2> /dev/null) || return 1
+  if [ "$n" -eq 0 ]; then
+    printf '%s' "$arr"
+    return 0
+  fi
+  fields=$(printf '%s' "$arr" \
+    | jq -r '.[] | ((.title // ""), (.url // "")) | tostring | gsub("[\r\n\t]"; " ")') || return 1
+  out=$(set -o pipefail; printf '%s\nEND-OF-FIELDS\n' "$fields" | corpflow_path_scrub) || return 1
+  printf '%s' "$arr" | jq -c --arg s "$out" '
+    ($s | split("\n")) as $l
+    | if ($l | length) < (length * 2 + 1) or $l[length * 2] != "END-OF-FIELDS"
+      then error("scrub changed the line count")
+      else [ range(0; length) as $i | .[$i] + {title: $l[2 * $i], url: $l[2 * $i + 1]} ] end' \
+    2> /dev/null
+}
+
+MATCHED=$(scrub_hits "$MATCHED") || finish_skipped scrub_unavailable
+PRIORS=$(scrub_hits "$PRIORS") || finish_skipped scrub_unavailable
 
 COUNT=$(printf '%s' "$MATCHED" | jq 'length' 2> /dev/null || printf '0')
 PRIOR_COUNT=$(printf '%s' "$PRIORS" | jq 'length' 2> /dev/null || printf '0')

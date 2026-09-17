@@ -100,7 +100,9 @@ _physical() {
 @test "parity: state-read-lib and model-switch-lib agree on the same fixture with CONTEXT_DIR unset" {
   local repo wt from_skills from_hooks
   repo="$(mk_git_fixture --dir "$WD/repo" --file 'a.txt:hi' --commit init)"
+  # A ledger, not a bare dir: hooks treat a stateless .context/ as no worktask.
   mkdir -p "$repo/.context"
+  printf '{}' > "$repo/.context/state.json"
   wt="$WD/wt"
   git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q "$wt" -b wtb 2>/dev/null \
     || skip "git worktree unavailable"

@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "worktask_id": "dv-fanout-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "all",
+  "run_index": 0,
+  "tasks": {
+    "PL0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "PL", "run_index": 0 } },
+    "DV0": {
+      "status": "pending",
+      "blocked_by": ["PL0"],
+      "metadata": {
+        "stage": "DV", "run_index": 0, "stream": "service", "artifact": ".context/development-0-service.md",
+        "description": "DV stream service: API handlers", "effort": "high", "isolation": "worktree",
+        "base_ref": "origin/develop", "requires_screenshots": false, "workspace_path": "/wt/service"
+      }
+    },
+    "DV1": {
+      "status": "pending",
+      "blocked_by": ["PL0"],
+      "metadata": {
+        "stage": "DV", "run_index": 0, "stream": "web", "artifact": ".context/development-0-web.md",
+        "description": "DV stream web: UI views", "effort": "high", "isolation": "worktree",
+        "base_ref": "origin/develop", "requires_screenshots": false, "workspace_path": "/wt/web"
+      }
+    },
+    "DR0": {
+      "status": "pending",
+      "blocked_by": ["DV0", "DV1"],
+      "metadata": {
+        "stage": "DR", "run_index": 0, "description": "Review every DV stream", "effort": "high",
+        "isolation": "none", "base_ref": "origin/develop", "requires_screenshots": false, "workspace_path": "/wt/orch"
+      }
+    }
+  },
+  "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": { "PL": "ok" } },
+  "handoffs": {}
+}

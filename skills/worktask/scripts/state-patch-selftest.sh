@@ -1243,6 +1243,21 @@ EOART
   fi
   rm -f .context/state.json.snapack
 
+  # ---- T-stream: a DV per-stream artifact name is canonical; a malformed slug still warns ----
+  make_state
+  cp .context/development-0.md .context/development-0-swift-app.md 2> /dev/null \
+    || printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n---\n' > .context/development-0-swift-app.md
+  cp .context/development-0-swift-app.md .context/development-0-Swift_App.md
+  tstream_out=$(bash "$SELF" --stage DV --artifact .context/development-0-swift-app.md 2>&1 || true)
+  tstream_bad=$(bash "$SELF" --stage DV --artifact .context/development-0-Swift_App.md 2>&1 || true)
+  rm -f .context/development-0-swift-app.md .context/development-0-Swift_App.md
+  if [[ "$tstream_out" != *"is not the canonical name"* && "$tstream_bad" == *"is not the canonical name"* ]]; then
+    printf 'T-stream: DV -<stream> suffix is canonical, a malformed slug warns: ok\n'
+  else
+    printf 'T-stream: DV stream-suffix canonical check: FAIL\n%s\n%s\n' "$tstream_out" "$tstream_bad" >&2
+    exit 1
+  fi
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }

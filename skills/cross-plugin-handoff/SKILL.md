@@ -178,13 +178,13 @@ Implement the following for the corpflow worktask DV stage:
 
 ## Expected Output
 1. Implementation code
-2. Write summary to .context/development-N.md
+2. Write summary to the DV row's artifact (tasks.<ID>.metadata.artifact)
 3. Return compressed handoff for QA stage (max 500 tokens)
 ```
 
 ### 4. Return Protocol
 
-The external agent updates task status to completed, writes `.context/development-N.md`, and returns a compressed summary for the next stage.
+The external agent updates task status to completed, writes the artifact its own DV row names (`metadata.artifact`; `skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`), and returns a compressed summary for the next stage.
 
 ## Direct Orchestrator Dispatch
 

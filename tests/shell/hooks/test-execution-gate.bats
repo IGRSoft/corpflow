@@ -82,7 +82,11 @@ teardown() {
 
 @test "5: no .context/state.json -> allow, no decision, no audit row (FO-4)" {
   rm -f "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload './run-tests.sh')"
+  # A ledgerless declared root falls through to git rank 5, so pin cwd and the ceiling to $WD;
+  # otherwise a run from a live worktree reads and writes that worktree's ledger.
+  run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --unset CONTEXT_DIR \
+    --env "CLAUDE_PROJECT_DIR=$WD" --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --stdin-string "$(bash_payload './run-tests.sh')" "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   [ -z "$output" ]
   [ ! -f "$WD/.context/logs/audit.jsonl" ]

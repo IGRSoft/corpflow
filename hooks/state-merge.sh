@@ -7,7 +7,7 @@
 #   - Exits 0 ALWAYS — must never block a stage transition. Failures log to
 #     .context/logs/state-merge.log and stderr.
 #   - Idempotent: a ledger already reflecting this frontmatter is left alone.
-#   - Absent state.json: log INFO and exit 0 (F1, context_files mode).
+#   - Absent state.json: exit 0 before any mkdir, log or write.
 #   - Corrupt state.json: the original is copied aside and verified before any
 #     write; an unverifiable backup aborts the repair and leaves the file as
 #     found. The original is never destroyed.
@@ -73,8 +73,8 @@ fi
 # Never resolve `.context/` from cwd: this fires on SubagentStop, often for a DV
 # stream, whose cwd is a linked worktree where `.context/` does not exist (it is
 # gitignored and never carried into a worktree checkout). A cwd-relative merge
-# lands in a throwaway ledger, silently. `write` mode, not `read`: this hook
-# writes, so the declared workspace must win even before `.context/` exists.
+# lands in a throwaway ledger, silently. No ledger means nothing to merge into,
+# so an unseeded checkout gets no `.context/logs/` either.
 #
 # Guarded source (AD-2): a truncated library is a syntax error, fatal under this
 # script's `set -e` and unrescuable by `||`, which would break a hook whose whole
@@ -88,14 +88,15 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 
 LIB_DEGRADED=0
 if command -v corpflow_hook_audit_row > /dev/null 2>&1; then
-  WORKSPACE_DIR=$(corpflow_workspace_root write)
+  WORKSPACE_DIR=$(corpflow_workspace_root)
 else
-  # Library-free last resort. Resolution runs BEFORE $LOG exists, so a degraded
-  # root still has to be good enough for this hook to find its own log — which is
-  # why this one line stays local while the three probe arms and the git arm move
-  # to the library. No cwd fallback: an unresolved declared root means "write
-  # nowhere", never "guess the directory this hook happened to fire from".
-  WORKSPACE_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-}}"
+  # Library-free last resort: declared roots holding a ledger, never cwd.
+  WORKSPACE_DIR=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
+    WORKSPACE_DIR="${WORKSPACE_ROOT}"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
+    WORKSPACE_DIR="${CLAUDE_PROJECT_DIR}"
+  fi
   LIB_DEGRADED=1
 fi
 

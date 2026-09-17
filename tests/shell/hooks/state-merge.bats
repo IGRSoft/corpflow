@@ -14,9 +14,9 @@ SCRIPT="hooks/state-merge.sh"
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context/logs"
-  # The root ladder (hooks/model-switch-lib.sh) never falls back to cwd; declare
-  # the fixture as the workspace root so `corpflow_workspace_root write` (rank 3,
-  # or rank 7 before .context/ exists) resolves it instead of no-op'ing.
+  # The root ladder (hooks/model-switch-lib.sh) never falls back to cwd and every
+  # rank demands .context/state.json; declare the fixture as the workspace root so
+  # `corpflow_workspace_root` (rank 3) resolves it once a test seeds the ledger.
   export WORKSPACE_ROOT="$WD"
 }
 
@@ -364,4 +364,50 @@ EOF
   # log line is the only surviving evidence that the write was swallowed, not lost.
   run grep -c 'rc=3' "$WD/.context/logs/state-merge.log"
   assert_output "1"
+}
+
+# --- no ledger, no write -------------------------------------------------------
+
+@test "AC-2: one subagent cycle through every registered hook leaves a clean checkout clean" {
+  local repo h hit
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  repo="$(cd "$repo" && pwd -P)"
+  local tool='{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV0 in_progress"},"tool_use_id":"t1","duration_ms":5,"session_id":"s1"}'
+  local stop='{"hook_event_name":"SubagentStop","agent_type":"corpflow:developer","agent_id":"agt1","session_id":"s1","duration_ms":5}'
+  local sw='{"session_id":"s1","agent_id":"agt1","from_model":"opus","to_model":"sonnet"}'
+
+  # <script> <payload> [args...] — both declared roots point at the unseeded checkout,
+  # and the off-hatches are set because they are the arms that write sentinels.
+  _fire() {
+    local s="$1" p="$2"
+    shift 2
+    run env -u CONTEXT_DIR WORKSPACE_ROOT="$repo" CLAUDE_PROJECT_DIR="$repo" \
+      CLAUDE_TASK_METADATA_STAGE=DV CORPFLOW_TEST_GATE=off CORPFLOW_MODEL_SWITCH_GATE=off \
+      bash -c 'cd "$1" && shift && bash "$@"' _ "$repo" "$PLUGIN_ROOT/$s" "$@" <<< "$p"
+    [ "$status" -eq 0 ] || fail "$s exited $status: $output"
+  }
+
+  for h in test-execution-gate audit-tooluse test-execution-promote anchor-preflight comment-standard-context; do
+    _fire "hooks/$h.sh" "$tool"
+  done
+  _fire hooks/model-switch-gate.sh "$sw"
+  _fire hooks/model-switch-audit.sh "$sw"
+  for h in audit-subagent dv-screenshot-gate dv-comment-density-gate state-merge megatask-monitor; do
+    _fire "hooks/$h.sh" "$stop"
+  done
+  _fire hooks/agent-stop.sh "$stop" --stage DV
+  _fire hooks/precompact-checkpoint.sh '{}'
+  _fire skills/context-compression/scripts/post-compact-recovery.sh '{}'
+  _fire hooks/session-end-finalize.sh '{"hook_event_name":"SessionEnd","reason":"clear"}'
+
+  hit="$(find "$repo" -name .context -print | head -n 1)"
+  [ -z "$hit" ] || fail "a hook created $hit"
+}
+
+@test "no ledger: a bare .context/ with no state.json is not a merge target — no log, no ledger" {
+  _seed_artifact
+  run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV GIT_CEILING_DIRECTORIES='$WD' bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  [ ! -e "$WD/.context/logs/state-merge.log" ]
+  [ ! -e "$WD/.context/state.json" ]
 }

@@ -214,7 +214,7 @@ stage**, which is a behaviour change for every Node project, not a no-op hardeni
 
 **DV's no-handler auto-promotion never widens to `full`** (`test-selection-syntax.md § Auto-promotion
 when no handler`): the cap is `module-scope`, an execution-only value recorded in
-`development-N.md § Decisions`, never a `test_mode` value — that vocabulary stays exactly
+the DV artifact's `§ Decisions`, never a `test_mode` value — that vocabulary stays exactly
 `build-only | scoped | full`, unchanged and PL0-owned.
 
 ### Dispatch discipline — the brief carries the invocation
@@ -228,7 +228,7 @@ Every DV/QA brief therefore states the **resolved mode** and the **exact selecto
 (`-only-testing:…`, `--tests …`, a pytest nodeid — grammar in
 `skills/shared/test-selection-syntax.md`). Where `always_required_tests` is spelled in a different
 grammar than the platform's selector syntax, DV reconciles the two and records the resolved spelling
-in `development-N.md § Decisions`.
+in its artifact's `§ Decisions`.
 
 ### Escalation path
 
@@ -373,7 +373,7 @@ DV/QA enforce these even if PL set a tighter mode:
   `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}`
   → DV auto-promotes to **module-scope** (never `full` — § Test-Execution Authority) with a logged
   warning. Metadata keeps the PL-declared mode; the promotion is recorded in
-  `development-N.md § Decisions` as `auto_promoted_mode: module-scope`. If module scope cannot be
+  the DV artifact's `§ Decisions` as `auto_promoted_mode: module-scope`. If module scope cannot be
   computed, DV runs the smoke set instead and records `deferred_to_qa: full_regression` — it does not
   widen further.
 
@@ -406,7 +406,8 @@ DV's `Selected Tests` is the **handoff artifact** consumed by QA; `Executed Test
 
 - **Selected Tests** = full algorithm output (smoke ∪ dependency-matched ∪ covers-changed-files ∪
   module-level ∪ `metadata.always_required_tests`). Always written to
-  `development-N.md § Selected Tests`. QA executes this list.
+  `§ Selected Tests` in each DV row's artifact. QA executes the union across every DV artifact
+  (`refs.dev[]`).
 - **Executed Tests (DV)** = (Selected ∩ test files Added/Modified in
   `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Only this subset
   runs at DV.
@@ -514,7 +515,7 @@ explicitly excluded (no implicit `-skip-testing:`).
 ### Recording the resolved selection
 
 DV records `test_mode`, `selected_tests_count`, and `ui_visual_check` in
-`.context/development-N.md § Decisions`. QA records the resolved mode and any
+its artifact's `§ Decisions` (the row's `metadata.artifact`). QA records the resolved mode and any
 `Selected Tests (QA additions)` in `testing-N.md § Notes`. Applies on every platform, including runs
 auto-promoted to `module-scope` (§ Test-Execution Authority).
 
