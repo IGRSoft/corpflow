@@ -195,7 +195,7 @@ run_gate() {
     _landed=""
     if [ -n "$_phys_root" ]; then
       _landed=$(jq -r --arg root "$_phys_root" \
-        '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]' \
+        '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' \
         "$_ctx/state.json" 2>/dev/null || true)
     fi
     if [ -n "$_landed" ]; then

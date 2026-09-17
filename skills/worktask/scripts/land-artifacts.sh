@@ -57,7 +57,7 @@ export LC_ALL=C
 # (hook, technical-lead.md, project-manager.md, state-ledger.md) carries this
 # SAME string, always evaluated with `--arg root <tree>`; a parity test diffs
 # them, so a change here without the others is a test failure, not a typo.
-readonly LANDED_SET_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]'
+readonly LANDED_SET_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]'
 
 # Sentinel carried through the collect_pairs TSV stream for a candidate whose
 # `consumes` shape is invalid. Kept out of the producer-id column so it can
@@ -66,6 +66,7 @@ readonly BADDECL_MARK='__BADDECL__'
 
 usage() {
   sed -n '2,44s/^# \{0,1\}//p' "$0" >&2
+  CONTRACT_EXIT=1
   exit 2
 }
 
@@ -73,6 +74,7 @@ die() {
   local code="$1"
   shift
   printf >&2 'land-artifacts: %s\n' "$*"
+  CONTRACT_EXIT=1
   exit "$code"
 }
 
@@ -245,7 +247,7 @@ source_check() {
         IFS= read -r -d '' _a || true
         IFS= read -r -d '' _v || true
         printf '%s' "${_v:-}"; }
-  )
+  ) || filt=""
   if [ -n "$filt" ] && [ "$filt" != "unspecified" ]; then
     printf 'REASON:filtered_path'
     return 0
@@ -406,24 +408,39 @@ TMP_LIVE=""
 CREATED_DIRS=()
 WRITTEN_FILES=()
 
-# shellcheck disable=SC2329 # invoked only through the EXIT/INT/TERM trap below
+# Set to 1 immediately before every intentional exit (usage/die/--check-path/
+# --list-landed/the resolve_tree* `|| exit 2` sites/the final exit "$RUN_RC").
+# Left "" for a signal or for a command failing under errexit outside any of
+# those sites, so cleanup_trap can tell "this run chose to stop here" apart
+# from "something stopped this run out from under it".
+CONTRACT_EXIT=""
+
+# shellcheck disable=SC2329 # invoked only through the EXIT trap below
 cleanup_trap() {
   local rc=$?
   if [ -n "$TMP_LIVE" ] && [ -e "$TMP_LIVE" ]; then
     rm -f -- "$TMP_LIVE"
   fi
-  # Any exit this run's own die()/fail_pair() paths did not already normalise
-  # (a signal, or a command failing outside those paths) must still honour the
-  # 0/1/2 contract: whatever this run wrote gets rolled back, and the caller
-  # never sees a bare git/jq status code. rollback_run is a no-op once this
-  # run's writes are already durable or already undone.
-  if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+  if [ -z "$CONTRACT_EXIT" ]; then
+    # An unmarked exit: a signal (see the INT/TERM/HUP trap below, which always
+    # clears the marker first) or an errexit-triggered stop this run's own
+    # code never named. Neither is safe to read as "already blocked" (rc=1)
+    # or "already landed" (rc=0), so whatever this run wrote is rolled back
+    # and the caller always sees 2, regardless of the raw rc.
+    rollback_run
+    rc=2
+  elif [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+    # A marked, intentional non-0/1 exit (die, or the resolve_tree* `exit 2`
+    # sites) still rolls back this run's own writes before the caller sees 2.
     rollback_run
     rc=2
   fi
   exit "$rc"
 }
-trap cleanup_trap EXIT INT TERM
+trap cleanup_trap EXIT
+# A signal always reaches the EXIT trap unmarked, even if it lands between a
+# CONTRACT_EXIT=1 assignment and the exit statement right after it.
+trap 'CONTRACT_EXIT=""; exit 2' INT TERM HUP
 
 # mv flavor that refuses to follow a symlink-to-dir destination: GNU has -T,
 # BSD/macOS has -h. Detected once so a same-uid race during the move below
@@ -482,7 +499,12 @@ write_blob() {
   fi
   local perm=644
   [ "$idxmode" = "100755" ] && perm=755
-  chmod "$perm" -- "$tmp"
+  chmod "$perm" -- "$tmp" || {
+    rm -f -- "$tmp"
+    TMP_LIVE=""
+    WB_RESULT='REASON:git_error'
+    return 0
+  }
 
   local dest="$parent/$base"
   if [ -L "$dest" ] || [ -d "$dest" ]; then
@@ -508,7 +530,7 @@ write_blob() {
   fi
   if [ -d "$dest" ] && [ ! -L "$dest" ]; then
     local stray_phys
-    stray_phys="$(phys_dir "$dest" 2> /dev/null)"
+    stray_phys="$(phys_dir "$dest" 2> /dev/null)" || stray_phys=""
     case "$stray_phys/" in
       "$c_root"/*)
         # Same-uid race replaced our file with a directory; rmdir (never
@@ -613,7 +635,7 @@ resolve_tree() {
 # never need the extra spellings; only the consumer row records landed_roots).
 resolve_tree_root() {
   local out
-  out=$(resolve_tree "$1") || exit 2
+  out=$(resolve_tree "$1") || { CONTRACT_EXIT=1; exit 2; }
   printf '%s' "${out%%$'\t'*}"
 }
 
@@ -712,17 +734,32 @@ ok_row() {
 # The single --task-meta write for the whole consumer: jq's "*" merge
 # replaces arrays wholesale, so every pair's new paths/roots must be folded
 # into one union before the one write, not one write per pair. Existing
-# entries are re-validated as strings so a hand-edited or corrupt ledger
-# array never smuggles a non-string into the union.
+# entries are unioned and re-validated inside jq, as JSON values end to end —
+# never split on a text newline — so a stored entry holding one can neither
+# smuggle a non-string nor get laundered into two separate entries.
+#
+# Called through `if !`, which suppresses errexit for everything below: a jq
+# call that fails silently here would otherwise fall through with stale data
+# and still read as success, so every step needs its own explicit `|| return 1`.
 commit_landed() {
-  local c="$1" new_landed_json="$2" new_roots_json="$3" existing_paths existing_roots union_paths union_roots
-  existing_paths=$(jqf --arg id "$c" '.tasks[$id].metadata.landed_paths // [] | arrays | .[]? | strings')
-  union_paths=$(printf '%s\n%s\n' "$existing_paths" "$(printf '%s' "$new_landed_json" | jq -r '.[]?')" \
-    | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-  existing_roots=$(jqf --arg id "$c" '.tasks[$id].metadata.landed_roots // [] | arrays | .[]? | strings')
-  union_roots=$(printf '%s\n%s\n' "$existing_roots" "$(printf '%s' "$new_roots_json" | jq -r '.[]?')" \
-    | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-  state_patch --task-meta "$c" --set "{\"landed_paths\":$union_paths,\"landed_roots\":$union_roots,\"landing_error\":null}"
+  local c="$1" new_landed_json="$2" new_roots_json="$3"
+  local existing_paths_json existing_roots_json union_paths union_roots set_body
+  existing_paths_json=$(jq -c --arg id "$c" \
+    '(.tasks[$id].metadata.landed_paths // []) | if type == "array" then . else [] end' \
+    "$STATE_PATH" 2> /dev/null) || return 1
+  existing_roots_json=$(jq -c --arg id "$c" \
+    '(.tasks[$id].metadata.landed_roots // []) | if type == "array" then . else [] end' \
+    "$STATE_PATH" 2> /dev/null) || return 1
+  union_paths=$(jq -cn --argjson ex "$existing_paths_json" --argjson new "$new_landed_json" \
+    '($ex + $new) | map(strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))) | unique' \
+    2> /dev/null) || return 1
+  union_roots=$(jq -cn --argjson ex "$existing_roots_json" --argjson new "$new_roots_json" \
+    '($ex + $new) | map(strings | select(length > 0 and startswith("/")
+       and (explode | all(.[]; . >= 32 and . != 127)))) | unique' \
+    2> /dev/null) || return 1
+  set_body=$(jq -cn --argjson paths "$union_paths" --argjson roots "$union_roots" \
+    '{landed_paths: $paths, landed_roots: $roots, landing_error: null}') || return 1
+  state_patch --task-meta "$c" --set "$set_body"
 }
 
 # roots_would_grow <C> <root> <banner_path> <raw_toplevel> -> "true"/"false"
@@ -823,6 +860,10 @@ process_consumer() {
     fi
     produces=$(produces_of "$p")
     IFS=',' read -r -a plist <<< "$pathcsv"
+    if [ "${#plist[@]}" -eq 0 ]; then
+      fail_pair "$c" "$p" "bad_declaration" "-"
+      return 0
+    fi
     for path in "${plist[@]+"${plist[@]}"}"; do
       if ! in_set "$path" "$produces"; then
         fail_pair "$c" "$p" "not_produced" "$path"
@@ -844,7 +885,7 @@ process_consumer() {
   # propagate through `read <<<`; an unchecked empty root would turn every
   # destination below into an absolute path, so its status is checked here.
   local c_root c_banner_path c_toplevel_raw tree_line
-  tree_line=$(resolve_tree "$c") || exit 2
+  tree_line=$(resolve_tree "$c") || { CONTRACT_EXIT=1; exit 2; }
   IFS=$'\t' read -r c_root c_banner_path c_toplevel_raw <<< "$tree_line"
   [ -n "$c_root" ] || die 2 "tree_invalid: $c resolved to an empty root"
   local landed_snapshot
@@ -860,11 +901,15 @@ process_consumer() {
   while [ "$i" -lt "$n" ]; do
     p="${ROW_P[$i]}"
     pathcsv="${ROW_PATHS[$i]}"
-    p_root=$(resolve_tree_root "$p") || exit 2
+    p_root=$(resolve_tree_root "$p") || { CONTRACT_EXIT=1; exit 2; }
     [ -n "$p_root" ] || die 2 "tree_invalid: $p resolved to an empty root"
     row_root[i]="$p_root"
     row_start[i]="${#act_path[@]}"
     IFS=',' read -r -a plist <<< "$pathcsv"
+    if [ "${#plist[@]}" -eq 0 ]; then
+      fail_pair "$c" "$p" "bad_declaration" "-"
+      return 0
+    fi
 
     if [ "$c_root" = "$p_root" ]; then
       for path in "${plist[@]+"${plist[@]}"}"; do
@@ -1114,8 +1159,9 @@ collect_pairs() {
       elif any(.[]; (type != "object") or (has("from")|not) or (has("paths")|not)
                     or (.from|type != "string") or (.paths|type != "array")
                     or ((.paths|length) < 1) or any(.paths[]; type != "string")
-                    or (.from|test("^DV[0-9]+$")|not)
-                    or any(.paths[]; test("[\t\n\r,]"))) then "bad"
+                    or (.from|test("\\ADV[0-9]+\\z")|not)
+                    or any(.paths[]; test("[\t\n\r,]"))
+                    or any(.paths[]; length == 0)) then "bad"
       else "ok" end' 2> /dev/null || printf 'bad')
     if [ "$shape" != "ok" ]; then
       # At the boundary, a malformed declaration is only this producer's
@@ -1238,8 +1284,10 @@ if [ "$CHECKPATH_GIVEN" -eq 1 ]; then
   checkpath_reason=$(lexical_check "$CHECKPATH_ARG")
   if [ -n "$checkpath_reason" ]; then
     printf 'reason=%s\n' "$checkpath_reason"
+    CONTRACT_EXIT=1
     exit 1
   fi
+  CONTRACT_EXIT=1
   exit 0
 fi
 
@@ -1272,6 +1320,7 @@ if [ "$CMD" = "list-landed" ]; then
       esac
       if [ -n "$strict_reason" ]; then
         printf >&2 'land-artifacts: landed set for --tree holds an unsafe entry (reason=%s)\n' "$strict_reason"
+        CONTRACT_EXIT=1
         exit 1
       fi
     done < <(jq -r --arg root "$root" \
@@ -1280,6 +1329,7 @@ if [ "$CMD" = "list-landed" ]; then
       "$STATE_PATH" 2> /dev/null || printf 'N\n')
   fi
   jq -r --arg root "$root" "$LANDED_SET_JQ" "$STATE_PATH" 2> /dev/null || true
+  CONTRACT_EXIT=1
   exit 0
 fi
 
@@ -1326,4 +1376,5 @@ while IFS=$'\t' read -r cid pid pathcsv; do
 done <<< "$(collect_pairs)"
 flush_consumer "$CUR_C"
 
+CONTRACT_EXIT=1
 exit "$RUN_RC"

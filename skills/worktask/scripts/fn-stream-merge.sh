@@ -299,9 +299,13 @@ cmd_commit() {
 
   git add -u || blocked commit_failed "$id" "$stream"
   if [[ "${#LANDED[@]}" -gt 0 ]]; then
+    # --diff-filter=A: a landed-path entry can only unstage a file THIS run
+    # added, never a genuine tracked modification a forged or stale entry
+    # happens to name — land-artifacts.sh itself never overwrites tracked
+    # content, so a real landing is always an add.
     while IFS= read -r -d '' p; do
       restore+=("$p")
-    done < <(git diff --cached --name-only -z -- "${LANDED[@]}" 2> /dev/null || true)
+    done < <(git diff --cached --name-only -z --diff-filter=A -- "${LANDED[@]}" 2> /dev/null || true)
     if [[ "${#restore[@]}" -gt 0 ]]; then
       git restore --staged -- "${restore[@]}" || blocked commit_failed "$id" "$stream"
       excluded="${#restore[@]}"

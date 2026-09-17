@@ -145,12 +145,13 @@ tree, so no reader has to decide which row is the consumer. Every reader compute
 expression, byte for byte, always passing the tree as `--arg root`:
 
 ```jq
-[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]
+[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]
 ```
 
 The key is the tree that received the landing, not a row's assigned `workspace_path`: a re-pin
 rewrites that path, and a copy left in the old tree must stay excluded there. An entry outside the
-`[A-Za-z0-9._@+/-]` alphabet is dropped, so it never becomes a match pattern.
+`[A-Za-z0-9._@+/-]` alphabet is dropped, so it never becomes a match pattern; the match is
+whole-string, so an entry with a trailing newline is dropped too.
 
 ##### The landed set — each reader's root
 

@@ -2360,15 +2360,17 @@ only the router calls `--check-path`.
 
 ### land-artifacts.sh — exits
 
-Exits are 0, 1 or 2 only; the script maps any other failure to 2. Exit `0`: landed, same tree,
-already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a `blocked`
-one silently, one that is `in_progress`, `completed`, `failed` or `skipped` with one `warn`
-`contract_landed` row (`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
+Exits are 0, 1 or 2 only: an interrupting signal (INT, TERM, HUP) or an unexpected command failure
+rolls back what the run wrote and exits 2, so 1 is never a stray status. Exit `0`: landed, same
+tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a
+`blocked` one silently, any other non-`pending` one with one `warn` `contract_landed` row
+(`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
 `metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
 refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). Exit 1 is
-also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage,
-a malformed id, a bad ledger, an invalid tree, a missing tool, or a failed ledger write. Refusal
-reasons and the audit rows: `references/handoff-protocol.md § Landing consumed artifacts`.
+also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage, a
+malformed id, a bad ledger, an invalid tree, a missing tool, a failed ledger write, or that signal
+or failure. Refusal reasons and the audit rows:
+`references/handoff-protocol.md § Landing consumed artifacts`.
 
 ### blocked-on-dispatch.sh and blocked-on-lib.sh
 
