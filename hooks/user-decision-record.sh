@@ -29,6 +29,7 @@ set +e
 
 UD_AUDIT_CTX=""
 _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
+_UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck)$'
 
 # _ud_refuse <ctx> <reason> [<tool_use_id>] — one user_decision_refused row; tool_use_id is
 # folded in only once P2 (event/tool/id shape) has already passed.
@@ -196,11 +197,15 @@ _ud_guard_ledger_cmd() {
   return 0
 }
 
-# _ud_guard_hook_cmd <command> — AD8 Bash-hook-script arm: deny a segment that executes
-# user-decision-record.sh, directly or as the operand of bash|sh|zsh|source|.|exec.
-# bash -n and shellcheck are explicitly allowed.
+# _ud_guard_hook_cmd <command> — AD8 Bash-hook-script arm, deny-by-default like the ledger arm
+# above: a segment naming user-decision-record.sh is denied unless it is a read-only or lint
+# shape (`bash -n`, shellcheck, or a program from the read-only allow-list). An allow-list of
+# interpreters cannot work, because `env bash`, `command bash`, `timeout 10 bash` and `nohup bash`
+# all run the script under a first word that is not an interpreter name. Re-invoking the hook is
+# itself a forgery primitive: the transcript of a declined dialog still holds a matching
+# tool_use, so a hand-built payload would mint both the ledger row and its audit corroboration.
 _ud_guard_hook_cmd() {
-  local cmd="$1" seg prog segs
+  local cmd="$1" seg prog segs scrub
   segs=$(printf '%s\n' "$cmd" | tr ';&|' '\n')
   while IFS= read -r seg; do
     [ -n "${seg//[[:space:]]/}" ] || continue
@@ -208,22 +213,35 @@ _ud_guard_hook_cmd() {
       *user-decision-record.sh*) : ;;
       *) continue ;;
     esac
-    if [[ "$seg" =~ (^|[^A-Za-z0-9_./-])(bash[[:space:]]+-n|shellcheck)([[:space:]]|$) ]]; then
-      continue
-    fi
     if command -v strip_assignments > /dev/null 2>&1; then
       seg=$(strip_assignments "$seg")
     fi
+    # shellcheck disable=SC2016  # these are literal glob patterns, not expansions to interpolate
+    if [[ "$seg" == *'$('* || "$seg" == *'`'* || "$seg" == *'<('* || "$seg" == *'>('* ]]; then
+      _ud_deny "a Bash command naming user-decision-record.sh contains command substitution or process substitution, which is denied." Bash "$cmd"
+      return 0
+    fi
+    if [[ "$seg" =~ (^|[^A-Za-z0-9_./-])(eval|xargs|tee|exec)([[:space:]]|$) ]]; then
+      _ud_deny "a Bash command naming user-decision-record.sh runs eval, exec, xargs or tee, which is denied." Bash "$cmd"
+      return 0
+    fi
+    scrub="$seg"
+    scrub="${scrub//2>\/dev\/null/}"
+    scrub="${scrub//>\/dev\/null/}"
+    scrub="${scrub//2>&1/}"
+    scrub="${scrub//>&2/}"
+    if [[ "$scrub" == *'>'* || "$scrub" == *'<'* ]]; then
+      _ud_deny "a Bash command naming user-decision-record.sh redirects, which is denied: the hook reads its payload from stdin." Bash "$cmd"
+      return 0
+    fi
+    # `bash -n <script>` is the one interpreter shape allowed, and only with -n as its first word.
+    if [[ "$seg" =~ ^[[:space:]]*[^[:space:]]*(bash|sh)[[:space:]]+-n([[:space:]]|$) ]]; then
+      continue
+    fi
     prog=$(printf '%s' "$seg" | awk '{print $1}')
     prog="${prog##*/}"
-    case "$prog" in
-      user-decision-record.sh | bash | sh | zsh | source | .)
-        _ud_deny "a Bash command executes user-decision-record.sh, which is denied outside bash -n or shellcheck." Bash "$cmd"
-        return 0
-        ;;
-    esac
-    if [[ "$seg" =~ (^|[[:space:]])exec[[:space:]] ]]; then
-      _ud_deny "a Bash command execs user-decision-record.sh, which is denied outside bash -n or shellcheck." Bash "$cmd"
+    if ! [[ "$prog" =~ $_UD_HOOK_ALLOW_RE ]]; then
+      _ud_deny "a Bash command naming user-decision-record.sh runs a program outside the read-only allow-list, which is denied outside bash -n or shellcheck." Bash "$cmd"
       return 0
     fi
   done <<< "$segs"

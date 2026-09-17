@@ -140,9 +140,11 @@ After P7 the append itself can refuse: `unstable_encoding`, `ledger_torn`, `lock
 ### Lock and append — what the lock covers
 
 The lock covers the tail check, dedupe, and the id and `prev_sha256` computation. The append copies
-the ledger to a temp file under umask 077, appends the rows, re-checks the tail hash and renames
-with `mv -f`. The lock-free verifier therefore never reads a half row, and a planted symlink is
-replaced. Each row's `user_decision_recorded` audit row is written under the same lock, after the
+the ledger into an `mktemp` file in the same directory under umask 077, appends the rows and renames
+with `mv -f`, so the lock-free verifier never reads a half row. There is no second tail check after
+the copy: the tail check that matters runs under the lock before any row is built. A symlinked
+ledger is refused as `ledger_symlink` before the lock is taken, not replaced, and the rename is
+skipped if the ledger has become a symlink by then. Each row's `user_decision_recorded` audit row is written under the same lock, after the
 rename, and confirmed with `grep -F`; a miss reports `degraded`.
 
 ## Write guard
@@ -263,7 +265,11 @@ Until upstream U1 lands, a subagent or the orchestrator with Bash could still ap
 with a correct `prev_sha256`, plus a matching `user_decision_recorded` audit row. The chain detects a
 forged row only when that row breaks the chain, and a well-formed tail append does not. The write
 guard is a speed bump that obfuscated shell evades. Audit corroboration, which fails closed, means a
-forgery needs two coordinated file writes, and dedupe on `tool_use_id` blocks a replay. U1, the
+forgery needs both writes to land, and dedupe on the `(tool_use_id, question)` pair blocks a replay.
+Re-invoking this hook is not the cheap path to both writes it once was: a segment naming
+`user-decision-record.sh` is denied unless it is `bash -n`, shellcheck or a read-only reader, so
+feeding the hook a hand-built payload no longer mints the row and its audit row for free. What is
+left is a shell that writes both files without naming either — obfuscation the guard cannot see. U1, the
 harness forwarding a user's answer into a subagent thread itself, is tracked outside this milestone.
 
 ### S2 — a forged transcript
@@ -286,7 +292,8 @@ Code's `askUserQuestionTimeout` off; an answer carrying `afkTimeoutMs` is refuse
 ### S5 — retention
 
 The ledger holds verbatim question and answer text, as the registry seam requires. It is mode 0600,
-lives in the git-excluded `.context/`, and receives rung 1 and rung 2 questions only. Audit rows
+lives under `.context/`, which the committed `.gitignore` excludes, and receives rung 1 and rung 2
+questions only. Audit rows
 never hold the text.
 
 ### S6 — root divergence

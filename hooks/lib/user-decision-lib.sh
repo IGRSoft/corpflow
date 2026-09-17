@@ -363,7 +363,7 @@ ud_append_call() {
   local _ledger _state _payload _cb _rc _staged _tuid
   local _n_prior _prev _prevline _sha _wid _ts_id _ts_row
   local _idx _header _qok _aok _scope _srow _line _newlines _cb_ids _any
-  local _tmp _cb_id _cb_tuid _cb_sha _cb_item
+  local _tmp _dir _cb_id _cb_tuid _cb_sha _cb_item
 
   _ledger="${1:-}" _state="${2:-}" _payload="${3:-}" _cb="${4:-}"
   [ -n "$_ledger" ] && [ -n "$_state" ] && [ -n "$_payload" ] && [ -n "$_cb" ] || return 2
@@ -510,7 +510,14 @@ ud_append_call() {
     return 1
   fi
 
-  _tmp="${_ledger}.tmp.$$"
+  # mktemp, not "$_ledger.tmp.$$": a predictable name in a shared directory is a pre-creation
+  # target. Same directory, so the rename below stays atomic.
+  _dir="${_ledger%/*}"
+  [ "$_dir" != "$_ledger" ] || _dir="."
+  _tmp=$(umask 077 && mktemp "$_dir/.ud-append.XXXXXXXX" 2> /dev/null) || {
+    ud_lock_release
+    return 2
+  }
   (
     umask 077
     [ -f "$_ledger" ] && cat -- "$_ledger" > "$_tmp"
@@ -633,8 +640,12 @@ ud_chain_walk() {
     ([inputs | select(length > 0) | digline]) as $digs
     | (reduce $digs[] as $d ({}; . + {($d.p | split("/") | last): $d.h})) as $byname
     | ($meta | split("\n") | map(select(length > 0)) | map(split("\t"))) as $rows
+    # One AskUserQuestion call legitimately writes one row per question, all sharing its single
+    # tool_use_id, so the duplicate key is (tool_use_id, canonical [question,answer] digest) —
+    # a real replay repeats that pair, a batched call of up to 4 questions does not.
     | ($rows | map(.[0])) as $ids
-    | ($rows | map(.[4])) as $tuids
+    | ([range(0; $n) as $j
+        | (($rows[$j][4]) + ":" + ($byname["canon." + (($j + 1) | tostring)] // ""))]) as $tukeys
     | range(0; $n) as $i
     | ($rows[$i]) as $m
     | ($i + 1) as $idx
@@ -653,7 +664,7 @@ ud_chain_walk() {
        else false end) as $chain_bad
     | (if $shape_ok and $chain_bad then "chain_broken" else null end) as $r_chain
     | (if $shape_ok and (($ids | map(select(. == $m[0]))) | length) > 1 then "duplicate_id" else null end) as $r_dupid
-    | (if $shape_ok and (($tuids | map(select(. == $m[4]))) | length) > 1 then "duplicate_tool_use" else null end) as $r_duptu
+    | (if $shape_ok and (($tukeys | map(select(. == $tukeys[$i]))) | length) > 1 then "duplicate_tool_use" else null end) as $r_duptu
     | ([$r_shape, $r_tail, $r_sha, $r_actor, $r_chain, $r_dupid, $r_duptu] | map(select(. != null))) as $reasons
     | {index: $idx, id: (if $shape_ok then $m[0] else null end), line_sha256: $line_sha, reasons: $reasons}
     | tojson
