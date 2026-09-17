@@ -153,7 +153,10 @@ The same script runs on PreToolUse `Write|Edit|Bash` as a separate manifest entr
 emits a deny, so it cannot loosen a deny or ask from another hook, and it has no ordering dependency.
 
 - **Fast path.** Stdin naming neither `decisions.jsonl` nor `user-decision-record.sh` exits 0 at
-  once, as does a tree with no `state.json`.
+  once, as does a tree with no `state.json`. "At once" is measured from the guard's own work: the
+  substring test is a shell builtin and forks nothing, but the script has by then sourced its four
+  libraries and read `hook_event_name` with one `jq`, the same cost every hook entry pays. Reading
+  stdin before the libraries would need the event name before jq is available, so this is the floor.
 - **Write or Edit.** Denied when `file_path`, resolved to its physical parent plus basename, is the
   ledger or lies under its lock dir. Editing the hook source stays allowed.
 - **Fail closed.** After a fast-path hit, a missing jq or library denies. There is no environment
@@ -265,7 +268,8 @@ Until upstream U1 lands, a subagent or the orchestrator with Bash could still ap
 with a correct `prev_sha256`, plus a matching `user_decision_recorded` audit row. The chain detects a
 forged row only when that row breaks the chain, and a well-formed tail append does not. The write
 guard is a speed bump that obfuscated shell evades. Audit corroboration, which fails closed, means a
-forgery needs both writes to land, and dedupe on the `(tool_use_id, question)` pair blocks a replay.
+forgery needs both writes to land, and dedupe on the `(tool_use_id, canonical [question,answer]
+digest)` pair blocks a replay while still admitting the several questions of one batched call.
 Re-invoking this hook is not the cheap path to both writes it once was: a segment naming
 `user-decision-record.sh` is denied unless it is `bash -n`, shellcheck or a read-only reader, so
 feeding the hook a hand-built payload no longer mints the row and its audit row for free. What is

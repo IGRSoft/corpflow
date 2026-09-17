@@ -29,7 +29,10 @@ set +e
 
 UD_AUDIT_CTX=""
 _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
-_UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck)$'
+# git is on the hook arm only: it cannot execute the script, and `git diff|show|blame -- <hook>`
+# plus the `git checkout -- <path>` revert agents are told to run have no exec value. It stays OFF
+# the ledger arm, where `git apply`/`checkout` could write a ledger that git has no reason to read.
+_UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck|git)$'
 
 # _ud_refuse <ctx> <reason> [<tool_use_id>] — one user_decision_refused row; tool_use_id is
 # folded in only once P2 (event/tool/id shape) has already passed.
@@ -71,7 +74,7 @@ _ud_cb() {
 
 # do_post — PostToolUse AskUserQuestion. Reads $PAYLOAD (already staged as one JSON string).
 do_post() {
-  local CTX TOOL_NAME TUID PFILE treason trc STATE LEDGER areason arc
+  local CTX TOOL_NAME TUID PFILE preason prc treason trc STATE LEDGER areason arc
   CTX=$(corpflow_context_root)
   [ -n "$CTX" ] || return 0
   command -v jq > /dev/null 2>&1 || return 0
@@ -95,6 +98,18 @@ do_post() {
   }
   printf '%s' "$PAYLOAD" > "$PFILE" 2> /dev/null
 
+  # AD4 is a ladder and first failure wins, so P3's payload half (idle_auto_answer, no_answer)
+  # is asked before P4 reads the transcript. ud_append_call stages the answers again later; one
+  # extra jq pass per call is the price of reporting the reason AD4 orders first.
+  preason=$(ud_extract_answers "$PFILE")
+  prc=$?
+  if [ "$prc" -eq 1 ]; then
+    rm -f "$PFILE"
+    _ud_refuse "$CTX" "$preason" "$TUID"
+    return 0
+  fi
+  [ "$prc" -eq 0 ] && rm -f "$preason"
+
   treason=$(ud_transcript_check "$PFILE")
   trc=$?
   if [ "$trc" -eq 1 ]; then
@@ -108,8 +123,10 @@ do_post() {
     return 0
   fi
 
+  # AD4 P1: no state.json with a non-empty worktask_id means no context to audit into, so the
+  # hook exits silently rather than writing a refusal row nobody can read.
   STATE="$CTX/state.json"
-  if [ ! -f "$STATE" ]; then
+  if [ ! -f "$STATE" ] || [ -z "$(jq -r '.worktask_id // ""' "$STATE" 2> /dev/null)" ]; then
     rm -f "$PFILE"
     return 0
   fi
@@ -162,13 +179,14 @@ _ud_deny_fail_closed() {
 # stripped) must start with a read-only program, carry no substitution/eval/xargs/tee, and
 # redirect nowhere but /dev/null, 2>&1 or &2.
 _ud_guard_ledger_cmd() {
-  local cmd="$1" seg prog scrub segs
+  local cmd="$1" seg sseg prog scrub segs
   segs=$(printf '%s\n' "$cmd" | tr ';&|' '\n')
   while IFS= read -r seg; do
     [ -n "${seg//[[:space:]]/}" ] || continue
-    if command -v strip_assignments > /dev/null 2>&1; then
-      seg=$(strip_assignments "$seg")
-    fi
+    # AD8's rule is over the command, so the checks below read the RAW segment: an assignment's
+    # value is shell the shell still runs (`X=$(tee<a>ledger) cat ledger`), and stripping it
+    # first would hide the substitution, the redirect and the denied program alike. The stripped
+    # form is used for nothing but the program name.
     # shellcheck disable=SC2016  # these are literal glob patterns, not expansions to interpolate
     if [[ "$seg" == *'$('* || "$seg" == *'`'* || "$seg" == *'<('* || "$seg" == *'>('* ]]; then
       _ud_deny "a Bash command naming the user-decision ledger contains command substitution or process substitution, which is denied." Bash "$cmd"
@@ -187,7 +205,11 @@ _ud_guard_ledger_cmd() {
       _ud_deny "a Bash command naming the user-decision ledger redirects output somewhere other than /dev/null, which is denied." Bash "$cmd"
       return 0
     fi
-    prog=$(printf '%s' "$seg" | awk '{print $1}')
+    sseg="$seg"
+    if command -v strip_assignments > /dev/null 2>&1; then
+      sseg=$(strip_assignments "$seg")
+    fi
+    prog=$(printf '%s' "$sseg" | awk '{print $1}')
     prog="${prog##*/}"
     if ! [[ "$prog" =~ $_UD_LEDGER_ALLOW_RE ]]; then
       _ud_deny "a Bash command naming the user-decision ledger runs a program outside the read-only allow-list, which is denied." Bash "$cmd"
@@ -205,7 +227,7 @@ _ud_guard_ledger_cmd() {
 # itself a forgery primitive: the transcript of a declined dialog still holds a matching
 # tool_use, so a hand-built payload would mint both the ledger row and its audit corroboration.
 _ud_guard_hook_cmd() {
-  local cmd="$1" seg prog segs scrub
+  local cmd="$1" seg sseg prog segs scrub
   segs=$(printf '%s\n' "$cmd" | tr ';&|' '\n')
   while IFS= read -r seg; do
     [ -n "${seg//[[:space:]]/}" ] || continue
@@ -213,9 +235,9 @@ _ud_guard_hook_cmd() {
       *user-decision-record.sh*) : ;;
       *) continue ;;
     esac
-    if command -v strip_assignments > /dev/null 2>&1; then
-      seg=$(strip_assignments "$seg")
-    fi
+    # Raw segment, for the reason spelled out in the ledger arm above: an assignment value like
+    # `X=$(./hooks/user-decision-record.sh<p.json)` runs the hook before the allow-listed program
+    # on the same line ever starts.
     # shellcheck disable=SC2016  # these are literal glob patterns, not expansions to interpolate
     if [[ "$seg" == *'$('* || "$seg" == *'`'* || "$seg" == *'<('* || "$seg" == *'>('* ]]; then
       _ud_deny "a Bash command naming user-decision-record.sh contains command substitution or process substitution, which is denied." Bash "$cmd"
@@ -238,7 +260,11 @@ _ud_guard_hook_cmd() {
     if [[ "$seg" =~ ^[[:space:]]*[^[:space:]]*(bash|sh)[[:space:]]+-n([[:space:]]|$) ]]; then
       continue
     fi
-    prog=$(printf '%s' "$seg" | awk '{print $1}')
+    sseg="$seg"
+    if command -v strip_assignments > /dev/null 2>&1; then
+      sseg=$(strip_assignments "$seg")
+    fi
+    prog=$(printf '%s' "$sseg" | awk '{print $1}')
     prog="${prog##*/}"
     if ! [[ "$prog" =~ $_UD_HOOK_ALLOW_RE ]]; then
       _ud_deny "a Bash command naming user-decision-record.sh runs a program outside the read-only allow-list, which is denied outside bash -n or shellcheck." Bash "$cmd"

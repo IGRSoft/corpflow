@@ -363,7 +363,8 @@ ud_append_call() {
   local _ledger _state _payload _cb _rc _staged _tuid
   local _n_prior _prev _prevline _sha _wid _ts_id _ts_row
   local _idx _header _qok _aok _scope _srow _line _newlines _cb_ids _any
-  local _tmp _dir _cb_id _cb_tuid _cb_sha _cb_item
+  local _tmp _dir _n_start _tailsha0 _chk _cb_id _cb_tuid _cb_sha _cb_item
+  _tailsha0=""
 
   _ledger="${1:-}" _state="${2:-}" _payload="${3:-}" _cb="${4:-}"
   [ -n "$_ledger" ] && [ -n "$_state" ] && [ -n "$_payload" ] && [ -n "$_cb" ] || return 2
@@ -445,8 +446,10 @@ ud_append_call() {
         return 1
       }
       _prev="\"$_sha\""
+      _tailsha0="$_sha"
     fi
   fi
+  _n_start="$_n_prior"
   _wid=$(jq -r '.worktask_id // ""' "$_state" 2> /dev/null)
   _ts_id=$(date -u +%Y%m%dT%H%M%SZ 2> /dev/null) || _ts_id="19700101T000000Z"
   _ts_row=$(date -u +%FT%TZ 2> /dev/null) || _ts_row="unknown"
@@ -481,7 +484,7 @@ ud_append_call() {
       continue
     fi
 
-    _sha=$(printf '%s' "$_srow" | jq -jc '[.question,.answer]' 2> /dev/null | ud_digest)
+    _sha=$(printf '%s' "$_srow" | ud_row_sha256 -)
     if [ -z "$_sha" ]; then
       _n_prior=$((_n_prior - 1))
       continue
@@ -518,12 +521,37 @@ ud_append_call() {
     ud_lock_release
     return 2
   }
-  (
+  # A copy cut short by ENOSPC or an IO error still renames fine — a rename needs no space — and
+  # the chain cannot see its own truncation (S3), so the copy's status is checked and the copied
+  # prefix is re-verified against the pre-copy line count and tail digest before the rename.
+  if ! (
     umask 077
-    [ -f "$_ledger" ] && cat -- "$_ledger" > "$_tmp"
-    printf '%s' "$_newlines" >> "$_tmp"
-  ) 2> /dev/null
-  if [ ! -f "$_tmp" ] || [ -L "$_ledger" ] || ! mv -f -- "$_tmp" "$_ledger" 2> /dev/null; then
+    if [ -f "$_ledger" ]; then cat -- "$_ledger" > "$_tmp" || exit 1; fi
+    printf '%s' "$_newlines" >> "$_tmp" || exit 1
+  ) 2> /dev/null; then
+    rm -f "$_tmp"
+    ud_lock_release
+    printf 'ledger_torn'
+    return 1
+  fi
+  _chk=$(LC_ALL=C wc -l < "$_tmp" 2> /dev/null | tr -d ' ')
+  if [ "$_chk" != "$_n_prior" ]; then
+    rm -f "$_tmp"
+    ud_lock_release
+    printf 'ledger_torn'
+    return 1
+  fi
+  if [ "$_n_start" -gt 0 ]; then
+    _chk=$(head -n "$_n_start" -- "$_tmp" 2> /dev/null | tail -n 1)
+    _chk=$(printf '%s' "$_chk" | ud_digest)
+    if [ "$_chk" != "$_tailsha0" ]; then
+      rm -f "$_tmp"
+      ud_lock_release
+      printf 'ledger_torn'
+      return 1
+    fi
+  fi
+  if [ -L "$_ledger" ] || ! mv -f -- "$_tmp" "$_ledger" 2> /dev/null; then
     rm -f "$_tmp"
     ud_lock_release
     return 2

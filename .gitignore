@@ -28,4 +28,4 @@ skills/*/evals/responses*/
 evals/review/
 
 # Worktask run state, logs and the user-decision ledger (0600, verbatim answer text)
-.context/
+/.context/
