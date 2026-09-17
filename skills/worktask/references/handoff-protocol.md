@@ -1452,11 +1452,10 @@ When state.json approaches the 500-token cap:
 
 ### PL0 seed (initial state) {#pl0-seed}
 
-PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is **re-run aware**:
-`plan_file` and `run_index` take the next free planning index `N` computed from any pre-existing
-`.context/planning-*.md` (`0` on a fresh `.context/`) — hard-coding `0` would pin an old plan and
-make PL0 overwrite `planning-0.md`. Use the canonical executable snippet in
-`commands/worktask.md` Phase 1 step 3a verbatim; the JSON below shows only the resulting shape.
+`commands/worktask.md` Phase 1 Step 3a writes the initial ledger by running
+`skills/worktask/scripts/seed-state.sh`, the seed's only definition (next free planning index `N`
+from `.context/planning-*.md`, `0` on a fresh `.context/`; goal escaping and truncation; atomic
+write). This section keeps only the resulting shape.
 
 #### Seed shape (resulting JSON)
 
@@ -1470,6 +1469,7 @@ the `plan_file` shape boundary under § state.json schema.
   "plan_file": ".context/planning-${N}.md",
   "platform": "all",
   "run_index": ${N},
+  "metadata": { "workspace_path": "<absolute worktree root>" },
   "tasks": {
     "PL0": { "status": "in_progress" }
   },
@@ -1494,9 +1494,11 @@ additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capa
 written on demand and MUST NOT be seeded — their absence is meaningful (Layer-1 self-patch, no
 error, no worktree record, no observed capability hard-fail).
 
-**On a new PL run in an existing `.context/`**: the seed sets `run_index = N` up front; PL0 then
-atomically resets `stages` to `{PL: in_progress}` and `facts.*` to empty. Historical run data
-lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
+**On a new run in an existing `.context/`**: `seed-state.sh` refuses (exit 3) and leaves
+`state.json` byte-unchanged; it has no overwrite path. Step 3a only reopens PL0
+(`--task-status PL0 in_progress`). PL0's `pl0-procedure.md § Step 4 — state.json reset` is the
+sole reset writer: `run_index = N`, `plan_file`, `tasks` reset to `{PL0: in_progress}`, `facts.*`
+emptied. Historical run data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ---
 
