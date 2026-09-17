@@ -662,20 +662,20 @@ _section() {
     || fail "a retry: true line does not say corpflow never returns it: $hits"
 }
 
-@test "doc-contract AC12: the handoff schema lists the blocked_on enums verbatim; only permission names keys" {
-  local f="$PLUGIN_ROOT/$PROTOCOL_MD" schema line
+@test "doc-contract AC12: the handoff schema lists the blocked_on enums verbatim and every kind's required keys" {
+  local schema line req
   schema="$(_section "$PROTOCOL_MD" '### Schema — blocked_on' '^### Schema — .defs')"
   [ -n "$schema" ] || fail "Schema — blocked_on section not found"
   grep -qF 'kind: user_decision | user_action | permission | peer_session | artifact | correction | host_environment' <<< "$schema" \
     || fail "kind enum missing"
   grep -qF 'resume_with: decision_ref | artifact_path | reply_ref' <<< "$schema" || fail "resume_with enum missing"
   line="$(grep -E '^[[:space:]]*detail: \{…kind-specific…\}' <<< "$schema" || true)"
-  grep -qF '# permission: {tool, command, classifier_reason, allow_rule}' <<< "$line" \
-    || fail "the detail line does not carry the four permission keys: $line"
-  grep -qF 'required: [tool, command, classifier_reason, allow_rule]' <<< "$schema" \
-    || fail "the permission arm does not require the four keys"
-  ! grep -qE '(user_decision|user_action|peer_session|artifact|correction|host_environment): *\{' <<< "$schema" \
-    || fail "a kind other than permission names detail keys"
+  grep -qF '# e.g. permission: {tool, command, classifier_reason, allow_rule}; peer_session: {to, question, deadline}' <<< "$line" \
+    || fail "the detail line does not carry the registry's e.g. comment: $line"
+  for req in '[question, options]' '[request, command]' '[tool, command, classifier_reason, allow_rule]' \
+    '[to, question]' '[producer_task, path]' '[target_task, finding, evidence_ref, severity]' '[check, observed]'; do
+    grep -qF "required: $req" <<< "$schema" || fail "no arm declares required: $req"
+  done
 }
 
 @test "doc-contract AC13: the megatask fallback never hand-writes a symlinked workspace.json" {

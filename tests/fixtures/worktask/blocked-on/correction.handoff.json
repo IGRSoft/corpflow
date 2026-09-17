@@ -1,0 +1,1 @@
+{"stage":"DC","verdict":"blocked","summary":"Upstream defect found","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"CORRECTION-FINDING-TEXT: route exits 0 on a refused write","evidence_ref":"skills/worktask/scripts/blocked-on-dispatch.sh:120","severity":"blocking"},"resume_with":"artifact_path"}}

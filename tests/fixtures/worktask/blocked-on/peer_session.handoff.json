@@ -1,0 +1,1 @@
+{"stage":"DR","verdict":"blocked","summary":"Needs the backend session answer","blocked_on":{"kind":"peer_session","detail":{"to":"backend-session","question":"Which base branch does the API change target?","deadline":"2026-09-20T00:00:00Z"},"resume_with":"reply_ref"}}

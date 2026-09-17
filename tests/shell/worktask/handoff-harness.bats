@@ -1394,3 +1394,138 @@ split_state() {
   assert_success
   refute_output --partial "warn:"
 }
+
+# --- blocked_on: the typed need, gated identically with and without yq ---------------
+# The enums are skills/worktask/scripts/blocked-on-lib.sh's; the cases below are the bats twin of
+# self_test_blocked_on in skills/worktask/scripts/handoff-harness-selftest.sh.
+
+BO_FIX="${FIXTURES}/worktask/blocked-on"
+
+# _dv_blocked_artifact <path> <lines under handoff:> — a passing DV artifact plus one need.
+_dv_blocked_artifact() {
+  {
+    printf -- '---\nhandoff:\n  stage: DV\n  verdict: blocked\n'
+    printf '  summary: "blocked_on fixture"\n  tests_executed: 3\n'
+    printf '  test_summary_line: "3 tests, 0 failures"\n  files_touched: [a.md]\n'
+    printf '  next_stage_focus: "DR reviews"\n  open_questions: []\n'
+    printf '%s\n' "$2"
+    printf '  refs:\n    dev: development-0.md#files-changed\n'
+    printf -- '---\n\n# Development\n\n## verification-command\n\n3 tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n'
+  } > "$1"
+}
+
+# _bo_from_fixture <name> — the fixture's need as one JSON flow line, which YAML reads as-is.
+_bo_from_fixture() {
+  if jq -e 'has("blocked_on")' "$BO_FIX/$1.handoff.json" > /dev/null; then
+    printf '  blocked_on: %s' "$(jq -c '.blocked_on' "$BO_FIX/$1.handoff.json")"
+  else
+    printf '  cross_session_ask: %s' "$(jq -c '.cross_session_ask' "$BO_FIX/$1.handoff.json")"
+  fi
+}
+
+@test "blocked_on: each of the seven kinds passes the gate, with and without yq" {
+  local kind
+  for kind in user_decision user_action permission peer_session artifact correction host_environment; do
+    _dv_blocked_artifact "$WD/bo-$kind.md" "$(_bo_from_fixture "$kind")"
+    run_script_env --separate-stderr "$SCRIPT" --validate-frontmatter "$WD/bo-$kind.md"
+    [ "$status" -eq 0 ] || fail "$kind (host reader): exit $status: $stderr"
+    run_script_env --separate-stderr --hide yq "$SCRIPT" --validate-frontmatter "$WD/bo-$kind.md"
+    [ "$status" -eq 0 ] || fail "$kind (no yq): exit $status: $stderr"
+  done
+}
+
+@test "blocked_on: unknown kind, unknown resume_with and missing detail fail by name, with and without yq" {
+  local spec name want hide
+  for spec in 'invalid-unknown-kind|fail: blocked_on.kind "coffee_break" is not one of' \
+    'invalid-unknown-resume-with|fail: blocked_on.resume_with "carrier_pigeon" is not one of' \
+    'invalid-missing-detail|fail: blocked_on.detail is missing or empty'; do
+    name="${spec%%|*}" want="${spec#*|}"
+    _dv_blocked_artifact "$WD/$name.md" "$(_bo_from_fixture "$name")"
+    for hide in no yes; do
+      if [ "$hide" = yes ]; then
+        run_script_env --separate-stderr --hide yq "$SCRIPT" --validate-frontmatter "$WD/$name.md"
+      else
+        run_script_env --separate-stderr "$SCRIPT" --validate-frontmatter "$WD/$name.md"
+      fi
+      [ "$status" -eq 1 ] || fail "$name (hide yq: $hide): exit $status, want 1"
+      [[ "$stderr" == *"$want"* ]] || fail "$name (hide yq: $hide): no '$want' in: $stderr"
+    done
+  done
+}
+
+@test "blocked_on: an empty detail object fails like a missing one" {
+  _dv_blocked_artifact "$WD/empty.md" '  blocked_on:
+    kind: user_action
+    detail: {}
+    resume_with: decision_ref'
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --validate-frontmatter "$WD/empty.md"
+  assert_failure 1
+  [[ "$stderr" == *"fail: blocked_on.detail is missing or empty"* ]]
+  run_script_env --separate-stderr "$SCRIPT" --validate-frontmatter "$WD/empty.md"
+  assert_failure 1
+}
+
+@test "--read-blocked-on: the legacy alias reads as peer_session with source cross_session_ask" {
+  _dv_blocked_artifact "$WD/alias.md" '  cross_session_ask:
+    to: backend-session
+    question: "Which base branch does the API change target?"'
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/alias.md"
+  assert_success
+  [ "${#lines[@]}" -eq 2 ]
+  jq -e '. == {kind: "peer_session", detail: {to: "backend-session",
+    question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' <<< "${lines[0]}"
+  [ "${lines[1]}" = "source: cross_session_ask" ]
+  run_script_env --separate-stderr "$SCRIPT" --read-blocked-on "$WD/alias.md"
+  assert_success
+  [ "${lines[1]}" = "source: cross_session_ask" ]
+}
+
+@test "--read-blocked-on: blocked_on wins over the alias, and neither present exits 1" {
+  _dv_blocked_artifact "$WD/both.md" "$(_bo_from_fixture artifact)
+$(_bo_from_fixture legacy-cross-session-ask)"
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/both.md"
+  assert_success
+  jq -e '.kind == "artifact"' <<< "${lines[0]}"
+  [ "${lines[1]}" = "source: blocked_on" ]
+  _dv_test_evidence_artifact "$WD/none.md" 3
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/none.md"
+  assert_failure 1
+  [[ "$stderr" == *"no blocked_on or cross_session_ask"* ]]
+}
+
+@test "--read-blocked-on: the no-yq reader parses block style, flow style and a block sequence alike" {
+  local want
+  want='{"kind":"user_decision","detail":{"question":"Ship: behind a flag?","options":["flag","no-flag"],"recommended":"flag"},"resume_with":"decision_ref"}'
+  _dv_blocked_artifact "$WD/block.md" '  blocked_on:
+    kind: user_decision   # the stage cannot choose
+    detail:
+      question: "Ship: behind a flag?"
+      options:
+        - flag
+        - '"'no-flag'"'
+      recommended: flag
+    resume_with: decision_ref'
+  _dv_blocked_artifact "$WD/flow.md" '  blocked_on: { kind: user_decision, detail: { question: "Ship: behind a flag?", options: [flag, no-flag], recommended: flag }, resume_with: decision_ref }'
+  local f
+  for f in block flow; do
+    run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/$f.md"
+    assert_success
+    [ "$(jq -cS . <<< "${lines[0]}")" = "$(jq -cS . <<< "$want")" ] || fail "$f (no yq): ${lines[0]}"
+    run_script_env --separate-stderr "$SCRIPT" --read-blocked-on "$WD/$f.md"
+    assert_success
+    [ "$(jq -cS . <<< "${lines[0]}")" = "$(jq -cS . <<< "$want")" ] || fail "$f (host reader): ${lines[0]}"
+  done
+}
+
+@test "blocked_on: the self-test source carries one case per kind and each refusal, each asserting its exit code" {
+  local st="$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness-selftest.sh" kind
+  for kind in user_decision user_action permission peer_session artifact correction host_environment; do
+    grep -qE "^$kind\|" "$st" || fail "no self-test case row for $kind"
+  done
+  grep -qF '_bo_case "valid/$kind" 0' "$st" || fail "the valid cases do not assert exit 0"
+  grep -qF '_bo_case "unknown-kind" 1' "$st" || fail "no unknown-kind case asserting exit 1"
+  grep -qF '_bo_case "unknown-resume_with" 1' "$st" || fail "no unknown resume_with case asserting exit 1"
+  grep -qF '_bo_case "missing-detail" 1' "$st" || fail "no missing-detail case asserting exit 1"
+  grep -qF 'legacy-alias/reads-as-peer_session' "$st" || fail "no legacy alias read case"
+  grep -qF 'skills/worktask/scripts/blocked-on-lib.sh' "$BATS_TEST_FILENAME"
+}
