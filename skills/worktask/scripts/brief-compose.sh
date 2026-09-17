@@ -24,8 +24,8 @@
 # @exitcode 0  Brief printed.
 # @exitcode 1  Guard failure: an absolute path outside the allowed roots, or an unresolved
 #              `ref:` line. One `brief-compose: <reason>: <token>` stderr line per finding.
-# @exitcode 2  Usage error, malformed/unknown task id, unreadable ledger, missing jq, or a
-#              canon source file/section absent.
+# @exitcode 2  Usage error, malformed/unknown task id, unreadable ledger, malformed
+#              metadata.context_refs, missing jq, or a canon source file/section absent.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
