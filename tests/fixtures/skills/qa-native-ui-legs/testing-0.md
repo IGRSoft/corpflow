@@ -3,8 +3,7 @@ handoff:
   stage: QA
   verdict: no-go
   summary: "3 bats cases pass; 2 native UI legs delegated with evidence, 1 not delegated"
-  tests_executed: 3
-  test_summary_line: "1..3"
+  tests_executed: [{ runner: bats, count: 3, summary_line: "1..3" }]
   files_touched: []
   key_decisions:
     - { id: qa1, summary: "UI-3 not delegated (plugin_unavailable); AC-3 unverified", anchor: "testing-0.md#results" }
