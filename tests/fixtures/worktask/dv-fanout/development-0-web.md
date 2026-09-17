@@ -1,8 +1,7 @@
 ---
 handoff:
   stage: DV
-  tests_executed: 2
-  test_summary_line: "2 tests, 0 failures"
+  tests_executed: [{ runner: bats, count: 2, summary_line: "2 tests, 0 failures" }]
   verdict: ok
   summary: "dv-fanout fixture: stream web"
   files_touched: [src/web/main.sh]

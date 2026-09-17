@@ -601,7 +601,8 @@ handoff:
   task_id: DV0                 # your ledger row id; REQUIRED with >1 DV row
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files changed, M tests added>"
-  tests_executed: 12
+  tests_executed:              # one entry per runner; [] is legal
+    - { runner: bats, count: 12, summary_line: "1..12" }
   test_suite_compiles: true
   worktree: true               # DR hard-fails on false
   worktree_path: <abs path>    # OPTIONAL
@@ -611,6 +612,12 @@ handoff:
   next_stage_focus: "<imperative: what DR/QA focuses on>"
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "<this artifact>#elicitation-sweep", blocks_next_stage: false }
+```
+
+##### The block — refs and architecture half
+
+```yaml
+# …continued: handoff
   refs:
     decisions: architecture-N.md#decisions    # ONLY when AR ran
     coordination: coordination-N.md#fan-out   # ONLY when TL ran
@@ -623,18 +630,25 @@ handoff:
 
 #### Field notes — test evidence
 
-`tests_executed` is the count of cases that actually **ran**, taken from the same summary line
-`## verification-command` quotes verbatim — never a number a runner printed while enumerating.
+`tests_executed` is a list with **one entry per runner invocation**: `{runner, count, summary_line}`.
+`count` is the cases that actually **ran** under that runner — never a number it printed while
+enumerating — and `summary_line` is the line that runner printed, the same one
+`## verification-command` quotes verbatim, required whenever `count` is above 0. Two runners are two
+entries, never one summed count. A rework round records only its own runs: the ledger keeps earlier
+rounds (`tasks.<ID>.rework_runs`), so never copy one into this artifact. A scalar `tests_executed`
+fails the harness.
+
+##### Field notes — zero executed tests
 
 Zero is a legal value. Report it honestly when the gate denied the run, when the selector matched
 nothing, or when the suite never got as far as executing. What you may not do is leave it
-ambiguous: **whenever `tests_executed` is 0, `test_suite_compiles` is required** — `true`, `false`,
-or `unknown` with the reason in `§ Decisions`.
+ambiguous: **whenever the list is empty or every `count` is 0, `test_suite_compiles` is required** —
+`true`, `false`, or `unknown` with the reason in `§ Decisions`.
 
 You can answer it while denied. Building the test target needs no test-execution authority, so a
 denial is never a reason to omit it, and it is the only field that tells DR and QA whether they are
-looking at gate-blocked work or work that never compiled. `handoff-harness.sh` fails the stage for a
-`tests_executed: 0` with no `test_suite_compiles`.
+looking at gate-blocked work or work that never compiled. `handoff-harness.sh` fails the stage for an
+empty or all-zero list with no `test_suite_compiles`.
 
 #### Field notes — files_touched
 

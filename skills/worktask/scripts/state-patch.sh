@@ -89,6 +89,10 @@
 #                                             byte-identical.  --cascade also resets the
 #                                             transitive dependents reachable through
 #                                             blocked_by, skipping FN/RE with a warning.
+#                                             A reset row holding tests_executed also gets
+#                                             rework_pending: true, so its next completion
+#                                             merge files the prior list under rework_runs[]
+#                                             as a new round instead of overwriting it.
 # @arg --agents-json <path>                   Passed through to stale-check.sh for the replay
 #                                             liveness guard.  Test/diagnostic seam only.
 # @arg --claim <ID>                          pending|blocked -> in_progress + claimed_at
@@ -360,10 +364,18 @@ resolve_artifact_for_stage() {
 # Parse frontmatter with yq (preferred) or awk fallback.
 # Sets PARSED_STAGE, PARSED_VERDICT, PARSED_SUMMARY and (additive, optional)
 # PARSED_WT_PATH / PARSED_WT_BRANCH in the caller's scope.
+#
+# Also sets PARSED_TE_STATE / PARSED_TE_JSON for the ledger's tests_executed mirror:
+#   list      handoff.tests_executed is a sequence; PARSED_TE_JSON is it as compact JSON
+#   absent    anything else (no key, a legacy scalar, a map)
+#   unparsed  the list could not be read (no yq, a yq/jq error, no frontmatter)
+# `unparsed` exists so a host without yq leaves the mirror and any rework marker alone
+# rather than reading the list as gone.
 parse_frontmatter() {
   local art="$1"
   PARSED_STAGE="" PARSED_VERDICT="" PARSED_SUMMARY=""
   PARSED_WT_PATH="" PARSED_WT_BRANCH=""
+  PARSED_TE_STATE="unparsed" PARSED_TE_JSON="null"
 
   local fmfile
   fmfile=$(mktemp -t corpflow-fm-XXXXXX) || {
@@ -404,12 +416,28 @@ parse_frontmatter() {
   PARSED_SUMMARY=$(corpflow_fm_field "$fmfile" summary "")
   PARSED_WT_PATH=$(corpflow_fm_field "$fmfile" worktree_path "")
   PARSED_WT_BRANCH=$(corpflow_fm_field "$fmfile" worktree_branch "")
+  parse_tests_executed "$fmfile"
   rm -f "$fmfile"
 
   # A missing verdict is left empty, never defaulted — the artifact-preflight refusal
   # is the one place that decides what an absent verdict means.
   [[ -z "$PARSED_SUMMARY" ]] && PARSED_SUMMARY="(auto)"
   return 0
+}
+
+# parse_tests_executed <block-file> — sets PARSED_TE_STATE / PARSED_TE_JSON (see above).
+parse_tests_executed() {
+  local fm="$1" tag json
+  command -v yq > /dev/null 2>&1 || return 0
+  tag=$(yq eval '.handoff.tests_executed | tag' "$fm" 2> /dev/null) || return 0
+  if [[ "$tag" != '!!seq' ]]; then
+    PARSED_TE_STATE="absent"
+    return 0
+  fi
+  json=$(yq -o=json -I=0 '.handoff.tests_executed' "$fm" 2> /dev/null | jq -c . 2> /dev/null) \
+    || return 0
+  [[ -n "$json" ]] || return 0
+  PARSED_TE_STATE="list" PARSED_TE_JSON="$json"
 }
 
 # Predecessor codes are a SUPERSET of stage codes: USER is the documented origin of the
@@ -704,6 +732,16 @@ _lock_break_if_stale() {
   fi
 }
 
+# _audit_task_ref — the ledger key this invocation names, for an audit row's task_id;
+# "unknown" when it names none.
+_audit_task_ref() {
+  local t
+  for t in "${TASK_OP_ID:-}" "${TASK_ID_ARG:-}"; do
+    [[ "$t" =~ ^[A-Z]{2}[0-9]+$ ]] && { printf '%s' "$t"; return 0; }
+  done
+  printf 'unknown'
+}
+
 # _lock_audit <action> <key=value>... — one audit row about the lock, never a gate.
 #
 # The audit library is probed HERE rather than reusing the --facts probe near the bottom of
@@ -731,8 +769,8 @@ _lock_audit() {
   local kv=()
   for pair in "$@"; do kv[${#kv[@]}]="--meta-kv"; kv[${#kv[@]}]="$pair"; done
   corpflow_audit_row --file "${dir}/logs/audit.jsonl" \
-    --actor "${VIA_ARG:-agent}:state-patch" --action "$action" --result degraded \
-    ${kv[@]+"${kv[@]}"} || true
+    --actor "${VIA_ARG:-agent}:state-patch" --action "$action" --subject "${sp##*/}" \
+    --result degraded --task-id "$(_audit_task_ref)" ${kv[@]+"${kv[@]}"} || true
 }
 
 # _lock_owner_read <lockdir> — the owner token, bounded, empty when there is none.
@@ -1830,7 +1868,8 @@ if [[ -n "$TASK_OP" ]]; then
           | del(.completed_via)
           | (if (.metadata | type) == "object"
              then .metadata |= (del(.retry_count) | del(.error_escalated_to))
-             else . end);
+             else . end)
+          | (if has("tests_executed") then .rework_pending = true else . end);
         . as $st
         | [ $members[] | . as $m | select((($st.tasks // {}) | has($m)) | not) ] as $missing
         | if ($missing | length) > 0
@@ -2206,7 +2245,8 @@ ${FACTS_REJECT_LIST}"
     # did this run reject" is exactly the question nobody could answer afterwards.
     if [[ -n "$_FACTS_AUDIT_OK" ]]; then
       corpflow_audit_row --file "${STATE_PATH%/*}/logs/audit.jsonl" \
-        --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --result degraded \
+        --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --subject facts --result degraded \
+        --task-id "$(_audit_task_ref)" \
         --meta "$(printf '%s' "$FACTS_PART" | jq -c '{rejected: [.rejects[] | {key, label, reason}]}')"
     fi
   fi
@@ -2325,19 +2365,36 @@ ${FACTS_REJECT_LIST}"
 fi
 
 # ---------- Idempotency check ----------
-# One @tsv read: this runs on every hook-driven stage completion, so each extra jq spawn is
-# paid per stage per run. Artifact paths never contain a tab. Widened past status/verdict/
+# One jq read: this runs on every hook-driven stage completion, so each extra jq spawn is
+# paid per stage per run. Fields are joined on US (0x1F), not tab: tab is IFS whitespace, so
+# `read` would collapse the run around an empty field (gate_from_stage is empty on every
+# completed row) and shift every later field one slot left. Newline and US inside a value
+# are blanked so the single-line, six-field shape holds. Widened past status/verdict/
 # artifact to the two fields this merge also writes: the mirrored facts.verdicts
 # entry and, on a pending row, the gate_from_stage marker — either drifting from what this
 # call would write means the merge is not actually a no-op.
+#
+# The tests_executed mirror is compared with jq equality inside the same read, not as a
+# string: key order and spacing are not part of the value. A pending rework marker is never
+# a no-op, since consuming it is the write that files the prior round.
 CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT="" CURRENT_FACT_VERDICT="" CURRENT_GATE_FROM=""
+CURRENT_TE_DIRTY=""
 if command -v jq > /dev/null 2>&1; then
-  IDEM_TSV=$(jq -r --arg s "$TASK_ID" \
-    '[.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // "",
-      .facts.verdicts[$s] // "", .tasks[$s].metadata.gate_from_stage // ""] | @tsv' \
-    "$STATE_PATH" 2> /dev/null || printf '\t\t\t\t')
-  IFS=$'\t' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT CURRENT_FACT_VERDICT \
-    CURRENT_GATE_FROM <<< "$IDEM_TSV" || true
+  IDEM_ROW=$(jq -r --arg s "$TASK_ID" --arg te_state "${PARSED_TE_STATE:-unparsed}" \
+    --argjson te "${PARSED_TE_JSON:-null}" \
+    '(.tasks[$s] // {}) as $row
+     | [.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // "",
+      .facts.verdicts[$s] // "", .tasks[$s].metadata.gate_from_stage // "",
+      (if $te_state == "unparsed" then "0"
+       elif $row.rework_pending == true then "1"
+       elif $te_state == "list" then (if ($row.tests_executed // null) != $te then "1" else "0" end)
+       elif ($row | has("tests_executed")) then "1"
+       else "0" end)]
+     | ([31] | implode) as $us
+     | map(if type == "string" then gsub("[\n" + $us + "]"; " ") else . end) | join($us)' \
+    "$STATE_PATH" 2> /dev/null || printf '\037\037\037\037\037')
+  IFS=$'\037' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT CURRENT_FACT_VERDICT \
+    CURRENT_GATE_FROM CURRENT_TE_DIRTY <<< "$IDEM_ROW" || true
 fi
 
 # A remediation loop re-completes a stage at the same verdict with a fresh artifact and summary,
@@ -2352,6 +2409,9 @@ if [[ "$CURRENT_STATUS" == "$STATUS_MAPPED" && "$CURRENT_VERDICT" == "$PARSED_VE
     PATCH_IS_NOOP=0
   fi
   if [[ "$STATUS_MAPPED" == "pending" && "$CURRENT_GATE_FROM" != "$PARSED_STAGE" ]]; then
+    PATCH_IS_NOOP=0
+  fi
+  if [[ "$CURRENT_TE_DIRTY" == "1" ]]; then
     PATCH_IS_NOOP=0
   fi
   if [[ -n "$PREV_ARG" ]] && command -v jq > /dev/null 2>&1; then
@@ -2390,6 +2450,13 @@ fi
 # an N-way split writes N edges instead of collapsing to one last-writer-wins entry; the
 # source stays a bare code because it answers which stage this followed, and only the
 # destination ever collided.
+#
+# tasks.<ID>.tests_executed mirrors the artifact's current list. rework_runs[] is
+# append-only: a row carrying rework_pending (set by --task-replay) files its prior list as
+# {round: last round + 1, tests_executed} before the mirror is overwritten, and the marker is
+# consumed. Without a marker nothing is appended, so re-merging the same artifact never adds
+# a round and earlier rounds are re-emitted untouched. An unparsed list skips the whole block
+# and keeps the marker for a merge that can read it.
 ART_BASE=$(basename "$ART")
 COMPLETION_FILTER='
   def vrank($v):
@@ -2422,6 +2489,18 @@ COMPLETION_FILTER='
   | if ($rows | length) > 0
     then .facts.verdicts[$code] = ($rows | max_by([vrank(.verdict), .n]) | .verdict)
     else . end
+  | if $te_state == "unparsed" then .
+    else
+      (.tasks[$taskid]) as $row
+      | (if $row.rework_pending == true and ($row.tests_executed | type) == "array"
+         then .tasks[$taskid].rework_runs = (($row.rework_runs // []) + [{
+                round: (((($row.rework_runs // []) | last | .round) // 0) + 1),
+                tests_executed: $row.tests_executed }])
+         else . end)
+      | .tasks[$taskid] |= del(.rework_pending)
+      | if $te_state == "list" then .tasks[$taskid].tests_executed = $te
+        else .tasks[$taskid] |= del(.tests_executed) end
+    end
 '
 
 if atomic_apply "$STATE_PATH" "$COMPLETION_FILTER" \
@@ -2435,7 +2514,9 @@ if atomic_apply "$STATE_PATH" "$COMPLETION_FILTER" \
   --arg wt_branch "$PARSED_WT_BRANCH" \
   --arg prev "$PREV_ARG" \
   --arg summary "$PARSED_SUMMARY" \
-  --arg ref "$ART_BASE"; then
+  --arg ref "$ART_BASE" \
+  --arg te_state "${PARSED_TE_STATE:-unparsed}" \
+  --argjson te "${PARSED_TE_JSON:-null}"; then
   log_msg INFO "merged tasks.${TASK_ID} artifact=${ART} verdict=${PARSED_VERDICT} (summary: ${PARSED_SUMMARY:0:80})"
   _warn_unledgered_sweep_ids "$ART" "$STATE_PATH"
 else

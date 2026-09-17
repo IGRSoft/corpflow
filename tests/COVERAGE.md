@@ -184,11 +184,15 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
 | `skills/worktask/scripts/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
 | `skills/worktask/scripts/section-lint.sh` | `tests/shell/worktask/section-lint.bats` | — | — | — |
+| `skills/worktask/scripts/snippet-shell-lint.sh` | `tests/shell/worktask/snippet-shell-lint.bats` | — | — | — |
+| `skills/worktask/scripts/snippet-shell-lint-selftest.sh` | `tests/shell/worktask/snippet-shell-lint.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
 | `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
 | `skills/worktask/scripts/attachments-preseed.sh` | `tests/shell/worktask/attachments-preseed.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
+| `skills/worktask/scripts/seed-state.sh` | `tests/shell/worktask/seed-state.bats` | — | — | — |
+| `skills/worktask/scripts/seed-state-selftest.sh` | `tests/shell/worktask/seed-state.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/effort-ladder.sh` | `tests/shell/worktask/effort-ladder.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |

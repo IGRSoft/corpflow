@@ -184,7 +184,7 @@ OUTPUT_PNG="${IMAGES_DIR}/dv-${TASK_ID}-${NN}-${SLUG}.png"
 # the shared appender.
 audit() {
     corpflow_audit_row --file "$AUDIT_LOG" --actor "apple-canvas-adapter" \
-      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --task-id "$TASK_ID" --result "$2" --meta "${3:-}"
+      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --task-id "${TASK_ID:-unknown}" --result "$2" --meta "${3:-}"
 }
 
 # -----------------------------------------------------------------------------
