@@ -12,6 +12,11 @@
 #   AUDIT_REDACTION ("" or scrub_unavailable), so a caller needing both the head and the
 #   targets of one command pays one scrub and no command substitution.
 #
+#   A head keeps the program's basename and at most three more tokens, each a single-letter flag
+#   (`-v`), a lowercase long flag of at most 32 characters with nothing attached (`--verbose`), a
+#   ledger task id or a ledger status. Every other token is "[redacted]", including clustered or
+#   value-carrying flags such as `-rf`, `-pS3cret`, `--password=x` and `--S3cret`.
+#
 # Minimum shell: bash 3.2+ (macOS default).
 
 if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
@@ -52,7 +57,8 @@ strip_assignments() {
   printf '%s' "$_s"
 }
 
-_CH_FLAG_RE='^--?[A-Za-z][A-Za-z0-9-]*$'
+# A flag never carries its value: `-pS3cret` and `--password=x` are single tokens.
+_CH_FLAG_RE='^(-[A-Za-z]|--[a-z][a-z0-9-]{0,30})$'
 _CH_TASK_RE='^[A-Z]{2}[0-9]+$'
 _CH_PROG_RE='^[A-Za-z0-9._+-]+$'
 _CH_PATH_RE='^[A-Za-z0-9._/~-]+$'
@@ -264,8 +270,8 @@ _ch_redact() {
 _NL_CH=$'\n'
 
 # audit_command_head <command> [<match>] -> prints the head of the segment <match>
-# selects: the program's basename plus up to three flag, task-id or status tokens,
-# anything else "[redacted]"; masked, path-scrubbed, at most 120 chars.
+# selects: the program's basename plus up to three single-letter flag, bare lowercase long
+# flag, task-id or status tokens, anything else "[redacted]"; masked, path-scrubbed, <=120 chars.
 audit_command_head() {
   _ch_redact "${1:-}" "${2:-}" 1
   printf '%s' "$AUDIT_COMMAND_HEAD"

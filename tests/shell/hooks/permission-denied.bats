@@ -58,7 +58,7 @@ _rows() {
   assert_success
   [ "$(_rows)" = 1 ] || fail "expected one row, got $(_rows)"
   run jq -e '.metadata | keys_unsorted == ["tool", "dedupe_key", "command_head", "truncated"]
-    and .truncated == true and .command_head == "curl -sS -H [redacted]"' "$AUDIT"
+    and .truncated == true and .command_head == "curl [redacted] -H [redacted]"' "$AUDIT"
   assert_success
   for needle in "$tok" 'api03' "$key" 'alice' "$cmd" "$reason" 'Blocked by classifier' "Bash(curl" \
     'Authorization' 'evil.example.com' \
@@ -122,6 +122,21 @@ _rows() {
     > "$root/skills/shared/scripts/path-scrub.sh"
   [ "$(_meta_in)" = '{"tool":"Bash","dedupe_key":"0123456789abcdef","command_head":"gh [redacted] [redacted] [redacted]","truncated":true}' ] \
     || fail "working scrub (control): $(_meta_in)"
+}
+
+@test "canary: a password glued to a short flag never reaches the permission row" {
+  local pw payload needle
+  pw="S3cret""Pw"
+  payload="$(jq -cn --arg c "mysql -uroot -p$pw db" \
+    '{hook_event_name:"PermissionDenied", tool_name:"Bash", tool_input:{command:$c}, reason:"Blocked by classifier"}')"
+  _hook <<< "$payload"
+  assert_success
+  [ "$(_rows)" = 1 ] || fail "expected one row, got $(_rows)"
+  run jq -e '.metadata.command_head == "mysql [redacted] [redacted] [redacted]" and .metadata.truncated == true' "$AUDIT"
+  assert_success
+  for needle in "$pw" '-uroot' 'root'; do
+    ! grep -qF -- "$needle" "$AUDIT" || fail "audit.jsonl carries: $needle"
+  done
 }
 
 @test "canary: a short secret-bearing command never reaches the permission row whole" {
@@ -234,7 +249,7 @@ _rows() {
     '{hook_event_name:"PermissionDenied", tool_name:"Bash", tool_input:{command:$c}, reason:"Blocked by classifier"}')"
   _hook <<< "$payload"
   assert_success
-  run jq -e '.metadata | (.command_head | length) <= 120 and (.command_head | startswith("rm -rf "))
+  run jq -e '.metadata | (.command_head | length) <= 120 and (.command_head | startswith("rm [redacted] "))
     and (.command_head | test("[[:cntrl:]]") | not)
     and .truncated == true and ((has("command") or has("allow_rule") or has("classifier_reason")) | not)' "$AUDIT"
   assert_success

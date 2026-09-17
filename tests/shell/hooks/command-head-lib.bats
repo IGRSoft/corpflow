@@ -70,6 +70,23 @@ _isolated_lib() {
   assert_output 'deploy [redacted] --force [redacted]'
 }
 
+@test "bound: a flag keeps no attached value; clustered and value-carrying flags are redacted" {
+  ch audit_command_head 'mysql -uroot -pS3cretPw db'
+  assert_output 'mysql [redacted] [redacted] [redacted]'
+  refute_output --partial 'root'
+  refute_output --partial 'S3cretPw'
+  ch audit_command_head 'curl -uuser:pass https://x'
+  assert_output 'curl [redacted] [redacted]'
+  refute_output --partial 'user:pass'
+  ch audit_command_head 'rm -rf x'
+  assert_output 'rm [redacted] [redacted]'
+  ch audit_command_head 'tool --password=hunter2 --S3cretPw --aaaa-bbbb-cccc-dddd-eeee-ffff-gggg'
+  assert_output 'tool [redacted] [redacted] [redacted]'
+  refute_output --partial 'hunter2'
+  ch audit_command_head 'tool -v --verbose --dry-run'
+  assert_output 'tool -v --verbose --dry-run'
+}
+
 @test "segment: only the first line's segment that invokes the named script is read" {
   ch audit_command_head $'cd /tmp && API_TOKEN=zq1 bash /x/state-patch.sh --task-status QA0 done | tee y; echo ok\nstate-patch.sh --leak' state-patch.sh
   assert_output 'state-patch.sh --task-status QA0 [redacted]'
