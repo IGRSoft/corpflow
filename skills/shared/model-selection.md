@@ -15,8 +15,8 @@ to write a prompt for the model this file picks** lives in `skills/shared/model-
 | Model | Relative Cost | Cost/1M Tokens | Use For |
 |-------|---------------|----------------|---------|
 | **haiku** | 1x (baseline) | ~$0.25 | Formatting, routing, checklists, status checks |
-| **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, code review, coordination |
-| **opus** | ~50x haiku | ~$15.00 | Architecture decisions, complex reasoning, meta-optimization |
+| **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, test design, coordination |
+| **opus** | ~50x haiku | ~$15.00 | Architecture decisions, review gates, complex reasoning, meta-optimization |
 
 ## Aliases and the models they resolve to
 
@@ -147,19 +147,15 @@ caveat: `skills/context-compression/SKILL.md`.
 
 ## Selection Criteria
 
+A worktask stage never reads this table: its model and effort are its row in
+`skills/shared/stage-codes.md`, the only stage/agent → model assignment. The table sizes everything
+else — ad-hoc delegations, support work, a new agent's default.
+
 | Complexity | Model | Signals |
 |------------|-------|---------|
-| Simple | haiku | Procedural steps, well-defined output format, little reasoning, high volume / low latency, cost-first |
-| Moderate | sonnet | Moderate reasoning, several considerations to balance, bounded creative output |
-| Complex | opus | Multi-step or novel reasoning, tradeoff-heavy decisions, high-stakes gates, meta-level work (agents about agents) |
-
-## Selection Matrix by Task Type
-
-| Model | Task types | Rationale |
-|-------|------------|-----------|
-| haiku | Status checks, task status updates, code formatting, platform routing | Mechanical, rule-based, pattern matching |
-| sonnet | Code implementation, code review, test design, team coordination | Balanced complexity; analysis + suggestions |
-| opus | Architecture design, system analysis, prompt optimization | Complex tradeoffs, deep and meta-level reasoning |
+| Simple | haiku | Procedural steps, well-defined output format, little reasoning, high volume / low latency, cost-first: status checks, formatting, platform routing |
+| Moderate | sonnet | Moderate reasoning, several considerations to balance, bounded creative output: test design, team coordination |
+| Complex | opus | Multi-step or novel reasoning, tradeoff-heavy decisions, high-stakes gates such as code review, meta-level work (agents about agents, prompt optimization), architecture and system analysis |
 
 ## Per-Invocation Override
 

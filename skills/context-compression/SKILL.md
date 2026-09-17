@@ -25,7 +25,7 @@ Second-most-effective: prefix-prefix equality with the Anthropic prompt cache tu
 ```
 [1] Plugin/agent contract reminder         ← stable across ALL stages
 [2] Worktask header (id, plan, exploration)← stable across ALL stages
-[3] state.json blob (inlined JSON)         ← evolves per stage
+[3] Ledger pointer + readiness digest (from ledger-digest.sh) ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type
 [4b] Model discipline block                ← stable WITHIN stage type
 ─────── (cache prefix boundary) ───────
@@ -100,27 +100,45 @@ Filled PL- and AR-stage examples: `references/compression-examples.md`.
 
 Per-context summary-block formats: `references/compression-examples.md § Reference Formats`.
 
-## Context Budget by Handoff
+## Stage Budget Table
 
-Maximum tokens to pass between stages:
+Every per-stage budget figure lives here; agents and references point to their row. Inbound is the
+most any upstream handoff may pass into the stage, standard / extended (1M). Typical tokens is a
+whole-stage run measured on sonnet. `—` means no figure is set.
 
-| Handoff | Standard | Extended (1M) | Focus areas |
-|---------|----------|---------------|-------------|
-| PL→AR | 500 | 2,000 | Requirements, constraints, user needs |
-| AR→TL | 300 | 1,200 | Architecture decisions, patterns, risks |
-| PL→TL | 400 | 1,600 | Requirements, workstream split, acceptance criteria (no AR) |
-| TL→DV | 400 | 1,600 | Implementation approach, file assignments, deadlines |
-| AR→DV | 350 | 1,400 | Architecture decisions, integration points, schemas (no TL) |
-| PL→DV | 400 | 1,600 | Requirements, acceptance criteria, constraints (no AR/TL) |
-| DV→DR | 300 | 1,200 | What changed, code areas, implementation decisions |
-| DR→QA | 300 | 1,200 | Review findings, test focus areas, flagged issues |
-| QA→DC | 200 | 800 | Test results summary, documentation needs |
-| DC→FN | 200 | 800 | Doc changes, release items, changelog |
-| FN→ST | 150 | 600 | Executive summary, approval checklist |
+| Stage | Inbound tokens | Artifact lines | Final return tokens | Tool calls | Typical tokens |
+|---|---|---|---|---|---|
+| PL | — | ≤350 | ≤250 | — | 5,000-10,000 |
+| AR | 500 / 2,000 | ≤250 | ≤250 | — | 10,000-20,000 |
+| TL | 400 / 1,600 | — | — | — | 3,000-5,000 |
+| DV | 400 / 1,600 | ≤250 | ≤250 | ≤80 | 20,000-50,000 |
+| DR | 300 / 1,200 | ≤300 | ≤200 | — | — |
+| QA | 300 / 1,200 | ≤250 | ≤250 | ≤35 | 10,000-20,000 |
+| DC | 200 / 800 | — | — | — | 5,000-10,000 |
+| FN | 200 / 800 | ≤200 | ≤200 | — | 3,000-5,000 |
+| ST | 150 / 600 | — | — | — | 2,000-3,000 |
+
+Global caps: every artifact's `handoff:` block ≤200 tokens / ≤30 lines; the ledger ≤500 tokens.
+
+### Per-edge focus areas
+
+What each handoff carries into the stage it feeds:
+
+- PL→AR: requirements, constraints, user needs
+- AR→TL: architecture decisions, patterns, risks
+- PL→TL (no AR): requirements, workstream split, acceptance criteria
+- TL→DV: implementation approach, file assignments, deadlines
+- AR→DV (no TL): architecture decisions, integration points, schemas
+- PL→DV (no AR/TL): requirements, acceptance criteria, constraints
+- DV→DR: what changed, code areas, implementation decisions
+- DR→QA: review findings, test focus areas, flagged issues
+- QA→DC: test results summary, documentation needs
+- DC→FN: doc changes, release items, changelog
+- FN→ST: executive summary, approval checklist
 
 ### Extended Context Budget (1M Window)
 
-The **Extended** column needs a live 1M window and suits genuinely complex runs only — standard budgets stay preferred for cost, and compression is a best practice at any window size.
+The extended (1M) inbound figure needs a live 1M window and suits genuinely complex runs only — standard budgets stay preferred for cost, and compression is a best practice at any window size.
 
 #### 1M credit caveats
 

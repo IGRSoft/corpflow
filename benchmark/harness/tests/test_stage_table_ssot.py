@@ -1,7 +1,7 @@
 """STAGE_TABLE SSOT parity (port of StageTableSSOTTests): stage-codes.md model and
 effort columns match STAGE_TABLE; DR row is opus/high; efforts are valid; the table
-covers exactly the 10-stage PIPELINE_STAGES (SR included); and the prose restatement in
-headless-dispatch.md agrees with canon.
+covers exactly the 10-stage PIPELINE_STAGES (SR included); and headless-dispatch.md's
+per-stage flag table points at stage-codes.md for model/effort instead of restating them.
 """
 
 import os
@@ -28,12 +28,15 @@ _EFFORT_ROW = re.compile(
     re.MULTILINE,
 )
 
-# The dispatch reference bolds the stage code and backticks the effort, and carries it one
-# column earlier than stage-codes.md — a restatement table, not a second copy of canon.
+# The dispatch reference bolds the stage code and backticks $AGENT and $MODE — three
+# columns, no model or effort cell.
 _DISPATCH_ROW = re.compile(
-    r"^\|\s*\*\*([A-Z]{2})\*\*\s*\|[^|\n]*\|[^|\n]*\|\s*`(\w+)`\s*\|",
+    r"^\|\s*\*\*([A-Z]{2})\*\*\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|",
     re.MULTILINE,
 )
+
+_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5", "claude-sonnet-5"}
+_EFFORT_TERMS = {"low", "medium", "high", "xhigh", "max"}
 
 
 def _family(model_id: str) -> str:
@@ -84,23 +87,27 @@ class StageTableSSOT(unittest.TestCase):
             self.assertEqual(STAGE_TABLE[code][2], declared[code],
                              f"{code} effort mismatch vs stage-codes.md")
 
-    def test_headless_dispatch_table_matches_stage_codes(self):
-        # headless-dispatch.md restates the per-stage contract as prose for external CLI
-        # dispatchers. Nothing imports it, so only an assertion that reads the file keeps it
-        # honest; both sides are parsed from disk so a canon change fails here rather than
-        # leaving the restatement quietly wrong.
+    def test_headless_dispatch_table_points_to_stage_codes(self):
+        # headless-dispatch.md's flag table carries $AGENT and $MODE per stage but no
+        # model/effort cell — those are looked up from stage-codes.md at call time (§ Model &
+        # effort defaults). Nothing imports the reference, so this reads it from disk: every
+        # parsed row's stage code must be canon, neither cell may restate a model or effort
+        # term, and the defaults section must still point at stage-codes.md.
         with open(_STAGE_CODES, encoding="utf-8") as f:
-            canon = dict(_EFFORT_ROW.findall(f.read()))
+            stage_codes_text = f.read()
+            canon_codes = set(dict(_ROW.findall(stage_codes_text)))
         with open(_HEADLESS_DISPATCH, encoding="utf-8") as f:
-            restated = dict(_DISPATCH_ROW.findall(f.read()))
-        self.assertTrue(restated, "no stage rows parsed from headless-dispatch.md")
-        # It documents a subset (and uniquely carries RE), so compare the overlap and let the
-        # asymmetry stand rather than forcing the two tables to cover the same stages.
-        overlap = set(canon) & set(restated)
-        self.assertTrue(overlap, "no overlapping stage codes between canon and dispatch table")
-        for code in sorted(overlap):
-            self.assertEqual(restated[code], canon[code],
-                             f"{code} effort in headless-dispatch.md disagrees with stage-codes.md")
+            headless_text = f.read()
+        rows = _DISPATCH_ROW.findall(headless_text)
+        self.assertTrue(rows, "no stage rows parsed from headless-dispatch.md")
+        for code, agent, mode in rows:
+            self.assertIn(code, canon_codes, f"{code} is not a stage-codes.md stage")
+            for cell in (agent, mode):
+                self.assertNotIn(cell.strip().lower(), _MODEL_TERMS,
+                                  f"{code} row restates a model: {cell!r}")
+                self.assertNotIn(cell.strip().lower(), _EFFORT_TERMS,
+                                  f"{code} row restates an effort tier: {cell!r}")
+        self.assertIn("stage-codes.md", headless_text.split("Model & effort defaults", 1)[-1][:400])
 
 
 if __name__ == "__main__":
