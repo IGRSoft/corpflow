@@ -2659,6 +2659,56 @@ $(diff snap-r2 .context/state.json || true)"
   assert_output '[false,false,1]'
 }
 
+# Both cases below keep artifact name, verdict and summary fixed, so the tests_executed
+# comparison is the only field that can make the merge a non-no-op. gate_from_stage is empty
+# on a completed row: a separator that collapses empty fields would hide the change.
+_te_same_summary() {  # [count] — no count writes an artifact with no list
+  if [[ -n "${1:-}" ]]; then
+    printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "fixed summary"\n  tests_executed:\n    - { runner: bats, count: %s, summary_line: "1..%s" }\n  test_suite_compiles: true\n---\n\n1..%s\n' \
+      "$1" "$1" "$1" > .context/development-0.md
+  else
+    printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "fixed summary"\n---\n' \
+      > .context/development-0.md
+  fi
+}
+
+@test "tests_executed: a changed list under the same artifact and verdict re-merges onto the row" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  _te_same_summary 12
+  _te_merge > /dev/null
+  run jq -r '.tasks.DV0 | [.status, .verdict, (.metadata.gate_from_stage // "")] | @csv' \
+    .context/state.json
+  assert_output '"completed","ok",""'
+
+  _te_same_summary 14
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0.tests_executed' .context/state.json
+  assert_output '[{"runner":"bats","count":14,"summary_line":"1..14"}]'
+  # No replay happened, so the corrected list replaces the mirror and files no round.
+  run jq -r '.tasks.DV0 | [has("rework_runs"), has("rework_pending")] | @csv' .context/state.json
+  assert_output "false,false"
+}
+
+@test "tests_executed: a row holding a list re-merged from an artifact with no list drops the mirror" {
+  command -v yq > /dev/null 2>&1 || skip "yq not installed"
+  cd "$WD"
+  _te_seed
+  _te_same_summary 12
+  _te_merge > /dev/null
+  run jq -r '.tasks.DV0 | has("tests_executed")' .context/state.json
+  assert_output "true"
+
+  _te_same_summary
+  run _te_merge
+  assert_success
+  run jq -c '.tasks.DV0 | [has("tests_executed"), has("rework_runs"), .status, .verdict]' \
+    .context/state.json
+  assert_output '[false,false,"completed","ok"]'
+}
+
 @test "tests_executed: without yq the mirror and the rework marker are left untouched" {
   command -v yq > /dev/null 2>&1 || skip "yq not installed"
   cd "$WD"

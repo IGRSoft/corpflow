@@ -2354,8 +2354,11 @@ ${FACTS_REJECT_LIST}"
 fi
 
 # ---------- Idempotency check ----------
-# One @tsv read: this runs on every hook-driven stage completion, so each extra jq spawn is
-# paid per stage per run. Artifact paths never contain a tab. Widened past status/verdict/
+# One jq read: this runs on every hook-driven stage completion, so each extra jq spawn is
+# paid per stage per run. Fields are joined on US (0x1F), not tab: tab is IFS whitespace, so
+# `read` would collapse the run around an empty field (gate_from_stage is empty on every
+# completed row) and shift every later field one slot left. Newline and US inside a value
+# are blanked so the single-line, six-field shape holds. Widened past status/verdict/
 # artifact to the two fields this merge also writes: the mirrored facts.verdicts
 # entry and, on a pending row, the gate_from_stage marker — either drifting from what this
 # call would write means the merge is not actually a no-op.
@@ -2366,7 +2369,7 @@ fi
 CURRENT_STATUS="" CURRENT_VERDICT="" CURRENT_ARTIFACT="" CURRENT_FACT_VERDICT="" CURRENT_GATE_FROM=""
 CURRENT_TE_DIRTY=""
 if command -v jq > /dev/null 2>&1; then
-  IDEM_TSV=$(jq -r --arg s "$TASK_ID" --arg te_state "${PARSED_TE_STATE:-unparsed}" \
+  IDEM_ROW=$(jq -r --arg s "$TASK_ID" --arg te_state "${PARSED_TE_STATE:-unparsed}" \
     --argjson te "${PARSED_TE_JSON:-null}" \
     '(.tasks[$s] // {}) as $row
      | [.tasks[$s].status // "", .tasks[$s].verdict // "", .tasks[$s].artifact // "",
@@ -2375,10 +2378,12 @@ if command -v jq > /dev/null 2>&1; then
        elif $row.rework_pending == true then "1"
        elif $te_state == "list" then (if ($row.tests_executed // null) != $te then "1" else "0" end)
        elif ($row | has("tests_executed")) then "1"
-       else "0" end)] | @tsv' \
-    "$STATE_PATH" 2> /dev/null || printf '\t\t\t\t\t')
-  IFS=$'\t' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT CURRENT_FACT_VERDICT \
-    CURRENT_GATE_FROM CURRENT_TE_DIRTY <<< "$IDEM_TSV" || true
+       else "0" end)]
+     | ([31] | implode) as $us
+     | map(if type == "string" then gsub("[\n" + $us + "]"; " ") else . end) | join($us)' \
+    "$STATE_PATH" 2> /dev/null || printf '\037\037\037\037\037')
+  IFS=$'\037' read -r CURRENT_STATUS CURRENT_VERDICT CURRENT_ARTIFACT CURRENT_FACT_VERDICT \
+    CURRENT_GATE_FROM CURRENT_TE_DIRTY <<< "$IDEM_ROW" || true
 fi
 
 # A remediation loop re-completes a stage at the same verdict with a fresh artifact and summary,

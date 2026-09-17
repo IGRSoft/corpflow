@@ -1249,9 +1249,9 @@ EOART
     printf '[]\n' > agents-gone.json
     bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" \
       > /dev/null
-    _t35_art() {  # <count>
+    _t35_art() {  # <count> [summary-count]
       printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "round with %s"\n  tests_executed:\n    - { runner: bats, count: %s, summary_line: "1..%s" }\n---\n' \
-        "$1" "$1" "$1" > .context/development-0.md
+        "${2:-$1}" "$1" "$1" > .context/development-0.md
     }
     _t35_art 12
     bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
@@ -1271,6 +1271,18 @@ EOART
       exit 1
     fi
     rm -f .context/state.json.snap35
+    # Same artifact, verdict and summary with only the list changed: the empty gate_from_stage
+    # field must not hide the difference and turn the merge into a no-op.
+    _t35_art 16 14
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    if jq -e '.tasks.DV0.tests_executed == [{runner:"bats",count:16,summary_line:"1..16"}]
+              and (.tasks.DV0.rework_runs | length) == 1' .context/state.json > /dev/null; then
+      printf 'T35: a changed list under the same artifact and verdict re-merges: ok\n'
+    else
+      printf 'T35: changed-list re-merge: FAIL\n' >&2
+      jq '.tasks.DV0' .context/state.json >&2
+      exit 1
+    fi
   else
     printf 'T35: rework_runs append: SKIP (yq unavailable)\n'
   fi
