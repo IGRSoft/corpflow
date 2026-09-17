@@ -132,13 +132,12 @@ properties:
       open_questions:
         type: array
         items: { $ref: '#/$defs/SweepStub' }   # closing elicitation sweep, the only item shape
-      cross_session_ask:
+      cross_session_ask:   # deprecated alias of blocked_on kind peer_session
         type: object
         description: >
-          OPTIONAL. Legal only alongside verdict "blocked". Names WHO to ask and WHAT; the stage
-          never sends it itself, because a subagent's reply from another session is delivered to
-          the parent conversation and would never reach the stage. The orchestrator owns the send
-          (resume.md § Reply routing).
+          OPTIONAL, legacy. Legal only alongside verdict "blocked", and read as blocked_on
+          {kind: peer_session, detail: {to, question}, resume_with: reply_ref}; blocked_on wins
+          when both are present. New returns write blocked_on (§ Schema — blocked_on).
         required: [to, question]
         properties:
           to: { type: string, maxLength: 200 }
@@ -154,7 +153,7 @@ constraints:
 ### Schema — acted_on_msg_id
 
 ```yaml
-# …continued: handoff.properties, beside cross_session_ask
+# …continued: handoff.properties, beside open_questions
       acted_on_msg_id:
         type: string
         maxLength: 200
@@ -171,16 +170,33 @@ constraints:
 # …continued: handoff.properties — the megatask Shared Seams registry entry, verbatim
       blocked_on:
         kind: user_decision | user_action | permission | peer_session | artifact | correction | host_environment
-        detail: {…kind-specific…}   # permission: {tool, command, classifier_reason, allow_rule}
+        detail: {…kind-specific…}   # e.g. permission: {tool, command, classifier_reason, allow_rule}; peer_session: {to, question, deadline}
         resume_with: decision_ref | artifact_path | reply_ref
+      # cross_session_ask stays readable as an alias for blocked_on.kind=peer_session for one minor version
 ```
 
-OPTIONAL, and legal only alongside `verdict: "blocked"`, which every stage may return with it under
-the cross-stage blocked exception (§ Per-stage required-field matrix). It is the typed reason a
-stage cannot continue, in the shape the megatask Shared Seams registry declares
-(`skills/megatask/SKILL.md § Registry location`). Both enums are copied whole, so the other kinds need no second schema edit, but only
-the `permission` arm is defined here; every other kind keeps its `{…kind-specific…}` placeholder
-until its own arm is specified.
+OPTIONAL, legal only alongside `verdict: "blocked"`, which every stage may return with it under the
+cross-stage blocked exception (§ Per-stage required-field matrix): the typed reason a stage cannot
+continue, in the shape the megatask Shared Seams registry declares
+(`skills/megatask/SKILL.md § Registry location`). Each kind has one arm below, which fixes its
+`detail` keys and the one `resume_with` it pairs with.
+
+#### Schema — blocked_on, the seven arms at a glance
+
+| kind | detail keys, required first, `[optional]` | resume_with |
+|---|---|---|
+| `user_decision` | question, options, [recommended] | decision_ref |
+| `user_action` | request, command, [verify] | decision_ref |
+| `permission` | tool, command, classifier_reason, allow_rule | decision_ref |
+| `peer_session` | to, question, [deadline] | reply_ref |
+| `artifact` | producer_task, path | artifact_path |
+| `correction` | target_task, finding, evidence_ref, severity | artifact_path |
+| `host_environment` | check, observed | decision_ref |
+
+`handoff-harness.sh --validate-frontmatter` fails an unknown kind, an unknown `resume_with` or a
+missing `detail`; the router also refuses a missing key or another row's pairing. All seven route
+through one table (`skills/worktask/SKILL.md § Step 6.5a3`). `scripts/blocked-on-lib.sh` holds both
+enums, so a new kind, key or value changes this table, that lib and the registry entry together.
 
 #### Schema — blocked_on, the permission arm
 
@@ -229,6 +245,138 @@ task was parked stays in that history.
 `.context/logs/audit.jsonl` is treated as committed, so it gets the redacted shape alone: `permission_denied` and `permission_resumed` rows carry `tool`, `dedupe_key`,
 `command_head` and `truncated`, and `escalation_parked` lists `{tool, command_head, truncated}` per
 need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks the 80-character head cut, not the 512-character command cut.
+
+#### Schema — blocked_on, the user_decision arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is user_decision
+        detail:
+          type: object
+          required: [question, options]
+          properties:
+            question: { type: string, maxLength: 512 }
+            options: { type: array, minItems: 2, maxItems: 4, items: { type: string, maxLength: 200 } }
+            recommended: { type: string, maxLength: 200 }   # one of options
+        resume_with: { const: decision_ref }
+```
+
+A choice only the user can make, with the options the stage weighed. It is not a closing-sweep
+item: a sweep item lets the stage finish, and this need stops it.
+
+#### Schema — blocked_on, the user_action arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is user_action
+        detail:
+          type: object
+          required: [request, command]
+          properties:
+            request: { type: string, maxLength: 512 }
+            command: { type: string, maxLength: 512 }   # "" when there is nothing to run
+            verify: { type: string, maxLength: 512 }    # how the resumed stage confirms it
+        resume_with: { const: decision_ref }
+```
+
+Something only the user can do on the host: boot a device, place a file, sign in. The user runs
+`command` as a `!` line; the orchestrator never runs it. A command cut at 512 characters is context
+only, as on the permission arm. The resumed stage checks `verify` before it continues.
+
+#### Schema — blocked_on, the peer_session arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is peer_session
+        detail:
+          type: object
+          required: [to, question]
+          properties:
+            to: { type: string, maxLength: 200 }            # the peer session's name
+            question: { type: string, maxLength: 512 }
+            deadline: { type: string, format: date-time }   # ISO-8601; past it the ask expires
+        resume_with: { const: reply_ref }
+```
+
+An answer only another session holds. The stage never sends the ask itself, because a subagent's
+cross-session reply lands in the parent conversation (`skills/agent-coordination/SKILL.md § Replies
+from a subagent land in the parent conversation`).
+
+#### Schema — blocked_on, the artifact arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is artifact
+        detail:
+          type: object
+          required: [producer_task, path]
+          properties:
+            producer_task: { type: string, pattern: '^[A-Z]{2}[0-9]+$' }
+            path: { type: string, maxLength: 600 }
+        resume_with: { const: artifact_path }
+```
+
+A file another task produces, which this stage must read before it can continue. Its
+`artifact_path` is `detail.path`.
+
+#### Schema — blocked_on, the correction arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is correction
+        detail:
+          type: object
+          required: [target_task, finding, evidence_ref, severity]
+          properties:
+            target_task: { type: string, pattern: '^[A-Z]{2}[0-9]+$' }
+            finding: { type: string, maxLength: 512 }
+            evidence_ref: { type: string, maxLength: 600 }   # <file>:<line>
+            severity: { type: string, maxLength: 32 }        # DC writes blocking
+        resume_with: { const: artifact_path }
+```
+
+A defect in work an upstream task owns, which this stage does not fix itself. Keys and order are
+DC's (`skills/shared/stage-contracts.md § The correction return (tpl-dc)`). Its `artifact_path` is
+the ledger `metadata.artifact` of `target_task`, once corrected.
+
+#### Schema — blocked_on, the host_environment arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is host_environment
+        detail:
+          type: object
+          required: [check, observed]
+          properties:
+            check: { type: string, maxLength: 64 }   # a metadata.preflight checks[].id
+            observed: { type: string, maxLength: 512 }
+        resume_with: { const: decision_ref }
+```
+
+A grant, evidence tool or toolchain that the autonomy preflight probes, failing now. `check` names
+that probe (§ metadata.preflight — field notes), so a re-probe can tell fixed from still broken. A
+host need no probe covers is a `user_action`.
+
+##### Schema — blocked_on, decision_ref on the other arms
+
+For every arm but `permission`, `decision_ref` is `blocked_on:<task_id>:<kind>:<n>`, the
+`metadata.decision_ref` of the closing-leg `blocked_on` audit row. `blocked-on-dispatch.sh resume`
+appends and prints it; for a `host_environment` probe that passes, `route` does. `<kind>` is the
+stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the earlier closing
+rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
+its `artifact_path` is resolved as the arm above says and printed beside it.
+
+##### Schema — blocked_on, the other arms' full detail and audit row
+
+The split is the permission arm's. The full detail lives in the artifact's `handoff.blocked_on`, in
+the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`, and in the `batch`
+output and boundary prompt. The committed `blocked_on` audit row carries no `request`, `command`,
+`question`, `finding`, `observed` or user answer: only `{kind, arm, leg}` plus the fallback,
+redacted-command and `decision_ref` fields (`skills/agent-coordination/SKILL.md § Writers —
+blocked_on rows`).
+
+#### Schema — blocked_on, the cross_session_ask alias
+
+A return carrying the legacy alias `cross_session_ask {to, question}` is read as `{kind:
+peer_session, detail: {to, question}, resume_with: reply_ref}`, and `blocked_on` wins when both are
+present. The alias stays readable through the 4.1.x line and is removable no earlier than 4.2.0.
+`blocked-on-lib.sh` owns that normalize step, so the harness and the router read it alike:
+`handoff-harness.sh --read-blocked-on <artifact>` prints the normalized object plus a
+`source: blocked_on` line, or `source: cross_session_ask` for the alias.
 
 ### Schema — $defs: SweepItem and SweepStub
 
@@ -422,7 +570,9 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 ##### Conventions — the optional fields
 
-`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. `blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
+`blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
+
+`cross_session_ask`, the legacy alias of `blocked_on` kind `peer_session`, is still read on every stage on the same terms (§ Schema — blocked_on, the cross_session_ask alias).
 
 `acted_on_msg_id` is optional on every stage with the same absent-means-none reading: absent, no message carrying a `msg_id` reached this dispatch. Once one did, it names the newest id the stage acked (`state-patch.sh --ack`) and followed; `ack-check.sh` enforces that, not the validator.
 

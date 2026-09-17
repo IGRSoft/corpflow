@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# blocked-on-dispatch-selftest.sh — the `--self-test` harness for blocked-on-dispatch.sh.
+#
+# SOURCED, never executed: blocked-on-dispatch.sh loads this file only on `--self-test`, so the
+# production path never pays for it. Drives the real CLI end to end against a throwaway ledger
+# through the real state-patch.sh; only the host_environment re-probe is a stub, because the real
+# preflight's verdict depends on the host it runs on.
+#
+# Contract: defines `self_test`, returning 0 when every case passes.
+
+self_test() {
+  local self td state audit stub out rc fails=0 before
+  self="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/blocked-on-dispatch.sh"
+  command -v jq > /dev/null 2>&1 || { echo "blocked-on-dispatch: self-test FAIL (jq missing)"; return 1; }
+  td=$(mktemp -d) || return 1
+  # shellcheck disable=SC2064  # expand now: td is local and gone by the time EXIT fires
+  trap "rm -rf '$td'" EXIT
+  mkdir -p "$td/.context/logs"
+  state="$td/.context/state.json"
+  audit="$td/.context/logs/audit.jsonl"
+  printf '%s' '{"version":2,"run_index":0,"facts":{},"metadata":{"preflight":{"platforms":["systems"]}},"tasks":{
+    "PL0":{"status":"completed","metadata":{}},
+    "DV0":{"status":"completed","metadata":{"artifact":"development-0.md"}},
+    "DC0":{"status":"in_progress","metadata":{"workspace_path":"/tmp/wt"}},
+    "DR0":{"status":"in_progress","metadata":{}},
+    "QA0":{"status":"in_progress","metadata":{}},
+    "FN0":{"status":"in_progress","metadata":{}}}}' > "$state"
+  stub="$td/preflight-stub.sh"
+  # The stub answers pass for gh-pr-create only, so one stub serves the pass and the fail case.
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "result_json=%s\n" "{\"version\":1,\"result\":\"fail\",\"ran_at\":\"unknown\",\"platforms\":[],\"checks\":[{\"id\":\"gh-pr-create\",\"kind\":\"permission\",\"status\":\"pass\",\"detail\":\"ok\"},{\"id\":\"git-push\",\"kind\":\"permission\",\"status\":\"fail\",\"detail\":\"no\"}],\"tools_absent\":[]}"' \
+    > "$stub"
+
+  _st_pass() { printf '  ok   %s\n' "$1"; }
+  _st_fail() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
+  _st_run() {
+    env -u WORKSPACE_ROOT -u CONTEXT_DIR -u CLAUDE_PROJECT_DIR -u MILESTONE_MODE \
+      BLOCKED_ON_PREFLIGHT="$stub" bash "$self" "$@" --state "$state" 2> /dev/null
+  }
+  _st_rows() {
+    [ -f "$audit" ] || { echo 0; return 0; }
+    jq -nR --arg a "$1" '[inputs | fromjson? | select(.action == $a)] | length' "$audit"
+  }
+
+  rc=0
+  before=$(cat "$state")
+  out=$(_st_run route --task-id FN0 --payload '{"verdict":"blocked","blocked_on":{"kind":"permission","detail":{"tool":"Bash","command":"gh pr merge 1","classifier_reason":"Blocked by classifier","allow_rule":""},"resume_with":"decision_ref"}}') || rc=$?
+  if [ "$rc" -eq 0 ] && [ "$(cat "$state")" = "$before" ] && [ ! -f "$audit" ] \
+    && printf '%s' "$out" | jq -e '.arm == "permission" and .leg == null and .parked == false' > /dev/null 2>&1; then
+    _st_pass "route: a permission need writes nothing and names the permission arm"
+  else
+    _st_fail "route: a permission need writes nothing and names the permission arm"
+  fi
+
+  rc=0
+  out=$(_st_run route --task-id DC0 --payload '{"verdict":"blocked","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"SECRET-FINDING-TEXT","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}') || rc=$?
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "correction" and .owner_issue == 404 and .parked == true' > /dev/null 2>&1 \
+    && jq -e '.tasks.DC0.status == "blocked" and .tasks.DC0.metadata.blocked_on.kind == "correction"' "$state" > /dev/null 2>&1 \
+    && [ "$(_st_rows blocked_on)" = 1 ] && ! grep -qF 'SECRET-FINDING-TEXT' "$audit"; then
+    _st_pass "route: a pending correction arm parks as a user_action with one redacted requested row"
+  else
+    _st_fail "route: a pending correction arm parks as a user_action with one redacted requested row"
+  fi
+
+  rc=0
+  _st_run route --task-id DC0 --payload '{"verdict":"blocked","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"x","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc=$?
+  if [ "$rc" -eq 0 ] && [ "$(_st_rows blocked_on)" = 1 ]; then
+    _st_pass "route: re-routing a need that is still open writes no second requested row"
+  else
+    _st_fail "route: re-routing a need that is still open writes no second requested row"
+  fi
+
+  before=$(cat "$state")
+  rc=0
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"coffee","detail":{"a":"b"},"resume_with":"decision_ref"}}' > /dev/null || rc=$?
+  local rc2=0 rc3=0 rc4=0
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0"},"resume_with":"artifact_path"}}' > /dev/null || rc2=$?
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"x.md"},"resume_with":"reply_ref"}}' > /dev/null || rc3=$?
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"artifact","detail":{},"resume_with":"artifact_path"}}' > /dev/null || rc4=$?
+  if [ "$rc" -eq 1 ] && [ "$rc2" -eq 1 ] && [ "$rc3" -eq 1 ] && [ "$rc4" -eq 1 ] && [ "$(cat "$state")" = "$before" ]; then
+    _st_pass "route: unknown kind, missing key, wrong pairing and empty detail exit 1 and write nothing"
+  else
+    _st_fail "route: unknown kind, missing key, wrong pairing and empty detail exit 1 and write nothing"
+  fi
+
+  rc=0
+  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?
+  if [ "$rc" -eq 0 ] && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session" and .fallback_from == "peer_session" and .owner_issue == 405' > /dev/null 2>&1; then
+    _st_pass "route: the legacy cross_session_ask alias routes as peer_session"
+  else
+    _st_fail "route: the legacy cross_session_ask alias routes as peer_session"
+  fi
+
+  rc=0
+  out=$(_st_run route --task-id FN0 --payload '{"verdict":"blocked","blocked_on":{"kind":"host_environment","detail":{"check":"gh-pr-create","observed":"not logged in"},"resume_with":"decision_ref"}}') || rc=$?
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.leg == "probed" and .parked == false and .decision_ref == "blocked_on:FN0:host_environment:1" and .resume_block.do_not_rerun == true' > /dev/null 2>&1 \
+    && jq -e '.tasks.FN0.status == "in_progress" and .tasks.FN0.metadata.blocked_on == null' "$state" > /dev/null 2>&1; then
+    _st_pass "route: a host_environment re-probe that passes clears the need and names decision_ref"
+  else
+    _st_fail "route: a host_environment re-probe that passes clears the need and names decision_ref"
+  fi
+
+  rc=0
+  out=$(_st_run route --task-id QA0 --payload '{"verdict":"blocked","blocked_on":{"kind":"host_environment","detail":{"check":"git-push","observed":"denied"},"resume_with":"decision_ref"}}') || rc=$?
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "host_environment" and (has("owner_issue") | not)' > /dev/null 2>&1 \
+    && jq -e '.tasks.QA0.status == "blocked"' "$state" > /dev/null 2>&1; then
+    _st_pass "route: a host_environment re-probe that still fails parks as a user_action"
+  else
+    _st_fail "route: a host_environment re-probe that still fails parks as a user_action"
+  fi
+
+  rc=0
+  out=$(_st_run batch) || rc=$?
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DR0", "QA0"]
+      and all(.needs[]; .resume_leg == "verified")
+      and (.payloads[0].questions | length) == 3
+      and all(.payloads[0].questions[]; (.question | contains("! ") | not))' > /dev/null 2>&1; then
+    _st_pass "batch: every parked non-permission need is asked, and a fallback offers no ! line"
+  else
+    _st_fail "batch: every parked non-permission need is asked, and a fallback offers no ! line"
+  fi
+
+  rc=0
+  _st_run resume --task-id DC0 --leg requested > /dev/null || rc=$?
+  local rc5=0
+  out=$(_st_run resume --task-id DC0 --leg verified) || rc5=$?
+  if [ "$rc" -eq 1 ] && [ "$rc5" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.cleared == true and .resume_block.decision_ref == "blocked_on:DC0:correction:1" and .resume_block.artifact_path == "development-0.md"' > /dev/null 2>&1 \
+    && jq -e '.tasks.DC0.metadata.blocked_on == null' "$state" > /dev/null 2>&1; then
+    _st_pass "resume: only the closing leg resumes, and the ref and artifact_path are named"
+  else
+    _st_fail "resume: only the closing leg resumes, and the ref and artifact_path are named"
+  fi
+
+  if [ "$fails" -eq 0 ]; then
+    echo "blocked-on-dispatch: self-test OK"
+    return 0
+  fi
+  echo "blocked-on-dispatch: self-test FAIL ($fails)"
+  return 1
+}

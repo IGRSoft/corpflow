@@ -154,7 +154,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), and legacy `cross_session_ask` alias rows read, never written |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 
@@ -186,6 +186,18 @@ Known limit: re-denying the same command in the same task after a grant writes n
 #### Writers — where the full permission detail lives
 
 The full command, `classifier_reason` and `allow_rule` stay out of the audit log, not out of `.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one, which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`; in the resume message or re-dispatch suffix built from `resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A project that commits `.context/` commits the artifact copy, and a ledger copy committed while the task was parked stays in that history.
+
+#### Writers — blocked_on rows
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`blocked-on-dispatch.sh route\|resume`, worktask Steps 6.5a3 and 7a) | `blocked_on`: one row per leg of a non-permission arm. `subject` and `task_id` are the task id; `result: "blocked"` on a leg that leaves the task parked, `"ok"` on the closing leg. `metadata.{kind, arm, leg}`, plus `fallback_from` and `owner_issue` on a fallback, `command_head` and `truncated` on a need with a command, and `decision_ref` on the closing leg |
+
+The permission arm writes no `blocked_on` row: its `denied` leg is the `permission_denied` row, and its `granted` and `resumed` legs are the `permission_resumed` row. A closing row's `decision_ref` is `blocked_on:<task_id>:<kind>:<n>` (`worktask/references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`).
+
+#### Writers — blocked_on rows, redacted
+
+`.context/logs/audit.jsonl` is committed, so a `blocked_on` row never carries a full `command`, `request`, `question`, `finding` or `observed` text, nor a user answer; that detail stays in the artifact's `handoff.blocked_on` and the ledger's `tasks.<ID>.metadata.blocked_on`. `command_head` is at most 4 tokens of the secret-masked, path-scrubbed command: from `audit_command_head` (`hooks/lib/command-head-lib.sh`) when that file is readable, else the first 4 tokens of `pd_command_head` (`hooks/lib/permission-denied-lib.sh`), else the literal `"[redacted]"`. `truncated: true` marks a cut head or that placeholder.
 
 #### Test-run counter rows
 
@@ -248,7 +260,7 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|permission_resumed|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|permission_resumed|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|blocked_on|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",   // legacy cross_session_ask alias rows are read, never written
 ```
 
 #### Schema — remaining fields
@@ -441,7 +453,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 > A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly — including resume: a subagent that resumes another agent via `SendMessage` is woken by that agent's completion.
 
-> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.cross_session_ask` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — open_questions, refs, constraints`); the orchestrator sends, receives the reply natively, and relays it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`).
+> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.blocked_on` of kind `peer_session` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — blocked_on, the peer_session arm`); the orchestrator routes it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`), and until #405 lands it asks the user to relay the reply.
 
 #### Skill discovery & subagent_type resolution
 

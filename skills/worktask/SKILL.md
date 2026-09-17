@@ -359,7 +359,7 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 > are dispatchable is idle time, not a handoff: the pipeline sits until a human asks whether anything
 > is happening. Exactly four things justify stopping mid-pipeline — the plan gate
 > (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the prompt for a parked
-> permission denial (§ Step 7a, asked only after every ready stage is dispatched), and the FN gate
+> permission denial or typed need (§ Step 7a, asked only after every ready stage is dispatched), and the FN gate
 > (§ FN Gate). Nothing else does.
 
 #### Readiness is mechanical, not a judgement call
@@ -1354,52 +1354,69 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
       }
 ```
 
-##### Step 6.5a3 — why a cross-session ask needs its own arm
+##### Step 6.5a3 — why a typed blocked return needs its own arm
 
-A stage that needs another **session's** answer cannot get it: a subagent's `SendMessage` to a
-session delivers the reply into the *parent* conversation, so a stage agent that sent its own ask
-would wait for something that structurally never arrives. The stage therefore returns
-`verdict:"blocked"` naming who to ask and what, and the orchestrator — which *is* the session that
-receives the reply — sends on its behalf. Without this arm the return reads as an ordinary blocked
-verdict and burns a retry on a stage that never failed.
+A stage that cannot continue without something it cannot produce returns `verdict: "blocked"` with
+one `handoff.blocked_on` (`references/handoff-protocol.md § Schema — blocked_on`). Read as an
+ordinary blocked verdict, that return burns a retry on a stage that never failed. Left to judgement,
+it takes a new improvised route each time: one run met a screenshot need, a host file, a merge
+denial and a cross-session ask, and routed all four by hand. So every kind goes through one table
+and one router, and each writes a fixed set of audit legs.
 
-##### Step 6.5a3 — cross-session ask (blocked-on-peer return)
+##### Step 6.5a3 — the dispatch table
 
-```typescript
-      // …continued: after the 6.5a2 block
-      const ask = incHandoff?.cross_session_ask;
-      if (!incomplete && incHandoff?.verdict === "blocked" && ask) {
-        atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
-        // notify_when_idle: one-shot wake instead of polling `claude agents --json`.
-        // Same-machine peers only; a remote peer simply never wakes us and the row stays deferred.
-        SendMessage({ to: ask.to, notify_when_idle: true, message: ask.question });
-        appendAudit({
-          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
-          result: "deferred",
-          metadata: { to: ask.to, question: ask.question, leg: "ask" },
-        });
-        continue;   // siblings keep moving; this stage is parked, not failed
-      }
-```
+| kind | Orchestrator action | Audit legs | Owner | Fallback |
+|---|---|---|---|---|
+| `user_decision` | ask `question` with its `options` | asked / answered / resumed | #395, pending | `user_action` |
+| `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
+| `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
+| `peer_session` | send `question` to `to`, relay the reply | sent / delivered / answered / relayed / expired | #405, pending | `user_action` |
+| `artifact` | resume once `path` lands | landed | #399, pending | `user_action` |
+| `correction` | open rework on `target_task` | opened / closed | #404, pending | `user_action` |
+| `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while it fails |
 
-##### Step 6.5a3 — relaying the answer
+###### Step 6.5a3 — landing an arm
 
-The reply arrives in the orchestrator's own conversation on a later turn. Relay it and log the
-second leg; the `deferred`/`ok` pair is what `references/resume.md § Reply routing` branches on.
-The relay goes to a stage, so it carries a `msg_id`; the ask leg goes to a peer session and carries
-none.
+A pending row routes to its fallback, and its own legs start once its owner lands. Landing an arm
+changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the same PR.
+
+##### Step 6.5a3 — route every typed blocked return
 
 ```typescript
-        sendStageMessage(state, task, subagentType, reply);   // Step 6.5a4
-        appendAudit({
-          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
-          result: "ok", metadata: { to: ask.to, leg: "relay" },
-        });
+      // …continued: after the 6.5a2 block; ROUTER = scripts/blocked-on-dispatch.sh. No branch
+      // picks an arm by hand: the router reads the table above from blocked-on-lib.sh.
+      const typedNeed = !incomplete && incHandoff?.verdict === "blocked"
+        && Boolean(incHandoff?.blocked_on ?? incHandoff?.cross_session_ask);   // legacy alias
+      const routed = !typedNeed ? null : spawnSync("bash", [ROUTER, "route", "--task-id", task.id,
+        "--payload", JSON.stringify(incHandoff)], { encoding: "utf8" });
 ```
 
-Check the send result on both legs (`references/resume.md § Reattach rows — the SendMessage has a
-result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
-was never asked for.
+##### Step 6.5a3 — what the route result decides
+
+```typescript
+      // …continued. Exit 1 is a malformed need: re-dispatch with its fail: line, as § Step 6.5c.
+      if (routed?.status === 1) { redispatch(task.id, { suffix: routed.stderr }); continue; }
+      if (routed && routed.status !== 0) { escalate(task.id); continue; }   // 2: § Error Handling
+      const out = routed ? JSON.parse(routed.stdout) : null;
+      const rb = out?.resume_block;   // a host_environment re-probe that passed
+      if (rb) { deliverResume(rb, rb.instruction); continue; }
+      if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
+      // A permission need, or a blocked return with no typed need, goes on to § Step 6.5a4.
+```
+
+##### Step 6.5a3 — the fallback arm
+
+`route` parks a pending arm's need as a `user_action`. The ledger keeps the stage's original
+`blocked_on`, and the `requested` row adds `fallback_from` and `owner_issue`. At § Step 7a, `batch`
+shows a fixed lead line for the kind with the detail keys fenced as data. Only a native
+`user_action` offers a `!` line.
+
+- `peer_session`, until #405 lands: no `SendMessage`, and no `sent` or `relayed` leg. The user sees
+  `to` and `question`, asks that peer, and answers with its reply.
+- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
+  need clears only when `check` reads `pass`; otherwise it parks as a `user_action` with
+  `fallback_from` and no `owner_issue`.
+- `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
 
 ##### Step 6.5a4 — why delivered is not acknowledged
 
@@ -1418,9 +1435,9 @@ escalate`.
 ##### Step 6.5a4 — message ack check
 
 ```typescript
-      // …continued: after the 6.5a3 block. Reached by a completed return, or a blocked one with no
-      // ask; the 6.5a2 and 6.5a3 sends are checked at the return they provoke. A fix round reuses
-      // the task key, so --run-index keeps an earlier dispatch's messages from judging this one.
+      // …continued: after the 6.5a3 block. Reached by a completed return, or a blocked one 6.5a3
+      // did not park; 6.5a2, 6.5a3 and 7a sends are checked at the return they provoke. A fix
+      // round reuses the task key, so --run-index keeps an earlier dispatch's messages out.
       const ack = spawnSync("bash", ["skills/worktask/scripts/ack-check.sh", "--task", task.id,
         "--run-index", String(full.metadata.run_index ?? 0),
         ...(fs.existsSync(incArtifact) ? ["--artifact", incArtifact] : [])], { encoding: "utf8" });
@@ -1529,8 +1546,8 @@ function resendOnceOrEscalate(state, task, subagentType, ack) {
 ##### Step 6.5a4 — every stage message carries a msg_id
 
 ```typescript
-// The one path for every orchestrator → stage SendMessage: the 6.5a2 nudge, the 6.5a3 relay,
-// the 7a permission resume, resume-time reattaches, amendments and resends. A resend or retry that omits `supersedes`
+// The one path for every orchestrator → stage SendMessage: the 6.5a2 nudge, the 7a permission and
+// typed-need resumes, resume-time reattaches, amendments and resends. A resend or retry that omits `supersedes`
 // leaves the message it replaces reading not-delivered at every later boundary.
 function sendStageMessage(state, task, subagentType, body, supersedes = null) {
   // k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
@@ -1680,7 +1697,7 @@ const rowMatchesHandoff = (row, h) =>
     const row = ledger.tasks[task.id];
     if (row.status === "blocked") {
       // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp. A
-      // permission park never reaches here: 6.5a4 continued past it, and § Step 7a asks.
+      // typed or permission park never reaches here: 6.5a3 or 6.5a4 continued, § Step 7a asks.
     } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
       loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
     } else if (row.status !== "completed") {
@@ -1695,15 +1712,24 @@ const rowMatchesHandoff = (row, h) =>
   // …continued: after the for-loop, inside the while
   // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
   //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
-  //     permission prompt).
+  //     permission prompt). ROUTER's batch holds every other parked need, as a user_action.
   const batch = JSON.parse(spawnSync("bash", [PARK, "batch"]).stdout);
-  if (batch.mode === "megatask_park" && batch.park) return stopParked(batch.park);
-  const answers = batch.payloads.flatMap(p => AskUserQuestion(p));
+  const typed = JSON.parse(spawnSync("bash", [ROUTER, "batch"]).stdout);
+  for (const b of [batch, typed])   // both ran first, so a megatask park records every need
+    if (b.mode === "megatask_park" && b.park) return stopParked(b.park);
+```
+
+##### Step 7a — one prompt, then each resume
+
+```typescript
+  // …continued: permission needs and typed needs are asked in the same round.
+  const answers = [...batch.payloads, ...typed.payloads].flatMap(p => AskUserQuestion(p));
   for (const need of batch.needs) {
     const answer = answerFor(answers, need.task_id);
     if (answer === "manual") waitForUserRun(need);   // until the user reports having run it
     resumeDeniedStep(need, answer);
   }
+  for (const need of typed.needs) resumeTypedNeed(need, answerFor(answers, need.task_id));
 
   // Refresh — TL/DV may have added tasks since the last read.
   state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
@@ -1716,6 +1742,8 @@ const rowMatchesHandoff = (row, h) =>
 Under a `/megatask` per-issue run `batch` asks nothing. It writes `execution.status: "failed"` and
 `execution.reason: "parked_escalation"` to `workspace.json` plus one `escalation_parked` row, and
 leaves `blocked_on` set — the existing PARK path (§ Escalation class), so nothing more dispatches.
+The router's `batch` parks its typed needs the same way; each `escalated[]` entry is `{kind,
+command_head, truncated}`, and the head and flag appear only on a need with a command.
 
 ###### Step 7a — stopParked checks the path batch resolved
 
@@ -1741,7 +1769,8 @@ function stopParked(park) {
 The orchestrator never Writes or Edits a symlinked `workspace.json`, and it checks that same
 resolved path again right before a hand-write, because a link can appear after `batch` looked. For `symlink`,
 `not_regular_file`, `unreadable` or `write_failed`, `refuseParkWrite` makes no write: it appends
-one `escalation` row (`result: "blocked"`, `metadata.{kind: "permission", workspace_reason}`),
+one `escalation` row (`result: "blocked"`, `metadata.{kind, workspace_reason}`, `kind` being
+`permission` or, for the router's park, `user_action`),
 reports the issue, the path and the reason per § Error Handling, and stops. It never removes,
 replaces or re-points the link. The track then does not settle by itself; that is the price of not
 writing through a link another process planted.
@@ -1793,6 +1822,44 @@ carries the stage's directory as a `cwd:` data line inside its fenced info block
 the `! <command>` line from that directory. Nothing composes `cd <dir> && <command>`: the `!` line
 holds the denied command only, and the directory stays data. `cwd` comes from the ledger's
 `workspace_path`, never from `blocked_on`; a need without one gets no `cwd:` line.
+
+##### Step 7a — resume a typed need
+
+```typescript
+// resume re-claims the row, sets blocked_on to null and appends the closing blocked_on row that
+// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action),
+// so landing an arm changes no line here. Only the user's own answer reaches this function.
+function resumeTypedNeed(need, answer) {
+  if (answer === "stop here") return stopForUser(need);   // stays parked; the run stops
+  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
+  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  deliverResume(rb, answer === "done" ? rb.instruction : `${rb.instruction}\n\n${fence(answer)}`);
+}
+```
+
+###### Step 7a — deliverResume, live or re-dispatched
+
+```typescript
+// Liveness: references/resume.md § Live-agent rows. A re-dispatch carries body as suffix [7].
+function deliverResume(rb, body) {
+  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
+  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
+    sendStageMessage(state, task, task.metadata.agent, body);
+  else redispatch(rb.task_id, { suffix: body });
+}
+```
+
+###### Step 7a — the typed-need answers
+
+- "done" → resumed at once. The user did what the request asked, and the resumed stage checks
+  `verify`, when the need has one, before it continues.
+- "stop here" → nothing is written. The task stays parked, and the run stops per § Escalation
+  Chains; a later `/worktask --resume` asks again (`references/resume.md § Reply routing`).
+- Free text → the answer itself: a decision, or the reply the user got from a peer. It resumes like
+  "done" and reaches the stage as a fenced block; no audit row holds it.
+- A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
+  `cwd:` line as § Step 7a — where the `!` line runs says.
 
 ##### Step 7 — loop-back arm
 
@@ -2010,6 +2077,8 @@ unattended `/megatask` per-issue run has no user, so the issue PARKS instead: se
 audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
 A parked permission need is escalation-class by construction — granting is security posture — so
 no delegate answers it: § Step 7a asks the user, and a megatask per-issue run PARKs by this path.
+A typed need § Step 6.5a3 parks as a `user_action` takes the same path, because only the user can
+meet it.
 
 ## FN Gate
 
@@ -2153,6 +2222,120 @@ back as `resume_block.decision_ref` (§ Step 7a). The row never holds the comman
 `command_head` is masked, path-scrubbed and cut at 80 characters, its `truncated` marks that cut,
 and both are omitted when the scrub is unavailable. `resume_block.truncated` is a different flag:
 the stored command was cut at 512 characters.
+
+### blocked-on-dispatch.sh and blocked-on-lib.sh
+
+| Script | One-line invocation | Purpose |
+|--------|---------------------|---------|
+| `scripts/blocked-on-dispatch.sh` | `route\|batch\|resume` | Routes a typed `blocked_on` return to its arm or its `user_action` fallback, batches those needs and builds the resume (§ Step 6.5a3, § Step 7a). Self-test: `--self-test`. |
+| `scripts/blocked-on-lib.sh` | sourced, never run | The one definition of the `blocked_on` enums, the arm table, the alias normalize step and `validate`. `handoff-harness.sh` and the router both source it. |
+
+### blocked-on-dispatch.sh — CLI
+
+```
+blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
+blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
+blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--state <state.json>]
+blocked-on-dispatch.sh --self-test
+```
+
+Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
+unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
+written; for `resume`, a task not parked on a non-permission `blocked_on`, or a `--leg` that is not
+its arm's closing leg. `2`: usage error, missing or unparseable ledger, broken install, or a ledger
+write refused. Requires jq; bash 3.2+.
+
+### blocked-on-dispatch.sh — route
+
+Normalizes and validates `--payload` through the lib, then acts on the arm the lib's table names:
+
+- `permission`: writes nothing; § Step 6.5a4 parks it.
+- `user_action`, or a pending arm: `state-patch.sh --task-meta` with the stage's original
+  `blocked_on` (under `--log /dev/null`), then `--task-status blocked`, then one `requested` row.
+- `host_environment`: `autonomy-preflight.sh --auto plan --platform <metadata.preflight.platforms>`
+  in check mode, `--harness` added when `check` is `git-reset-hard`, then one `probed` row. Only a
+  `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
+  and `decision_ref` on the row. A fail, a skip or an absent id parks it as a `user_action`.
+
+#### blocked-on-dispatch.sh — route stdout
+
+One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
+`fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
+re-probe. `leg` is `null` for `permission`. `source` names the key the need came from:
+`blocked_on`, or `cross_session_ask` for the legacy alias.
+
+### blocked-on-dispatch.sh — batch
+
+Selects every `blocked` task whose `metadata.blocked_on.kind` is not `permission`. Interactive:
+`{"mode":"ask","needs":[{"task_id","kind","arm":"user_action","resume_leg","request","command",
+"verify","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`, a fallback need adding
+`fallback_from` and `owner_issue`. A fallback's `request` is its kind's lead line and its `command`
+is `""`. Each question has the task id as `header`, the lead line, then every `detail` key as
+`key: value` data and `cwd:` from the ledger's `workspace_path`, inside a fence one backtick longer
+than its longest run. Options: "done" and "stop here".
+
+#### blocked-on-dispatch.sh — batch, the `!` line and the megatask park
+
+A `! <command>` line, in its own fence, appears only on a native `user_action` whose `command` is
+non-empty and not cut at 512 characters. Under a megatask per-issue run it asks nothing and prints
+`permission-park.sh batch`'s `megatask_park` shape: the same `workspace.json` write and symlink
+refusal, and one `escalation_parked` row with `metadata.kind: "user_action"` whose `escalated[]`
+entries are `{kind, command_head, truncated}`.
+
+### blocked-on-dispatch.sh — resume
+
+`--claim`, then `blocked_on` set to `null`, then one closing-leg row carrying `decision_ref`
+(`references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`). Prints
+`{"resume_block":{"task_id","kind","arm","leg","decision_ref","resume_with","do_not_rerun":true,
+"instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the
+kind resumes with one. `instruction` restates the need, detail fenced, and forbids re-running any
+step that already completed.
+
+#### blocked-on-dispatch.sh — the lead lines
+
+Fixed strings, with `<ID>` the only substitution:
+
+- `user_decision`: "<ID> needs your decision. Answer with one of the options below, or your own."
+- `user_action`: "<ID> needs you to do the request below, then answer done."
+- `peer_session`: "<ID> needs an answer from the session below. Ask it, then answer with its reply."
+- `artifact`: "<ID> waits on the file below from another task. Answer done once it exists."
+- `correction`: "<ID> found the defect below in another task's work. Answer done once it is fixed."
+- `host_environment`: "<ID> is blocked by the host check below, which still fails. Answer done
+  once it passes."
+
+#### blocked-on-dispatch.sh — the blocked_on row
+
+`actor: "orchestrator"`, `action: "blocked_on"`, `subject` and `task_id` both the task id. `result`
+is `blocked` on a leg that leaves the task parked and `ok` on the closing leg. `metadata` is
+`{kind, arm, leg}` plus `fallback_from` and `owner_issue` on a fallback, `command_head` and
+`truncated` on a need with a command, and `decision_ref` on the closing leg. The redaction rule and
+the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on rows`.
+
+### blocked-on-lib.sh — the sourced interface
+
+- `BLOCKED_ON_KINDS`, `BLOCKED_ON_RESUME_WITH`: both enums, in registry order.
+- `blocked_on_arm <kind>`: prints the kind's row as `required|optional|resume_with|legs|closing_leg|owner_issue|landed`,
+  comma-separated within a field. Exit 1 on an unknown kind.
+- `blocked_on_normalize <handoff json>`: prints `{"blocked_on":{…},"source":…}`. `blocked_on` wins;
+  otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
+- `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
+  non-empty object; exit 1 with one `fail:` line. The harness stops here.
+- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`.
+
+#### blocked-on-lib.sh — the arm table
+
+| kind | legs | closing_leg | owner_issue | landed |
+|---|---|---|---|---|
+| user_decision | asked, answered, resumed | resumed | 395 | no |
+| user_action | requested, verified | verified | 394 | yes |
+| permission | denied, granted, resumed | resumed | 393 | yes |
+| peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | no |
+| artifact | landed | landed | 399 | no |
+| correction | opened, closed | closed | 404 | no |
+| host_environment | probed | probed | 390 | yes |
+
+A pending arm's fallback closes on `verified`. Required and optional keys and `resume_with` are
+`references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
 
 ## Related
 
