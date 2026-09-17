@@ -27,6 +27,23 @@ fail() {
   exit 1
 }
 
+# Same fallback ladder as land-artifacts.sh's own hash_stdin: sha256sum is not
+# guaranteed present on macOS, but shasum -a 256 is.
+HASH_KIND=""
+if command -v sha256sum > /dev/null 2>&1; then
+  HASH_KIND="sha256sum"
+elif command -v shasum > /dev/null 2>&1; then
+  HASH_KIND="shasum"
+else
+  fail "no sha256 hasher (sha256sum or shasum) found"
+fi
+hash_stdin() {
+  case "$HASH_KIND" in
+    sha256sum) sha256sum | awk '{print $1}' ;;
+    shasum) shasum -a 256 | awk '{print $1}' ;;
+  esac
+}
+
 TD=$(mktemp -d -t land-artifacts-selftest-XXXXXX)
 
 # ---------- shared fixture: one bare-ish main repo, two worktrees ----------
@@ -73,8 +90,8 @@ rc=$?
 set -e
 [ "$rc" -eq 0 ] || fail "S1 happy path: expected exit 0, got $rc: $out"
 [ -f "$CONS/contract.yaml" ] || fail "S1 happy path: dest not landed"
-expect_sha=$(git -C "$PROD" cat-file blob "$(git -C "$PROD" rev-parse HEAD:contract.yaml)" | sha256sum | awk '{print $1}')
-dest_sha=$(sha256sum < "$CONS/contract.yaml" | awk '{print $1}')
+expect_sha=$(git -C "$PROD" cat-file blob "$(git -C "$PROD" rev-parse HEAD:contract.yaml)" | hash_stdin)
+dest_sha=$(hash_stdin < "$CONS/contract.yaml")
 [ "$expect_sha" = "$dest_sha" ] || fail "S1 happy path: sha mismatch on landed file"
 landed=$(jq -r '.tasks.DV1.metadata.landed_paths // [] | .[]?' "$LEDGER")
 [ "$landed" = "contract.yaml" ] || fail "S1 happy path: landed_paths not recorded (got: $landed)"

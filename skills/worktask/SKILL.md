@@ -756,7 +756,8 @@ across three runs, always cleared by the same manual step — this codifies that
       // the payload's history. Landed files are a DV producer's to ship, not AR's: subtract
       // them from untracked entries only, listed per file, since the default porcelain
       // folds a new directory into one `?? dir/` line.
-      const landed = new Set(listLanded());  // `land-artifacts.sh --list-landed`; failure = empty set
+      // `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`; failure = empty set
+      const landed = new Set(listLanded(gitToplevel()));
       const stray = gitPorcelain()           // `git status --porcelain --untracked-files=all`
         .filter(f => !f.path.startsWith(".context/"))
         .filter(f => f.worktreeDirty || (f.untracked && !landed.has(f.path)));
@@ -861,7 +862,7 @@ boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that wr
       if (consumes.length > 0) {
         const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
                                         "--consumer", task.id]);
-        if (land.status === 2) blockOnToolError(task.id);  // the script wrote nothing about this row
+        if (land.status !== 0 && land.status !== 1) blockOnToolError(task.id);  // 1: already blocked
         if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Task()
         full.description += "\n\nLANDED (read-only, never edit or stage): " +
           consumes.flatMap(c => c.paths).join(", ");
@@ -870,8 +871,9 @@ boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that wr
 
 ##### Step 4.8 — a refused landing, and its release
 
-`blockOnToolError` exists because exit 2 records nothing, and a row left `pending` is re-dispatched
-every pass. It runs `state-patch.sh --task-meta <ID> --set '{"landing_error":{"reason":"tool_error"}}'`,
+`blockOnToolError` exists because every status other than 0 or 1 records nothing — exit 2, or a
+signal or crash that bypassed the script's own mapping to 2 — and a row left `pending` is
+re-dispatched every pass. It runs `state-patch.sh --task-meta <ID> --set '{"landing_error":{"reason":"tool_error"}}'`,
 then `--task-status <ID> blocked`; if either write fails, stop per § Error Handling. Exit 1 needs
 neither, since the script already blocked the row. `queueLandingBlock` reports it as § Step 6.5d does.
 
@@ -1687,7 +1689,8 @@ const rowMatchesHandoff = (row, h) =>
     if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
       const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
                                       "--producer", task.id]);
-      if (land.status !== 0) queueLandingBlock(land);  // exit 1: consumers already blocked
+      // exit 1: consumers already blocked; any other non-zero is reported, never blocked here
+      if (land.status !== 0) queueLandingBlock(land);
     }
 ```
 
@@ -1697,9 +1700,14 @@ const rowMatchesHandoff = (row, h) =>
 `producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
 Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
 
-On exit 2 (usage, ledger, missing tool, failed ledger write) the script recorded nothing about any
-consumer, so the report carries its stderr instead. Nothing is blocked here; the consumer's own
-§ Step 4.8 — land consumed artifacts gate refuses its dispatch later.
+On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
+signal) the script recorded nothing about any consumer, so the report carries its stderr instead.
+Nothing is blocked here; the consumer's own § Step 4.8 — land consumed artifacts gate refuses its
+dispatch later.
+
+A producer re-run (a DR rework) can reach a consumer that is no longer `pending`. The pass leaves
+that row untouched and exits 0 with one `warn` `contract_landed` row whose reason is
+`consumer_not_pending`, so a rework never flips a running or finished stream to `blocked`.
 
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
@@ -2174,7 +2182,7 @@ Executable helpers (never read into context — invoke via `bash`):
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 | `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
-| `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
+| `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed --tree <path>` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
 
 ### state-patch.sh — exit codes
 
@@ -2224,23 +2232,29 @@ the stored command was cut at 512 characters.
 ### land-artifacts.sh — CLI
 
 ```
-land-artifacts.sh [--consumer <ID>] [--producer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
-land-artifacts.sh --list-landed [--state <p>]
+land-artifacts.sh --producer <ID> [--consumer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --consumer <ID> [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --list-landed --tree <path> [--state <p>]
 land-artifacts.sh --self-test | -h | --help
 ```
 
-A landing call needs at least one selector. Any call with `--producer` is the boundary pass
-(§ Step 6.5d); `--consumer` alone is the dispatch gate (§ Step 4.8 — land consumed artifacts).
-`--dry-run` checks every path and writes nothing. `--list-landed` prints the landed set
-(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0.
+Any call with `--producer` is the boundary pass (§ Step 6.5d); `--consumer` alone is the dispatch
+gate (§ Step 4.8 — land consumed artifacts). `--dry-run` checks every path and writes nothing.
+`--list-landed --tree <path>` prints the landed set scoped to that tree
+(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0, and
+no `--tree` is exit 2. The orchestrator's grant admits a call only when its first argument is
+`--producer`, `--consumer` or `--list-landed`, so every call leads with that argument.
 
 ### land-artifacts.sh — exits
 
-Exit `0`: landed, same tree, already present, a gate no-op, a `blocked` consumer skipped by a
-boundary pass, or nothing selected. `1`: a consumer failed, and is now `blocked` with
-`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row. `2`: usage, a
-malformed id, a bad ledger, a missing tool, or a failed ledger write. Refusal reasons and the audit
-row: `references/handoff-protocol.md § Landing consumed artifacts`.
+Exits are 0, 1 or 2 only; the script maps any other failure to 2. Exit `0`: landed, same tree,
+already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a `blocked`
+one silently, one that is `in_progress`, `completed`, `failed` or `skipped` with one `warn`
+`contract_landed` row (`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
+`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
+refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). `2`: usage,
+a malformed id, a bad ledger, an invalid tree, a missing tool, or a failed ledger write. Refusal
+reasons and the audit rows: `references/handoff-protocol.md § Landing consumed artifacts`.
 
 ## Related
 

@@ -185,12 +185,19 @@ run_gate() {
 
   # A landed file is the producer's to ship — the consumer never authored it, so
   # it cannot count as this agent's comment bloat. Subtracted from the untracked
-  # half only; a staged/tracked path stays visible regardless. Mirrors
-  # land-artifacts.sh --list-landed (skills/shared/state-ledger.md § The landed
-  # set); a missing state file or jq failure leaves nothing subtracted.
+  # half only; a staged/tracked path stays visible regardless. Scoped to this
+  # tree by its physical root (state-ledger.md § The landed set) so a
+  # same-named untracked file in a different tree is never hidden here. A
+  # missing state file, an unresolvable root or a jq failure leaves nothing
+  # subtracted.
   if [ -n "$_untracked" ]; then
-    _landed=$(jq -r '[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]' \
-      "$_ctx/state.json" 2>/dev/null || true)
+    _phys_root=$(CDPATH="" cd -P -- "$_root" 2>/dev/null && pwd -P) || _phys_root=""
+    _landed=""
+    if [ -n "$_phys_root" ]; then
+      _landed=$(jq -r --arg root "$_phys_root" \
+        '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]' \
+        "$_ctx/state.json" 2>/dev/null || true)
+    fi
     if [ -n "$_landed" ]; then
       _untracked=$(printf '%s\n' "$_untracked" | grep -F -x -v -f <(printf '%s\n' "$_landed") || true)
     fi

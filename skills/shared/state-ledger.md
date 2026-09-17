@@ -129,24 +129,46 @@ refusal reasons: `skills/worktask/references/handoff-protocol.md § Landing cons
 |-------|---------|
 | `produces` | Producer rows: repo-relative, post-merge paths this row `git add`s for its consumers before its completion patch. Written by PL0 or TL only |
 | `consumes` | Consumer rows: `[{from: "DV<n>", paths: [path]}]`, each path one the producer lists in `produces`. The row is also `blocked_by` every `from`. Written by PL0 or TL only |
+
+#### Landing results
+
+| Field | Purpose |
+|-------|---------|
 | `landed_paths` | Consumer rows: sorted unique paths landed untracked into this row's tree. Written only by `land-artifacts.sh`; absent or `[]` is normal (§ The landed set) |
+| `landed_roots` | Consumer rows: every spelling of each tree those paths landed into — the banner path, `git rev-parse --show-toplevel`, the physical root. Written only by `land-artifacts.sh`, in the same write as `landed_paths` |
 | `landing_error` | `{reason, path, producer}` while a refused landing holds this row `blocked`; `null` once released |
 
 #### The landed set
 
-The union of `landed_paths` across **every** task row, so no reader has to decide which row is the
-consumer. Every reader computes it with this expression, byte for byte:
+The paths landed into **one tree**: `landed_paths` from every row whose `landed_roots` holds that
+tree, so no reader has to decide which row is the consumer. Every reader computes it with this
+expression, byte for byte, always passing the tree as `--arg root`:
 
 ```jq
-[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]
+[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]
 ```
 
-`land-artifacts.sh --list-landed` prints it one path per line. A reader subtracts it from
-**untracked** entries only, enumerated file-level (`git status --porcelain --untracked-files=all` or
-`git ls-files --others --exclude-standard`), since default porcelain collapses a new directory to
-`?? dir/`. It never subtracts from `M`, `A` or `D` lines: a staged landed path is a consumer
-violation and stays visible. An empty set is normal; only `land-artifacts.sh` writes it, and the
-producer's tree ships every landed file.
+The key is the tree that received the landing, not a row's assigned `workspace_path`: a re-pin
+rewrites that path, and a copy left in the old tree must stay excluded there. An entry outside the
+`[A-Za-z0-9._@+/-]` alphabet is dropped, so it never becomes a match pattern.
+
+##### The landed set — each reader's root
+
+| Reader | `$root` |
+|--------|---------|
+| Script transports (fn-preflight base-sanity, `skills/worktask/SKILL.md` Step 4.7a) | `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`. `--tree` is required (exit 2 without it); the script matches the tree's physical path |
+| `hooks/dv-comment-density-gate.sh` | Its physical `_root`, resolved with `cd -P` and `pwd -P` |
+| `agents/project-manager.md` (FN scope check) | `git rev-parse --show-toplevel` |
+| `agents/technical-lead.md` (DR untracked check) | The exact string it gave `git -C` |
+| Any reader with no tree to hand | `--arg root ""`, which matches no row: the set is empty, never the union over every tree |
+
+##### The landed set — subtracting it
+
+A reader subtracts the set from **untracked** entries only, enumerated file-level
+(`git status --porcelain --untracked-files=all` or `git ls-files --others --exclude-standard`),
+since default porcelain collapses a new directory to `?? dir/`. It never subtracts from `M`, `A` or
+`D` lines: a staged landed path is a consumer violation and stays visible. An empty set is normal;
+only `land-artifacts.sh` writes it, and the producer's tree ships every landed file.
 
 ### Dispatch metadata (optional)
 
@@ -328,6 +350,11 @@ uncapped; capping post-append would silently strip those banners from the prompt
       "type": "array",
       "items": { "type": "string" },
       "description": "Written only by land-artifacts.sh: paths landed untracked into this row's tree. May be absent or empty."
+    },
+    "landed_roots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Written only by land-artifacts.sh with landed_paths: every spelling (banner path, git toplevel, physical) of each tree it landed into. The landed set is scoped by it."
     },
     "landing_error": {
       "type": ["object", "null"],

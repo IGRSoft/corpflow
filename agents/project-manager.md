@@ -126,9 +126,9 @@ in `complete-summary-N.md`; a path that churns every run is a repo defect worth 
 List untracked files file-level with `git status --porcelain --untracked-files=all`; the default
 collapses a new directory to `?? dir/`. Subtract the landed set
 (`skills/shared/state-ledger.md § The landed set`) from the `??` entries only:
-`jq -r '[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]' .context/state.json`.
-`landed_paths` absent or empty is normal. A landed path is never committed from a consumer tree —
-the producer's tree ships it. One that shows staged or modified is a consumer violation, so the
+`jq -r --arg root "$(git rev-parse --show-toplevel)" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]' .context/state.json`.
+An empty set is normal. A landed path is never committed from a consumer tree — the producer's
+tree ships it. One that shows staged or modified is a consumer violation, so the
 subtraction does not hide it: it stays in this check's scope.
 
 #### Conductor attachments

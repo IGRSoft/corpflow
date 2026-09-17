@@ -113,7 +113,7 @@ A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifa
 
 ##### No untracked files outside the landed set
 
-List untracked files file-level with `git -C <DV tree> status --porcelain --untracked-files=all`; the default collapses a new directory to `?? dir/`. Every `??` path must be in the landed set (`skills/shared/state-ledger.md § The landed set`), read with `jq -r '[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]' .context/state.json`; `landed_paths` absent or empty is normal. Subtract the set from `??` entries only: a landed path that shows staged or modified is a consumer editing a read-only file, and stays a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
+List untracked files file-level with `git -C <DV tree> status --porcelain --untracked-files=all`; the default collapses a new directory to `?? dir/`. Every `??` path must be in that tree's landed set (`skills/shared/state-ledger.md § The landed set`), read with `jq -r --arg root "<DV tree>" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]' .context/state.json`, where `<DV tree>` is the exact string given to `git -C`; an empty set is normal. Subtract the set from `??` entries only: a landed path that shows staged or modified is a consumer editing a read-only file, and stays a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
 
 #### DR3.5 — Warning Escalation
 

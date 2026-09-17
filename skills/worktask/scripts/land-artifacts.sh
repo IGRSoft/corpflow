@@ -14,14 +14,17 @@
 # @arg --state <path>     state.json path (default: corpflow_context_dir()+/state.json).
 # @arg --orch-root <path> Passed through to workspace-root-banner.sh unchanged.
 # @arg --dry-run          Preflight only; writes nothing (no mkdir, no copy).
-# @arg --list-landed [--state <path>]
-#                          Print the union of every landed_paths entry across the
-#                          ledger, one path per line. Empty output is exit 0.
+# @arg --list-landed --tree <path> [--state <path>]
+#                          Print the landed set scoped to that tree, one path
+#                          per line. Missing or unresolvable --tree exits 2.
+#                          Empty output is exit 0.
 # @arg --self-test        Exec the sibling land-artifacts-selftest.sh harness.
+#                          Must be the only argument on the command line.
 # @arg -h | --help        Show this header.
 #
 # @exitcode 0  Landed, same tree, already present, gate no-op, boundary-skipped
-#              `blocked` consumer, or nothing selected.
+#              `blocked` consumer, boundary-skipped non-pending consumer (warn
+#              row), or nothing selected.
 # @exitcode 1  A consumer's landing failed: it is now `blocked`, a fail
 #              `contract_landed` row was written.
 # @exitcode 2  Usage, malformed id, unreadable/invalid ledger, missing
@@ -32,11 +35,17 @@
 
 set -euo pipefail
 IFS=$'\n\t'
+# ASCII-only collation for every allow-list `case` below: a UTF-8 locale can
+# admit non-ASCII letters into ranges like [A-Za-z...], which would break the
+# "porcelain never quotes a landed path" premise this ladder depends on.
+export LC_ALL=C
 
-# The one landed-paths exclusion expression. Every other transport (hook, technical-lead.md,
-# project-manager.md, state-ledger.md) carries this SAME string; a parity test
-# diffs them, so a change here without the others is a test failure, not a typo.
-readonly LANDED_UNION_JQ='[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]'
+# The one landed-set exclusion expression, scoped to the tree that received
+# the landing (`landed_roots`), never a global union. Every other transport
+# (hook, technical-lead.md, project-manager.md, state-ledger.md) carries this
+# SAME string, always evaluated with `--arg root <tree>`; a parity test diffs
+# them, so a change here without the others is a test failure, not a typo.
+readonly LANDED_SET_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]'
 
 # Sentinel carried through the collect_pairs TSV stream for a candidate whose
 # `consumes` shape is invalid. Kept out of the producer-id column so it can
@@ -126,9 +135,13 @@ lexical_check() {
         printf 'reserved_segment'
         return 0
         ;;
+      .claude | .github | .mcp.json | .envrc | .gitattributes | .gitmodules)
+        printf 'reserved_destination'
+        return 0
+        ;;
     esac
   done
-  if printf '%s' "$p" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+  if printf '%s' "$p" | grep -q '[[:cntrl:]]'; then
     printf 'control_char'
     return 0
   fi
@@ -152,8 +165,22 @@ lexical_check() {
 # ---------- git hygiene (called once, before any git call) ----------
 git_hygiene() {
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM \
+    GIT_ATTR_SOURCE GIT_REPLACE_REF_BASE GIT_NAMESPACE GIT_CEILING_DIRECTORIES
+  # A numbered GIT_CONFIG_KEY_n/VALUE_n pair injects arbitrary config values;
+  # the count above is unbounded, so every exported name matching the prefix
+  # must go, not just a fixed range.
+  local envname
+  for envname in $(compgen -e 'GIT_CONFIG_KEY_' 2> /dev/null) $(compgen -e 'GIT_CONFIG_VALUE_' 2> /dev/null); do
+    unset "$envname"
+  done
   export GIT_LITERAL_PATHSPECS=1
+}
+
+# ---------- git wrapper: every call disables fsmonitor, none trust a hook ----------
+git_run() {
+  git -c core.fsmonitor=false "$@"
 }
 
 # ---------- source: mode/oid at path p in tree root, or a REASON ----------
@@ -174,7 +201,7 @@ source_check() {
     fi
     found_mode="$mode"
     found_oid="$oid"
-  done < <(git -C "$root" ls-files -s -z -- "$p" 2> /dev/null)
+  done < <(git_run -C "$root" ls-files -s -z -- "$p" 2> /dev/null)
   if [ "$n" -eq 0 ]; then
     printf 'REASON:not_staged'
     return 0
@@ -201,7 +228,7 @@ source_check() {
 
   local filt=""
   filt=$(
-    git -C "$root" check-attr -z filter -- "$p" 2> /dev/null \
+    git_run -C "$root" check-attr -z filter -- "$p" 2> /dev/null \
       | { IFS= read -r -d '' _p || true
         IFS= read -r -d '' _a || true
         IFS= read -r -d '' _v || true
@@ -231,7 +258,7 @@ source_check() {
     fi
   done
 
-  if git -C "$root" diff --quiet --no-ext-diff --no-textconv -- "$p" 2> /dev/null; then
+  if git_run -C "$root" diff --quiet --no-ext-diff --no-textconv -- "$p" 2> /dev/null; then
     :
   else
     local rc=$?
@@ -256,8 +283,12 @@ in_set() {
 }
 
 # ---------- destination walk ----------
-# Globals read: DRY_RUN. Globals written: CREATED_DIRS (append).
-# Prints "OK:<phys_parent>" or "REASON:<reason>".
+# Globals read: DRY_RUN. Globals written: CREATED_DIRS (append), DW_RESULT.
+# Must be called directly, never through `$(...)`: a command substitution
+# forks a subshell, so the CREATED_DIRS append below would never reach the
+# caller and rollback_run would have nothing to undo. Sets
+# DW_RESULT="OK:<phys_parent>" or "REASON:<reason>"; always returns 0.
+DW_RESULT=""
 dest_walk() {
   local c_root="$1" p="$2"
   local parent base seg accum="" full old_ifs
@@ -274,22 +305,22 @@ dest_walk() {
     for seg in "$@"; do
       if [ -z "$accum" ]; then full="$c_root/$seg"; else full="$c_root/$accum/$seg"; fi
       if [ -L "$full" ]; then
-        printf 'REASON:symlink_segment'
+        DW_RESULT='REASON:symlink_segment'
         return 0
       fi
       if [ -e "$full" ]; then
         if [ ! -d "$full" ]; then
-          printf 'REASON:not_dir'
+          DW_RESULT='REASON:not_dir'
           return 0
         fi
       elif [ "$DRY_RUN" -eq 0 ]; then
         mkdir -m 755 -- "$full" || {
-          printf 'REASON:not_dir'
+          DW_RESULT='REASON:not_dir'
           return 0
         }
         CREATED_DIRS[${#CREATED_DIRS[@]}]="$full"
         if [ -L "$full" ]; then
-          printf 'REASON:symlink_segment'
+          DW_RESULT='REASON:symlink_segment'
           return 0
         fi
       fi
@@ -302,7 +333,7 @@ dest_walk() {
     phys_parent="$c_root"
   elif [ -d "$c_root/$parent" ] && [ ! -L "$c_root/$parent" ]; then
     phys_parent=$(phys_dir "$c_root/$parent") || {
-      printf 'REASON:not_dir'
+      DW_RESULT='REASON:not_dir'
       return 0
     }
   else
@@ -310,7 +341,7 @@ dest_walk() {
     # Best-effort physical anchor: the deepest existing ancestor, plus the
     # still-missing suffix appended as text (it cannot be a symlink yet).
     phys_parent="$(phys_resolve_partial "$c_root" "$parent")" || {
-      printf 'REASON:not_dir'
+      DW_RESULT='REASON:not_dir'
       return 0
     }
   fi
@@ -318,21 +349,21 @@ dest_walk() {
   case "$phys_parent/" in
     "$c_root"/*) : ;;
     *)
-      printf 'REASON:dest_escape'
+      DW_RESULT='REASON:dest_escape'
       return 0
       ;;
   esac
 
   local dest="$c_root/$p"
   if [ -L "$dest" ]; then
-    printf 'REASON:symlink_dest'
+    DW_RESULT='REASON:symlink_dest'
     return 0
   fi
   if [ -e "$dest" ] && [ ! -f "$dest" ]; then
-    printf 'REASON:dest_not_regular'
+    DW_RESULT='REASON:dest_not_regular'
     return 0
   fi
-  printf 'OK:%s' "$phys_parent"
+  DW_RESULT="OK:$phys_parent"
 }
 
 phys_resolve_partial() {
@@ -365,27 +396,55 @@ WRITTEN_FILES=()
 
 # shellcheck disable=SC2329 # invoked only through the EXIT/INT/TERM trap below
 cleanup_trap() {
+  local rc=$?
   if [ -n "$TMP_LIVE" ] && [ -e "$TMP_LIVE" ]; then
     rm -f -- "$TMP_LIVE"
   fi
+  # Any exit this run's own die()/fail_pair() paths did not already normalise
+  # (a signal, or a command failing outside those paths) must still honour the
+  # 0/1/2 contract: whatever this run wrote gets rolled back, and the caller
+  # never sees a bare git/jq status code. rollback_run is a no-op once this
+  # run's writes are already durable or already undone.
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+    rollback_run
+    rc=2
+  fi
+  exit "$rc"
 }
 trap cleanup_trap EXIT INT TERM
 
+# mv flavor that refuses to follow a symlink-to-dir destination: GNU has -T,
+# BSD/macOS has -h. Detected once so a same-uid race during the move below
+# cannot rename our tmp file inside a raced directory.
+MV_NOFOLLOW=""
+if { mv --version 2> /dev/null || true; } | grep -q GNU; then
+  MV_NOFOLLOW="-T"
+elif { mv 2>&1 || true; } | grep -q -- '-h'; then
+  MV_NOFOLLOW="-h"
+fi
+
 # write_blob <producer_root> <phys_parent> <base> <oid> <index_mode> <consumer_root>
-# Prints "OK:<sha256>" or "REASON:<reason>".
+# Globals written: TMP_LIVE, WRITTEN_FILES (append), WB_RESULT. Must be called
+# directly, never through `$(...)`: see dest_walk's contract note above; the
+# same subshell defect here would make WRITTEN_FILES/TMP_LIVE invisible to
+# rollback_run and to the EXIT/INT/TERM trap. Sets WB_RESULT="OK:<sha256>",
+# "REASON:<reason>", or "REASON:dest_race:<stray-path>" when a raced
+# directory resolves outside consumer_root (left in place, named for the
+# caller instead of removed). Always returns 0.
+WB_RESULT=""
 write_blob() {
   local p_root="$1" parent="$2" base="$3" oid="$4" idxmode="$5" c_root="$6"
   local tmp
   tmp=$(mktemp "$parent/.land-artifacts.XXXXXX") || {
-    printf 'REASON:git_error'
+    WB_RESULT='REASON:git_error'
     return 0
   }
   TMP_LIVE="$tmp"
 
-  if ! git -C "$p_root" cat-file blob "$oid" > "$tmp" 2> /dev/null; then
+  if ! git_run -C "$p_root" cat-file blob "$oid" > "$tmp" 2> /dev/null; then
     rm -f -- "$tmp"
     TMP_LIVE=""
-    printf 'REASON:git_error'
+    WB_RESULT='REASON:git_error'
     return 0
   fi
 
@@ -393,16 +452,22 @@ write_blob() {
   # one failure source (a corrupt `cat-file`), so a second sha256 read alone
   # would let that same corruption verify itself.
   local check=""
-  check=$(git -C "$p_root" hash-object --no-filters --stdin < "$tmp" 2> /dev/null) || check=""
+  check=$(git_run -C "$p_root" hash-object --no-filters --stdin < "$tmp" 2> /dev/null) || check=""
   if [ "$check" != "$oid" ]; then
     rm -f -- "$tmp"
     TMP_LIVE=""
-    printf 'REASON:sha256_mismatch'
+    WB_RESULT='REASON:sha256_mismatch'
     return 0
   fi
 
-  local sha
-  sha=$(hash_stdin < "$tmp")
+  local sha=""
+  sha=$(hash_stdin < "$tmp") || sha=""
+  if [ -z "$sha" ]; then
+    rm -f -- "$tmp"
+    TMP_LIVE=""
+    WB_RESULT='REASON:git_error'
+    return 0
+  fi
   local perm=644
   [ "$idxmode" = "100755" ] && perm=755
   chmod "$perm" -- "$tmp"
@@ -411,50 +476,62 @@ write_blob() {
   if [ -L "$dest" ] || [ -d "$dest" ]; then
     rm -f -- "$tmp"
     TMP_LIVE=""
-    printf 'REASON:dest_race'
+    WB_RESULT='REASON:dest_race'
     return 0
   fi
-  if ! mv -f -- "$tmp" "$dest"; then
+  local -a mv_cmd=(mv -f)
+  [ -n "$MV_NOFOLLOW" ] && mv_cmd+=("$MV_NOFOLLOW")
+  mv_cmd+=(-- "$tmp" "$dest")
+  if ! "${mv_cmd[@]}"; then
     rm -f -- "$tmp" 2> /dev/null || true
     TMP_LIVE=""
-    printf 'REASON:git_error'
+    WB_RESULT='REASON:git_error'
     return 0
   fi
   TMP_LIVE=""
 
   if [ -e "$tmp" ]; then
-    printf 'REASON:dest_race'
+    WB_RESULT='REASON:dest_race'
     return 0
   fi
   if [ -d "$dest" ] && [ ! -L "$dest" ]; then
-    # Same-uid race replaced our file with a directory; rmdir (never rm -rf)
-    # cleans up the stray only when it is still ours to touch.
-    case "$(phys_dir "$dest" 2> /dev/null)/" in
-      "$c_root"/*) rmdir -- "$dest" 2> /dev/null || true ;;
+    local stray_phys
+    stray_phys="$(phys_dir "$dest" 2> /dev/null)"
+    case "$stray_phys/" in
+      "$c_root"/*)
+        # Same-uid race replaced our file with a directory; rmdir (never
+        # rm -rf) cleans up the stray only when it is still ours to touch.
+        rmdir -- "$dest" 2> /dev/null || true
+        WB_RESULT='REASON:dest_race'
+        ;;
+      *)
+        # Outside the consumer root: removing it would reach beyond our
+        # write boundary, so it is left in place and named for the caller.
+        WB_RESULT="REASON:dest_race:${stray_phys:-$dest}"
+        ;;
     esac
-    printf 'REASON:dest_race'
     return 0
   fi
   if [ ! -f "$dest" ] || [ -L "$dest" ]; then
-    printf 'REASON:dest_race'
+    WB_RESULT='REASON:dest_race'
     return 0
   fi
   local reparent
   reparent=$(phys_dir "$parent") || reparent=""
   if [ "$reparent" != "$parent" ]; then
-    printf 'REASON:dest_race'
+    WB_RESULT='REASON:dest_race'
     return 0
   fi
-  local dest_sha
-  dest_sha=$(hash_stdin < "$dest")
+  local dest_sha=""
+  dest_sha=$(hash_stdin < "$dest") || dest_sha=""
   if [ "$dest_sha" != "$sha" ]; then
     rm -f -- "$dest"
-    printf 'REASON:sha256_mismatch'
+    WB_RESULT='REASON:sha256_mismatch'
     return 0
   fi
 
   WRITTEN_FILES[${#WRITTEN_FILES[@]}]="$dest:$sha"
-  printf 'OK:%s' "$sha"
+  WB_RESULT="OK:$sha"
 }
 
 # Failure rollback: only files this run wrote whose sha is still ours, then
@@ -494,8 +571,11 @@ resolve_state() {
   printf '%s/state.json' "$ctx"
 }
 
-# resolve_tree <task-id> -> physical root, or dies (tree_invalid is a hard stop:
-# a wrong tree writing files is worse than any other refusal in this script).
+# resolve_tree <task-id> -> "root<TAB>banner_path<TAB>raw_toplevel", or dies
+# (tree_invalid is a hard stop: a wrong tree writing files is worse than any
+# other refusal in this script). The three fields are every spelling this run
+# saw of the same tree; a consumer caller unions them into landed_roots so a
+# later re-pin under a different banner/orchestrator root still matches.
 resolve_tree() {
   local id="$1" banner path root
   local self_dir
@@ -509,12 +589,20 @@ resolve_tree() {
   path="${banner#WORKSPACE_ROOT=}"
   [ -d "$path" ] || die 2 "tree_invalid: $id resolves to a non-existent path: $path"
   root=$(phys_dir "$path") || die 2 "tree_invalid: $id path does not physically resolve: $path"
-  local toplevel
-  toplevel=$(git -C "$root" rev-parse --show-toplevel 2> /dev/null) || \
+  local raw_toplevel toplevel
+  raw_toplevel=$(git_run -C "$root" rev-parse --show-toplevel 2> /dev/null) || \
     die 2 "tree_invalid: $id tree is not a git worktree: $root"
-  toplevel=$(phys_dir "$toplevel") || die 2 "tree_invalid: $id toplevel does not resolve: $toplevel"
+  toplevel=$(phys_dir "$raw_toplevel") || die 2 "tree_invalid: $id toplevel does not resolve: $raw_toplevel"
   [ "$toplevel" = "$root" ] || die 2 "tree_invalid: $id resolved root $root != its own toplevel $toplevel"
-  printf '%s' "$root"
+  printf '%s\t%s\t%s' "$root" "$path" "$raw_toplevel"
+}
+
+# resolve_tree_root <task-id> -> just the physical root (producer-side calls
+# never need the extra spellings; only the consumer row records landed_roots).
+resolve_tree_root() {
+  local out
+  out=$(resolve_tree "$1") || exit 2
+  printf '%s' "${out%%$'\t'*}"
 }
 
 jqf() { jq -r "$@" "$STATE_PATH" 2> /dev/null; }
@@ -564,10 +652,12 @@ state_patch() {
 }
 
 # ---------- pair handling ----------
-# fail_pair <C> <P> <reason> <path>
+# fail_pair <C> <P> <reason> <path> [<stray>]
 # Rolls back this run's writes for C, blocks C, writes one fail audit row.
+# <stray> names a raced destination that was left in place rather than
+# removed (dest_race outside the consumer root); optional, omitted when empty.
 fail_pair() {
-  local c="$1" p="$2" reason="$3" path="$4"
+  local c="$1" p="$2" reason="$3" path="$4" stray="${5:-}"
   rollback_run
   if [ "$DRY_RUN" -eq 1 ]; then
     printf >&2 'land-artifacts: %s -> %s refused: %s (%s) [dry-run: no ledger write]\n' \
@@ -576,8 +666,13 @@ fail_pair() {
     return 0
   fi
   local meta
-  meta=$(jq -cn --arg reason "$reason" --arg path "$path" --arg producer "$p" \
-    '{reason: $reason, path: $path, producer: $producer}')
+  if [ -n "$stray" ]; then
+    meta=$(jq -cn --arg reason "$reason" --arg path "$path" --arg producer "$p" --arg stray "$stray" \
+      '{reason: $reason, path: $path, producer: $producer, stray: $stray}')
+  else
+    meta=$(jq -cn --arg reason "$reason" --arg path "$path" --arg producer "$p" \
+      '{reason: $reason, path: $path, producer: $producer}')
+  fi
   state_patch --task-meta "$c" --set "{\"landing_error\":$meta}" \
     || die 2 "state-patch.sh failed writing landing_error for $c"
   state_patch --task-status "$c" blocked \
@@ -601,16 +696,31 @@ ok_row() {
     --subject "$c" --task-id "$c" --meta "$meta"
 }
 
-# commit_landed <C> <new_landed_json>
+# commit_landed <C> <new_landed_json> <new_roots_json>
 # The single --task-meta write for the whole consumer: jq's "*" merge
-# replaces arrays wholesale, so every pair's new paths must be folded into one
-# union before the one write, not one write per pair.
+# replaces arrays wholesale, so every pair's new paths/roots must be folded
+# into one union before the one write, not one write per pair. Existing
+# entries are re-validated as strings so a hand-edited or corrupt ledger
+# array never smuggles a non-string into the union.
 commit_landed() {
-  local c="$1" new_landed_json="$2" existing union
-  existing=$(jqf --arg id "$c" '.tasks[$id].metadata.landed_paths // [] | arrays | .[]?')
-  union=$(printf '%s\n%s\n' "$existing" "$(printf '%s' "$new_landed_json" | jq -r '.[]?')" \
+  local c="$1" new_landed_json="$2" new_roots_json="$3" existing_paths existing_roots union_paths union_roots
+  existing_paths=$(jqf --arg id "$c" '.tasks[$id].metadata.landed_paths // [] | arrays | .[]? | strings')
+  union_paths=$(printf '%s\n%s\n' "$existing_paths" "$(printf '%s' "$new_landed_json" | jq -r '.[]?')" \
     | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-  state_patch --task-meta "$c" --set "{\"landed_paths\":$union,\"landing_error\":null}"
+  existing_roots=$(jqf --arg id "$c" '.tasks[$id].metadata.landed_roots // [] | arrays | .[]? | strings')
+  union_roots=$(printf '%s\n%s\n' "$existing_roots" "$(printf '%s' "$new_roots_json" | jq -r '.[]?')" \
+    | grep -v '^[[:space:]]*$' | LC_ALL=C sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+  state_patch --task-meta "$c" --set "{\"landed_paths\":$union_paths,\"landed_roots\":$union_roots,\"landing_error\":null}"
+}
+
+# roots_would_grow <C> <root> <banner_path> <raw_toplevel> -> "true"/"false"
+# Whether unioning these three spellings into C's existing landed_roots would
+# add anything new; used to decide if a same-file re-pin still needs the
+# meta write (a re-pinned tree with identical files still records its root).
+roots_would_grow() {
+  jqf --arg id "$1" --arg a "$2" --arg b "$3" --arg c "$4" \
+    '(.tasks[$id].metadata.landed_roots // [] | arrays | map(select(type=="string"))) as $ex
+     | (([$a, $b, $c] - $ex) | length) > 0'
 }
 
 # first_of_csv <csv> -> first comma-separated field, for the single <path>
@@ -627,19 +737,54 @@ process_consumer() {
   local n="${#ROW_P[@]}"
   [ "$n" -gt 0 ] || return 0
 
-  if [ "${ROW_PATHS[0]}" = "$BADDECL_MARK" ]; then
-    fail_pair "$c" "${ROW_P[0]}" "bad_declaration" "-"
+  # Status is read before the declaration is ever inspected: a consumer this
+  # pass has no business touching (already dispatched, or a producer rework
+  # racing an in-flight/finished stream) must never be refused bad_declaration
+  # for a shape it was never going to act on.
+  local cstat
+  cstat=$(task_status "$c")
+
+  if [ "$BOUNDARY" -eq 1 ]; then
+    case "$cstat" in
+      blocked)
+        # An earlier landing_error is kept; the gate re-lands after release.
+        return 0
+        ;;
+      pending) : ;;
+      *)
+        # A producer rework must not flip an already-dispatched consumer to
+        # blocked; Step 4.8's gate stays the sole authority over readiness.
+        # Record why this pass took no action, without touching the row.
+        if [ "$DRY_RUN" -eq 0 ]; then
+          local paths_json="[]" meta
+          if [ "${ROW_PATHS[0]}" != "$BADDECL_MARK" ]; then
+            paths_json=$(printf '%s' "${ROW_PATHS[0]}" | tr ',' '\n' \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+          meta=$(jq -cn --arg producer "${ROW_P[0]}" --arg consumer "$c" --arg status "$cstat" \
+            --argjson paths "$paths_json" \
+            '{producer: $producer, consumer: $consumer, reason: "consumer_not_pending", status: $status, paths: $paths}')
+          audit_row --actor orchestrator --action contract_landed --result warn \
+            --subject "$c" --task-id "$c" --meta "$meta"
+        fi
+        return 0
+        ;;
+    esac
+  elif [ "$cstat" != "pending" ]; then
+    local badpath
+    if [ "${ROW_PATHS[0]}" = "$BADDECL_MARK" ]; then
+      badpath="-"
+    else
+      badpath="$(first_of_csv "${ROW_PATHS[0]}")"
+    fi
+    fail_pair "$c" "${ROW_P[0]}" "consumer_already_dispatched" "$badpath"
     return 0
   fi
 
-  local cstat
-  cstat=$(task_status "$c")
-  if [ "$cstat" = "blocked" ] && [ "$BOUNDARY" -eq 1 ]; then
-    # An earlier landing_error is kept; the gate re-lands after release.
-    return 0
-  fi
-  if [ "$cstat" != "pending" ]; then
-    fail_pair "$c" "${ROW_P[0]}" "consumer_already_dispatched" "$(first_of_csv "${ROW_PATHS[0]}")"
+  # Reached only for a pending consumer (boundary or gate): now the
+  # declaration shape itself can be judged.
+  if [ "${ROW_PATHS[0]}" = "$BADDECL_MARK" ]; then
+    fail_pair "$c" "${ROW_P[0]}" "bad_declaration" "-"
     return 0
   fi
 
@@ -680,8 +825,16 @@ process_consumer() {
     i=$((i + 1))
   done
 
-  local c_root
-  c_root=$(resolve_tree "$c")
+  # Every spelling this run saw of C's own tree: the writer unions them into
+  # landed_roots on success, so a later re-pin under a different
+  # banner/orchestrator root still matches the exclusion at read time.
+  # resolve_tree's die runs inside a command substitution, which bash does not
+  # propagate through `read <<<`; an unchecked empty root would turn every
+  # destination below into an absolute path, so its status is checked here.
+  local c_root c_banner_path c_toplevel_raw tree_line
+  tree_line=$(resolve_tree "$c") || exit 2
+  IFS=$'\t' read -r c_root c_banner_path c_toplevel_raw <<< "$tree_line"
+  [ -n "$c_root" ] || die 2 "tree_invalid: $c resolved to an empty root"
   local landed_snapshot
   landed_snapshot=$(landed_paths_of "$c")
 
@@ -695,7 +848,8 @@ process_consumer() {
   while [ "$i" -lt "$n" ]; do
     p="${ROW_P[$i]}"
     pathcsv="${ROW_PATHS[$i]}"
-    p_root=$(resolve_tree "$p")
+    p_root=$(resolve_tree_root "$p") || exit 2
+    [ -n "$p_root" ] || die 2 "tree_invalid: $p resolved to an empty root"
     row_root[i]="$p_root"
     row_start[i]="${#act_path[@]}"
     IFS=',' read -r -a plist <<< "$pathcsv"
@@ -715,6 +869,10 @@ process_consumer() {
             ;;
         esac
         oid="${mo##*:}"
+        oid_valid "$oid" || {
+          fail_pair "$c" "$p" "git_error" "$path"
+          return 0
+        }
         act_path[${#act_path[@]}]="$path"
         act_kind[${#act_kind[@]}]="same_tree"
         act_mode[${#act_mode[@]}]=""
@@ -746,7 +904,8 @@ process_consumer() {
         return 0
       }
 
-      dw=$(dest_walk "$c_root" "$path")
+      dest_walk "$c_root" "$path"
+      dw="$DW_RESULT"
       case "$dw" in
         REASON:*)
           fail_pair "$c" "$p" "${dw#REASON:}" "$path"
@@ -759,8 +918,12 @@ process_consumer() {
       kind="copy"
       if [ -e "$dest" ]; then
         tracked=0
-        git -C "$c_root" ls-files --error-unmatch -- "$path" > /dev/null 2>&1 && tracked=1
-        expect_sha=$(git -C "$p_root" cat-file blob "$oid" 2> /dev/null | hash_stdin)
+        git_run -C "$c_root" ls-files --error-unmatch -- "$path" > /dev/null 2>&1 && tracked=1
+        expect_sha=$(git_run -C "$p_root" cat-file blob "$oid" 2> /dev/null | hash_stdin) || expect_sha=""
+        if [ -z "$expect_sha" ]; then
+          fail_pair "$c" "$p" "git_error" "$path"
+          return 0
+        fi
         dest_sha=$(hash_stdin < "$dest" 2> /dev/null || printf '')
         if [ "$tracked" -eq 1 ]; then
           if [ "$dest_sha" = "$expect_sha" ]; then
@@ -794,7 +957,7 @@ process_consumer() {
   # back every file/dir this consumer created so far, across every pair.
   local total="${#act_path[@]}"
   local -a act_sha=() act_copy=() act_grew=()
-  local j=0 base sha any_copy_c=0 grew_c=0 new_landed_total="[]"
+  local j=0 base sha any_copy_c=0 grew_c=0 saw_cross_tree_c=0 new_landed_total="[]" ri owner
   while [ "$j" -lt "$total" ]; do
     path="${act_path[$j]}"
     kind="${act_kind[$j]}"
@@ -804,23 +967,37 @@ process_consumer() {
     act_copy[j]=0
     act_grew[j]=0
 
+    # p_root for this entry: walk back to the owning row via row_start. Needed
+    # for both branches below (a same_tree row's p_root equals c_root too),
+    # so this runs once per entry rather than duplicated per branch.
+    ri=0
+    owner=0
+    while [ "$ri" -lt "$n" ]; do
+      [ "${row_start[$ri]}" -le "$j" ] && owner="$ri"
+      ri=$((ri + 1))
+    done
+    p_root="${row_root[$owner]}"
+
     if [ "$kind" = "same_tree" ]; then
       # c_root == p_root for a same_tree pair (checked at preflight); hash
       # the blob the same way as every other kind, not git's own oid, so the
       # ok-row's sha256 field always means what its name says.
-      sha=$(git -C "$c_root" cat-file blob "$oid" 2> /dev/null | hash_stdin)
+      sha=$(git_run -C "$c_root" cat-file blob "$oid" 2> /dev/null | hash_stdin) || sha=""
+      if [ -z "$sha" ]; then
+        fail_pair "$c" "${ROW_P[$owner]}" "git_error" "$path"
+        return 0
+      fi
     else
-      # p_root for this entry: walk back to the owning row via row_start.
-      local ri=0 owner=0
-      while [ "$ri" -lt "$n" ]; do
-        [ "${row_start[$ri]}" -le "$j" ] && owner="$ri"
-        ri=$((ri + 1))
-      done
-      p_root="${row_root[$owner]}"
+      saw_cross_tree_c=1
       base=$(basename -- "$path")
       if [ "$kind" = "copy" ] && [ "$DRY_RUN" -eq 0 ]; then
-        mo=$(write_blob "$p_root" "$parent" "$base" "$oid" "$mode" "$c_root")
+        write_blob "$p_root" "$parent" "$base" "$oid" "$mode" "$c_root"
+        mo="$WB_RESULT"
         case "$mo" in
+          REASON:dest_race:*)
+            fail_pair "$c" "${ROW_P[$owner]}" "dest_race" "$path" "${mo#REASON:dest_race:}"
+            return 0
+            ;;
           REASON:*)
             fail_pair "$c" "${ROW_P[$owner]}" "${mo#REASON:}" "$path"
             return 0
@@ -832,7 +1009,11 @@ process_consumer() {
       elif [ "$kind" = "copy" ]; then
         sha=""
       else
-        sha=$(git -C "$p_root" cat-file blob "$oid" 2> /dev/null | hash_stdin)
+        sha=$(git_run -C "$p_root" cat-file blob "$oid" 2> /dev/null | hash_stdin) || sha=""
+        if [ -z "$sha" ]; then
+          fail_pair "$c" "${ROW_P[$owner]}" "git_error" "$path"
+          return 0
+        fi
       fi
       if [ "$kind" != "already_present" ]; then
         if ! in_set "$path" "$landed_snapshot"; then
@@ -846,10 +1027,21 @@ process_consumer() {
     j=$((j + 1))
   done
 
+  # landed_roots grows only when this consumer actually crossed trees this
+  # run (a same-tree-only consumer records neither); a re-pin that
+  # lands identical files still needs its root recorded even without a copy.
+  local new_roots_json roots_grew_c=0
+  new_roots_json=$(jq -cn --arg a "$c_root" --arg b "$c_banner_path" --arg c "$c_toplevel_raw" \
+    '[$a, $b, $c] | unique')
+  if [ "$saw_cross_tree_c" -eq 1 ] \
+    && [ "$(roots_would_grow "$c" "$c_root" "$c_banner_path" "$c_toplevel_raw")" = "true" ]; then
+    roots_grew_c=1
+  fi
+
   # Ledger meta write: one write for the whole consumer. A same-tree-only
-  # consumer never touches landed_paths.
-  if [ "$DRY_RUN" -eq 0 ] && { [ "$any_copy_c" -eq 1 ] || [ "$grew_c" -eq 1 ]; }; then
-    if ! commit_landed "$c" "$new_landed_total"; then
+  # consumer never touches landed_paths or landed_roots.
+  if [ "$DRY_RUN" -eq 0 ] && { [ "$any_copy_c" -eq 1 ] || [ "$grew_c" -eq 1 ] || [ "$roots_grew_c" -eq 1 ]; }; then
+    if ! commit_landed "$c" "$new_landed_total" "$new_roots_json"; then
       rollback_run
       die 2 "state-patch.sh failed writing landed_paths for $c; files rolled back"
     fi
@@ -875,7 +1067,8 @@ process_consumer() {
     row_mode="already_present"
     [ "${row_root[$i]}" = "$c_root" ] && row_mode="same_tree"
     [ "$row_any_copy" -eq 1 ] && row_mode="copied"
-    if [ "$BOUNDARY" -eq 1 ] || [ "$row_any_copy" -eq 1 ] || [ "$row_grew" -eq 1 ]; then
+    if [ "$BOUNDARY" -eq 1 ] || [ "$row_any_copy" -eq 1 ] || [ "$row_grew" -eq 1 ] \
+      || { [ "$roots_grew_c" -eq 1 ] && [ "${row_root[$i]}" != "$c_root" ]; }; then
       ok_row "$c" "${ROW_P[$i]}" "$row_mode" "$row_files"
     fi
     i=$((i + 1))
@@ -895,7 +1088,8 @@ collect_pairs() {
     candidates[0]="$CONSUMER_ARG"
   else
     while IFS= read -r cid; do
-      [ -n "$cid" ] && candidates[${#candidates[@]}]="$cid"
+      valid_task_id "$cid" || continue
+      candidates[${#candidates[@]}]="$cid"
     done <<< "$(jqf '(.tasks // {}) | keys[]?')"
   fi
 
@@ -907,10 +1101,22 @@ collect_pairs() {
       if type != "array" then "bad"
       elif any(.[]; (type != "object") or (has("from")|not) or (has("paths")|not)
                     or (.from|type != "string") or (.paths|type != "array")
-                    or ((.paths|length) < 1) or any(.paths[]; type != "string")) then "bad"
+                    or ((.paths|length) < 1) or any(.paths[]; type != "string")
+                    or (.from|test("^DV[0-9]+$")|not)
+                    or any(.paths[]; test("[\t\n\r,]"))) then "bad"
       else "ok" end' 2> /dev/null || printf 'bad')
     if [ "$shape" != "ok" ]; then
-      printf '%s\t%s\t%s\n' "$cid" "${PRODUCER_ARG:-?}" "$BADDECL_MARK"
+      # At the boundary, a malformed declaration is only this producer's
+      # business if it names this producer somewhere in the raw shape; a row
+      # that never mentions $p is silently not this pass's concern.
+      if [ -n "$PRODUCER_ARG" ]; then
+        printf '%s' "$raw" | jq -e --arg p "$PRODUCER_ARG" \
+          '(type == "array") and any(.[]?; (type == "object") and (.from == $p))' \
+          > /dev/null 2>&1 || continue
+        printf '%s\t%s\t%s\n' "$cid" "$PRODUCER_ARG" "$BADDECL_MARK"
+      else
+        printf '%s\t%s\t%s\n' "$cid" "?" "$BADDECL_MARK"
+      fi
       continue
     fi
     local from_ids
@@ -932,10 +1138,16 @@ CONSUMER_ARG=""
 PRODUCER_ARG=""
 STATE_ARG=""
 ORCH_ROOT=""
+TREE_ARG=""
 DRY_RUN=0
 CMD="land"
 RUN_RC=0
 BOUNDARY=0
+
+# Captured once, before any shift: --self-test's "sole argument" rule needs
+# the original argc, since by the time --self-test is reached mid-loop the
+# preceding args are already consumed and $# alone would look like 1.
+ARGC=$#
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -959,6 +1171,11 @@ while [ "$#" -gt 0 ]; do
       ORCH_ROOT="$2"
       shift 2
       ;;
+    --tree)
+      [ "$#" -ge 2 ] || usage
+      TREE_ARG="$2"
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -968,6 +1185,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --self-test)
+      [ "$ARGC" -eq 1 ] || die 2 "--self-test takes no other arguments"
       CMD="self-test"
       shift
       ;;
@@ -998,9 +1216,13 @@ fi
 jq -e . "$STATE_PATH" > /dev/null 2>&1 || die 2 "ledger is not valid JSON: $STATE_PATH"
 
 if [ "$CMD" = "list-landed" ]; then
-  jq -r "$LANDED_UNION_JQ" "$STATE_PATH" 2> /dev/null || true
+  [ -n "$TREE_ARG" ] || die 2 "--list-landed requires --tree <path>"
+  root=$(phys_dir "$TREE_ARG") || die 2 "--tree does not resolve: $TREE_ARG"
+  jq -r --arg root "$root" "$LANDED_SET_JQ" "$STATE_PATH" 2> /dev/null || true
   exit 0
 fi
+
+[ -z "$TREE_ARG" ] || die 2 "--tree is only valid with --list-landed"
 
 [ -n "$CONSUMER_ARG" ] || [ -n "$PRODUCER_ARG" ] || usage
 

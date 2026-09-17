@@ -1754,7 +1754,7 @@ C treats a landed path as read-only and never edits or stages it, because P's tr
 
 | Pass | Where | Call | Effect |
 |---|---|---|---|
-| Boundary | § Step 6.5d, once P is `completed`, before the next ready-filter pass | `--producer P` | Lands into every consumer's current tree; skips a `blocked` consumer, keeping its `landing_error` |
+| Boundary | § Step 6.5d, once P is `completed`, before the next ready-filter pass | `--producer P` | Lands into every `pending` consumer's current tree; skips a `blocked` one, keeping its `landing_error`, and leaves any other status untouched with one `warn` row |
 | Gate | § Step 4.8, after any re-pin, before Step 5 stamps `in_progress` | `--consumer C` | Re-lands every pair of C into its final tree; an unchanged tree is a no-op that writes nothing |
 
 When P and C resolve to the same physical tree nothing is copied and no `landed_paths` are
@@ -1771,7 +1771,8 @@ recorded; a boundary pass still writes its `same_tree` ok row.
    with a different sha is refused unless C's `landed_paths` already lists it (a producer re-run).
 4. **Write.** The blob goes to a temp file beside the destination, is checked against its git
    object id, then renamed into place and re-verified by sha256.
-5. **Record.** `landed_paths` becomes the sorted union of old and new, `landing_error` `null`.
+5. **Record.** `landed_paths` and `landed_roots` (every spelling of C's tree) become sorted unions;
+   `landing_error` `null`.
 
 A refusal rolls back only files and directories this pass created.
 
@@ -1781,36 +1782,54 @@ Each refusal writes exactly one `reason` into `landing_error` and the fail row:
 
 | Check | Reasons |
 |---|---|
-| Pair | `consumer_already_dispatched`, `producer_not_completed`, `not_blocked_on_producer`, `self_consume`, `bad_declaration`, `not_produced` |
-| Path shape | `bad_path`, `absolute_path`, `dotdot`, `reserved_segment`, `control_char`, `leading_dash`, `unsafe_char` |
-| Trees | `tree_invalid` |
-| Source | `symlink_source`, `gitlink`, `not_staged`, `conflicted`, `filtered_path`, `staged_then_modified`, `git_error` |
+| Pair | `consumer_already_dispatched` (gate only), `producer_not_completed`, `not_blocked_on_producer`, `self_consume`, `bad_declaration`, `not_produced` |
+| Path shape | `bad_path`, `absolute_path`, `dotdot`, `reserved_segment`, `reserved_destination`, `control_char`, `leading_dash`, `unsafe_char` |
+| Source | `symlink_source`, `gitlink`, `not_staged`, `conflicted`, `filtered_path`, `staged_then_modified` |
 | Destination | `symlink_segment`, `not_dir`, `dest_escape`, `symlink_dest`, `dest_not_regular`, `dest_tracked`, `dest_exists` |
 | Copy | `sha256_mismatch`, `dest_race` |
-| Gate, exit 2 | `tool_error`, written by the orchestrator |
+| Any git read | `git_error`, the read failed |
+| Gate, exit neither 0 nor 1 | `tool_error`, written by the orchestrator |
+
+###### Landing — reserved names
+
+`reserved_segment` is a segment equal to `.git` or `.context`; `reserved_destination` is one equal to
+`.claude`, `.github`, `.mcp.json`, `.envrc`, `.gitattributes` or `.gitmodules`. Both compare
+case-insensitively.
 
 ##### Landing — exits and the audit row
 
 | Exit | Meaning |
 |---|---|
-| `0` | Landed, same tree, already present, a gate no-op, a `blocked` consumer skipped by a boundary pass, or nothing selected |
+| `0` | Landed, same tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
 | `1` | A consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
-| `2` | Usage, malformed id, bad ledger, missing tool, or a failed ledger write; nothing recorded about C |
+| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, or a failed ledger write; nothing recorded about C |
+
+No other exit exists: the script maps any other failure to `2`.
+
+###### Landing — the audit row
 
 Each row is `corpflow_audit_row` with actor `orchestrator`, action `contract_landed`, subject C:
 
 ```text
 ok:   {"producer":"DV0","consumer":"DV1","mode":"copied","files":[{"path":"src/api.h","sha256":"<hex>"}]}
+warn: {"producer":"DV0","consumer":"DV1","reason":"consumer_not_pending","status":"completed","paths":["src/api.h"]}
 fail: {"producer":"DV0","consumer":"DV1","reason":"dest_tracked","path":"src/api.h"}
 ```
 
 `mode` is `copied`, `same_tree` or `already_present`. A lost audit row warns on stderr and never
 changes the exit code.
 
+###### Landing — a consumer that already ran
+
+A producer re-run, such as a DR rework, can reach a consumer that is `in_progress`, `completed`,
+`failed` or `skipped`. A boundary pass writes no file and no ledger field for that row, exits 0, and
+writes the one `warn` row above, so a rework never flips a dispatched stream to `blocked`. The gate
+still refuses such a row with `consumer_already_dispatched` (exit 1). `--dry-run` writes no row.
+
 ##### Landing — release and readiness
 
-On a gate exit 2 the orchestrator writes `landing_error {reason: "tool_error"}`, then
-`--task-status C blocked`; at the boundary exit 2 is reported only. Release, once the cause is fixed:
+On a gate exit other than 0 or 1 the orchestrator writes `landing_error {reason: "tool_error"}`,
+then `--task-status C blocked`; at the boundary that exit is reported only. Release, once the cause is fixed:
 
 ```bash
 state-patch.sh --task-meta C --set '{"landing_error":null}'

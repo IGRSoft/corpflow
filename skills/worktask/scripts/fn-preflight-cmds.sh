@@ -661,7 +661,7 @@ cmd_base_sanity() {
   # denominator is demonstrably incomplete, and a block computed from it is a false block on a
   # correct base. Warn instead, like every other rung that cannot trust its inputs. A wrong
   # base does not dirty the working tree, so this cannot mask the topology being checked.
-  local tree_files land_script land_out untracked_landed
+  local tree_files land_script land_out untracked_landed tree_top
   # Enumerated file-level, not the porcelain default's collapsed `?? dir/` — a
   # landed file can sit one level inside a new directory, and the collapsed
   # form would hide it from the subtraction below.
@@ -670,14 +670,20 @@ cmd_base_sanity() {
   # A landed file is the producer's to ship, not evidence the consumer
   # introduced drift, so it is dropped from the denominator — but only from
   # the untracked half; a staged landed path stays visible. A missing or
-  # failing land-artifacts.sh leaves the count unchanged.
+  # failing land-artifacts.sh, or an unresolvable toplevel, leaves the count
+  # unchanged: the set is scoped to this tree, never the global union.
   land_script="${SCRIPT_DIR}/land-artifacts.sh"
   land_out=""
-  [ -r "$land_script" ] && land_out=$(bash "$land_script" --list-landed --state "$STATE_PATH" 2> /dev/null || printf '')
+  tree_top=$(git rev-parse --show-toplevel 2> /dev/null || printf '')
+  if [ -r "$land_script" ] && [ -n "$tree_top" ]; then
+    land_out=$(bash "$land_script" --list-landed --tree "$tree_top" --state "$STATE_PATH" 2> /dev/null || printf '')
+  fi
   if [[ -n "$land_out" ]]; then
+    # grep -f exits 1 on no match; under errexit that would abort this whole
+    # preflight run rather than degrade to "nothing subtracted".
     untracked_landed=$(git status --porcelain --untracked-files=all 2> /dev/null \
       | awk '/^\?\? /{print substr($0, 4)}' \
-      | grep -F -x -f <(printf '%s\n' "$land_out") \
+      | { grep -F -x -f <(printf '%s\n' "$land_out") || true; } \
       | awk 'END{print NR + 0}')
     case "$untracked_landed" in '' | *[!0-9]*) untracked_landed=0 ;; esac
     tree_files=$((tree_files - untracked_landed))
