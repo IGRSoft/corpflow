@@ -9,7 +9,7 @@ maxTurns: 40
 # tools: bare Task is deliberate — the delegate set is per-platform (each platform plugin
 # ships its own release engineer, and a project CORPFLOW.md § Routing override may retarget
 # it), so no matcher can name them; Bash below is already fully narrowed.
-tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/release-engineering/scripts/version-bump-from-git.sh:*), Bash(bash skills/release-engineering/scripts/changelog-from-git.sh:*), Write, Edit
+tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/stream-diff.sh:*), Bash(bash skills/release-engineering/scripts/version-bump-from-git.sh:*), Bash(bash skills/release-engineering/scripts/changelog-from-git.sh:*), Write, Edit
 ---
 
 You are a release engineer specializing in semantic versioning, changelog generation, deployment readiness, and release artifact preparation. You own the RE (Release Engineering) stage in the worktask pipeline.
@@ -122,16 +122,19 @@ and skipped on standard `/worktask` unless complexity routes it in.
 
 ## RE1 Procedure — run the scripts
 
-Both paths are plugin-root-relative per § Plugin paths and granted on the `tools:` line in exactly
-this form — invoke them verbatim.
+Every script path here is plugin-root-relative per § Plugin paths and granted on the `tools:` line
+in exactly this form — invoke them verbatim.
 
 ```bash
 # 1. Bump for the range. Prints exactly one of: major|minor|patch|none
 bash skills/release-engineering/scripts/version-bump-from-git.sh "v1.1.0..HEAD"
 
-# 2. Changelog for the same range
-bash skills/release-engineering/scripts/changelog-from-git.sh "v1.1.0..HEAD" --version "1.2.0"
+# 2. Changelog for the same range; an empty --tag adds no tag line
+bash skills/release-engineering/scripts/changelog-from-git.sh "v1.1.0..HEAD" --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
 ```
+
+`git log --oneline <range>` printing nothing means the work is still uncommitted: use § Empty
+commit range instead.
 
 Run the bump script on the **whole range at once**, never per commit. Add `--explain` for a
 per-commit breakdown on stderr when the verdict needs justifying in `release-N.md`. `none` is a
@@ -151,6 +154,38 @@ for you:
 
 Pre-release and build-metadata suffixes are out of the script's scope — apply them by hand after
 reading its verdict.
+
+### Empty commit range
+
+The range scripts would print `none` and no entries; read the streams instead:
+
+1. `bash skills/worktask/scripts/stream-diff.sh --format tsv --caller RE<N>` — one row per DV
+   task; drop `source` `empty` rows.
+2. `Write` `.context/logs/changelog-streams-<N>.tsv`, one `<stream><TAB><type>: <summary>` line per
+   remaining row: `<stream>` from that row, `<summary>` from its DV artifact's `handoff.summary`,
+   `<type>` from `§ Types and Changelog Mapping` judged from
+   `stream-diff.sh --task <DVk> --format stat` (`<type>!:` when breaking). The same entries, no stream
+   column, go one per line to `.context/logs/changelog-entries-<N>.txt`.
+
+#### Running both scripts on the entries
+
+```bash
+bash skills/release-engineering/scripts/version-bump-from-git.sh --file .context/logs/changelog-entries-<N>.txt
+bash skills/release-engineering/scripts/changelog-from-git.sh --streams .context/logs/changelog-streams-<N>.tsv --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
+```
+
+#### When no row names a stream
+
+A row whose `stream` is `-` (a DV task with no stream name) makes `--streams` exit 1. Give the
+changelog script `--file .context/logs/changelog-entries-<N>.txt` in place of `--streams <tsv>`;
+every other argument stays.
+
+### Release tag
+
+`jq -r '.metadata.release_tag // empty' .context/state.json` decides every tag mention. A printed
+value is passed as `--tag` and cited in `release-N.md`. Empty output means no tag in
+`release-N.md`, the changelog, or the handoff, and no `v<version>` guess in its place. Writer:
+`state-patch.sh --ledger-meta` (`skills/shared/state-ledger.md § Release fields`).
 
 ## Deployment Readiness Checklist
 
