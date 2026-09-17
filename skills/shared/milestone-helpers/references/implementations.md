@@ -34,7 +34,8 @@ function capSlug(body: string, type: string, number: number): string {
 ```
 
 **Examples**: `"Add login flow"` → `feature/42-add-login-flow`; `"Fix: crash on startup!!!"` →
-`bugfix/43-fix-crash-on-startup`; `"Fix the reconstruction scan flow blinking before the first
+`bugfix/43-fix-crash-on-startup`; `"Build multiplatform leaderboard"` →
+`feat/7-build-multiplatform-leaderboard`; `"Fix the reconstruction scan flow blinking before the first
 frame renders"` → `bugfix/164-fix-the-reconstruction-scan-flow-blinking-before` (word boundary,
 not `…-before-t`).
 
