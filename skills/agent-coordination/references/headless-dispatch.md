@@ -50,23 +50,23 @@ claude agents run --cwd "$WORKTREE" --model "$MODEL" --effort "$EFFORT" \
 
 Neither `claude agents run` nor top-level `--cwd` exists on the probed CLI (§ Watch run — CC 2.1.270 (observed)): read the one-liner as the flag mapping, not a runnable command, until it is re-derived.
 
-| Stage | `$AGENT` | `$MODEL` | `$EFFORT` | `$MODE` |
-|---|---|---|---|---|
-| **DV** | `corpflow:developer` | `claude-opus-5` | `high` | `bypassPermissions` |
-| **DR** | `corpflow:technical-lead` | `claude-opus-5` | `high` | `acceptEdits` |
-| **SR** | `corpflow:security-reviewer` | `claude-opus-5` | `xhigh` | `default` |
-| **QA** | `corpflow:qa-engineer` | `claude-sonnet-5` | `medium` | `acceptEdits` |
-| **FN** | `corpflow:project-manager` | `claude-sonnet-5` | `medium` | `default` |
-| **RE** | `corpflow:release-engineer` | `claude-sonnet-5` | `low` | `default` |
-| **ST** | `corpflow:stakeholder` | `claude-sonnet-5` | `low` | `acceptEdits` |
+| Stage | `$AGENT` | `$MODE` |
+|---|---|---|
+| **DV** | `corpflow:developer` | `bypassPermissions` |
+| **DR** | `corpflow:technical-lead` | `acceptEdits` |
+| **SR** | `corpflow:security-reviewer` | `default` |
+| **QA** | `corpflow:qa-engineer` | `acceptEdits` |
+| **FN** | `corpflow:project-manager` | `default` |
+| **RE** | `corpflow:release-engineer` | `default` |
+| **ST** | `corpflow:stakeholder` | `acceptEdits` |
 
 ### Model & effort defaults
 
-Defaults track `skills/shared/model-selection.md`; override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/high**, matching `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/benchmarklive/stage_table.py` (the machine-checked SSOT); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
+`$MODEL` and `$EFFORT` come from the stage's row in `skills/shared/stage-codes.md` (§ Primary Stages; § Secure overrides under `--secure`), the one stage → model assignment. Pass the model as the pinned id its alias maps to in § Alias note. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
 
 ### Alias note
 
-> The pinned ids exist for **SSOT parity** — they match `STAGE_TABLE` in the live-dispatch table so a benchmark run is byte-reproducible. They coincide with what the aliases resolve to today (`opus` → Claude Opus 5, `sonnet` → Claude Sonnet 5), but that is timing, not a guarantee: prefer **aliases** in ad-hoc runner scripts (deprecation-proof, `skills/shared/model-selection.md`) and keep pinned ids only where byte-reproducibility matters. Re-pinning the SSOT is a **benchmark change, not a docs refresh** — measurements before and after are not comparable, so record the cut-over in `benchmark/README.md`.
+> Pinned ids: `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. They exist for **SSOT parity** — they match `STAGE_TABLE` in the live-dispatch table so a benchmark run is byte-reproducible. They coincide with what the aliases resolve to today, but that is timing, not a guarantee: prefer **aliases** in ad-hoc runner scripts (deprecation-proof, `skills/shared/model-selection.md`) and keep pinned ids only where byte-reproducibility matters. Re-pinning the SSOT is a **benchmark change, not a docs refresh** — measurements before and after are not comparable, so record the cut-over in `benchmark/README.md`.
 
 ### Runner-side reliability
 

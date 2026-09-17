@@ -381,18 +381,18 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
-Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses, and it is why section [3] carries one even though nothing compares [3]. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
 
 #### Composing the brief (binding)
 
-Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
+Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
 #### Preamble layout (binding)
 
 ```
-[1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
+[1] Contract reminder (references/contract-reminder.md) ← stable across ALL stages (cacheable)
 [2] Worktask header (id, plan, exploration)← stable across ALL stages (cacheable)
-[3] state.json blob (inlined JSON)         ← evolves per stage
+[3] Ledger pointer + readiness digest (from ledger-digest.sh) ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 [4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
@@ -403,14 +403,16 @@ Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.
 
 [5]'s lines and ref shapes: `references/handoff-protocol.md § Section [5] — task identifiers and refs`.
 
-#### Step 0 (NEW) — Read state.json before each delegation
+#### Step 0 — section [3] comes from ledger-digest.sh
 
 ```typescript
-const stateRaw = fs.existsSync(".context/state.json")
-  ? fs.readFileSync(".context/state.json", "utf8")
-  : null;
-// The composer inlines the ledger as section [3]; stateRaw only drives the loop.
-// The ledger is mandatory: a null here is a hard failure, not a degraded mode.
+// Section [3] body: the ledger pointer plus readiness digest, grammar in
+// references/handoff-protocol.md#cache-prefix. brief-compose.sh (Step 6) makes this call for
+// every delegation and is its only caller, so [3] cannot drift from the lint that checks it.
+const digest = execFileSync("bash", ["skills/worktask/scripts/ledger-digest.sh",
+                                     "--state", ".context/state.json"], { encoding: "utf8" });
+// Exit 3 means the ledger is missing or unparseable: the composer exits 2 and nothing is
+// dispatched — a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -462,7 +464,7 @@ below.
 
 > "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
 
-###### Dispatch-tracking helpers (steps 6a/6.5 — write only cache section [3])
+###### Dispatch-tracking helpers (steps 6a/6.5 — ledger writes; [3] only points at the ledger)
 
 ```typescript
 // markDispatchStatus — dispatched_agents[] with the task_id entry flipped to `status`,
@@ -1188,7 +1190,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     // 6a. dispatched_agents[] — one entry per task_id; writer = orchestrator ONLY, through
     //     `state-patch.sh --dispatch <TASK_ID> <agent_id> <status>` (upserts by task_id, clamps
     //     the array). status:"launched" now, flipped to completed/failed by Step 6.5. Read by
-    //     resume.md step 0. Cache section [3]. The dispatched agent claims its own row with
+    //     resume.md step 0. Ledger only; [3] digests it. The dispatched agent claims its own row with
     //     `state-patch.sh --claim <TASK_ID>` (agents/developer.md § D0.0b), never the orchestrator.
     if (fs.existsSync(".context/state.json")) {
       if (launchAck?.agent_id) {
@@ -1710,7 +1712,8 @@ const rowMatchesHandoff = (row, h) =>
     //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
     //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
-    //      either way, and never swap in a higher-frontmatter agent to make the tier real.
+    //      either way. In-process the row records effort_resolved "requested, not applied"
+    //      until upstream U7 lands. Never swap in a higher-frontmatter agent to make it real.
 ```
 
 ##### Step 6.6b — render the remainder

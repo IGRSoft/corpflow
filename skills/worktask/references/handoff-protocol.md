@@ -1042,7 +1042,7 @@ fails the whole payload (exit 2) and `{}` is a no-op. It never touches `facts.br
 
 ## #state-json-schema
 
-`.context/state.json` is the worktask ledger. Created by PL0; patched by every stage on completion; read by orchestrator before each delegation; embedded in the preamble as section [3]. Token budget ≤500.
+`.context/state.json` is the worktask ledger. Created by PL0; patched by every stage on completion; read from disk by the orchestrator and by every stage agent. Preamble section [3] carries a pointer to it plus a readiness digest, never the ledger itself (`#cache-prefix`). Token budget ≤500.
 
 JSON-Schema-style spec:
 
@@ -1933,7 +1933,7 @@ Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equ
 <<<worktask-header>>>
 [2]  Worktask header (id, plan, exploration)← stable across ALL stages
 <<<state-json>>>
-[3]  state.json blob (inlined JSON)         ← evolves per stage
+[3]  Ledger pointer + readiness digest (from ledger-digest.sh) ← evolves per stage
 <<<stage-contract>>>
 [4]  Stage contract excerpt (this stage)    ← stable WITHIN stage type
 <<<model-discipline>>>
@@ -1955,12 +1955,32 @@ optional:
 
 - **The lint parses them.** `cache-lint.sh` prefix mode extracts sections by marker, so the
   layout above is what makes an assembler's output checkable rather than guessed at.
-- **Section [3] needs a marker even though nothing asserts [3].** Without `<<<state-json>>>`,
-  [2] runs to `<<<stage-contract>>>` and swallows the inlined ledger, which evolves every stage —
-  byte-identity then fails on a section that never changed. A marker whose own section is never
-  compared still terminates the one before it.
-- **They separate instruction from data.** [3] is JSON and [5] is ledger-copied lines, both
-  sitting between blocks of instructions.
+- **Section [3] needs its marker.** Without `<<<state-json>>>`, [2] runs to `<<<stage-contract>>>`
+  and swallows the digest, which evolves every stage — byte-identity then fails on a section that
+  never changed. [3] itself is a ledger pointer plus a readiness digest, never the ledger JSON
+  (§ Section [3] — ledger pointer and readiness digest).
+- **They separate instruction from data.** [3] is a `key: value` digest and [5] is ledger-copied
+  identifier and `ref:` lines, both sitting between blocks of instructions.
+
+#### Section [3] — ledger pointer and readiness digest
+
+Stage agents read `.context/state.json` from disk; [3] only tells them where it is and what is
+ready. Grammar (exact key order, one `key: value` per line, no JSON, no timestamps):
+
+```text
+<<<state-json>>>
+ledger: .context/state.json
+run_index: <integer>
+ready: <task ids, comma-separated, ascending key order | none>
+in_progress: <ids | none>
+blocked: <ids | none>
+open_blocking_questions: <integer>
+```
+
+`skills/worktask/scripts/ledger-digest.sh` is the one executable copy: it prints this body without
+the marker. `ready` is pending with every blocker completed, `blocked` is `status == "blocked"`,
+and `open_blocking_questions` counts `facts.open_questions[]` with `blocks_next_stage == true` and
+a `status` other than `resolved`.
 
 ### Section [4b] — model discipline block
 
@@ -1978,8 +1998,8 @@ rather than in the agent definitions is in `model-prompting.md § Why this lives
 
 ### Section [5] — task identifiers and refs
 
-`brief-compose.sh` writes [5]; the ledger's `task.description` is not copied into it and reaches
-the agent only inside the [3] ledger. The section
+`brief-compose.sh` writes [5]; the ledger's `task.description` is not copied into it — the agent
+reads it from `.context/state.json` on disk, the file [3] points at. The section
 is identifier lines copied verbatim from the ledger (`task_id`, `stage`, `agent`, `model`,
 `artifact`, `subject`), then `ref:` lines only. A ref value has one of three shapes:
 
@@ -2005,7 +2025,7 @@ Anything below collapses cache-hit rate:
 
 - `worktask_id` (string literal in [2])
 - `plan_file` path (string literal in [2])
-- Static contract reminder text (section [1])
+- Contract reminder text (section [1]) — drawn from `skills/worktask/references/contract-reminder.md`, copied verbatim
 - Stage contract excerpt for this stage type (section [4]) — drawn from `skills/shared/stage-contracts.md`, copied verbatim
 - Model discipline block for `task.metadata.model` (section [4b]) — drawn from `skills/shared/model-prompting.md`, copied verbatim
 
@@ -2013,7 +2033,8 @@ Anything below collapses cache-hit rate:
 
 - Stage 1 (PL): 0% (cold cache).
 - Stage 2..N, no retry: ≈ 20% (cross-stage prefix [1]+[2] cached).
-- Stage 2..N, retry within same stage with state.json unchanged: ≈ 80% (full preamble cached).
+- Stage 2..N, retry within same stage with the [3] digest unchanged: ≈ 80% (full preamble cached).
+- [3] is six short lines, the first a pointer, so each stage prompt carries the digest in place of the ≤500-token ledger.
 - Cross-stage average: ≈ 60% (meets AC-14).
 
 ### Settings
@@ -2026,7 +2047,7 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 ### Lint
 
-`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant.
+`skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant. A line carrying `"contract_canon": true` opts in the same way for [1], which must then equal the fenced block in `contract-reminder.md`. Every line with a [3] section is checked for the `ledger: .context/state.json` first line, all six keys in order, and no embedded ledger.
 
 `skills/worktask/scripts/brief-compose.sh` is the assembler this spec binds — the orchestrator dispatches its stdout — and it writes no `prompt-log.jsonl`, so prefix mode stays fixture-gated.
 

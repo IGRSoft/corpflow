@@ -266,7 +266,7 @@ state-patch.sh --task-create QA0 --metadata '{
 
 ## Context Compression Guidelines
 
-Inter-stage budgets and the corpflow-side handoff shape: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` (§ Context Budget by Handoff, § Handoff Template). Plugin-side return shape: `templates/CORPFLOW.md § Return summary`. Cross-plugin summaries specifically:
+Inter-stage budgets and the corpflow-side handoff shape: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` (§ Stage Budget Table, § Handoff Template). Plugin-side return shape: `templates/CORPFLOW.md § Return summary`. Cross-plugin summaries specifically:
 
 | Context Type | Max Tokens |
 |--------------|------------|

@@ -329,14 +329,16 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 
 ### Sub-Task Delegation
 
-| Sub-Task | Delegate To | Model |
-|----------|-------------|-------|
-| Status check | Self | haiku |
-| Code implementation | developer | opus |
-| Architecture question | software-architector | opus |
-| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/routing-matrix.md § Functional-role aliases` | opus |
-| Technical decision | technical-lead | opus |
-| Test design | qa-engineer | sonnet |
+| Sub-Task | Delegate To |
+|----------|-------------|
+| Status check | Self |
+| Code implementation | developer |
+| Architecture question | software-architector |
+| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/routing-matrix.md § Functional-role aliases` |
+| Technical decision | technical-lead |
+| Test design | qa-engineer |
+
+Model: a worktask stage dispatch takes model and effort from its row in `skills/shared/stage-codes.md`; any other delegation sizes its model by `skills/shared/model-selection.md § Selection Criteria`.
 
 > **Cross-plugin AR collaboration**: on platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (for Apple: pattern selection, DI, navigation, concurrency; equivalents elsewhere). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
 

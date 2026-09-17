@@ -1202,13 +1202,16 @@ must say which surface it got:
 | headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
 | in-process `Task()` | nothing — the sub-agent runs at its own frontmatter `effort:` | `frontmatter-only` |
 
-In-process the tier is **recorded, not applied**, and the resolver still runs.
+In-process the tier is **recorded, not applied**, and the resolver still runs: the row's
+`effort_resolved` is the literal `"requested, not applied"`, never a tier the session did not run
+at. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tracked outside this milestone.
 
 ###### Step C.0a — do not reach the tier another way
 
 Never substitute a different agent whose frontmatter sits a rung higher: that trades the domain
 expertise answering the question for a field value. `Task()` gains no `effort` parameter here and
-none is invented; if one lands later, the table above is the only place that changes.
+none is invented; if one lands later, the table above and the `frontmatter-only` literal in
+step 4 are the only places that change.
 
 ##### Step C.0a — what the prompt carries
 
@@ -1227,17 +1230,20 @@ write, exactly as at Step A.4.
 4. The ORCHESTRATOR merges each answer through the § Step C.5 write — the whole stub, resolution
    marked `(auto-decided)` — and appends one `auto_decision_resolved` row (`subject:"<CODE><N>"`,
    `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
-   effort_transport, decisions: [{question, answer, rationale}] }`).
+   effort_transport, decisions: [{question, answer, rationale}] }`). `effort_requested` is the
+   computed tier on both surfaces. `effort_resolved` is the tier the session ran at under
+   `dispatch-flag`, and `"requested, not applied"` under `frontmatter-only`.
 5. Fall through to § Step C.0 with whatever remains: every `escalate` item, everything the
    delegate declined, and everything C.0a's four conditions excluded.
 
 ###### Step C.0a — reading the two effort fields
 
+The comparison applies only under `effort_transport: "dispatch-flag"`. There,
 `effort_requested` != `effort_resolved` means the tier evaporated in transit — thinking disabled
 downgrades `xhigh`/`max` to `high` silently (`model-selection.md § xhigh routing`). Recorded, not
-enforced: the answer stands, it just was not reached at the tier asked for. Read it with
-`effort_transport` — under `frontmatter-only` the request never left the orchestrator, so a
-difference there says nothing about the session.
+enforced: the answer stands, it just was not reached at the tier asked for. Under
+`frontmatter-only` the request never left the orchestrator, so `effort_resolved` reads
+`"requested, not applied"` and the pair says nothing about the session.
 
 ##### Step C.0a stamps no approval carrier
 
