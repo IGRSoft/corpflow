@@ -2,23 +2,36 @@
 # Contract tests for skills/worktask/scripts/land-artifacts.sh.
 #
 # Contracts covered:
-#   - happy path: --producer boundary lands a staged producer artifact into a
+#   - happy path: a boundary pass lands a staged producer artifact into a
 #     cross-tree consumer; one ok contract_landed row; landed_paths recorded;
 #     consumer status untouched.
 #   - sha256_mismatch: a PATH `git` shim (tests/fixtures/worktask/land-artifacts/bin/git)
-#     corrupts `cat-file` output; the run fails closed, blocks the consumer, and the
-#     SKILL.md readiness filter stops listing it.
+#     corrupts a keyed `cat-file` read; the run fails closed, blocks the consumer, and
+#     the SKILL.md readiness filter stops listing it.
+#   - a mid-run write failure rolls back every path this run created (not only the
+#     failing one), and a failed git blob read surfaces as git_error, never a raw
+#     git exit code.
+#   - a consumes path holding an embedded newline or comma is refused as
+#     bad_declaration without touching any other ledger row.
 #   - preconditions: not_staged, staged_then_modified, not_produced,
-#     consumer_already_dispatched, producer_not_completed, not_blocked_on_producer,
-#     self_consume, bad_declaration.
-#   - path-safety ladder: one case per refusal reason reachable from a real tree.
+#     producer_not_completed, not_blocked_on_producer, self_consume, bad_declaration;
+#     a non-pending, non-blocked consumer is skipped with a warn row at the boundary
+#     but still refused at the dispatch gate (consumer_already_dispatched).
+#   - path-safety ladder: one case per refusal reason reachable from a real tree,
+#     including the reserved-destination segments (.claude/, a case-folded .github/).
 #   - same_tree: physically-equal roots copy nothing, ok row mode same_tree.
 #   - row cardinality: idempotent re-run, gate no-op after boundary, gate into a
-#     freshly re-pinned tree, boundary skip of a `blocked` consumer.
-#   - --list-landed, --dry-run, usage exit 2.
+#     freshly re-pinned tree (landed_roots unioned, not replaced), boundary skip
+#     of a blocked consumer.
+#   - --list-landed scoped by --tree: union across rows sharing a tree, tree A
+#     never sees tree B's landing, a malformed entry is dropped, a missing --tree
+#     exits 2.
+#   - --dry-run writes nothing; malformed/unknown ids and no selector exit 2.
 #   - parity: the exclusion expression is byte-identical across every transport.
-#   - readers (fn-preflight-cmds.sh base-sanity, the density hook, DR, FN,
-#     SKILL.md Step 4.7a) do not flag/count an untracked landed path.
+#   - readers: fn-preflight-cmds.sh base-sanity drops an untracked landed file from
+#     its working-tree count and does not abort when a landed path has no untracked
+#     match; the comment-density hook does not flag an untracked landed file; DR, FN
+#     and SKILL.md name the exclusion.
 #   - --self-test reaches ALL PASS (dv-tree-preflight.sh convention).
 #
 # Reader paths named literally for L1 selection reachability:
@@ -34,11 +47,12 @@
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/land-artifacts.sh"
+FN_SCRIPT="skills/worktask/scripts/fn-preflight.sh"
 FIXDIR="${FIXTURES}/worktask/land-artifacts"
 
-# D8: the one exclusion expression, mirrored here only for the parity assertions
+# The one exclusion expression, mirrored here only for the parity assertions
 # below — never sourced, so a drift in any transport is a diff, not a silent pass.
-D8_JQ='[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]'
+D8_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]'
 
 phys() { (cd -P "$1" 2>/dev/null && pwd -P); }
 
@@ -99,8 +113,8 @@ patch_state() {
 
 reason_of() { jq -r '.tasks.DV1.metadata.landing_error.reason' "$STATE"; }
 
-# One case per D5/D4 refusal reachable purely from the ledger (no P/C filesystem
-# fixture needed): lexical_check runs before any git/filesystem touch.
+# One case per refusal reachable purely from the ledger (no P/C filesystem
+# fixture needed): the lexical check runs before any git/filesystem touch.
 assert_refused() {
   local reason="$1" path="$2"
   run_land --producer DV0
@@ -112,10 +126,10 @@ assert_refused() {
 }
 
 # ---------------------------------------------------------------------------
-# AC1 / AC2
+# happy path / corrupted read
 # ---------------------------------------------------------------------------
 
-@test "contract: AC1 happy path lands the producer artifact into the consumer tree" {
+@test "contract: happy path lands the producer artifact into the consumer tree" {
   run_land --producer DV0
   assert_equal "$status" 0
   [ -f "$C_REAL/contract.yaml" ]
@@ -131,7 +145,7 @@ assert_refused() {
   assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'pending'
 }
 
-@test "contract: AC2 a corrupted cat-file read fails closed with sha256_mismatch" {
+@test "contract: a corrupted cat-file read fails closed with sha256_mismatch" {
   LAND_REAL_GIT="$(command -v git)"
   export LAND_REAL_GIT
   local old_path="$PATH"
@@ -156,54 +170,150 @@ assert_refused() {
   refute_line 'DV1'
 }
 
+@test "contract: a mid-run write failure rolls back every path this run created" {
+  mkdir -p "$P_REAL/new/dir"
+  printf 'a\n' > "$P_REAL/new/dir/a.yaml"
+  printf 'k: v\n' > "$P_REAL/b.yaml"
+  git -C "$P_REAL" add new/dir/a.yaml b.yaml
+
+  patch_state '(.tasks.DV0.metadata.produces) = ["new/dir/a.yaml", "b.yaml"]
+    | (.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["new/dir/a.yaml", "b.yaml"]}]'
+
+  # Both paths pass preflight (they are validly staged), so the first path's
+  # write completes before the second's keyed blob read is corrupted — the
+  # exact shape a subshell-scoped rollback ledger cannot see past.
+  local oid
+  oid=$(git -C "$P_REAL" ls-files -s -- b.yaml | awk '{print $2}')
+
+  LAND_REAL_GIT="$(command -v git)"
+  export LAND_REAL_GIT
+  export LAND_SHIM_CORRUPT_OID="$oid"
+  local old_path="$PATH"
+  PATH="$FIXDIR/bin:$PATH"
+  run_land --producer DV0
+  PATH="$old_path"
+  unset LAND_SHIM_CORRUPT_OID
+
+  assert_equal "$status" 1
+  [ ! -e "$C_REAL/new" ]
+  [ ! -e "$C_REAL/b.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'blocked'
+  assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail --count 1
+}
+
+@test "contract: a failed git blob read surfaces as git_error, not a raw git exit code" {
+  local oid
+  oid=$(git -C "$P_REAL" ls-files -s -- contract.yaml | awk '{print $2}')
+
+  LAND_REAL_GIT="$(command -v git)"
+  export LAND_REAL_GIT
+  export LAND_SHIM_FAIL_OID="$oid"
+  local old_path="$PATH"
+  PATH="$FIXDIR/bin:$PATH"
+  run_land --producer DV0
+  PATH="$old_path"
+  unset LAND_SHIM_FAIL_OID
+
+  assert_equal "$status" 1
+  [ ! -e "$C_REAL/contract.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'blocked'
+  assert_equal "$(reason_of)" 'git_error'
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
+    --meta reason=git_error --count 1
+}
+
+@test "contract: a consumes path holding an embedded newline is refused as bad_declaration" {
+  patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["a\nb.yaml"]}]'
+  local before
+  before=$(jq -S '.tasks | del(.DV1)' "$STATE")
+
+  run_land --producer DV0
+  assert_equal "$status" 1
+  assert_equal "$(reason_of)" 'bad_declaration'
+  [ ! -e "$C_REAL/a" ]
+
+  local after
+  after=$(jq -S '.tasks | del(.DV1)' "$STATE")
+  assert_equal "$after" "$before"
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
+    --meta reason=bad_declaration --count 1
+}
+
+@test "contract: a consumes path holding a comma is refused as bad_declaration" {
+  patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["a,b.yaml"]}]'
+  local before
+  before=$(jq -S '.tasks | del(.DV1)' "$STATE")
+
+  run_land --producer DV0
+  assert_equal "$status" 1
+  assert_equal "$(reason_of)" 'bad_declaration'
+
+  local after
+  after=$(jq -S '.tasks | del(.DV1)' "$STATE")
+  assert_equal "$after" "$before"
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
+    --meta reason=bad_declaration --count 1
+}
+
 # ---------------------------------------------------------------------------
-# D5 path-safety ladder — lexical (no filesystem needed)
+# path-safety ladder — lexical (no filesystem needed)
 # ---------------------------------------------------------------------------
 
-@test "contract: D5 absolute_path is refused" {
+@test "contract: absolute_path is refused" {
   set_pair_path "/etc/passwd"
   assert_refused absolute_path "/etc/passwd"
 }
 
-@test "contract: D5 dotdot is refused" {
+@test "contract: dotdot is refused" {
   set_pair_path "a/../b.yaml"
   assert_refused dotdot "a/../b.yaml"
 }
 
-@test "contract: D5 reserved_segment is refused (.GIT case-fold variant)" {
+@test "contract: reserved_segment is refused (.GIT case-fold variant)" {
   set_pair_path ".GIT/x"
   assert_refused reserved_segment ".GIT/x"
 }
 
-@test "contract: D5 control_char is refused" {
+@test "contract: reserved_destination is refused for a landing under .claude/" {
+  set_pair_path ".claude/settings.json"
+  assert_refused reserved_destination ".claude/settings.json"
+}
+
+@test "contract: reserved_destination is refused for a case-folded .github/ segment" {
+  set_pair_path ".GitHub/workflows/x.yml"
+  assert_refused reserved_destination ".GitHub/workflows/x.yml"
+}
+
+@test "contract: control_char is refused" {
   local p
   p=$'bad\x01name.yaml'
   set_pair_path "$p"
   assert_refused control_char "$p"
 }
 
-@test "contract: D5 leading_dash is refused" {
+@test "contract: leading_dash is refused" {
   set_pair_path "-bad.yaml"
   assert_refused leading_dash "-bad.yaml"
 }
 
-@test "contract: D5 unsafe_char is refused" {
+@test "contract: unsafe_char is refused" {
   set_pair_path "bad name.yaml"
   assert_refused unsafe_char "bad name.yaml"
 }
 
 # ---------------------------------------------------------------------------
-# D5 path-safety ladder — needs a real tree
+# path-safety ladder — needs a real tree
 # ---------------------------------------------------------------------------
 
-@test "contract: D5 symlink_source is refused for a staged symlink (mode 120000)" {
+@test "contract: symlink_source is refused for a staged symlink (mode 120000)" {
   ln -s /nonexistent "$P_REAL/linkfile.yaml"
   git -C "$P_REAL" add linkfile.yaml
   set_pair_path "linkfile.yaml"
   assert_refused symlink_source "linkfile.yaml"
 }
 
-@test "contract: D5 symlink_source is refused via a symlinked intermediate dir in P" {
+@test "contract: symlink_source is refused via a symlinked intermediate dir in P" {
   mkdir -p "$WD/real_target"
   printf 'inner\n' > "$WD/real_target/inner.txt"
   ln -s "$WD/real_target" "$P_REAL/sdir"
@@ -212,7 +322,7 @@ assert_refused() {
   assert_refused symlink_source "sdir/inner.txt"
 }
 
-@test "contract: D5 symlink_segment is refused for a symlinked dir in C" {
+@test "contract: symlink_segment is refused for a symlinked dir in C" {
   mkdir -p "$P_REAL/seg"
   printf 'inner\n' > "$P_REAL/seg/inner.yaml"
   git -C "$P_REAL" add seg/inner.yaml
@@ -221,12 +331,12 @@ assert_refused() {
   assert_refused symlink_segment "seg/inner.yaml"
 }
 
-@test "contract: D5 symlink_dest is refused when the destination is already a symlink" {
+@test "contract: symlink_dest is refused when the destination is already a symlink" {
   ln -s /nonexistent "$C_REAL/contract.yaml"
   assert_refused symlink_dest "contract.yaml"
 }
 
-@test "contract: D5 dest_escape vector actually classifies as symlink_segment (ladder order)" {
+@test "contract: a dest_escape vector actually classifies as symlink_segment (ladder order)" {
   # A parent segment symlinked outside C's root is caught by dest_walk's per-segment
   # -L check BEFORE the phys_parent/dest_escape comparison is ever reached, so this
   # vector's observed reason is symlink_segment, not dest_escape — pinned here rather
@@ -239,19 +349,19 @@ assert_refused() {
   assert_refused symlink_segment "outside/thing.yaml"
 }
 
-@test "contract: D5 dest_tracked is refused when C already tracks different content" {
+@test "contract: dest_tracked is refused when C already tracks different content" {
   printf 'different\n' > "$C_REAL/contract.yaml"
   git -C "$C_REAL" add contract.yaml
   git -C "$C_REAL" commit -q -m seed-tracked
   assert_refused dest_tracked "contract.yaml"
 }
 
-@test "contract: D5 dest_exists is refused for an untracked file with different content" {
+@test "contract: dest_exists is refused for an untracked file with different content" {
   printf 'different\n' > "$C_REAL/contract.yaml"
   assert_refused dest_exists "contract.yaml"
 }
 
-@test "contract: D5 not_dir is refused when a parent segment is a regular file" {
+@test "contract: not_dir is refused when a parent segment is a regular file" {
   mkdir -p "$P_REAL/blocker"
   printf 'inner\n' > "$P_REAL/blocker/contract2.yaml"
   git -C "$P_REAL" add blocker/contract2.yaml
@@ -260,7 +370,7 @@ assert_refused() {
   assert_refused not_dir "blocker/contract2.yaml"
 }
 
-@test "contract: D5 gitlink (mode 160000) is refused" {
+@test "contract: gitlink (mode 160000) is refused" {
   local head_sha
   head_sha=$(git -C "$P_REAL" rev-parse HEAD)
   git -C "$P_REAL" update-index --add --cacheinfo "160000,${head_sha},sub.git"
@@ -268,7 +378,7 @@ assert_refused() {
   assert_refused gitlink "sub.git"
 }
 
-@test "contract: D5 filtered_path is refused for a filter=lfs attribute" {
+@test "contract: filtered_path is refused for a filter=lfs attribute" {
   printf 'lfs.bin filter=lfs\n' > "$P_REAL/.gitattributes"
   git -C "$P_REAL" add .gitattributes
   git -C "$P_REAL" commit -q -m attrs
@@ -279,15 +389,15 @@ assert_refused() {
 }
 
 # ---------------------------------------------------------------------------
-# D4 preconditions
+# preconditions
 # ---------------------------------------------------------------------------
 
-@test "contract: D4 not_staged is refused when the path was never git add'ed" {
+@test "contract: not_staged is refused when the path was never git add'ed" {
   set_pair_path "never-staged.yaml"
   assert_refused not_staged "never-staged.yaml"
 }
 
-@test "contract: D4 staged_then_modified is refused for a post-stage edit" {
+@test "contract: staged_then_modified is refused for a post-stage edit" {
   printf 'a\n' > "$P_REAL/mod.yaml"
   git -C "$P_REAL" add mod.yaml
   printf 'b\n' > "$P_REAL/mod.yaml"
@@ -295,27 +405,42 @@ assert_refused() {
   assert_refused staged_then_modified "mod.yaml"
 }
 
-@test "contract: D4 not_produced is refused when the path is absent from producer.produces" {
+@test "contract: not_produced is refused when the path is absent from producer.produces" {
   patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["other.yaml"]}]'
   assert_refused not_produced "other.yaml"
 }
 
-@test "contract: D4 consumer_already_dispatched is refused when C is not pending" {
-  patch_state '(.tasks.DV1.status) = "in_progress"'
-  assert_refused consumer_already_dispatched "contract.yaml"
+@test "contract: a boundary pass skips a non-pending, non-blocked consumer with a warn row" {
+  # A producer rework must not flip an already-completed
+  # consumer to blocked. The gate stays the sole authority over dispatch.
+  patch_state '(.tasks.DV1.status) = "completed"'
+  run_land --producer DV0
+  assert_equal "$status" 0
+  [ ! -e "$C_REAL/contract.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'completed'
+  assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result warn \
+    --meta reason=consumer_not_pending --meta status=completed --count 1
 }
 
-@test "contract: D4 producer_not_completed is refused when P has not completed" {
+@test "contract: the dispatch gate still refuses a consumer that is already dispatched" {
+  patch_state '(.tasks.DV1.status) = "in_progress"'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --state "$STATE" --consumer DV1
+  assert_equal "$status" 1
+  assert_equal "$(reason_of)" 'consumer_already_dispatched'
+}
+
+@test "contract: producer_not_completed is refused when P has not completed" {
   patch_state '(.tasks.DV0.status) = "pending"'
   assert_refused producer_not_completed "contract.yaml"
 }
 
-@test "contract: D4 not_blocked_on_producer is refused when C.blocked_by omits P" {
+@test "contract: not_blocked_on_producer is refused when C.blocked_by omits P" {
   patch_state '(.tasks.DV1.blocked_by) = []'
   assert_refused not_blocked_on_producer "contract.yaml"
 }
 
-@test "contract: D4 self_consume is refused when a row consumes from itself" {
+@test "contract: self_consume is refused when a row consumes from itself" {
   patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV1", "paths": ["contract.yaml"]}]
     | (.tasks.DV1.blocked_by) = ["DV1"]'
   run_land --consumer DV1
@@ -323,7 +448,7 @@ assert_refused() {
   assert_equal "$(reason_of)" 'self_consume'
 }
 
-@test "contract: D4 bad_declaration is refused for a malformed consumes shape" {
+@test "contract: bad_declaration is refused for a malformed consumes shape" {
   patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0"}]'
   run_land --producer DV0
   assert_equal "$status" 1
@@ -333,10 +458,10 @@ assert_refused() {
 }
 
 # ---------------------------------------------------------------------------
-# D6 same tree / D7 row cardinality
+# same-tree landing and row cardinality
 # ---------------------------------------------------------------------------
 
-@test "contract: D6 same_tree writes an ok row and records no landed_paths" {
+@test "contract: same_tree writes an ok row and records no landed_paths" {
   run_land --producer DV0
   assert_equal "$status" 0
   assert_audit_row contract_landed --file "$AUDIT" --subject DV2 --result ok \
@@ -366,7 +491,7 @@ assert_refused() {
   assert_equal "$after" "$before"
 }
 
-@test "contract: the dispatch gate into a freshly re-pinned tree adds one copied row" {
+@test "contract: the dispatch gate into a freshly re-pinned tree adds one copied row and unions landed_roots" {
   run_land --producer DV0
   assert_equal "$status" 0
 
@@ -383,6 +508,14 @@ assert_refused() {
   [ -f "$C2_REAL/contract.yaml" ]
   assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result ok \
     --meta mode=copied --count 1
+
+  # landed_roots must gain C2's root without losing C's — a union, not a
+  # replacement, or the boundary copy left behind in the old tree would stop
+  # being excluded there.
+  local roots
+  roots=$(jq -r '.tasks.DV1.metadata.landed_roots[]' "$STATE")
+  printf '%s\n' "$roots" | grep -qxF -- "$C_REAL"
+  printf '%s\n' "$roots" | grep -qxF -- "$C2_REAL"
 }
 
 @test "contract: a boundary pass skips a blocked consumer, keeping its landing_error" {
@@ -395,13 +528,17 @@ assert_refused() {
 }
 
 # ---------------------------------------------------------------------------
-# --list-landed / --dry-run / usage
+# --list-landed, scoped by --tree / --dry-run / usage
 # ---------------------------------------------------------------------------
 
-@test "contract: --list-landed prints the sorted unique union across rows" {
-  patch_state '(.tasks.DV1.metadata.landed_paths) = ["b.yaml", "a.yaml"]
-    | (.tasks.DV2.metadata.landed_paths) = ["a.yaml", "c.yaml"]'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --state "$STATE"
+@test "contract: --list-landed prints the sorted unique union across rows sharing a tree" {
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = ["b.yaml", "a.yaml"]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]
+     | (.tasks.DV2.metadata.landed_paths) = ["a.yaml", "c.yaml"]
+     | (.tasks.DV2.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --state "$STATE"
   assert_equal "$status" 0
   assert_equal "$output" "$(printf 'a.yaml\nb.yaml\nc.yaml')"
 }
@@ -409,9 +546,34 @@ assert_refused() {
 @test "contract: --list-landed on an empty ledger prints nothing and exits 0" {
   local empty="$WD/empty-state.json"
   printf '{"tasks":{}}' > "$empty"
-  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --state "$empty"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$WD" --state "$empty"
   assert_equal "$status" 0
   assert_equal "$output" ""
+}
+
+@test "contract: --list-landed without --tree exits 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --state "$STATE"
+  assert_equal "$status" 2
+}
+
+@test "contract: --list-landed never lists a path landed in a different tree" {
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = ["only-in-c.yaml"]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$P_REAL" --state "$STATE"
+  assert_equal "$status" 0
+  assert_equal "$output" ""
+}
+
+@test "contract: --list-landed drops an entry containing a space or a newline" {
+  jq --arg c "$C_REAL" --arg nl "$(printf 'a\nb.yaml')" \
+    '(.tasks.DV1.metadata.landed_paths) = ["good.yaml", "bad name.yaml", $nl]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --state "$STATE"
+  assert_equal "$status" 0
+  assert_equal "$output" "good.yaml"
 }
 
 @test "contract: --dry-run writes nothing to disk, the ledger or the audit log" {
@@ -451,37 +613,111 @@ assert_refused() {
 }
 
 # ---------------------------------------------------------------------------
-# D8 parity — the exclusion expression is byte-identical at every transport
+# parity — the exclusion expression is byte-identical at every transport
 # ---------------------------------------------------------------------------
 
-@test "contract: D8 exclusion expression is byte-identical in every transport" {
-  grep -F -- "$D8_JQ" "$PLUGIN_ROOT/skills/worktask/scripts/land-artifacts.sh"
-  grep -F -- "$D8_JQ" "$PLUGIN_ROOT/hooks/dv-comment-density-gate.sh"
-  grep -F -- "$D8_JQ" "$PLUGIN_ROOT/agents/technical-lead.md"
-  grep -F -- "$D8_JQ" "$PLUGIN_ROOT/agents/project-manager.md"
-  grep -F -- "$D8_JQ" "$PLUGIN_ROOT/skills/shared/state-ledger.md"
+@test "contract: the exclusion expression is byte-identical in every transport" {
+  local f
+  for f in skills/worktask/scripts/land-artifacts.sh hooks/dv-comment-density-gate.sh \
+           agents/technical-lead.md agents/project-manager.md skills/shared/state-ledger.md; do
+    run grep -cF -- "$D8_JQ" "$PLUGIN_ROOT/$f"
+    assert_success
+    [ "$output" -ge 1 ]
+  done
 }
 
 # ---------------------------------------------------------------------------
-# AC4 — reader exclusion (D8 transports (a)/(b)/(c))
+# reader exclusion — every transport drops an untracked landed path from its
+# own count/scan, scoped to the tree that received the landing
 # ---------------------------------------------------------------------------
 
-@test "contract: fn-preflight-cmds.sh and the selftest harness name the D8 union" {
+@test "contract: fn-preflight-cmds.sh and the selftest harness name the landed-set transport" {
   grep -qE -- '--list-landed|landed_paths' \
     "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh"
   [ -e "$PLUGIN_ROOT/skills/worktask/scripts/land-artifacts-selftest.sh" ]
 }
 
-@test "contract: the canonical D8 jq matches an untracked-landed-path exclusion on a fixture tree" {
+@test "contract: fn-preflight base-sanity drops an untracked landed file from its working-tree count" {
+  local rwd
+  rwd="$(mk_tmpworkdir)"
+  mkdir -p "$rwd/.context/logs"
+  (
+    cd "$rwd"
+    git init -q -b master .
+    git -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m base
+    git checkout -q -b feature/work
+  )
+  local i
+  for i in $(seq 1 22); do printf 'x\n' > "$rwd/junk$i.txt"; done
+  printf 'k: v\n' > "$rwd/landed.yaml"
+
+  local root
+  root="$(phys "$(git -C "$rwd" rev-parse --show-toplevel)")"
+  jq -n --arg r "$root" \
+    '{version: 2,
+      tasks: {DV0: {status: "completed",
+                    metadata: {landed_paths: ["landed.yaml"], landed_roots: [$r]}}},
+      facts: {files_modified: ["seed.txt"]},
+      metadata: {base_ref: "master"}}' \
+    > "$rwd/.context/state.json"
+
+  cd "$rwd"
+  run bash "$PLUGIN_ROOT/$FN_SCRIPT" base-sanity
+  assert_equal "$status" 0
+
+  local tree_files
+  tree_files=$(jq -rs 'map(select(.action == "base_sanity"))[-1].metadata.tree_files' \
+    "$rwd/.context/logs/audit.jsonl")
+  # 22 plain untracked files plus the landed one: without the tree-scoped
+  # subtraction this would read 23. Reading 22 proves the landed file never
+  # entered the denominator, not merely that it failed to trip a rung.
+  assert_equal "$tree_files" "22"
+}
+
+@test "contract: fn-preflight base-sanity does not abort when a landed path has no untracked match" {
+  local rwd
+  rwd="$(mk_tmpworkdir)"
+  mkdir -p "$rwd/.context/logs"
+  (
+    cd "$rwd"
+    git init -q -b master .
+    git -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m base
+    git checkout -q -b feature/work
+  )
+  # Real untracked files present, none of which match the declared landed
+  # path — the exact shape that pipes an empty match into `grep -f`.
+  printf 'x\n' > "$rwd/other1.txt"
+  printf 'x\n' > "$rwd/other2.txt"
+
+  local root
+  root="$(phys "$(git -C "$rwd" rev-parse --show-toplevel)")"
+  jq -n --arg r "$root" \
+    '{version: 2,
+      tasks: {DV0: {status: "completed",
+                    metadata: {landed_paths: ["ghost.yaml"], landed_roots: [$r]}}},
+      facts: {files_modified: ["seed.txt"]},
+      metadata: {base_ref: "master"}}' \
+    > "$rwd/.context/state.json"
+
+  cd "$rwd"
+  run bash "$PLUGIN_ROOT/$FN_SCRIPT" base-sanity
+  assert_equal "$status" 0
+  assert_output --partial "base-sanity: pass"
+}
+
+@test "contract: the canonical exclusion expression matches an untracked-landed-path on a fixture tree" {
   local repo
   repo="$(mk_git_fixture --branch main --file 'README.md:seed\n' --commit init)"
   printf 'k: v\n' > "$repo/contract.yaml"
+  local root
+  root="$(phys "$repo")"
   local ledger="$WD/reader-state.json"
-  jq -n --arg p contract.yaml \
-    '{tasks: {DV1: {status: "pending", metadata: {landed_paths: [$p]}}}}' > "$ledger"
+  jq -n --arg p contract.yaml --arg r "$root" \
+    '{tasks: {DV1: {status: "pending", metadata: {landed_paths: [$p], landed_roots: [$r]}}}}' \
+    > "$ledger"
 
   local landed untracked
-  landed=$(jq -r "$D8_JQ" "$ledger" | LC_ALL=C sort)
+  landed=$(jq -r --arg root "$root" "$D8_JQ" "$ledger" | LC_ALL=C sort)
   untracked=$(git -C "$repo" status --porcelain --untracked-files=all \
     | awk '/^\?\? /{print substr($0,4)}' | LC_ALL=C sort)
   # Every untracked path in the fixture tree is accounted for by the landed set.
@@ -490,7 +726,39 @@ assert_refused() {
   assert_equal "$remainder" ""
 }
 
-@test "contract: DR, FN and SKILL.md 4.7a name the D8 exclusion" {
+@test "contract: the density hook does not flag an over-dense untracked landed file" {
+  local repo
+  repo="$(mk_git_fixture --branch main --file 'README.md:seed\n' --commit init)"
+  mkdir -p "$repo/.context/logs"
+  # Bloated content the hook would otherwise flag — except it is declared
+  # landed for this tree.
+  {
+    printf '/// Essay line %s narrating history the standard bans.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '/// Contract prose %s restating the signature.\n' 1 2 3 4 5 6 7 8 9 10
+    printf '/// Provenance %s.\n' 1 2 3 4 5 6 7 8 9 10
+    echo 'struct Bloated {'
+    printf '    let field%s: Int\n' 1 2 3 4 5 6 7 8
+    echo '}'
+  } > "$repo/Landed.swift"
+
+  local root
+  root="$(phys "$(git -C "$repo" rev-parse --show-toplevel)")"
+  jq -n --arg r "$root" \
+    '{version: 2,
+      tasks: {DV0: {status: "completed",
+                    metadata: {landed_paths: ["Landed.swift"], landed_roots: [$r]}}}}' \
+    > "$repo/.context/state.json"
+
+  run_script_env --env "CLAUDE_PROJECT_DIR=$repo" --cwd "$repo" \
+    --stdin-string '{"agent_type":"corpflow:swift-developer","agent_id":"agt_t","session_id":"s"}' \
+    "hooks/dv-comment-density-gate.sh"
+
+  assert_success
+  assert_output ''
+  assert_audit_row comment_density_block --file "$repo/.context/logs/audit.jsonl" --absent
+}
+
+@test "contract: DR, FN and SKILL.md name the landed-set exclusion" {
   grep -qE -- "landed_paths|--list-landed" "$PLUGIN_ROOT/agents/technical-lead.md"
   grep -qE -- "landed_paths|--list-landed" "$PLUGIN_ROOT/agents/project-manager.md"
   grep -qE -- "landed_paths|--list-landed" "$PLUGIN_ROOT/skills/worktask/SKILL.md"
