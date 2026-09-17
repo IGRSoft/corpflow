@@ -1023,7 +1023,7 @@ DEV_ARTIFACT=$(jq -r --arg id "$TASK_ID" \
   '.tasks[$id] | .artifact // .metadata.artifact // empty' .context/state.json)
 # shellcheck disable=SC2086
 skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$DEV_ARTIFACT" \
-  --state .context/state.json $STRICT_FLAG
+  --state .context/state.json $STRICT_FLAG $LEGACY_TE_FLAG
 ```
 
 #### Step B rollout and opt-in
@@ -1050,6 +1050,19 @@ failure, and its `fail:` line names a `sw-` id.
 dangling references before the next minor flips `--strict` to the default. The inverse guard (an
 architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
 
+##### Step B — the legacy tests_executed opt-in
+
+```bash
+LEGACY_TE_FLAG=""
+[ "${CORPFLOW_LEGACY_TESTS_EXECUTED:-0}" = "1" ] && LEGACY_TE_FLAG="--legacy-tests-executed"
+```
+
+**`CORPFLOW_LEGACY_TESTS_EXECUTED=1`** makes the orchestrator pass `--legacy-tests-executed`, so an
+artifact written before per-runner entries (a legacy scalar count) validates under the old integer
+rules with one deprecation `warn:`. Use it only to land in-flight legacy artifacts: it never relaxes a
+list, and it is removed in the next minor release. Without it a scalar `tests_executed` fails and
+routes per § Step B.1 — on failure.
+
 ### Step B.1 — Sweep checks at every stage completion
 
 The harness is not a DV-only tool. After **any** stage `<CODE><N>` lands its `completed` patch (loop
@@ -1057,12 +1070,16 @@ step 6.5) and before § Step C.0 renders its blocking items or the next stage is
 
 ```bash
 ART=$(jq -r --arg id "<CODE><N>" '.tasks[$id].artifact // empty' .context/state.json)
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json
+# shellcheck disable=SC2086
+skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json \
+  $LEGACY_TE_FLAG
 ```
 
 `$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
-alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact whose
-`open_questions` is the empty array passes untouched; any item in it must be a full sweep stub.
+alone. `$LEGACY_TE_FLAG` (§ Step B — the legacy tests_executed opt-in) affects only the
+`tests_executed` arm of DV and QA. For DV this **is** the § Step B invocation — run it once, not
+twice. An artifact whose `open_questions` is the empty array passes untouched; any item in it must
+be a full sweep stub.
 
 #### Step B.1 — on failure
 
@@ -1076,9 +1093,11 @@ writes what it owes. There is no advisory tier here — the unreadable-ledger ca
 
 ##### Step B.1 — the routing default, and why it is a default
 
-The default is the rule, not a fallback: a shape absent from this table routes like every row in
-it. An earlier version routed only the first three, so one run's boundary stalled four times on
+The default is the rule, not a fallback: a shape absent from the routing table routes like every row
+in it. An earlier version routed only the first three, so one run's boundary stalled four times on
 lines that each named a real defect and had no branch to take.
+
+###### Step B.1 — the routing table
 
 | `fail:` line names | What the stage owes |
 |---|---|
@@ -1086,7 +1105,9 @@ lines that each named a real defect and had no branch to take.
 | `sweep ledger parity cannot be verified` | a readable ledger or spill, then re-run |
 | a decision id `disagrees across transports` | one reconciled statement — see the arm below |
 | `missing required field: <field>` | that field, per `stage-contracts.md#tpl-<CODE>` |
-| `tests_executed: 0 with no test_suite_compiles` | the compile answer — no test authority needed |
+| `is a scalar` / `is a map, not a list` | `tests_executed` rewritten as one `{runner, count, summary_line}` entry per runner |
+| `tests_executed[` | that entry, fixed as the line says — never folded into another |
+| `with no test_suite_compiles` | the compile answer — no test authority needed |
 | `N discretionary tokens > 200 budget` | a shorter `summary` / `next_stage_focus` |
 | anything else | what the line says — route it here regardless |
 
