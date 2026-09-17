@@ -422,11 +422,11 @@ When building an eval harness for orchestrator fan-out (`RUN.md` + per-prompt fi
 
 ## Artifact Schema (your DV row's artifact)
 
-Additive to the `stage-contracts § DV–SR` base sections (those four stay mandatory); append these so DR/QA/SR/ST can debug DV from the artifact alone. To read non-markdown documents or document URLs, use pandoc (`skills/shared/pandoc-ingestion.md`).
+H2 set: § Artifact anchors (end of file). Each section below names the H2 it lands under, so DR/QA/SR/ST can debug DV from the artifact alone; `## verification-command` holds the runner's summary line (§ The runner's summary line is part of the artifact). To read non-markdown documents or document URLs, use pandoc (`skills/shared/pandoc-ingestion.md`).
 
 ### Decisions
 
-One row per material choice (architecture pivot, dependency add, scope deviation, security boundary).
+Under `## decisions`, one row per material choice (architecture pivot, dependency add, scope deviation, security boundary).
 
 | id | choice | alternatives | rationale | source |
 | -- | ------ | ------------ | --------- | ------ |
@@ -434,7 +434,7 @@ One row per material choice (architecture pivot, dependency add, scope deviation
 
 ### Tool Invocations
 
-One row per material build/test/MCP call, chronological, then a final coverage row (percentage from `get_coverage_report` or the platform equivalent: `swift test --enable-code-coverage`, Jest `--coverage`, …) so DR computes coverage delta without re-running tests. No coverage tool wired → still emit that row, so DR/QA see the absence is deliberate.
+An H3 under `## tests-added`: one row per material build/test/MCP call, chronological, then a final coverage row (percentage from `get_coverage_report` or the platform equivalent: `swift test --enable-code-coverage`, Jest `--coverage`, …) so DR computes coverage delta without re-running tests. No coverage tool wired → still emit that row, so DR/QA see the absence is deliberate.
 
 | ts (UTC) | tool | scope | log_path | result | coverage_pct |
 | -------- | ---- | ----- | -------- | ------ | ------------ |
@@ -443,7 +443,7 @@ One row per material build/test/MCP call, chronological, then a final coverage r
 
 ### Selected Tests
 
-Required when `<plan_file>` declares `metadata.test_mode`. Under a mode/auto-promotion header row, write **Always Required**, **Dependency-Matched** and **Excluded (with reason)** in the shapes canonical to `skills/shared/testing-strategy.md § Selected Tests — production by DV`, plus these two DV-only sub-sections:
+An H3 under `## tests-added`, required when `<plan_file>` declares `metadata.test_mode`. Under a mode/auto-promotion header row, write **Always Required**, **Dependency-Matched** and **Excluded (with reason)** in the shapes canonical to `skills/shared/testing-strategy.md § Selected Tests — production by DV`, plus these two DV-only sub-sections:
 
 - **Executed at DV** — `| Test | Source | Status |`, Source ∈ {Added, Modified, always_required, smoke_safety_net}, Status ∈ {pass, fail}. Empty when `test_mode=build-only`.
 - **Warnings** — first 3 lines of `.context/logs/test-selection-warnings.md`, if any.
@@ -452,13 +452,13 @@ QA reads Always Required / Dependency-Matched / Excluded and executes the full S
 
 ### Blockers, Retry Log, Completion Checklist
 
-Blockers (omit if empty):
+`## Blockers` (omit if empty):
 
 | id | kind | description | escalate_to |
 | -- | ---- | ----------- | ----------- |
 | b1 | missing_input \| design_flaw \| hard_constraint \| ambiguous_requirements | <text> | PL \| AR \| TL \| USER |
 
-Retry Log (omit if `metadata.retry_count == 0`) mirrors the `errors/developer.md` headings — one bullet per retry: `DV[N] Retry [X] — <classification> — <one-line outcome>`. DV Completion Checklist: verbatim copy of the § Completion Verification list with `[x]` boxes ticked; required by validation.
+Retry Log (an H3 under `## deviations`; omit if `metadata.retry_count == 0`) mirrors the `errors/developer.md` headings — one bullet per retry: `DV[N] Retry [X] — <classification> — <one-line outcome>`. `## DV Completion Checklist`: verbatim copy of the § Completion Verification list with `[x]` boxes ticked; required by validation.
 
 ## Response Approach
 
@@ -683,3 +683,13 @@ jq --argjson fr '[{"path":"Sources/Foo.swift","stage":"DV","lines":"all"},{"path
    '.facts.files_read = (($fr + (.facts.files_read // [])) | unique_by(.path) | .[-30:])' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
 ```
+
+<!-- output-sections:begin stage=DV -->
+### Artifact anchors
+
+`development-<N>[-<stream>].md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups`, `## elicitation-sweep`
+- Optional for DV: `## verification-command`, `## decisions`, `## Blockers`, `## DV Completion Checklist`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=DV -->

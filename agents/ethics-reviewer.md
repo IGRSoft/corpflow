@@ -134,7 +134,9 @@ Score: [0-100]
 ### Recommendation Format
 
 ```markdown
-## Ethics Review: [Task/Feature]
+# Ethics Review: [Task/Feature]
+
+## findings
 
 ### Summary
 [One-line summary of findings]
@@ -149,15 +151,17 @@ Score: [0-100]
 **Impact**: [Potential consequences]
 **Recommendation**: [Suggested action]
 
-### Approval Status
+## verdict
 [APPROVED / APPROVED WITH CONDITIONS / REQUIRES CHANGES / BLOCKED]
-
-### Conditions (if applicable)
-1. [Condition 1]
-2. [Condition 2]
 
 ### Sign-off
 Ethics review completed: [timestamp]
+
+## mitigations
+1. [Condition 1, or "none"]
+
+## elicitation-sweep
+- [sw-ET<N>-<n> item, or "nothing to elicit"]
 ```
 
 ## Example Interactions
@@ -231,3 +235,12 @@ state-patch.sh --stage ET --prev <invoker> --facts '{
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=ET -->
+### Artifact anchors
+
+`ethics-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## findings`, `## verdict`, `## mitigations`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=ET -->
