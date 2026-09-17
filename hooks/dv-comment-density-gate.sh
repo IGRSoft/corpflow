@@ -180,10 +180,26 @@ run_gate() {
   _root=$(git -C "$_repo" rev-parse --show-toplevel 2>/dev/null) || return 0
 
   # Changed + untracked source files, NUL-safe against paths with spaces.
+  _tracked=$(git -C "$_root" diff --name-only --diff-filter=ACMR -M HEAD 2>/dev/null || true)
+  _untracked=$(git -C "$_root" ls-files --others --exclude-standard 2>/dev/null || true)
+
+  # A landed file is the producer's to ship — the consumer never authored it, so
+  # it cannot count as this agent's comment bloat. Subtracted from the untracked
+  # half only; a staged/tracked path stays visible regardless. Mirrors
+  # land-artifacts.sh --list-landed (skills/shared/state-ledger.md § The landed
+  # set); a missing state file or jq failure leaves nothing subtracted.
+  if [ -n "$_untracked" ]; then
+    _landed=$(jq -r '[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]' \
+      "$_ctx/state.json" 2>/dev/null || true)
+    if [ -n "$_landed" ]; then
+      _untracked=$(printf '%s\n' "$_untracked" | grep -F -x -v -f <(printf '%s\n' "$_landed") || true)
+    fi
+  fi
+
   _files=$(
     {
-      git -C "$_root" diff --name-only --diff-filter=ACMR -M HEAD 2>/dev/null || true
-      git -C "$_root" ls-files --others --exclude-standard 2>/dev/null || true
+      printf '%s\n' "$_tracked"
+      printf '%s\n' "$_untracked"
     } | sort -u
   )
   [ -n "$_files" ] || return 0

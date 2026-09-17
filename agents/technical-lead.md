@@ -109,11 +109,11 @@ DV is one or more ledger tasks, each with its own artifact and tree. Take the ar
 
 #### Scope-addition re-entry checklist
 
-A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifact after its original sign-off) re-opens the delivery surface, not just the code. Verify it mechanically first, in each DV tree:
+A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifact after its original sign-off) re-opens the delivery surface, not just the code. Verify it mechanically first, in each DV tree, with the untracked-file check below. A gap is `verdict: fail` back to the DV task owning that tree, anchored on the criterion the scope addition was accepted under. Release-notes coverage of the added scope is RE's check (`agents/release-engineer.md`).
 
-**No untracked files outside the landed set** — every `??` path from `git -C <DV tree> status --porcelain` is in the landed set: the union of `metadata.landed_paths` across every task row, `jq -r '[.tasks[] | .metadata.landed_paths // [] | .[]] | unique | .[]' .context/state.json`. The set is empty until landing populates it, so today any `??` line is a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
+##### No untracked files outside the landed set
 
-A gap is `verdict: fail` back to the DV task owning that tree, anchored on the criterion the scope addition was accepted under. Release-notes coverage of the added scope is RE's check (`agents/release-engineer.md`).
+List untracked files file-level with `git -C <DV tree> status --porcelain --untracked-files=all`; the default collapses a new directory to `?? dir/`. Every `??` path must be in the landed set (`skills/shared/state-ledger.md § The landed set`), read with `jq -r '[(.tasks // {})[] | .metadata.landed_paths // [] | arrays | .[] | strings] | unique | .[]' .context/state.json`; `landed_paths` absent or empty is normal. Subtract the set from `??` entries only: a landed path that shows staged or modified is a consumer editing a read-only file, and stays a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
 
 #### DR3.5 — Warning Escalation
 

@@ -661,9 +661,28 @@ cmd_base_sanity() {
   # denominator is demonstrably incomplete, and a block computed from it is a false block on a
   # correct base. Warn instead, like every other rung that cannot trust its inputs. A wrong
   # base does not dirty the working tree, so this cannot mask the topology being checked.
-  local tree_files
-  tree_files=$(git status --porcelain 2> /dev/null | grep -c . || printf '0')
+  local tree_files land_script land_out untracked_landed
+  # Enumerated file-level, not the porcelain default's collapsed `?? dir/` — a
+  # landed file can sit one level inside a new directory, and the collapsed
+  # form would hide it from the subtraction below.
+  tree_files=$(git status --porcelain --untracked-files=all 2> /dev/null | awk 'END{print NR + 0}')
   case "$tree_files" in '' | *[!0-9]*) tree_files=0 ;; esac
+  # A landed file is the producer's to ship, not evidence the consumer
+  # introduced drift, so it is dropped from the denominator — but only from
+  # the untracked half; a staged landed path stays visible. A missing or
+  # failing land-artifacts.sh leaves the count unchanged.
+  land_script="${SCRIPT_DIR}/land-artifacts.sh"
+  land_out=""
+  [ -r "$land_script" ] && land_out=$(bash "$land_script" --list-landed --state "$STATE_PATH" 2> /dev/null || printf '')
+  if [[ -n "$land_out" ]]; then
+    untracked_landed=$(git status --porcelain --untracked-files=all 2> /dev/null \
+      | awk '/^\?\? /{print substr($0, 4)}' \
+      | grep -F -x -f <(printf '%s\n' "$land_out") \
+      | awk 'END{print NR + 0}')
+    case "$untracked_landed" in '' | *[!0-9]*) untracked_landed=0 ;; esac
+    tree_files=$((tree_files - untracked_landed))
+    [[ "$tree_files" -lt 0 ]] && tree_files=0
+  fi
   if [[ "$tree_files" -gt $((ledger_files * 3)) ]] && [[ $((tree_files - ledger_files)) -gt 20 ]]; then
     printf 'base-sanity: the ledger records %s modified files but the working tree shows %s — the denominator is incomplete, so the magnitude comparison is unreliable; skipped\n' \
       "$ledger_files" "$tree_files"

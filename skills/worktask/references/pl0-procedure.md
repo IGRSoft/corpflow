@@ -168,6 +168,18 @@ Every DV row is a fan-out unit with its own artifact; these two keys are what ma
 | `metadata.stream` | kebab slug, unique among the run's DV rows | Names the row's artifact. MANDATORY on every DV row once the run seeds ≥2; MAY be omitted when there is exactly one. |
 | `metadata.artifact` | `".context/development-${N}-<stream>.md"`, or `".context/development-${N}.md"` for a lone DV row | The file that row writes and patches. DV never invents it; downstream stages resolve their inputs from these values, never from a composed name. |
 
+##### Propagation fields — DV landing declarations
+
+Conditional: stamp `produces` and `consumes` only when one DV row consumes a file another DV row produces, and
+pass them inside `--metadata` on `state-patch.sh --task-create`, the call that seeds the row. PL0
+writes them, or TL when TL runs; DV never does. Contract: `handoff-protocol.md § Landing consumed
+artifacts`.
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.produces` | `[path, ...]`, repo-relative post-merge, alphabet `[A-Za-z0-9._@+/-]` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
+| `metadata.consumes` | `[{"from": "DV<n>", "paths": [path, ...]}]`, each path listed in that producer's `produces` | Consumer row. Block it on every `from` too (`--task-block C --on P`), or landing refuses it with `not_blocked_on_producer`. |
+
 ##### Propagation fields — base branch & test scope
 
 `--task-create` refuses a non-PL/IR row missing `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (§ Workspace Mode): exit 2, `state.json` untouched.
