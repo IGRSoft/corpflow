@@ -81,7 +81,7 @@ software-architector = security architecture (AR).
 
 ### Diff input (SR0)
 
-The diff is `bash skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
+The diff is `bash skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only: list them with `stream-diff.sh --task <DVk> --format names` and `Read` each `?` path as that task's diff. A block with `source=empty` and `untracked=0`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
 
 ### Threat Model (SR0)
 

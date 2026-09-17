@@ -97,7 +97,7 @@ stream-diff task=<ID|-> stream=<s|-> source=<committed|staged|worktree|empty> ba
 
 #### What each header key asks of you
 
-- `source` — `committed` is `<base>...HEAD`; `staged` is the index only; `worktree` is every uncommitted tracked edit, staged or not, against `HEAD`; `empty` is nothing. Copy it into the `Source:` line (§ Decision line).
+- `source` — `committed` is `<base>...HEAD`; `staged` is the index only; `worktree` is every uncommitted tracked edit, staged or not, against `HEAD`; `empty` is no tracked change, reviewable only through `untracked` when that is above 0. Copy it into the `Source:` line (§ Decision line).
 - `reason` — `-` and `no_changes` are clean. Any other token marks a degraded block: name it in `§ Findings`, never as a clean pass.
 - `staged_also` — above 0 on a `committed` block, that many uncommitted tracked edits sit outside the body: a coverage gap to record in `§ Findings`, `[verify-later]`.
 - `untracked` — new files no body shows: list them with `--format names` and `Read` each under that block's tree.

@@ -161,12 +161,17 @@ re-run `commit`.
 |---|---|---|
 | 0 | result lines | continue |
 | 1 | `blocked reason=<token> task=<ID\|-> stream=<s\|->` | `handoff.verdict: blocked`; copy the line verbatim to `.context/errors/project-manager.md` and name the reason and stream in `complete-summary-N.md`; no push, no `gh pr create` |
-| 2 | usage on stderr | FN's own call is malformed: fix it and re-run |
+| 1 | `blocked reason=stream_is_combined task=<ID> stream=<s>` | a stream's branch is `facts.branch` (`commit`: the stream tree's current branch; `merge`: a `facts.stream_branches` value); nothing was written; `handoff.verdict: blocked` naming that stream, as above |
+| 2 | `fn-stream-merge: <message>` on stderr, nothing on stdout | FN's own call is malformed: fix it and re-run |
 | 3 | stderr | ledger unreadable or install broken: handle as exit 1 |
 | 4 | `escalate reason=merge_abort_failed task=- stream=<s>` | the tree is left mid-merge: `handoff.verdict: escalate`, the line to the errors file, and stop without touching that tree |
 
+##### Clearing a block
+
 `commit` and `merge` are idempotent: clear a block by fixing its named cause and re-running the
-same step. A `merge_conflict` block was already aborted, so no ref moved.
+same step. A `merge_conflict` block was already aborted, so no ref moved. A re-run never clears
+`stream_is_combined`: that stream's work sits on the PR branch itself, where the foreign-commit
+check cannot tell it apart. Giving it its own branch is a human's call.
 
 ##### Forbidden on this arm
 
