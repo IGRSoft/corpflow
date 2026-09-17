@@ -396,10 +396,12 @@ Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 [4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
-[5] task.description                       ← dynamic per delegation
+[5] Task identifiers + ref: lines          ← dynamic per delegation
 [6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
+
+[5]'s lines and ref shapes: `references/handoff-protocol.md § Section [5] — task identifiers and refs`.
 
 #### Step 0 (NEW) — Read state.json before each delegation
 
@@ -1032,11 +1034,11 @@ The code implements `references/handoff-protocol.md § Pinning a row's tree`.
     //    write (never agent_type or an env var, so nested delegates inherit it).
     sh(`state-patch.sh --task-status ${task.id} in_progress`);
 
-    // 5a. Embedded commands (DV) — PREPEND the Skill invocation when the worktask carries
+    // 5a. Embedded commands (DV) — APPENDED as suffix [7] when the worktask carries
     //     embedded_commands metadata.
     if (full.metadata.stage === "DV" && worktask_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
-      full.description = skillInvocation + "\n\n" + full.description;
+      full.description = full.description + "\n\n" + skillInvocation;
     }
 ```
 
@@ -1139,10 +1141,10 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     // …continued: step 6 body. Runs after Step 4.8's re-stamp, so [7]'s WORKSPACE_ROOT= line and
-    // Step 4.8's banner read one row. orchRoot = _orch_root from commands/worktask.md
+    // Step 4.8's banner read one row. _orch_root is set in commands/worktask.md
     // § Workspace-root cross-check. Contract: § Composing the brief.
     const composed = spawnSync("bash", ["skills/worktask/scripts/brief-compose.sh", task.id,
-                                        "--orch-root", orchRoot], { encoding: "utf8" });
+                                        "--orch-root", _orch_root], { encoding: "utf8" });
     if (composed.status !== 0) {  // 1 = guard failure, 2 = usage/ledger/canon; stdout is empty
       sh(`state-patch.sh --task-status ${task.id} blocked`);
       appendAudit({ actor: "orchestrator", action: "brief_compose_failed", subject: task.id,

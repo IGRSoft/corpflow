@@ -1766,7 +1766,7 @@ Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equ
 [4b] Model discipline block                 ← stable WITHIN stage type
 ─────── (cache prefix boundary for sections 1+2+4+4b sharing) ───────
 <<<task-description>>>
-[5]  task.description                       ← dynamic per delegation
+[5]  Task identifiers + ref: lines          ← dynamic per delegation
 <<<retry-hints>>>
 [6]  retry hints (if retry_count > 0)       ← dynamic per delegation
 <<<stage-banners>>>
@@ -1785,8 +1785,8 @@ optional:
   [2] runs to `<<<stage-contract>>>` and swallows the inlined ledger, which evolves every stage —
   byte-identity then fails on a section that never changed. A marker whose own section is never
   compared still terminates the one before it.
-- **They separate instruction from data.** [3] is JSON and [5] is free-form text, both sitting
-  between blocks of instructions.
+- **They separate instruction from data.** [3] is JSON and [5] is ledger-copied lines, both
+  sitting between blocks of instructions.
 
 ### Section [4b] — model discipline block
 
@@ -1801,6 +1801,19 @@ section count does not vary by model.
 The orchestrator never composes this text. A block assembled at dispatch instead of copied is
 the drift `cache-lint.sh` exists to catch — and the reason the blocks live in one canon file
 rather than in the agent definitions is in `model-prompting.md § Why this lives at dispatch`.
+
+### Section [5] — task identifiers and refs
+
+`brief-compose.sh` writes [5]; the ledger's `task.description` is not copied into it and reaches
+the agent only inside the [3] ledger. The section
+is identifier lines copied verbatim from the ledger (`task_id`, `stage`, `agent`, `model`,
+`artifact`, `subject`), then `ref:` lines only. A ref value has one of three shapes:
+
+- `file:line` — plugin-root-relative, else under a `workspace_path`;
+- `artifact#anchor` — an artifact in the resolved `.context` directory with a `## <anchor>` heading;
+- a plain path to an existing file — from `metadata.context_refs` only.
+
+A ref that does not resolve fails the compose with exit 1 and an empty stdout.
 
 ### Forbidden tokens in sections [1], [2], [4], [4b]
 
