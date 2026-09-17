@@ -139,6 +139,16 @@
 #                           call this instead of re-implementing the preference ladder.
 #
 # @arg --read-decisions    Print facts.decisions[] unioned with the eviction spill, and exit.
+# @arg --verify-decision <ud-id> --task-id <ID> [--expect-answer <text>]
+#                           Read-only: verifies one user-decision ledger row (actor, per-row and
+#                           chain sha256, worktask id, scope covering <ID>, audit corroboration,
+#                           and, with --expect-answer, an exact answer match). Dispatches right
+#                           after the root ladder and before pre-flight: no lock, no log write
+#                           (LOG_FILE forced to /dev/null), no audit row, no state write. Prints
+#                           the verifier JSON on stdout; question/answer/scope are null unless
+#                           valid. --task-id is required. Exits 0 valid, 5 refused, 2 usage/IO
+#                           (missing --task-id, unresolved ledger, unsupported version, missing
+#                           jq or the library), 1 never (internal errors there exit 2).
 # @arg --self-test          Run the built-in self-test and exit.
 # @arg -h | --help          Show this header.
 #
@@ -170,6 +180,9 @@
 #               resolves to more than one open instance with nothing to disambiguate it; or
 #               --claim on a settled (completed|skipped|failed) row.  Unknown ids stay 1 and
 #               malformed ids stay 2.
+# @exitcode 5   --verify-decision only: the row (or the chain it sits in) is refused — forged,
+#               edited, out of scope, uncorroborated or answer-mismatched.  Every other op in
+#               this file never returns 5.
 #
 # Note: --task-replay's liveness guard shells out to stale-check.sh, which needs python3.
 # The dependency is out-of-process and fail-closed — without it the replay refuses (exit 4)
@@ -1342,6 +1355,9 @@ TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
 READ_DECISIONS=""
+VERIFY_DECISION_ID=""
+VERIFY_EXPECT=""
+VERIFY_EXPECT_GIVEN=""
 FACTS_ARG=""
 REPLAY_CASCADE="false"
 AGENTS_JSON_ARG=""
@@ -1375,6 +1391,8 @@ while [[ $# -gt 0 ]]; do
     --allow-missing-artifact) ALLOW_MISSING_ARTIFACT="1"; shift ;;
     --facts) shift; FACTS_ARG="${1:-}"; shift ;;
     --task-id) shift; TASK_ID_ARG="${1:-}"; shift ;;
+    --verify-decision) shift; VERIFY_DECISION_ID="${1:-}"; shift ;;
+    --expect-answer) shift; VERIFY_EXPECT="${1:-}"; VERIFY_EXPECT_GIVEN="1"; shift ;;
     --task-create) shift; TASK_OP="create"; TASK_OP_ID="${1:-}"; shift ;;
     --task-status) shift; TASK_OP="status"; TASK_OP_ID="${1:-}"; shift; TASK_OP_VALUE="${1:-}"; shift ;;
     --task-block) shift; TASK_OP="block"; TASK_OP_ID="${1:-}"; shift ;;
@@ -1502,6 +1520,61 @@ fi
 # calling this on its own artifact needs to know its ledger write landed nowhere.
 if [[ -n "$STATE_UNRESOLVED" && -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
   printf >&2 'warn: no ledger resolved (checked --state, CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — refusing cwd\n'
+fi
+
+# ---------- --verify-decision (read-only; dispatched before pre-flight so this op takes no
+# lock, writes no log and touches no audit row — LOG_FILE is forced to /dev/null even though
+# --log may have been given, so a caller cannot accidentally make a read-only op write one) ----
+if [[ -n "$VERIFY_DECISION_ID" ]]; then
+  LOG_FILE="/dev/null"
+  if [[ -z "$TASK_ID_ARG" ]]; then
+    printf >&2 'state-patch.sh --verify-decision requires --task-id <ID>\n'
+    exit 2
+  fi
+  if [[ -z "$STATE_PATH" ]]; then
+    printf >&2 'state-patch.sh --verify-decision: no ledger resolved\n'
+    exit 2
+  fi
+  if [[ -f "$STATE_PATH" ]] && command -v jq > /dev/null 2>&1; then
+    _VD_VER=$(jq -r '.version // empty' "$STATE_PATH" 2> /dev/null) || _VD_VER=""
+    if [[ -n "$_VD_VER" && "$_VD_VER" != "2" ]]; then
+      printf >&2 'state-patch.sh --verify-decision: ledger version %s unsupported (expected 2)\n' "$_VD_VER"
+      exit 2
+    fi
+  fi
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 'state-patch.sh --verify-decision: jq is required\n'
+    exit 2
+  }
+  _VD_LIBDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../hooks/lib"
+  _VD_LIB="$_VD_LIBDIR/user-decision-lib.sh"
+  if [[ ! -r "$_VD_LIB" ]]; then
+    printf >&2 'state-patch.sh --verify-decision: plugin install broken — user-decision-lib.sh not found at %s\n' "$_VD_LIB"
+    exit 2
+  fi
+  # shellcheck source=../../../hooks/lib/user-decision-lib.sh
+  . "$_VD_LIB"
+  command -v ud_verify > /dev/null 2>&1 || {
+    printf >&2 'state-patch.sh --verify-decision: user-decision-lib.sh loaded without ud_verify\n'
+    exit 2
+  }
+  _VD_CTX="${STATE_PATH%/*}"
+  [[ "$_VD_CTX" == "$STATE_PATH" ]] && _VD_CTX="."
+  _VD_LEDGER="$_VD_CTX/decisions.jsonl"
+  _VD_AUDIT="$_VD_CTX/logs/audit.jsonl"
+  _VD_RC=0
+  if [[ -n "$VERIFY_EXPECT_GIVEN" ]]; then
+    ud_verify "$STATE_PATH" "$_VD_LEDGER" "$_VD_AUDIT" "$VERIFY_DECISION_ID" "$TASK_ID_ARG" "$VERIFY_EXPECT" || _VD_RC=$?
+  else
+    ud_verify "$STATE_PATH" "$_VD_LEDGER" "$_VD_AUDIT" "$VERIFY_DECISION_ID" "$TASK_ID_ARG" || _VD_RC=$?
+  fi
+  if [[ "$_VD_RC" -eq 0 ]]; then
+    exit 0
+  elif [[ "$_VD_RC" -eq 1 ]]; then
+    exit 5
+  else
+    exit 2
+  fi
 fi
 
 # ---------- Pre-flight ----------

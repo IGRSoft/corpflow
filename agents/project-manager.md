@@ -422,6 +422,8 @@ top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` wh
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### State Patch — REQUIRED before return
 
 Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; `--prev DC` when RE is

@@ -164,6 +164,23 @@ constraints:
           reached this dispatch. Checked at the boundary by ack-check.sh, not by the harness.
 ```
 
+### Schema — decisions_applied
+
+```yaml
+# …continued: handoff.properties, beside acted_on_msg_id
+      decisions_applied:
+        type: array
+        items: { type: string, pattern: '^ud-[0-9]{8}T[0-9]{6}Z-[0-9]+$' }   # UD_ID_RE
+        description: >
+          OPTIONAL, every stage. Each user-decision ledger row this stage acted on, once
+          `state-patch.sh --verify-decision <ud-id> --task-id <own id> --expect-answer <applied>`
+          exited 0 for it. Absent: the stage applied no user decision.
+```
+
+The item grammar is the ledger's row id, `ud-<YYYYMMDDTHHMMSSZ>-<n>`, where `n` is the row's 1-based
+line number (`UD_ID_RE` in `hooks/lib/user-decision-lib.sh`). The acceptance rule is
+`skills/shared/stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### Schema — blocked_on
 
 ```yaml
@@ -185,7 +202,7 @@ continue, in the shape the megatask Shared Seams registry declares
 
 | kind | detail keys, required first, `[optional]` | resume_with |
 |---|---|---|
-| `user_decision` | question, options, [recommended] | decision_ref |
+| `user_decision` | question, options, [recommended, item] | decision_ref |
 | `user_action` | request, command, [verify] | decision_ref |
 | `permission` | tool, command, classifier_reason, allow_rule | decision_ref |
 | `peer_session` | to, question, [deadline] | reply_ref |
@@ -257,11 +274,25 @@ need (`skills/agent-coordination/SKILL.md § Writers — redacted permission row
             question: { type: string, maxLength: 512 }
             options: { type: array, minItems: 2, maxItems: 4, items: { type: string, maxLength: 200 } }
             recommended: { type: string, maxLength: 200 }   # one of options
+            item: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }   # sweep item it settles
         resume_with: { const: decision_ref }
 ```
 
 A choice only the user can make, with the options the stage weighed. It is not a closing-sweep
-item: a sweep item lets the stage finish, and this need stops it.
+item: a sweep item lets the stage finish, and this need stops it. The options are unique and
+non-empty.
+
+##### Schema — blocked_on, the user_decision legs and decision_ref
+
+- `asked`: `route` parked the need for the next boundary's question.
+- `answered`: the hook's `user_decision_recorded` audit row, written when the user answered.
+- `resumed`: the closing leg, written by `resume` once a verified ledger row covers the task.
+
+Its `decision_ref` is the `ud-<YYYYMMDDTHHMMSSZ>-<n>` id of that row in `.context/decisions.jsonl`,
+never the `blocked_on:<task_id>:<kind>:<n>` form. `resume` writes it on the `resumed` row and returns
+it as `resume_block.decision_ref`. The answer text stays in the ledger: no audit row and no
+`resume_block.instruction` carries it. The stage reads it through `state-patch.sh --verify-decision`
+(`hooks/references/user-decision-ledger.md`).
 
 #### Schema — blocked_on, the user_action arm
 
@@ -353,12 +384,13 @@ host need no probe covers is a `user_action`.
 
 #### Schema — blocked_on, decision_ref on the other arms
 
-For every arm but `permission`, `decision_ref` is `blocked_on:<task_id>:<kind>:<n>`, the
-`metadata.decision_ref` of the closing-leg `blocked_on` audit row. `blocked-on-dispatch.sh resume`
-appends and prints it; for a `host_environment` probe that passes, `route` does. `<kind>` is the
-stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the earlier closing
-rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
-its `artifact_path` is resolved as the arm above says and printed beside it.
+For every arm but `permission` and `user_decision`, `decision_ref` is
+`blocked_on:<task_id>:<kind>:<n>`, the `metadata.decision_ref` of the closing-leg `blocked_on` audit
+row. `blocked-on-dispatch.sh resume` appends and prints it; for a `host_environment` probe that
+passes, `route` does. `<kind>` is the stage's own kind even when a fallback arm closed the need, and
+`n` is 1 plus the earlier closing rows for that task and kind. While an arm falls back, its
+`reply_ref` is that `decision_ref`, and its `artifact_path` is resolved as the arm above says and
+printed beside it.
 
 #### Schema — blocked_on, the other arms' full detail and audit row
 
@@ -598,6 +630,8 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 `cross_session_ask`, the legacy alias of `blocked_on` kind `peer_session`, is still read on every stage on the same terms (§ Schema — blocked_on, the cross_session_ask alias).
 
 `acted_on_msg_id` is optional on every stage with the same absent-means-none reading: absent, no message carrying a `msg_id` reached this dispatch. Once one did, it names the newest id the stage acked (`state-patch.sh --ack`) and followed; `ack-check.sh` enforces that, not the validator.
+
+`decisions_applied` is optional on every stage too: absent, the stage applied no user decision.
 
 ###### Conventions — the $defs pointer is an obligation
 

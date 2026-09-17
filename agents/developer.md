@@ -584,6 +584,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### DV frontmatter block
 
 Paste at the top of **your row's artifact** — the path `tasks.<ID>.metadata.artifact` names, one per DV ledger row. You write that file and no other: naming grammar, the per-row `stream` key and the single-DV case are `handoff-protocol.md § DV fan-out — ledger tasks`.

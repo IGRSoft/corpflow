@@ -233,6 +233,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 **Skip-exploration short-circuit**: `task.metadata.skip_exploration === true` makes `metadata.exploration_anchors` (`<file>#<anchor>` refs) the authoritative pre-explored set — do NOT re-Glob/Grep the source tree for files it covers; read only those anchors and start from their facts (`skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`).
 
 ### next_stage_focus and key_decisions

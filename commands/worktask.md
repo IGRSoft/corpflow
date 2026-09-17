@@ -1305,9 +1305,10 @@ runs the `! <command>` line from that directory. No `cd <dir> && <command>` is e
 A task parked on any other `blocked_on` kind (`skills/worktask/SKILL.md § Step 6.5a3`) is rendered
 at the same boundary by `blocked-on-dispatch.sh batch`, as a `user_action` need: a fixed lead line
 with the stage's detail fenced as data, a `!` line only on a native `user_action` whose command was
-not cut, and the options "done" and "stop here". Its `payloads[]` are asked in the same round as the
-permission ones, only the user answers them under any gate setting, and a `/megatask` per-issue run
-parks them the same way. Answers and resume: `skills/worktask/SKILL.md § Step 7a — the typed-need
+not cut, and the options "done" and "stop here". A `user_decision` is the exception: it is asked
+with the stage's own question and options, and the stage is resumed with the hook row's `ud-` id.
+Its `payloads[]` are asked in the same round as the permission ones, only the user answers them
+under any gate setting, and a `/megatask` per-issue run parks them the same way. Answers and resume: `skills/worktask/SKILL.md § Step 7a — the typed-need
 answers`.
 
 #### Step C.1 — collect everything not already answered
@@ -1395,7 +1396,9 @@ than joining the resolver contract.
    `handoff-harness.sh check_sweep_ref_anchor` is what guarantees that anchor exists. Options are
    `options[]` with the `recommended: true` entry marked, and the `rationale` is shown with them. These calls **precede** the gate's approve/reject call and never
    merge into it: a merged call overflows at four-plus items and entangles sweep answers with the
-   gate's reject/resume path.
+   gate's reject/resume path. Each question's `header` is the item's `id` (`sw-<TASK_ID>-<n>`), so
+   the user-decision hook scopes the recorded answer to the emitting task
+   (`hooks/references/user-decision-ledger.md § Scope ladder`).
 
 #### Step C.5 — record, and the unattended lanes
 

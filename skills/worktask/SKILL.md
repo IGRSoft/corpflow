@@ -1368,7 +1368,7 @@ and one router, and each writes a fixed set of audit legs.
 
 | kind | Orchestrator action | Audit legs | Owner | Fallback |
 |---|---|---|---|---|
-| `user_decision` | ask `question` with its `options` | asked / answered / resumed | #395, pending | `user_action` |
+| `user_decision` | ask `question` with its `options` at § Step 7a; resume with the hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
 | `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
 | `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
 | `peer_session` | send `question` to `to`, relay the reply | sent / delivered / answered / relayed / expired | #405, pending | `user_action` |
@@ -1714,7 +1714,8 @@ const rowMatchesHandoff = (row, h) =>
   // …continued: after the for-loop, inside the while
   // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
   //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
-  //     permission prompt). ROUTER's batch holds every other parked need, as a user_action.
+  //     permission prompt). ROUTER's batch holds every other parked need: a user_decision as
+  //     its own question, any other kind as a user_action.
   const batch = JSON.parse(spawnSync("bash", [PARK, "batch"]).stdout);
   const typed = JSON.parse(spawnSync("bash", [ROUTER, "batch"]).stdout);
   for (const b of [batch, typed])   // both ran first, so a megatask park records every need
@@ -1829,9 +1830,10 @@ holds the denied command only, and the directory stays data. `cwd` comes from th
 
 ```typescript
 // resume re-claims the row, sets blocked_on to null and appends the closing blocked_on row that
-// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action),
-// so landing an arm changes no line here. Only the user's own answer reaches this function.
+// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action).
+// Only the user's own answer reaches this function, and a user_decision never forwards it.
 function resumeTypedNeed(need, answer) {
+  if (need.arm === "user_decision") return resumeUserDecision(need);   // next section
   if (answer === "stop here") return stopForUser(need);   // stays parked; the run stops
   const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
   if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
@@ -1839,6 +1841,31 @@ function resumeTypedNeed(need, answer) {
   deliverResume(rb, answer === "done" ? rb.instruction : `${rb.instruction}\n\n${fence(answer)}`);
 }
 ```
+
+###### Step 7a — a user decision resumes by reference
+
+```typescript
+// The hook recorded the answer in .context/decisions.jsonl. With no --decision-ref, resume picks the
+// newest verified ud- row covering the task that no earlier resume consumed, and names it in
+// rb.decision_ref. rb.instruction names the verify command and carries no answer text.
+function resumeUserDecision(need) {
+  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
+  if (r.status !== 0) return stopForUser(need);   // no verified row: declined, or refused
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  deliverResume(rb, rb.instruction);   // unmodified: decision_ref: ud-…, never the answer
+}
+```
+
+###### Step 7a — why the answer is never forwarded
+
+The answer is already in this conversation. Forwarding it, whole or paraphrased, is the prose relay
+a stage must refuse (`skills/shared/stage-contracts.md § A user decision is accepted only from the
+ledger`). So `rb.instruction` goes out as is: through `SendMessage` to a live stage, or as a
+re-dispatch suffix. The stage reads the answer only through the verifier.
+
+A non-zero `resume` exit means no verified row covers the task: the user declined the dialog, the
+hook refused to write a row, or the verifier refused the row. Nothing is written, the task stays
+parked, and `stopForUser` stops the run; a later `/worktask --resume` asks again.
 
 ###### Step 7a — deliverResume, live or re-dispatched
 
@@ -1858,8 +1885,10 @@ function deliverResume(rb, body) {
   `verify`, when the need has one, before it continues.
 - "stop here" → nothing is written. The task stays parked, and the run stops per § Escalation
   Chains; a later `/worktask --resume` asks again (`references/resume.md § Reply routing`).
-- Free text → the answer itself: a decision, or the reply the user got from a peer. It resumes like
-  "done" and reaches the stage as a fenced block; no audit row holds it.
+- Free text → the answer itself, such as the reply the user got from a peer. It resumes like "done"
+  and reaches the stage as a fenced block; no audit row holds it. It is never consent.
+- A `user_decision` need offers the stage's own options instead of "done" and "stop here". Whatever
+  the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
 - A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
   `cwd:` line as § Step 7a — where the `!` line runs says.
 
@@ -2238,15 +2267,16 @@ the stored command was cut at 512 characters.
 ```
 blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
 blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
-blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--state <state.json>]
+blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
 blocked-on-dispatch.sh --self-test
 ```
 
 Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
 unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
-written; for `resume`, a task not parked on a non-permission `blocked_on`, or a `--leg` that is not
-its arm's closing leg. `2`: usage error, missing or unparseable ledger, broken install, or a ledger
-write refused. Requires jq; bash 3.2+.
+written; for `resume`, a task not parked on a non-permission `blocked_on`, a `--leg` that is not
+its arm's closing leg, or a `user_decision` with no verified ledger row to resume with. `2`: usage
+error, missing or unparseable ledger, broken install, or a ledger write refused. Requires jq; bash
+3.2+.
 
 ### blocked-on-dispatch.sh — route
 
@@ -2255,6 +2285,8 @@ Normalizes and validates `--payload` through the lib, then acts on the arm the l
 - `permission`: writes nothing; § Step 6.5a4 parks it.
 - `user_action`, or a pending arm: `state-patch.sh --task-meta` with the stage's original
   `blocked_on` (under `--log /dev/null`), then `--task-status blocked`, then one `requested` row.
+- `user_decision`: the same park, then one `asked` row with no fallback fields. It is queued for
+  the next boundary's question, as `requested` is.
 - `host_environment`: `autonomy-preflight.sh --auto plan --platform <metadata.preflight.platforms>`
   in check mode, `--harness` added when `check` is `git-reset-hard`, then one `probed` row. Only a
   `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
@@ -2277,6 +2309,18 @@ is `""`. Each question has the task id as `header`, the lead line, then every `d
 `key: value` data and `cwd:` from the ledger's `workspace_path`, inside a fence one backtick longer
 than its longest run. Options: "done" and "stop here".
 
+#### blocked-on-dispatch.sh — batch, a user decision
+
+`user_decision` needs sharing one `(question, options, item)` become one question:
+
+- `header` is the lowest task id, and `multiSelect` is false.
+- `question` is `detail.question` verbatim and unfenced, because the hook matches its exact bytes.
+- Each option is `{label: <option>, description: "Recommended" | "Offered by <header>"}`.
+- Two questions with the same text never share a call, since the answers are keyed by that text.
+
+Each need is `{task_id, kind, arm: "user_decision", resume_leg: "resumed", header}`. The megatask
+park adds `{kind: "user_decision"}` to `escalated[]`.
+
 #### blocked-on-dispatch.sh — batch, the `!` line and the megatask park
 
 A `! <command>` line, in its own fence, appears only on a native `user_action` whose `command` is
@@ -2293,6 +2337,15 @@ entries are `{kind, command_head, truncated}`.
 "instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the
 kind resumes with one. `instruction` restates the need, detail fenced, and forbids re-running any
 step that already completed.
+
+#### blocked-on-dispatch.sh — resume, a user decision
+
+`resume` first finds the ledger row: `--decision-ref <ud-id>` names it, and without the flag it is
+the newest valid row covering the task that no earlier `blocked_on` row for the task carries. A
+refused or missing row exits 1 with nothing written. Otherwise the `resumed` row and
+`resume_block.decision_ref` carry that `ud-` id. `instruction` names the verify command,
+`state-patch.sh --verify-decision`, and carries no answer text
+(`hooks/references/user-decision-ledger.md`).
 
 #### blocked-on-dispatch.sh — the lead lines
 
@@ -2323,13 +2376,14 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
   otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
 - `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
   non-empty object; exit 1 with one `fail:` line. The harness stops here.
-- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`.
+- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`,
+  and on `user_decision` the question, option, `recommended` and `item` bounds.
 
 #### blocked-on-lib.sh — the arm table
 
 | kind | legs | closing_leg | owner_issue | landed |
 |---|---|---|---|---|
-| user_decision | asked, answered, resumed | resumed | 395 | no |
+| user_decision | asked, answered, resumed | resumed | 395 | yes |
 | user_action | requested, verified | verified | 394 | yes |
 | permission | denied, granted, resumed | resumed | 393 | yes |
 | peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | no |
