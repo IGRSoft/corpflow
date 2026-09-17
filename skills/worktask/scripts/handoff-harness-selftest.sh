@@ -34,6 +34,7 @@ self_test() {
 
   self_test_ar_gate "$td"
   self_test_tests_executed "$td"
+  self_test_anchors "$td"
   self_test_collect_all "$td"
   self_test_control_bytes "$td"
 
@@ -62,6 +63,7 @@ self_test_tests_executed() {
       echo '  open_questions: []'
       echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
       echo '# Development'; echo; echo '1..12'; echo '3 passed in 0.4s'
+      printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups
       echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
     } > "$1"
   }
@@ -95,6 +97,23 @@ self_test_tests_executed() {
     echo "self-test: tests-executed legacy opt-in: FAIL (rc=$rc) $out" >&2; exit 1
   fi
   echo "self-test: tests-executed legacy opt-in: ok"
+}
+
+# Every stage's H2 set is enforced: a drifted retrospective names each defect on its own line.
+self_test_anchors() {
+  local ctx="$1/.context" out rc=0
+  {
+    printf -- '---\nhandoff:\n  stage: ST\n  verdict: ok\n  summary: "s"\n  key_decisions: []\n'
+    printf '  open_questions: []\n  refs: { plan: planning-0.md#requirements }\n---\n\n'
+    printf '## %s\n\nx\n\n' decision learnings elicitation-sweep Notes
+  } > "$ctx/retrospective-9.md"
+  out=$(validate_frontmatter "$ctx/retrospective-9.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] \
+    || ! printf '%s\n' "$out" | grep -qF "fail: anchor-lint stage=ST missing required H2 '## followups' in retrospective-9.md" \
+    || ! printf '%s\n' "$out" | grep -qF "fail: anchor-lint stage=ST unexpected H2 '## Notes' in retrospective-9.md"; then
+    echo "self-test: anchors: FAIL (rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: anchors: ok"
 }
 
 # A raw NUL is a gate failure naming the path; the same text spelling the escape passes.
@@ -160,6 +179,7 @@ self_test_collect_all() {
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions: []'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+    printf '## %s\n\nx\n\n' files-changed tests-added deviations follow-ups
     echo '## decisions'; echo
     echo '- **dv-1 — The retry budget for a failing stage is three attempts, per planning-0.md.**'
     echo; echo '12 tests, 0 failures'
@@ -183,6 +203,8 @@ self_test_ar_gate() {
   fi
 
   jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
+
+  _dv_required_h2s() { printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups; }
 
   # The item the harness requires under a stub's anchor: at least two options[].
   _two_option_item() {  # <id>
@@ -209,6 +231,7 @@ self_test_ar_gate() {
       echo '---'
       echo
       echo '# Development'; echo; echo '12 tests, 0 failures'
+      _dv_required_h2s
       echo
       echo '## elicitation-sweep'
       echo
@@ -275,7 +298,7 @@ self_test_ar_gate() {
     echo '  open_questions:'
     echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'; echo; echo '12 tests, 0 failures'; echo; echo '## elicitation-sweep'; echo; _two_option_item sw-DV0-1
+    echo '# Development'; echo; echo '12 tests, 0 failures'; _dv_required_h2s; echo; echo '## elicitation-sweep'; echo; _two_option_item sw-DV0-1
   } > "$ctx/dv-stub.md"
   jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
      "$ctx/state-no-ar.json" > "$ctx/state-stub.json"

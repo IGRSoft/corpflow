@@ -431,31 +431,31 @@ Independent of `test_mode` — a `build-only` plan can still set it `true` for a
 ### Selected Tests — production by DV
 
 DV's D2 step parses test sources for the markers in `skills/shared/test-selection-syntax.md` and
-produces:
+produces, as an H3 under `## tests-added` in `development-N.md`:
 
 ```markdown
-## Selected Tests
+### Selected Tests
 
 | Mode | build-only |
 | Reason | metadata.test_mode default |
 
-### Always Required
+#### Always Required
 - AppLaunchTests.testLaunchSucceeds — `@test-required`
 - AuthSmokeTests.testLoginRoundtrip — `metadata.always_required_tests`
 
-### Dependency-Matched
+#### Dependency-Matched
 | Test | Matched on | Source |
 | ---- | ---------- | ------ |
 | PaymentRefundTests.testRefundFlow | `PaymentService` (changed in `PaymentService.swift:42`) | `// @depends-on: PaymentService` at `PaymentRefundTests.swift:8` |
 
-### Excluded (with reason)
+#### Excluded (with reason)
 | Test | Reason |
 | ---- | ------ |
 | OrderHistoryTests.testListRender | No marker matches diff; `test_mode != full` |
 ```
 
-QA reads this section verbatim; tests QA adds during edge-case review go to a
-`## Selected Tests (QA additions)` section in `testing-N.md`.
+QA reads this section verbatim; QA's edge-case additions go to an
+`### Selected Tests (QA additions)` H3 under `## results` in `testing-N.md`.
 
 ### Design↔result image comparison (wired flow)
 

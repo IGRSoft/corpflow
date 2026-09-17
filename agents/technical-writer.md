@@ -248,6 +248,15 @@ state-patch.sh --stage DC --prev QA --facts '{
 >
 > 1. **Write `documentation-N.md`, then immediately patch the ledger** (`state-patch.sh --stage DC --prev QA`). One closing action, done first — not last, not "if there's time". The artifact leads only because the patch reads it: with none on disk the tool exits 3.
 > 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC0` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
-> 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it. Your explicit self-patch is the contract.
+> 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it.
 >
 > If you can only complete one closing action, complete this one.
+
+<!-- output-sections:begin stage=DC -->
+### Artifact anchors
+
+`documentation-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## files-changed`, `## cross-references`, `## follow-ups`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=DC -->

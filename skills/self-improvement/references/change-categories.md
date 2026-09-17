@@ -48,7 +48,7 @@ The classifier must be conservative. Prefer `low` when in doubt — low-confiden
 | `30 seconds` → `60 seconds` | `accuracy` / high | Correct the rule in whichever prompt documented 30s; add a constraint if none exists |
 | `extension User: @unchecked Sendable {}` added to a cross-actor type | `domain-knowledge` / high | Add a Sendable DO NOT constraint to the developer agent |
 | `approach` → `strategy` | `tone` / low | Deferred — a single-word swap carries no systemic signal |
-| New `## Risk Assessment` section in `.context/planning-0.md` | `structure` / high | Require that section in `agents/product-manager.md`'s planning template |
+| New `### Risk Assessment` subsection under `## risks` in `.context/planning-0.md` | `structure` / high | Require that subsection in `agents/product-manager.md`'s planning template |
 | `Tests Added:` → `## Tests Added` across 3 files | `style` / medium | Heading-hierarchy note to the producing agent (≥ 2 files is what lifts it above `low`) |
 
 The pattern each row follows: read the diff, then propose against the *producing* prompt file — never against the artifact the user edited.

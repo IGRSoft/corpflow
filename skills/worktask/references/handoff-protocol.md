@@ -1847,7 +1847,7 @@ Prefix-lint consumes a `prompt-log.jsonl` (`{worktask_id, stage, model, prompt}`
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below plus the one universal anchor. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+Every stage artifact carries its stage's required H2 anchors plus the universal one, and any other H2 only from the allowed and optional sets below. The tables are generated from `skills/worktask/scripts/cache-lint.sh` by `output-sections.sh --write`, which renders the same set into each stage agent's § Artifact anchors; `output-sections.sh --check` fails `make test` on drift. Enforcement runs at the write and at the stage boundary (§ Anchor Pre-Flight). None of it is a CI lint job: that job runs the four repo lints, and anchor-lint mode is deliberately not among them.
 
 ### Anchors — required in every artifact
 
@@ -1866,6 +1866,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 
 ### Anchors — PL to DR
 
+<!-- output-sections:begin table=required-pl-dr -->
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
@@ -1873,9 +1874,11 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-<N>[-<stream>].md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
+<!-- output-sections:end table=required-pl-dr -->
 
 ### Anchors — SR to ET
 
+<!-- output-sections:begin table=required-sr-et -->
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | SR | security-review-N.md | `## findings`, `## verdict`, `## blockers`, `## threat-model` |
@@ -1886,33 +1889,53 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | ST | retrospective-N.md | `## decision`, `## learnings`, `## followups` |
 | IR | incident-N.md | `## root-cause`, `## fix-plan`, `## blast-radius` |
 | ET | ethics-review-N.md | `## findings`, `## verdict`, `## mitigations` |
+<!-- output-sections:end table=required-sr-et -->
+
+### Anchors — optional per stage
+
+Allowed in that stage's artifact only, required in none; title-case entries are matched literally.
+
+<!-- output-sections:begin table=optional -->
+| Stage | Optional H2 anchors |
+|-------|---------------------|
+| AR | `## <Platform> App Architecture`, `## Test Architecture` |
+| TL | `## Blockers` |
+| DV | `## verification-command`, `## decisions`, `## Blockers`, `## DV Completion Checklist` |
+| QA | `## Visual Evidence`, `## Design Comparison` |
+| RE | `## Release Preparation Summary` |
+| ST | `## Self-Improvement` |
+| IR | `## Incident Report` |
+<!-- output-sections:end table=optional -->
 
 ### Convention rules
 
 1. H2 only. H1 is the artifact's title (exempt from anchor lint).
-2. Kebab-case. No spaces, no underscores, no camelCase.
+2. Kebab-case. No spaces, no underscores, no camelCase. The title-case optional entries above are the only exceptions.
 3. Anchor IDs come from GitHub-style slugify, but the H2 title MUST already be the kebab-case form — do not rely on slugify.
 4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
-### Anchor Pre-Flight (PostToolUse hook)
+### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
 
-The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces only after AR/TL/DV have paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint also runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)**, not an opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which first scans every write whose extension is on the control-byte text allowlist for raw C0 control bytes, then gates on the artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
+One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude-plugin/plugin.json`) checks anchors at the write under both events, before a stray H2 costs a rework round; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-#### Managed hook entry (plugin.json)
+- **`PreToolUse` deny.** Path on the artifact regex below, basename exactly `<canonical>-<N>.md` (or a DV task's `development-<N>-<stream>.md`, judged against the DV set), `state.json` beside it: the Write `content` (or Edit `new_string`, `old_string` H2s as baseline) with an unexpected H2 gets `permissionDecision: "deny"` naming those H2s and the allowed set. A missing required H2 never denies; any hook error allows.
+- **`PostToolUse` advisory.** Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost).
+- **Stage boundary.** `handoff-harness.sh --validate-frontmatter` fails on a missing required or unexpected H2 for all 13 stages, and fails closed when `cache-lint.sh` cannot run.
+
+#### Managed hook entries (plugin.json)
 
 ```jsonc
-// .claude-plugin/plugin.json → hooks.PostToolUse (managed entry, alongside audit-tooluse)
-{
-  "matcher": "Write|Edit",
-  "hooks": [
-    { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "continueOnBlock": true }
-  ]
-}
+// hooks.PreToolUse, after test-execution-gate: a JSON deny needs no continueOnBlock
+{ "matcher": "Write|Edit",
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "pre"] } ] }
+// hooks.PostToolUse, alongside audit-tooluse
+{ "matcher": "Write|Edit",
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "post"], "continueOnBlock": true } ] }
 ```
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
+`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the stage-boundary harness is the only check — there is no CI counterpart.
 
 **Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

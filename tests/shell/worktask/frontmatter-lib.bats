@@ -37,7 +37,7 @@ _artifact() {  # <path> <nested|flat>
     printf '%sopen_questions: []\n' "$pad"
     printf '%srefs:\n' "$pad"
     printf '%s  dev: development-0.md#files-changed\n' "$pad"
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$1"
 }
 
