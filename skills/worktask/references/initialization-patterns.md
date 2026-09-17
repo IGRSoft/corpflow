@@ -7,9 +7,7 @@
 
 ## PL0 state.json Initialization (Phase 1)
 
-PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` right after `mkdir -p .context/`, seeding the ledger every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it.
-
-**The canonical executable snippet — `N` computation plus the atomic temp+fsync+rename write — lives in `commands/worktask.md` Phase 1 step 3a. Use it verbatim; do not re-derive it here.** It computes `N` with a nullglob-guarded loop over `.context/planning-*.md`, resolves `WORKSPACE_PATH` as `git rev-parse --show-toplevel` (else `pwd`), and writes the seed shape given in `handoff-protocol.md#pl0-seed` — plus `metadata.workspace_path` and `facts.goal`, both covered below.
+`commands/worktask.md` Phase 1 Step 3a creates `.context/state.json` right after `mkdir -p .context/` by running `skills/worktask/scripts/seed-state.sh`, the seed's only executable definition: the re-run-aware next free planning index `N` (`0` on a fresh `.context/`), `metadata.workspace_path`, `facts.goal`, and the atomic temp+fsync+rename write. `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`). The script refuses (exit 3) when `state.json` already exists; `pl0-procedure.md § Step 4 — state.json reset` owns re-runs. Resulting JSON shape: `handoff-protocol.md#pl0-seed`.
 
 ### plan_file shape boundary
 
