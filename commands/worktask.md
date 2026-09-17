@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh":*), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh":*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh":*), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh":*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*), Bash(bash skills/worktask/scripts/brief-compose.sh:*)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -973,14 +973,15 @@ fi
 
 ##### Banner injection
 
-The orchestrator MUST also append the task's `WORKSPACE_ROOT=` line as the first line of every stage
-prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to
-target. The value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root —
-never the ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
+The task's `WORKSPACE_ROOT=` line opens section [7] of every stage prompt (the suffix, per the
+cache-prefix spec) so the subagent knows which directory to target. It arrives through the composer,
+which emits `workspace-root-banner.sh`'s stdout as [7]'s first line; do not append it again. The
+value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root — never the
+ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
 
 ```bash
-bash skills/worktask/scripts/workspace-root-banner.sh --task "<TASK_ID>" --orch-root "$_orch_root"
-# stdout is the banner line verbatim; exit 2 (unknown task id) means do not call Task()
+bash skills/worktask/scripts/brief-compose.sh "<TASK_ID>" --orch-root "$_orch_root"
+# stdout is the whole brief, [7] opening with the banner line; exit 1 or 2 means do not call Task()
 ```
 
 Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.

@@ -1940,7 +1940,7 @@ Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equ
 [4b] Model discipline block                 ← stable WITHIN stage type
 ─────── (cache prefix boundary for sections 1+2+4+4b sharing) ───────
 <<<task-description>>>
-[5]  task.description                       ← dynamic per delegation
+[5]  Task identifiers + ref: lines          ← dynamic per delegation
 <<<retry-hints>>>
 [6]  retry hints (if retry_count > 0)       ← dynamic per delegation
 <<<stage-banners>>>
@@ -1959,8 +1959,8 @@ optional:
   and swallows the digest, which evolves every stage — byte-identity then fails on a section that
   never changed. [3] itself is a ledger pointer plus a readiness digest, never the ledger JSON
   (§ Section [3] — ledger pointer and readiness digest).
-- **They separate instruction from data.** [3] is a `key: value` digest and [5] is free-form text,
-  both sitting between blocks of instructions.
+- **They separate instruction from data.** [3] is a `key: value` digest and [5] is ledger-copied
+  identifier and `ref:` lines, both sitting between blocks of instructions.
 
 #### Section [3] — ledger pointer and readiness digest
 
@@ -1995,6 +1995,19 @@ section count does not vary by model.
 The orchestrator never composes this text. A block assembled at dispatch instead of copied is
 the drift `cache-lint.sh` exists to catch — and the reason the blocks live in one canon file
 rather than in the agent definitions is in `model-prompting.md § Why this lives at dispatch`.
+
+### Section [5] — task identifiers and refs
+
+`brief-compose.sh` writes [5]; the ledger's `task.description` is not copied into it — the agent
+reads it from `.context/state.json` on disk, the file [3] points at. The section
+is identifier lines copied verbatim from the ledger (`task_id`, `stage`, `agent`, `model`,
+`artifact`, `subject`), then `ref:` lines only. A ref value has one of three shapes:
+
+- `file:line` — plugin-root-relative, else under a `workspace_path`;
+- `artifact#anchor` — an artifact in the resolved `.context` directory with a `## <anchor>` heading;
+- a plain path to an existing file — from `metadata.context_refs` only.
+
+A ref that does not resolve fails the compose with exit 1 and an empty stdout.
 
 ### Forbidden tokens in sections [1], [2], [4], [4b]
 
@@ -2035,6 +2048,8 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 ### Lint
 
 `skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant. A line carrying `"contract_canon": true` opts in the same way for [1], which must then equal the fenced block in `contract-reminder.md`. Every line with a [3] section is checked for the `ledger: .context/state.json` first line, all six keys in order, and no embedded ledger.
+
+`brief-compose.sh` is the assembler this spec binds; it writes no `prompt-log.jsonl`, so prefix mode stays fixture-gated.
 
 #### Fixture-gated, not log-gated
 
