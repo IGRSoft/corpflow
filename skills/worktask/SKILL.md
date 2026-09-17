@@ -756,16 +756,26 @@ across three runs, always cleared by the same manual step — this codifies that
     //       actor holding git that is not itself inside the tree under repair.
 ```
 
-##### Step 4.7a — landing and audit
+##### Step 4.7a — the stray set
 
 ```typescript
     if (full.metadata.stage === "DV" && state.tasks?.AR0?.status === "completed") {
       // .context/ is the ledger's own tree and never lands here: it is not what DV reads
       // through an architecture reference, and committing it would put run bookkeeping in
-      // the payload's history.
-      const stray = gitPorcelain()                       // `git status --porcelain`
+      // the payload's history. Landed files are a DV producer's to ship, not AR's: subtract
+      // them from untracked entries only, listed per file, since the default porcelain
+      // folds a new directory into one `?? dir/` line.
+      // `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`; failure = empty set
+      const landed = new Set(listLanded(gitToplevel()));
+      const stray = gitPorcelain()           // `git status --porcelain --untracked-files=all`
         .filter(f => !f.path.startsWith(".context/"))
-        .filter(f => f.worktreeDirty || f.untracked);
+        .filter(f => f.worktreeDirty || (f.untracked && !landed.has(f.path)));
+```
+
+##### Step 4.7a — landing and audit
+
+```typescript
+      // …continued: step 4.7a body
       if (stray.length > 0) {
         gitCommit(stray.map(f => f.path),
                   `AR contract landing for ${task.id} (run ${state.run_index})`);
@@ -849,6 +859,36 @@ The code implements `references/handoff-protocol.md § Pinning a row's tree`.
                                              "--task", task.id], { encoding: "utf8" })
                          .trim().replace(/^WORKSPACE_ROOT=/, "");
 ```
+
+##### Step 4.8 — land consumed artifacts
+
+After any re-pin and before Step 5 stamps `in_progress`, a row that declares `consumes` has every
+consumed pair landed again into the tree it will run in. A re-pinned stream holds a fresh tree the
+boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that writes nothing.
+
+```typescript
+      // …continued: step 4.8 body
+      const consumes = full.metadata.consumes ?? [];
+      if (consumes.length > 0) {
+        const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                        "--consumer", task.id]);
+        if (land.status !== 0 && land.status !== 1) blockOnToolError(task.id);  // 1: already blocked
+        if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Task()
+        full.description += "\n\nLANDED (read-only, never edit or stage): " +
+          consumes.flatMap(c => c.paths).join(", ");
+      }
+```
+
+##### Step 4.8 — a refused landing, and its release
+
+`blockOnToolError` exists because every status other than 0 or 1 records nothing — exit 2, or a
+signal or crash that bypassed the script's own mapping to 2 — and a row left `pending` is
+re-dispatched every pass. It runs `state-patch.sh --task-meta <ID> --set '{"landing_error":{"reason":"tool_error"}}'`,
+then `--task-status <ID> blocked`; if either write fails, stop per § Error Handling. Exit 1 needs
+neither, since the script already blocked the row. `queueLandingBlock` reports it as § Step 6.5d does.
+
+**Release**, once the cause is fixed: `state-patch.sh --task-meta <ID> --set '{"landing_error":null}'`,
+then `--task-status <ID> pending`. The next ready pass reaches this gate, which re-lands every pair.
 
 ##### Step 4.8 — assigned-tree banner & audit
 
@@ -1407,7 +1447,7 @@ and one router, and each writes a fixed set of audit legs.
 | `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
 | `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
 | `peer_session` | send `question` to `to`, relay the reply | sent / delivered / answered / relayed / expired | #405, pending | `user_action` |
-| `artifact` | resume once `path` lands | landed | #399, pending | `user_action` |
+| `artifact` | resume once `path` is in the stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
 | `correction` | open rework on `target_task` | opened / closed | #404, pending | `user_action` |
 | `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while it fails |
 
@@ -1434,7 +1474,7 @@ changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the s
       if (routed?.status === 1) { redispatch(task.id, { suffix: routed.stderr }); continue; }
       if (routed && routed.status !== 0) { escalate(task.id); continue; }   // 2: § Error Handling
       const out = routed ? JSON.parse(routed.stdout) : null;
-      const rb = out?.resume_block;   // a host_environment re-probe that passed
+      const rb = out?.resume_block;   // a host_environment re-probe that passed, or an artifact already landed
       if (rb) { deliverResume(rb, rb.instruction); continue; }
       if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
       // A permission need, or a blocked return with no typed need, goes on to § Step 6.5a4.
@@ -1449,10 +1489,18 @@ shows a fixed lead line for the kind with the detail keys fenced as data. Only a
 
 - `peer_session`, until #405 lands: no `SendMessage`, and no `sent` or `relayed` leg. The user sees
   `to` and `question`, asks that peer, and answers with its reply.
-- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
-  need clears only when `check` reads `pass`; otherwise it parks as a `user_action` with
-  `fallback_from` and no `owner_issue`.
 - `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
+
+###### Step 6.5a3 — a landed arm that checks before it parks
+
+A miss on either check below parks the need as a `user_action` with `fallback_from` and no
+`owner_issue`.
+
+- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
+  need clears only when `check` reads `pass`.
+- `artifact`: `route` checks `path` against the landed set of the stage's tree, once the path ladder
+  admits it. A hit clears the need with the ok `landed` row and a `resume_block`; a miss, or a path
+  no landing can produce such as a `.context/` artifact, writes no `landed` row.
 
 ##### Step 6.5a4 — why delivered is not acknowledged
 
@@ -1690,6 +1738,62 @@ const rowMatchesHandoff = (row, h) =>
     //       the next stage, re-dispatch this stage with the fail line verbatim. For DV this is
     //       the same call as § Step B (the AR-reference arm rides on it); run it once.
 ```
+
+##### Step 6.5d — land the producer's artifacts
+
+```typescript
+    // 6.5d. After 6.5c and BEFORE the next ready-filter pass: copy this DV row's staged
+    //       `produces` into each consumer's tree (handoff-protocol.md § Landing consumed
+    //       artifacts). Landing at the producer's boundary is what keeps a consumer whose
+    //       landing failed out of the ready set; the ready filter itself is unchanged.
+    const producer = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks[task.id];
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                      "--producer", task.id]);
+      // exit 1: consumers already blocked; any other non-zero is reported, never blocked here
+      if (land.status !== 0) queueLandingBlock(land);
+    }
+```
+
+##### Step 6.5d — resume a stage parked on this producer's artifact
+
+```typescript
+    // …continued, whatever the landing exited. ROUTER as in § Step 6.5a3.
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const tasks = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks;
+      for (const [id, t] of Object.entries(tasks)) {
+        const need = t.metadata?.blocked_on;
+        if (t.status !== "blocked" || need?.kind !== "artifact"
+            || need.detail?.producer_task !== task.id) continue;
+        const r = spawnSync("bash", [ROUTER, "resume", "--task-id", id, "--leg", "landed"]);
+        if (r.status === 0) { const rb = JSON.parse(r.stdout).resume_block; deliverResume(rb, rb.instruction); }
+        else if (r.status !== 1) escalate(id);
+      }
+    }
+```
+
+Exit 0 delivers the resume, exit 1 leaves the stage parked for § Step 7a, and any other exit goes to
+§ Error Handling.
+
+###### Step 6.5d — a parked stage is never landed into
+
+The boundary pass skips a `blocked` consumer, so `resume --leg landed` succeeds here only when
+`path` is already in the parked stage's tree's landed set; otherwise the user answers at § Step 7a.
+
+##### Step 6.5d — reporting a refused landing
+
+`queueLandingBlock` reports each blocked consumer's `metadata.landing_error` (`reason`, `path`,
+`producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
+Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
+
+On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
+signal) the script recorded nothing about any consumer, so the report carries its stderr instead.
+Nothing is blocked here; the consumer's own § Step 4.8 — land consumed artifacts gate refuses its
+dispatch later.
+
+A producer re-run (a DR rework) can reach a consumer that is no longer `pending`. The pass leaves
+that row untouched and exits 0 with one `warn` `contract_landed` row whose reason is
+`consumer_not_pending`, so a rework never flips a running or finished stream to `blocked`.
 
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
@@ -2217,6 +2321,9 @@ Executable helpers (never read into context — invoke via `bash`):
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 | `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
+| `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed --tree <path>` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
+
+### state-patch.sh — exit codes
 
 Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
 and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
@@ -2261,6 +2368,47 @@ path-scrubbed, at most 120 characters), `truncated` marks a head showing less th
 command, and an unavailable scrub gives `[redacted]` with `redaction: "scrub_unavailable"`. `resume_block.truncated` is a different flag:
 the stored command was cut at 512 characters.
 
+### land-artifacts.sh — CLI
+
+```
+land-artifacts.sh --producer <ID> [--consumer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --consumer <ID> [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --list-landed --tree <path> [--strict] [--state <p>]
+land-artifacts.sh --check-path <path>
+land-artifacts.sh --self-test | -h | --help
+```
+
+Any call with `--producer` is the boundary pass (§ Step 6.5d); `--consumer` alone is the dispatch
+gate (§ Step 4.8 — land consumed artifacts). `--dry-run` checks every path and writes nothing.
+`--list-landed --tree <path>` prints the landed set scoped to that tree
+(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0, and
+no `--tree` is exit 2.
+
+#### land-artifacts.sh — the fail-closed modes
+
+`--strict` prints the same set, but exits 1 with empty stdout and one stderr line that never echoes
+the entry when any raw `landed_paths` entry scoped to that tree fails the path ladder or the
+alphabet. This script never writes such an entry, so one means a hand-edited ledger.
+`--check-path <path>` runs the path ladder alone, with no ledger: silent exit 0 when safe, exit 1
+printing `reason=<token>` when refused. The orchestrator's grant admits a call only when its first
+argument is `--producer`, `--consumer` or `--list-landed`, so every call leads with that argument.
+Scripts make the other calls: `fn-stream-merge.sh` and `blocked-on-dispatch.sh` pass `--strict`, and
+only the router calls `--check-path`.
+
+### land-artifacts.sh — exits
+
+Exits are 0, 1 or 2 only: an interrupting signal (INT, TERM, HUP) or an unexpected command failure
+rolls back what the run wrote and exits 2, so 1 is never a stray status. Exit `0`: landed, same
+tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a
+`blocked` one silently, any other non-`pending` one with one `warn` `contract_landed` row
+(`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
+`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
+refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). Exit 1 is
+also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage, a
+malformed id, a bad ledger, an invalid tree, a missing tool, a failed ledger write, or that signal
+or failure. Refusal reasons and the audit rows:
+`references/handoff-protocol.md § Landing consumed artifacts`.
+
 ### blocked-on-dispatch.sh and blocked-on-lib.sh
 
 | Script | One-line invocation | Purpose |
@@ -2279,8 +2427,9 @@ blocked-on-dispatch.sh --self-test
 
 Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
 unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
-written; for `resume`, a task not parked on a non-permission `blocked_on`, or a `--leg` that is not
-its arm's closing leg. `2`: usage error, missing or unparseable ledger, broken install, or a ledger
+written; for `resume`, a task not parked on a non-permission
+`blocked_on`, a `--leg` that is not its arm's closing leg, or `--leg landed` on an artifact `path`
+that the path ladder refuses or that has not landed. `2`: usage error, missing or unparseable ledger, broken install, or a ledger
 write refused. Requires jq; bash 3.2+.
 
 ### blocked-on-dispatch.sh — route
@@ -2295,11 +2444,21 @@ Normalizes and validates `--payload` through the lib, then acts on the arm the l
   `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
   and `decision_ref` on the row. A fail, a skip or an absent id parks it as a `user_action`.
 
+#### blocked-on-dispatch.sh — route, the artifact arm
+
+- `artifact`: parks first. When `detail.producer_task` is a task id, `detail.path` passes
+  `land-artifacts.sh --check-path`, and the landed set of the task's `metadata.workspace_path` tree
+  (`--list-landed --tree <workspace_path> --strict`) holds `detail.path` exactly, it claims, clears
+  `blocked_on`, writes one ok `landed` row with `decision_ref` `blocked_on:<ID>:artifact:<n>`, and
+  prints `resume_block` with `artifact_path` set to `detail.path`. No `workspace_path`, a failed
+  read, a refused path or a non-member leaves it parked as a `user_action`: a `requested` row with `fallback_from: artifact`
+  and no `owner_issue`. `BLOCKED_ON_LAND` swaps the landing script, a test seam.
+
 #### blocked-on-dispatch.sh — route stdout
 
 One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
 `fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
-re-probe. `leg` is `null` for `permission`. `source` names the key the need came from:
+re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from:
 `blocked_on`, or `cross_session_ask` for the legacy alias.
 
 ### blocked-on-dispatch.sh — batch
@@ -2328,6 +2487,11 @@ entries are `{kind, command_head, truncated}`.
 "instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the
 kind resumes with one. `instruction` restates the need, detail fenced, and forbids re-running any
 step that already completed.
+
+`--leg landed` resumes an `artifact` need: it re-checks `path` safety and landed-set membership
+first, exits 1 when the path has not landed, and otherwise claims, clears and writes the ok
+`landed` row with its `decision_ref`, printing the same stdout. `--leg verified`, the user's "done",
+still resumes it through the fallback.
 
 #### blocked-on-dispatch.sh — the lead lines
 
@@ -2368,11 +2532,11 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
 | user_action | requested, verified | verified | 394 | yes |
 | permission | denied, granted, resumed | resumed | 393 | yes |
 | peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | no |
-| artifact | landed | landed | 399 | no |
+| artifact | landed | landed | 399 | yes |
 | correction | opened, closed | closed | 404 | no |
 | host_environment | probed | probed | 390 | yes |
 
-A pending arm's fallback closes on `verified`. Required and optional keys and `resume_with` are
+Every fallback closes on `verified`; an `artifact` need also closes on `landed`. Required and optional keys and `resume_with` are
 `references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
 
 ## Related

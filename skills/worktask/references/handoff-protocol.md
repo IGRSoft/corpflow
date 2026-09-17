@@ -315,6 +315,18 @@ from a subagent land in the parent conversation`).
 A file another task produces, which this stage must read before it can continue. Its
 `artifact_path` is `detail.path`.
 
+##### Schema — blocked_on, the artifact arm's landed leg
+
+`route` parks the need, then reads the landed set only for a `path` the path ladder admits
+(`land-artifacts.sh --check-path`); a stage file under `.context/` never lands, so it always takes
+the fallback.
+When `path` is in the landed set of the task's `metadata.workspace_path` tree, read with `--strict`,
+the `landed` leg closes the need at once: one ok `landed` row carrying the `decision_ref`, and a
+`resume_block` with `artifact_path`. Otherwise it parks as a `user_action` fallback
+(`fallback_from: artifact`, no `owner_issue`, no `landed` row), and `resume --leg landed` closes it
+once the path has landed. The landing that puts it there is the `contract_landed` ok row
+(§ Landing — the audit row).
+
 #### Schema — blocked_on, the correction arm
 
 ```yaml
@@ -355,7 +367,8 @@ host need no probe covers is a `user_action`.
 
 For every arm but `permission`, `decision_ref` is `blocked_on:<task_id>:<kind>:<n>`, the
 `metadata.decision_ref` of the closing-leg `blocked_on` audit row. `blocked-on-dispatch.sh resume`
-appends and prints it; for a `host_environment` probe that passes, `route` does. `<kind>` is the
+appends and prints it; for a `host_environment` probe that passes, or an `artifact` path already
+landed, `route` does. `<kind>` is the
 stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the earlier closing
 rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
 its `artifact_path` is resolved as the arm above says and printed beside it.
@@ -1904,6 +1917,136 @@ replace the last line with:
 ```bash
   | .[] | ((.value.artifact // .value.metadata.artifact // empty) | split("/") | last) + "#files-changed"
 ```
+
+#### Landing consumed artifacts
+
+One DV row can consume a file another DV row produces, such as an interface contract, without the
+producer committing it. The rows declare the pair with `produces` and `consumes`
+(`skills/shared/state-ledger.md § Landing fields (DV rows)`):
+
+```text
+produces := tasks.<P>.metadata.produces = [path, ...]
+consumes := tasks.<C>.metadata.consumes = [{"from": "<P>", "paths": [path, ...]}, ...]
+path     := repo-relative, post-merge; alphabet [A-Za-z0-9._@+/-]
+rule     := C.blocked_by holds every from, and every path is in that producer's produces
+writer   := PL0, or TL when TL runs; never the DV agent
+source   := P's index blob: P runs `git add -- <path>` per produced path before its completion patch
+```
+
+C treats a landed path as read-only and never edits or stages it, because P's tree ships it.
+
+##### Landing — the two passes
+
+`skills/worktask/scripts/land-artifacts.sh` runs from two points in `skills/worktask/SKILL.md`:
+
+| Pass | Where | Call | Effect |
+|---|---|---|---|
+| Boundary | § Step 6.5d, once P is `completed`, before the next ready-filter pass | `--producer P` | Lands into every `pending` consumer's current tree; skips a `blocked` one, keeping its `landing_error`, and leaves any other status untouched with one `warn` row |
+| Gate | § Step 4.8, after any re-pin, before Step 5 stamps `in_progress` | `--consumer C` | Re-lands every pair of C into its final tree; an unchanged tree is a no-op that writes nothing |
+
+When P and C resolve to the same physical tree nothing is copied and no `landed_paths` are
+recorded; a boundary pass still writes its `same_tree` ok row.
+
+##### Landing — what one consumer's pass does
+
+1. **Preflight.** Every path of every pair of C is checked before the first write, so C lands all or
+   nothing.
+2. **Source.** Exactly one stage-0 index entry in P, mode `100644` or `100755`, no filter attribute,
+   no symlink on its way, and a worktree file unchanged since `git add`.
+3. **Destination.** Under C's physical root, every parent a real directory, the file untracked. A
+   tracked file is refused unless byte-identical (`already_present`, not recorded). An untracked one
+   with a different sha is refused unless C's `landed_paths` already lists it (a producer re-run).
+4. **Write.** The blob goes to a temp file beside the destination, is checked against its git
+   object id, then renamed into place and re-verified by sha256.
+5. **Record.** `landed_paths` and `landed_roots` (every spelling of C's tree) become sorted unions;
+   `landing_error` `null`.
+
+A refusal rolls back only files and directories this pass created.
+
+##### Landing — refusal reasons
+
+Each refusal writes exactly one `reason` into `landing_error` and the fail row:
+
+| Check | Reasons |
+|---|---|
+| Pair | `consumer_already_dispatched` (gate only), `producer_not_completed`, `not_blocked_on_producer`, `self_consume`, `bad_declaration`, `not_produced` |
+| Path shape | `bad_path`, `absolute_path`, `dotdot`, `reserved_segment`, `reserved_destination`, `control_char`, `leading_dash`, `unsafe_char` |
+| Source | `symlink_source`, `gitlink`, `not_staged`, `conflicted`, `filtered_path`, `staged_then_modified` |
+| Destination | `symlink_segment`, `not_dir`, `dest_escape`, `symlink_dest`, `dest_not_regular`, `dest_tracked`, `dest_exists` |
+| Copy | `sha256_mismatch`, `dest_race` |
+| Any git read | `git_error`, the read failed |
+| Gate, exit neither 0 nor 1 | `tool_error`, written by the orchestrator |
+
+###### Landing — reserved names
+
+`reserved_segment` is a segment equal to `.git` or `.context`; `reserved_destination` is one equal to
+`.claude`, `.github`, `.mcp.json`, `.envrc`, `.gitattributes` or `.gitmodules`. Both compare
+case-insensitively.
+
+##### Landing — exits and the audit row
+
+| Exit | Meaning |
+|---|---|
+| `0` | Landed, same tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
+| `1` | A consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
+| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, a failed ledger write, or an interrupting signal (INT, TERM, HUP) or unexpected command failure, after rolling back this run's writes. A ledger write for C that completed before the interruption stays: a `blocked` row fails closed, a `landed_paths` entry naming a rolled-back file is copied again on the next pass |
+
+No other exit exists: a signal or an unexpected command failure exits `2`, never a stray `1`, so
+exit 1 always means a `landing_error` recorded on a `blocked` row, or a refused `--check-path` or
+unsafe `--strict` entry (§ Landing — strict readers).
+
+###### Landing — the audit row
+
+Each row is `corpflow_audit_row` with actor `orchestrator`, action `contract_landed`, subject C:
+
+```text
+ok:   {"producer":"DV0","consumer":"DV1","mode":"copied","files":[{"path":"src/api.h","sha256":"<hex>"}]}
+warn: {"producer":"DV0","consumer":"DV1","reason":"consumer_not_pending","status":"completed","paths":["src/api.h"]}
+fail: {"producer":"DV0","consumer":"DV1","reason":"dest_tracked","path":"src/api.h"}
+```
+
+`mode` is `copied`, `same_tree` or `already_present`. A lost audit row warns on stderr and never
+changes the exit code.
+
+###### Landing — a consumer that already ran
+
+A producer re-run, such as a DR rework, can reach a consumer that is `in_progress`, `completed`,
+`failed` or `skipped`. A boundary pass writes no file and no ledger field for that row, exits 0, and
+writes the one `warn` row above, so a rework never flips a dispatched stream to `blocked`. The gate
+still refuses such a row with `consumer_already_dispatched` (exit 1). `--dry-run` writes no row.
+
+##### Landing — release and readiness
+
+On a gate exit other than 0 or 1 the orchestrator writes `landing_error {reason: "tool_error"}`,
+then `--task-status C blocked`; at the boundary that exit is reported only. Release, once the cause is fixed:
+
+```bash
+state-patch.sh --task-meta C --set '{"landing_error":null}'
+state-patch.sh --task-status C pending
+```
+
+Until then C is not ready: the ready filter (`skills/worktask/SKILL.md § Readiness is mechanical`)
+selects `pending` rows only, so for a `blocked` C this prints nothing:
+
+```bash
+jq -r --arg c DV1 '.tasks as $t | $t | to_entries[]
+  | select(.value.status == "pending")
+  | select([(.value.blocked_by // [])[] | $t[.].status] | all(. == "completed"))
+  | .key | select(. == $c)' .context/state.json
+```
+
+##### Landing — strict readers
+
+`land-artifacts.sh --list-landed --tree <tree> --strict` prints the same set as the plain call
+(`skills/shared/state-ledger.md § The landed set`), but exits 1 with empty stdout when any raw
+`landed_paths` entry scoped to that tree fails the path ladder: not a string, a control character,
+or a lexical refusal (§ Landing — refusal reasons). The script never writes such an entry, so one
+means a hand-edited ledger, and a strict reader fails closed instead of dropping it. Two readers are
+strict. `fn-stream-merge.sh` reads each stream's own tree set, never a union: an unsafe entry is
+`blocked reason=landed_path_unsafe`, a failed read `landed_set_unreadable`. The `blocked_on`
+`artifact` arm reads the parked task's tree (§ Schema — blocked_on, the artifact arm's landed leg).
+`--check-path <path>` runs the same ladder with no ledger, silent exit 0 when safe and exit 1 with
+`reason=<token>` when refused; the router runs it on `detail.path`.
 
 ### Run-index resolution
 

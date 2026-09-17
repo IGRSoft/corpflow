@@ -99,7 +99,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
 #### Procedure
 
 1. **Inputs**: `state.json` facts first. **AR ran** (a `tasks.AR0` entry exists) → read the `handoff:` frontmatter of `architecture-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `architecture-*.md`) and anchor-read `architecture-N.md#decisions` to identify work streams. **AR excluded** → derive the streams from the plan alone and skip every architecture read. **Only when** AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
-2. Per stream, define: exclusive file ownership list, interface contracts, acceptance criteria
+2. Per stream, define: exclusive file ownership list, interface contracts, acceptance criteria, and any file it hands another stream (Step 5 declarations)
 
 ##### Steps 3-4: Locate and Narrow DV0
 
@@ -120,7 +120,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
    DV0_META=$(jq -c '.tasks.DV0.metadata' .context/state.json)
    bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-create "DV${N}" --metadata "$(jq -n \
      --argjson m "$DV0_META" --arg slug "$STREAM_SLUG" --arg desc "$STREAM_SCOPE" \
-     '$m + {description:$desc, stream:$slug,
+     '($m | del(.produces, .consumes)) + {description:$desc, stream:$slug,
             artifact:".context/development-\($m.run_index)-\($slug).md"}')"
    ```
 ##### Step 5 field notes
@@ -129,11 +129,16 @@ The clone is what keeps the row valid: `--task-create` refuses a row missing `ef
 
 `$STREAM_SCOPE` is that stream's scope, file ownership, interface contracts and acceptance criteria. Leave `workspace_path` as DV0's cloned path; TL never creates a worktree. The orchestrator re-pins a parallel stream to its own worktree at dispatch, so whether a stream gets its own tree follows from the `blocked_by` edges you wire in Steps 6-8 (rule: `skills/worktask/references/handoff-protocol.md § Pinning a row's tree`).
 
+##### Step 5 declarations
+
+A file one stream writes and another reads is declared on both rows, inside the object that row's step already writes: DV0's Step 4 `--set`, or a stream's Step 5 `--task-create --metadata`. The producer carries `produces` (`["<path>", …]`), the consumer `consumes` (`[{from: "DV<n>", paths: ["<path>"]}]`). Each path names one file, post-merge repo-relative, using only `[A-Za-z0-9._@+/-]`. The Step 5 clone drops DV0's declarations, so a stream never inherits them.
+
 ##### Steps 6-8: Wire Dependencies and Document
 
-6. Block each new DVN on TL0, not on DV0 — they run in parallel:
+6. Block each new DVN on TL0, not on DV0 — they run in parallel. A row with `consumes` is also blocked on each producer it names, DV0 included (`--task-block` unions):
    ```bash
    bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block "DV${N}" --on TL0
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block "$CONSUMER" --on "$PRODUCER"   # once per consumes[].from
    ```
 7. Rewire DR0 to wait for ALL DV tasks (`--task-block` unions, so DR0's existing DV0 edge survives):
    ```bash
@@ -145,7 +150,7 @@ The clone is what keeps the row valid: `--task-create` refuses a row missing `ef
 
 #### File Ownership Rules
 
-Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary.
+Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary. A contract file one stream produces for another is declared `produces`/`consumes` (Step 5 declarations) with the consumer blocked on its producer (Step 6), and landing it into the consumer's tree is automatic (`skills/worktask/references/handoff-protocol.md § Landing consumed artifacts`).
 
 ### Multi-Reviewer Coordination
 
