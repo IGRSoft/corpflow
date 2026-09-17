@@ -2548,6 +2548,51 @@ _mk_mkdir_shim() { # <post-mkdir-body>
   [ -d .context/state.json.lock.d ] || fail "the foreign lock was removed"
 }
 
+# --- facts.stream_branches: object keyed by stream, union by key ---------------------------
+
+@test "facts: stream_branches unions by stream key and leaves facts.branch byte-equal" {
+  cd "$WD"
+  jq '.facts.branch = "feature/398-combined"' .context/state.json > s && mv s .context/state.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"stream_branches":{"service":"feature/s-service"}}'
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"stream_branches":{"web":"feature/s-web"}}'
+  assert_success
+  run jq -c '.facts.stream_branches' .context/state.json
+  assert_output '{"service":"feature/s-service","web":"feature/s-web"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"stream_branches":{"web":"feature/s-web-2"}}'
+  assert_success
+  run jq -c '.facts.stream_branches' .context/state.json
+  assert_output '{"service":"feature/s-service","web":"feature/s-web-2"}'
+  run jq -r '.facts.branch' .context/state.json
+  assert_output "feature/398-combined"
+}
+
+@test "facts: a bad stream_branches key or value exits 2 with the ledger byte-unchanged" {
+  cd "$WD"
+  cp .context/state.json snap
+  local payload
+  for payload in '{"stream_branches":{"web":"bad branch"}}' \
+                 '{"stream_branches":{"Web":"feature/x"}}' \
+                 '{"stream_branches":{"web":7}}' \
+                 '{"stream_branches":["feature/x"]}' \
+                 '{"files_modified":["a.sh"],"stream_branches":{"web":"-x y"}}'; do
+    run bash "$PLUGIN_ROOT/$SCRIPT" --facts "$payload"
+    assert_failure 2
+    assert_output --partial "invalid stream_branches"
+    run cmp -s .context/state.json snap
+    assert_success
+  done
+}
+
+@test "facts: an empty stream_branches object is a no-op" {
+  cd "$WD"
+  cp .context/state.json snap
+  run bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"stream_branches":{}}'
+  assert_success
+  run cmp -s .context/state.json snap
+  assert_success
+}
+
 # ---------------------------------------------------------------------------
 # tests_executed mirror and rework_runs. The row mirrors the current artifact's list; a
 # --task-replay marks a row holding evidence, and the next completion merge files the

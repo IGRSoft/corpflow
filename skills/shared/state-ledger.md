@@ -157,9 +157,19 @@ rewrites that path, and a copy left in the old tree must stay excluded there. An
 | Reader | `$root` |
 |--------|---------|
 | Script transports (fn-preflight base-sanity, `skills/worktask/SKILL.md` Step 4.7a) | `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`. `--tree` is required (exit 2 without it); the script matches the tree's physical path |
+| `fn-stream-merge.sh` | `--list-landed --tree <tree> --strict`, each stream's `<tree>` from `plan`, never a union |
+| `blocked-on-dispatch.sh` (`artifact` arm) | `--list-landed --tree <workspace_path> --strict`, the parked task's `metadata.workspace_path` |
 | `hooks/dv-comment-density-gate.sh` | Its physical `_root`, resolved with `cd -P` and `pwd -P` |
-| `agents/project-manager.md` (FN scope check) | `git rev-parse --show-toplevel` |
-| `agents/technical-lead.md` (DR untracked check) | The exact string it gave `git -C` |
+
+`--strict` fails closed on an entry the path ladder refuses instead of dropping it; the FN arm and
+the artifact arm use it.
+
+##### The landed set — each agent's root
+
+| Reader | `$root` |
+|--------|---------|
+| `agents/project-manager.md` (FN scope check) | Single tree: `git rev-parse --show-toplevel`. Multi-stream arm: the stream's `<tree>` from `fn-stream-merge.sh plan` |
+| `agents/technical-lead.md` (DR untracked check) | The DV row's `metadata.workspace_path` as the ledger holds it, else the orchestrator's `git rev-parse --show-toplevel` |
 | Any reader with no tree to hand | `--arg root ""`, which matches no row: the set is empty, never the union over every tree |
 
 ##### The landed set — subtracting it
@@ -414,6 +424,12 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `preexisting_plan` | orchestrator → PL agent | Absolute path to a user-approved plan supplied at init; PL0 adopts it verbatim and reuses its anchors |
 | `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
 | `with_design` | `--with-design` → `skills/worktask/references/pl0-procedure.md § Designer Invocation` | When `true`, PL0 invokes `corpflow:designer`; otherwise Designer is skipped even for UI work and the keyword score stays advisory. No component stamps the field, so the gate reads absent on every run. |
+
+### Release fields
+
+| Field | Writer → Reader | Description |
+|-------|-----------------|-------------|
+| `release_tag` | `state-patch.sh --ledger-meta --set '{"release_tag":"<tag>"}'` → release engineer (`changelog-from-git.sh --tag`) | The tag this release is cut under. Absent or empty ⇒ no changelog, PR or summary text names a tag |
 
 ### Issue publishing field
 

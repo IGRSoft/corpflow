@@ -235,15 +235,24 @@ so they are exempt.
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| Stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in **this** (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the `ok` leg. Absent → still outstanding; do **not** re-delegate and do **not** re-ask (a second send duplicates the question to the peer) |
+| Stage `blocked` with `metadata.blocked_on` of a kind other than `permission` | A `blocked_on` row with `result: "blocked"` and no later closing-leg row for that `task_id` | Parked on a typed need (`SKILL.md § Step 6.5a3`). Do **not** re-delegate, and do **not** call `route` again: a second call writes a second opening leg. Re-enter the loop; § Step 7a's `blocked-on-dispatch.sh batch` asks the user at the next boundary |
+
+#### Reply routing — the legacy cross_session_ask row
+
+Runs already in flight may still hold rows of the legacy alias; new returns route through `blocked_on` above.
+
+| Ledger Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| Legacy alias: stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in **this** (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the closing leg as a `blocked_on` row of kind `peer_session`; the legacy row is read-only and no new `cross_session_ask` row is ever written (`agent-coordination/SKILL.md § Writers — blocked_on rows`). Absent → still outstanding; do **not** re-delegate and do **not** re-ask (a second send duplicates the question to the peer) |
 
 #### Reply routing — why the stage cannot ask for itself
 
 A subagent's `SendMessage` to another **session** delivers its reply to the parent session's
 conversation, so a stage agent that sends its own cross-session ask can never receive the answer —
-it would wait forever. The stage names who to ask and what; the orchestrator owns the send. Rule
-and schema: `agent-coordination/SKILL.md § Replies from a subagent land in the parent conversation`
-and `handoff-protocol.md § Schema — open_questions, refs, constraints`.
+it would wait forever. The stage returns `blocked_on` of kind `peer_session` naming who to ask and
+what; the orchestrator routes it, and until #405 lands asks the user to relay the reply. Rule and
+schema: `agent-coordination/SKILL.md § Replies from a subagent land in the parent conversation`
+and `handoff-protocol.md § Schema — blocked_on, the peer_session arm`.
 
 A stage that sent its own ask before this rule existed has no path to the answer. Treat it like
 `stage_returned_incomplete` and reattach so the ask is redone through the orchestrator.
@@ -272,7 +281,7 @@ A stage that sent its own ask before this rule existed has no path to the answer
 
    `ListAgents`/`claude agents --json` now lists live **teammates** (previously invisible, so a
    reachable teammate read as absent) and tells a session **its own name** — the address peers use,
-   and the one to avoid when constructing a `cross_session_ask` so a stage does not address itself.
+   and the one to avoid when constructing a `peer_session` ask so a stage does not address itself.
    The pre-warmed idle worker no longer appears until a task claims it, removing a phantom row from
    the best-effort `subagent_type` match in § Degrade rules — absent or terminal rows.
 

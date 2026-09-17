@@ -9,6 +9,10 @@
 # @arg --file PATH        Read pre-fetched commits from a file: NUL-separated whole
 #                         messages, or one subject per line when it contains no NUL
 # @arg --repo PATH        Path to git repo (default: current directory)
+# @arg --streams PATH     Per-stream entries instead of commits: one "<stream><TAB><entry>"
+#                         per line, rendered as "### <stream>" then "#### <Section>" blocks
+#                         in first-seen stream order. Excludes <git-range> and --file.
+# @arg --tag NAME         Adds a "Tag: `NAME`" line under the header; empty adds nothing
 # @arg --self-test        Run built-in tests against a temp repo (no network)
 # @exitcode 0  Success — markdown written to stdout
 # @exitcode 1  Usage error or git failure
@@ -37,6 +41,9 @@ fi
 # ---------------------------------------------------------------------------
 _SECTIONS=("Added" "Changed" "Deprecated" "Removed" "Fixed" "Security" "Other")
 _BUCKET_DIR=""
+# Where section_append writes; streams mode re-points it per stream.
+_BUCKET_PATH=""
+_STREAM_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
 
 # ---------------------------------------------------------------------------
 # init_buckets — create temp dir for section files; register EXIT cleanup.
@@ -44,12 +51,27 @@ _BUCKET_DIR=""
 # ---------------------------------------------------------------------------
 init_buckets() {
   _BUCKET_DIR="$(mktemp -d)"
+  _BUCKET_PATH="$_BUCKET_DIR"
   # shellcheck disable=SC2064  # we intentionally expand _BUCKET_DIR now
   trap "rm -rf '${_BUCKET_DIR}'" EXIT
   local s
   for s in "${_SECTIONS[@]}"; do
     : > "${_BUCKET_DIR}/${s}"
   done
+}
+
+# use_stream_bucket <stream> — points section_append at that stream's buckets,
+# creating them and recording first-seen order on first use.
+use_stream_bucket() {
+  local dir="${_BUCKET_DIR}/streams/$1" s
+  if [[ ! -d "$dir" ]]; then
+    mkdir -p "$dir"
+    for s in "${_SECTIONS[@]}"; do
+      : > "${dir}/${s}"
+    done
+    printf '%s\n' "$1" >> "${_BUCKET_DIR}/.stream-order"
+  fi
+  _BUCKET_PATH="$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -60,7 +82,7 @@ init_buckets() {
 section_append() {
   local name="$1"
   local entry="$2"
-  printf '%s\n' "$entry" >> "${_BUCKET_DIR}/${name}"
+  printf '%s\n' "$entry" >> "${_BUCKET_PATH}/${name}"
 }
 
 # ---------------------------------------------------------------------------
@@ -109,35 +131,103 @@ parse_and_bucket() {
 }
 
 # ---------------------------------------------------------------------------
-# render_sections <version> <date>
-# Writes Keep-a-Changelog markdown to stdout from the current bucket files.
+# render_header <version> <date> <tag>
 # ---------------------------------------------------------------------------
-render_sections() {
-  local version="$1" date="$2"
+render_header() {
+  local version="$1" date="$2" tag="$3"
 
   if [[ "$version" == "Unreleased" ]]; then
     printf '## [Unreleased]\n'
   else
     printf '## [%s] - %s\n' "$version" "$date"
   fi
+  if [[ -n "$tag" ]]; then
+    # shellcheck disable=SC2016  # literal markdown backticks, not a command substitution
+    printf '\nTag: `%s`\n' "$tag"
+  fi
+}
 
+# ---------------------------------------------------------------------------
+# render_buckets <dir> <heading-prefix>
+# Writes one heading plus entry list per non-empty section file in <dir>.
+# Returns 1 when every section was empty.
+# ---------------------------------------------------------------------------
+render_buckets() {
+  local dir="$1" prefix="$2"
   local has_content=0
   local section bucket entry
   for section in "${_SECTIONS[@]}"; do
-    bucket="${_BUCKET_DIR}/${section}"
+    bucket="${dir}/${section}"
     # Skip empty bucket files
     [[ -s "$bucket" ]] || continue
     has_content=1
-    printf '\n### %s\n' "$section"
+    printf '\n%s %s\n' "$prefix" "$section"
     while IFS= read -r entry; do
       [[ -z "$entry" ]] && continue
       printf '%s\n' "- ${entry}"
     done < "$bucket"
   done
+  [[ "$has_content" -eq 1 ]]
+}
 
-  if [[ "$has_content" -eq 0 ]]; then
+# ---------------------------------------------------------------------------
+# render_sections <version> <date> <tag>
+# Writes Keep-a-Changelog markdown to stdout from the current bucket files.
+# ---------------------------------------------------------------------------
+render_sections() {
+  render_header "$1" "$2" "$3"
+  if ! render_buckets "$_BUCKET_DIR" '###'; then
     printf '\n_(no changelog-worthy commits in this range)_\n'
   fi
+}
+
+# ---------------------------------------------------------------------------
+# render_streams <version> <date> <tag>
+# ---------------------------------------------------------------------------
+render_streams() {
+  render_header "$1" "$2" "$3"
+  local order="${_BUCKET_DIR}/.stream-order" stream
+  if [[ ! -s "$order" ]]; then
+    printf '\n_(no changelog-worthy entries in these streams)_\n'
+    return 0
+  fi
+  while IFS= read -r stream; do
+    [[ -n "$stream" ]] || continue
+    printf '\n### %s\n' "$stream"
+    if ! render_buckets "${_BUCKET_DIR}/streams/${stream}" '####'; then
+      printf '\n_(no changelog-worthy entries in this stream)_\n'
+    fi
+  done < "$order"
+}
+
+# ---------------------------------------------------------------------------
+# bucket_streams_file <path>
+# Buckets "<stream><TAB><entry>" lines. A stream name becomes a markdown heading
+# and a directory name, so anything outside the kebab grammar is refused.
+# ---------------------------------------------------------------------------
+bucket_streams_file() {
+  local file="$1" line stream entry n=0
+  if [[ ! -r "$file" ]]; then
+    printf >&2 'error: cannot read file: %s\n' "$file"
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    [[ -n "${line//[[:space:]]/}" ]] || continue
+    if [[ "$line" != *$'\t'* ]]; then
+      printf >&2 'error: --streams line %d has no TAB separator\n' "$n"
+      return 1
+    fi
+    stream="${line%%$'\t'*}"
+    entry="${line#*$'\t'}"
+    if [[ ! "$stream" =~ $_STREAM_RE ]] || [[ "${#stream}" -gt 40 ]]; then
+      printf >&2 'error: --streams line %d: invalid stream name: %s\n' "$n" "$stream"
+      return 1
+    fi
+    use_stream_bucket "$stream"
+    parse_and_bucket "$entry"
+  done < "$file"
+  _BUCKET_PATH="$_BUCKET_DIR"
 }
 
 # ---------------------------------------------------------------------------
@@ -147,6 +237,7 @@ usage() {
   cat >&2 << USAGE
 Usage: changelog-from-git.sh [--repo PATH] <git-range> [--version V] [--date D]
        changelog-from-git.sh --file PATH [--version V] [--date D]
+       changelog-from-git.sh --streams PATH [--version V] [--date D] [--tag NAME]
        changelog-from-git.sh --self-test
 
 Options:
@@ -156,6 +247,10 @@ Options:
   --date DATE        Date for section header (YYYY-MM-DD).  Default: today
   --file PATH        Read commits from file instead of git: NUL-separated whole
                      messages, or one subject per line if it holds no NUL.
+  --streams PATH     Read "<stream><TAB><entry>" lines instead of commits; output is
+                     grouped "### <stream>" then "#### <Section>". Excludes
+                     <git-range> and --file.
+  --tag NAME         Add a "Tag: \`NAME\`" line under the header. Empty adds nothing.
   --self-test        Run built-in tests against a temp repo (no network).
 
 Output: Keep-a-Changelog markdown section written to stdout.
@@ -168,6 +263,7 @@ USAGE
 # ---------------------------------------------------------------------------
 main() {
   local range="" version="Unreleased" date="" input_file="" repo_path=""
+  local streams_file="" tag=""
 
   date="$(date +%Y-%m-%d)"
 
@@ -210,6 +306,16 @@ main() {
         repo_path="$2"
         shift 2
         ;;
+      --streams)
+        [[ $# -lt 2 ]] && usage
+        streams_file="$2"
+        shift 2
+        ;;
+      --tag)
+        [[ $# -lt 2 ]] && usage
+        tag="$2"
+        shift 2
+        ;;
       --help | -h)
         usage
         ;;
@@ -234,13 +340,29 @@ main() {
   done
 
   # Validate
-  if [[ -z "$input_file" && -z "$range" ]]; then
+  if [[ -n "$streams_file" ]]; then
+    if [[ -n "$input_file" || -n "$range" ]]; then
+      printf >&2 'error: --streams excludes a git range and --file\n'
+      usage
+    fi
+  elif [[ -z "$input_file" && -z "$range" ]]; then
     printf >&2 'error: git range required (or --file)\n'
+    usage
+  fi
+  # The tag lands inside a markdown code span, so a backtick or newline would break out of it.
+  if [[ -n "$tag" && ! "$tag" =~ ^[A-Za-z0-9._/+-]+$ ]]; then
+    printf >&2 'error: --tag contains unsafe characters: %s\n' "$tag"
     usage
   fi
 
   # Initialise section buckets (temp files; EXIT trap wired inside)
   init_buckets
+
+  if [[ -n "$streams_file" ]]; then
+    bucket_streams_file "$streams_file"
+    render_streams "$version" "$date" "$tag"
+    return 0
+  fi
 
   # Staged through a file so a git or read failure aborts here; a process
   # substitution would swallow it and render an empty-but-successful changelog.
@@ -252,7 +374,7 @@ main() {
     parse_and_bucket "$msg"
   done < "$records"
 
-  render_sections "$version" "$date"
+  render_sections "$version" "$date" "$tag"
 }
 
 main "$@"

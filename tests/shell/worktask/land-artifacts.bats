@@ -45,6 +45,7 @@
 #   skills/shared/state-ledger.md
 #   skills/worktask/references/handoff-protocol.md
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+bats_require_minimum_version 1.5.0
 
 SCRIPT="skills/worktask/scripts/land-artifacts.sh"
 FN_SCRIPT="skills/worktask/scripts/fn-preflight.sh"
@@ -576,6 +577,118 @@ assert_refused() {
   assert_equal "$output" "good.yaml"
 }
 
+# ---------------------------------------------------------------------------
+# --check-path: sole mode, no ledger read and no git call
+# ---------------------------------------------------------------------------
+
+@test "contract: --check-path accepts a safe relative path, silent, exit 0" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path "docs/api.md"
+  assert_equal "$status" 0
+  assert_equal "$output" ""
+}
+
+@test "contract: --check-path refuses a parent-traversal segment" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path "../x"
+  assert_equal "$status" 1
+  assert_equal "$output" "reason=dotdot"
+}
+
+@test "contract: --check-path refuses an absolute path" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path "/abs"
+  assert_equal "$status" 1
+  assert_equal "$output" "reason=absolute_path"
+}
+
+@test "contract: --check-path refuses a reserved destination segment" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path ".git/config"
+  assert_equal "$status" 1
+  assert_equal "$output" "reason=reserved_segment"
+}
+
+@test "contract: --check-path refuses a leading-dash segment" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path "-x"
+  assert_equal "$status" 1
+  assert_equal "$output" "reason=leading_dash"
+}
+
+@test "contract: --check-path refuses an embedded space" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path "a b"
+  assert_equal "$status" 1
+  assert_equal "$output" "reason=unsafe_char"
+}
+
+@test "contract: --check-path with no value exits 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path
+  assert_equal "$status" 2
+}
+
+@test "contract: --check-path combined with --list-landed exits 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check-path a --list-landed --tree "$WD"
+  assert_equal "$status" 2
+}
+
+# ---------------------------------------------------------------------------
+# --list-landed --strict
+# ---------------------------------------------------------------------------
+
+@test "contract: --list-landed --strict prints the same lines as non-strict for a clean set" {
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = ["b.yaml", "a.yaml"]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --strict --state "$STATE"
+  assert_equal "$status" 0
+  assert_equal "$output" "$(printf 'a.yaml\nb.yaml')"
+}
+
+@test "contract: --list-landed --strict refuses a dotdot entry scoped to the tree, empty stdout" {
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = ["../x"]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --strict --state "$STATE"
+  assert_equal "$status" 1
+  assert_equal "$output" ""
+  [ -n "$stderr" ]
+}
+
+@test "contract: --list-landed --strict refuses an entry holding an embedded newline" {
+  jq --arg c "$C_REAL" --arg nl "$(printf 'a\nb')" \
+    '(.tasks.DV1.metadata.landed_paths) = [$nl]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --strict --state "$STATE"
+  assert_equal "$status" 1
+  assert_equal "$output" ""
+}
+
+@test "contract: --list-landed --strict refuses a non-string landed_paths entry" {
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = [1]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --strict --state "$STATE"
+  assert_equal "$status" 1
+  assert_equal "$output" ""
+}
+
+@test "contract: --list-landed --strict ignores an unsafe entry scoped to a different tree" {
+  jq --arg p "$P_REAL" --arg c "$C_REAL" \
+    '(.tasks.DV0.metadata.landed_paths) = ["../x"]
+     | (.tasks.DV0.metadata.landed_roots) = [$p]
+     | (.tasks.DV1.metadata.landed_paths) = ["ok.yaml"]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --strict --state "$STATE"
+  assert_equal "$status" 0
+  assert_equal "$output" "ok.yaml"
+}
+
+@test "contract: --strict without --list-landed exits 2" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --strict --state "$STATE"
+  assert_equal "$status" 2
+}
+
 @test "contract: --dry-run writes nothing to disk, the ledger or the audit log" {
   local before_sum after_sum
   before_sum=$(shasum -a 256 < "$STATE")
@@ -635,6 +748,20 @@ assert_refused() {
   grep -qE -- '--list-landed|landed_paths' \
     "$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh"
   [ -e "$PLUGIN_ROOT/skills/worktask/scripts/land-artifacts-selftest.sh" ]
+}
+
+@test "contract: fn-stream-merge.sh and blocked-on-dispatch.sh name the strict per-tree landed transport" {
+  local f
+  for f in skills/worktask/scripts/fn-stream-merge.sh skills/worktask/scripts/blocked-on-dispatch.sh; do
+    grep -q -- '--list-landed' "$PLUGIN_ROOT/$f"
+    grep -q -- '--strict' "$PLUGIN_ROOT/$f"
+  done
+  run grep -F -- '.metadata.landed_paths // [] | .[] | strings]' \
+    "$PLUGIN_ROOT/skills/worktask/scripts/fn-stream-merge.sh"
+  assert_failure
+  run grep -F -- '.landed_roots' \
+    "$PLUGIN_ROOT/skills/worktask/scripts/fn-stream-merge.sh"
+  assert_failure
 }
 
 @test "contract: fn-preflight base-sanity drops an untracked landed file from its working-tree count" {

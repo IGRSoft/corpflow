@@ -67,6 +67,52 @@ A message from the orchestrator to your stage opens with a `msg_id:` line, a `su
 
 An unacknowledged message reads as not delivered, and a missing or different `acted_on_msg_id` reads as a mismatch. Either one costs a resend, then escalation (`skills/worktask/references/resume.md § Reattach rows — one resend, then escalate`). If the ack exits non-zero, still follow the message and name the exit code in the artifact.
 
+### A need you cannot meet is returned as blocked_on
+
+When the stage cannot continue without something it cannot produce itself, stop at that step and
+return `verdict: blocked` with one `handoff.blocked_on` whose `kind` names the need
+(`handoff-protocol.md § Schema — blocked_on`, one arm per kind):
+
+- a choice only the user can make: `user_decision`; something only the user can do: `user_action`
+- a denied tool call: `permission` (below); another session's answer: `peer_session`
+- another task's file: `artifact`; a defect in upstream work: `correction` (`#tpl-dc`)
+- a failing autonomy-preflight check: `host_environment`
+
+List the steps that already completed in the artifact body. The orchestrator routes every kind
+(`skills/worktask/SKILL.md § Step 6.5a3`) and resumes the stage with what `resume_with` names.
+`cross_session_ask` is the legacy alias of `peer_session`; new returns write `blocked_on`.
+
+#### A need you cannot meet — never routed by the stage
+
+Waiting inline, asking in prose, messaging another session or editing another task's files each
+routes the need by hand, where no ledger row or audit leg records it. One observed run did that for
+a screenshot need, a host file, a merge denial and a cross-session ask. Return the need instead.
+
+#### A need you cannot meet — the blocked_on shape
+
+<examples>
+<example>
+
+```yaml
+  blocked_on:
+    kind: user_action
+    detail: { request: "Boot the iPhone 16 simulator; capture needs a running device", command: "xcrun simctl boot 'iPhone 16'", verify: "xcrun simctl list devices booted" }
+    resume_with: decision_ref
+```
+
+</example>
+<example>
+
+```yaml
+  blocked_on:
+    kind: host_environment
+    detail: { check: gh-pr-create, observed: "gh auth status: not logged in to github.com" }
+    resume_with: decision_ref
+```
+
+</example>
+</examples>
+
 ### A permission denial is returned, not worked around
 
 When Claude Code's auto-mode classifier denies a tool call, stop at that step and return

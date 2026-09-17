@@ -1,0 +1,450 @@
+#!/usr/bin/env bats
+# Tests for skills/worktask/scripts/blocked-on-dispatch.sh — route, batch and resume for a typed
+# handoff.blocked_on return — against the fixtures under tests/fixtures/worktask/blocked-on/.
+load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+
+SCRIPT="skills/worktask/scripts/blocked-on-dispatch.sh"
+SELFTEST="skills/worktask/scripts/blocked-on-dispatch-selftest.sh"
+LIB="skills/worktask/scripts/blocked-on-lib.sh"
+PARK="skills/worktask/scripts/permission-park.sh"
+PREFLIGHT="skills/worktask/scripts/autonomy-preflight.sh"
+FIX="${FIXTURES}/worktask/blocked-on"
+
+setup() {
+  WD="$(mk_tmpworkdir)"
+  mkdir -p "$WD/.context/logs"
+  STATE="$WD/.context/state.json"
+  AUDIT="$WD/.context/logs/audit.jsonl"
+  cp "$FIX/state.blocked-on.json" "$STATE"
+  unset MILESTONE_MODE BLOCKED_ON_PREFLIGHT BLOCKED_ON_LAND
+}
+
+# _bo <subcommand> [args...] — the router against this test's ledger, stdout and stderr apart.
+_bo() {
+  local sub="$1"
+  shift
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" "$sub" --state "$STATE" "$@"
+}
+
+_route() {
+  _bo route --task-id "$1" --payload "$(cat "$FIX/$2.handoff.json")"
+}
+
+_rows() {
+  [ -f "$AUDIT" ] || { echo 0; return 0; }
+  jq -nR --arg a "${1:-blocked_on}" '[inputs | fromjson? | select(.action == $a)] | length' "$AUDIT"
+}
+
+_ledger_jq() {
+  jq "$1" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+}
+
+# _stub_preflight <check-id> <status> — a preflight double that reports one check, so the probe's
+# verdict is the test's choice rather than the host's.
+_stub_preflight() {
+  local rj
+  rj="$(jq -cn --arg c "$1" --arg s "$2" \
+    '{version: 1, result: "fail", ran_at: "unknown", platforms: [], checks: [{id: $c, kind: "permission", status: $s, detail: "stub"}], tools_absent: []}')"
+  stub_cmd preflight --stdout "result_json=$rj"
+  export BLOCKED_ON_PREFLIGHT="$STUB_BIN/preflight"
+}
+
+_assert_audit_clean() {
+  local needle
+  [ -f "$AUDIT" ] || return 0
+  for needle in "$@"; do
+    ! grep -qF -- "$needle" "$AUDIT" || fail "audit.jsonl leaks: $needle"
+  done
+}
+
+# _land_stub <landed-path> [list-landed-exit] — a BLOCKED_ON_LAND double so the artifact arm's
+# landed verdict is this test's choice, not land-artifacts.sh's. --check-path refuses only a
+# ../-prefixed path (dotdot), so a case controls unsafety by the path it sends; --list-landed
+# ignores --tree/--state and answers from the one fixed path baked in here. Every call's mode word
+# ($1) appends to land-calls.log, so a case can assert --list-landed was never reached.
+_land_stub() {
+  local landed="$1" rc="${2:-0}"
+  LAND_STUB="$WD/land-stub.sh"
+  LAND_CALLS="$WD/land-calls.log"
+  : > "$LAND_CALLS"
+  cat > "$LAND_STUB" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$1" >> "$LAND_CALLS"
+case "\$1" in
+  --check-path)
+    case "\$2" in
+      ../*) printf 'reason=dotdot\n'; exit 1 ;;
+      *) exit 0 ;;
+    esac
+    ;;
+  --list-landed)
+    printf '%s\n' "$landed"
+    exit $rc
+    ;;
+esac
+EOF
+  chmod +x "$LAND_STUB"
+  export BLOCKED_ON_LAND="$LAND_STUB"
+}
+
+# --- route -------------------------------------------------------------------------
+
+@test "route: a permission return names the permission arm and writes nothing; the park writes the one denied row" {
+  local before
+  before="$(cat "$STATE")"
+  _route FN0 permission
+  assert_success
+  jq -e '.arm == "permission" and .kind == "permission" and .leg == null and .source == "blocked_on"
+    and .parked == false and .audit_row_written == false' <<< "$output"
+  [ "$(cat "$STATE")" = "$before" ] || fail "route changed the ledger for a permission need"
+  [ ! -f "$AUDIT" ] || fail "route wrote an audit row for a permission need"
+
+  run --separate-stderr bash "$PLUGIN_ROOT/$PARK" park --state "$STATE" --task-id FN0 \
+    --detail "$(jq -c '.blocked_on.detail' "$FIX/permission.handoff.json")"
+  assert_success
+  [ "$(_rows permission_denied)" = 1 ] || fail "expected exactly one permission_denied row, got $(_rows permission_denied)"
+  [ "$(_rows blocked_on)" = 0 ] || fail "the permission arm must write no blocked_on row"
+}
+
+@test "route: a correction return (owner #404 unlanded) parks as a user_action with one requested row" {
+  _route DC0 correction
+  assert_success
+  jq -e '.task_id == "DC0" and .kind == "correction" and .arm == "user_action" and .leg == "requested"
+    and .fallback_from == "correction" and .owner_issue == 404 and .source == "blocked_on"
+    and .parked == true and .audit_row_written == true' <<< "$output"
+  run jq -e --slurpfile h "$FIX/correction.handoff.json" \
+    '.tasks.DC0.status == "blocked" and .tasks.DC0.metadata.blocked_on == $h[0].blocked_on' "$STATE"
+  assert_success
+  [ "$(_rows)" = 1 ] || fail "expected one blocked_on row, got $(_rows)"
+  run jq -e 'select(.action == "blocked_on")
+    | .actor == "orchestrator" and .subject == "DC0" and .task_id == "DC0" and .result == "blocked"
+    and (.metadata | keys_unsorted) == ["kind", "arm", "leg", "fallback_from", "owner_issue"]
+    and .metadata == {kind: "correction", arm: "user_action", leg: "requested", fallback_from: "correction", owner_issue: 404}' "$AUDIT"
+  assert_success
+  _assert_audit_clean "CORRECTION-FINDING-TEXT" "evidence_ref" "blocked-on-dispatch.sh:120"
+}
+
+@test "route: re-routing a still-open need adds no second requested row" {
+  _route DC0 correction
+  _route DC0 correction
+  assert_success
+  jq -e '.audit_row_written == false' <<< "$output"
+  [ "$(_rows)" = 1 ] || fail "expected one blocked_on row, got $(_rows)"
+}
+
+@test "route: a native user_action row carries a redacted head of at most 4 tokens, never the request or command" {
+  _route DV1 user_action
+  assert_success
+  jq -e '.arm == "user_action" and .leg == "requested" and (has("fallback_from") | not)' <<< "$output"
+  run jq -e 'select(.action == "blocked_on")
+    | (.metadata | keys_unsorted) == ["kind", "arm", "leg", "command_head", "truncated"]
+    and (.metadata.command_head | split(" ") | length) <= 4
+    and (.metadata.truncated | type) == "boolean"' "$AUDIT"
+  assert_success
+  _assert_audit_clean "hunter2hunter2" "/Users/alice" "Boot the iPhone 16" \
+    "$(jq -r '.blocked_on.detail.command' "$FIX/user_action.handoff.json")"
+  [ ! -f "$WD/.context/logs/state-merge.log" ] || ! grep -qF "hunter2hunter2" "$WD/.context/logs/state-merge.log" \
+    || fail "state-merge.log leaks the need's command"
+}
+
+@test "route: a host_environment probe that passes clears the need, writes probed with decision_ref, and resumes" {
+  _stub_preflight gh-pr-create pass
+  _route FN0 host_environment
+  assert_success
+  jq -e '.arm == "host_environment" and .leg == "probed" and .parked == false
+    and .decision_ref == "blocked_on:FN0:host_environment:1"
+    and .resume_block.decision_ref == .decision_ref and .resume_block.do_not_rerun == true
+    and (.resume_block.instruction | contains("Do not re-run any step that already completed."))' <<< "$output"
+  run jq -e '.tasks.FN0.status == "in_progress" and .tasks.FN0.metadata.blocked_on == null' "$STATE"
+  assert_success
+  run jq -e 'select(.action == "blocked_on") | .result == "ok"
+    and .metadata == {kind: "host_environment", arm: "host_environment", leg: "probed", decision_ref: "blocked_on:FN0:host_environment:1"}' "$AUDIT"
+  assert_success
+  stub_log --argv preflight | grep -qx -- '--platform' || fail "the probe did not pass the ledger platforms"
+  ! stub_log --argv preflight | grep -qx -- '--harness' || fail "--harness is only for git-reset-hard"
+  _assert_audit_clean "HOST-OBSERVED-TEXT"
+}
+
+@test "route: a host_environment probe that still fails writes probed, then parks as a user_action with no owner_issue" {
+  _stub_preflight gh-pr-create fail
+  _route FN0 host_environment
+  assert_success
+  jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "host_environment"
+    and (has("owner_issue") | not) and .parked == true and .audit_row_written == true' <<< "$output"
+  run jq -e '.tasks.FN0.status == "blocked" and .tasks.FN0.metadata.blocked_on.kind == "host_environment"' "$STATE"
+  assert_success
+  run jq -sc '[.[] | select(.action == "blocked_on") | .metadata.leg]' "$AUDIT"
+  assert_output '["probed","requested"]'
+  _assert_audit_clean "HOST-OBSERVED-TEXT"
+}
+
+@test "route: the real preflight skipping under a megatask run proves nothing, so the need parks" {
+  run --separate-stderr env MILESTONE_MODE=1 bash "$PLUGIN_ROOT/$SCRIPT" route --state "$STATE" \
+    --task-id FN0 --payload "$(cat "$FIX/host_environment.handoff.json")"
+  assert_success
+  jq -e '.arm == "user_action" and .fallback_from == "host_environment" and .parked == true' <<< "$output"
+  [ -r "$PLUGIN_ROOT/$PREFLIGHT" ]
+}
+
+@test "route: git-reset-hard re-probes with --harness" {
+  _stub_preflight git-reset-hard pass
+  _bo route --task-id FN0 --payload \
+    '{"verdict":"blocked","blocked_on":{"kind":"host_environment","detail":{"check":"git-reset-hard","observed":"no rule"},"resume_with":"decision_ref"}}'
+  assert_success
+  stub_log --argv preflight | grep -qx -- '--harness' || fail "git-reset-hard must add --harness"
+}
+
+@test "route: each invalid return exits 1 with one named fail: line and writes nothing" {
+  local spec name want before
+  before="$(cat "$STATE")"
+  for spec in 'invalid-unknown-kind|fail: blocked_on.kind "coffee_break" is not one of' \
+    'invalid-unknown-resume-with|fail: blocked_on.resume_with "carrier_pigeon" is not one of' \
+    'invalid-missing-detail|fail: blocked_on.detail is missing or empty'; do
+    name="${spec%%|*}" want="${spec#*|}"
+    _route QA0 "$name"
+    [ "$status" -eq 1 ] || fail "$name: exit $status, want 1"
+    [[ "$stderr" == *"$want"* ]] || fail "$name: stderr lacks '$want': $stderr"
+    [ "$(printf '%s\n' "$stderr" | grep -c '^fail:')" = 1 ] || fail "$name: want exactly one fail: line"
+  done
+  _bo route --task-id QA0 --payload '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0"},"resume_with":"artifact_path"}}'
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"missing required key: path"* ]]
+  _bo route --task-id QA0 --payload '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"x"},"resume_with":"reply_ref"}}'
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"must be artifact_path"* ]]
+  [ "$(cat "$STATE")" = "$before" ] || fail "an invalid return changed the ledger"
+  [ ! -f "$AUDIT" ] || fail "an invalid return wrote an audit row"
+}
+
+@test "route: the legacy cross_session_ask alias routes as peer_session; blocked_on wins when both are present" {
+  _route DR0 legacy-cross-session-ask
+  assert_success
+  jq -e '.kind == "peer_session" and .source == "cross_session_ask" and .fallback_from == "peer_session"
+    and .owner_issue == 405' <<< "$output"
+  run jq -e '.tasks.DR0.metadata.blocked_on == {kind: "peer_session",
+    detail: {to: "backend-session", question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' "$STATE"
+  assert_success
+  _bo route --task-id QA0 --payload "$(jq -c '. + {cross_session_ask: {to: "x", question: "y"}}' "$FIX/artifact.handoff.json")"
+  assert_success
+  jq -e '.kind == "artifact" and .source == "blocked_on"' <<< "$output"
+}
+
+@test "route: usage errors and a missing ledger exit 2" {
+  _bo route --task-id 'DV1;id' --payload '{}'
+  [ "$status" -eq 2 ]
+  _bo route --task-id DV1
+  [ "$status" -eq 2 ]
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" route --state "$WD/nope.json" --task-id DV1 \
+    --payload "$(cat "$FIX/user_action.handoff.json")"
+  [ "$status" -eq 2 ]
+}
+
+@test "route: artifact — a path the ladder refuses parks the fallback and never reads the landed set" {
+  _land_stub "../x" 0
+  _bo route --task-id QA0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"../x"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "artifact"
+    and (has("owner_issue") | not) and .parked == true' <<< "$output"
+  grep -qx -- "--check-path" "$LAND_CALLS" || fail "the path must go through --check-path"
+  ! grep -qx -- "--list-landed" "$LAND_CALLS" || fail "a refused path must not reach --list-landed"
+  run jq -sc '[.[] | select(.action == "blocked_on") | .metadata.leg]' "$AUDIT"
+  assert_output '["requested"]'
+}
+
+@test "route: artifact — a producer_task that is not a task id parks the fallback without calling LAND" {
+  _land_stub "docs/out.md" 0
+  _bo route --task-id QA0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"nope","path":"docs/out.md"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.arm == "user_action" and .fallback_from == "artifact" and .parked == true' <<< "$output"
+  [ ! -s "$LAND_CALLS" ] || fail "a bad producer_task must not reach the LAND double at all"
+}
+
+@test "route: artifact — no workspace_path parks as a user_action fallback without checking the landed set" {
+  _land_stub "docs/out.md" 0
+  _bo route --task-id PL0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"docs/out.md"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.kind == "artifact" and .arm == "user_action" and .leg == "requested" and .fallback_from == "artifact"
+    and (has("owner_issue") | not) and .parked == true and .audit_row_written == true' <<< "$output"
+  run jq -e '.tasks.PL0.status == "blocked" and .tasks.PL0.metadata.blocked_on.kind == "artifact"' "$STATE"
+  assert_success
+  run jq -e 'select(.action == "blocked_on")
+    | .metadata == {kind: "artifact", arm: "user_action", leg: "requested", fallback_from: "artifact"}' "$AUDIT"
+  assert_success
+  ! grep -qx -- "--list-landed" "$LAND_CALLS" || fail "no workspace_path must not reach --list-landed"
+}
+
+@test "route: artifact — a path already landed in its tree claims the task and resumes" {
+  _land_stub "docs/out.md" 0
+  _bo route --task-id QA0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"docs/out.md"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.task_id == "QA0" and .kind == "artifact" and .arm == "artifact" and .leg == "landed"
+    and .source == "blocked_on" and .parked == false and .audit_row_written == true
+    and .decision_ref == "blocked_on:QA0:artifact:1"
+    and .resume_block.artifact_path == "docs/out.md" and .resume_block.do_not_rerun == true
+    and (has("fallback_from") | not) and (has("owner_issue") | not)' <<< "$output"
+  run jq -e '.tasks.QA0.status == "in_progress" and .tasks.QA0.metadata.blocked_on == null' "$STATE"
+  assert_success
+  run jq -e 'select(.action == "blocked_on") | .result == "ok"
+    and .metadata == {kind: "artifact", arm: "artifact", leg: "landed", decision_ref: "blocked_on:QA0:artifact:1"}' "$AUDIT"
+  assert_success
+}
+
+@test "route: artifact — a strict --list-landed refusal is treated as not landed and parks the fallback" {
+  _land_stub "docs/out.md" 1
+  _bo route --task-id QA0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"docs/out.md"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "artifact"
+    and (has("owner_issue") | not) and .parked == true' <<< "$output"
+  run jq -sc '[.[] | select(.action == "blocked_on") | .metadata.leg]' "$AUDIT"
+  assert_output '["requested"]'
+}
+
+# --- batch -------------------------------------------------------------------------
+
+@test "batch: parked needs become one prompt; only a native user_action offers a ! line" {
+  _route DV1 user_action
+  _route DC0 correction
+  _route DR0 peer_session
+  _route FN0 permission
+  _bo batch
+  assert_success
+  jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DR0", "DV1"]
+    and all(.needs[]; .arm == "user_action" and .resume_leg == "verified" and .cwd == "/tmp/wt")
+    and (.needs[] | select(.task_id == "DC0") | .fallback_from == "correction" and .owner_issue == 404 and .command == ""
+         and .request == "DC0 found the defect below in another task\u0027s work. Answer done once it is fixed.")
+    and (.needs[] | select(.task_id == "DV1") | (has("fallback_from") | not) and .truncated == false)
+    and (.payloads | length) == 1 and (.payloads[0].questions | length) == 3
+    and all(.payloads[0].questions[]; [.options[].label] == ["done", "stop here"])' <<< "$output"
+  jq -e '.payloads[0].questions[] | select(.header == "DV1") | .question | contains("! xcrun simctl boot")' <<< "$output"
+  jq -e '[.payloads[0].questions[] | select(.header != "DV1") | .question | contains("! ")] | any | not' <<< "$output"
+  jq -e '.payloads[0].questions[] | select(.header == "DC0") | .question | contains("finding: CORRECTION-FINDING-TEXT")' <<< "$output"
+}
+
+@test "batch: under a megatask per-issue run the boundary parks the issue with one redacted escalation row" {
+  _ledger_jq '.tasks.PL0.metadata.megatask_group = "milestone-1"'
+  printf '%s' '{"version":"2.0","execution":{"status":"in_progress","retry_count":0}}' > "$WD/workspace.json"
+  _route DV1 user_action
+  _route DC0 correction
+  _bo batch --boundary DV1
+  assert_success
+  jq -e '.mode == "megatask_park" and .payloads == [] and .park.workspace_written == true
+    and .park.audit_row_written == true' <<< "$output"
+  _bo batch --boundary DV1
+  assert_success
+  [ "$(_rows escalation_parked)" = 1 ] || fail "expected one escalation_parked row, got $(_rows escalation_parked)"
+  run jq -e 'select(.action == "escalation_parked") | .subject == "DV1" and .metadata.kind == "user_action"
+    and ([.metadata.escalated[] | select(.kind == "user_action") | keys_unsorted] == [["kind", "command_head", "truncated"]])
+    and ([.metadata.escalated[] | select(.kind == "correction")] == [{kind: "correction"}])' "$AUDIT"
+  assert_success
+  run jq -e '.execution.status == "failed" and .execution.reason == "parked_escalation"' "$WD/workspace.json"
+  assert_success
+  _assert_audit_clean "hunter2hunter2" "CORRECTION-FINDING-TEXT" "Boot the iPhone 16"
+}
+
+# --- resume ------------------------------------------------------------------------
+
+@test "resume: only the closing leg resumes; decision_ref counts closing rows per task and kind" {
+  _route DC0 correction
+  _bo resume --task-id DC0 --leg requested
+  [ "$status" -eq 1 ]
+  _bo resume --task-id DC0 --leg verified
+  assert_success
+  jq -e '.cleared == true and .audit_row_written == true
+    and .resume_block.decision_ref == "blocked_on:DC0:correction:1"
+    and .resume_block.resume_with == "artifact_path" and .resume_block.artifact_path == "development-0.md"
+    and .resume_block.do_not_rerun == true' <<< "$output"
+  run jq -e '.tasks.DC0.status == "in_progress" and .tasks.DC0.metadata.blocked_on == null' "$STATE"
+  assert_success
+  run jq -sc '[.[] | select(.action == "blocked_on") | [.result, .metadata.leg, .metadata.decision_ref]]' "$AUDIT"
+  assert_output '[["blocked","requested",null],["ok","verified","blocked_on:DC0:correction:1"]]'
+
+  _route DC0 correction
+  [ "$(jq -r '.audit_row_written' <<< "$output")" = true ] || fail "a need raised again after resume must write a new requested row"
+  _bo resume --task-id DC0 --leg verified
+  assert_success
+  [ "$(jq -r '.resume_block.decision_ref' <<< "$output")" = "blocked_on:DC0:correction:2" ]
+  _assert_audit_clean "CORRECTION-FINDING-TEXT"
+}
+
+@test "resume: a task not parked on a non-permission need is refused and the ledger is unchanged" {
+  local before
+  before="$(cat "$STATE")"
+  _bo resume --task-id DV1 --leg verified
+  [ "$status" -eq 1 ]
+  _ledger_jq '.tasks.FN0.metadata.blocked_on = {kind: "permission", detail: {tool: "Bash", command: "x", classifier_reason: "r", allow_rule: ""}, resume_with: "decision_ref"} | .tasks.FN0.status = "blocked"'
+  before="$(cat "$STATE")"
+  _bo resume --task-id FN0 --leg verified
+  [ "$status" -eq 1 ]
+  [ "$(cat "$STATE")" = "$before" ]
+  [ "$(_rows)" = 0 ]
+}
+
+@test "resume: artifact --leg landed refuses until the path lands, then claims and clears it" {
+  local before
+  _land_stub "" 1
+  _bo route --task-id DR0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"docs/x.md"},"resume_with":"artifact_path"}}'
+  assert_success
+  jq -e '.arm == "user_action" and .fallback_from == "artifact"' <<< "$output"
+
+  before="$(cat "$STATE")"
+  _bo resume --task-id DR0 --leg landed
+  [ "$status" -eq 1 ]
+  [ "$(cat "$STATE")" = "$before" ] || fail "an un-landed --leg landed resume changed the ledger"
+  [ "$(_rows)" = 1 ] || fail "an un-landed --leg landed resume must write no new row"
+
+  _land_stub "docs/x.md" 0
+  _bo resume --task-id DR0 --leg landed
+  assert_success
+  jq -e '.cleared == true and .audit_row_written == true
+    and .resume_block.kind == "artifact" and .resume_block.arm == "artifact" and .resume_block.leg == "landed"
+    and .resume_block.decision_ref == "blocked_on:DR0:artifact:1"
+    and .resume_block.artifact_path == "docs/x.md" and .resume_block.do_not_rerun == true' <<< "$output"
+  run jq -e '.tasks.DR0.status == "in_progress" and .tasks.DR0.metadata.blocked_on == null' "$STATE"
+  assert_success
+  run jq -sc '[.[] | select(.action == "blocked_on") | [.result, .metadata.leg, .metadata.decision_ref]]' "$AUDIT"
+  assert_output '[["blocked","requested",null],["ok","landed","blocked_on:DR0:artifact:1"]]'
+}
+
+@test "resume: artifact --leg verified still resumes via the user_action fallback, with no owner_issue" {
+  _land_stub "" 1
+  _bo route --task-id DC0 --payload \
+    '{"blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":"docs/y.md"},"resume_with":"artifact_path"}}'
+  assert_success
+
+  _bo resume --task-id DC0 --leg landed
+  [ "$status" -eq 1 ] || fail "the wrong leg must not resume an un-landed artifact need"
+
+  _bo resume --task-id DC0 --leg verified
+  assert_success
+  jq -e '.cleared == true and .audit_row_written == true
+    and .resume_block.kind == "artifact" and .resume_block.arm == "user_action" and .resume_block.leg == "verified"
+    and .resume_block.resume_with == "artifact_path" and .resume_block.artifact_path == "docs/y.md"
+    and .resume_block.decision_ref == "blocked_on:DC0:artifact:1"' <<< "$output"
+  run jq -e 'select(.action == "blocked_on" and .metadata.leg == "verified")
+    | .metadata == {kind: "artifact", arm: "user_action", leg: "verified", fallback_from: "artifact",
+                     decision_ref: "blocked_on:DC0:artifact:1"}' "$AUDIT"
+  assert_success
+}
+
+# --- static contracts --------------------------------------------------------------
+
+@test "AC6: no audit row call in the router passes need text as metadata" {
+  run grep -nE -- '--meta(-kv)? [^|]*(\.detail|\$cmd|request|question|finding|observed)' "$PLUGIN_ROOT/$SCRIPT"
+  [ "$status" -eq 1 ] || fail "an audit row call passes need text: $output"
+  run grep -nE 'blocked-on-lib\.sh' "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -r "$PLUGIN_ROOT/$LIB" ]
+}
+
+@test "contract: --self-test passes (smoke, NON-counting)" {
+  [ -r "$PLUGIN_ROOT/$SELFTEST" ]
+  run_script_env "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_success
+  assert_output --partial "self-test OK"
+}

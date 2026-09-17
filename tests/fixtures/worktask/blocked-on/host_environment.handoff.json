@@ -1,0 +1,1 @@
+{"stage":"FN","verdict":"blocked","summary":"gh is not authenticated","blocked_on":{"kind":"host_environment","detail":{"check":"gh-pr-create","observed":"HOST-OBSERVED-TEXT: gh auth status: not logged in to github.com"},"resume_with":"decision_ref"}}

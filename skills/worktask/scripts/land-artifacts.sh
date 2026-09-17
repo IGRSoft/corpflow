@@ -14,19 +14,31 @@
 # @arg --state <path>     state.json path (default: corpflow_context_dir()+/state.json).
 # @arg --orch-root <path> Passed through to workspace-root-banner.sh unchanged.
 # @arg --dry-run          Preflight only; writes nothing (no mkdir, no copy).
-# @arg --list-landed --tree <path> [--state <path>]
+# @arg --check-path <path>
+#                          Sole mode: needs no ledger, makes no git call. Runs the
+#                          same lexical ladder every landing does; safe prints
+#                          nothing (exit 0), refused prints `reason=<token>` on
+#                          stdout (exit 1). Combined with any other mode, or a
+#                          missing value, exits 2.
+# @arg --list-landed --tree <path> [--strict] [--state <path>]
 #                          Print the landed set scoped to that tree, one path
 #                          per line. Missing or unresolvable --tree exits 2.
-#                          Empty output is exit 0.
+#                          Empty output is exit 0. --strict (valid only here)
+#                          re-checks every raw landed_paths entry of that tree's
+#                          rows against the lexical ladder before printing; a
+#                          non-string entry or one the ladder refuses prints
+#                          nothing on stdout, one line on stderr, and exits 1.
 # @arg --self-test        Exec the sibling land-artifacts-selftest.sh harness.
 #                          Must be the only argument on the command line.
 # @arg -h | --help        Show this header.
 #
 # @exitcode 0  Landed, same tree, already present, gate no-op, boundary-skipped
 #              `blocked` consumer, boundary-skipped non-pending consumer (warn
-#              row), or nothing selected.
+#              row), nothing selected, a safe --check-path, or a clean --strict
+#              --list-landed.
 # @exitcode 1  A consumer's landing failed: it is now `blocked`, a fail
-#              `contract_landed` row was written.
+#              `contract_landed` row was written; or --check-path refused the
+#              path; or --strict found an unsafe entry in the tree's landed set.
 # @exitcode 2  Usage, malformed id, unreadable/invalid ledger, missing
 #              jq/git/hasher, or a failed state-patch.sh write (this run's own
 #              files were rolled back first).
@@ -53,7 +65,7 @@ readonly LANDED_SET_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots
 readonly BADDECL_MARK='__BADDECL__'
 
 usage() {
-  sed -n '2,32s/^# \{0,1\}//p' "$0" >&2
+  sed -n '2,44s/^# \{0,1\}//p' "$0" >&2
   exit 2
 }
 
@@ -1143,6 +1155,9 @@ DRY_RUN=0
 CMD="land"
 RUN_RC=0
 BOUNDARY=0
+CHECKPATH_ARG=""
+CHECKPATH_GIVEN=0
+STRICT=0
 
 # Captured once, before any shift: --self-test's "sole argument" rule needs
 # the original argc, since by the time --self-test is reached mid-loop the
@@ -1184,6 +1199,16 @@ while [ "$#" -gt 0 ]; do
       CMD="list-landed"
       shift
       ;;
+    --check-path)
+      [ "$#" -ge 2 ] || usage
+      CHECKPATH_ARG="$2"
+      CHECKPATH_GIVEN=1
+      shift 2
+      ;;
+    --strict)
+      STRICT=1
+      shift
+      ;;
     --self-test)
       [ "$ARGC" -eq 1 ] || die 2 "--self-test takes no other arguments"
       CMD="self-test"
@@ -1203,6 +1228,23 @@ if [ "$CMD" = "self-test" ]; then
   exec bash "$self"
 fi
 
+# --check-path is the sole mode: no ledger is resolved and no git call is made,
+# so a caller can validate a path before a ledger even exists.
+if [ "$CHECKPATH_GIVEN" -eq 1 ]; then
+  if [ -n "$CONSUMER_ARG" ] || [ -n "$PRODUCER_ARG" ] || [ "$CMD" = "list-landed" ] \
+    || [ -n "$TREE_ARG" ] || [ "$DRY_RUN" -eq 1 ] || [ "$STRICT" -eq 1 ]; then
+    die 2 "--check-path is the sole mode"
+  fi
+  checkpath_reason=$(lexical_check "$CHECKPATH_ARG")
+  if [ -n "$checkpath_reason" ]; then
+    printf 'reason=%s\n' "$checkpath_reason"
+    exit 1
+  fi
+  exit 0
+fi
+
+[ "$STRICT" -eq 0 ] || [ "$CMD" = "list-landed" ] || die 2 "--strict is only valid with --list-landed --tree <path>"
+
 command -v jq > /dev/null 2>&1 || die 2 "jq is required"
 command -v git > /dev/null 2>&1 || die 2 "git is required"
 [ -n "$HASHER_KIND" ] || die 2 "no sha256 hasher (sha256sum or shasum) found"
@@ -1218,6 +1260,25 @@ jq -e . "$STATE_PATH" > /dev/null 2>&1 || die 2 "ledger is not valid JSON: $STAT
 if [ "$CMD" = "list-landed" ]; then
   [ -n "$TREE_ARG" ] || die 2 "--list-landed requires --tree <path>"
   root=$(phys_dir "$TREE_ARG") || die 2 "--tree does not resolve: $TREE_ARG"
+  if [ "$STRICT" -eq 1 ]; then
+    # jq classifies before bash sees the value: a control character (a newline
+    # above all) would split one entry across lines or be trimmed by $( ).
+    while IFS= read -r raw_entry; do
+      case "$raw_entry" in
+        N) strict_reason="bad_path" ;;
+        C) strict_reason="control_char" ;;
+        S*) strict_reason=$(lexical_check "${raw_entry#S}") ;;
+        *) strict_reason="bad_path" ;;
+      esac
+      if [ -n "$strict_reason" ]; then
+        printf >&2 'land-artifacts: landed set for --tree holds an unsafe entry (reason=%s)\n' "$strict_reason"
+        exit 1
+      fi
+    done < <(jq -r --arg root "$root" \
+      '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[]] | .[]
+       | if type != "string" then "N" elif (explode | any(.[]; . < 32 or . == 127)) then "C" else "S" + . end' \
+      "$STATE_PATH" 2> /dev/null || printf 'N\n')
+  fi
   jq -r --arg root "$root" "$LANDED_SET_JQ" "$STATE_PATH" 2> /dev/null || true
   exit 0
 fi

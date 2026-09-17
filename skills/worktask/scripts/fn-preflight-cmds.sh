@@ -10,11 +10,12 @@
 #
 #   Reads these globals from the caller, none of which it defines: STATE_PATH,
 #   CONTEXT_DIR, BODY_FILE, SCRIPT_DIR, LIB_PATH, UD_PRINT. Also calls branch-lib.sh's
-#   audit_fn, meta_json, fn_batch_scope and resolve_base_ref, so the caller must
+#   audit_fn, meta_json, fn_batch_scope, resolve_base_ref and resolve_git_ref, so the caller must
 #   source that library FIRST — fn-preflight.sh's exit-3 guard is what enforces it.
 #
-#   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result, resolve_git_ref,
+#   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result,
 #   cmd_attachments, cmd_staging, cmd_pr_body, cmd_validate_pr, cmd_continuity,
+#   _continuity_stream_mode, _continuity_streams,
 #   cmd_branch_divergence, cmd_issue_close_required, _bs_override_on,
 #   _bs_fork_candidate, cmd_base_sanity, UD_HEADING, UD_LEAD, UD_ACTION, UD_SEP, _ud_rows,
 #   _ud_question, _ud_render, _ud_scrub, _ud_splice, cmd_unresolved_decisions.
@@ -116,63 +117,6 @@ ve_row_result() {
       tail -1 | grep -oE '"result":"[a-z_]+"' | cut -d'"' -f4 || true)
   fi
   printf '%s' "$r"
-}
-
-# A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
-# — the form workspace-modes.md documents). Map either onto something git resolves,
-# which is what lets both stored shapes work without normalising the stored value.
-#
-# The REMOTE-TRACKING ref is preferred over a same-named local branch. Trying the bare
-# name first resolved a stale local copy whenever one existed, and a stale base makes
-# the diff measured against it wrong in the blocking direction: base-sanity reported a
-# 70-file diff against a ledger claiming 18 and refused a finalization that was in fact
-# correct, while the only escape it signposts is the override that would also mask a
-# REAL wrong-base finding. Third patch to this resolution logic, so reordering alone
-# was rejected: it trades one silent wrong answer for another. Divergence is announced
-# on stderr with both names and both ahead-counts, and callers must not swallow it.
-resolve_git_ref() {
-  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead upstream
-
-  # The branch's own configured upstream is tried first, because `origin` is not always the
-  # canonical remote. In a fork workflow — origin = fork, upstream = canonical — hardcoding
-  # origin/ picks the stale fork ref, and base-sanity then measures the diff against it and
-  # blocks a correctly-based PR. Falls through to origin/ when no upstream is set, so the
-  # single-remote case resolves exactly as before.
-  # Short branch name, not refs/heads/: `@{upstream}` rejects a full refname outright
-  # ("fatal: no such branch"), which silently yielded no upstream and fell through to origin/.
-  upstream=$(git rev-parse --verify --quiet --abbrev-ref "${bare}@{upstream}" 2> /dev/null || printf '')
-  for c in ${upstream:+"$upstream"} "origin/$bare" "refs/remotes/origin/$bare"; do
-    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
-  done
-  git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"
-
-  if [[ -n "$remote" ]]; then
-    if [[ -n "$local_ref" ]] &&
-       [[ "$(git rev-parse "$remote" 2> /dev/null)" != "$(git rev-parse "$local_ref" 2> /dev/null)" ]]; then
-      # --left-right --count on a symmetric range: left = remote-only, right = local-only.
-      counts=$(git rev-list --left-right --count "${remote}...${local_ref}" 2> /dev/null || printf '')
-      behind=${counts%%[!0-9]*}; ahead=${counts##*[!0-9-]}
-      printf >&2 'WARNING: base ref %s is ambiguous — %s and %s have diverged.\n' \
-        "$name" "$remote" "$local_ref"
-      printf >&2 '  %s is ahead by %s commit(s); %s is ahead by %s commit(s).\n' \
-        "$remote" "${behind:-?}" "$local_ref" "${ahead:-?}"
-      printf >&2 '  Resolving to %s. Pass FN_BASE_REF=%s to force the local branch.\n' \
-        "$remote" "$local_ref"
-    fi
-    printf '%s' "$remote"
-    return 0
-  fi
-
-  # No remote-tracking ref: fall back exactly as before, so a purely local base,
-  # a tag or a raw revision still resolves.
-  for c in "$name" "$local_ref"; do
-    [[ -n "$c" ]] || continue
-    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then
-      printf '%s' "$c"
-      return 0
-    fi
-  done
-  return 1
 }
 
 # ---------- Commands ----------
@@ -393,8 +337,47 @@ cmd_validate_pr() {
   return 0
 }
 
+# Multi-stream finalization records >=2 stream branches; a single-stream ledger never
+# does, so the legacy path below stays byte-for-byte what it was for every other run.
+_continuity_stream_mode() {
+  command -v jq > /dev/null 2>&1 || return 1
+  jq -e '(.facts.stream_branches | type) == "object"
+         and (.facts.stream_branches | length) >= 2' "$STATE_PATH" > /dev/null 2>&1
+}
+
+# Every stream branch must be an ancestor of HEAD (the combined branch). A missing stream
+# is silent loss in the PR, so any unmerged stream exits 1 — after all are checked, so one
+# run names every gap.
+_continuity_streams() {
+  local head rows s b unmerged=0
+  head=$(git rev-parse --verify --quiet HEAD 2> /dev/null || printf '')
+  rows=$(jq -r '.facts.stream_branches | to_entries[] | [.key, (.value | tostring)] | @tsv' \
+    "$STATE_PATH" 2> /dev/null || printf '')
+  while IFS=$'\t' read -r s b; do
+    [[ -n "$s" ]] || continue
+    if [[ -n "$head" && -n "$b" ]] &&
+       git rev-parse --verify --quiet "refs/heads/${b}^{commit}" > /dev/null 2>&1 &&
+       git merge-base --is-ancestor "refs/heads/${b}" "$head" 2> /dev/null; then
+      printf 'continuity: stream %s branch %s is merged into HEAD\n' "$s" "$b"
+      audit_fn branch_continuity stream_merged "$(meta_json stream "$s" branch "$b" head "$head")"
+    else
+      printf >&2 'BLOCKED: stream %s branch %s is not an ancestor of HEAD — its work would be missing from the PR\n' \
+        "$s" "$b"
+      audit_fn branch_continuity stream_unmerged "$(meta_json stream "$s" branch "$b" head "$head")"
+      unmerged=1
+    fi
+  done <<< "$rows"
+  [[ "$unmerged" -eq 0 ]] || return 1
+  printf 'continuity: every stream branch is merged into HEAD\n'
+  return 0
+}
+
 cmd_continuity() {
   local wt_head int_branch ref
+  if _continuity_stream_mode; then
+    _continuity_streams || return $?
+    return 0
+  fi
   wt_head=$(git rev-parse HEAD 2> /dev/null || printf '')
   int_branch=$(resolve_base_ref)
   if [[ -z "$int_branch" ]]; then

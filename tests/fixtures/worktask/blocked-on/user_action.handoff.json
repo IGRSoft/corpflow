@@ -1,0 +1,1 @@
+{"stage":"DV","verdict":"blocked","summary":"Capture needs a booted simulator","blocked_on":{"kind":"user_action","detail":{"request":"Boot the iPhone 16 simulator; capture needs a running device","command":"xcrun simctl boot iPhone-16 --password=hunter2hunter2 /Users/alice/devices.json","verify":"xcrun simctl list devices booted"},"resume_with":"decision_ref"}}

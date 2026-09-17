@@ -1,0 +1,1 @@
+{"stage":"QA","verdict":"blocked","summary":"Unknown resume_with","blocked_on":{"kind":"user_action","detail":{"request":"x","command":""},"resume_with":"carrier_pigeon"}}
