@@ -83,6 +83,29 @@ setup() {
   assert_failure
 }
 
+@test "grant predicate: an argument-scoped anchored grant passes; its relative, colon-star and wildcard-arg forms fail" {
+  # shellcheck disable=SC2016
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *)"' \
+    _ "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  # shellcheck disable=SC2016
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer:*)"' \
+    _ "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash skills/worktask/scripts/land-artifacts.sh --consumer *)"' \
+    _ "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+  # A wildcard or expansion inside the argument prefix would widen the grant.
+  # shellcheck disable=SC2016
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --c* *)"' \
+    _ "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+  # shellcheck disable=SC2016
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/*/scripts/land-artifacts.sh --consumer *)"' \
+    _ "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure
+}
+
 # --- corpflow_grant_matches ---------------------------------------------------
 
 @test "matcher: an anchored rule matches the substituted command, bare or with args" {
@@ -141,7 +164,7 @@ setup() {
 }
 
 @test "matcher: a --flag=value argument is not read as a leading env assignment" {
-  # F1: only an anchored leading VAR= fails; '=' elsewhere in the command must match.
+  # Only an anchored leading VAR= fails; '=' elsewhere in the command must match.
   # shellcheck disable=SC2016
   run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/state-patch.sh *)" \
     "bash /r/skills/self-improvement/scripts/state-patch.sh --plugin-data=/x" "/r"' \
@@ -205,6 +228,34 @@ mk_grant_tree() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/r"
   assert_success
   assert_output ""
+}
+
+@test "CLI: an argument-scoped anchored grant is clean" {
+  # shellcheck disable=SC2016
+  mk_grant_tree "$WD/r" 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh --consumer *)'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/r"
+  assert_success
+  assert_output ""
+}
+
+@test "CLI: an argument-scoped relative grant is named relative" {
+  mk_grant_tree "$WD/r" 'Bash(bash skills/worktask/scripts/x.sh --consumer *)'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/r"
+  assert_failure 1
+  assert_output --partial "agents/a.md:2: relative: Bash(bash skills/worktask/scripts/x.sh --consumer *)"
+}
+
+@test "CLI: an argument-scoped colon-star grant is named colon-star, anchored or relative" {
+  # shellcheck disable=SC2016
+  mk_grant_tree "$WD/r" 'Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh --consumer:*)'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/r"
+  assert_failure 1
+  assert_output --partial ": colon-star: "
+  rm -rf "$WD/r"
+  mk_grant_tree "$WD/r" 'Bash(bash skills/worktask/scripts/x.sh --consumer:*)'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/r"
+  assert_failure 1
+  assert_output --partial ": colon-star: "
 }
 
 @test "CLI: a non-script grant is ignored" {
@@ -297,7 +348,7 @@ mk_grant_tree() {
 }
 
 @test "CLI: --root pointing at a non-git directory exits 2 with a stderr message" {
-  # SR-3: an empty/unavailable scan set (no git work tree here) fails closed,
+  # An empty/unavailable scan set (no git work tree here) fails closed,
   # never a silent clean 0 — the guard a "no widening" claim depends on.
   mkdir -p "$WD/nongit"
   run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/nongit"
@@ -321,6 +372,16 @@ mk_invocation_tree() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --invocations --root "$WD/r"
   assert_success
   assert_output ""
+}
+
+@test "--invocations: an argument-scoped grant checks the anchored script prefix" {
+  # shellcheck disable=SC2016
+  mk_git_fixture --dir "$WD/r" \
+    --file "agents/a.md:---\ntools: Read, Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh --consumer *)\n---\n\nRun \`bash skills/worktask/scripts/x.sh --consumer y\`.\n" \
+    --file 'skills/worktask/scripts/x.sh:#!/usr/bin/env bash\n' > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --invocations --root "$WD/r"
+  assert_failure 1
+  assert_output --partial ": relative: "
 }
 
 @test "--invocations: a bare script-name mention is named bare-name" {

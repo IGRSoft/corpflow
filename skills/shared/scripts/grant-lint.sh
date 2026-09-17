@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # @description grant-lint.sh — the one checker for the anchored script-grant shape
-#   (`Bash(bash <token>/skills/<skill>/scripts/<name>.sh *)`, where <token> is the literal
-#   `CORPFLOW_GRANT_TOKEN` text below) and, with `--invocations`, for the rule that a
+#   (`Bash(bash <token>/skills/<skill>/scripts/<name>.sh [<args>] *)`, where <token> is the
+#   literal `CORPFLOW_GRANT_TOKEN` text below and the optional <args> is a fixed,
+#   wildcard-free subcommand prefix such as `--consumer`) and, with `--invocations`, for the rule that a
 #   runnable body mention of a granted script
 #   must read the grant prefix byte for byte. `tests/shell/skills/plugin-root-refs.bats`
 #   sources this file for its arm-S path rule, so the rule is defined once.
@@ -66,8 +67,22 @@ corpflow_grant_script_path_ok() {
   [[ "$p" =~ ^skills/[a-z0-9-]+/scripts/[A-Za-z0-9_.-]+\.(sh|py)$ ]]
 }
 
-# corpflow_grant_rule_ok <grant> — 0 iff Bash(<interp> <token>/<path> *) (<token> = the
-# CORPFLOW_GRANT_TOKEN text); bash<->.sh, python3<->.py.
+# _cf_gl_args_ok <path_term> — 0 iff <path_term> is a bare script path or a
+# script path, one space and a literal argument prefix. The argument charset has
+# no `*`, `$`, quotes or metacharacters, so a narrowed grant can never smuggle a
+# second wildcard or an expansion; the path half is checked by the caller.
+_cf_gl_args_ok() {
+  local args args_re
+  case "$1" in
+    *' '*) args="${1#* }" ;;
+    *) return 0 ;;
+  esac
+  args_re='^[A-Za-z0-9_.,=/-]+( [A-Za-z0-9_.,=/-]+)*$'
+  [[ "$args" =~ $args_re ]]
+}
+
+# corpflow_grant_rule_ok <grant> — 0 iff Bash(<interp> <token>/<path>[ <args>] *)
+# (<token> = the CORPFLOW_GRANT_TOKEN text); bash<->.sh, python3<->.py.
 corpflow_grant_rule_ok() {
   local g="$1" interp path rest
   case "$g" in
@@ -85,6 +100,8 @@ corpflow_grant_rule_ok() {
     *' *)') path="${rest% \*)}" ;;
     *) return 1 ;;
   esac
+  _cf_gl_args_ok "$path" || return 1
+  path="${path%% *}"
   corpflow_grant_script_path_ok "$path" || return 1
   case "$interp:$path" in
     bash:*.sh | python3:*.py) return 0 ;;
@@ -209,6 +226,8 @@ _cf_gl_classify_grant() {
           *:\*) path="${path_term%:\*}"; term="colon" ;;
           *) printf 'malformed'; return ;;
         esac
+        _cf_gl_args_ok "$path" || { printf 'malformed'; return; }
+        path="${path%% *}"
         if corpflow_grant_script_path_ok "$path"; then
           case "$interp:$path" in
             bash:*.sh | python3:*.py)
@@ -272,6 +291,8 @@ _cf_gl_run_grants() {
 
 # _cf_gl_file_grants <file> — prints "<interp>\t<path>" per anchored grant the
 # file's own frontmatter holds (only grants that already pass corpflow_grant_rule_ok).
+# An argument prefix is dropped: the body rule checks the anchored script prefix,
+# so every narrowed grant of one script collapses to a single path line.
 _cf_gl_file_grants() {
   local file lineno tok content interp
   while IFS="$(printf '\t')" read -r file lineno tok; do
@@ -283,11 +304,11 @@ _cf_gl_file_grants() {
       case "$content" in
         "$interp ${CORPFLOW_GRANT_TOKEN}/"*)
           printf '%s\t%s\n' "$interp" "${content#"$interp ${CORPFLOW_GRANT_TOKEN}/"}" \
-            | sed -E 's/ \*$//'
+            | sed -E 's/ \*$//; s/ .*$//'
           ;;
       esac
     done
-  done < <(_cf_gl_scan_tokens "$1")
+  done < <(_cf_gl_scan_tokens "$1") | sort -u
 }
 
 # _cf_gl_classify_invocation <line> <interp> <path> — prints a finding class on
