@@ -89,6 +89,30 @@ There is deliberately **no bare `corpflow:release-engineer` alias** — corpflow
 that exact `name:`, and an alias basename colliding with a real agent is what the no-collision test
 in `routing-matrix.bats` exists to catch.
 
+### UI-verifier aliases (native UI legs — apple and android only)
+
+These targets run QA's **native UI legs**: a UI test bundle, or a build driven live and captured on
+a simulator or emulator. corpflow's `agents/qa-engineer.md` keeps the stage, the leg verdicts, and
+every `state.json` write; the delegate returns logs and images (`§ Native UI legs` there).
+
+| Alias | Default target | Platform |
+|-------|----------------|----------|
+| `corpflow:apple-ui-verifier` | `apple-developer:ios-developer` | apple |
+| `corpflow:android-ui-verifier` | `android-developer:android-developer` | android |
+
+#### Why only two rows, and the non-iOS Apple pick
+
+A section of its own for the release-engineer reason above. Only Apple and Android have a native
+runtime to drive, so there is no systems, web, backend, or ai row; a browser leg is not native.
+
+The apple default names the iOS agent. When no override applies and the target is macOS, tvOS,
+watchOS, or visionOS, QA dispatches the matching `apple-developer:<os>-developer` instead, the
+same pick `skills/dv-screenshot-capture/SKILL.md` makes.
+
+For these aliases § Resolution step 5 stops at the resolved target: an unreachable target,
+override included, becomes a `not_delegated` leg, never a retry of the default target or a
+direct Bash run.
+
 ### Support-plugin aliases (route only when installed)
 
 | Alias | Default target | Role |
