@@ -1989,7 +1989,7 @@ case-insensitively.
 |---|---|
 | `0` | Landed, same tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
 | `1` | A consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
-| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, a failed ledger write, or an interrupting signal (INT, TERM, HUP) or unexpected command failure, after rolling back this run's writes; nothing recorded about C |
+| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, a failed ledger write, or an interrupting signal (INT, TERM, HUP) or unexpected command failure, after rolling back this run's writes. A ledger write for C that completed before the interruption stays: a `blocked` row fails closed, a `landed_paths` entry naming a rolled-back file is copied again on the next pass |
 
 No other exit exists: a signal or an unexpected command failure exits `2`, never a stray `1`, so
 exit 1 always means a `landing_error` recorded on a `blocked` row, or a refused `--check-path` or

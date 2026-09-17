@@ -408,30 +408,25 @@ TMP_LIVE=""
 CREATED_DIRS=()
 WRITTEN_FILES=()
 
-# Set to 1 immediately before every intentional exit (usage/die/--check-path/
-# --list-landed/the resolve_tree* `|| exit 2` sites/the final exit "$RUN_RC").
-# Left "" for a signal or for a command failing under errexit outside any of
-# those sites, so cleanup_trap can tell "this run chose to stop here" apart
-# from "something stopped this run out from under it".
+# Set to 1 immediately before every intentional exit (usage, die, --check-path,
+# --list-landed, the `|| exit 2` sites, the final exit "$RUN_RC"); left "" for
+# a signal or an errexit stop no site named. An unmarked exit can be read as
+# neither "already blocked" (1) nor "already landed" (0), so cleanup_trap rolls
+# back this run's writes and exits 2; a marked non-0/1 exit rolls back too.
 CONTRACT_EXIT=""
 
 # shellcheck disable=SC2329 # invoked only through the EXIT trap below
 cleanup_trap() {
   local rc=$?
+  # A second signal would re-enter the signal trap and cut rollback short.
+  trap '' INT TERM HUP
   if [ -n "$TMP_LIVE" ] && [ -e "$TMP_LIVE" ]; then
     rm -f -- "$TMP_LIVE"
   fi
   if [ -z "$CONTRACT_EXIT" ]; then
-    # An unmarked exit: a signal (see the INT/TERM/HUP trap below, which always
-    # clears the marker first) or an errexit-triggered stop this run's own
-    # code never named. Neither is safe to read as "already blocked" (rc=1)
-    # or "already landed" (rc=0), so whatever this run wrote is rolled back
-    # and the caller always sees 2, regardless of the raw rc.
     rollback_run
     rc=2
   elif [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
-    # A marked, intentional non-0/1 exit (die, or the resolve_tree* `exit 2`
-    # sites) still rolls back this run's own writes before the caller sees 2.
     rollback_run
     rc=2
   fi
@@ -456,7 +451,7 @@ fi
 # Globals written: TMP_LIVE, WRITTEN_FILES (append), WB_RESULT. Must be called
 # directly, never through `$(...)`: see dest_walk's contract note above; the
 # same subshell defect here would make WRITTEN_FILES/TMP_LIVE invisible to
-# rollback_run and to the EXIT/INT/TERM trap. Sets WB_RESULT="OK:<sha256>",
+# rollback_run and to the EXIT trap. Sets WB_RESULT="OK:<sha256>",
 # "REASON:<reason>", or "REASON:dest_race:<stray-path>" when a raced
 # directory resolves outside consumer_root (left in place, named for the
 # caller instead of removed). Always returns 0.
@@ -1139,19 +1134,22 @@ process_consumer() {
 # command substitution, which runs in a subshell, so a side effect here (like
 # fail_pair's RUN_RC=1) would never reach the parent shell's exit code.
 collect_pairs() {
-  local cid raw
+  local cid raw keys
   local -a candidates=()
   if [ -n "$CONSUMER_ARG" ]; then
     candidates[0]="$CONSUMER_ARG"
   else
+    # A `done <<< "$(...)"` would discard jq's status and read a failed query
+    # as "no candidates", exiting 0 with nothing landed.
+    keys=$(jqf '(.tasks // {}) | keys[]?') || exit 2
     while IFS= read -r cid; do
       valid_task_id "$cid" || continue
       candidates[${#candidates[@]}]="$cid"
-    done <<< "$(jqf '(.tasks // {}) | keys[]?')"
+    done <<< "$keys"
   fi
 
   for cid in "${candidates[@]+"${candidates[@]}"}"; do
-    raw=$(consumes_json "$cid")
+    raw=$(consumes_json "$cid") || exit 2
     [ "$raw" = "null" ] && continue
     local shape
     shape=$(printf '%s' "$raw" | jq -r '
@@ -1168,9 +1166,13 @@ collect_pairs() {
       # business if it names this producer somewhere in the raw shape; a row
       # that never mentions $p is silently not this pass's concern.
       if [ -n "$PRODUCER_ARG" ]; then
+        # jq -e: 1 is a real "does not name $p", anything above is a failure.
+        local named=0
         printf '%s' "$raw" | jq -e --arg p "$PRODUCER_ARG" \
           '(type == "array") and any(.[]?; (type == "object") and (.from == $p))' \
-          > /dev/null 2>&1 || continue
+          > /dev/null 2>&1 || named=$?
+        [ "$named" -le 1 ] || exit 2
+        [ "$named" -eq 0 ] || continue
         printf '%s\t%s\t%s\n' "$cid" "$PRODUCER_ARG" "$BADDECL_MARK"
       else
         printf '%s\t%s\t%s\n' "$cid" "?" "$BADDECL_MARK"
@@ -1179,13 +1181,13 @@ collect_pairs() {
     fi
     local from_ids
     from_ids=$(printf '%s' "$raw" | jq -r --arg p "$PRODUCER_ARG" \
-      'map(.from) | unique | .[] | select($p == "" or . == $p)')
+      'map(.from) | unique | .[] | select($p == "" or . == $p)') || exit 2
     [ -n "$from_ids" ] || continue
     local fid pathset
     while IFS= read -r fid; do
       [ -n "$fid" ] || continue
       pathset=$(printf '%s' "$raw" | jq -r --arg f "$fid" \
-        '[.[] | select(.from == $f) | .paths[]] | unique | join(",")')
+        '[.[] | select(.from == $f) | .paths[]] | unique | join(",")') || exit 2
       printf '%s\t%s\t%s\n' "$cid" "$fid" "$pathset"
     done <<< "$from_ids"
   done
@@ -1361,7 +1363,10 @@ flush_consumer() {
 }
 
 # collect_pairs emits every candidate's rows contiguously (one outer loop per
-# consumer id, never revisited), so grouping on "id changed" is exact.
+# consumer id, never revisited), so grouping on "id changed" is exact. Its
+# subshell status is checked here, before any consumer is processed, so a
+# failed ledger read exits 2 with nothing dispatched.
+PAIRS=$(collect_pairs) || die 2 "ledger read failed while collecting consumes declarations"
 CUR_C=""
 ROW_P=()
 ROW_PATHS=()
@@ -1373,7 +1378,7 @@ while IFS=$'\t' read -r cid pid pathcsv; do
   fi
   ROW_P[${#ROW_P[@]}]="$pid"
   ROW_PATHS[${#ROW_PATHS[@]}]="$pathcsv"
-done <<< "$(collect_pairs)"
+done <<< "$PAIRS"
 flush_consumer "$CUR_C"
 
 CONTRACT_EXIT=1
