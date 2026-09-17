@@ -1406,7 +1406,7 @@ _rgr_diverged_repo() { # $1=remote-ahead $2=local-ahead
 # Sourcing the library directly: resolve_git_ref is a pure function of the cwd
 # repository, and every subcommand that reaches it needs a full FN fixture around it.
 _rgr() { # $1=repo $2=name
-  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh' > '$1/rgr.sh'
+  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh' > '$1/rgr.sh'
            cd '$1' && . ./rgr.sh && resolve_git_ref '$2'"
 }
 
@@ -1878,4 +1878,56 @@ $(head -5 body.md)"
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --print
   assert_success
   assert_line "- **sw-SR0-1** (SR0): ${head299}"$'\xe2\x80\x94'
+}
+
+# ---------------------------------------------------------------------------
+# continuity per-stream mode: entered only with >=2 facts.stream_branches keys.
+# Full merge fixtures live in fn-stream-merge.bats; these pin the mode switch.
+# ---------------------------------------------------------------------------
+
+@test "continuity: one stream_branches key keeps the legacy path and its diverged row" {
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q integration
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq '.metadata.base_ref="integration" | .facts.stream_branches={"only":"integration"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "diverged_cherry_pick"
+}
+
+@test "continuity: two merged stream branches pass with stream_merged rows only" {
+  cd "$WD"
+  git init -q -b main .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q s-a
+  git branch -q s-b
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "combined work"
+  jq '.metadata.base_ref="main" | .facts.stream_branches={"a":"s-a","b":"s-b"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  assert_output --partial "every stream branch is merged into HEAD"
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "$(printf 'stream_merged\nstream_merged')"
+}
+
+@test "continuity: an unmerged or unknown stream branch blocks all, after checking every stream" {
+  cd "$WD"
+  git init -q -b main .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git checkout -q -b s-a
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "stream a only"
+  git checkout -q main
+  jq '.metadata.base_ref="main" | .facts.stream_branches={"a":"s-a","b":"no-such-branch"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_failure 1
+  [[ "$stderr" == *"stream a branch s-a"* ]]
+  [[ "$stderr" == *"stream b branch no-such-branch"* ]]
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "$(printf 'stream_unmerged\nstream_unmerged')"
 }

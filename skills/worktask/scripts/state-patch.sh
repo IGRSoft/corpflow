@@ -48,7 +48,7 @@
 #                           state.json directly (handoff-protocol.md#layer-1-fallback).
 # @arg --facts <json>       Union-merge compressed facts into facts.*.  Object keyed by any
 #                           subset of decisions | open_questions | files_modified |
-#                           tests_added | branch.  COMPOSES with --stage: applied after the
+#                           tests_added | branch | stream_branches.  COMPOSES with --stage: applied after the
 #                           artifact/verdict preflight, in its own atomic window, so one call
 #                           patches both the ledger row and the facts a stage recorded.  A
 #                           refused or skipped stage patch (unresolved artifact, unparsed
@@ -62,6 +62,11 @@
 #                           (last writer wins, exempt from the array-shape check); any other
 #                           shape is a whole-payload refusal, exit 2. A branch-only payload
 #                           counts as non-empty (no facts-empty no-op).
+#                           stream_branches is an object <stream> -> <branch>: key matching
+#                           ^[a-z0-9]+(-[a-z0-9]+)*$ (<=40 chars), value matching the branch
+#                           regex; unioned by key into facts.stream_branches (a later write
+#                           replaces only its own streams), facts.branch untouched. Any bad
+#                           entry is a whole-payload refusal, exit 2; {} is a no-op.
 #
 #   Ledger ops — direct tasks{} writes.  Each short-circuits the artifact path and exits.
 #   --task-create is the ONLY op that may introduce a key; the rest reject an unknown ID
@@ -999,6 +1004,9 @@ _FACTS_UNION_FILTER='
            else . end)
         | (if ($f.branch // null) != null
            then .branch = $f.branch
+           else . end)
+        | (if (($f.stream_branches // {}) | length) > 0
+           then .stream_branches = ((.stream_branches // {}) + $f.stream_branches)
            else . end))'
 
 # Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
@@ -1014,7 +1022,9 @@ _FACTS_UNION_FILTER='
 # Predicates arrive as jq arguments (never spliced into the program text) for the same reason
 # the shape gate did it: a spliced regex would make the program caller-controlled.
 _FACTS_PARTITION_FILTER='
-      def _allowed: ["decisions","files_modified","open_questions","tests_added","branch"];
+      def _allowed: ["decisions","files_modified","open_questions","tests_added","branch",
+                     "stream_branches"];
+      def _scalar_key: . == "branch" or . == "stream_branches";
       def _label: if (type == "object") and ((.id | type) == "string")
                   then .id else (tojson[0:40]) end;
       def _oq_bad:
@@ -1039,15 +1049,24 @@ _FACTS_PARTITION_FILTER='
       elif ((keys - _allowed) | length) > 0
         then _fatal("unknown key(s): " + ((keys - _allowed) | join(", "))
                     + " (allowed: " + (_allowed | join(", ")) + ")")
-      elif ([ to_entries[] | select(.key != "branch") | select((.value | type) != "array") | .key ]
+      elif ([ to_entries[] | select(.key | _scalar_key | not)
+              | select((.value | type) != "array") | .key ]
             | length) > 0
         then _fatal("bad shape for "
-                    + ([ to_entries[] | select(.key != "branch")
+                    + ([ to_entries[] | select(.key | _scalar_key | not)
                          | select((.value | type) != "array") | .key ] | join(", "))
                     + " (expected an array)")
       elif (has("branch"))
            and (((.branch | type) != "string") or ((.branch | test($branchre)) | not))
         then _fatal("invalid branch: expected a string matching " + $branchre)
+      elif (has("stream_branches"))
+           and (((.stream_branches | type) != "object")
+                or ([ .stream_branches | to_entries[]
+                      | select(((.key | test($streamre)) | not) or ((.key | length) > 40)
+                               or ((.value | type) != "string")
+                               or ((.value | test($branchre)) | not)) ] | length) > 0)
+        then _fatal("invalid stream_branches: expected an object of <stream> -> <branch>, stream matching "
+                    + $streamre + " (<=40 chars), branch matching " + $branchre)
       else . as $p
         | { fatal: "",
             clean:
@@ -1059,7 +1078,9 @@ _FACTS_PARTITION_FILTER='
                  then {files_modified: [ $p.files_modified[] | select(type == "string") ]} else {} end)
               + (if $p | has("tests_added")
                  then {tests_added: [ $p.tests_added[] | select(type == "string") ]} else {} end)
-              + (if $p | has("branch") then {branch: $p.branch} else {} end) ),
+              + (if $p | has("branch") then {branch: $p.branch} else {} end)
+              + (if $p | has("stream_branches")
+                 then {stream_branches: $p.stream_branches} else {} end) ),
             rejects:
               ( [ ($p.decisions // [])[] | select(_dec_bad != "")
                   | {key: "decisions", label: _label, reason: _dec_bad} ]
@@ -2169,6 +2190,7 @@ if [[ -n "$FACTS_ARG" ]]; then
   FACTS_PART=$(printf '%s' "$FACTS_ARG" \
     | jq -c --arg idre "$SWEEP_ID_RE" --arg refre "$SWEEP_REF_RE" \
             --arg branchre '^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,199}$' \
+            --arg streamre '^[a-z0-9]+(-[a-z0-9]+)*$' \
             --argjson classes "$SWEEP_CLASS_JSON" "$_FACTS_PARTITION_FILTER" 2> /dev/null) \
     || FACTS_PART=""
   if [[ -z "$FACTS_PART" ]]; then

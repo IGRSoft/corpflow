@@ -798,3 +798,18 @@ _mk_ranks_1_4_empty() {
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+@test "resolve_git_ref lives in branch-lib.sh only, and prefers the remote-tracking ref" {
+  run bash -c "grep -l '^resolve_git_ref() {' '$PLUGIN_ROOT'/skills/worktask/scripts/*.sh"
+  assert_output "$PLUGIN_ROOT/$LIB"
+  cd "$WD"
+  git init -q -b develop .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/develop HEAD
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; resolve_git_ref develop"
+  assert_success
+  assert_output "origin/develop"
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; resolve_git_ref no-such-base"
+  assert_failure
+}
+

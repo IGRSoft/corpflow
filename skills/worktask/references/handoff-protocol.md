@@ -815,6 +815,7 @@ downstream stage silently dropped an upstream stage's entries.
 | `decisions` | `.id` | last writer wins | survivor moves to the TAIL |
 | `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped | survivor moves to the TAIL |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
+| `stream_branches` (object) | the stream key | later value for that key wins; other keys kept | key insertion order |
 
 ##### Ordering and idempotency
 
@@ -841,6 +842,13 @@ write chokepoint, `#atomic-write`). When that line is empty or non-conventional 
 `target_branch=<name>` is not, the **target** is what gets stamped: the local rename can be
 blocked (upstream tracked, target exists, host workspace) while the PR head is still the
 pipeline's to name. See field notes — branch above.
+
+#### Additive-field writers — facts.stream_branches
+
+One writer: FN on the multi-stream arm, passing the `facts=` line `fn-stream-merge.sh commit`
+prints to `state-patch.sh --facts '{"stream_branches": {"<stream>": "<branch>"}}'`. Keys match the
+S1 stream grammar (`^[a-z0-9]+(-[a-z0-9]+)*$`, ≤40), values the `branch` regex; any bad entry
+fails the whole payload (exit 2) and `{}` is a no-op. It never touches `facts.branch`.
 
 ---
 
@@ -1118,6 +1126,11 @@ The patch writes only its own row. Moving a failure back to DV is the orchestrat
         type: string
         maxLength: 120
         description: "Working branch named once at PL start — see field notes"
+      stream_branches:
+        type: object
+        propertyNames: { pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 40 }
+        additionalProperties: { type: string, pattern: "^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,199}$" }
+        description: "OPTIONAL (additive) — stream -> stream branch, FN multi-stream arm only; see field notes"
       files_modified: { type: array, items: { type: string } }
       tests_added: { type: array, items: { type: string } }
 ```
@@ -1412,6 +1425,14 @@ not an error** — it tells FN the commits live somewhere other than the planned
 what `fn-preflight.sh continuity` handles. No writer may copy one into the other; that copy is
 what would make them a silent duplicate.
 
+#### Field notes — stream_branches
+
+OPTIONAL (additive). Present only after the FN multi-stream arm committed each stream: the branch
+each stream's commit sits on, keyed by `tasks.DV<k>.metadata.stream`. `fn-stream-merge.sh merge`
+merges each value into `facts.branch` and blocks on a missing key; `fn-preflight.sh continuity`
+switches to its per-stream ancestor check once the object holds ≥2 keys. It is not the PR head —
+`facts.branch` stays that — and no writer copies a value from one into the other.
+
 #### Field notes — goal
 
 One-sentence worktask intent, populated by PL0 from the task description (or the issue title under `/megatask`). Read by stages needing the original intent without re-reading the plan file (AR sanity-checking architecture against requirements, FN composing the PR title). Single surface for this value — do not introduce a parallel one.
@@ -1655,6 +1676,9 @@ jq -r '.tasks | to_entries
   | sort_by(.key | ltrimstr("DV") | tonumber)
   | .[] | (.value.artifact // .value.metadata.artifact // empty)' .context/state.json
 ```
+
+Review diff source: the diff for those rows comes from `skills/worktask/scripts/stream-diff.sh`
+(same order, one labelled block per row, base from `resolve_base_ref`), never a hand-written range.
 
 A `refs.dev[]` element (`stage-contracts.md#tpl-dr`) is that path's basename plus `#files-changed` —
 replace the last line with:
