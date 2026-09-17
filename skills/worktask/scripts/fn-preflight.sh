@@ -46,7 +46,21 @@
 #                    over 3x the ledger's AND over 20 files larger — the signature of a
 #                    base this work never forked from. Warns when HEAD is >25 commits
 #                    ahead. Every unresolvable input degrades to a warning + exit 0.
-#     all            attachments → staging → pr-body → validate-pr → continuity → base-sanity.
+#     unresolved-decisions
+#                    list the escalation-class questions this run shipped without a decision
+#                    (its `sweep_escalation_unprompted` audit rows, one per metadata.id) in a
+#                    `## Unresolved decisions` block at byte 0 of the body, replacing a block
+#                    already there, so a re-run is byte-identical. The question text is the
+#                    item's `summary` under its ref anchor, else the id alone. The block is
+#                    passed through path-scrub.sh; if that file, its function or either ERE is
+#                    missing, or the scrub fails, nothing is published: exit 1 and the body is
+#                    byte-identical, on every route. Zero rows leaves the body untouched, exits
+#                    0 and never sources the scrub, so a run with nothing to list cannot wedge.
+#                    `--print` writes the same scrubbed block to stdout instead of the body;
+#                    it is the one source for the final user message. One audit row,
+#                    `unresolved_decisions_emitted`, carries `count`.
+#     all            unresolved-decisions → attachments → staging → pr-body → validate-pr →
+#                    continuity → base-sanity.
 #
 #   `branch-divergence` and `issue-close-required` are deliberately NOT in `all`: each is a
 #   separate subcommand so it is independently testable and cannot perturb `continuity`'s
@@ -55,6 +69,9 @@
 #   `base-sanity` runs LAST in `all`: the `&&` chain aborts at the first failure, and
 #   `continuity`'s non-blocking `diverged` row is directly useful when diagnosing a
 #   base-sanity block. Blocking earlier would suppress that evidence.
+#
+#   `unresolved-decisions` runs FIRST in `all`: `pr-body` sanitises and lints the body it is
+#   handed, so the block must already be in it for the published bytes to be the checked bytes.
 #
 #   `pr-body` runs BEFORE `validate-pr` because it rewrites the body in place: the
 #   body whose `Closes #<n>` line is validated must be the byte-identical body that
@@ -76,7 +93,9 @@
 #
 # @arg --state <path>     state.json path (default: .context/state.json).
 # @arg --context <dir>    .context dir (default: .context).
-# @arg --body <path>      Composed PR body file (required by validate-pr / pr-body / all).
+# @arg --body <path>      Composed PR body file (required by validate-pr / pr-body / all, and by
+#                         unresolved-decisions unless --print).
+# @arg --print            unresolved-decisions only: write the block to stdout, leave the body.
 # @arg --strict           Export CORPFLOW_PR_BODY_STRICT=1: a pr-body-lint.sh failure blocks
 #                         `pr-body` (and so `all`) outside batch and incident routing.
 # @arg -h | --help        Show this header.
@@ -100,8 +119,12 @@
 #               `pr-body`: missing `Test plan` heading, missing or contradicted
 #               visual-evidence evidence, an unreachable sanitiser library, or under
 #               --strict a pr-body-lint.sh that found, errored or could not run;
-#               `base-sanity`: the PR diff dwarfs this run's own record of it).
-# @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body).
+#               `base-sanity`: the PR diff dwarfs this run's own record of it;
+#               `unresolved-decisions`: rows to list but the path scrub is unavailable or
+#               failed, or the audit log holds rows that cannot be read).
+# @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body;
+#               `unresolved-decisions` without --body or --print; --print with any
+#               other command).
 # @exitcode 3   branch-lib.sh unreachable — no dispatch runs; or `staging` cannot read
 #               control-byte-lint.sh (plugin install broken).
 #
@@ -113,6 +136,7 @@ IFS=$'\n\t'
 STATE_PATH=".context/state.json"
 CONTEXT_DIR=".context"
 BODY_FILE=""
+UD_PRINT=0
 
 # Physical directory of this script. CDPATH= disables a benign-but-common
 # CDPATH setting that otherwise makes `cd` echo an extra line into this very
@@ -179,7 +203,7 @@ usage() {
 
 # ---------- Argument parsing ----------
 COMMAND=""
-# shellcheck disable=SC2034  # STATE_PATH/CONTEXT_DIR/BODY_FILE are read by fn-preflight-cmds.sh
+# shellcheck disable=SC2034  # STATE_PATH/CONTEXT_DIR/BODY_FILE/UD_PRINT are read by fn-preflight-cmds.sh
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --state)
@@ -197,13 +221,17 @@ while [[ $# -gt 0 ]]; do
       BODY_FILE="${1:-}"
       shift
       ;;
+    --print)
+      UD_PRINT=1
+      shift
+      ;;
     --strict)
       # Exported so the pr-body-lint.sh child process sees the same mode.
       export CORPFLOW_PR_BODY_STRICT=1
       shift
       ;;
     -h | --help) usage ;;
-    attachments | staging | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | base-sanity | all)
+    attachments | staging | resolve-issue | validate-pr | pr-body | continuity | branch-divergence | issue-close-required | base-sanity | unresolved-decisions | all)
       COMMAND="$1"
       shift
       ;;
@@ -219,6 +247,13 @@ done
   usage
 }
 
+# Every other command would ignore the flag and still run, so `all --print` would publish
+# nothing at the top of the body while looking like a successful preflight.
+if [[ "$UD_PRINT" == 1 && "$COMMAND" != unresolved-decisions ]]; then
+  printf >&2 -- '--print applies only to unresolved-decisions\n'
+  usage
+fi
+
 case "$COMMAND" in
   attachments) cmd_attachments ;;
   staging) cmd_staging ;;
@@ -229,8 +264,9 @@ case "$COMMAND" in
   branch-divergence) cmd_branch_divergence ;;
   issue-close-required) cmd_issue_close_required ;;
   base-sanity) cmd_base_sanity ;;
+  unresolved-decisions) cmd_unresolved_decisions ;;
   all)
-    cmd_attachments && cmd_staging && cmd_pr_body && cmd_validate_pr && cmd_continuity \
-      && cmd_base_sanity
+    cmd_unresolved_decisions && cmd_attachments && cmd_staging && cmd_pr_body \
+      && cmd_validate_pr && cmd_continuity && cmd_base_sanity
     ;;
 esac

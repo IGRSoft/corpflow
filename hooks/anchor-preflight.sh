@@ -17,34 +17,45 @@ SELF_TEST=0
 
 # Canonical artifact basenames (mirrors handoff-protocol.md#stage-artifact-map).
 #
-# The per-stream fan-out files development-N-<stream>.md are deliberately NOT matched.
-# handoff-protocol.md § Per-stream DV artifacts calls them merge inputs, not handoff
-# carriers: the entry agent merges them into the canonical development-N.md, and that
-# merged file is the DR/QA input the anchor contract exists to police. Linting the
-# inputs against the carrier's allow-list only produced `unexpected: commits
-# verification` on every stream write — noise on a non-blocking hook, and noise is how
-# a real anchor failure gets scrolled past.
-ARTIFACT_RE='\.context/(planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$'
+# DV also matches the per-stream development-N-<stream>.md: under handoff-protocol.md
+# § DV fan-out — ledger tasks each stream file IS its row's DV handoff, read directly by
+# DR/QA through refs.dev, so it carries the same anchor contract as development-N.md.
+# The stream arm is the S1 slug grammar; its 40-char cap cannot be said in one ERE, so
+# STREAM_TOO_LONG_RE subtracts over-long slugs. Other stages have no stream suffix.
+ARTIFACT_RE='\.context/((planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*)\.md$'
+STREAM_TOO_LONG_RE='\.context/development-[0-9]+-[a-z0-9-]{41,}\.md$'
+
+# is_artifact <path> — true when <path> is a lintable stage artifact name.
+is_artifact() {
+  printf '%s' "$1" | grep -qE "$ARTIFACT_RE" || return 1
+  ! printf '%s' "$1" | grep -qE "$STREAM_TOO_LONG_RE"
+}
 
 if [ "$SELF_TEST" -eq 1 ]; then
   ok=0
   for p in \
     ".context/development-0.md" \
+    ".context/development-0-swift-app.md" \
+    ".context/development-2-backend.md" \
+    ".context/development-0-a234567890123456789012345678901234567890.md" \
     ".context/developer-review-12.md" \
     "/abs/path/.context/planning-3.md"; do
-    printf '%s' "$p" | grep -qE "$ARTIFACT_RE" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
+    is_artifact "$p" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
   done
   for p in \
     "skills/worktask/SKILL.md" \
     ".context/state.json" \
     ".context/development.md" \
     ".context/development-0-.md" \
-    ".context/development-0-swift-app.md" \
-    ".context/development-2-backend.md" \
     ".context/development-0-Stream.md" \
+    ".context/development-0--web.md" \
+    ".context/development-0-web-.md" \
+    ".context/development-N-web.md" \
+    ".context/development-0-a2345678901234567890123456789012345678901.md" \
     ".context/planning-0-stream.md" \
+    ".context/developer-review-0-web.md" \
     ".context/worktask-comms.md"; do
-    printf '%s' "$p" | grep -qE "$ARTIFACT_RE" && { echo "anchor-preflight: self-test FAIL (should NOT match: $p)"; exit 1; }
+    is_artifact "$p" && { echo "anchor-preflight: self-test FAIL (should NOT match: $p)"; exit 1; }
     ok=$((ok + 1))
   done
 
@@ -125,7 +136,7 @@ if [ -f "$FILE_PATH" ] && [ -r "$CB_LIB" ]; then
   fi
 fi
 
-if ! printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || [ ! -f "$FILE_PATH" ]; then
+if ! is_artifact "$FILE_PATH" || [ ! -f "$FILE_PATH" ]; then
   [ "$cbrc" -eq 0 ] || exit 2
   exit 0
 fi

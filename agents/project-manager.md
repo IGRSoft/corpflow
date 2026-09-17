@@ -133,8 +133,8 @@ Templates, data sources, full procedure:
 #### Pre-`gh pr create` validator battery
 
 Compose the PR body to a file, then run `fn-preflight.sh all --body <pr-body-file>`
-(`skills/worktask/scripts/`): attachments → pr-body → validate-pr → continuity → base-sanity, in
-that order (`pr-body` rewrites the body in place, so the body `validate-pr` checks is byte-identical
+(`skills/worktask/scripts/`): unresolved-decisions → attachments → staging → pr-body → validate-pr →
+continuity → base-sanity, in that order (`pr-body` rewrites the body in place, so the body `validate-pr` checks is byte-identical
 to the one reaching `gh pr create`; `base-sanity` is last so a block never suppresses `continuity`'s
 diagnostic row). Each check also runs standalone.
 
@@ -151,6 +151,18 @@ line plus the audit reason) to `.context/errors/project-manager.md`, and do NOT 
 | `validate-pr` | body matches `(?im)^(Closes\|Fixes\|Resolves)\s+#\d+$` for the resolved issue | no issue resolvable → `pr_issue_link` `result:deferred` row, proceed WITHOUT a closing line |
 | `continuity` | worktree HEAD is an ancestor of the integration branch, so fast-forward/merge is safe | diverged → diagnostic + `branch_continuity` `result: "diverged_cherry_pick"` row; cherry-pick the worktree commits, confirm the count matches the unmerged set, record it in `complete-summary-N.md` |
 | `base-sanity` | the PR-vs-ledger magnitude check that discriminates a wrong base (below) | degrades, never false-blocks (below) |
+
+##### `unresolved-decisions` specifics
+
+- Runs first. Lists every escalate item this run shipped without a decision (its
+  `sweep_escalation_unprompted` audit rows) in a `## Unresolved decisions` block at byte 0 of the
+  body, replacing a block already there.
+- **Blocks** when rows exist and the path scrub is unusable; the body stays byte-identical. Zero
+  rows leave the body untouched and exit 0.
+- **Repeat the items in the FN summary.** Whenever
+  `fn-preflight.sh unresolved-decisions --print` prints a block, open `complete-summary-N.md` and
+  the final return with it, verbatim, ahead of the 200-token summary. Never retype the questions:
+  the printed block is the scrubbed copy.
 
 ##### `base-sanity` specifics
 

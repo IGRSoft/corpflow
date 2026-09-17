@@ -65,7 +65,7 @@ sanitise_body() {
       if (probe ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
-      if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
+      if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\.md/) next  # L7,L8; the optional -<stream> tail catches per-stream DV names
       if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
       # non-bullet token (e.g. "* Routed to corpflow:developer ...",

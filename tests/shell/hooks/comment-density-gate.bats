@@ -15,6 +15,8 @@ REVIEWER='{"agent_type":"corpflow:technical-lead","agent_id":"agt_t","session_id
 setup() {
   REPO="$(mk_git_fixture --branch main --file 'README.md:seed\n' --commit 'init')"
   mkdir -p "$REPO/.context/logs"
+  # The root ladder answers only a context holding a ledger.
+  printf '%s' '{"version":2,"tasks":{}}' > "$REPO/.context/state.json"
   AUDIT_LOG="$REPO/.context/logs/audit.jsonl"
 }
 
