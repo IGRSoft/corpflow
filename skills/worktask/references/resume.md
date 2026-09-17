@@ -243,7 +243,7 @@ Runs already in flight may still hold rows of the legacy alias; new returns rout
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| Legacy alias: stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in **this** (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the `ok` leg. Absent → still outstanding; do **not** re-delegate and do **not** re-ask (a second send duplicates the question to the peer) |
+| Legacy alias: stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in **this** (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the closing leg as a `blocked_on` row of kind `peer_session`; the legacy row is read-only and no new `cross_session_ask` row is ever written (`agent-coordination/SKILL.md § Writers — blocked_on rows`). Absent → still outstanding; do **not** re-delegate and do **not** re-ask (a second send duplicates the question to the peer) |
 
 #### Reply routing — why the stage cannot ask for itself
 

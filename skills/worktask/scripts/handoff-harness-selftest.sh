@@ -142,7 +142,7 @@ KINDS
   out=$(read_blocked_on "$ctx/dv-bo-alias.md" 2>&1) || rc=$?
   if [[ "$rc" -ne 0 ]] \
      || ! printf '%s\n' "$out" | head -n 1 | jq -e '. == {kind: "peer_session", detail: {to: "backend-session", question: "Which base branch?"}, resume_with: "reply_ref"}' > /dev/null 2>&1 \
-     || [[ "$(printf '%s\n' "$out" | sed -n 2p)" != "source: cross_session_ask" ]]; then
+     || [[ "$(printf '%s\n' "$out" | sed -n 2p)" != "source: cross_session_ask" ]]; then  # legacy alias
     echo "self-test: blocked_on legacy-alias/reads-as-peer_session: FAIL (rc=$rc)" >&2; exit 1
   fi
   echo "self-test: blocked_on legacy-alias/reads-as-peer_session: ok"

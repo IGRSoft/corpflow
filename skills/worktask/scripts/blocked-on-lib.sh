@@ -71,7 +71,7 @@ blocked_on_table_json() {
     | from_entries'
 }
 
-# blocked_on_normalize <handoff json> — prints {"blocked_on":{…},"source":"blocked_on"|"cross_session_ask"}.
+# blocked_on_normalize <handoff json> — prints {"blocked_on":{…},"source":"blocked_on"|<legacy alias>}.
 # A non-null blocked_on wins even when malformed, so a broken typed need is validated and
 # refused rather than silently replaced by the alias beside it. Exit 1 when neither is present.
 blocked_on_normalize() {
@@ -80,13 +80,13 @@ blocked_on_normalize() {
   _bo_out=$(printf '%s' "${1:-}" | jq -c '
     if type != "object" then empty
     elif .blocked_on != null then {blocked_on: .blocked_on, source: "blocked_on"}
-    elif .cross_session_ask != null then
+    elif .cross_session_ask != null then  # legacy alias
       {blocked_on: {kind: "peer_session",
-                    detail: (.cross_session_ask
+                    detail: (.cross_session_ask  # legacy alias
                       | if type == "object" then {to, question} | with_entries(select(.value != null))
                         else {} end),
                     resume_with: "reply_ref"},
-       source: "cross_session_ask"}
+       source: "cross_session_ask"}  # legacy alias
     else empty end' 2> /dev/null) || _bo_out=""
   [ -n "$_bo_out" ] || return 1
   printf '%s\n' "$_bo_out"
@@ -99,6 +99,11 @@ blocked_on_validate() {
   local _bo_msg
   if ! command -v jq > /dev/null 2>&1; then
     printf >&2 'fail: blocked_on cannot be validated: jq is not installed\n'
+    return 1
+  fi
+  # jq reads empty input as no values and exits 0, which would pass as valid.
+  if [ -z "${1:-}" ]; then
+    printf >&2 'fail: blocked_on is empty\n'
     return 1
   fi
   _bo_msg=$(printf '%s' "${1:-}" | jq -r --arg kinds "$BLOCKED_ON_KINDS" --arg rw "$BLOCKED_ON_RESUME_WITH" \

@@ -66,9 +66,9 @@
 #
 #   handoff-harness.sh --read-blocked-on <artifact.md>
 #       Prints the artifact's need normalized through blocked-on-lib.sh as one compact JSON
-#       line, then `source: blocked_on` or `source: cross_session_ask`. Exits 1 when the
-#       artifact carries neither, or its frontmatter cannot be read; 2 without jq. Without
-#       yq every scalar is read as a string and a `- key: value` sequence item as its text.
+#       line, then `source: blocked_on` or, for the legacy alias, `source: cross_session_ask`.
+#       Exits 1 when the artifact carries neither, or its frontmatter cannot be read; 2 without
+#       jq. Without yq every scalar is read as a string.
 #
 #   handoff-harness.sh --validate-state <state.json>
 #       Validates the ledger against the schema (required keys, ≤500 token
@@ -235,11 +235,13 @@ if ! command -v blocked_on_validate > /dev/null 2>&1; then
   exit 1
 fi
 
-# The no-yq reader of handoff.blocked_on and handoff.cross_session_ask: every CI host lacks yq,
+# The no-yq reader of handoff.blocked_on and its legacy alias handoff.cross_session_ask: every CI
+# host lacks yq,
 # so this is the path the gate usually takes, and it must reach the same verdict as yq. It reads
 # the YAML subset a stage writes — block mappings, flow mappings and sequences (JSON included),
 # quoted and plain scalars, `|`/`>` block scalars — and prints
-# {"blocked_on":<json|null>,"cross_session_ask":<json|null>}. Exit 1 on a value it cannot parse,
+# {"blocked_on":<json|null>,"cross_session_ask":<json|null>} (the second key is the legacy alias).
+# Exit 1 on a value it cannot parse,
 # which the gate reports as a failure rather than reading as absent.
 read -r -d '' _FM_BO_AWK << 'AWK' || true
 function jstr(s,    i, c, o, n) {
@@ -317,7 +319,7 @@ function fkey(    c, start, t) {
   fskip(); c = substr(S, P, 1)
   if (c == "\"" || c == "'") { t = fquoted(); return substr(t, 2, length(t) - 2) }
   start = P
-  while (P <= length(S) && substr(S, P, 1) != ":" && substr(S, P, 1) !~ /[,{}\[\]]/) P++
+  while (P <= length(S) && substr(S, P, 1) != ":" && index(",{}[]", substr(S, P, 1)) == 0) P++
   return trim(substr(S, start, P - start))
 }
 function pflow(    c, out, first, key, v, start, cl) {
@@ -346,11 +348,14 @@ function pflow(    c, out, first, key, v, start, cl) {
   }
   if (c == "\"" || c == "'") { v = fquoted(); if (ERR) return "null"; return scalar(v) }
   start = P
-  while (P <= length(S) && substr(S, P, 1) !~ /[,}\]]/) P++
+  while (P <= length(S) && index(",}]", substr(S, P, 1)) == 0) P++
   return scalar(substr(S, start, P - start))
 }
-function inline_block(rest, k, ind,    c, j, o, first, fold, line, v) {
-  if (rest == "" || rest ~ /^#/) return pblock(k + 1, ind)
+function isdash(s) { sub(/^[ \t]+/, "", s); return (s == "-" || s ~ /^-[ \t]/) }
+# iskey: the value of a mapping key, which YAML lets open an indentless sequence at the key's own
+# indent (`options:` then `- a`); a sequence item's empty value has no such form.
+function inline_block(rest, k, ind, iskey,    c, j, o, first, fold, line, v) {
+  if (rest == "" || rest ~ /^#/) return pblock(k + 1, ind, iskey)
   c = substr(rest, 1, 1)
   if (c == "{" || c == "[") {
     S = rest; j = k
@@ -370,18 +375,27 @@ function inline_block(rest, k, ind,    c, j, o, first, fold, line, v) {
   NX = k + 1
   return scalar(rest)
 }
-function pblock(start, pind,    j, ind, out, first, key, v, s) {
+function pblock(start, pind, seqok,    j, ind, out, first, key, v, s, rest, col, pad, m) {
   j = start
   while (j <= n && B[j]) j++
-  if (j > n || I[j] <= pind) { NX = j; return "null" }
+  if (j > n || I[j] < pind || (I[j] == pind && !(seqok && isdash(T[j])))) { NX = j; return "null" }
   ind = I[j]; s = T[j]; sub(/^[ \t]+/, "", s)
-  if (s == "-" || s ~ /^-[ \t]/) {
+  if (isdash(s)) {
     out = "["; first = 1
     while (j <= n) {
       if (B[j]) { j++; continue }
       s = T[j]; sub(/^[ \t]+/, "", s)
-      if (I[j] != ind || (s != "-" && s !~ /^-[ \t]/)) break
-      v = inline_block(trim(substr(s, 2)), j, ind); if (ERR) return "null"
+      if (I[j] != ind || !isdash(s)) break
+      rest = substr(s, 2); match(rest, /^[ \t]*/); m = RLENGTH; rest = trim(rest)
+      if (rest != "" && (isdash(rest) || splitkey(rest))) {
+        # A `- key: v` or `- - v` item is a nested node whose indent is its content's column, so
+        # the line is rewritten in place to that column and its continuation lines join it.
+        col = ind + 1 + m; pad = ""
+        while (length(pad) < col) pad = pad " "
+        T[j] = pad rest; I[j] = col
+        v = pblock(j, ind, 0)
+      } else v = inline_block(rest, j, ind, 0)
+      if (ERR) return "null"
       out = out (first ? "" : ",") v; first = 0; j = NX
     }
     NX = j; return out "]"
@@ -392,7 +406,7 @@ function pblock(start, pind,    j, ind, out, first, key, v, s) {
     if (I[j] < ind) break
     if (I[j] > ind) { j++; continue }
     if (!splitkey(T[j])) { ERR = 1; return "null" }
-    key = KEY; v = inline_block(REST, j, ind); if (ERR) return "null"
+    key = KEY; v = inline_block(REST, j, ind, 1); if (ERR) return "null"
     out = out (first ? "" : ",") jstr(key) ":" v; first = 0; j = NX
   }
   NX = j; return out "}"
@@ -408,14 +422,14 @@ END {
       if (I[k] == 0) break
       if (ci < 0) ci = I[k]
       if (I[k] != ci || !splitkey(T[k])) continue
-      if (KEY != "blocked_on" && KEY != "cross_session_ask") continue
-      key = KEY; v = inline_block(REST, k, ci)
+      if (KEY != "blocked_on" && KEY != "cross_session_ask") continue  # legacy alias
+      key = KEY; v = inline_block(REST, k, ci, 1)
       if (ERR) exit 1
       if (key == "blocked_on") bo = v; else csa = v
       k = NX - 1
     }
   }
-  printf "{\"blocked_on\":%s,\"cross_session_ask\":%s}\n", bo, csa
+  printf "{\"blocked_on\":%s,\"cross_session_ask\":%s}\n", bo, csa  # legacy alias
 }
 AWK
 
@@ -1667,12 +1681,12 @@ validate_frontmatter() {
   echo "ok: $f stage=$stage tokens=$tcount"
 }
 
-# fm_blocked_on_raw <fmfile> — {"blocked_on":…,"cross_session_ask":…} from the frontmatter block,
-# null for an absent key; yq when present, the awk reader above otherwise. rc 1 when unreadable.
+# fm_blocked_on_raw <fmfile> — {"blocked_on":…,"cross_session_ask":…} (legacy alias) from the
+# frontmatter block, null for an absent key; yq when present, the awk reader above otherwise. rc 1 when unreadable.
 fm_blocked_on_raw() {
   local out
   if command -v yq > /dev/null 2>&1; then
-    out=$(yq eval -o=json -I=0 '{"blocked_on": .handoff.blocked_on, "cross_session_ask": .handoff.cross_session_ask}' "$1" 2> /dev/null) || return 1
+    out=$(yq eval -o=json -I=0 '{"blocked_on": .handoff.blocked_on, "cross_session_ask": .handoff.cross_session_ask}' "$1" 2> /dev/null) || return 1  # legacy alias
   else
     out=$(awk "$_FM_BO_AWK" "$1" 2> /dev/null) || return 1
   fi
@@ -1685,7 +1699,7 @@ fm_blocked_on_raw() {
 check_blocked_on() {
   local raw norm
   # Most artifacts carry no need, and this runs at every stage boundary: no key, no process.
-  grep -qE '^[[:space:]]+(blocked_on|cross_session_ask):' "$1" 2> /dev/null || return 0
+  grep -qE '^[[:space:]]+(blocked_on|cross_session_ask):' "$1" 2> /dev/null || return 0  # legacy alias
   if ! command -v jq > /dev/null 2>&1; then
     echo "fail: handoff.blocked_on present but jq is not installed to validate it" >&2
     return 1
@@ -1711,7 +1725,7 @@ read_blocked_on() {
   corpflow_fm_block "$f" > "$fmfile" 2> /dev/null || true
   [[ -s "$fmfile" ]] || { echo "fail: missing frontmatter block in $f" >&2; return 1; }
   raw=$(fm_blocked_on_raw "$fmfile") || { echo "fail: handoff.blocked_on in $f could not be parsed" >&2; return 1; }
-  norm=$(blocked_on_normalize "$raw") || { echo "fail: no blocked_on or cross_session_ask in $f" >&2; return 1; }
+  norm=$(blocked_on_normalize "$raw") || { echo "fail: no blocked_on or cross_session_ask in $f" >&2; return 1; }  # legacy alias
   printf '%s' "$norm" | jq -c '.blocked_on'
   printf 'source: %s\n' "$(printf '%s' "$norm" | jq -r '.source')"
 }

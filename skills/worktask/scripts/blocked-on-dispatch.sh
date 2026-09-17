@@ -139,21 +139,35 @@ bo_field() {
 # tried only when the one above yields nothing, and no rung ever falls back to the raw command.
 bo_command_head() {
   local cmd="${1:-}" lib="$_BO_ROOT/hooks/lib/command-head-lib.sh" raw="" text="" cut=false pd
+  local -a words=()
   [ -n "$cmd" ] || { printf '{}'; return 0; }
   if [ -r "$lib" ]; then
     # A subshell: the helper is another issue's file, and sourcing it must not be able to
-    # redefine this script's functions or exit it.
+    # redefine this script's functions or exit it. The lib's contract is AUDIT_COMMAND_HEAD plus
+    # AUDIT_REDACTION, set by audit_command_head; its stdout is the same head, read only when a
+    # variant leaves the variable unset. A redirect, not $( ), so the variables survive the call.
     raw=$( (
       # shellcheck source=/dev/null
       . "$lib" > /dev/null 2>&1 || exit 1
       command -v audit_command_head > /dev/null 2>&1 || exit 1
-      audit_command_head "$cmd"
+      AUDIT_COMMAND_HEAD="" AUDIT_REDACTION=""
+      audit_command_head "$cmd" > /dev/null 2>&1 || exit 1
+      h="$AUDIT_COMMAND_HEAD"
+      [ -n "$h" ] || h=$(audit_command_head "$cmd" 2> /dev/null | head -n 1)
+      jq -cn --arg h "$h" --arg r "$AUDIT_REDACTION" '{h: $h, r: $r}'
     ) 2> /dev/null) || raw=""
-    if printf '%s' "$raw" | jq -e 'type == "object" and (.command_head | type) == "string"' > /dev/null 2>&1; then
-      text=$(printf '%s' "$raw" | jq -r '.command_head')
-      cut=$(printf '%s' "$raw" | jq -r '.truncated == true')
-    else
-      text=$(printf '%s\n' "$raw" | head -n 1)
+    if [ -n "$raw" ]; then
+      text=$(printf '%s' "$raw" | jq -r '.h' 2> /dev/null) || text=""
+      if [ -n "$text" ]; then
+        # The lib reports no cut flag: its head covers the first segment of the first line only,
+        # so a scrub that did not run, a second line, or more words than the head kept is a cut.
+        IFS=$' \t' read -r -a words <<< "${cmd%%$'\n'*}" || true
+        if [ -n "$(printf '%s' "$raw" | jq -r '.r' 2> /dev/null)" ] \
+          || [ "${cmd%%$'\n'*}" != "$cmd" ] \
+          || [ "${#words[@]}" -gt "$(printf '%s' "$text" | wc -w | tr -d ' ')" ]; then
+          cut=true
+        fi
+      fi
     fi
   fi
   if [ -z "$text" ]; then
@@ -325,7 +339,7 @@ cmd_route() {
   handoff=$(printf '%s' "$PAYLOAD_ARG" \
     | jq -c 'if type == "object" and (.handoff | type) == "object" then .handoff else . end' 2> /dev/null) || handoff=""
   if ! norm=$(blocked_on_normalize "$handoff"); then
-    printf >&2 'fail: the payload carries no blocked_on or cross_session_ask\n'
+    printf >&2 'fail: the payload carries no blocked_on or cross_session_ask\n'  # legacy alias
     exit 1
   fi
   BO=$(printf '%s' "$norm" | jq -c '.blocked_on')

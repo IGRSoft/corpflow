@@ -351,7 +351,7 @@ A grant, evidence tool or toolchain that the autonomy preflight probes, failing 
 that probe (§ metadata.preflight — field notes), so a re-probe can tell fixed from still broken. A
 host need no probe covers is a `user_action`.
 
-##### Schema — blocked_on, decision_ref on the other arms
+#### Schema — blocked_on, decision_ref on the other arms
 
 For every arm but `permission`, `decision_ref` is `blocked_on:<task_id>:<kind>:<n>`, the
 `metadata.decision_ref` of the closing-leg `blocked_on` audit row. `blocked-on-dispatch.sh resume`
@@ -360,7 +360,7 @@ stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the
 rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
 its `artifact_path` is resolved as the arm above says and printed beside it.
 
-##### Schema — blocked_on, the other arms' full detail and audit row
+#### Schema — blocked_on, the other arms' full detail and audit row
 
 The split is the permission arm's. The full detail lives in the artifact's `handoff.blocked_on`, in
 the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`, and in the `batch`

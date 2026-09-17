@@ -85,8 +85,8 @@ self_test() {
   fi
 
   rc=0
-  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?
-  if [ "$rc" -eq 0 ] && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session" and .fallback_from == "peer_session" and .owner_issue == 405' > /dev/null 2>&1; then
+  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?  # legacy alias
+  if [ "$rc" -eq 0 ] && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session" and .fallback_from == "peer_session" and .owner_issue == 405' > /dev/null 2>&1; then  # legacy alias
     _st_pass "route: the legacy cross_session_ask alias routes as peer_session"
   else
     _st_fail "route: the legacy cross_session_ask alias routes as peer_session"
