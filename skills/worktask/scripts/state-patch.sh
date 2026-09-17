@@ -2060,7 +2060,13 @@ if [[ -n "$STAGE_ARG" || -n "$ARTIFACT_ARG" ]]; then
     _CANON_BASE="$(basename_for_stage "$STAGE_ARG")"
     if [[ -n "$_CANON_BASE" ]]; then
       _GIVEN_BASE="$(basename -- "$ARTIFACT_ARG")"
-      if ! printf '%s' "$_GIVEN_BASE" | grep -qE "^${_CANON_BASE}-[0-9]+\.md$"; then
+      # DV alone may carry the S1 stream suffix (handoff-protocol.md § DV fan-out); the
+      # slug grammar and 40-char cap mirror hooks/anchor-preflight.sh, so a name this
+      # accepts is one the hook lints.
+      _CANON_RE="^${_CANON_BASE}-[0-9]+\.md$"
+      [[ "$_CANON_BASE" == "development" ]] && _CANON_RE="^development-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\.md$"
+      if ! printf '%s' "$_GIVEN_BASE" | grep -qE "$_CANON_RE" \
+        || printf '%s' "$_GIVEN_BASE" | grep -qE '^development-[0-9]+-[a-z0-9-]{41,}\.md$'; then
         printf >&2 'warn: --artifact %s is not the canonical name for stage %s (expected %s-<N>.md). It will be ledgered, but hooks/anchor-preflight.sh gates on the canonical name and will SKIP its anchor lint for this file.\n' \
           "$_GIVEN_BASE" "$STAGE_ARG" "$_CANON_BASE"
         log_msg WARN "non-canonical --artifact ${_GIVEN_BASE} for stage ${STAGE_ARG} (canonical: ${_CANON_BASE}-<N>.md) — anchor lint will not run"

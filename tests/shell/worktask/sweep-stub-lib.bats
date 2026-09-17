@@ -20,7 +20,9 @@ setup() {
     > "$WD/state.json"
   # The ref-anchor check resolves a stub's ref beside the artifact, so a passing row needs
   # its target to exist; a failing row never reaches that check.
-  printf '# Planning\n\n## elicitation-sweep\n\nbody\n' > "$WD/planning-0.md"
+  # The item under it carries two options, so the harness's item-body check never decides a row.
+  printf '# Planning\n\n## elicitation-sweep\n\n- id: sw-PL0-1\n  summary: "Which way?"\n  options:\n    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n' \
+    > "$WD/planning-0.md"
 }
 
 # --- library authoring rules -------------------------------------------------
@@ -94,7 +96,11 @@ none
 
 ## elicitation-sweep
 
-body
+- id: sw-PL0-1
+  summary: "Which way?"
+  options:
+    - { label: "A", detail: "first" }
+    - { label: "B", detail: "second" }
 EOF
   if bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$art" > /dev/null 2>&1; then
     printf 'pass'

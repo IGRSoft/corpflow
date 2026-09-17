@@ -112,7 +112,7 @@ Cheapest-first when only the verdict/decisions/refs or the delta is needed: (1) 
 
 #### Q1 Three-Mode Dispatcher
 
-Read `metadata.test_mode` from `<plan_file>` (effective default `scoped`) and DV's list in `.context/development-N.md § Selected Tests`.
+Read `metadata.test_mode` from `<plan_file>` (effective default `scoped`) and the `§ Selected Tests` list of every DV artifact — `refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`; the union of those lists is the Selected Tests below.
 
 | `test_mode` (DV's effective mode, post-auto-promotion) | QA execution |
 |---|---|

@@ -55,11 +55,11 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 if command -v corpflow_context_root >/dev/null 2>&1; then
   CTX=$(corpflow_context_root)
 else
-  # Degraded: declared roots only, requiring an existing .context — never cwd.
+  # Degraded: declared roots only, requiring an existing ledger — never cwd.
   CTX=""
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     CTX="${WORKSPACE_ROOT}/.context"
-  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     CTX="${CLAUDE_PROJECT_DIR}/.context"
   fi
 fi

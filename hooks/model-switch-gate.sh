@@ -67,9 +67,9 @@ if ! command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   # sentinel is only ever planted under an explicitly DECLARED root, never one
   # this hook would have to go looking for itself.
   _cf_ctx=""
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     _cf_ctx="${WORKSPACE_ROOT}/.context"
-  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     _cf_ctx="${CLAUDE_PROJECT_DIR}/.context"
   fi
   if [ -n "$_cf_ctx" ] && [ -f "$_cf_ctx/state.json" ]; then

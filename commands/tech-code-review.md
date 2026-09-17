@@ -273,7 +273,7 @@ A **sound bug** — a **read-confirmed P0/P1** (read-confirmed trigger OR direct
 
 ### How to escalate (reuse existing machinery)
 
-1. **Set the DR run `verdict: fail` — this IS the escalation.** The orchestrator's execution loop re-dispatches the **previous stage (DV)** on a DR rejection, carrying the DR findings verbatim into the DV retry prompt (run_index bumped, `retry_count++`). See `skills/worktask/SKILL.md § Orchestrator Execution Loop` and the escalation chain `…DR→DV…` in `skills/agent-coordination/SKILL.md § Error Handling`. No special routing classification is needed.
+1. **Set the DR run `verdict: fail` — this IS the escalation.** The orchestrator's execution loop re-dispatches the **previous stage (DV)** on a DR rejection, carrying the DR findings verbatim into the DV retry prompt (`run_index` unchanged, `retry_count` up by 1). See `skills/worktask/SKILL.md § Orchestrator Execution Loop` and the escalation chain `…DR→DV…` in `skills/agent-coordination/SKILL.md § Error Handling`. No special routing classification is needed.
 2. **Record the sound findings in `.context/developer-review-N.md § Findings`** — the artifact the DV retry prompt reads — one entry per finding naming the file, the trigger, and what must change.
 
 #### Escalation step 3 — optional tracking block
