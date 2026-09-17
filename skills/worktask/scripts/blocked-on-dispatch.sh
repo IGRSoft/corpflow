@@ -513,7 +513,18 @@ cmd_batch() {
            | . + {_lines: ($d | bo_lines)}
          end]' \
     "$STATE_PATH")
-  needs=$(printf '%s' "$full" | jq -c 'map(del(._lines))')
+  # AD10: a user_decision need carries the `header` its question will be asked under — the lowest
+  # task id of its (question, options, item) group — so the orchestrator can map an answer back
+  # to every task in that group. The grouping is the same one the payloads use below.
+  needs=$(printf '%s' "$full" | jq -c '
+    map(del(._lines)) as $n
+    | ($n | map(select(.kind == "user_decision"))
+       | group_by([.question, .options, .item])
+       | map(. as $g | ($g | map(.task_id) | sort | .[0] | .[0:12]) as $h
+             | $g | map({(.task_id): $h}))
+       | flatten | add // {}) as $hdr
+    | $n | map(if .kind == "user_decision"
+               then . + {header: ($hdr[.task_id] // (.task_id | .[0:12]))} else . end)')
   megatask=$(jq -r '(.tasks["PL\(.run_index // 0)"].metadata.megatask_group // "") | tostring' "$STATE_PATH")
 
   if [ -z "$megatask" ]; then
@@ -617,6 +628,14 @@ cmd_resume_user_decision() {
   ledger_path="${STATE_PATH%/*}/decisions.jsonl"
   if [ -n "$DECISION_REF_ARG" ]; then
     dr="$DECISION_REF_ARG"
+    # ud_find_covering refuses a consumed row; an explicit ref gets the same check, or a
+    # re-raised need could be resumed twice off one decision.
+    if [ -f "$AUDIT" ] && jq -nRe --arg id "$dr" --arg t "$TASK_ARG" '
+      any(inputs | (try fromjson catch null); . != null and type == "object"
+        and .action == "blocked_on" and .subject == $t
+        and (.metadata.decision_ref? // "") == $id)' "$AUDIT" > /dev/null 2>&1; then
+      die 1 "$dr was already consumed by an earlier resume of tasks.$TASK_ARG"
+    fi
   else
     dr=$(ud_find_covering "$STATE_PATH" "$ledger_path" "$AUDIT" "$TASK_ARG")
   fi

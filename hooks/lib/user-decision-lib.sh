@@ -36,8 +36,27 @@ UD_ROW_KEYS="id ts actor tool_use_id question answer scope sha256 prev_sha256"
 # shellcheck disable=SC2034  # public constant: the closed reason set ud_verify's callers match against
 UD_REASONS="not_found ledger_symlink malformed_row duplicate_id duplicate_tool_use actor_mismatch sha256_mismatch chain_broken worktask_mismatch scope_not_covering audit_uncorroborated answer_mismatch"
 
+# AD2 pinned canonical probe: the digest of `jq -jc` over a [question,answer] pair carrying a
+# DEL, U+2028/U+2029, U+FFFD, C0 controls, a non-BMP codepoint, `/` and `\`. A jq whose string
+# escaping differs from the pinned reference (jq 1.7.1) fails this, and the verifier then exits 2
+# with `jq_canon_drift` rather than reading its own stored digests as forgeries. The probe value
+# is built from codepoints, so this file holds no raw control byte and no escape to mis-decode.
+UD_CANON_SHA="0710843c3d55cd66ecd919da7f62cc1e761baff43303000f38d571bc8e3e7059"
+# shellcheck disable=SC2034  # public constant: the probe program, exposed for drift diagnosis
+UD_CANON_PROBE='[([97,34,98,92,99,47,100,1,101,9,102,10,103,127,104,8232,105,65533,106,119070,107] | implode), ([122,8233] | implode)]'
+
 _UD_LOCK_DIR=""
 _UD_LOCK_TOKEN=""
+
+# ud_canon_ok — rc 0 when this jq encodes the pinned probe exactly as the reference did; rc 1 on
+# drift; rc 2 when jq or a digest tool is missing (the caller's own IO exit).
+ud_canon_ok() {
+  local _out
+  command -v jq > /dev/null 2>&1 || return 2
+  _out=$(jq -jcn "$UD_CANON_PROBE" 2> /dev/null | ud_digest) || return 2
+  [ "$_out" = "$UD_CANON_SHA" ] || return 1
+  return 0
+}
 
 # ud_digest — stdin's bytes -> 64 lowercase hex on stdout; rc 2 with empty stdout when neither
 # digest tool works. Buffers stdin to a file first, never a variable: a mid-stream shasum
@@ -369,6 +388,13 @@ ud_append_call() {
     return 1
   fi
 
+  # Checked before locking: ud_lock_acquire's own symlink refusal is indistinguishable from a timeout.
+  if [ -L "$_ledger" ]; then
+    rm -f "$_staged"
+    printf 'ledger_symlink'
+    return 1
+  fi
+
   if ! ud_lock_acquire "$_ledger"; then
     rm -f "$_staged"
     printf 'lock_timeout'
@@ -388,6 +414,14 @@ ud_append_call() {
     ud_lock_release
     rm -f "$_staged"
     printf 'replay'
+    return 1
+  fi
+
+  # P6 runs after P5 (first failure wins): one badly shaped answer refuses the whole call.
+  if jq -se 'any(.[]; .question_ok == true and .answer_ok != true)' "$_staged" > /dev/null 2>&1; then
+    ud_lock_release
+    rm -f "$_staged"
+    printf 'answer_shape'
     return 1
   fi
 
@@ -412,7 +446,11 @@ ud_append_call() {
   _ts_row=$(date -u +%FT%TZ 2> /dev/null) || _ts_row="unknown"
 
   _newlines="" _cb_ids="" _any=0
-  while IFS=$'\t' read -r _idx _header _qok _aok; do
+  # The staged file is JSONL; flatten it to TSV here. Header goes last so an empty one cannot
+  # shift fields (tab is IFS whitespace, so adjacent tabs collapse), and a header carrying a
+  # tab/CR/LF is blanked rather than escaped, so the rest reach `read` byte-exact. Only ids and
+  # booleans cross into shell state, never question or answer text.
+  while IFS=$'\t' read -r _idx _qok _aok _header; do
     [ -n "$_idx" ] || continue
     [ "$_qok" = "true" ] && [ "$_aok" = "true" ] || continue
     _scope=$(ud_scope_for "$_state" "$_header" "$_payload" "$_idx") || _scope="no_scope"
@@ -455,7 +493,9 @@ ud_append_call() {
 "
     _prev="\"$_sha\""
     _any=1
-  done < "$_staged"
+  done < <(jq -r '
+    "\(.index)\t\(.question_ok)\t\(.answer_ok)\t\((.header // "") | if test("[\t\r\n]") then "" else . end)"
+  ' "$_staged" 2> /dev/null)
   rm -f "$_staged"
 
   if [ "$_any" -eq 0 ]; then
@@ -492,7 +532,7 @@ ud_append_call() {
 # is what makes a 200-row ledger cost a handful of forks rather than hundreds.
 ud_chain_walk() {
   local _ledger _raw _td _tsv _n _shaout _rc
-  local _row_line _row_id _row_actor _row_prev _row_sha _row_tuid _row_shape _row_canon
+  local _row_line _row_meta _row_canon _i _notail
   local _files
 
   _ledger="${1:-}"
@@ -504,25 +544,40 @@ ud_chain_walk() {
     return 0
   fi
   [ -f "$_ledger" ] || return 0
+
+  # AD6: NUL, CR or a missing final LF is malformed. A NUL cannot survive the `$( )` snapshot at
+  # all, so it refuses the whole ledger here; CR is caught per line inside jq; a missing final LF
+  # is invisible to `cat` and is carried to the last row as $notail.
+  if [ -s "$_ledger" ] \
+    && [ "$(LC_ALL=C tr -dc '\000' < "$_ledger" 2> /dev/null | LC_ALL=C wc -c | tr -d ' ')" != "0" ]; then
+    printf '{"index":1,"id":null,"line_sha256":null,"reasons":["malformed_row"]}\n'
+    return 0
+  fi
+  _notail=0
+  if [ -s "$_ledger" ] && [ -n "$(tail -c 1 -- "$_ledger" 2> /dev/null)" ]; then
+    _notail=1
+  fi
+
   _raw=$(cat -- "$_ledger" 2> /dev/null)
   [ -n "$_raw" ] || return 0
 
   _td=$(mktemp -d 2> /dev/null) || return 2
 
+  # Two lines per stored line: the @tsv meta record, then the canonical [question,answer] JSON.
+  # Neither carries a raw LF, and neither passes through @tsv's backslash escaping on its way to
+  # a digest — the raw line bytes come from `read` over the snapshot itself, below.
   _tsv=$(printf '%s' "$_raw" | jq -Rr --arg keys "$UD_ROW_KEYS" '
-    (split("\n") | (if (length > 0 and .[-1] == "") then .[0:-1] else . end)) as $lines
-    | ($keys | split(" ")) as $want
-    | $lines[]
+    ($keys | split(" ")) as $want
     | . as $l
     | (try fromjson catch null) as $row
-    | if ($row == null or ($row | type) != "object") then
-        [$l, "", "", "", "", "", "no", ""] | @tsv
+    | if (($l | test("\r")) or $row == null or ($row | type) != "object") then
+        (["", "", "", "", "", "no"] | @tsv), "null"
       else
-        [$l, ($row.id // "" | tostring), ($row.actor // "" | tostring),
-         ($row.prev_sha256 // "" | tostring), ($row.sha256 // "" | tostring),
-         ($row.tool_use_id // "" | tostring),
-         (if (($row | keys_unsorted) == $want) then "yes" else "no" end),
-         ([$row.question, $row.answer] | tojson)] | @tsv
+        ([($row.id // "" | tostring), ($row.actor // "" | tostring),
+          ($row.prev_sha256 // "" | tostring), ($row.sha256 // "" | tostring),
+          ($row.tool_use_id // "" | tostring),
+          (if (($row | keys_unsorted) == $want) then "yes" else "no" end)] | @tsv),
+        ([$row.question, $row.answer] | tojson)
       end
   ' 2> /dev/null)
   if [ -z "$_tsv" ]; then
@@ -531,20 +586,25 @@ ud_chain_walk() {
   fi
 
   _n=0
-  : > "$_td/meta"
   _files=()
-  while IFS=$'\t' read -r _row_line _row_id _row_actor _row_prev _row_sha _row_tuid _row_shape _row_canon; do
+  while IFS= read -r _row_line; do
     _n=$((_n + 1))
     printf '%s' "$_row_line" > "$_td/raw.$_n"
-    printf '%s' "$_row_canon" > "$_td/canon.$_n"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$_row_id" "$_row_actor" "$_row_prev" "$_row_sha" "$_row_tuid" "$_row_shape" >> "$_td/meta"
     _files+=("$_td/raw.$_n" "$_td/canon.$_n")
+  done <<< "$_raw"
+
+  _i=0
+  : > "$_td/meta"
+  while IFS= read -r _row_meta && IFS= read -r _row_canon; do
+    _i=$((_i + 1))
+    printf '%s\n' "$_row_meta" >> "$_td/meta"
+    printf '%s' "$_row_canon" > "$_td/canon.$_i"
   done <<< "$_tsv"
 
-  if [ "$_n" -eq 0 ]; then
+  if [ "$_n" -eq 0 ] || [ "$_i" -ne "$_n" ]; then
     rm -rf "$_td"
-    return 0
+    [ "$_n" -eq 0 ] && return 0
+    return 2
   fi
 
   if command -v shasum > /dev/null 2>&1; then
@@ -560,7 +620,8 @@ ud_chain_walk() {
     return 2
   fi
 
-  printf '%s\n' "$_shaout" | jq -Rn --rawfile meta "$_td/meta" --argjson n "$_n" --arg actor "$UD_ACTOR" '
+  printf '%s\n' "$_shaout" | jq -Rn --rawfile meta "$_td/meta" --argjson n "$_n" \
+    --argjson notail "$_notail" --arg actor "$UD_ACTOR" '
     def digline: capture("^(?<h>[0-9a-f]{64})[ *]+(?<p>\\S.*)$");
     ([inputs | select(length > 0) | digline]) as $digs
     | (reduce $digs[] as $d ({}; . + {($d.p | split("/") | last): $d.h})) as $byname
@@ -574,18 +635,19 @@ ud_chain_walk() {
     | ($byname["canon." + ($idx | tostring)]) as $canon_sha
     | ($m[5] == "yes") as $shape_ok
     | (if $shape_ok then null else "malformed_row" end) as $r_shape
-    | (if $shape_ok and $m[3] != "" and $m[3] != $canon_sha then "sha256_mismatch" else null end) as $r_sha
+    | (if $shape_ok and $notail == 1 and $idx == $n then "malformed_row" else null end) as $r_tail
+    | (if $shape_ok and $m[3] != $canon_sha then "sha256_mismatch" else null end) as $r_sha
     | (if $shape_ok and $m[1] != $actor then "actor_mismatch" else null end) as $r_actor
     | (if $shape_ok then
          (($m[0] | capture("-(?<n>[0-9]+)$").n // null) | (try tonumber catch null) // -1) as $ord
          | (if $ord != $idx then true
             elif $idx == 1 then $m[2] != ""
-            else $m[2] != ("\"" + ($byname["raw." + (($idx - 1) | tostring)] // "") + "\"") end)
+            else $m[2] != ($byname["raw." + (($idx - 1) | tostring)] // "") end)
        else false end) as $chain_bad
     | (if $shape_ok and $chain_bad then "chain_broken" else null end) as $r_chain
     | (if $shape_ok and (($ids | map(select(. == $m[0]))) | length) > 1 then "duplicate_id" else null end) as $r_dupid
     | (if $shape_ok and (($tuids | map(select(. == $m[4]))) | length) > 1 then "duplicate_tool_use" else null end) as $r_duptu
-    | ([$r_shape, $r_sha, $r_actor, $r_chain, $r_dupid, $r_duptu] | map(select(. != null))) as $reasons
+    | ([$r_shape, $r_tail, $r_sha, $r_actor, $r_chain, $r_dupid, $r_duptu] | map(select(. != null))) as $reasons
     | {index: $idx, id: (if $shape_ok then $m[0] else null end), line_sha256: $line_sha, reasons: $reasons}
     | tojson
   ' 2> /dev/null
@@ -623,7 +685,7 @@ ud_verify() (
   set +eE -u
   IFS=$' \t\n'
   local state ledger audit id task expect has_expect
-  local wid reasons idx chain_n walk row dup checks found tuid sha valid
+  local wid reasons idx chain_n walk row dup checks found tuid sha valid _ud_whole
   state="${1:-}" ledger="${2:-}" audit="${3:-}" id="${4:-}" task="${5:-}" expect="${6:-}"
   has_expect=0
   [ "$#" -ge 6 ] && has_expect=1
@@ -635,8 +697,18 @@ ud_verify() (
     printf '{}'
     exit 2
   }
-  printf '%s' "$id" | LC_ALL=C grep -Eq "$UD_ID_RE" || {
+  # Whole-string, not grep's per-line match: an id carrying an LF whose second line looks like a
+  # valid id is a usage error (exit 2), never a lookup that can reach exit 5.
+  [[ $id =~ $UD_ID_RE ]] || {
     printf '{}'
+    exit 2
+  }
+
+  # AD2: escaping drift is exit 2, never a refusal, so a jq upgrade is never read as forgery.
+  ud_canon_ok || {
+    jq -cn --arg id "$id" --arg task "$task" '
+      {decision_ref: $id, task_id: $task, valid: false, reasons: ["jq_canon_drift"],
+       question: null, answer: null, scope: null, row_index: null, chain_rows: 0}'
     exit 2
   }
 
@@ -654,18 +726,32 @@ ud_verify() (
     chain_n=$(printf '%s\n' "$walk" | LC_ALL=C grep -c . 2> /dev/null)
     [ -n "$chain_n" ] || chain_n=0
     row=$(printf '%s\n' "$walk" | jq -c --arg id "$id" 'select(.id == $id)' 2> /dev/null | head -n 1)
+    # AD6 whole-ledger trust: an edit anywhere refuses everything, so every row's integrity
+    # reasons are folded into the target's. Reported in UD_REASONS check order.
+    # shellcheck disable=SC2016  # jq program text: $r/$o/$all are jq variables
+    _ud_whole='
+      ["ledger_symlink","malformed_row","duplicate_id","duplicate_tool_use",
+       "actor_mismatch","sha256_mismatch","chain_broken"] as $whole
+      | ($order | split(" ")) as $o
+      | ($base + [$rows[] | (.reasons // [])[] | select(. as $r | $whole | any(.[]; . == $r))]) as $all
+      | [$o[] | select(. as $r | $all | any(.[]; . == $r))]'
 
     if [ -z "$row" ]; then
-      reasons='["not_found"]'
+      reasons=$(printf '%s\n' "$walk" | jq -sc --argjson base '["not_found"]' --arg order "$UD_REASONS" \
+        '. as $rows | '"$_ud_whole" 2> /dev/null)
+      [ -n "$reasons" ] || reasons='["not_found"]'
     else
       idx=$(printf '%s' "$row" | jq -r '.index')
       reasons=$(printf '%s' "$row" | jq -c '.reasons')
 
       dup=$(printf '%s\n' "$walk" | jq -sc --arg id "$id" '[.[] | select(.id == $id)] | length')
       [ "${dup:-1}" -gt 1 ] && reasons=$(printf '%s' "$reasons" | jq -c '. + ["duplicate_id"] | unique')
+      reasons=$(printf '%s\n' "$walk" | jq -sc --argjson base "$reasons" --arg order "$UD_REASONS" \
+        '. as $rows | '"$_ud_whole" 2> /dev/null) || reasons=""
+      [ -n "$reasons" ] || reasons='["malformed_row"]'
 
       if [ "$(printf '%s' "$reasons" | jq 'length')" = "0" ]; then
-        checks=$(jq -c --arg id "$id" --arg wid "$wid" --arg task "$task" \
+        checks=$(jq -nc --arg id "$id" --arg wid "$wid" --arg task "$task" \
           --argjson has_expect "$has_expect" --arg expect "$expect" '
           ([inputs | select(.id == $id)] | .[0]) as $row
           | if $row == null then {found: false}
@@ -707,7 +793,7 @@ ud_verify() (
   [ "$(printf '%s' "$reasons" | jq 'length' 2> /dev/null)" = "0" ] && valid=true
 
   if [ "$valid" = true ] && [ -f "$ledger" ] && [ ! -L "$ledger" ]; then
-    jq -c --arg id "$id" --arg task "$task" --argjson reasons "$reasons" \
+    jq -nc --arg id "$id" --arg task "$task" --argjson reasons "$reasons" \
       --argjson idx "${idx:-null}" --argjson chainn "$chain_n" '
       ([inputs | select(.id == $id)] | .[0]) as $row
       | {decision_ref: $id, task_id: $task, valid: true, reasons: $reasons,
@@ -728,11 +814,18 @@ ud_verify() (
 # covers <task_id> and that no recorded `blocked_on` row for this subject already carries as its
 # decision_ref. Prints the id, or nothing (rc 0 either way — "not found" is not a failure here).
 ud_find_covering() {
-  local _state _ledger _audit _task _ids _id _v _consumed
+  local _state _ledger _audit _task _ids _id _v _consumed _walk
   _state="${1:-}" _ledger="${2:-}" _audit="${3:-}" _task="${4:-}"
   [ -n "$_state" ] && [ -n "$_ledger" ] && [ -n "$_task" ] || return 2
   command -v jq > /dev/null 2>&1 || return 2
   [ -f "$_ledger" ] && [ ! -L "$_ledger" ] || return 0
+
+  # AD6 whole-ledger trust, checked once up front: any integrity reason on any row (or a walk
+  # that cannot run) means no row covers anything.
+  _walk=$(ud_chain_walk "$_ledger" 2> /dev/null) || return 0
+  [ -n "$_walk" ] || return 0
+  printf '%s\n' "$_walk" | jq -se 'all(.[]; (.reasons // ["malformed_row"]) | length == 0)' \
+    > /dev/null 2>&1 || return 0
 
   _ids=$(jq -r --arg t "$_task" '
     select(((.scope.task_ids // []) | index($t)) != null) | .id
@@ -749,7 +842,8 @@ ud_find_covering() {
       ' "$_audit" > /dev/null 2>&1 && _consumed=true
     fi
     [ "$_consumed" = true ] && continue
-    _v=$(ud_verify "$_state" "$_ledger" "$_audit" "$_id" "$_task" 2> /dev/null)
+    # rc 1 (a refused candidate) is this loop's normal case: keep it off a `set -e` caller.
+    _v=$(ud_verify "$_state" "$_ledger" "$_audit" "$_id" "$_task" 2> /dev/null) || _v=""
     if printf '%s' "$_v" | jq -e '.valid == true' > /dev/null 2>&1; then
       printf '%s' "$_id"
       return 0

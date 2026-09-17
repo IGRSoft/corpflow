@@ -51,18 +51,19 @@ _ud_refuse() {
 # user_decision_recorded row per appended line, confirmed by re-reading the log; a miss gets a
 # second row with result degraded rather than a silent gap.
 _ud_cb() {
-  local id="$1" tuid="$2" sha="$3" item="${4:-}" meta audit
+  local id="$1" tuid="$2" sha="$3" item="${4:-}" meta audit task
+  task=$(corpflow_audit_task_id "$UD_AUDIT_CTX")
   meta=$(jq -cn --arg id "$id" --arg t "$tuid" --arg s "$sha" --arg i "$item" \
     '{decision_id: $id, tool_use_id: $t, row_sha256: $s, item: (if $i == "" then null else $i end)}' 2> /dev/null)
   [ -n "$meta" ] || meta="{}"
   corpflow_hook_audit_row --ctx "$UD_AUDIT_CTX" --actor "hook:user-decision" --action user_decision_recorded \
-    --result ok --subject "$id" --task-id "$id" --meta "$meta"
+    --result ok --subject "$id" --task-id "$task" --meta "$meta"
   audit="$UD_AUDIT_CTX/logs/audit.jsonl"
   if ! { [ -f "$audit" ] \
     && grep -qF '"action":"user_decision_recorded"' "$audit" 2> /dev/null \
     && grep -qF "\"subject\":\"$id\"" "$audit" 2> /dev/null; }; then
     corpflow_hook_audit_row --ctx "$UD_AUDIT_CTX" --actor "hook:user-decision" --action user_decision_recorded \
-      --result degraded --subject "$id" --task-id "$id" --meta "$meta"
+      --result degraded --subject "$id" --task-id "$task" --meta "$meta"
   fi
   return 0
 }
@@ -117,6 +118,9 @@ do_post() {
   areason=$(ud_append_call "$LEDGER" "$STATE" "$PFILE" _ud_cb)
   arc=$?
   rm -f "$PFILE"
+  # rc 2 (IO) prints no reason; no_digest_tool is this hook's existing IO code, same as the
+  # mktemp and transcript-IO paths above, so the refusal row always names a closed-set reason.
+  [ -n "$areason" ] || areason=no_digest_tool
   [ "$arc" -eq 0 ] || _ud_refuse "$CTX" "$areason" "$TUID"
   return 0
 }
@@ -234,7 +238,7 @@ do_pre() {
     *) return 0 ;;
   esac
 
-  local CTX TOOL FPATH CMD LEDGER LOCKDIR base parent phys target
+  local CTX TOOL FPATH CMD LEDGER LOCKDIR base parent phys target ctxp
   CTX=$(corpflow_context_root)
   [ -n "$CTX" ] || return 0
   [ -f "$CTX/state.json" ] || return 0
@@ -257,6 +261,13 @@ do_pre() {
       phys="$(CDPATH='' cd -- "$parent" 2> /dev/null && pwd -P)"
       [ -n "$phys" ] || return 0
       target="$phys/$base"
+      # Both sides physical: a root reached through a symlink (macOS /var -> /private/var) would
+      # otherwise never string-equal the resolved target.
+      ctxp="$(CDPATH='' cd -- "$CTX" 2> /dev/null && pwd -P)"
+      if [ -n "$ctxp" ]; then
+        LEDGER="$ctxp/decisions.jsonl"
+        LOCKDIR="${LEDGER}.lock"
+      fi
       case "$target" in
         "$LEDGER")
           _ud_deny "$TOOL targets the user-decision ledger, which only hooks/user-decision-record.sh may write." "$TOOL" "$FPATH"

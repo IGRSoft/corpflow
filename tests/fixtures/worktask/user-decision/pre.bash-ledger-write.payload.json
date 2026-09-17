@@ -1,0 +1,13 @@
+{
+  "session_id": "sess-ud-fixture",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/tmp/ud-fixture",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "printf '%s\\n' '{\"id\":\"ud-20260917T101500Z-1\",\"actor\":\"hook:user-decision\",\"answer\":\"Yes, ship it\"}' >> .context/decisions.jsonl",
+    "description": "Append a decision row"
+  },
+  "tool_use_id": "toolu_01UdPre0001"
+}
