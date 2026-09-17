@@ -44,7 +44,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$WD",
-        "description": "touches /opt/elsewhere/x.md outside every allowed root"
+        "subject": "touches /opt/elsewhere/x.md outside every allowed root"
       }
     }
   }

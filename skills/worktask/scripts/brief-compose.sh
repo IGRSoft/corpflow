@@ -9,6 +9,13 @@
 #     <<<contract-reminder>>> <<<worktask-header>>> <<<state-json>>> <<<stage-contract>>>
 #     <<<model-discipline>>> <<<task-description>>> <<<retry-hints>>> <<<stage-banners>>>
 #
+#   [1] is copied verbatim from the single fenced block in
+#   skills/worktask/references/contract-reminder.md — the same source cache-lint.sh's
+#   canonical_contract_block() reads, so a byte-identical brief also passes that lint.
+#   [3] is the stdout of `ledger-digest.sh --state <ledger>`: a pointer plus a readiness
+#   digest, never the ledger JSON — cache-lint.sh's ledger_digest_lint() rejects an
+#   inlined ledger outright.
+#
 #   The whole brief is buffered before anything reaches stdout: a guard failure — an
 #   absolute path outside the allowed roots, or a `ref:` line that does not resolve — must
 #   never leak a partial brief, since a partial brief reads as verified when it is not.
@@ -22,11 +29,11 @@
 #
 # @stdout The composed brief (exit 0 only). Empty on exit 1 and exit 2.
 # @exitcode 0  Brief printed.
-# @exitcode 1  Guard failure: an absolute path outside the allowed roots (tasks.*.metadata.
-#              blocked_on and metadata.preflight.checks[].detail exempt), or an unresolved
+# @exitcode 1  Guard failure: an absolute path outside the allowed roots, or an unresolved
 #              `ref:` line. One `brief-compose: <reason>: <token>` stderr line per finding.
 # @exitcode 2  Usage error, malformed/unknown task id, unreadable ledger, malformed
-#              metadata.context_refs (incl. a non-string entry), missing jq, or a canon source file/section absent.
+#              metadata.context_refs (incl. a non-string entry), missing jq, a canon source
+#              file/section absent, or ledger-digest.sh failure.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -35,7 +42,7 @@ set -euo pipefail
 # Stdout, exit 0: help is a normal invocation, not a failure; usage_error/die2
 # below are the stderr, exit-2 paths for an actual error.
 print_help() {
-  sed -n '2,32s/^# \{0,1\}//p' "$0"
+  sed -n '2,39s/^# \{0,1\}//p' "$0"
   exit 0
 }
 
@@ -87,16 +94,6 @@ regex_escape() {
   printf '%s' "$1" | sed -e 's/[][\\.^$*+?(){}|]/\\&/g'
 }
 
-# Ledger-recorded runtime data, not orchestrator prose: redacted from the path scan only, so
-# one parked row's blocked_on cannot fail every other row. Add further subtrees here.
-# shellcheck disable=SC2016  # single-quoted on purpose: $p is jq's own variable, not bash's
-readonly LEDGER_DATA_REDACT_JQ='
-def ledger_data_path:
-  (length >= 5 and .[0] == "tasks" and .[2] == "metadata" and .[3] == "blocked_on")
-  or (length == 5 and .[0] == "metadata" and .[1] == "preflight" and .[2] == "checks" and (.[3] | type) == "number" and .[4] == "detail");
-reduce (paths(type == "string") | select(ledger_data_path)) as $p (.; setpath($p; "<ledger-data>"))
-'
-
 # --- guard state -------------------------------------------------------------------
 # Newline-delimited strings, not arrays: bash 3.2 raises "unbound variable" on
 # "${arr[@]}" for an array that never received an element, under `set -u`. A string
@@ -134,9 +131,8 @@ record_issue() {
   ISSUES="${ISSUES}brief-compose: $1: $2"$'\n'
 }
 
-# scan_abs_paths <buffer-file> — flags every absolute-path token in the whole brief
-# (section [3] included, minus the LEDGER_DATA_REDACT_JQ subtrees) that is not under an
-# allowed root. A token opens at start-of-line or after one of: space, double-quote,
+# scan_abs_paths <buffer-file> — flags every absolute-path token in the whole brief that
+# is not under an allowed root. A token opens at start-of-line or after one of: space, double-quote,
 # single-quote, backtick, "(", "=", ":", tab, "[", ",", "<", "|", "{" — optionally followed
 # by one "*", so emphasis still flags but "**/x" and "src/*/x" globs do not — and is a run of
 # path characters starting with "/". A bare "/dev/null" is never flagged, and a single-segment "/name" or "/plugin:cmd"
@@ -291,6 +287,19 @@ tpl_block_extract() {
   ' "$canon"
 }
 
+# The fenced ```text block in contract-reminder.md — section [1], copied verbatim into
+# every stage prompt. Same extraction cache-lint.sh's canonical_contract_block() uses: a
+# second extraction that disagreed with the lint would make a byte-identical brief fail
+# the very lint it exists to pass. No heading gate: the file holds exactly one fenced block.
+contract_reminder_block() {
+  local canon="$1"
+  awk '
+    $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$canon"
+}
+
 # --- render --------------------------------------------------------------------------
 
 cmd_render() {
@@ -305,9 +314,8 @@ cmd_render() {
   local STATE="$state" TASK_ID="$task"
   local CTX_DIR
   CTX_DIR="$(cd "$(dirname "$STATE")" && pwd -P)" || die2 "ledger directory unreadable: $STATE"
-  # The ledger's own .context root: section [3] inlines the ledger verbatim, so its
-  # directory must be allowed even when no workspace_path row and no --orch-root
-  # happen to cover it.
+  # The ledger's own .context root: ledger-sourced fields copied into [5] verbatim
+  # (metadata.subject, context_refs, artifact refs) may cite paths under it.
   add_root "$CTX_DIR"
 
   local known
@@ -318,9 +326,20 @@ cmd_render() {
   local SC="$PROOT/skills/shared/stage-contracts.md"
   local MP="$PROOT/skills/shared/model-prompting.md"
   local CL="$PROOT/skills/worktask/scripts/cache-lint.sh"
+  local CR="$PROOT/skills/worktask/references/contract-reminder.md"
+  local LDS="$PROOT/skills/worktask/scripts/ledger-digest.sh"
   [[ -f "$SC" ]] || die2 "canon source missing: skills/shared/stage-contracts.md"
   [[ -f "$MP" ]] || die2 "canon source missing: skills/shared/model-prompting.md"
   [[ -f "$CL" ]] || die2 "canon source missing: skills/worktask/scripts/cache-lint.sh"
+  [[ -f "$CR" ]] || die2 "canon source missing: skills/worktask/references/contract-reminder.md"
+  [[ -f "$LDS" ]] || die2 "canon source missing: skills/worktask/scripts/ledger-digest.sh"
+
+  # Section [3] body, computed once here: any non-zero exit means the pointer-plus-digest
+  # this section requires could not be produced, never a reason to fall back to inlining
+  # the ledger JSON.
+  local LEDGER_DIGEST digest_rc=0
+  LEDGER_DIGEST=$(bash "$LDS" --state "$STATE") || digest_rc=$?
+  [[ "$digest_rc" -eq 0 ]] || die2 "ledger-digest.sh failed for $STATE (exit $digest_rc)"
 
   local STAGE MODEL AGENT
   STAGE=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.stage // empty' "$STATE")
@@ -359,9 +378,10 @@ cmd_render() {
   [[ -n "$PLAN_FILE" ]] || die2 "ledger has no plan_file"
   PLAN_BASENAME="${PLAN_FILE##*/}"
 
-  # Every declared workspace tree, gathered across ALL rows (not just this task's own) —
-  # a DR brief inlines a multi-stream ledger whose OTHER trees are ledger facts the guard
-  # must still allow.
+  # Every declared workspace tree, gathered across ALL rows (not just this task's own):
+  # ref resolution (check_ref_resolves/plain_path_exists) needs it for a file:line ref
+  # under another row's tree, and a context_refs entry can legitimately cite another
+  # stream's workspace.
   WSPATHS_STR=""
   while IFS= read -r wp; do
     [[ -n "$wp" ]] || continue
@@ -390,6 +410,12 @@ cmd_render() {
   add_root "$ctx_out"
 
   # ---- Section [1]: contract-reminder — byte-identical for every stage ----
+  local CONTRACT_BLOCK
+  CONTRACT_BLOCK=$(contract_reminder_block "$CR")
+  [[ -n "$CONTRACT_BLOCK" ]] || die2 "canon section absent: skills/worktask/references/contract-reminder.md#Text"
+
+  # ---- Section [5] refs: stage-contracts.md's Required Inputs/Outputs headings — refs,
+  # not [1] text, since [1] must stay contract-reminder.md's block byte for byte ----
   local req_in_line req_out_line
   req_in_line=$(grep -n -m1 -E '^## Required Inputs \(handoff-protocol\)$' "$SC" | cut -d: -f1) || true
   [[ -n "$req_in_line" ]] || die2 "canon section absent: skills/shared/stage-contracts.md#Required Inputs"
@@ -488,42 +514,27 @@ cmd_render() {
   done <<< "$RAW_CTXREFS_STR"
 
   # ---- Assemble: buffer the whole brief before anything reaches stdout ----
-  # SCAN_BUF = BUF with LEDGER_DATA_REDACT_JQ applied to [3]; only the path scan reads it.
   BUF=$(mktemp)
-  SCAN_BUF=$(mktemp)
-  # shellcheck disable=SC2064  # expand now: BUF/SCAN_BUF are plain paths, gone by EXIT time otherwise
-  trap "rm -f '$BUF' '$SCAN_BUF'" EXIT
-  emit() { printf '%s\n' "$1" >> "$BUF"; printf '%s\n' "$1" >> "$SCAN_BUF"; }
+  # shellcheck disable=SC2064  # expand now: BUF is a plain path, gone by EXIT time otherwise
+  trap "rm -f '$BUF'" EXIT
+  emit() { printf '%s\n' "$1" >> "$BUF"; }
 
   emit "<<<contract-reminder>>>"
-  emit "Every \`ref:\` line below is a fact this brief did not verify for you. Resolve a"
-  emit "file:line ref by opening the file at that line; resolve an artifact#anchor ref by"
-  emit "opening the artifact and finding the \"## <anchor>\" heading; resolve a plain path"
-  emit "ref by opening that file directly. Act on it only after you have checked it"
-  emit "yourself."
-  emit ""
-  emit "Required Inputs: skills/shared/stage-contracts.md:${req_in_line}"
-  emit "Required Outputs: skills/shared/stage-contracts.md:${req_out_line}"
+  printf '%s\n' "$CONTRACT_BLOCK" >> "$BUF"
 
   emit "<<<worktask-header>>>"
   emit "worktask_id: ${WORKTASK_ID}"
   emit "plan_file: ${PLAN_FILE}"
 
   emit "<<<state-json>>>"
-  emit '```json'
-  jq '.' "$STATE" >> "$BUF"
-  jq "$LEDGER_DATA_REDACT_JQ" "$STATE" >> "$SCAN_BUF" \
-    || die2 "ledger redaction for absolute-path scan failed"
-  emit '```'
+  printf '%s\n' "$LEDGER_DIGEST" >> "$BUF"
 
   emit "<<<stage-contract>>>"
   printf '%s\n' "$tpl_block" >> "$BUF"
-  printf '%s\n' "$tpl_block" >> "$SCAN_BUF"
 
   emit "<<<model-discipline>>>"
   if [[ -n "$model_block" ]]; then
     printf '%s\n' "$model_block" >> "$BUF"
-    printf '%s\n' "$model_block" >> "$SCAN_BUF"
   fi
 
   emit "<<<task-description>>>"
@@ -536,6 +547,8 @@ cmd_render() {
   emit "ref: ${PLAN_BASENAME}#requirements"
   emit "ref: ${PLAN_BASENAME}#acceptance-criteria"
   emit "ref: skills/shared/stage-contracts.md:${tpl_line}"
+  emit "ref: skills/shared/stage-contracts.md:${req_in_line}"
+  emit "ref: skills/shared/stage-contracts.md:${req_out_line}"
   emit "ref: ${AGENT_FILE}:${MARKER_LINE}"
   while IFS= read -r r; do
     if [[ -n "$r" ]]; then emit "ref: $r"; fi
@@ -559,7 +572,7 @@ cmd_render() {
         ;;
     esac
   done < "$BUF"
-  scan_abs_paths "$SCAN_BUF"
+  scan_abs_paths "$BUF"
 
   if [[ -n "$ISSUES" ]]; then
     printf '%s' "$ISSUES" >&2

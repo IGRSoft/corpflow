@@ -2049,7 +2049,7 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 
 `skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant. A line carrying `"contract_canon": true` opts in the same way for [1], which must then equal the fenced block in `contract-reminder.md`. Every line with a [3] section is checked for the `ledger: .context/state.json` first line, all six keys in order, and no embedded ledger.
 
-`skills/worktask/scripts/brief-compose.sh` is the assembler this spec binds — the orchestrator dispatches its stdout — and it writes no `prompt-log.jsonl`, so prefix mode stays fixture-gated.
+`brief-compose.sh` is the assembler this spec binds; it writes no `prompt-log.jsonl`, so prefix mode stays fixture-gated.
 
 #### Fixture-gated, not log-gated
 

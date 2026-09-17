@@ -157,6 +157,44 @@ EOF
   done <<< "$sec5"
   check "refs: every [5] ref independently resolves " [ -z "$resolve_fail" ]
 
+  # ---- canon: [1] is contract-reminder.md's fenced block, byte for byte — the same
+  # extraction cache-lint.sh's canonical_contract_block() uses, so a self-test pass here
+  # is also a prediction that the prefix-lint's `contract_canon: true` check will pass ----
+  local s1 contract_canon
+  s1=$(extract_section "$out1" "contract-reminder")
+  contract_canon=$(awk '
+    $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$proot/skills/worktask/references/contract-reminder.md")
+  check "canon: [1] equals contract-reminder.md's fenced block byte for byte" \
+    str_eq "$s1" "$contract_canon"
+
+  # ---- digest: [3] is ledger-digest.sh's grammar — a pointer plus six ordered
+  # keys, never the ledger JSON cache-lint.sh's ledger_digest_lint() rejects ----
+  local s3 s3_keys want_keys
+  s3=$(extract_section "$out1" "state-json")
+  s3_keys=$(grep -oE '^[a-z_]+:' <<< "$s3" | sed 's/:$//')
+  want_keys=$'ledger\nrun_index\nready\nin_progress\nblocked\nopen_blocking_questions'
+  check "digest: [3] first line is the ledger pointer" \
+    str_eq "$(head -1 <<< "$s3")" "ledger: .context/state.json"
+  check "digest: [3] keys are exactly the six digest keys, in order" \
+    str_eq "$s3_keys" "$want_keys"
+  check "digest: [3] carries no inlined-JSON brace" not_grep '{' "$s3"
+  check "digest: [3] carries no ledger \"tasks\" key" not_grep '"tasks"' "$s3"
+
+  # ---- refs: stage-contracts.md's Required Inputs/Outputs headings ride in [5] as
+  # resolvable refs, since [1] carries only the canon block ----
+  local req_in_line req_out_line
+  req_in_line=$(grep -n -m1 -E '^## Required Inputs \(handoff-protocol\)$' \
+    "$proot/skills/shared/stage-contracts.md" | cut -d: -f1)
+  req_out_line=$(grep -n -m1 -E '^## Required Outputs \(handoff-protocol\)$' \
+    "$proot/skills/shared/stage-contracts.md" | cut -d: -f1)
+  check "refs: [5] carries the Required Inputs ref" \
+    has_line "ref: skills/shared/stage-contracts.md:${req_in_line}" "$sec5"
+  check "refs: [5] carries the Required Outputs ref" \
+    has_line "ref: skills/shared/stage-contracts.md:${req_out_line}" "$sec5"
+
   # ---- refs: context_refs as a JSON-encoded string (state-ledger.md's preferred
   # shape) decodes; the ref is one only context_refs can produce ----
   local d5="$td/ac1b"
@@ -270,7 +308,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d2",
-        "description": "touches /opt/elsewhere/x.md outside every allowed root"
+        "subject": "touches /opt/elsewhere/x.md outside every allowed root"
       }
     }
   }
@@ -300,7 +338,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d3",
-        "description": "touches $d3/notes/ok.md, which sits under the fixture root"
+        "subject": "touches $d3/notes/ok.md, which sits under the fixture root"
       }
     }
   }
@@ -328,7 +366,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d7",
-        "description": "redirects to /dev/null, then run /worktask or /corpflow:worktask"
+        "subject": "redirects to /dev/null, then run /worktask or /corpflow:worktask"
       }
     }
   }
@@ -356,7 +394,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d8",
-        "description": "touches $d8/notes/ok.md, under a root with a space and @"
+        "subject": "touches $d8/notes/ok.md, under a root with a space and @"
       }
     }
   }
@@ -384,7 +422,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d9a",
-        "description": "see the list: ,/opt/elsewhere/x.md"
+        "subject": "see the list: ,/opt/elsewhere/x.md"
       }
     }
   }
@@ -410,7 +448,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d9b",
-        "description": "see file:///opt/elsewhere/y.md"
+        "subject": "see file:///opt/elsewhere/y.md"
       }
     }
   }
@@ -421,8 +459,9 @@ EOF
   check "guard: a file:// off-root path exits 1" [ "$rc9b" -eq 1 ]
   check "guard: a file:// off-root path prints no stdout" [ -z "$out9b" ]
 
-  # ---- guard: a parked sibling's blocked_on and preflight check detail are ledger
-  # data, so an off-root path there does not fail another row's compose ----
+  # ---- guard: a parked sibling's blocked_on/preflight-check detail stays in the ledger
+  # on disk — [3] is a digest — so its off-root path neither reaches the brief nor fails
+  # DV0's compose ----
   local d11="$td/ac4a"
   mkdir -p "$d11/.context"
   cp "$d1/.context/planning-0.md" "$d11/.context/planning-0.md"
@@ -476,66 +515,8 @@ EOF
   local out11 rc11=0
   out11=$(bash "$SELF" DV0 --state "$d11/.context/state.json" --orch-root "$d11" 2>/dev/null) || rc11=$?
   check "guard: a parked sibling's blocked_on/preflight detail does not fail DV0 (exit 0)" [ "$rc11" -eq 0 ]
-  check "guard: the ledger is still inlined verbatim, parked path included" \
-    has_line "/Users/alice/devices.json" "$out11"
-
-  # ---- guard: the same path in DV0's own description still fails, so the
-  # exemption is by ledger path, not by token ----
-  local d12="$td/ac4b"
-  mkdir -p "$d12/.context"
-  cp "$d1/.context/planning-0.md" "$d12/.context/planning-0.md"
-  cat > "$d12/.context/state.json" << EOF
-{
-  "worktask_id": "brief-compose-selftest",
-  "plan_file": ".context/planning-0.md",
-  "run_index": 0,
-  "metadata": {
-    "preflight": {
-      "version": 1,
-      "result": "pass",
-      "ran_at": "unknown",
-      "platforms": ["systems"],
-      "checks": [
-        {"id": "xcrun", "kind": "toolchain", "status": "pass", "detail": "found at /opt/homebrew/bin/xcrun"}
-      ],
-      "tools_absent": []
-    }
-  },
-  "tasks": {
-    "DV0": {
-      "metadata": {
-        "stage": "DV",
-        "model": "opus",
-        "run_index": 0,
-        "workspace_path": "$d12",
-        "description": "touches /Users/alice/devices.json"
-      }
-    },
-    "DV1": {
-      "status": "blocked",
-      "metadata": {
-        "stage": "DV",
-        "model": "opus",
-        "run_index": 0,
-        "workspace_path": "$d12",
-        "blocked_on": {
-          "kind": "user_action",
-          "detail": {
-            "request": "Boot the iPhone 16 simulator; capture needs a running device",
-            "command": "xcrun simctl boot iPhone-16 --password=hunter2hunter2 /Users/alice/devices.json",
-            "verify": "xcrun simctl list devices booted"
-          },
-          "resume_with": "decision_ref"
-        }
-      }
-    }
-  }
-}
-EOF
-  local out12 rc12=0
-  out12=$(bash "$SELF" DV0 --state "$d12/.context/state.json" --orch-root "$d12" 2>/dev/null) || rc12=$?
-  check "guard: DV0's own description with the same path exits 1" [ "$rc12" -eq 1 ]
-  check "guard: DV0's own description with the same path prints no stdout" [ -z "$out12" ]
+  check "guard: a parked sibling's off-root blocked_on path no longer reaches the brief" \
+    not_grep "/Users/alice/devices.json" "$out11"
 
   # ---- guard: "**/x" and "src/*/x" globs are not off-root paths ----
   local d13="$td/ac4c"
@@ -553,7 +534,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d13",
-        "description": "globs **/Package.swift and src/*/x.md"
+        "subject": "globs **/Package.swift and src/*/x.md"
       }
     }
   }
@@ -580,7 +561,7 @@ EOF
         "model": "opus",
         "run_index": 0,
         "workspace_path": "$d14",
-        "description": "see */opt/elsewhere/z.md* here"
+        "subject": "see */opt/elsewhere/z.md* here"
       }
     }
   }
