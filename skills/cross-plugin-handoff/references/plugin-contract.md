@@ -146,7 +146,7 @@ the test fails until each inline table matches the matrix.
 |---|------|--------------|
 | 10 | `commands/milestone.md` | Implementation / Test / Review agent-assignment tables; `--platform` flag docs |
 | 11 | `commands/tech-code-review.md` | `--platform` enum |
-| 12 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation model table; AR-collaboration note |
+| 12 | `skills/agent-coordination/SKILL.md` | Sub-Task Delegation table (platform-architect row); AR-collaboration note |
 | 13 | `README.md` | Plugin mentions and worktask examples |
 | 14 | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `MEMORY.md` | MINOR version bump + release notes. New entries always land in `CHANGELOG.md`; `CHANGELOG-3.x.md` is a frozen archive and is never appended to |
 

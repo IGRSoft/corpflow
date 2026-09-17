@@ -221,13 +221,14 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
 
 `priority:"medium"`, `plan_file`, `worktask_id` and `error_file: ".context/errors/<agent>.md"` are
 the same on every row. Drop `--argjson shots` / `requires_screenshots` on rows that do not list it.
+`model` and `effort` come from the stage's row in `skills/shared/stage-codes.md`, not from this table.
 
-| Task | stage / agent / model | `context_refs` | `requires_screenshots` |
+| Task | stage / agent | `context_refs` | `requires_screenshots` |
 |---|---|---|---|
-| AR0 | `AR` / `corpflow:software-architector` / `opus` | `exploration.md#findings`, `<plan>#requirements` | — |
-| DV0 | `DV` / `corpflow:developer` / `opus` | `<plan>#requirements`, `architecture-0.md#decisions`, `coordination-0.md#fan-out` | yes |
-| DR0 | `DR` / `corpflow:technical-lead` / `sonnet` | `<plan>#requirements`, `architecture-0.md#decisions`, one `#deviations` ref per DV row's `metadata.artifact` | — |
-| QA0 | `QA` / `corpflow:qa-engineer` / `sonnet` | `<plan>#acceptance-criteria`, `developer-review-0.md#verdict` | yes (QA's Q1.5 manifest ingestion / advisory-skip reads it) |
+| AR0 | `AR` / `corpflow:software-architector` | `exploration.md#findings`, `<plan>#requirements` | — |
+| DV0 | `DV` / `corpflow:developer` | `<plan>#requirements`, `architecture-0.md#decisions`, `coordination-0.md#fan-out` | yes |
+| DR0 | `DR` / `corpflow:technical-lead` | `<plan>#requirements`, `architecture-0.md#decisions`, one `#deviations` ref per DV row's `metadata.artifact` | — |
+| QA0 | `QA` / `corpflow:qa-engineer` | `<plan>#acceptance-criteria`, `developer-review-0.md#verdict` | yes (QA's Q1.5 manifest ingestion / advisory-skip reads it) |
 
 ### AR0 task
 

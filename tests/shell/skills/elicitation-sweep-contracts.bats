@@ -1817,3 +1817,19 @@ resolver_body() {
 @test "the deep_reads resolver exemption is stated where deep_reads is defined" {
   grep -q 'deep_reads — the resolver exemption' "$PLUGIN_ROOT/$HANDOFF"
 }
+
+AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
+
+@test "the resolver-effort fixture pairs with the C.0a effort_resolved prose" {
+  local fm_resolved dispatch_resolved c0a
+  fm_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter-only") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  dispatch_resolved=$(jq -r 'select(.metadata.effort_transport == "dispatch-flag") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  [ "$fm_resolved" = "requested, not applied" ]
+  [[ "$dispatch_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
+
+  # The frontmatter-only literal must be the same one C.0a documents, not a fixture-only string.
+  c0a=$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")
+  grep -qF "$fm_resolved" <<< "$c0a"
+}

@@ -23,6 +23,17 @@
 #      alone cannot see a stage that consistently carries the WRONG model's
 #      block, which is the routing miss this check exists for.
 #
+#      An optional `contract_canon: true` field turns on the same kind of
+#      check for section [1]: it must equal, byte for byte, the fenced block
+#      skills/worktask/references/contract-reminder.md ships.
+#
+#      Every log line whose prompt carries the <<<state-json>>> marker gets
+#      section [3] checked unconditionally (no opt-in field): the first
+#      non-empty line must be `ledger: .context/state.json`, all six digest
+#      keys must appear in handoff-protocol.md#cache-prefix order, and an
+#      embedded ledger (a line opening with `{`, or a `"tasks"`/`"facts"`
+#      token) is rejected. A line with no [3] section at all is skipped.
+#
 #      N (number of lines compared) is computed from the FIRST stage's
 #      sections [1]+[2]+[4] line count — derived dynamically, NOT a magic
 #      number. Robust to spec changes.
@@ -585,6 +596,53 @@ canonical_model_block() {
   ' "$canon"
 }
 
+# canonical_contract_block <root> -> the fenced `text` block in
+# contract-reminder.md — section [1], copied verbatim into every stage prompt.
+# The file holds exactly one fenced block, so this walks the first fence
+# with no per-alias heading gate, unlike canonical_model_block above.
+canonical_contract_block() {
+  local root="$1" canon="$1/skills/worktask/references/contract-reminder.md"
+  [[ -f "$canon" ]] || { echo "prefix-lint: contract canon not found: $canon" >&2; return 2; }
+  awk '
+    $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$canon"
+}
+
+# ---------- Section [3] ledger-digest grammar ----------
+# ledger_digest_lint <section-text> <label> -> 0 pass / 1 fail, diagnostics on stderr.
+# Not opt-in like `model`/`contract_canon`: a malformed digest is wrong whatever the log sets.
+ledger_digest_lint() {
+  local section="$1" label="$2" rc=0
+  # Short-circuit: an inlined ledger would otherwise also report every key as missing.
+  if [[ "$section" =~ (^|$'\n')[[:space:]]*\{ ]] \
+    || [[ "$section" == *'"tasks"'* ]] || [[ "$section" == *'"facts"'* ]]; then
+    echo "prefix-lint: $label: section [3] embeds the ledger (inlined JSON) instead of the ledger-digest.sh pointer" >&2
+    return 1
+  fi
+  local first_line=""
+  while IFS= read -r _ldl_line; do
+    [[ -n "$_ldl_line" ]] || continue
+    first_line="$_ldl_line"
+    break
+  done <<< "$section"
+  if [[ "$first_line" != "ledger: .context/state.json" ]]; then
+    echo "prefix-lint: $label: section [3] first line must be 'ledger: .context/state.json' (got: ${first_line:-<empty>})" >&2
+    rc=1
+  fi
+  # Key order, not just presence: a digest with the right six keys shuffled is
+  # still not the grammar this check enforces.
+  local keys_found expected_keys
+  keys_found=$(printf '%s\n' "$section" | grep -oE '^[a-z_]+:' | sed 's/:$//')
+  expected_keys=$'ledger\nrun_index\nready\nin_progress\nblocked\nopen_blocking_questions'
+  if [[ "$keys_found" != "$expected_keys" ]]; then
+    echo "prefix-lint: $label: section [3] keys must be ledger, run_index, ready, in_progress, blocked, open_blocking_questions in that order (got: $(tr '\n' ',' <<< "$keys_found"))" >&2
+    rc=1
+  fi
+  return $rc
+}
+
 # ---------- Forbidden-token scanner ----------
 # Scans ONE section's text for the seven forbidden-token classes named in
 # handoff-protocol.md#cache-prefix (mirrored verbatim in
@@ -678,21 +736,31 @@ prefix_lint() {
     # prompt — the only multi-line one — is whatever follows the first two lines.
     # The `X` sentinel keeps command substitution from eating the separator that
     # an EMPTY prompt is reduced to, which would shift `stage` into `prompt`.
-    local fields wid stage model prompt
-    fields=$(jq -r '.worktask_id, .stage, (.model // ""), .prompt' <<< "$line"; printf 'X')
+    local fields wid stage model ccanon prompt
+    fields=$(jq -r '.worktask_id, .stage, (.model // ""), (.contract_canon // false), .prompt' <<< "$line"; printf 'X')
     fields="${fields%X}"
     wid="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
     stage="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
-    model="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
+    model="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    ccanon="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
     # Three separate substitutions stripped every trailing newline from each
     # field; keep that, so a prompt is compared the same way it always was.
     while [ "${prompt%$'\n'}" != "$prompt" ]; do prompt="${prompt%$'\n'}"; done
 
-    local s1 s2 s4 s4b
+    local s1 s2 s3 s4 s4b
     s1=$(extract_section "$prompt" "contract-reminder")
     s2=$(extract_section "$prompt" "worktask-header")
+    s3=$(extract_section "$prompt" "state-json")
     s4=$(extract_section "$prompt" "stage-contract")
     s4b=$(extract_section "$prompt" "model-discipline")
+
+    # extract_section yields "" for an absent marker and for an empty body; only an
+    # absent [3] may skip, since an empty body is itself a missing pointer.
+    if grep -qx '<<<state-json>>>' <<< "$prompt"; then
+      if ! ledger_digest_lint "$s3" "worktask_id=$wid stage=$stage"; then
+        rc=1
+      fi
+    fi
 
     # L1 forbidden-token scan — runs on EVERY line (intrinsic per-section
     # check, independent of the cross-line byte-identity comparison below).
@@ -718,6 +786,20 @@ prefix_lint() {
         while [ "${canon%$'\n'}" != "$canon" ]; do canon="${canon%$'\n'}"; done
         if [[ "$s4b" != "$canon" ]]; then
           echo "prefix-lint: worktask_id=$wid stage=$stage: section [4b] does not match model-prompting.md block for model=$model" >&2
+          rc=1
+        fi
+      else
+        rc=1
+      fi
+    fi
+
+    # Opt-in like `model` above: [1] must equal contract-reminder.md's block byte for byte.
+    if [[ "$ccanon" == "true" ]]; then
+      local ccanon_block
+      if ccanon_block=$(canonical_contract_block "$(plugin_root)"); then
+        while [ "${ccanon_block%$'\n'}" != "$ccanon_block" ]; do ccanon_block="${ccanon_block%$'\n'}"; done
+        if [[ "$s1" != "$ccanon_block" ]]; then
+          echo "prefix-lint: worktask_id=$wid stage=$stage: section [1] does not match contract-reminder.md" >&2
           rc=1
         fi
       else

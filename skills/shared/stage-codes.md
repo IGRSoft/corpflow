@@ -55,8 +55,8 @@ Single source of truth for worktask stage codes.
 The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and
 stamp both onto `tasks.<ID>.metadata`. The **Model** and **Effort** columns in § Primary
 Stages are that lookup, and § Secure overrides replaces a stage's pair under `--secure`/`--full`;
-support agents use § Support Agents below. Deliberately no third copy — a duplicate table had
-already drifted from the agents' shipped frontmatter.
+support agents use § Support Agents below. These tables are the only stage/agent → model and
+effort assignment; other files point to a row here, and `model-selection.md` keeps the rules.
 
 > `effort` is stamped for the same reason `model` is, plus one of its own: the Step C.0a
 > resolver dispatches one rung above the stage that raised the item

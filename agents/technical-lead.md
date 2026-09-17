@@ -270,6 +270,7 @@ Distinct key, enum, and lifecycle — keep them separate:
 ### Output Budget (DR)
 
 Artifact ≤300 lines; findings table ≤2 lines/row; no diff hunks >5 lines — cite `path:line-range`. Final return ≤200 tok. **Context**: progressive loading and compression per `skills/context-compression/SKILL.md`.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, DR row.
 
 ## Code Quality Framework
 
