@@ -1294,6 +1294,16 @@ question therefore shows that tree as a `cwd:` data line inside its fenced info 
 runs the `! <command>` line from that directory. No `cd <dir> && <command>` is ever composed: the
 `!` line holds the denied command only (`skills/worktask/SKILL.md § Step 7a — where the ! line runs`).
 
+##### Boundary permission prompt — typed needs in the same round
+
+A task parked on any other `blocked_on` kind (`skills/worktask/SKILL.md § Step 6.5a3`) is rendered
+at the same boundary by `blocked-on-dispatch.sh batch`, as a `user_action` need: a fixed lead line
+with the stage's detail fenced as data, a `!` line only on a native `user_action` whose command was
+not cut, and the options "done" and "stop here". Its `payloads[]` are asked in the same round as the
+permission ones, only the user answers them under any gate setting, and a `/megatask` per-issue run
+parks them the same way. Answers and resume: `skills/worktask/SKILL.md § Step 7a — the typed-need
+answers`.
+
 #### Step C.1 — collect everything not already answered
 
 1. **C.1 — Collect.** Read `facts.open_questions[]` **unioned with the eviction spill** (below) and
