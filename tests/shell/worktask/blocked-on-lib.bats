@@ -19,6 +19,12 @@ _lib() {
   run --separate-stderr bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'; $1" < /dev/null
 }
 
+@test "blocked_on_validate: empty input is refused, not read as valid" {
+  _lib 'blocked_on_validate ""'
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"fail: blocked_on is empty"* ]]
+}
+
 @test "executing the library directly is refused" {
   run bash "$PLUGIN_ROOT/$LIB"
   assert_failure 2

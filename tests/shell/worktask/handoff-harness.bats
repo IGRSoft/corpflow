@@ -1738,6 +1738,29 @@ $(_bo_from_fixture legacy-cross-session-ask)"
   done
 }
 
+@test "--read-blocked-on: an indentless sequence and multi-line mapping items read the same with and without yq" {
+  local want
+  want='{"kind":"user_decision","detail":{"question":"Which base?","options":[{"label":"develop","description":"the default"},{"label":"master"}],"recommended":"develop"},"resume_with":"decision_ref"}'
+  _dv_blocked_artifact "$WD/indentless.md" '  blocked_on:
+    kind: user_decision
+    detail:
+      question: "Which base?"
+      options:
+      - label: develop
+        description: the default
+      - label: master
+      recommended: develop
+    resume_with: decision_ref'
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/indentless.md"
+  assert_success
+  [ "$(jq -cS . <<< "${lines[0]}")" = "$(jq -cS . <<< "$want")" ] || fail "no yq: ${lines[0]}"
+  run_script_env --separate-stderr "$SCRIPT" --read-blocked-on "$WD/indentless.md"
+  assert_success
+  [ "$(jq -cS . <<< "${lines[0]}")" = "$(jq -cS . <<< "$want")" ] || fail "host reader: ${lines[0]}"
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --validate-frontmatter "$WD/indentless.md"
+  assert_success
+}
+
 @test "blocked_on: the self-test source carries one case per kind and each refusal, each asserting its exit code" {
   local st="$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness-selftest.sh" kind
   for kind in user_decision user_action permission peer_session artifact correction host_environment; do
