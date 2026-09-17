@@ -538,6 +538,11 @@ effort`). The bump is therefore computed and recorded on every path and *applied
 resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
 — the tier only reaches some dispatch surfaces` holds the table.
 
+Under `frontmatter-only` the `auto_decision_resolved` row records
+`effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier; under
+`dispatch-flag` `effort_resolved` is the tier the session ran at, and only there does comparing the
+two fields mean anything. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tracked outside this milestone.
+
 Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
 deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
 a licence to reach the number another way — substituting a higher-frontmatter agent trades the

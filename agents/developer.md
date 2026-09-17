@@ -331,6 +331,7 @@ Every `Write`/`Edit` MUST target a path under `task.metadata.workspace_path` whi
 ### Output Budget (DV)
 
 Artifact ≤250 lines; no full-file listings — cite `path:line-range` or anchors, not pasted bodies. Final return ≤250 tok. Target ≤80 tool calls/run: batch multi-file edits into one pass (§ D1), never re-Read a file unchanged since your last Read, keep narration lean (no per-file play-by-play, no restating what the artifact holds).
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, DV row.
 
 ## Logging & Audit
 

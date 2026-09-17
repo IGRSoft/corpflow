@@ -240,6 +240,47 @@ _pl_artifact() {  # _pl_artifact <path> <extra-headings...>
   assert_output ""
 }
 
+# --- section [3], the ledger pointer + readiness digest ----------------------
+
+@test "happy: prefix-lint accepts a well-formed section [3] ledger digest" {
+  cat > "$WD/ledger-ok.jsonl" <<'EOF'
+{"worktask_id":"wtL1","stage":"DV","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<state-json>>>\nledger: .context/state.json\nrun_index: 0\nready: none\nin_progress: none\nblocked: none\nopen_blocking_questions: 0\n<<<stage-contract>>>\nDV\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/ledger-ok.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+  assert_equal "$stderr" ""
+}
+
+@test "failure: prefix-lint rejects an inlined ledger in section [3]" {
+  cat > "$WD/ledger-inline.jsonl" <<'EOF'
+{"worktask_id":"wtL2","stage":"DV","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<state-json>>>\n{\"tasks\": {\"PL0\": {\"status\": \"completed\"}}}\n<<<stage-contract>>>\nDV\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/ledger-inline.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"embeds the ledger"* ]]
+  assert_output ""
+}
+
+@test "failure: prefix-lint rejects section [3] missing the ledger: pointer" {
+  cat > "$WD/ledger-nopointer.jsonl" <<'EOF'
+{"worktask_id":"wtL3","stage":"DV","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<state-json>>>\nrun_index: 0\nready: none\nin_progress: none\nblocked: none\nopen_blocking_questions: 0\n<<<stage-contract>>>\nDV\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/ledger-nopointer.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"first line must be 'ledger: .context/state.json'"* ]]
+  assert_output ""
+}
+
+@test "happy: a prompt with no section [3] at all is skipped, not rejected" {
+  # stable.jsonl (setup()) carries no <<<state-json>>> marker — an absent [3]
+  # section must stay lintable, not fail as if the digest were missing.
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/stable.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+  assert_equal "$stderr" ""
+}
+
 @test "failure: prefix-lint catches an ISO-8601 timestamp in section [2] (REQ-3/AC-4)" {
   run_script_env --separate-stderr -- "$SCRIPT" "$WD/forbidden-timestamp.jsonl"
   assert_failure 1
@@ -353,6 +394,50 @@ PYEOF
   assert_success
   assert_output --partial "no drift"
   assert_equal "$stderr" ""
+}
+
+# --- section [1], the contract_canon opt-in -----------------------------------
+# Same shape as the [4b] model canon checks above: byte-identity alone cannot
+# see a stage that consistently carries a hand-written [1] instead of the
+# shipped contract-reminder.md block.
+
+@test "happy: the real contract-reminder.md block passes the canon check (contract_canon)" {
+  # Built FROM the canon file, so it cannot rot when the text is reworded.
+  python3 - "$WD/ccanon.jsonl" "skills/worktask/references/contract-reminder.md" <<'PYEOF'
+import json, re, sys
+
+out, canon = sys.argv[1], sys.argv[2]
+body = open(canon).read()
+sec = re.search(r"^```text\n(.*?)^```", body, re.S | re.M)
+assert sec, "no fenced text block in " + canon
+block = sec.group(1).rstrip("\n")
+assert block, "the contract-reminder block is empty"
+
+prompt = (
+    "<<<contract-reminder>>>\n" + block + "\n"
+    "<<<worktask-header>>>\nh\n"
+    "<<<stage-contract>>>\nDV\n"
+    "<<<task-description>>>\nwork"
+)
+with open(out, "w") as fh:
+    fh.write(json.dumps({"worktask_id": "wtc2", "stage": "DV",
+                         "contract_canon": True, "prompt": prompt}) + "\n")
+PYEOF
+
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/ccanon.jsonl"
+  assert_success
+  assert_output --partial "no drift"
+  assert_equal "$stderr" ""
+}
+
+@test "failure: prefix-lint rejects a [1] mismatch when contract_canon is true" {
+  cat > "$WD/ccanon-bad.jsonl" <<'EOF'
+{"worktask_id":"wtc3","stage":"DV","contract_canon":true,"prompt":"<<<contract-reminder>>>\na hand-written reminder that does not match contract-reminder.md\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDV\n<<<task-description>>>\nwork"}
+EOF
+  run_script_env --separate-stderr -- "$SCRIPT" "$WD/ccanon-bad.jsonl"
+  assert_failure 1
+  [[ "$stderr" == *"section [1] does not match contract-reminder.md"* ]]
+  assert_output ""
 }
 
 @test "happy: a log line without a model field skips the canon check" {
