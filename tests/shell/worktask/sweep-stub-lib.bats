@@ -68,8 +68,7 @@ handoff:
   stage: DV
   verdict: ok
   summary: "parity fixture"
-  tests_executed: 12
-  test_summary_line: "12 tests, 0 failures"
+  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]
   files_touched: 1
   next_stage_focus: "review"
   open_questions:

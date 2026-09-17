@@ -118,7 +118,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact, H2 set: `handoff-protocol.md#anchor-allow-list`, the runner's **verbatim** summary line in `## verification-command`, plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact, H2 set: `handoff-protocol.md#anchor-allow-list`, the runner's **verbatim** summary line in `## verification-command`, plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + per-runner `tests_executed` entries (or `test_suite_compiles` at all 0) + `.context/logs/build-*.log` shows success |
 | **DR** | every DV task artifact + source diff | `developer-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## verdict` ∈ {pass, fail} |
 | **SR** | every DV task artifact + source diff | `security-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | No High/Critical findings unresolved |
 
@@ -632,9 +632,9 @@ handoff:
   task_id: DV0                # your own ledger row id; REQUIRED once the run has >1 DV row
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
-  tests_executed: 12          # cases RUN, not discovered; 0 is legal
-  test_summary_line: "12 tests, 0 failures"  # verbatim; REQUIRED when the count is non-zero
-  test_suite_compiles: true   # true/false/unknown; REQUIRED when the count is 0
+  tests_executed:             # one entry per runner; cases RUN, not discovered; [] is legal
+    - { runner: bats, count: 12, summary_line: "1..12" }  # line verbatim; REQUIRED when count > 0
+  test_suite_compiles: true   # true/false/unknown; REQUIRED when [] or every count is 0
   files_touched:              # cap 10, then ONE marker; #files-touched
     - path/to/file1.md
     - "+ 7 more"              # obliges the FULL body set
@@ -700,42 +700,44 @@ Where a runner writes its tally only to a terminal, capture through a pty or a l
 out of the capture. Where a stage's scoped authority refuses the full-suite entrypoint, record the
 refusal and quote the summary line of the scoped run that was permitted.
 
-##### test_summary_line is the checked half (tpl-dv)
+##### summary_line is the checked half (tpl-dv)
 
-The same line goes in the frontmatter as `test_summary_line`, and DV and QA both carry it whenever
-`tests_executed` is non-zero — they are the two stages holding test-execution authority, so no other
-can produce it honestly. `handoff-harness.sh --validate-frontmatter` **fails** an artifact whose
-line is absent, empty, digitless, or found neither in the artifact body nor in a `.context/logs/`
-capture the artifact names. It **warns** when the line does not carry `tests_executed` as a
-whole-number token: a TAP plan line (`1..840`) is a whole summary and a Gradle or Xcode formatter
-need not repeat the count, so blocking there would fail honest stages.
+The same line goes in the frontmatter as the `summary_line` of that runner's `tests_executed` entry,
+and DV and QA both carry it on every entry whose `count` is non-zero — they are the two stages
+holding test-execution authority, so no other can produce it honestly. `handoff-harness.sh
+--validate-frontmatter` **fails** an entry whose line is absent, empty, digitless, or found neither
+in the artifact body nor in a `.context/logs/` capture the artifact names, one `fail:` per bad entry
+in a single run. It **warns** when the line does not carry that entry's `count` as a whole-number
+token: a TAP plan line (`1..840`) is a whole summary and a Gradle or Xcode formatter need not repeat
+the count, so blocking there would fail honest stages.
 
-##### tests_executed is the bats plan count, not the grand total (tpl-dv)
+##### tests_executed carries one entry per runner (tpl-dv)
 
-A multi-runner suite (bats + swift + python + a benchmark harness, say) reports `tests_executed` as
-the **bats plan count alone**, never the sum across runners. The corroboration rule above requires
-`test_summary_line` to carry `tests_executed` as a whole-number token, and only the bats TAP plan
-(`1..N`) does that reliably — a non-bats runner's own summary line rarely repeats the grand total
-verbatim. Convention, not accident: a run with 1949 bats cases plus 589 non-bats cases records
-`tests_executed: 1949` with `test_summary_line: "1..1949"`; the 589 are attested in the artifact
-body, not folded into the frontmatter count.
+A multi-runner suite (bats + swift + pytest, say) records **one entry per runner invocation**, each
+with its own `count` and the summary line that runner printed — never a sum across runners, and
+never one runner standing in for the rest. A run with 1949 bats cases and 589 pytest cases records
+`{runner: bats, count: 1949, summary_line: "1..1949"}` and `{runner: pytest, count: 589,
+summary_line: "589 passed in 41.2s"}`; the same runner run at two scopes is two entries. A rework
+round writes only its own entries: the ledger keeps earlier rounds under `tasks.<ID>.rework_runs`
+(`handoff-protocol.md § Field notes — tests_executed, rework_runs`), so no artifact copies one
+forward.
 
 #### Zero executed tests must say whether the suite compiles (tpl-dv)
 
-`tests_executed` counts cases that actually **ran** — the number in the summary line above, never
-the number a runner enumerated before exiting. Zero is legal and is not a failure; being unable to
-tell zero from "never built" is.
+Each `tests_executed` entry's `count` is cases that actually **ran** — the number in that runner's
+summary line, never the number a runner enumerated before exiting. Zero is legal and is not a
+failure; being unable to tell zero from "never built" is.
 
-So when `tests_executed` is `0`, `test_suite_compiles` is REQUIRED: `true`, `false`, or `unknown`
-with the reason in the body. **Compilation is checkable without test-execution authority**, which
-is exactly why it is asked of the stage that was denied.
+So when the `tests_executed` list is empty or every `count` is `0`, `test_suite_compiles` is
+REQUIRED: `true`, `false`, or `unknown` with the reason in the body. **Compilation is checkable
+without test-execution authority**, which is exactly why it is asked of the stage that was denied.
 
 ##### Why not build_status (tpl-dv)
 
 `build_status` reports the app build. A test target can fail to compile while the app builds clean,
 and that combination is what stayed invisible for ten hours of one run while four stages escalated
 with remedies aimed at the wrong control. `handoff-harness.sh --validate-frontmatter` fails a DV
-artifact reporting `tests_executed: 0` with no `test_suite_compiles`.
+artifact whose `tests_executed` list is empty or all-zero and carries no `test_suite_compiles`.
 
 #### Architecture reference contract (tpl-dv)
 
@@ -817,8 +819,8 @@ handoff:
   stage: QA
   verdict: go                  # go / no-go
   summary: "<N unit tests pass, M integration checks. Coverage X%>"
-  tests_executed: 840          # cases RUN; QA holds full-suite authority
-  test_summary_line: "1..840"  # verbatim; REQUIRED when the count is non-zero
+  tests_executed:              # one entry per runner; cases RUN; QA holds full-suite authority
+    - { runner: bats, count: 840, summary_line: "1..840" }  # line verbatim; REQUIRED when count > 0
   files_touched:
     - tests/added/test-file.sh
   key_decisions:

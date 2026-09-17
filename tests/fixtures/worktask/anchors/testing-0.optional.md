@@ -5,8 +5,7 @@ handoff:
   summary: "QA optional-anchor anchor fixture"
   files_touched: [a.sh]
   key_decisions: []
-  tests_executed: 3
-  test_summary_line: "3 tests, 0 failures"
+  tests_executed: [{ runner: bats, count: 3, summary_line: "3 tests, 0 failures" }]
   open_questions: []
   refs: { plan: planning-0.md#requirements }
 ---
