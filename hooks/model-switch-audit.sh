@@ -132,8 +132,12 @@ run_audit() {
   [ -n "$_subject" ] || _subject="$_stage"
   [ -n "$_subject" ] || _subject="unknown"
 
+  _tid="$_task_id"
+  [ -n "$_tid" ] || _tid=$(corpflow_audit_task_id "$_ctx")
+
   corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-audit \
-    --action "model_switched" --result ok --subject "$_subject" --meta "$_meta"
+    --action "model_switched" --result ok --subject "$_subject" --task-id "$_tid" \
+    --meta "$_meta"
 }
 
 if [ "$SELF_TEST" -eq 1 ]; then

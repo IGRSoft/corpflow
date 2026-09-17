@@ -315,7 +315,8 @@ if [ -z "${CLAUDE_TASK_METADATA_STAGE:-}" ] && [ -z "${CLAUDE_ARTIFACT_PATH:-}" 
   if [ ! -f "$_NOOP_SENTINEL" ]; then
     : > "$_NOOP_SENTINEL" 2> /dev/null || true
     corpflow_hook_audit_row --ctx "$WORKSPACE_DIR/.context" \
-      --actor hook:state-merge --action state_merge_noop --result ok \
+      --actor hook:state-merge --action state_merge_noop --result skipped \
+      --subject none --task-id none \
       --meta "$(jq -cn --argjson n "$_NOOP_RUN" \
         '{reason: "no stage and no artifact in the SubagentStop environment", run_index: $n}')"
   fi

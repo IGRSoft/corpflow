@@ -295,10 +295,14 @@ break every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` r
 
 ### Seeding a track's PL
 
+`/worktask` Step 3a seeds the per-issue ledger with `seed-state.sh`
+(`commands/worktask.md § Steps 3–3a`); it already holds `tasks.PL0`, so this row is a metadata merge.
+
 ```bash
+# $PLUGIN_ROOT per commands/worktask.md § Snippet preamble
 # megatask bypasses both default-checkpoint gates; decision_gate=auto means open
 # questions go to a Fable decision pass and an escalation parks the issue.
-state-patch.sh --task-create "PL0" --metadata "$(jq -n \
+bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-meta "PL0" --set "$(jq -n \
   --argjson issue "$ISSUE_NUMBER" --argjson track "$TRACK" \
   --arg group "$GROUP" --arg ms "$MILESTONE_OR_EMPTY" \
   '{stage:"PL", agent:"corpflow:product-manager",
