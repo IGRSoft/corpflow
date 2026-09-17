@@ -1,0 +1,1 @@
+{"stage":"DR","verdict":"blocked","summary":"Legacy cross-session ask","cross_session_ask":{"to":"backend-session","question":"Which base branch does the API change target?"}}

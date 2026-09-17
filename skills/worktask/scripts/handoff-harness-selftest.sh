@@ -37,8 +37,115 @@ self_test() {
   self_test_anchors "$td"
   self_test_collect_all "$td"
   self_test_control_bytes "$td"
+  self_test_blocked_on "$td"
 
   echo "self-test: ALL PASS"
+}
+
+# One case per blocked_on kind, plus each refusal and the legacy alias. Every case asserts the
+# gate's exit code on the host's reader AND on the no-yq awk reader, because CI hosts lack yq and
+# a verdict that differs between the two is the drift this gate exists to prevent.
+self_test_blocked_on() {
+  local ctx="$1/.context" kind detail rw out rc awk_rc
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "self-test: blocked_on: SKIP (jq unavailable)"
+    return 0
+  fi
+
+  # <path> <blocked_on block lines, indented under handoff:>
+  _bo_artifact() {
+    {
+      echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: blocked'
+      echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
+      echo '  summary: "Blocked on a typed need."'; echo '  files_touched: [a.md]'
+      echo '  next_stage_focus: "DR reviews"'; echo '  open_questions: []'
+      printf '%s\n' "$2"
+      echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+      echo '# Development'; echo; echo '12 tests, 0 failures'
+      printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups
+      echo; echo '## elicitation-sweep'; echo; echo 'nothing to elicit'
+    } > "$1"
+  }
+
+  # The verdict the no-yq reader reaches on the same artifact: 0 valid or absent, 1 refused.
+  _bo_awk_verdict() {
+    local fm raw norm vrc=0
+    fm=$(mktemp -t handoff-bo-st-XXXXXX)
+    corpflow_fm_block "$1" > "$fm" 2> /dev/null || true
+    raw=$(awk "$_FM_BO_AWK" "$fm" 2> /dev/null) || { rm -f "$fm"; return 1; }
+    rm -f "$fm"
+    norm=$(blocked_on_normalize "$raw") || return 0
+    blocked_on_validate "$(printf '%s' "$norm" | jq -c '.blocked_on')" 2> /dev/null || vrc=$?
+    return "$vrc"
+  }
+
+  # <label> <want-rc> <want-pattern|-> <artifact>
+  _bo_case() {
+    rc=0; awk_rc=0
+    out=$(validate_frontmatter "$4" 2>&1) || rc=$?
+    _bo_awk_verdict "$4" || awk_rc=$?
+    if [[ "$rc" -ne "$2" || "$awk_rc" -ne "$2" ]]; then
+      echo "self-test: blocked_on $1: FAIL (rc=$rc awk_rc=$awk_rc want=$2)" >&2; exit 1
+    fi
+    if [[ "$3" != "-" ]] && ! printf '%s\n' "$out" | grep -qF "$3"; then
+      echo "self-test: blocked_on $1: FAIL (pattern not found: $3)" >&2; exit 1
+    fi
+    echo "self-test: blocked_on $1: ok"
+  }
+
+  while IFS='|' read -r kind detail rw; do
+    [[ -n "$kind" ]] || continue
+    _bo_artifact "$ctx/dv-bo-$kind.md" "  blocked_on:
+    kind: $kind
+    detail: $detail
+    resume_with: $rw"
+    _bo_case "valid/$kind" 0 - "$ctx/dv-bo-$kind.md"
+  done <<'KINDS'
+user_decision|{ question: "Ship behind a flag?", options: [flag, no-flag], recommended: flag }|decision_ref
+user_action|{ request: "Boot the simulator", command: "xcrun simctl boot 'iPhone 16'", verify: "xcrun simctl list devices booted" }|decision_ref
+permission|{ tool: Bash, command: "gh pr merge 412 --squash", classifier_reason: "Blocked by classifier", allow_rule: "" }|decision_ref
+peer_session|{ to: backend-session, question: "Which base branch?", deadline: "2026-09-20T00:00:00Z" }|reply_ref
+artifact|{ producer_task: DV0, path: development-0.md }|artifact_path
+correction|{ target_task: DV0, finding: "wrong exit code", evidence_ref: "a.sh:12", severity: blocking }|artifact_path
+host_environment|{ check: gh-pr-create, observed: "gh auth status: not logged in" }|decision_ref
+KINDS
+
+  _bo_artifact "$ctx/dv-bo-bad-kind.md" '  blocked_on:
+    kind: coffee_break
+    detail: { request: "x", command: "" }
+    resume_with: decision_ref'
+  _bo_case "unknown-kind" 1 'fail: blocked_on.kind "coffee_break" is not one of' "$ctx/dv-bo-bad-kind.md"
+
+  _bo_artifact "$ctx/dv-bo-bad-rw.md" '  blocked_on:
+    kind: user_action
+    detail: { request: "x", command: "" }
+    resume_with: carrier_pigeon'
+  _bo_case "unknown-resume_with" 1 'fail: blocked_on.resume_with "carrier_pigeon" is not one of' "$ctx/dv-bo-bad-rw.md"
+
+  _bo_artifact "$ctx/dv-bo-no-detail.md" '  blocked_on:
+    kind: user_action
+    resume_with: decision_ref'
+  _bo_case "missing-detail" 1 'fail: blocked_on.detail is missing or empty' "$ctx/dv-bo-no-detail.md"
+
+  _bo_artifact "$ctx/dv-bo-empty-detail.md" '  blocked_on:
+    kind: user_action
+    detail: {}
+    resume_with: decision_ref'
+  _bo_case "empty-detail" 1 'fail: blocked_on.detail is missing or empty' "$ctx/dv-bo-empty-detail.md"
+
+  _bo_artifact "$ctx/dv-bo-alias.md" '  cross_session_ask:
+    to: backend-session
+    question: "Which base branch?"'
+  _bo_case "legacy-alias/validates" 0 - "$ctx/dv-bo-alias.md"
+  rc=0
+  out=$(read_blocked_on "$ctx/dv-bo-alias.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]] \
+     || ! printf '%s\n' "$out" | head -n 1 | jq -e '. == {kind: "peer_session", detail: {to: "backend-session", question: "Which base branch?"}, resume_with: "reply_ref"}' > /dev/null 2>&1 \
+     || [[ "$(printf '%s\n' "$out" | sed -n 2p)" != "source: cross_session_ask" ]]; then  # legacy alias
+    echo "self-test: blocked_on legacy-alias/reads-as-peer_session: FAIL (rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: blocked_on legacy-alias/reads-as-peer_session: ok"
 }
 
 # tests_executed is a per-runner list: a list passes, a scalar fails, an entry without a

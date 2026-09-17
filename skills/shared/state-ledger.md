@@ -324,6 +324,12 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
 | `with_design` | `--with-design` → `skills/worktask/references/pl0-procedure.md § Designer Invocation` | When `true`, PL0 invokes `corpflow:designer`; otherwise Designer is skipped even for UI work and the keyword score stays advisory. No component stamps the field, so the gate reads absent on every run. |
 
+### Release fields
+
+| Field | Writer → Reader | Description |
+|-------|-----------------|-------------|
+| `release_tag` | `state-patch.sh --ledger-meta --set '{"release_tag":"<tag>"}'` → release engineer (`changelog-from-git.sh --tag`) | The tag this release is cut under. Absent or empty ⇒ no changelog, PR or summary text names a tag |
+
 ### Issue publishing field
 
 `metadata.github_issue_url` — issue URL written by `publish-pl-issue.sh` on the run that CREATES the issue; it short-circuits (`already_published`) on a resume of that same run. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`.

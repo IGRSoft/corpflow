@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # @description branch-lib.sh — sourceable library shared by branch-name.sh (PL-stage
-#   rename entry point) and fn-preflight.sh (surviving FN validator commands).
+#   rename entry point), fn-preflight.sh (surviving FN validator commands),
+#   stream-diff.sh and fn-stream-merge.sh.
 #
 #   Dependency-free by construction: sources nothing, sets no shell options, does no
 #   jq/git probing at load time, and has no side effects at load beyond idempotent
@@ -10,7 +11,8 @@
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
 #   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base, _fork_base_uncached,
-#   _base_ref_ranked, resolve_base_ref, base_ref_source, BRANCH_AUDIT_ACTORS, branch_audit_actor.
+#   _base_ref_ranked, resolve_base_ref, base_ref_source, resolve_git_ref, BRANCH_AUDIT_ACTORS,
+#   branch_audit_actor.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -599,4 +601,61 @@ base_ref_source() {
   local r
   r=$(_base_ref_ranked "${1:-}")
   printf '%s' "${r%% *}"
+}
+
+# A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
+# — the form workspace-modes.md documents). Map either onto something git resolves,
+# which is what lets both stored shapes work without normalising the stored value.
+#
+# The REMOTE-TRACKING ref is preferred over a same-named local branch. Trying the bare
+# name first resolved a stale local copy whenever one existed, and a stale base makes
+# the diff measured against it wrong in the blocking direction: base-sanity reported a
+# 70-file diff against a ledger claiming 18 and refused a finalization that was in fact
+# correct, while the only escape it signposts is the override that would also mask a
+# REAL wrong-base finding. Third patch to this resolution logic, so reordering alone
+# was rejected: it trades one silent wrong answer for another. Divergence is announced
+# on stderr with both names and both ahead-counts, and callers must not swallow it.
+resolve_git_ref() {
+  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead upstream
+
+  # The branch's own configured upstream is tried first, because `origin` is not always the
+  # canonical remote. In a fork workflow — origin = fork, upstream = canonical — hardcoding
+  # origin/ picks the stale fork ref, and base-sanity then measures the diff against it and
+  # blocks a correctly-based PR. Falls through to origin/ when no upstream is set, so the
+  # single-remote case resolves exactly as before.
+  # Short branch name, not refs/heads/: `@{upstream}` rejects a full refname outright
+  # ("fatal: no such branch"), which silently yielded no upstream and fell through to origin/.
+  upstream=$(git rev-parse --verify --quiet --abbrev-ref "${bare}@{upstream}" 2> /dev/null || printf '')
+  for c in ${upstream:+"$upstream"} "origin/$bare" "refs/remotes/origin/$bare"; do
+    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
+  done
+  git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"
+
+  if [[ -n "$remote" ]]; then
+    if [[ -n "$local_ref" ]] &&
+       [[ "$(git rev-parse "$remote" 2> /dev/null)" != "$(git rev-parse "$local_ref" 2> /dev/null)" ]]; then
+      # --left-right --count on a symmetric range: left = remote-only, right = local-only.
+      counts=$(git rev-list --left-right --count "${remote}...${local_ref}" 2> /dev/null || printf '')
+      behind=${counts%%[!0-9]*}; ahead=${counts##*[!0-9-]}
+      printf >&2 'WARNING: base ref %s is ambiguous — %s and %s have diverged.\n' \
+        "$name" "$remote" "$local_ref"
+      printf >&2 '  %s is ahead by %s commit(s); %s is ahead by %s commit(s).\n' \
+        "$remote" "${behind:-?}" "$local_ref" "${ahead:-?}"
+      printf >&2 '  Resolving to %s. Pass FN_BASE_REF=%s to force the local branch.\n' \
+        "$remote" "$local_ref"
+    fi
+    printf '%s' "$remote"
+    return 0
+  fi
+
+  # No remote-tracking ref: fall back exactly as before, so a purely local base,
+  # a tag or a raw revision still resolves.
+  for c in "$name" "$local_ref"; do
+    [[ -n "$c" ]] || continue
+    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  return 1
 }

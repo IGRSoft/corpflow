@@ -115,6 +115,30 @@ bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --file subjects.txt --v
 
 # Against a specific repo directory
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /path/to/repo --version "1.2.0"
+
+# From per-stream entries instead of commits (work still uncommitted in its DV trees)
+bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --streams entries.tsv --version "1.2.0"
+```
+
+### Stream entries
+
+- `--streams <tsv>` reads one `<stream><TAB><entry>` line per entry and renders `### <stream>` then
+  `#### <Section>` blocks, streams in first-seen order. Each entry goes through the same
+  conventional-commit parser as a commit subject, so `feat: …` lands in Added and a
+  non-conventional entry in Other. It excludes a git range and `--file`.
+- A stream name outside `^[a-z0-9]+(-[a-z0-9]+)*$` or over 40 characters, or a line with no TAB,
+  exits 1.
+- The RE stage's use of streams and tags (empty commit range, `metadata.release_tag`):
+  `agents/release-engineer.md § Empty commit range` and `§ Release tag`.
+
+### Tag line
+
+`--tag <name>` adds a ``Tag: `<name>` `` line under the section header in every input mode; an empty
+value adds nothing, and a value outside `[A-Za-z0-9._/+-]` exits 1. Pass the ledger's tag, so no tag
+is named unless one was set:
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
 ```
 
 ### Script Classification Behavior

@@ -201,3 +201,50 @@ _range_repo() {
   assert_success
   assert_output --partial "no changelog-worthy"
 }
+
+# --- --streams / --tag ---------------------------------------------------------------------
+
+mk_streams() {
+  WD="$(mk_tmpworkdir)"
+  printf 'service\tfeat: add handler\nweb\tfix: repair view\nservice\tfix: guard input\nweb\tdocs: readme\n' \
+    > "$WD/streams.tsv"
+}
+
+@test "streams: entries group under ### <stream> then #### <Section>, first-seen order" {
+  mk_streams
+  run_script "$SCRIPT" --streams "$WD/streams.tsv" --version 1.0.0 --date 2026-01-01
+  assert_success
+  assert_output "$(printf '## [1.0.0] - 2026-01-01\n\n### service\n\n#### Added\n- add handler\n\n#### Fixed\n- guard input\n\n### web\n\n#### Fixed\n- repair view')"
+}
+
+@test "streams: no Tag line without --tag; the tag appears when given" {
+  mk_streams
+  run_script "$SCRIPT" --streams "$WD/streams.tsv"
+  assert_success
+  refute_output --partial "Tag:"
+  run_script "$SCRIPT" --streams "$WD/streams.tsv" --tag v4.0.33
+  assert_success
+  assert_line --index 1 'Tag: `v4.0.33`'
+  run_script "$SCRIPT" --streams "$WD/streams.tsv" --tag ""
+  refute_output --partial "Tag:"
+}
+
+@test "default mode: output without the new flags is unchanged and tag-free" {
+  run_script "$SCRIPT" --file "$SUBJECTS" --version "1.0.0" --date "2024-01-15"
+  assert_success
+  assert_line --index 0 "## [1.0.0] - 2024-01-15"
+  assert_line --index 1 "### Added"
+  refute_output --partial "Tag:"
+}
+
+@test "streams: a range or --file alongside --streams, a bad stream name, or an unsafe tag exit 1" {
+  mk_streams
+  run_script "$SCRIPT" --streams "$WD/streams.tsv" HEAD~1..HEAD
+  assert_failure 1
+  printf 'Bad Stream\tfeat: x\n' > "$WD/bad.tsv"
+  run_script "$SCRIPT" --streams "$WD/bad.tsv"
+  assert_failure 1
+  run_script "$SCRIPT" --streams "$WD/streams.tsv" --tag 'v1`x'
+  assert_failure 1
+}
+

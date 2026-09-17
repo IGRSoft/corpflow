@@ -1,0 +1,1 @@
+{"stage":"FN","verdict":"blocked","summary":"Merge denied by the auto-mode classifier","blocked_on":{"kind":"permission","detail":{"tool":"Bash","command":"gh pr merge 412 --squash --delete-branch","classifier_reason":"Blocked by classifier","allow_rule":"Bash(gh pr merge 412 --squash --delete-branch)"},"resume_with":"decision_ref"}}

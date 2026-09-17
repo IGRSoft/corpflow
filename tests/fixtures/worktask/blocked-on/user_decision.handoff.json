@@ -1,0 +1,1 @@
+{"stage":"PL","verdict":"blocked","summary":"Scope needs a user choice","blocked_on":{"kind":"user_decision","detail":{"question":"Ship the router behind a flag?","options":["flag","no-flag"],"recommended":"flag"},"resume_with":"decision_ref"}}

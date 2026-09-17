@@ -29,6 +29,11 @@
 #                    of every feature branch about to merge, so the signal reads the same
 #                    whether the base is right or wrong. `base-sanity` is the check that
 #                    discriminates a wrong base, and it blocks.
+#                    Per-stream mode, entered only when facts.stream_branches holds >=2
+#                    keys: every stream branch must be an ancestor of HEAD (one
+#                    `branch_continuity` row each, `stream_merged` | `stream_unmerged`);
+#                    any unmerged stream exits 1 after all are checked. The legacy
+#                    ancestor check and its `diverged_cherry_pick` row never run there.
 #     branch-divergence
 #                    has anything outside the pipeline renamed the local branch since the
 #                    naming step? Compares the local name against the `to` of the last
@@ -120,6 +125,7 @@
 #               visual-evidence evidence, an unreachable sanitiser library, or under
 #               --strict a pr-body-lint.sh that found, errored or could not run;
 #               `base-sanity`: the PR diff dwarfs this run's own record of it;
+#               `continuity` per-stream mode: a stream branch not merged into HEAD;
 #               `unresolved-decisions`: rows to list but the path scrub is unavailable or
 #               failed, or the audit log holds rows that cannot be read).
 # @exitcode 2   Usage error (unknown command/flag; `pr-body`/`validate-pr` without --body;
