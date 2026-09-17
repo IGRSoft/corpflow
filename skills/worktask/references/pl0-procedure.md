@@ -158,6 +158,16 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
 | `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; consumed by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on every downstream task. |
 
+##### Propagation fields — DV rows
+
+Every DV row is a fan-out unit with its own artifact; these two keys are what make it one
+(`skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`).
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.stream` | kebab slug, unique among the run's DV rows | Names the row's artifact. MANDATORY on every DV row once the run seeds ≥2; MAY be omitted when there is exactly one. |
+| `metadata.artifact` | `".context/development-${N}-<stream>.md"`, or `".context/development-${N}.md"` for a lone DV row | The file that row writes and patches. DV never invents it; downstream stages resolve their inputs from these values, never from a composed name. |
+
 ##### Propagation fields — base branch & test scope
 
 `--task-create` refuses a non-PL/IR row missing `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (§ Workspace Mode): exit 2, `state.json` untouched.
@@ -472,7 +482,7 @@ condition 3 has nothing to quote without one. Conditions, caps, and validity are
 4. **Set dependency chain** between seeded tasks using `state-patch.sh --task-block <ID> --on <ID[,ID…]>`
 5. **Mark PL0 completed** after creating all stage tasks
 
-Every seeded downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`, `development-${N}.md`).
+Every seeded downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`). DV is the exception: each DV row writes the path its own `metadata.artifact` carries (§ Propagation fields — DV rows).
 
 #### Agent mapping for `metadata.agent`
 

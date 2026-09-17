@@ -88,10 +88,18 @@ Versioning/changelog/readiness canon: `skills/release-engineering/SKILL.md`.
 
 | Phase | Description |
 |-------|-------------|
-| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of `development-N.md`, `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
+| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
 | **RE1** | Determine version bump and generate the changelog — both via the canonical scripts below, never by reading the mapping table by hand |
 | **RE2** | Validate deployment readiness, create rollback plan |
 | **RE3** | Prepare release artifacts, hand off to FN |
+
+### Scope-addition re-entry check
+
+When a DV artifact carries a `## rework-N` section that ADDS scope after its original sign-off, verify at RE1, once the changelog is generated:
+
+- **CHANGELOG names the new scope** — a bullet in the release block; a commit footer never reaches an upgrading user.
+
+A gap is `verdict: blocked`, anchored on the criterion the scope addition was accepted under. This is a check on RE1's output, not a second changelog writer.
 
 ### Output Artifact
 

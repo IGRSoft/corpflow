@@ -67,12 +67,42 @@ A message from the orchestrator to your stage opens with a `msg_id:` line, a `su
 
 An unacknowledged message reads as not delivered, and a missing or different `acted_on_msg_id` reads as a mismatch. Either one costs a resend, then escalation (`skills/worktask/references/resume.md § Reattach rows — one resend, then escalate`). If the ack exits non-zero, still follow the message and name the exit code in the artifact.
 
+### A permission denial is returned, not worked around
+
+When Claude Code's auto-mode classifier denies a tool call, stop at that step and return
+`verdict: blocked` carrying `blocked_on` (`handoff-protocol.md § Schema — blocked_on`), with
+`command` and `classifier_reason` copied verbatim from the denial (shape below).
+
+The same holds on pass/fail, go/no-go and approve/reject stages, whose vocabularies list no
+`blocked`. The cross-stage blocked exception (`handoff-protocol.md § Per-stage required-field
+matrix`) makes `blocked` with a `blocked_on` legal on every stage, so a denial is
+never returned as fail, no-go or reject. Each of those loops the pipeline back and spends a retry
+on work that did not fail.
+
+#### A permission denial — the blocked_on shape
+
+```yaml
+  blocked_on:
+    kind: permission
+    detail: { tool: Bash, command: "gh pr merge 412 --squash", classifier_reason: "Blocked by classifier", allow_rule: "Bash(gh pr merge 412 --squash)" }
+    resume_with: decision_ref
+```
+
+#### A permission denial — never worked around
+
+Never retry the denied call, and never reach its effect another way — a different command, tool or
+script doing what the denied one would have done. That lands an action the session's permission
+posture refused, with no grant on record. List the steps that already completed in the artifact
+body so a resumed dispatch can skip them. The orchestrator parks the task without spending a retry
+and asks the user (`skills/worktask/SKILL.md § Step 6.5a4`).
+
 ## Contract Table
 
 Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-resolution)). Reading the rows:
 
 - Every Validation cell implicitly requires that the named output artifact exists on disk; only the extra conditions are listed.
 - **`<plan_file>`** resolves via `task.metadata.plan_file`; fallback newest `.context/planning-*.md`.
+- **this row's artifact** (DV) and **every DV task artifact** (downstream) both resolve from the ledger's DV rows, in ascending task-id order — `handoff-protocol.md § DV fan-out — ledger tasks` (naming, seam S1) and § Iterating the DV tasks (seam S3). Never a filename composed by hand.
 - **†** = frontmatter-first read (`Read <artifact> limit:30`); deep-read a body ONLY on anchor-miss, a section-flagging `verdict`/`next_stage_focus`, or `retry_count > 0`.
 - Agent, model and error file per stage: **How to Read a Contract** above.
 
@@ -88,17 +118,17 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — then MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | `development-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`, the runner's **verbatim** summary line in `## verification-command`, plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + the summary line is quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
-| **DR** | `development-N.md` + source diff | `developer-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## verdict` ∈ {pass, fail} |
-| **SR** | `development-N.md` + source diff | `security-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | No High/Critical findings unresolved |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact, H2 set: `handoff-protocol.md#anchor-allow-list`, the runner's **verbatim** summary line in `## verification-command`, plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
+| **DR** | every DV task artifact + source diff | `developer-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## verdict` ∈ {pass, fail} |
+| **SR** | every DV task artifact + source diff | `security-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | No High/Critical findings unresolved |
 
 ### QA–RE
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **QA** | `development-N.md`, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
-| **DC** | `development-N.md`, `architecture-N.md` (when AR ran) † | `documentation-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Docs diff present |
-| **RE** | `development-N.md`, `testing-N.md`, `documentation-N.md` | `release-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Version bump proposed + changelog entry drafted |
+| **QA** | every DV task artifact, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
+| **DC** | every DV task artifact, `architecture-N.md` (when AR ran) † | `documentation-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Docs diff present |
+| **RE** | every DV task artifact, `testing-N.md`, `documentation-N.md` | `release-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Version bump proposed + changelog entry drafted |
 
 ### FN–ST
 
@@ -144,7 +174,7 @@ With **no** typed return (the dispatch primitive takes no `schema` argument, or 
 9. At DV completion, if `.context/state.json` has a `tasks.AR0` entry, run:
 
    ```bash
-   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter .context/development-N.md \
+   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter <the DV row's artifact> \
      --state .context/state.json
    ```
 
@@ -163,15 +193,7 @@ When AR completed, the DV0, DR0 **and** QA0 tasks MUST each carry `metadata.arch
 When a stage is delegated to a qualified agent (e.g., `apple-developer:ios-developer` takes over DV):
 
 - `metadata.agent` keeps the full qualified name; `metadata.error_file` derives from its last segment, collisions joined with `-` (`state-ledger` § error_file derivation).
-- The output artifact path is unchanged — `.context/development-N.md` regardless of which plugin implemented DV.
-
-## Multi-Run Within a Stage
-
-When TL splits DV into DV0/DV1/DV2 (parallel streams):
-
-- Each sub-task has its own `retry_count`
-- All write to the same `.context/errors/developer.md` with distinct section headers (`## DV0 Retry 1 — …`, `## DV1 Retry 1 — …`)
-- Output artifact is a single `.context/development-N.md` — each sub-task appends its "Files Changed" block
+- The output artifact path is the one on the stage's own ledger row (`metadata.artifact`) regardless of which plugin implemented it — a qualified DV agent writes its row's artifact exactly as `corpflow:developer` would.
 
 ## Closing Elicitation Sweep
 
@@ -202,7 +224,7 @@ Two destinations, selected per item by `blocks_next_stage` — never by stage:
 
 A `blocks_next_stage: true` item from a stage **other than PL, FN, ST or IR** does not stop the run for a human. It is handed to a **sub-agent dispatched one effort tier above the stage that raised it**, which answers it from the stage's own artifacts; the orchestrator waits for that answer and dispatches the next stage. Mechanism: `commands/worktask.md § Step C.0a`. Why a tier and not a model, how that tier travels, and where it is clamped: § Resolver Effort Tier.
 
-The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR are recorded rather than prompted already, so there is nothing for a resolver to unblock.
+The four exception stages keep their existing surfacing (§ Exceptions — PL, FN, ST, IR): PL's items are the plan gate's business, and FN/ST/IR `decision` items are recorded rather than prompted already, so there is nothing for a resolver to unblock.
 
 ##### What the resolver is given
 
@@ -374,7 +396,8 @@ Every code in `stage-codes.md § Primary Stages`, unioned with the `handoff-prot
 Schemas` titles, owes a sweep. No stage is exempt and there is no lower tier: a missing sweep fails
 the run. The default, which twelve of the thirteen once restated as identical table rows, is: an
 item is **surfaced at the FN gate when non-blocking and at this stage's own boundary when blocking**,
-and in an unattended lane it is **recorded, not prompted**.
+and in an unattended lane a `decision` item is **recorded, not prompted**, while an `escalate` item
+still stops at its boundary unless § Unattended fallbacks gives its lane nobody to stop for.
 
 Which side applies is decided per item by `blocks_next_stage` (§ Where an item is answered), never by
 the stage code. `commands/worktask.md § Step C` renders the non-blocking side; § Step C.0 renders the
@@ -388,9 +411,9 @@ does with it — never in whether the sweep is owed:
 | Code | Obligation | Surfaced by (non-blocking / blocking) | Unattended fallback |
 |---|---|---|---|
 | PL | Required | plan gate / plan gate (PL's boundary IS the plan gate) | auto-decided at § Step A.4, else recorded — unresolved `escalate` items still force the checkpoint stop |
-| FN | Required | recorded for ST / FN's own boundary, before ST | recorded, not prompted |
-| ST | Required | recorded as follow-ups / ST's own boundary | recorded, not prompted |
-| IR | Required | FN gate / this stage's own boundary | `--emergency` bypasses both gates: recorded |
+| FN | Required | recorded for ST / FN's own boundary, before ST | `decision` items recorded, not prompted; `escalate` items stop at FN's boundary unless their lane parks or records (§ Unattended fallbacks) |
+| ST | Required | recorded as follow-ups / ST's own boundary | `decision` items recorded, not prompted; `escalate` items as FN |
+| IR | Required | FN gate / this stage's own boundary | `--emergency` bypasses both gates: `decision` items recorded; `escalate` items still stop |
 
 #### Why those four depart
 
@@ -428,24 +451,24 @@ The sweep carries decisions a person would want to make. Four cases already own 
 
 ### Unattended fallbacks
 
-Recording never stops; only prompting does. One behaviour row per carrier, each carrier detected from its own defining field.
+Recording never stops; only prompting does. A bypass records `decision` items only. An `escalate` item stops at its boundary on every row that does not say otherwise; the rule and its lane order live at `commands/worktask.md § Escalation guard — escalate stops at every boundary`. One behaviour row per carrier, each carrier detected from its own defining field.
 
 #### Fallbacks — gate carriers
 
 | Carrier | Detected by | Sweep behaviour |
 |---|---|---|
-| plan gate bypassed | `PL0.metadata.plan_gate == "bypass"` | PL's sweep recorded, not prompted — **except** unresolved `escalate` items, which still force the plan-gate checkpoint stop; non-PL sweeps still batch at FN |
-| FN gate bypassed | `PL0.metadata.fn_gate == "bypass"` | collect and audit `sweep_recorded`; escalate-class items also audit `sweep_escalation_unprompted`. Subject is the boundary that would have rendered — `FN<N>` for a batched item, `<CODE><N>` for a blocking one |
+| plan gate bypassed | `PL0.metadata.plan_gate == "bypass"` | PL's `decision` items recorded, not prompted; unresolved `escalate` items still force the plan-gate checkpoint stop; non-PL sweeps still batch at FN |
+| FN gate bypassed | `PL0.metadata.fn_gate == "bypass"` | collect and audit `sweep_recorded` for `decision` items; `escalate` items stop for a checkpoint-style render at the boundary they surface on. Subject is that boundary — `FN<N>` for a batched item, `<CODE><N>` for a blocking one |
 | auto decision gate | `PL0.metadata.decision_gate == "auto"` | `decision` items answered by the delegate; `escalate` items hold their own checkpoint — the plan gate for planning-stage items, finalization otherwise |
 
 #### Fallbacks — unattended lanes
 
 | Carrier | Detected by | Sweep behaviour |
 |---|---|---|
-| `--emergency` | no PL task in `tasks` | both gates bypass, so every sweep is record-only |
+| `--emergency` | no PL task in `tasks` | both gates bypass: `decision` items recorded, `escalate` items still stop at their boundary |
 | `/megatask` per issue | `PL0.metadata.megatask_group` | PARK on any escalate item, at whichever boundary it surfaces: `workspace.json.execution.status: "failed"`, `execution.reason: "parked_escalation"`, `escalation_parked` audit row with that boundary's `<CODE><N>` subject |
-| `CORPFLOW_NONINTERACTIVE=1` | environment | record, never prompt |
-| headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool |
+| `CORPFLOW_NONINTERACTIVE=1` | environment | no reachable human: `decision` items recorded; each `escalate` item audits `sweep_escalation_unprompted` with `metadata: {id, stage, ref}`, the run continues, and FN lists it atop the PR body (`fn-preflight.sh unresolved-decisions`) |
+| headless dispatch | external runner | data-only by construction — no stage agent holds the ask tool; `escalate` items recorded as the row above |
 
 ## Resolver Effort Tier
 
@@ -606,7 +629,7 @@ excerpt nobody can complete is the ad-hoc truncation this convention replaces.
 ---
 handoff:
   stage: DV
-  # task_id: DV1               # set only when the stage has more than one task
+  task_id: DV0                # your own ledger row id; REQUIRED once the run has >1 DV row
   verdict: ok                  # ok / blocked / escalate
   summary: "<N files modified, M tests added>"
   tests_executed: 12          # cases RUN, not discovered; 0 is legal
@@ -619,6 +642,17 @@ handoff:
   open_questions:
     - { id: sw-DV0-1, class: decision, ref: "development-N.md#elicitation-sweep", blocks_next_stage: false }
 ---
+```
+
+#### Your artifact and row id come from the ledger (tpl-dv)
+
+You write **one** artifact — the one your ledger row names (`tasks.<ID>.metadata.artifact`), not a
+canonical file assembled from other DV rows. Naming grammar, the per-row `stream`/`artifact` keys
+and the single-DV case: `handoff-protocol.md § DV fan-out — ledger tasks`. Patch that row by id and
+path, since the orchestrator's basename guess cannot see a stream suffix:
+
+```bash
+state-patch.sh --stage DV --task-id <ID> --prev <PREV> --artifact <your row's artifact path>
 ```
 
 #### The refs and architecture half (tpl-dv)
@@ -736,12 +770,22 @@ handoff:
   open_questions:
     - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     findings: developer-review-N.md#findings
 ---
 ```
 
 Prev→this label: `DV→DR`.
+
+#### refs.dev is a list, one element per DV row (tpl-dr … tpl-re)
+
+`refs.dev` is ALWAYS a YAML list: a single-DV run yields a **one-element** list, never a scalar.
+Each element is `<artifact basename>#files-changed`, one per DV ledger row, in ascending numeric
+task-id order. Resolve them from the ledger rather than composing a filename — the idiom and the
+naming grammar are `handoff-protocol.md § Iterating the DV tasks` (seam S3). The same field, shape
+and rule apply to `#tpl-sr`, `#tpl-qa`, `#tpl-dc` and `#tpl-re`.
 
 ### #tpl-sr — Security Review (security-reviewer)
 
@@ -756,7 +800,9 @@ handoff:
   open_questions:
     - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     findings: security-review-N.md#findings
 ---
 ```
@@ -780,7 +826,9 @@ handoff:
   open_questions:
     - { id: sw-QA0-1, class: decision, ref: "testing-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     results: testing-N.md#results
 ---
 ```
@@ -814,7 +862,9 @@ handoff:
   open_questions:
     - { id: sw-DC0-1, class: decision, ref: "documentation-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
-    dev: development-N.md#files-changed
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     docs: documentation-N.md#files-changed
 ---
 ```
@@ -833,7 +883,7 @@ stage established, and it will be believed.
 
 #### Under fan-out, DC reads a tree that does not exist yet (tpl-dc)
 
-In fan-out mode DC runs before the streams are merged, so a cross-stream claim — a path, a command,
+In fan-out mode each DV row lands in its own tree, so a cross-stream claim — a path, a command,
 an integration — describes an **assembled tree DC cannot see**. Three of four paths one payload's
 README documented were absent from the tree DC was reading. The README was right; DC's method could
 not have established that.
@@ -912,6 +962,9 @@ handoff:
   open_questions:
     - { id: sw-RE0-1, class: decision, ref: "release-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:
+    dev:                                   # ALWAYS a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
     artifacts: release-N.md#artifacts
     version: release-N.md#version
 ---

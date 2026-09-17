@@ -120,7 +120,7 @@ Same four parts — summary, parameters, returns, throws/raises — in every lan
 context. **State ledger**: Stage DC, Owner: technical-writer — see `skills/shared/state-ledger.md`.
 
 ### DC Stage (Documentation)
-- **DC0**: Read `state.json` facts + the `handoff:` frontmatter of `development-N.md` and, when AR ran, `architecture-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
+- **DC0**: Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`) and, when AR ran, `architecture-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
 - **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files, documenting only what exists in the assigned tree(s): `task.metadata.workspace_path`, plus each worktree the dispatch prompt names
 - **DC2**: Run the option-existence gate over every doc DC1 wrote or edited, until it exits 0 or only correction findings remain (§ Option-existence gate (DC2))
 - **DC3**: All documentation updated, `documentation-N.md` summary written

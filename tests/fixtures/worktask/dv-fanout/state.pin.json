@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "worktask_id": "dv-fanout-pin-fixture",
+  "run_index": 0,
+  "tasks": {
+    "PL0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "PL", "run_index": 0 } },
+    "DV0": { "status": "pending", "blocked_by": ["PL0"],
+      "metadata": { "stage": "DV", "run_index": 0, "stream": "api", "workspace_path": "/wt/shared" } },
+    "DV1": { "status": "pending", "blocked_by": ["PL0"],
+      "metadata": { "stage": "DV", "run_index": 0, "stream": "ui", "workspace_path": "/wt/shared" } },
+    "DV2": { "status": "pending", "blocked_by": ["PL0"],
+      "metadata": { "stage": "DV", "run_index": 0, "stream": "schema", "workspace_path": "/wt/serial" } },
+    "DV3": { "status": "pending", "blocked_by": ["DV2"],
+      "metadata": { "stage": "DV", "run_index": 0, "stream": "migrate", "workspace_path": "/wt/serial" } },
+    "DV4": { "status": "pending", "blocked_by": ["DV3"],
+      "metadata": { "stage": "DV", "run_index": 0, "stream": "backfill", "workspace_path": "/wt/serial" } },
+    "DR0": { "status": "pending", "blocked_by": ["DV0", "DV1", "DV4"],
+      "metadata": { "stage": "DR", "run_index": 0, "workspace_path": "/wt/shared" } }
+  }
+}

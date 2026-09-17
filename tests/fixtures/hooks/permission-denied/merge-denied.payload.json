@@ -1,0 +1,14 @@
+{
+  "session_id": "sess_pd_fix",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/tmp",
+  "permission_mode": "auto",
+  "hook_event_name": "PermissionDenied",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "gh pr merge 412 --squash --delete-branch",
+    "description": "Merge the feature PR"
+  },
+  "tool_use_id": "toolu_pd_fix",
+  "reason": "Blocked by classifier"
+}

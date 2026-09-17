@@ -135,6 +135,24 @@ EOF
   assert_success
 }
 
+@test "failure: a per-stream DV write is linted like development-N.md (missing anchor)" {
+  mkdir -p "$WD/.context"
+  printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "no anchor"\n---\n\n# Development\n' \
+    > "$WD/.context/development-0-service.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "{\"tool_input\":{\"file_path\":\"$WD/.context/development-0-service.md\"}}"
+  assert_failure 2
+}
+
+@test "happy: an over-long stream slug is not an artifact name (no-op)" {
+  mkdir -p "$WD/.context"
+  long="$WD/.context/development-0-a2345678901234567890123456789012345678901.md"
+  printf -- '---\nhandoff:\n  stage: DV\n---\n' > "$long"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" \
+    <<< "{\"tool_input\":{\"file_path\":\"$long\"}}"
+  assert_success
+}
+
 @test "contract: --self-test asserts the gating regex (smoke, NON-counting)" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
@@ -271,9 +289,13 @@ run_pre() { run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT
   assert_output ""
 }
 
-@test "pre: a per-stream development file is never linted against the carrier set" {
+@test "pre: a per-stream development file is a DV handoff and gets the DV allow-list" {
   with_ledger
-  run_pre "$(pre_payload Write "$WD/.context/development-0-backend.md" $'## commits\n')"
+  run_pre "$(pre_payload Write "$WD/.context/development-0-backend.md" $'## files-changed\n\n## commits\n')"
+  assert_success
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ] || fail "not denied: $output"
+  [[ "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<< "$output")" == *"development-0-backend.md (stage=DV) adds H2 outside the allow-list: ## commits."* ]]
+  run_pre "$(pre_payload Write "$WD/.context/development-0-backend.md" $'## files-changed\n\n## verification-command\n')"
   assert_success
   assert_output ""
 }

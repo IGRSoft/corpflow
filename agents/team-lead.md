@@ -104,25 +104,30 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
 ##### Steps 3-4: Locate and Narrow DV0
 
 3. Read `tasks.DV0` and `tasks.DR0` from the ledger — the stage ids are the keys
-4. Narrow DV0's description to the primary stream's scope:
+4. Narrow DV0's description to the primary stream's scope and stamp its slug and artifact. Slugs are
+   kebab, unique within the run, assigned here, and never changed once stamped
+   (`handoff-protocol.md § Artifact naming (S1)`):
    ```bash
-   state-patch.sh --task-meta DV0 --set '{"description":"{primary stream scope}"}'
+   state-patch.sh --task-meta DV0 --set '{"description":"{primary stream scope}",
+     "stream":"{primary-slug}","artifact":".context/development-{N}-{primary-slug}.md"}'
    ```
 
 ##### Step 5: Create Stream Tasks
 
-5. Create each additional stream. All DVN share `developer.md`; retry sections are scoped per-task (`## DV1 Retry N`, `## DV2 Retry N`):
+5. Create each additional stream by **cloning DV0's metadata** and overriding only the stream
+   fields. Retry sections stay scoped per task (`## DV1 Retry N`, `## DV2 Retry N`):
    ```bash
-   # Resolve plan file with fallback first: task.metadata.plan_file, else the
-   # highest-N .context/planning-*.md.
+   DV0_META=$(jq -c '.tasks.DV0.metadata' .context/state.json)
    state-patch.sh --task-create "DV${N}" --metadata "$(jq -n \
-     --arg plan "$RESOLVED_PLAN_FILE" --argjson ri "$RUN_INDEX" --arg wid "$WORKTASK_ID" \
-     '{stage:"DV", agent:"corpflow:developer", model:"opus",
-       description:"{scope, file ownership, interface contracts, acceptance criteria}",
-       error_file:".context/errors/developer.md",
-       context_refs:(["\($plan)#requirements","architecture-\($ri).md#decisions","coordination-\($ri).md#fan-out"]|tojson),
-       plan_file:$plan, run_index:$ri, worktask_id:$wid, priority:"medium"}')"
+     --argjson m "$DV0_META" --arg slug "$STREAM_SLUG" --arg desc "$STREAM_SCOPE" \
+     '$m + {description:$desc, stream:$slug,
+            artifact:".context/development-\($m.run_index)-\($slug).md"}')"
    ```
+##### Step 5 field notes
+
+The clone is what keeps the row valid: `--task-create` refuses a row missing `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path`, and it carries forward the agent PL0 already resolved rather than re-routing the stream through a dispatcher agent.
+
+`$STREAM_SCOPE` is that stream's scope, file ownership, interface contracts and acceptance criteria. Leave `workspace_path` as DV0's cloned path; TL never creates a worktree. The orchestrator re-pins a parallel stream to its own worktree at dispatch, so whether a stream gets its own tree follows from the `blocked_by` edges you wire in Steps 6-8 (rule: `skills/worktask/references/handoff-protocol.md § Pinning a row's tree`).
 
 ##### Steps 6-8: Wire Dependencies and Document
 
@@ -134,13 +139,9 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
    ```bash
    state-patch.sh --task-block DR0 --on DV1,DV2
    ```
-8. Document the split in `.context/coordination-N.md` under a "Parallel Streams" section
-
-#### Stream Slugs (required for DV fan-out)
-
-Every stream MUST carry a **kebab-case `stream` slug**, unique within the run and recorded alongside the stream in `coordination-N.md § fan-out`; it names the stream's artifact, `development-N-<stream>.md`. A slug-less stream leaves its sub-agent no artifact name and blocks the merge.
-
-You specify slugs but never execute the fan-out: the DV entry agent spawns one sub-agent per stream, each writing only its own `development-N-<stream>.md`, then alone merges the canonical `development-N.md` — the DR/QA input (`agents/developer.md § TL fan-out`).
+8. Document the split in `.context/coordination-N.md` under a "Parallel Streams" section, one row per
+   stream: slug, owning agent, file ownership, artifact. The ledger row is authoritative; that
+   section is the human-readable copy DR reads alongside it.
 
 #### File Ownership Rules
 

@@ -8,8 +8,9 @@
 # fell through to the Post checks would exit 2 on the not-yet-written file's old contents and
 # block the write. With no --event the payload's hook_event_name decides, then Post.
 #
-# PreToolUse: denies a write to a canonical .context/<stage>-N.md artifact whose content adds
-# an H2 outside that stage's allow-list (cache-lint.sh --anchor-diff). A missing required H2
+# PreToolUse: denies a write to a canonical .context/<stage>-N.md artifact (DV also its
+# development-N-<stream>.md) whose content adds an H2 outside that stage's allow-list
+# (cache-lint.sh --anchor-diff). A missing required H2
 # never denies: artifacts are built in steps, and the stage-boundary harness owns that check.
 # An Edit is judged on new_string, minus the H2s old_string already carries. Fails open
 # (allows) without jq, without a state.json beside the artifact, or without a plugin root.
@@ -41,34 +42,45 @@ esac
 
 # Canonical artifact basenames (mirrors handoff-protocol.md#stage-artifact-map).
 #
-# The per-stream fan-out files development-N-<stream>.md are deliberately NOT matched.
-# handoff-protocol.md § Per-stream DV artifacts calls them merge inputs, not handoff
-# carriers: the entry agent merges them into the canonical development-N.md, and that
-# merged file is the DR/QA input the anchor contract exists to police. Linting the
-# inputs against the carrier's allow-list only produced `unexpected: commits
-# verification` on every stream write — noise on a non-blocking hook, and noise is how
-# a real anchor failure gets scrolled past.
-ARTIFACT_RE='\.context/(planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+\.md$'
+# DV also matches the per-stream development-N-<stream>.md: under handoff-protocol.md
+# § DV fan-out — ledger tasks each stream file IS its row's DV handoff, read directly by
+# DR/QA through refs.dev, so it carries the same anchor contract as development-N.md.
+# The stream arm is the S1 slug grammar; its 40-char cap cannot be said in one ERE, so
+# STREAM_TOO_LONG_RE subtracts over-long slugs. Other stages have no stream suffix.
+ARTIFACT_RE='\.context/((planning|architecture|coordination|development|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*)\.md$'
+STREAM_TOO_LONG_RE='\.context/development-[0-9]+-[a-z0-9-]{41,}\.md$'
+
+# is_artifact <path> — true when <path> is a lintable stage artifact name.
+is_artifact() {
+  printf '%s' "$1" | grep -qE "$ARTIFACT_RE" || return 1
+  ! printf '%s' "$1" | grep -qE "$STREAM_TOO_LONG_RE"
+}
 
 if [ "$SELF_TEST" -eq 1 ]; then
   ok=0
   for p in \
     ".context/development-0.md" \
+    ".context/development-0-swift-app.md" \
+    ".context/development-2-backend.md" \
+    ".context/development-0-a234567890123456789012345678901234567890.md" \
     ".context/developer-review-12.md" \
     "/abs/path/.context/planning-3.md"; do
-    printf '%s' "$p" | grep -qE "$ARTIFACT_RE" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
+    is_artifact "$p" || { echo "anchor-preflight: self-test FAIL (should match: $p)"; exit 1; }
   done
   for p in \
     "skills/worktask/SKILL.md" \
     ".context/state.json" \
     ".context/development.md" \
     ".context/development-0-.md" \
-    ".context/development-0-swift-app.md" \
-    ".context/development-2-backend.md" \
     ".context/development-0-Stream.md" \
+    ".context/development-0--web.md" \
+    ".context/development-0-web-.md" \
+    ".context/development-N-web.md" \
+    ".context/development-0-a2345678901234567890123456789012345678901.md" \
     ".context/planning-0-stream.md" \
+    ".context/developer-review-0-web.md" \
     ".context/worktask-comms.md"; do
-    printf '%s' "$p" | grep -qE "$ARTIFACT_RE" && { echo "anchor-preflight: self-test FAIL (should NOT match: $p)"; exit 1; }
+    is_artifact "$p" && { echo "anchor-preflight: self-test FAIL (should NOT match: $p)"; exit 1; }
     ok=$((ok + 1))
   done
 
@@ -173,7 +185,7 @@ pre_allowed_set() {
 pre_tool_use_arm() {
   FILE_PATH=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2> /dev/null) || return 0
   [ -n "$FILE_PATH" ] || return 0
-  printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || return 0
+  is_artifact "$FILE_PATH" || return 0
   # The ledger beside the artifact, not a resolved root: a megatask worktree's .context is
   # not the main checkout's.
   [ -f "$(dirname -- "$FILE_PATH")/state.json" ] || return 0
@@ -197,8 +209,9 @@ pre_tool_use_arm() {
   [ -n "$_bad" ] || return 0
 
   _base="${FILE_PATH##*/}"
-  _stem="${_base%.md}"
-  _set=$(pre_allowed_set "$_lint" "${_stem%-*}") || return 0
+  # Strip the run index and any DV stream suffix: the allow-list keys rows by canonical basename.
+  _canon=$(printf '%s' "${_base%.md}" | sed -E 's/-[0-9]+(-[a-z0-9-]+)?$//')
+  _set=$(pre_allowed_set "$_lint" "$_canon") || return 0
   _nl='
 '
   _reason="anchor-preflight: $_base (stage=${_set%%"$_nl"*}) adds H2 outside the allow-list: $_bad. Allowed: ${_set#*"$_nl"}. Nest other headings as H3."
@@ -256,7 +269,7 @@ if [ -f "$FILE_PATH" ] && [ -r "$CB_LIB" ]; then
   fi
 fi
 
-if ! printf '%s' "$FILE_PATH" | grep -qE "$ARTIFACT_RE" || [ ! -f "$FILE_PATH" ]; then
+if ! is_artifact "$FILE_PATH" || [ ! -f "$FILE_PATH" ]; then
   [ "$cbrc" -eq 0 ] || exit 2
   exit 0
 fi

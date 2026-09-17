@@ -76,7 +76,8 @@
 #   7. Anchor diff (the one H2 comparison behind --anchor-lint, the hook and the harness):
 #        cache-lint.sh --anchor-diff (--stage <CODE> | --for-path <path>) [--baseline <file>] <file|->
 #      TSV `missing\t<h>` rows (allow-list order), then `unexpected\t<h>` rows (document
-#      order). --for-path resolves only an exact <canonical>-<N>.md basename. A heading
+#      order). --for-path resolves an exact <canonical>-<N>.md basename, plus DV's
+#      development-<N>-<stream>.md (S1 slug, <= 40 chars); nothing else. A heading
 #      present in --baseline is never unexpected. Exit 0 clean, 1 diff, 2 usage, unknown
 #      stage or unreadable input.
 #
@@ -317,11 +318,17 @@ h2_headings() {
   ' "$1"
 }
 
-# The stage whose canonical artifact is exactly <basename>-<N>.md; empty otherwise, so a
-# per-stream or aliased name never resolves.
+# The stage whose canonical artifact is exactly <basename>-<N>.md; empty otherwise, so an
+# aliased name never resolves. The one suffixed form is DV's development-<N>-<stream>.md:
+# each DV ledger task's stream file IS that row's handoff (handoff-protocol.md § DV fan-out —
+# ledger tasks), so it carries the DV set exactly as the harness and the Post lint apply it.
 stage_for_path() {
   local base row code
   base="${1##*/}"
+  if [[ "$base" =~ ^development-[0-9]+-([a-z0-9]+(-[a-z0-9]+)*)\.md$ ]]; then
+    [[ "${#BASH_REMATCH[1]}" -le 40 ]] && printf 'DV\n'
+    return 0
+  fi
   case "$base" in *-[0-9]*.md) ;; *) return 0 ;; esac
   local stem="${base%.md}"
   local num="${stem##*-}"
@@ -914,9 +921,9 @@ filename_lint() {
     actual_name=$(basename "$artifact")
     name_re="^${expected_base}-[0-9]+\\.md\$"
     expected_desc="${expected_base}-N.md"
-    # DV fans out one sub-agent per TL-assigned workstream, each writing
-    # development-N-<stream>.md; the entry agent merges them into the canonical
-    # development-N.md. Both names are legal on disk simultaneously.
+    # DV fans out onto ledger tasks, one per stream, each writing its own
+    # development-N-<stream>.md handoff; a run with a single DV row may omit the
+    # stream and write development-N.md (handoff-protocol.md § DV fan-out).
     if [[ "$expected_base" == "development" ]]; then
       name_re="^development-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\\.md\$"
       expected_desc="development-N.md or development-N-<stream>.md"

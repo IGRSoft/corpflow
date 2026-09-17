@@ -46,6 +46,12 @@ load_allow_list() {
   fi
 }
 
+# Shared by both renderers. DV is the one stage with a second on-disk name: each DV ledger task
+# writes development-<N>-<stream>.md, so naming only development-N.md would send a stream run's
+# reader to a file it never wrote (handoff-protocol.md § DV fan-out — ledger tasks).
+# shellcheck disable=SC2016  # awk source, not a shell expansion
+AWK_ARTIFACT_NAME='function artifact_name(b) { return (b == "development") ? b "-<N>[-<stream>].md" : b "-N.md" }'
+
 stages() {
   awk -F'\t' '$1 != "*" && !seen[$1]++ { print $1 }' "$ALLOW"
 }
@@ -55,7 +61,7 @@ agent_file_for() {
 }
 
 render_stage() {
-  awk -F'\t' -v s="$1" '
+  awk -F'\t' -v s="$1" "$AWK_ARTIFACT_NAME"'
     function add(list, h) { return list (list == "" ? "" : ", ") "`## " h "`" }
     $1 == s {
       base = $3
@@ -67,7 +73,7 @@ render_stage() {
       if (base == "") exit 3
       print "### Artifact anchors"
       print ""
-      printf "`%s-N.md` carries only these H2 headings; nest every other heading as H3. ", base
+      printf "`%s` carries only these H2 headings; nest every other heading as H3. ", artifact_name(base)
       printf "Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. "
       printf "`hooks/anchor-preflight.sh` denies a write that adds any other H2; "
       print "`handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2."
@@ -80,7 +86,7 @@ render_stage() {
 
 # The required tables split after DR so each stays under the section-lint cap.
 render_table() {
-  awk -F'\t' -v key="$1" '
+  awk -F'\t' -v key="$1" "$AWK_ARTIFACT_NAME"'
     $1 == "*" { next }
     !seen[$1]++ { order[++n] = $1; if (split_at == 0 && $1 == "DR") split_at = n }
     $4 == "required" { req[$1] = req[$1] (req[$1] == "" ? "" : ", ") "`## " $5 "`"; base[$1] = $3 }
@@ -96,7 +102,7 @@ render_table() {
       print "|-------|----------|-----------------------|"
       lo = (key == "table=required-pl-dr") ? 1 : split_at + 1
       hi = (key == "table=required-pl-dr") ? split_at : n
-      for (i = lo; i <= hi; i++) printf "| %s | %s-N.md | %s |\n", order[i], base[order[i]], req[order[i]]
+      for (i = lo; i <= hi; i++) printf "| %s | %s | %s |\n", order[i], artifact_name(base[order[i]]), req[order[i]]
     }' "$ALLOW"
 }
 

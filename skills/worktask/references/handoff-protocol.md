@@ -165,6 +165,71 @@ constraints:
           reached this dispatch. Checked at the boundary by ack-check.sh, not by the harness.
 ```
 
+### Schema — blocked_on
+
+```yaml
+# …continued: handoff.properties — the megatask Shared Seams registry entry, verbatim
+      blocked_on:
+        kind: user_decision | user_action | permission | peer_session | artifact | correction | host_environment
+        detail: {…kind-specific…}   # permission: {tool, command, classifier_reason, allow_rule}
+        resume_with: decision_ref | artifact_path | reply_ref
+```
+
+OPTIONAL, and legal only alongside `verdict: "blocked"`, which every stage may return with it under
+the cross-stage blocked exception (§ Per-stage required-field matrix). It is the typed reason a
+stage cannot continue, in the shape the megatask Shared Seams registry declares
+(`skills/megatask/SKILL.md § Registry location`). Both enums are copied whole, so the other kinds need no second schema edit, but only
+the `permission` arm is defined here; every other kind keeps its `{…kind-specific…}` placeholder
+until its own arm is specified.
+
+#### Schema — blocked_on, the permission arm
+
+```yaml
+# …continued: handoff.properties.blocked_on, when kind is permission
+        detail:
+          type: object
+          required: [tool, command, classifier_reason, allow_rule]
+          properties:
+            tool: { type: string, maxLength: 64 }
+            command: { type: string, maxLength: 512 }
+            classifier_reason: { type: string, maxLength: 512 }
+            allow_rule: { type: string, maxLength: 600 }
+        resume_with: { const: decision_ref }
+```
+
+A stage fills it on an auto-mode classifier denial (`skills/shared/stage-contracts.md § A permission
+denial is returned, not worked around`). `allow_rule` is informational: the rule a user could add
+themselves, which corpflow never writes. The ledger copy is `tasks.<ID>.metadata.blocked_on`,
+written by `permission-park.sh park` and set to `null` by `resume` — `--task-meta` merges and has
+no unset, so a cleared park reads `blocked_on == null`, not an absent key.
+
+##### Schema — blocked_on, what decision_ref points at
+
+`resume_with: decision_ref` names the `permission_resumed` audit row that `permission-park.sh
+resume` appends once the user has answered (`skills/agent-coordination/SKILL.md § Writers —
+permission resumes`). Its `metadata.decision_ref` is `permission_resumed:<task_id>:<dedupe_key>:<n>`,
+and `resume` returns the same value as `resume_block.decision_ref`. `n` is 1 plus the earlier
+resumes with that task and key, so a call that is denied and parked again gets a distinct ref.
+`truncated: true` on a `batch` need or on `resume_block` marks a command cut at 512 characters. That
+text is context only: it is never offered as a `!` line, and the full command is in Claude Code's
+denial notice. The stored `blocked_on` carries no `truncated` key.
+
+##### Schema — blocked_on, where the full detail lives
+
+The full `command`, `classifier_reason` and `allow_rule` stay out of the audit log, not out of
+`.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one,
+which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`,
+which `resume` sets to `null`; in the resume message or re-dispatch suffix built from
+`resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A
+project that commits `.context/` commits the artifact copy, and a ledger copy committed while the
+task was parked stays in that history.
+
+##### Schema — blocked_on, the redacted audit shape
+
+`.context/logs/audit.jsonl` is treated as committed, so it gets the redacted shape alone: `permission_denied` and `permission_resumed` rows carry `tool`, `dedupe_key`,
+`command_head` and `truncated`, and `escalation_parked` lists `{tool, command_head, truncated}` per
+need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks the 80-character head cut, not the 512-character command cut.
+
 ### Schema — $defs: SweepItem and SweepStub
 
 Closing elicitation sweep item, defined once for all three transports (contract:
@@ -297,6 +362,12 @@ under its own stage id.
 
 ### Per-stage required-field matrix
 
+Cross-stage blocked exception: any stage may return `verdict: blocked` when the return carries a
+`blocked_on` (§ Schema — blocked_on), whether or not its row's vocabulary lists `blocked`. It holds
+on both channels, so a typed `verdict` enum without `blocked` still accepts it alongside
+`blocked_on`. A `blocked` with no `blocked_on` stays illegal on a row that lacks it, and no row's
+own vocabulary changes.
+
 #### Stages PL–DR
 
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
@@ -306,6 +377,9 @@ under its own stage id.
 | TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
 | DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_summary_line (REQUIRED when tests_executed is non-zero), test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
 | DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
+
+DR lists no `blocked`, yet still returns `verdict: blocked` with a `blocked_on` under the
+cross-stage blocked exception above.
 
 #### Stages SR–ET
 
@@ -319,6 +393,12 @@ under its own stage id.
 | ST | key_decisions (= rationale), open_questions | — | approve / reject |
 | IR | key_decisions (= root cause), next_stage_focus, open_questions | files_touched | ok / escalate |
 | ET | key_decisions (= ethics findings), open_questions | — | pass / fail |
+
+##### Stages SR–ET — where the exception bites
+
+SR, QA, ST, IR and ET list no `blocked`. Each still returns `verdict: blocked` with a `blocked_on`
+under the cross-stage blocked exception (§ Per-stage required-field matrix), so a permission denial
+is never returned as `fail`, `no-go` or `reject`.
 
 ### Token budget
 
@@ -334,15 +414,18 @@ Two parallel channels, neither replacing the other: the typed return is *validat
 
 ### Schema conventions
 
-JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
+JSON Schema draft 2020-12. **Each stage's `verdict` enum MUST match that stage's row in `#frontmatter-schema § Per-stage required-field matrix`** — one verdict vocabulary per stage across both channels, plus `blocked` alongside a `blocked_on` under that section's cross-stage blocked exception. The `required` set is the typed superset of that stage's frontmatter required fields (DR's `key_decisions (= findings)` becomes the typed `findings`/`blockers` arrays).
 
 #### Conventions — the sweep field
 
 Every stage schema requires `open_questions` — the closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) is mandatory for all thirteen, and an empty array is the legal form for a stage with nothing to ask. Its `$ref: '#/$defs/SweepItem'` resolves against the single `$defs` block at `#frontmatter-schema § Schema — $defs: SweepItem and SweepStub`.
 
-`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. 
+##### Conventions — the optional fields
+
+`cross_session_ask` is optional on every stage on the same terms — one shape, defined once above, legal wherever a stage can return `verdict: "blocked"`. Unlike `open_questions` it has no empty-array form: absent means the stage is not waiting on a peer session. `blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
 
 `acted_on_msg_id` is optional on every stage with the same absent-means-none reading: absent, no message carrying a `msg_id` reached this dispatch. Once one did, it names the newest id the stage acked (`state-patch.sh --ack`) and followed; `ack-check.sh` enforces that, not the validator.
+
 ###### Conventions — the $defs pointer is an obligation
 
 The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.
@@ -466,7 +549,8 @@ shared by the harness, this schema and the DR rule: `refs.decisions`, then `arch
 `handoff-harness.sh --validate-frontmatter <artifact> --state <state.json>` enforces it (warn-only
 in 3.42.0, blocking under `--strict`) and its inverse guard warns when an `architecture-*`
 reference appears without a `tasks.AR0` entry. `applied` is DV's truthful statement that AR's
-decisions were followed; deviations go in `development-N.md ## decisions` with rationale, and DR
+decisions were followed; deviations go in the row's artifact (`development-<N>[-<stream>].md`)
+`## decisions` with rationale, and DR
 fails an undeclared one.
 
 ### DRHandoff
@@ -652,13 +736,16 @@ from the artifact's `handoff:` frontmatter when there is none (F2; an artifact w
 
 #### Map — DV
 
+Rows apply **per DV ledger task**: `<DV>` is the row's own id (`DV0`, `DV1`, …) and `<dev-artifact>`
+its own artifact (§ DV fan-out — ledger tasks).
+
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
-| `DV.verdict` | `tasks.DV0.verdict` + `tasks.DV0.status` (verdict map) + `facts.verdicts.DV0` + derived `facts.verdicts.DV` | development-N.md `## deviations` (summary line) |
-| `DV.files_modified` | `facts.files_modified` (union) | development-N.md `## files-changed` |
-| `DV.tests_added` | `facts.tests_added` (union) | development-N.md `## tests-added` |
-| `DV.build_status` | (artifact only; status follows the verdict) | development-N.md `## deviations` |
-| `DV.decisions` | `facts.decisions[]` | development-N.md (inline) |
+| `DV.verdict` | `tasks.<DV>.verdict` + `tasks.<DV>.status` (verdict map) + `facts.verdicts.<DV>` + derived `facts.verdicts.DV` | `<dev-artifact>` `## deviations` (summary line) |
+| `DV.files_modified` | `facts.files_modified` (union) | `<dev-artifact>` `## files-changed` |
+| `DV.tests_added` | `facts.tests_added` (union) | `<dev-artifact>` `## tests-added` |
+| `DV.build_status` | (artifact only; status follows the verdict) | `<dev-artifact>` `## deviations` |
+| `DV.decisions` | `facts.decisions[]` | `<dev-artifact>` (inline) |
 
 #### Map — DR, SR, QA, DC, RE
 
@@ -689,8 +776,8 @@ from the artifact's `handoff:` frontmatter when there is none (F2; an artifact w
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
 | `ET.verdict` | `tasks.ET0.verdict` + `facts.verdicts.ET0` + derived `facts.verdicts.ET` | ethics-review-N.md `## verdict` |
-| `DV.worktree_path` | `tasks.DV0.worktree.path` | development-N.md (frontmatter `worktree_path`) |
-| `DV.worktree_branch` | `tasks.DV0.worktree.branch` | development-N.md (frontmatter `worktree_branch`) |
+| `DV.worktree_path` | `tasks.<DV>.worktree.path` | `<dev-artifact>` (frontmatter `worktree_path`) |
+| `DV.worktree_branch` | `tasks.<DV>.worktree.branch` | `<dev-artifact>` (frontmatter `worktree_branch`) |
 
 #### Additive-field writers
 
@@ -798,6 +885,7 @@ directory holding `state.json`.
       base_ref: { type: string }
       requires_screenshots: { type: boolean }
       test_mode: { type: string }
+      preflight: { type: object, description: "Autonomy preflight result, v1 — see metadata.preflight below" }
     additionalProperties: true
 ```
 
@@ -852,6 +940,67 @@ returns which rank answered (`env`, `state`, `workspace`, `origin_head`, `fork_p
 `unresolved`), both over one shared internal ladder and both accepting `--with-fork-point`. There is
 no literal fallback; readers report unresolved and degrade non-blocking. The same ranks, identically
 ordered, are restated in `pl0-procedure.md § Integration-branch detection`.
+
+#### metadata.preflight
+
+The autonomy preflight's passing result, a registered seam at `version: 1`. Its only writer is
+`skills/worktask/scripts/autonomy-preflight.sh --record`, called once after the Step 3a seed of an
+unattended run (`commands/worktask.md § Step 3a — record the autonomy preflight`), and `--record`
+refuses any result that is not a pass. Absent on attended runs, on megatask per-issue runs, and
+when the record failed. Consumer: the backend `tool_missing` evidence rule, which excuses a missing
+evidence tool only when `tools_absent[]` records it `accepted: true`. Change protocol: bump
+`version` on any field change.
+
+##### metadata.preflight — schema
+
+```yaml
+# …continued: WorktaskStateLedger.properties.metadata.properties
+      preflight:
+        type: object
+        required: [version, result, ran_at, platforms, checks, tools_absent]
+        properties:
+          version: { type: integer, const: 1 }
+          result: { type: string, enum: [pass, fail] }   # always pass on a ledger
+          ran_at: { type: string }                       # date -u +%FT%TZ, or "unknown"
+          platforms: { type: array, items: { type: string } }
+```
+
+##### metadata.preflight — checks and tools_absent
+
+```yaml
+# …continued: metadata.properties.preflight.properties
+          checks:
+            type: array
+            items:
+              required: [id, kind, status, detail]
+              properties:
+                id: { type: string }
+                kind: { type: string, enum: [permission, evidence, toolchain] }
+                status: { type: string, enum: [pass, fail, skip] }
+                detail: { type: string }
+          tools_absent:
+            type: array
+            items:
+              required: [tool, platform, accepted]
+              properties:
+                tool: { type: string, enum: [silicon, magick, convert, playwright, playwright-browser, adb-device, simulator, xcodebuildmcp] }
+                platform: { type: string }
+                accepted: { type: boolean }              # always true on a ledger
+```
+
+##### metadata.preflight — field notes
+
+- `accepted: true` means the tool was named in `/worktask --accept-absent=` at launch; nothing else
+  sets it. `--record` runs only after a pass and refuses an unaccepted entry, so every recorded
+  `tools_absent[]` entry is `accepted: true`, and an `accepted: false` entry on a ledger is a
+  contract violation.
+- A tool that was present is never listed in `tools_absent[]`, accepted or not.
+- A missing renderer is one entry per binary, as a `tool_missing` row names it (`silicon`,
+  `magick`, `convert`); `renderer` accepts all three.
+- `checks[].id`: `git-push`, `gh-pr-create`, `gh-pr-merge`, `git-reset-hard`, `renderer`, the other five tools,
+  `apple-developer-dir`, `apple-sdk-settings`, `apple-showsdks`, `apple-swift-match`,
+  `android-compile-sdk`, and `platform-<p>` (a platform with no checks of its own, recorded `skip`).
+- With Playwright itself absent, `playwright-browser` is a `skip` check, not a second absent tool.
 
 #### tasks
 
@@ -1424,7 +1573,7 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | PL | `planning-N.md` (N starts at 0) | yes |
 | AR | `architecture-N.md` | yes |
 | TL | `coordination-N.md` | yes |
-| DV | `development-N.md` (per-stream: `development-N-<stream>.md`) | yes |
+| DV | `development-N.md` (per DV ledger task: `development-N-<stream>.md`) | yes |
 | DR | `developer-review-N.md` | yes |
 | SR | `security-review-N.md` | yes |
 | QA | `testing-N.md` | yes |
@@ -1435,13 +1584,84 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 | IR | `incident-N.md` | yes |
 | ET | `ethics-review-N.md` | yes |
 
-### Per-stream DV artifacts
+### DV fan-out — ledger tasks
 
-Under TL fan-out the DV entry agent spawns one sub-agent per workstream; each writes only
-`development-N-<stream>.md`, `<stream>` being the kebab slug the coordination plan assigned. The
-entry agent alone merges them into the canonical `development-N.md` at fan-in. That merged file
-stays the documented DR/QA input and the one the DV0 handoff and state patch describe — the
-per-stream files are merge inputs, not handoff carriers.
+DV fans out as **ledger tasks**, never as sub-agents. `DV0`, `DV1`, … are rows in `state.json`: the
+orchestrator dispatches each on its own `Task()`, each writes its own artifact, each patches its own
+row. No entry agent assembles a canonical file afterwards — every DV artifact is a handoff carrier
+in its own right, and downstream stages reach them by iterating the rows.
+
+Retries are per row (`retry_count`); every row appends to the shared
+`.context/errors/developer.md` under its own `## DV<k> Retry <n> — …` heading.
+
+#### Pinning a row's tree
+
+Every DV row carries `metadata.workspace_path` from creation (`state-patch.sh --task-create` refuses
+one without it; a TL stream clones DV0's), and the row's agent enters that path and no other.
+
+At dispatch the orchestrator pins a DV row to its own stream worktree when the row carries
+`metadata.stream` AND its `metadata.workspace_path` is also held by another DV row that can run
+concurrently with it (neither row reaches the other through `blocked_by`). The orchestrator creates
+the worktree, re-stamps that row's `metadata.workspace_path` with `state-patch.sh --task-meta`, and
+only then renders the banner. Rows whose streams are serialized by `blocked_by` may share one tree.
+That is legal and is not re-pinned. It is the mode a /megatask per-issue run uses.
+
+#### Artifact naming (S1)
+
+```text
+artifact  := ".context/development-" N [ "-" stream ] ".md"
+N         := tasks.<ID>.metadata.run_index          # integer >= 0
+stream    := ^[a-z0-9]+(-[a-z0-9]+)*$               # kebab, <= 40 chars, unique among the DV rows
+source    := assigned by the row's creator: PL0, TL when TL runs, or the DV agent that splits its
+             own row (it stamps that row too); a stamped stream never changes
+row keys  := tasks.DV<k>.metadata.stream   = "<stream>"
+             tasks.DV<k>.metadata.artifact = ".context/development-<N>-<stream>.md"  # planned
+             tasks.DV<k>.artifact          # recorded at completion; beats the planned value
+rule      := >= 2 DV rows -> every DV row carries stream + artifact
+             exactly 1 DV row -> stream MAY be omitted, artifact development-<N>.md
+location  := the ledger's .context/ (the dir holding state.json), never a stream tree's
+```
+
+##### Finding the ledger from a stream tree
+
+A DV working in a separate stream tree finds the ledger's `.context/` through
+`skills/shared/scripts/resolve-root.sh` once no declared root (`--state`, `CONTEXT_DIR`) names it:
+with no flag the script prints the main worktree's `.context` directory (exit 1 outside any
+repository, 3 when the main worktree is bare).
+
+##### The bare name is a grammar output
+
+`development-<N>.md` is what the grammar emits for a single-DV run; it is not a name other text may
+spell. Downstream templates and readers take DV artifacts from `refs.dev[]` or from the ledger
+(§ Iterating the DV tasks), so that name reaches them only as an already-resolved list element.
+
+#### Completing a DV row
+
+The completion patch names both the row id and the path, because the orchestrator's basename guess
+cannot see a stream suffix:
+
+```bash
+state-patch.sh --stage DV --task-id DV<k> --prev <PREV> \
+  --artifact .context/development-<N>-<stream>.md
+```
+
+#### Iterating the DV tasks
+
+Every downstream reader resolves its DV inputs from the ledger, in ascending numeric task-id order:
+
+```bash
+jq -r '.tasks | to_entries
+  | map(select(.value.metadata.stage == "DV" and (.key | test("^DV[0-9]+$"))))
+  | sort_by(.key | ltrimstr("DV") | tonumber)
+  | .[] | (.value.artifact // .value.metadata.artifact // empty)' .context/state.json
+```
+
+A `refs.dev[]` element (`stage-contracts.md#tpl-dr`) is that path's basename plus `#files-changed` —
+replace the last line with:
+
+```bash
+  | .[] | ((.value.artifact // .value.metadata.artifact // empty) | split("/") | last) + "#files-changed"
+```
 
 ### Run-index resolution
 
@@ -1586,7 +1806,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
 | AR | architecture-N.md | `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks` |
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
-| DV | development-N.md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
+| DV | development-<N>[-<stream>].md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
 <!-- output-sections:end table=required-pl-dr -->
 
@@ -1626,13 +1846,13 @@ Allowed in that stage's artifact only, required in none; title-case entries are 
 1. H2 only. H1 is the artifact's title (exempt from anchor lint).
 2. Kebab-case. No spaces, no underscores, no camelCase. The title-case optional entries above are the only exceptions.
 3. Anchor IDs come from GitHub-style slugify, but the H2 title MUST already be the kebab-case form — do not rely on slugify.
-4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <development-N.md> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
+4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
 ### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
 
 One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude-plugin/plugin.json`) checks anchors at the write under both events, before a stray H2 costs a rework round; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-- **`PreToolUse` deny.** Path on the artifact regex below, basename exactly `<canonical>-<N>.md`, `state.json` beside it: the Write `content` (or Edit `new_string`, `old_string` H2s as baseline) with an unexpected H2 gets `permissionDecision: "deny"` naming those H2s and the allowed set. A missing required H2 never denies; any hook error allows.
+- **`PreToolUse` deny.** Path on the artifact regex below, basename exactly `<canonical>-<N>.md` (or a DV task's `development-<N>-<stream>.md`, judged against the DV set), `state.json` beside it: the Write `content` (or Edit `new_string`, `old_string` H2s as baseline) with an unexpected H2 gets `permissionDecision: "deny"` naming those H2s and the allowed set. A missing required H2 never denies; any hook error allows.
 - **`PostToolUse` advisory.** Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost).
 - **Stage boundary.** `handoff-harness.sh --validate-frontmatter` fails on a missing required or unexpected H2 for all 13 stages, and fails closed when `cache-lint.sh` cannot run.
 
@@ -1641,15 +1861,15 @@ One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude
 ```jsonc
 // hooks.PreToolUse, after test-execution-gate: a JSON deny needs no continueOnBlock
 { "matcher": "Write|Edit",
-  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh" } ] }
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "pre"] } ] }
 // hooks.PostToolUse, alongside audit-tooluse
 { "matcher": "Write|Edit",
-  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "continueOnBlock": true } ] }
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "post"], "continueOnBlock": true } ] }
 ```
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
+`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the stage-boundary harness is the only check — there is no CI counterpart.
 
 **Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 
