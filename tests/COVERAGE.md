@@ -199,6 +199,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
 | `skills/worktask/scripts/workspace-root-banner.sh` | `tests/shell/worktask/workspace-root-banner.bats` | — | — | — |
+| `skills/worktask/scripts/land-artifacts.sh` | `tests/shell/worktask/land-artifacts.bats` | — | — | — |
+| `skills/worktask/scripts/land-artifacts-selftest.sh` | `tests/shell/worktask/land-artifacts.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/doc-option-check.sh` | `tests/shell/worktask/doc-option-check.bats` (also `dc-secure-model.bats` for the secure-tier grant/prose parity) | — | — | — |
 | `skills/worktask/scripts/doc-option-check-selftest.sh` | `tests/shell/worktask/doc-option-check.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 

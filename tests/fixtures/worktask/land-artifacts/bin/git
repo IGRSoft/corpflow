@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# tests/fixtures/worktask/land-artifacts/bin/git — PATH shim for a corrupted
+# blob read (sha256_mismatch).
+#
+# Delegates every subcommand to the real git at $LAND_REAL_GIT unchanged, EXCEPT
+# `cat-file`: after a clean run, one extra byte is appended to its stdout so the
+# blob write_blob() reads no longer verifies against the oid it was asked for.
+# This anchors the test on a corrupted READ, not a corrupted git object — the
+# object store is untouched, only this process's view of it lies.
+#
+# The subcommand is found after skipping any leading `-C <dir>` pairs, since
+# land-artifacts.sh always calls `git -C <root> <subcommand> ...`.
+#
+# Minimum shell: bash 3.2+ (macOS default), matching the script under test.
+
+set -euo pipefail
+
+: "${LAND_REAL_GIT:?LAND_REAL_GIT must be set by the test before PATH is shimmed}"
+
+_args=("$@")
+_n=$#
+_i=0
+while [ "$_i" -lt "$_n" ]; do
+  case "${_args[$_i]}" in
+    -C)
+      _i=$((_i + 2))
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+_sub="${_args[$_i]:-}"
+
+if [ "$_sub" = "cat-file" ]; then
+  # Stream the real blob through unchanged, then corrupt with one trailing byte.
+  # A command-substitution round trip would mangle binary blobs; this does not.
+  "$LAND_REAL_GIT" "$@"
+  printf 'X'
+  exit 0
+fi
+
+exec "$LAND_REAL_GIT" "$@"
