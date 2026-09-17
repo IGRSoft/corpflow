@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "worktask_id": "wt-ud-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "systems",
+  "run_index": 0,
+  "facts": {
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [],
+    "verdicts": {}
+  },
+  "handoffs": {},
+  "metadata": {},
+  "tasks": {
+    "PL0": {
+      "status": "completed",
+      "verdict": "ok",
+      "metadata": {
+        "stage": "PL"
+      }
+    },
+    "AR0": {
+      "status": "completed",
+      "verdict": "ok",
+      "metadata": {
+        "stage": "AR"
+      }
+    },
+    "DV0": {
+      "status": "blocked",
+      "metadata": {
+        "stage": "DV",
+        "retry_count": 0,
+        "blocked_on": {
+          "kind": "user_decision",
+          "detail": {
+            "question": "Ship the ledger now?",
+            "options": [
+              "Yes, ship it",
+              "Not yet"
+            ],
+            "recommended": "Yes, ship it"
+          },
+          "resume_with": "decision_ref"
+        }
+      }
+    },
+    "DR0": {
+      "status": "pending",
+      "metadata": {
+        "stage": "DR"
+      }
+    }
+  }
+}

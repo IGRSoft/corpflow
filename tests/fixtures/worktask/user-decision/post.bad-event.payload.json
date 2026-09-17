@@ -1,0 +1,17 @@
+{
+  "session_id": "sess-ud-fixture",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/tmp/ud-fixture",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo not a question"
+  },
+  "tool_response": {
+    "answers": {
+      "Ship the ledger now?": "Yes, ship it"
+    }
+  },
+  "tool_use_id": "toolu_01UdFixture0001"
+}

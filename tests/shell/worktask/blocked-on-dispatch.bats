@@ -87,6 +87,52 @@ EOF
   export BLOCKED_ON_LAND="$LAND_STUB"
 }
 
+# Marker text for the user_decision cases: any of it in the audit log or a resume block is a leak.
+UD_Q="UD-QUESTION-TEXT which release train carries the router?"
+UD_A="UD-ANSWER-ALPHA"
+UD_B="UD-ANSWER-BETA"
+
+# _ud_payload — a user_decision return carrying the marker question and options.
+_ud_payload() {
+  jq -cn --arg q "$UD_Q" --arg a "$UD_A" --arg b "$UD_B" '{verdict: "blocked",
+    blocked_on: {kind: "user_decision", detail: {question: $q, options: [$a, $b], recommended: $a},
+                 resume_with: "decision_ref"}}'
+}
+
+# _ud_record <task_ids json> <answer> [no-audit] — appends one row to the ledger as the hook would:
+# ordinal id, canonical [question,answer] digest, prev = sha256 of the previous line's bytes, and
+# (unless no-audit) its user_decision_recorded audit row. Digests come from shasum, not the lib.
+# Sets UD_ID to the new row's id.
+_ud_record() {
+  local ledger="$WD/.context/decisions.jsonl" n=1 prev=null sha row
+  if [ -s "$ledger" ]; then
+    n=$(($(wc -l < "$ledger") + 1))
+    prev="\"$(tail -n 1 "$ledger" | tr -d '\n' | shasum -a 256 | cut -d' ' -f1)\""
+  fi
+  UD_ID="ud-20260917T101500Z-$n"
+  sha="$(jq -jcn --arg q "$UD_Q" --arg a "$2" '[$q, $a]' | shasum -a 256 | cut -d' ' -f1)"
+  row="$(jq -cn --arg id "$UD_ID" --arg tuid "toolu_01UdDispatch000$n" --arg q "$UD_Q" --arg a "$2" \
+    --argjson t "$1" --arg sha "$sha" --argjson prev "$prev" '
+    {id: $id, ts: "2026-09-17T10:15:00Z", actor: "hook:user-decision", tool_use_id: $tuid,
+     question: $q, answer: $a, scope: {worktask_id: "wt-blocked-on-fixture", task_ids: $t, item: null},
+     sha256: $sha, prev_sha256: $prev}')"
+  printf '%s\n' "$row" >> "$ledger"
+  if [ "${3:-}" = "no-audit" ]; then return 0; fi
+  printf '%s' "$row" | jq -c '{ts: "2026-09-17T10:15:00Z", actor: "hook:user-decision",
+    action: "user_decision_recorded", subject: .id, result: "ok", task_id: .scope.task_ids[0],
+    metadata: {decision_id: .id, tool_use_id: .tool_use_id, row_sha256: .sha256, item: null}}' >> "$AUDIT"
+}
+
+# _tree — the ledger, audit log and ledger file as they stand, for write-nothing assertions.
+_tree() {
+  cat "$STATE"
+  printf '\n--audit--\n'
+  [ ! -f "$AUDIT" ] || cat "$AUDIT"
+  printf '\n--ledger--\n'
+  [ ! -f "$WD/.context/decisions.jsonl" ] || cat "$WD/.context/decisions.jsonl"
+  [ ! -e "$WD/.context/decisions.jsonl.lock" ] || printf 'LOCK\n'
+}
+
 # --- route -------------------------------------------------------------------------
 
 @test "route: a permission return names the permission arm and writes nothing; the park writes the one denied row" {
@@ -430,6 +476,133 @@ EOF
     | .metadata == {kind: "artifact", arm: "user_action", leg: "verified", fallback_from: "artifact",
                      decision_ref: "blocked_on:DC0:artifact:1"}' "$AUDIT"
   assert_success
+}
+
+# --- user_decision: the landed native arm (#395) -----------------------------------
+
+@test "route: a user_decision return parks natively with one asked row, no fallback fields and no question text" {
+  _route DV1 user_decision
+  assert_success
+  jq -e '.task_id == "DV1" and .kind == "user_decision" and .arm == "user_decision" and .leg == "asked"
+    and .source == "blocked_on" and .parked == true and .audit_row_written == true
+    and (has("fallback_from") | not) and (has("owner_issue") | not) and (has("decision_ref") | not)' <<< "$output"
+  run jq -e --slurpfile h "$FIX/user_decision.handoff.json" \
+    '.tasks.DV1.status == "blocked" and .tasks.DV1.metadata.blocked_on == $h[0].blocked_on' "$STATE"
+  assert_success
+  [ "$(_rows)" = 1 ] || fail "expected one blocked_on row, got $(_rows)"
+  run jq -e 'select(.action == "blocked_on")
+    | .actor == "orchestrator" and .subject == "DV1" and .result == "blocked"
+    and .metadata == {kind: "user_decision", arm: "user_decision", leg: "asked"}' "$AUDIT"
+  assert_success
+
+  _route DV1 user_decision
+  assert_success
+  jq -e '.audit_row_written == false' <<< "$output"
+  [ "$(_rows)" = 1 ] || fail "a re-route wrote a second asked row"
+  _assert_audit_clean "Ship the router behind a flag?" "no-flag"
+}
+
+@test "batch: user_decision needs sharing one question ask it once, verbatim and unfenced, headed by the lowest task id" {
+  _route QA0 user_decision
+  _route DV1 user_decision
+  _route DR0 user_decision
+  _bo route --task-id FN0 --payload "$(_ud_payload)"
+  _route DC0 correction
+  _bo batch
+  assert_success
+  jq -e '.mode == "ask"
+    and ([.needs[] | select(.kind == "user_decision") | .task_id] | sort) == ["DR0", "DV1", "FN0", "QA0"]
+    and all(.needs[] | select(.kind == "user_decision"); .arm == "user_decision" and .resume_leg == "resumed")
+    and (.payloads | length) == 1 and (.payloads[0].questions | length) == 3' <<< "$output" || fail "batch: $output"
+  jq -e '[.payloads[0].questions[] | select(.question == "Ship the router behind a flag?")]
+    | length == 1 and .[0].header == "DR0" and .[0].multiSelect == false
+    and .[0].options == [{label: "flag", description: "Recommended"}, {label: "no-flag", description: "Offered by DR0"}]' <<< "$output" \
+    || fail "grouped question: $output"
+  jq -e --arg q "$UD_Q" --arg a "$UD_A" --arg b "$UD_B" '[.payloads[0].questions[] | select(.question == $q)]
+    | length == 1 and .[0].header == "FN0"
+    and .[0].options == [{label: $a, description: "Recommended"}, {label: $b, description: "Offered by FN0"}]' <<< "$output" \
+    || fail "second question: $output"
+  jq -e '[.payloads[0].questions[] | select(.header == "DR0" or .header == "FN0") | .question | contains("`")] | any | not' <<< "$output" \
+    || fail "a user_decision question was fenced"
+  jq -e '.payloads[0].questions[] | select(.header == "DC0") | [.options[].label] == ["done", "stop here"]' <<< "$output"
+}
+
+@test "resume: a user_decision with no valid covering row exits 1 and writes nothing" {
+  local before
+  _bo route --task-id DV1 --payload "$(_ud_payload)"
+  assert_success
+
+  before="$(_tree)"
+  _bo resume --task-id DV1 --leg resumed
+  [ "$status" -eq 1 ] || fail "no ledger: want exit 1, got $status"
+  [ "$(_tree)" = "$before" ] || fail "a refused resume (no ledger) wrote"
+
+  _ud_record '["DR0"]' "$UD_A"
+  _ud_record '["DV1"]' "$UD_A" no-audit
+  before="$(_tree)"
+  _bo resume --task-id DV1 --leg resumed
+  [ "$status" -eq 1 ] || fail "uncovered/uncorroborated: want exit 1, got $status"
+  [[ "$stderr" == *"no valid, unconsumed user-decision row covers tasks.DV1"* ]] || fail "stderr: $stderr"
+  _bo resume --task-id DV1 --leg resumed --decision-ref "$UD_ID"
+  [ "$status" -eq 1 ] || fail "an uncorroborated explicit ref: want exit 1, got $status"
+  _bo resume --task-id DV1 --leg resumed --decision-ref "ud-20260917T101500Z-1"
+  [ "$status" -eq 1 ] || fail "a ref scoped to DR0: want exit 1, got $status"
+  _bo resume --task-id DV1 --leg resumed --decision-ref "ud-20260917T101500Z-9"
+  [ "$status" -eq 1 ] || fail "an absent ref: want exit 1, got $status"
+  _bo resume --task-id DV1 --leg verified
+  [ "$status" -eq 1 ] || fail "a non-closing leg: want exit 1, got $status"
+  [ "$(_tree)" = "$before" ] || fail "a refused resume wrote"
+  [ -z "$output" ] || fail "a refused resume printed to stdout: $output"
+  run jq -e '.tasks.DV1.status == "blocked" and .tasks.DV1.metadata.blocked_on.kind == "user_decision"' "$STATE"
+  assert_success
+}
+
+@test "resume: a valid hook row clears the need, writes resumed with its ud- ref, and relays no answer text" {
+  _bo route --task-id DV1 --payload "$(_ud_payload)"
+  assert_success
+  _ud_record '["DV1"]' "$UD_A"
+  local id="$UD_ID"
+
+  _bo resume --task-id DV1 --leg resumed
+  assert_success
+  jq -e --arg id "$id" '.cleared == true and .audit_row_written == true
+    and .resume_block.task_id == "DV1" and .resume_block.kind == "user_decision"
+    and .resume_block.arm == "user_decision" and .resume_block.leg == "resumed"
+    and .resume_block.decision_ref == $id and .resume_block.resume_with == "decision_ref"
+    and .resume_block.do_not_rerun == true
+    and (.resume_block.instruction | contains("--verify-decision " + $id + " --task-id DV1"))' <<< "$output" \
+    || fail "resume: $output"
+  local needle
+  for needle in "$UD_Q" "$UD_A" "$UD_B"; do
+    [[ "$output" != *"$needle"* ]] || fail "the resume output relays need or answer text: $needle"
+  done
+  run jq -e '.tasks.DV1.status == "in_progress" and .tasks.DV1.metadata.blocked_on == null' "$STATE"
+  assert_success
+  run jq -sc '[.[] | select(.action == "blocked_on") | .metadata.leg]' "$AUDIT"
+  assert_output '["asked","resumed"]'
+  run jq -e --arg id "$id" 'select(.action == "blocked_on" and .metadata.leg == "resumed")
+    | .result == "ok" and .subject == "DV1"
+    and .metadata == {kind: "user_decision", arm: "user_decision", leg: "resumed", decision_ref: $id}' "$AUDIT"
+  assert_success
+  _assert_audit_clean "$UD_Q" "$UD_A" "$UD_B"
+
+  # The row is consumed: the same need raised again does not resume on it a second time.
+  _bo route --task-id DV1 --payload "$(_ud_payload)"
+  assert_success
+  jq -e '.audit_row_written == true' <<< "$output"
+  _bo resume --task-id DV1 --leg resumed
+  [ "$status" -eq 1 ] || fail "a consumed row resumed again: exit $status, $output"
+}
+
+@test "resume: --decision-ref picks a named covering row over the newest one" {
+  _bo route --task-id DV1 --payload "$(_ud_payload)"
+  assert_success
+  _ud_record '["DV1"]' "$UD_A"
+  local first="$UD_ID"
+  _ud_record '["DV1"]' "$UD_B"
+  _bo resume --task-id DV1 --leg resumed --decision-ref "$first"
+  assert_success
+  jq -e --arg id "$first" '.resume_block.decision_ref == $id' <<< "$output"
 }
 
 # --- static contracts --------------------------------------------------------------
