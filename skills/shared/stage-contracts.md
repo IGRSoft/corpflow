@@ -110,39 +110,39 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **PL** | User request; trigger flags | `.context/<plan_file>` (`planning-N.md`, N = next free integer ≥ 0; `pl0-procedure.md § Plan File & Run Index Naming`): Goal, Scope, Complexity Score, Stage Plan, Approval Required. Plus `.context/designs/figma-registry.md` if Figma URLs provided | Complexity Score int 0–50 + Stage Plan lists downstream task subjects + `metadata.plan_file = <plan_file>` AND `metadata.run_index = N` stamped on every downstream task |
-| **AR** | `<plan_file>` | `architecture-N.md`: Architecture Decisions, Trade-offs, Patterns, Integration Points | ≥1 decision with rationale |
-| **TL** | `<plan_file>`, `architecture-N.md` (when AR ran) | `coordination-N.md`: Task Breakdown, Parallel Streams, Assignments, Risks | Task breakdown maps to DV sub-tasks |
+| **PL** | User request; trigger flags | `.context/<plan_file>` (`planning-N.md`, N = next free integer ≥ 0; `pl0-procedure.md § Plan File & Run Index Naming`), H2 set: `handoff-protocol.md#anchor-allow-list`. Plus `.context/designs/figma-registry.md` if Figma URLs provided | Complexity Score int 0–50 + Stage Plan lists downstream task subjects + `metadata.plan_file = <plan_file>` AND `metadata.run_index = N` stamped on every downstream task |
+| **AR** | `<plan_file>` | `architecture-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | ≥1 decision with rationale |
+| **TL** | `<plan_file>`, `architecture-N.md` (when AR ran) | `coordination-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Task breakdown maps to DV sub-tasks |
 
 ### DV–SR
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact: Files Changed, Approach, Tests Added, Verification Command quoting the runner's **verbatim** summary line — plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
-| **DR** | every DV task artifact + source diff | `developer-review-N.md`: Code Quality, Test Coverage, Issues Found, Approval Status | Approval Status ∈ {approved, needs-changes, rejected} |
-| **SR** | every DV task artifact + source diff | `security-review-N.md`: Threat Model, Findings, Severity, Remediation | No High/Critical findings unresolved |
+| **DV** | `<plan_file>`; `architecture-N.md` (when AR ran — MANDATORY, gate-enforced via `--validate-frontmatter --state`); `coordination-N.md` (when TL ran) | this row's artifact, H2 set: `handoff-protocol.md#anchor-allow-list`, the runner's **verbatim** summary line in `## verification-command`, plus code changes | git diff non-empty + `files_touched` obeys `#files-touched` + summary line quoted + `tests_executed` + `test_summary_line` (or `test_suite_compiles` at 0) + `.context/logs/build-*.log` shows success |
+| **DR** | every DV task artifact + source diff | `developer-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## verdict` ∈ {pass, fail} |
+| **SR** | every DV task artifact + source diff | `security-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | No High/Critical findings unresolved |
 
 ### QA–RE
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **QA** | every DV task artifact, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`: Test Plan, Results, Design Comparison (if UI), Regression Check | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
-| **DC** | every DV task artifact, `architecture-N.md` (when AR ran) † | `documentation-N.md`: Doc Changes, README Updates, API Docs | Docs diff present |
-| **RE** | every DV task artifact, `testing-N.md`, `documentation-N.md` | `release-N.md`: Version Bump, Changelog, Deployment Checklist | Version bump proposed + changelog entry drafted |
+| **QA** | every DV task artifact, `developer-review-N.md`, `.context/designs/figma-registry.md` (if present; else glob `.context/designs/figma-*.png`) | `testing-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `.context/logs/test-*.log` shows pass + no blocking defects + if `figma-registry.md` present, `testing-N.md § Design Comparison` has one row per registry entry |
+| **DC** | every DV task artifact, `architecture-N.md` (when AR ran) † | `documentation-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Docs diff present |
+| **RE** | every DV task artifact, `testing-N.md`, `documentation-N.md` | `release-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Version bump proposed + changelog entry drafted |
 
 ### FN–ST
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **FN** | Upstream `.context/*-N.md` † (log each deep read in the `deep_reads` tripwire) + `state.json` facts | `complete-summary-N.md`: Summary, Files Changed, Stage Timings, Next Actions. Plus `.context/attachments/{PR instructions,Review request}.md` (`conductor-attachments.md`) and commit/PR. Preflight: `skills/worktask/scripts/fn-preflight.sh` | Both attachments exist + commit created OR PR opened |
-| **ST** | `complete-summary-N.md` | `retrospective-N.md`: Decision, Feedback, Follow-ups, Self-Improvement. Plus **optional** `.context/learnings.md`, only on in-scope user changes (`skills/self-improvement/SKILL.md`) | Decision ∈ {approved, rejected, changes-requested} + `self-improvement` invocation recorded (`learnings.md` present, or `Result: no-changes` in `.context/logs/self-improve-*.log`) |
+| **FN** | Upstream `.context/*-N.md` † (log each deep read in the `deep_reads` tripwire) + `state.json` facts | `complete-summary-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`. Plus `.context/attachments/{PR instructions,Review request}.md` (`conductor-attachments.md`) and commit/PR. Preflight: `skills/worktask/scripts/fn-preflight.sh` | Both attachments exist + commit created OR PR opened |
+| **ST** | `complete-summary-N.md` | `retrospective-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`. Plus **optional** `.context/learnings.md`, only on in-scope user changes (`skills/self-improvement/SKILL.md`) | Decision ∈ {approved, rejected, changes-requested} + `self-improvement` invocation recorded (`learnings.md` present, or `Result: no-changes` in `.context/logs/self-improve-*.log`) |
 
 ### IR–ET
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **IR** | User incident report | `incident-N.md`: Required Fix, Constraints, Blast Radius, Verification Command | All 4 sections non-empty |
-| **ET** | `<plan_file>` + high-risk keyword match | `ethics-review-N.md`: Risk Assessment, Mitigation, Decision | Decision ∈ {pass, block, conditional} |
+| **IR** | User incident report | `incident-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## root-cause`, `## fix-plan`, `## blast-radius` non-empty |
+| **ET** | `<plan_file>` + high-risk keyword match | `ethics-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Decision ∈ {pass, block, conditional} |
 
 ## Validation Protocol
 
@@ -159,7 +159,7 @@ With **no** typed return (the dispatch primitive takes no `schema` argument, or 
 
 ### Steps 3–5
 
-3. **Anchor lint (DR gate)**: every produced artifact's H2 headings match the per-stage allow-list in `handoff-protocol.md#anchor-allow-list`. DR runs `cache-lint.sh --anchor-lint <artifact>` as a stage gate; the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`) runs it at write time. No CI counterpart exists.
+3. **Anchor lint (every stage boundary)**: every produced artifact's H2 headings match its stage's allow-list in `handoff-protocol.md#anchor-allow-list`. `handoff-harness.sh --validate-frontmatter` fails the transition on a missing required or an unexpected H2; at write time `hooks/anchor-preflight.sh` denies a `PreToolUse` write that adds an unexpected H2 and re-lints advisorily on `PostToolUse` (`handoff-protocol.md § Anchor Pre-Flight`). No CI counterpart exists.
 4. **Section check**: grep the output artifact for required section headers.
 5. **Side-artifact check**: for DV/QA, the corresponding `.context/logs/` build/test capture exists.
 
@@ -538,7 +538,7 @@ Prev→this label: `USER→PL`.
 
 #### rejection_reason — after a plan-gate rejection
 
-After a plan-gate rejection, the revised `planning-N.md` MUST set `rejection_reason:` to the user's gate feedback (verbatim or condensed) — distinct from the `## Key Decisions` narrative — so downstream stages and ST retrospectives can cite it without reconstructing it from `audit.jsonl`. Omit the field on a first, un-rejected draft.
+After a plan-gate rejection, the revised `planning-N.md` MUST set `rejection_reason:` to the user's gate feedback (verbatim or condensed) — distinct from the plan's `## summary` narrative — so downstream stages and ST retrospectives can cite it without reconstructing it from `audit.jsonl`. Omit the field on a first, un-rejected draft.
 
 ### #tpl-ar — Architecture (software-architector)
 
@@ -1002,7 +1002,7 @@ handoff:
   verdict: approve             # approve / reject
   summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
   key_decisions:
-    - { id: st1, summary: "Approve merge", anchor: "complete-summary-N.md#decision" }
+    - { id: st1, summary: "Approve merge", anchor: "retrospective-N.md#decision" }
   open_questions:
     - { id: sw-ST0-1, class: decision, ref: "retrospective-N.md#elicitation-sweep", blocks_next_stage: false }
   refs:

@@ -37,6 +37,10 @@
 #       The inverse guard (an architecture reference with no tasks.AR<N> entry)
 #       always warns and never fails, in either mode.
 #
+#       The artifact's H2 set is checked for every stage against cache-lint.sh
+#       --anchor-diff (missing required or unexpected H2 = one `fail:` line each), in both
+#       modes and with or without yq; an unreachable lint fails the gate.
+#
 #       The three closing-sweep checks (stub shape, ref anchor, ledger parity)
 #       ride on the same invocation for EVERY stage and hard-fail in both modes.
 #       Ledger parity needs --state; when --state is unreadable and the artifact
@@ -1059,6 +1063,32 @@ check_ar_ref() {
   return 0
 }
 
+# check_anchors <artifact> <stage> — one `fail:` line per missing or unexpected H2. Fails
+# closed: an unreachable lint is a gate failure, unlike the pre-write hook, which fails open.
+check_anchors() {
+  local f="$1" stage="$2" name rows drc=0 kind h
+  name="$(basename "$f")"
+  local lint
+  lint="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cache-lint.sh"
+  if [[ ! -r "$lint" ]]; then
+    echo "fail: anchor gate cannot run on $name: cache-lint.sh unreachable at $lint" >&2
+    return 1
+  fi
+  rows=$(bash "$lint" --anchor-diff --stage "$stage" "$f" 2>&1) || drc=$?
+  [[ "$drc" -ne 0 ]] || return 0
+  if [[ "$drc" -ne 1 ]]; then
+    echo "fail: anchor gate cannot run on $name: ${rows%%$'\n'*}" >&2
+    return 1
+  fi
+  while IFS=$'\t' read -r kind h; do
+    case "$kind" in
+      missing) echo "fail: anchor-lint stage=$stage missing required H2 '## $h' in $name" >&2 ;;
+      unexpected) echo "fail: anchor-lint stage=$stage unexpected H2 '## $h' in $name — nest it as H3 (handoff-protocol.md#anchor-allow-list)" >&2 ;;
+    esac
+  done <<< "$rows"
+  return 1
+}
+
 validate_frontmatter() {
   local f="$1"
   [[ -f "$f" ]] || { echo "frontmatter: file not found: $f" >&2; return 1; }
@@ -1112,10 +1142,18 @@ validate_frontmatter() {
     return 1
   fi
 
+  # Before the yq gate so H2 enforcement never depends on yq; an unknown or absent stage is
+  # left to the stage checks below.
+  local anchor_rc=0 fm_stage
+  fm_stage=$(corpflow_fm_field "$fmfile" stage)
+  if [[ -n "$fm_stage" && "$fm_stage" != "null" && -n "$(required_for "$fm_stage")" ]]; then
+    check_anchors "$f" "$fm_stage" || anchor_rc=1
+  fi
+
   command -v yq >/dev/null 2>&1 || {
     echo "frontmatter: yq required for full validation; running grep-only fallback" >&2
     head -1 "$f" | grep -q '^---$' || { echo "fail: missing leading ---" >&2; return 1; }
-    return 0
+    return "$anchor_rc"
   }
 
   local stage
@@ -1132,7 +1170,7 @@ validate_frontmatter() {
   # round per defect. Each check keeps its own message text and its own line: Step B.1
   # re-dispatches with the `fail:` line verbatim and the orchestrator greps for one naming a
   # sweep id, so aggregating them into a single line would break that reader.
-  local rc=0
+  local rc="$anchor_rc"
 
   local field
   for field in $req; do
@@ -1339,6 +1377,10 @@ Score 38.
 ## stages
 
 PL AR TL DV DR QA DC FN ST.
+
+## summary
+
+Demo plan.
 EOF
 
   cat > "$d/.context/architecture.md" <<'EOF'

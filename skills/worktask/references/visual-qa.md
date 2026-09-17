@@ -51,7 +51,7 @@ Emit one Design Comparison row per registry row, so an N-frame container yields 
 
 ## Fallback: Glob Discovery (no registry)
 
-If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing.md § Design Comparison` as a process gap:
+If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing-N.md § Design Comparison` as a process gap:
 
 > No `figma-registry.md` found; using glob fallback. Screen/state/target mapping inferred from filenames only.
 
@@ -108,7 +108,7 @@ Reconcile a row's RMSE pre-pass and multimodal vision results with the matrix be
 
 ## Reporting
 
-Document results in `testing.md § Design Comparison` using the canonical table:
+Document results in `testing-N.md § Design Comparison` using the canonical table:
 
 | ID | Screen | State | RMSE | Verdict | Severity | Notes |
 |----|--------|-------|------|---------|----------|-------|

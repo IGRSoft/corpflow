@@ -96,7 +96,7 @@ Cheapest-first when only a judgment on the delta is needed (full reads stay avai
 
 ### Output Artifact
 
-Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the five mandatory anchors — the four SR anchors plus the universal `## elicitation-sweep` — and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
+Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 set: § Artifact anchors (end of file); everything else nests as H3.
 
 ```markdown
 # Security Review — [feature]
@@ -309,3 +309,12 @@ state-patch.sh --stage SR --prev DR --facts '{
 ```
 
 Union by `.id` (last writer wins, newest at tail): it never clobbers DR's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=SR -->
+### Artifact anchors
+
+`security-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## findings`, `## verdict`, `## blockers`, `## threat-model`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=SR -->

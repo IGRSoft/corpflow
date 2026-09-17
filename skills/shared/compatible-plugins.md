@@ -56,6 +56,8 @@ Used by stage agents consulting a dev plugin outside DV: AR (`software-architect
 SR (`security-reviewer`), QA (`qa-engineer`), DR remediation. The per-platform
 architect/security-auditor/test-generator/code-fixer targets are canonical in
 `skills/shared/routing-matrix.md § Functional-role aliases` — this file keeps no copy.
+QA's native UI legs (apple and android only) route through the `ui-verifier` aliases in
+`skills/shared/routing-matrix.md § UI-verifier aliases`.
 QA on web additionally consults `fe-accessibility-auditor` (review-only roster:
 `skills/shared/platform-detection.md § Review-only specialists`).
 
