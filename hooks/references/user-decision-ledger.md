@@ -169,12 +169,11 @@ emits a deny, so it cannot loosen a deny or ask from another hook, and it has no
 ### Write guard — Bash
 
 - **Naming the ledger.** Allowed only when every segment, split on `|`, `;`, `&&`, `||`, `&` and
-  newline with assignments stripped, starts with one of `cat head tail wc grep jq ls stat file
-  shasum sha256sum`. The command must hold no `$(`, backtick, `<(`, `>(`, `eval`, `xargs` or `tee`,
-  and no `>` other than `2>/dev/null`, `>/dev/null`, `2>&1` or `>&2`.
-- **Running the hook.** Denied when a segment executes `user-decision-record.sh`, as the program or
-  as the operand of `bash`, `sh`, `zsh`, `source`, `.` or `exec`. `bash -n` and `shellcheck` stay
-  allowed.
+  newline, holds no command substitution, process substitution, `eval`, `xargs` or `tee`, and no
+  redirects other than `2>/dev/null`, `>/dev/null`, `2>&1` or `>&2` (checked on the raw segment).
+  The program name is derived from assignments stripped and must be one of `cat head tail wc grep
+  jq ls stat file shasum sha256sum`.
+- **Running the hook.** Denied by default when a segment names `user-decision-record.sh`. Allowed only when the program is one of `cat head tail wc grep jq ls stat file shasum sha256sum shellcheck`, or the segment has the form `[path/]bash -n` or `[path/]sh -n`. `git` is deliberately absent: it is a configurable command executor that cannot be guarded by substring checks on one line.
 - **The cost.** False denials, such as `jq '.a > 1'` on the ledger. The deny reason names the read
   path.
 
@@ -211,7 +210,7 @@ decision in the file.
 | `ledger_symlink` | the ledger is a symlink |
 | `malformed_row` | a line is not one row with the keys above in order, holds NUL or CR, or the file lacks its final LF |
 | `duplicate_id` | two rows share an id |
-| `duplicate_tool_use` | two rows share a `tool_use_id` |
+| `duplicate_tool_use` | two rows share a `(tool_use_id, canonical [question,answer] digest, scope.item)` triple |
 | `actor_mismatch` | a row's `actor` is not `hook:user-decision` |
 | `sha256_mismatch` | a row's `sha256` is not its canonical digest |
 | `chain_broken` | a `prev_sha256` or an id ordinal does not match |
@@ -273,7 +272,7 @@ with a correct `prev_sha256`, plus a matching `user_decision_recorded` audit row
 forged row only when that row breaks the chain, and a well-formed tail append does not. The write
 guard is a speed bump that obfuscated shell evades. Audit corroboration, which fails closed, means a
 forgery needs both writes to land, and dedupe on the `(tool_use_id, canonical [question,answer]
-digest)` pair blocks a replay while still admitting the several questions of one batched call.
+digest, scope.item)` triple blocks a replay while still admitting the several questions of one batched call.
 Re-invoking this hook is not the cheap path to both writes it once was: a segment naming
 `user-decision-record.sh` is denied unless it is `bash -n`, shellcheck or a read-only reader, so
 feeding the hook a hand-built payload no longer mints the row and its audit row for free. What is
