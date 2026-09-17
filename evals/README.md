@@ -5,10 +5,14 @@ which measures cost and process.
 
 ## `failure-labels.jsonl` (**7 rows**, first written 2026-09-05)
 
-Append-only, committed dataset of user edits made **after** an agent delivered.
-Written by `skills/self-improvement` Step 5b on every ST completion (and by
-`/improve-yourself`). A user correcting delivered work is a domain-expert failure
-label — the signal most eval systems pay annotators for.
+The **V1 seed** of the failure-label dataset: user edits made **after** an agent
+delivered. This committed file is left untouched and is reached only through the
+fallback rung, when no usable plugin data dir exists. New labels from
+`skills/self-improvement` Step 5b (every ST completion, and `/improve-yourself`) are
+recorded under plugin data, outside the repo, in
+`<plugin-data>/self-improvement/failure-labels.jsonl`; resolution order and fallback:
+`skills/self-improvement/SKILL.md § Step 5b`. A user correcting delivered work is a
+domain-expert failure label — the signal most eval systems pay annotators for.
 
 The gate below stands at **7 of 100**. The seven rows come from a driven run over
 this repo's own `054932c..worktree` range rather than an organic ST completion —
@@ -45,7 +49,9 @@ One row per kept, classified change:
 - **No diff bodies are ever stored** — counts and a redacted one-line summary only
 - Opt out with `SELF_IMPROVE_LABELS=0`
 
-Aggregate with `skills/self-improvement/scripts/label-stats.sh`. It reports
+Aggregate with
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}`,
+replacing both tokens with absolute paths when running it by hand. It reports
 per-target and per-category counts, flags targets and categories at or above
 `--min-count=<n>` (default 3), and prints progress toward the 100-row taxonomy
 gate below. It reports only — acting on a repeat still goes through the human

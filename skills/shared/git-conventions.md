@@ -299,7 +299,8 @@ and "build" in any other form or position (`build-time`, `builds`, `rebuild`) st
 ### Conventionality is a predicate, never a judgement (BINDING)
 
 The **sole** authority is `branch_is_conventional()` in `skills/worktask/scripts/branch-lib.sh`
-(queryable as `branch-name.sh --check <name>`). No agent, orchestrator, or reviewer may decide
+(queryable as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check <name>`).
+No agent, orchestrator, or reviewer may decide
 by eye that a name "looks conventional" and skip the naming step — that judgement is exactly
 how a `fix/<slug>` branch survived after `fix` left the vocabulary. A plausible-looking name is
 not a checked name.

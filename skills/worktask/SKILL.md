@@ -139,10 +139,10 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base by mod
 ### DC + QA Parallel (Default)
 
 ```bash
-state-patch.sh --task-block DR0 --on DV0   # DR ← DV
-state-patch.sh --task-block QA0 --on DR0   # QA ← DR
-state-patch.sh --task-block DC0 --on DR0   # DC ← DR
-state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DR0 --on DV0   # DR ← DV
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block QA0 --on DR0   # QA ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DC0 --on DR0   # DC ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
 ```
 
 Use `--sequential` when DC requires test results.
@@ -261,7 +261,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
 
 ### Validation check 10 — pass a title, preview freely
 
@@ -385,7 +385,7 @@ Each section opens with its own `<<<marker>>>` line and runs to the next marker 
 
 #### Composing the brief (binding)
 
-Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
+Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
 #### Preamble layout (binding)
 
@@ -531,30 +531,27 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 ##### Step 3 — publish snippet
 
      ```bash
-     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
-     [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
-     HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
-     if [ -f "$HELPER" ]; then
-       bash "$HELPER"; true
+     pub_rc=0
+     bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
      ```
 
 ##### Step 3 — publish fallback (helper_not_found)
 
      ```bash
-     # …continued: helper missing → audit one deferred github_issue_created row
-     else
+     # …continued: exit 127 means bash found no helper → audit one deferred github_issue_created row
+     if [ "$pub_rc" -eq 127 ]; then
        LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
        mkdir -p "$LOG_DIR"
        STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
        jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
          '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
          >> "$LOG_DIR/audit.jsonl"; true
-     fi
+     fi; true
      ```
 
 ##### Step 3 — non-blocking & skip rules
 
-     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
+     The `|| pub_rc=$?` capture and the trailing `; true` mask the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
 
 #### Steps 1–3
 
@@ -1641,7 +1638,7 @@ function sendStageMessage(state, task, subagentType, body, supersedes = null) {
   const msg_id = `${task.id}-m${sendRows(task.id).length + 1}`;
   const sent = SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
     message: [`msg_id: ${msg_id}`, ...(supersedes ? [`supersedes: ${supersedes}`] : []),
-      `First tool call: bash skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
+      `First tool call: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
       "Set handoff.acted_on_msg_id to the newest msg_id you acted on.", "", body].join("\n") });
 ```
 
@@ -1686,7 +1683,7 @@ const rowMatchesHandoff = (row, h) =>
         const artifactPath = stageArtifactPath(code, runIndex, post.tasks?.[task.id]);  // the row's artifact when it names one
         // Layer 2 (synchronous): state-patch.sh is the single implementation (hooks/state-merge.sh
         // is a thin wrapper); `--via step6_5` stamps completed_via=step6_5 vs the hook default:
-        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
+        //   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
         // (equivalently: STATE_MERGE_VIA=step6_5 bash hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```

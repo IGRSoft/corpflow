@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.6.0
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), EnterWorktree, ExitWorktree
 hooks:
   Stop:
     - type: command
@@ -147,7 +147,7 @@ Runs only when the ledger holds more than one non-skipped DV task
 (`skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`). With one DV task, skip
 this section: the single-tree commit and push are unchanged.
 
-Start with `bash skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
+Start with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
 (every DV task shares one tree) → leave this section; the single-tree path applies. `arm=multi
 streams=<n>` is followed by one `<task><TAB><stream><TAB><tree>` line per stream: run § Per stream
 for each, in that order, then § Merge, battery, push.
@@ -160,9 +160,9 @@ for each, in that order, then § Merge, battery, push.
    lists as changed, never a path in that tree's landed set. `commit` stages tracked edits only
    (`add -u`), so a new file left unstaged never ships.
 3. `Write` the message per `skills/shared/git-conventions.md` to `.context/logs/fn-commit-<task>.txt`,
-   then `bash skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
+   then `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
 4. Pass the JSON after `facts=` on the second printed line to
-   `bash skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
    block with `stream_branch_missing`.
 
 `untracked=<n>` above 0 on the result line: stage any of those paths the DV artifact lists, then
@@ -170,7 +170,7 @@ re-run `commit`.
 
 ##### Merge, battery, push
 
-1. `bash skills/worktask/scripts/fn-stream-merge.sh merge` in FN's own tree: it cuts `facts.branch`
+1. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh merge` in FN's own tree: it cuts `facts.branch`
    from the base unless it exists, then merges each stream branch `--no-ff`, in task-id order.
 2. § Pre-`gh pr create` validator battery; `continuity` checks every stream (§ Branch checks).
 3. The existing non-force push, `git push -u origin HEAD:refs/heads/<facts.branch>` (§ Final FN
@@ -453,7 +453,7 @@ top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` wh
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; `--prev DC` when RE is
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE` (`--prev DC` when RE is
 skipped) to atomically patch `tasks.FN0` plus the `RE→FN` (or `DC→FN`) handoff edge into
 `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your
 artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the
@@ -465,7 +465,7 @@ tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage FN --prev RE --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE --facts '{
   "files_modified": ["CHANGELOG.md"],
   "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#summary"}],
   "open_questions": [{"id":"sw-FN0-1","class":"decision","ref":"complete-summary-0.md#elicitation-sweep","blocks_next_stage":false}]}'

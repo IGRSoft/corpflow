@@ -3,7 +3,7 @@ name: request-plan
 description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it
 argument-hint: '<request> [--save]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash skills/request-plan/scripts/capability-registry.sh:*)
+allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh *)
 related:
   - skills/request-plan/SKILL.md
   - skills/estimation-methodology/SKILL.md

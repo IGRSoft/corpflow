@@ -86,7 +86,7 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 | read-only | Read, Glob, Grep |
 | standard | Read, Glob, Grep, Write, Edit, Bash |
 | full | Read, Glob, Grep, Write, Edit, Bash |
-| orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash skills/worktask/scripts/state-patch.sh:*) |
+| orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *) |
 | design | Read, Glob, Grep, Write, ToolSearch |
 
 ### Cross-Plugin Delegation

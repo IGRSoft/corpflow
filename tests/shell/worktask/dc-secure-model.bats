@@ -118,7 +118,7 @@ pl0_dc_writer_value() { # <key>
 }
 
 @test "the technical-writer grant names the gate script, and the script exists" {
-  run grep -E '^tools:.*Bash\(bash skills/worktask/scripts/doc-option-check\.sh:\*\)' "$PLUGIN_ROOT/$AGENT"
+  run grep -E '^tools:.*Bash\(bash \$\{CLAUDE_PLUGIN_ROOT\}/skills/worktask/scripts/doc-option-check\.sh \*\)' "$PLUGIN_ROOT/$AGENT"
   assert_success
   [ -f "$PLUGIN_ROOT/$SCRIPT" ]
 }
@@ -136,7 +136,7 @@ pl0_dc_writer_value() { # <key>
 
 @test "the agent's invocation uses only flags the script accepts" {
   local invocation flag
-  invocation="$(grep -E '^bash skills/worktask/scripts/doc-option-check\.sh ' "$PLUGIN_ROOT/$AGENT")"
+  invocation="$(grep -E '^bash \$\{CLAUDE_PLUGIN_ROOT\}/skills/worktask/scripts/doc-option-check\.sh ' "$PLUGIN_ROOT/$AGENT")"
   [ -n "$invocation" ]
   for flag in $(printf '%s\n' "$invocation" | grep -oE -- '--[a-z][a-z-]+'); do
     grep -qE -- "(^ +|\| )${flag}( \||\))" "$PLUGIN_ROOT/$SCRIPT" || fail "script has no $flag arm"

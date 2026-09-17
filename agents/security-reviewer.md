@@ -6,7 +6,7 @@ color: red
 effort: xhigh
 version: 0.4.0
 maxTurns: 50
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/stream-diff.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task, Bash(bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh:*)
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)
 # tools: bare Task is deliberate — auditor targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the delegation audit row.
@@ -81,7 +81,7 @@ software-architector = security architecture (AR).
 
 ### Diff input (SR0)
 
-The diff is `bash skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only: list them with `stream-diff.sh --task <DVk> --format names` and `Read` each `?` path as that task's diff. A block with `source=empty` and `untracked=0`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
+The diff is `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only: list them with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` and `Read` each `?` path as that task's diff. A block with `source=empty` and `untracked=0`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
 
 ### Threat Model (SR0)
 
@@ -96,7 +96,7 @@ does not own alone:
 
 ### Diff-Only Read Rule (SR)
 
-Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `bash skills/worktask/scripts/stream-diff.sh --caller SR<N> -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
+Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller SR<N> -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 ### Output Artifact
 
@@ -233,7 +233,7 @@ Every auditor return is validated against `consultant-return.v1`
 
 1. `Write` the return verbatim to `.context/logs/consultant-return-SR0-<agent>-a1.md`, where
    `<agent>` is the auditor's basename. Never route it through a heredoc or `echo`.
-2. Run `bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <that path>`.
+2. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <that path>`.
 3. Exit 0: merge **stdout only** into the platform's subsection, and record each `warn:` line as a
    note on its findings.
 4. Exit 2 with `usage`, `unreadable` or `missing_dependency` is your own call failing: fix it and
@@ -260,7 +260,7 @@ SR0 scoped — the canon; never restated here. Platform domains: § Auditor rout
 
 Run whether or not a boundary was crossed.
 
-- **Secrets** — `bash skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (`skills/security-review-process/SKILL.md § Secrets Scanner`): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
+- **Secrets** — `bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (`skills/security-review-process/SKILL.md § Secrets Scanner`): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
 - **Dependencies** — an audit reports known advisories only; it proves neither trustworthiness nor reachability. Run the platform's native audit against the committed lockfile (SwiftPM: `Package.resolved`), then triage per `owasp-checklist.md § A06` — lockfile authority, reachability with dated deferrals, no forced auto-remediation, build-script approval, provenance.
 
 ## Severity Classification
@@ -301,14 +301,14 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic writes: 
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage SR --prev DR` (`skills/worktask/scripts/`): it atomically patches `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means the artifact is not on disk — write it and re-run, never continue as if the ledger were patched. If the tool cannot run, do NOT skip silently: apply the Edit-direct fallback `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage SR --prev DR`: it atomically patches `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means the artifact is not on disk — write it and re-run, never continue as if the ledger were patched. If the tool cannot run, do NOT skip silently: apply the Edit-direct fallback `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** — `state.json → facts.*` is the channel every downstream stage reads first, and this is its only scripted writer. SR's findings and blockers map onto `decisions[]`:
 
 ```bash
-state-patch.sh --stage SR --prev DR --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage SR --prev DR --facts '{
   "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}],
   "open_questions": [{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```

@@ -18,7 +18,7 @@ Security review checklist for the SR (Security Review) stage.
 
 **Invocation contract** (one line):
 ```
-bash scripts/scan-secrets.sh --path <repo-root>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>
 ```
 
 Output: `file:line:severity:pattern` — one finding per line, no surrounding code excerpt.

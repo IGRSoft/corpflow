@@ -115,14 +115,14 @@ missing_paths_block() {
 # violation.
 
 _orders_state_patch() {
-  grep -qE '^Run `state-patch\.sh' "$1" 2>/dev/null
+  grep -qE '^Run `(bash \$\{CLAUDE_PLUGIN_ROOT\}/skills/worktask/scripts/state-patch\.sh|state-patch\.sh)' "$1" 2>/dev/null
 }
 
 _grants_state_patch() {
   local tools
   tools="$(awk '/^tools:/{print; exit}' "$1")"
   printf '%s' "$tools" | grep -qE '(^|[ ,:])Bash([ ,]|$)' && return 0
-  printf '%s' "$tools" | grep -qF 'Bash(bash skills/worktask/scripts/state-patch.sh:'
+  printf '%s' "$tools" | grep -qE 'Bash\(bash (\$\{CLAUDE_PLUGIN_ROOT\}/)?skills/worktask/scripts/state-patch\.sh[ :]'
 }
 
 _documents_state_patch_fallback() {
@@ -285,7 +285,7 @@ mk_skill_layout() {
   # zero-sized candidate set means the matcher regressed, not that the repo is clean.
   local ordering
   ordering="$(cd "$PLUGIN_ROOT" && for f in $(git ls-files -- 'agents/*.md'); do
-    grep -qE '^Run `state-patch\.sh' "$f" && printf '%s\n' "$f"; done || true)"
+    _orders_state_patch "$f" && printf '%s\n' "$f"; done || true)"
   [ "$(printf '%s\n' "$ordering" | grep -c .)" -ge 13 ]
   run unexecutable_state_patch_orders "$PLUGIN_ROOT"
   assert_output ""
@@ -305,7 +305,7 @@ mk_skill_layout() {
   local root
   root="$(mk_tmpworkdir)"
   mk_git_fixture --dir "$root" \
-    --file 'agents/live.md:---\ntools: Read, Bash(bash skills/worktask/scripts/state-patch.sh:*)\n---\n\nx\n' \
+    --file 'agents/live.md:---\ntools: Read, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)\n---\n\nx\n' \
     --file 'commands/moved.md:---\nallowed-tools: Read, Bash(skills/gone/scripts/vanished.sh)\n---\n\nx\n' \
     --file 'skills/worktask/scripts/state-patch.sh:#!/usr/bin/env bash\n' \
     >/dev/null
@@ -318,9 +318,9 @@ mk_skill_layout() {
   local root
   root="$(mk_tmpworkdir)"
   mk_git_fixture --dir "$root" \
-    --file 'agents/blocked.md:---\ntools: Read, Write\n---\n\nRun `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`).\n' \
-    --file 'agents/granted.md:---\ntools: Read, Bash(bash skills/worktask/scripts/state-patch.sh:*)\n---\n\nRun `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`).\n' \
-    --file 'agents/fallback.md:---\ntools: Read, Edit\n---\n\nRun `state-patch.sh --stage ST --prev FN`; if it cannot run, patch `.context/state.json` yourself with `Edit`.\n' \
+    --file 'agents/blocked.md:---\ntools: Read, Write\n---\n\nRun `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage AR --prev PL`.\n' \
+    --file 'agents/granted.md:---\ntools: Read, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)\n---\n\nRun `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --prev QA`.\n' \
+    --file 'agents/fallback.md:---\ntools: Read, Edit\n---\n\nRun `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev FN`; if it cannot run, patch `.context/state.json` yourself with `Edit`.\n' \
     >/dev/null
   run unexecutable_state_patch_orders "$root"
   assert_output --partial "agents/blocked.md"
@@ -452,7 +452,7 @@ mk_script_order_layout() {
   local root
   root="$(mk_tmpworkdir)"
   mk_git_fixture --dir "$root" \
-    --file 'commands/run.md:---\nallowed-tools: Read, Bash(bash skills/worktask/scripts/patch.sh:*), Bash(bash skills/worktask/scripts/rank.sh:*), Bash(bash skills/worktask/scripts/seed.sh:*)\n---\n\nRun `bash skills/worktask/scripts/patch.sh --stage DV`.\n\n```bash\nskills/worktask/scripts/rank.sh --goal x\n```\n\nHELPER="$PLUGIN_ROOT/skills/worktask/scripts/seed.sh"\n\n| Script | `skills/worktask/scripts/audit.sh` |\n\nReachability is described in `skills/worktask/scripts/audit.sh`.\n\nThe runtime dispatches `bash hooks/state-merge.sh` itself.\n' \
+    --file 'commands/run.md:---\nallowed-tools: Read, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/rank.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed.sh *)\n---\n\nRun `bash skills/worktask/scripts/patch.sh --stage DV`.\n\n```bash\nskills/worktask/scripts/rank.sh --goal x\n```\n\nHELPER="$PLUGIN_ROOT/skills/worktask/scripts/seed.sh"\n\n| Script | `skills/worktask/scripts/audit.sh` |\n\nReachability is described in `skills/worktask/scripts/audit.sh`.\n\nThe runtime dispatches `bash hooks/state-merge.sh` itself.\n' \
     --file 'agents/free.md:---\ntools: Read, Bash\n---\n\nRun `bash skills/worktask/scripts/audit.sh --all`.\n' \
     --file 'skills/worktask/scripts/patch.sh:#!/usr/bin/env bash\n' \
     --file 'skills/worktask/scripts/rank.sh:#!/usr/bin/env bash\n' \
@@ -486,7 +486,7 @@ mk_related_layout() {
 @test "resolver: an ordered bash skills/… script with no matching grant is named" {
   local root
   root="$(mk_script_order_layout)"
-  sed -i.bak 's|, Bash(bash skills/worktask/scripts/patch.sh:\*)||' "$root/commands/run.md"
+  sed -i.bak 's|, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/patch.sh \*)||' "$root/commands/run.md"
   run ungranted_script_orders "$root"
   assert_output "commands/run.md -> skills/worktask/scripts/patch.sh"
 }
@@ -494,7 +494,7 @@ mk_related_layout() {
 @test "resolver: an interpreter-less skills/… order in a code block with no grant is named" {
   local root
   root="$(mk_script_order_layout)"
-  sed -i.bak 's|, Bash(bash skills/worktask/scripts/rank.sh:\*)||' "$root/commands/run.md"
+  sed -i.bak 's|, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/rank.sh \*)||' "$root/commands/run.md"
   run ungranted_script_orders "$root"
   assert_output "commands/run.md -> skills/worktask/scripts/rank.sh"
 }
@@ -502,7 +502,7 @@ mk_related_layout() {
 @test "resolver: a \$PLUGIN_ROOT-rooted script order with no grant is named" {
   local root
   root="$(mk_script_order_layout)"
-  sed -i.bak 's|, Bash(bash skills/worktask/scripts/seed.sh:\*)||' "$root/commands/run.md"
+  sed -i.bak 's|, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed.sh \*)||' "$root/commands/run.md"
   run ungranted_script_orders "$root"
   assert_output "commands/run.md -> skills/worktask/scripts/seed.sh"
 }
