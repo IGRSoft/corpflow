@@ -381,7 +381,11 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
-Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. The orchestrator copies these blocks, never composes them.
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
+
+#### Composing the brief (binding)
+
+Build every stage prompt by running `bash skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
 #### Preamble layout (binding)
 
@@ -392,20 +396,23 @@ Each section opens with its own `<<<marker>>>` line and runs to the next marker 
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 [4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
-[5] task.description                       ← dynamic per delegation
+[5] Task identifiers + ref: lines          ← dynamic per delegation
 [6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
-#### Step 0 — compose section [3] via ledger-digest.sh before each delegation
+[5]'s lines and ref shapes: `references/handoff-protocol.md § Section [5] — task identifiers and refs`.
+
+#### Step 0 — section [3] comes from ledger-digest.sh
 
 ```typescript
 // Section [3] body: the ledger pointer plus readiness digest, grammar in
-// references/handoff-protocol.md#cache-prefix. The script is the only composer, so [3]
-// cannot drift from the lint that checks it.
+// references/handoff-protocol.md#cache-prefix. brief-compose.sh (Step 6) makes this call for
+// every delegation and is its only caller, so [3] cannot drift from the lint that checks it.
 const digest = execFileSync("bash", ["skills/worktask/scripts/ledger-digest.sh",
                                      "--state", ".context/state.json"], { encoding: "utf8" });
-// Exit 3 means the ledger is missing or unparseable: a hard failure, not a degraded mode.
+// Exit 3 means the ledger is missing or unparseable: the composer exits 2 and nothing is
+// dispatched — a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -596,6 +603,10 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
     const full = state.tasks[task.id];
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
+    // [5] is the composer's, so the ledger text is never dispatched. full.description becomes the
+    // injection buffer: text prepended before the sentinel is [6], text appended after it is [7].
+    const INJECTION_SPLIT = "@@injection-split@@";  // no injection text contains it
+    full.description = INJECTION_SPLIT;
 ```
 
 ##### Agent-type resolution
@@ -790,7 +801,8 @@ takes a full budget to discover it.
 
 Two banners, because isolation and assignment are two claims: a stale worktree of a *different*
 clone is perfectly isolated, satisfies D0.0, and still cannot receive a single edit.
-`dv-tree-preflight.sh` exists for exactly that case.
+`dv-tree-preflight.sh` exists for exactly that case. Neither banner is the `WORKSPACE_ROOT=` line:
+Step 6's composer emits that as [7]'s first line from the same script, after the re-stamp below.
 
 ```typescript
     // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected: every DV stage
@@ -1064,11 +1076,11 @@ then `--task-status <ID> pending`. The next ready pass reaches this gate, which 
     //    write (never agent_type or an env var, so nested delegates inherit it).
     sh(`state-patch.sh --task-status ${task.id} in_progress`);
 
-    // 5a. Embedded commands (DV) — PREPEND the Skill invocation when the worktask carries
+    // 5a. Embedded commands (DV) — APPENDED as suffix [7] when the worktask carries
     //     embedded_commands metadata.
     if (full.metadata.stage === "DV" && worktask_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
-      full.description = skillInvocation + "\n\n" + full.description;
+      full.description = full.description + "\n\n" + skillInvocation;
     }
 ```
 
@@ -1080,8 +1092,7 @@ then `--task-status <ID> pending`. The next ready pass reaches this gate, which 
     //     COMMAND, not a skill: there is no skills/tech-code-review/ to invoke, so name
     //     the file and let the stage read it.
     if (full.metadata.stage === "DR") {
-      const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save the findings summary to the path on this brief's \`artifact:\` line.`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 ```
@@ -1103,7 +1114,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
         "  • `.context/attachments/PR instructions.md`",
         "  • `.context/attachments/Review request.md`",
         "Run `mkdir -p .context/attachments` first.",
-        "Also write `.context/complete-summary-N.md` (worktask summary + Stage Timings; N = task.metadata.run_index).",
+        "Also write the worktask summary + Stage Timings to the path on this brief's `artifact:` line.",
         "Then read `PR instructions.md` and follow it as the PR-creation script.",
       ].join("\n");
       full.description = full.description + "\n\n" + fnInjection;
@@ -1168,19 +1179,46 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     }
 ```
 
+##### Step 6 — compose the brief
+
+```typescript
+    // …continued: step 6 body. Runs after Step 4.8's re-stamp, so [7]'s WORKSPACE_ROOT= line and
+    // Step 4.8's banner read one row. _orch_root is set in commands/worktask.md
+    // § Workspace-root cross-check. Contract: § Composing the brief.
+    const composed = spawnSync("bash", ["skills/worktask/scripts/brief-compose.sh", task.id,
+                                        "--orch-root", _orch_root], { encoding: "utf8" });
+    if (composed.status !== 0) {  // 1 = guard failure, 2 = usage/ledger/canon; stdout is empty
+      sh(`state-patch.sh --task-status ${task.id} blocked`);
+      appendAudit({ actor: "orchestrator", action: "brief_compose_failed", subject: task.id,
+                    result: "blocked", metadata: { exit: composed.status, stderr: composed.stderr.trim() } });
+      continue;  // no Task(): surface the stderr per § Escalation Chains
+    }
+```
+
+##### Step 6 — splice the injections
+
+```typescript
+    // …continued: step 6 body. Each injection keeps its section; [1]–[5] stay as composed.
+    const [hints, banners] = full.description.split(INJECTION_SPLIT).map(s => s.trim());
+    const HINTS = "<<<retry-hints>>>\n";
+    const cut = composed.stdout.lastIndexOf(HINTS) + HINTS.length;
+    const prompt = composed.stdout.slice(0, cut) + (hints ? `${hints}\n` : "") +
+                   composed.stdout.slice(cut) + (banners ? `\n${banners}\n` : "");
+```
+
 ##### Step 6 — Task() dispatch
 
 ```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
     // A DV row's tree is fixed at dispatch by the dispatcher: Step 4.8 settled
     // tasks.<ID>.metadata.workspace_path (re-pinned if a concurrent row shared it) before this
-    // call, and the banner carries it. No
+    // call, and the composed [7] banner carries it. No
     // `isolation: "worktree"` argument — the Agent tool's fork is a tree the ledger never
     // recorded, and dv-tree-preflight.sh --assigned blocks every edit inside it.
     const launchAck = Task({
       subagent_type: subagentType,
       model: effectiveModel,
-      prompt: full.description,
+      prompt,  // the composer's stdout with [6]/[7] spliced in, never full.description
       ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
     });
 
