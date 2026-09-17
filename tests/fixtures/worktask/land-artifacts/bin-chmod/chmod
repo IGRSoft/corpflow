@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# tests/fixtures/worktask/land-artifacts/bin/chmod — PATH shim that always
+# tests/fixtures/worktask/land-artifacts/bin-chmod/chmod — PATH shim that always
 # fails, for exercising land-artifacts.sh's guarded `chmod "$perm" -- "$tmp"`
 # in write_blob (the only chmod call the script makes). git_hygiene does not
 # reset PATH, so this shim, once prepended, stays in effect for the run.
+# Kept out of the git shim's bin/: a case that prepends bin/ for a keyed git
+# fault must still write its earlier paths, which this shim would refuse.
 #
 # Minimum shell: bash 3.2+ (macOS default), matching the script under test.
 

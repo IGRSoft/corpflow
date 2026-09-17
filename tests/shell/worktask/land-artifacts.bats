@@ -10,7 +10,8 @@
 #     the SKILL.md readiness filter stops listing it.
 #   - a mid-run write failure rolls back every path this run created (not only the
 #     failing one), and a failed git blob read surfaces as git_error, never a raw
-#     git exit code.
+#     git exit code; a failed ledger read while collecting declarations exits 2
+#     with nothing dispatched.
 #   - a consumes path holding an embedded newline or comma is refused as
 #     bad_declaration without touching any other ledger row.
 #   - preconditions: not_staged, staged_then_modified, not_produced,
@@ -243,17 +244,12 @@ assert_refused() {
 }
 
 @test "contract: a guarded chmod failure blocks the consumer with git_error, nothing landed" {
-  LAND_REAL_GIT="$(command -v git)"
-  export LAND_REAL_GIT
-  # A LAND_SHIM_CORRUPT_OID that matches no real oid neutralises the git
-  # shim's default (unset => corrupt every cat-file) so only the chmod shim
-  # in the same fixture bin/ is exercised.
-  export LAND_SHIM_CORRUPT_OID="0000000000000000000000000000000000000000"
+  # Only the chmod shim's dir: git stays real, so the blob reads and the oid
+  # check pass and the failure is the chmod step alone.
   local old_path="$PATH"
-  PATH="$FIXDIR/bin:$PATH"
+  PATH="$FIXDIR/bin-chmod:$PATH"
   run_land --producer DV0
   PATH="$old_path"
-  unset LAND_SHIM_CORRUPT_OID
 
   assert_equal "$status" 1
   [ ! -e "$C_REAL/contract.yaml" ]
@@ -281,6 +277,22 @@ assert_refused() {
   assert_equal "$(reason_of)" 'git_error'
   assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
     --meta reason=git_error --count 1
+}
+
+@test "contract: a failed ledger read while collecting declarations exits 2, nothing dispatched" {
+  LAND_REAL_JQ="$(command -v jq)"
+  export LAND_REAL_JQ
+  local old_path="$PATH"
+  PATH="$FIXDIR/bin-jq:$PATH"
+  run_land --producer DV0
+  PATH="$old_path"
+
+  assert_equal "$status" 2
+  [ ! -e "$C_REAL/contract.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'pending'
+  assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
+  run jq -r 'select(.action == "contract_landed") | .subject' "$AUDIT"
+  refute_line 'DV1'
 }
 
 @test "contract: a consumes path holding an embedded newline is refused as bad_declaration" {
