@@ -612,12 +612,13 @@ ud_chain_walk() {
     | . as $l
     | (try fromjson catch null) as $row
     | if (($l | test("\r")) or $row == null or ($row | type) != "object") then
-        (["", "", "", "", "", "no"] | @tsv), "null"
+        (["", "", "", "", "", "no", ""] | @tsv), "null"
       else
         ([($row.id // "" | tostring), ($row.actor // "" | tostring),
           ($row.prev_sha256 // "" | tostring), ($row.sha256 // "" | tostring),
           ($row.tool_use_id // "" | tostring),
-          (if (($row | keys_unsorted) == $want) then "yes" else "no" end)] | @tsv),
+          (if (($row | keys_unsorted) == $want) then "yes" else "no" end),
+          ((($row.scope // {}).item // "") | tostring)] | @tsv),
         ([$row.question, $row.answer] | tojson)
       end
   ' 2> /dev/null)
@@ -669,11 +670,14 @@ ud_chain_walk() {
     | (reduce $digs[] as $d ({}; . + {($d.p | split("/") | last): $d.h})) as $byname
     | ($meta | split("\n") | map(select(length > 0)) | map(split("\t"))) as $rows
     # One AskUserQuestion call legitimately writes one row per question, all sharing its single
-    # tool_use_id, so the duplicate key is (tool_use_id, canonical [question,answer] digest) —
-    # a real replay repeats that pair, a batched call of up to 4 questions does not.
+    # tool_use_id, so the duplicate key is (tool_use_id, canonical [question,answer] digest,
+    # scope item). The item keeps two sweep questions of one call apart when their text and their
+    # answer are byte-identical — Step C.4 sweep items are not de-duplicated upstream the way
+    # user_decision needs are — while a genuinely replayed row still repeats all three.
     | ($rows | map(.[0])) as $ids
     | ([range(0; $n) as $j
-        | (($rows[$j][4]) + ":" + ($byname["canon." + (($j + 1) | tostring)] // ""))]) as $tukeys
+        | (($rows[$j][4]) + ":" + ($byname["canon." + (($j + 1) | tostring)] // "")
+           + ":" + ($rows[$j][6] // ""))]) as $tukeys
     | range(0; $n) as $i
     | ($rows[$i]) as $m
     | ($i + 1) as $idx

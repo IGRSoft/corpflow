@@ -29,10 +29,12 @@ set +e
 
 UD_AUDIT_CTX=""
 _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
-# git is on the hook arm only: it cannot execute the script, and `git diff|show|blame -- <hook>`
-# plus the `git checkout -- <path>` revert agents are told to run have no exec value. It stays OFF
-# the ledger arm, where `git apply`/`checkout` could write a ledger that git has no reason to read.
-_UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck|git)$'
+# git is deliberately absent from BOTH arms. It is a configurable command executor — `git -c
+# alias.x='!bash <hook>' x`, `git difftool -x bash`, `GIT_EXTERNAL_DIFF=<hook> git diff`, pagers
+# and textconv all run arbitrary programs — so no substring guard over one command line can admit
+# it safely. Inspecting the hook with git still works from any command that does not name the
+# script itself (`git diff hooks/`, `git checkout -- hooks/`), which this guard never sees.
+_UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck)$'
 
 # _ud_refuse <ctx> <reason> [<tool_use_id>] — one user_decision_refused row; tool_use_id is
 # folded in only once P2 (event/tool/id shape) has already passed.
@@ -79,6 +81,13 @@ do_post() {
   [ -n "$CTX" ] || return 0
   command -v jq > /dev/null 2>&1 || return 0
 
+  # AD4 P1, and it runs first: without a state.json carrying a non-empty worktask_id there is no
+  # context to audit into, so the hook exits silently rather than writing a row nobody can read.
+  STATE="$CTX/state.json"
+  if [ ! -f "$STATE" ] || [ -z "$(jq -r '.worktask_id // ""' "$STATE" 2> /dev/null)" ]; then
+    return 0
+  fi
+
   TOOL_NAME=$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // ""' 2> /dev/null) || TOOL_NAME=""
   TUID=$(printf '%s' "$PAYLOAD" | jq -r '.tool_use_id // "" | tostring' 2> /dev/null) || TUID=""
 
@@ -123,13 +132,6 @@ do_post() {
     return 0
   fi
 
-  # AD4 P1: no state.json with a non-empty worktask_id means no context to audit into, so the
-  # hook exits silently rather than writing a refusal row nobody can read.
-  STATE="$CTX/state.json"
-  if [ ! -f "$STATE" ] || [ -z "$(jq -r '.worktask_id // ""' "$STATE" 2> /dev/null)" ]; then
-    rm -f "$PFILE"
-    return 0
-  fi
   LEDGER="$CTX/decisions.jsonl"
   UD_AUDIT_CTX="$CTX"
 
@@ -257,7 +259,9 @@ _ud_guard_hook_cmd() {
       return 0
     fi
     # `bash -n <script>` is the one interpreter shape allowed, and only with -n as its first word.
-    if [[ "$seg" =~ ^[[:space:]]*[^[:space:]]*(bash|sh)[[:space:]]+-n([[:space:]]|$) ]]; then
+    # Anchored to bash or sh themselves, optionally path-qualified: `xsh -n <hook>` must not ride
+    # the carve-out by ending in the two letters the pattern looks for.
+    if [[ "$seg" =~ ^[[:space:]]*([^[:space:]]*/)?(bash|sh)[[:space:]]+-n([[:space:]]|$) ]]; then
       continue
     fi
     sseg="$seg"

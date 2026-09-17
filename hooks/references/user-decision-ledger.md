@@ -141,8 +141,12 @@ After P7 the append itself can refuse: `unstable_encoding`, `ledger_torn`, `lock
 
 The lock covers the tail check, dedupe, and the id and `prev_sha256` computation. The append copies
 the ledger into an `mktemp` file in the same directory under umask 077, appends the rows and renames
-with `mv -f`, so the lock-free verifier never reads a half row. There is no second tail check after
-the copy: the tail check that matters runs under the lock before any row is built. A symlinked
+with `mv -f`, so the lock-free verifier never reads a half row. The copy's own exit status is
+checked, and before the rename the temp file is re-verified against the pre-copy state: its line
+count must equal the rows the call expects to leave behind, and the digest of the copied prefix's
+last line must equal the digest taken of the ledger's tail under the lock. Either mismatch refuses
+as `ledger_torn` with nothing renamed, which is what keeps a copy cut short by ENOSPC from replacing
+the chain with a truncation no later row could detect. A symlinked
 ledger is refused as `ledger_symlink` before the lock is taken, not replaced, and the rename is
 skipped if the ledger has become a symlink by then. Each row's `user_decision_recorded` audit row is written under the same lock, after the
 rename, and confirmed with `grep -F`; a miss reports `degraded`.
