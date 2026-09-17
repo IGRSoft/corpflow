@@ -15,6 +15,9 @@
 #   LAND_SHIM_FAIL_OID=<oid>     that oid's cat-file exits non-zero instead of
 #                                 streaming anything, simulating a git
 #                                 object-store read failure.
+#   LAND_SHIM_TERM_OID=<oid>     that oid's cat-file sends SIGTERM to its own
+#                                 parent (the land-artifacts.sh process) before
+#                                 exiting, simulating a signal landing mid-write.
 #
 # The subcommand (and, for cat-file, the oid) is found after skipping any
 # leading `-C <dir>` and `-c <kv>` pairs, since land-artifacts.sh always calls
@@ -46,6 +49,11 @@ _oid="${_args[$((_i + 2))]:-}"
 if [ "$_sub" = "cat-file" ] && [ -n "${LAND_SHIM_FAIL_OID:-}" ] && [ "$_oid" = "$LAND_SHIM_FAIL_OID" ]; then
   printf >&2 'git: fatal: simulated read failure for %s\n' "$_oid"
   exit 128
+fi
+
+if [ "$_sub" = "cat-file" ] && [ -n "${LAND_SHIM_TERM_OID:-}" ] && [ "$_oid" = "$LAND_SHIM_TERM_OID" ]; then
+  kill -TERM "$PPID" 2> /dev/null || true
+  exit 1
 fi
 
 if [ "$_sub" = "cat-file" ]; then

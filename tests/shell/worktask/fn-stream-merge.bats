@@ -111,15 +111,38 @@ refs_snapshot() {
   local svc_real
   svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
   jq --arg s "$svc_real" \
+    '.tasks.DV0.metadata.landed_paths = ["artifact.yaml"] | .tasks.DV0.metadata.landed_roots = [$s]' \
+    "$L" > "$L.tmp" && mv "$L.tmp" "$L"
+  stream_edits
+  # A new, staged path (git add -u never stages an untracked file): its diff
+  # status is Added, so --diff-filter=A still excludes it.
+  printf 'landed change\n' > "$WD/wt-service/artifact.yaml"
+  git -C "$WD/wt-service" add artifact.yaml
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
+  assert_success
+  assert_line --index 0 --partial "excluded=1"
+  run git -C "$WD/wt-service" show --name-only --format= HEAD
+  assert_output "svc.txt"
+}
+
+@test "commit: a landed-set entry matching a tracked modification is still committed, not unstaged" {
+  # landed.md is already tracked from the base commit; declaring it landed
+  # here is a forged/stale entry — land-artifacts.sh itself never overwrites
+  # tracked content (dest_tracked refuses that), so a real landing is always
+  # an add. --diff-filter=A must leave this genuine modification staged.
+  local svc_real
+  svc_real="$(cd -P "$WD/wt-service" && pwd -P)"
+  jq --arg s "$svc_real" \
     '.tasks.DV0.metadata.landed_paths = ["landed.md"] | .tasks.DV0.metadata.landed_roots = [$s]' \
     "$L" > "$L.tmp" && mv "$L.tmp" "$L"
   stream_edits
   printf 'landed change\n' >> "$WD/wt-service/landed.md"
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" commit --task DV0 --message-file "$WD/msg.txt"
   assert_success
-  assert_line --index 0 --partial "excluded=1"
+  assert_line --index 0 --partial "excluded=0"
   run git -C "$WD/wt-service" show --name-only --format= HEAD
-  assert_output "svc.txt"
+  assert_line "landed.md"
+  assert_line "svc.txt"
 }
 
 @test "commit: a same-named staged path lands only in one stream's tree, excluded only there" {

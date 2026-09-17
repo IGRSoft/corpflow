@@ -53,7 +53,7 @@ FIXDIR="${FIXTURES}/worktask/land-artifacts"
 
 # The one exclusion expression, mirrored here only for the parity assertions
 # below — never sourced, so a drift in any transport is a diff, not a silent pass.
-D8_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("^[A-Za-z0-9._@+/-]+$"))] | unique | .[]'
+D8_JQ='[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]'
 
 phys() { (cd -P "$1" 2>/dev/null && pwd -P); }
 
@@ -174,17 +174,18 @@ assert_refused() {
 @test "contract: a mid-run write failure rolls back every path this run created" {
   mkdir -p "$P_REAL/new/dir"
   printf 'a\n' > "$P_REAL/new/dir/a.yaml"
-  printf 'k: v\n' > "$P_REAL/b.yaml"
-  git -C "$P_REAL" add new/dir/a.yaml b.yaml
+  printf 'k: v\n' > "$P_REAL/z.yaml"
+  git -C "$P_REAL" add new/dir/a.yaml z.yaml
 
-  patch_state '(.tasks.DV0.metadata.produces) = ["new/dir/a.yaml", "b.yaml"]
-    | (.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["new/dir/a.yaml", "b.yaml"]}]'
+  patch_state '(.tasks.DV0.metadata.produces) = ["new/dir/a.yaml", "z.yaml"]
+    | (.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["new/dir/a.yaml", "z.yaml"]}]'
 
-  # Both paths pass preflight (they are validly staged), so the first path's
-  # write completes before the second's keyed blob read is corrupted — the
-  # exact shape a subshell-scoped rollback ledger cannot see past.
+  # Both paths pass preflight (they are validly staged); jq `unique` sorts the
+  # declared paths ('n' < 'z'), so new/dir/a.yaml writes first and z.yaml's
+  # keyed blob read is corrupted second — the exact shape a subshell-scoped
+  # rollback ledger cannot see past.
   local oid
-  oid=$(git -C "$P_REAL" ls-files -s -- b.yaml | awk '{print $2}')
+  oid=$(git -C "$P_REAL" ls-files -s -- z.yaml | awk '{print $2}')
 
   LAND_REAL_GIT="$(command -v git)"
   export LAND_REAL_GIT
@@ -197,10 +198,68 @@ assert_refused() {
 
   assert_equal "$status" 1
   [ ! -e "$C_REAL/new" ]
-  [ ! -e "$C_REAL/b.yaml" ]
+  [ ! -e "$C_REAL/new/dir/a.yaml" ]
+  [ ! -e "$C_REAL/z.yaml" ]
   assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'blocked'
   assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
   assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail --count 1
+}
+
+@test "contract: a TERM signal mid-landing rolls back the already-written path, status 2" {
+  mkdir -p "$P_REAL/new/dir"
+  printf 'a\n' > "$P_REAL/new/dir/a.yaml"
+  printf 'k: v\n' > "$P_REAL/z.yaml"
+  git -C "$P_REAL" add new/dir/a.yaml z.yaml
+
+  patch_state '(.tasks.DV0.metadata.produces) = ["new/dir/a.yaml", "z.yaml"]
+    | (.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": ["new/dir/a.yaml", "z.yaml"]}]'
+
+  # new/dir/a.yaml (n < z) writes first and durably; z.yaml's keyed blob read
+  # is where the shim delivers the signal, mid-run, to the script itself.
+  local oid
+  oid=$(git -C "$P_REAL" ls-files -s -- z.yaml | awk '{print $2}')
+
+  LAND_REAL_GIT="$(command -v git)"
+  export LAND_REAL_GIT
+  export LAND_SHIM_TERM_OID="$oid"
+  # Neutralises the git shim's default (unset CORRUPT_OID => corrupt every
+  # cat-file read): new/dir/a.yaml's own read must stream through genuine so
+  # it is durably written before z.yaml's keyed read delivers the signal.
+  export LAND_SHIM_CORRUPT_OID="0000000000000000000000000000000000000000"
+  local old_path="$PATH"
+  PATH="$FIXDIR/bin:$PATH"
+  run_land --producer DV0
+  PATH="$old_path"
+  unset LAND_SHIM_TERM_OID LAND_SHIM_CORRUPT_OID
+
+  assert_equal "$status" 2
+  [ ! -e "$C_REAL/new" ]
+  [ ! -e "$C_REAL/new/dir/a.yaml" ]
+  [ ! -e "$C_REAL/z.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'pending'
+  assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
+  run jq -r 'select(.action == "contract_landed" and .result == "ok") | .subject' "$AUDIT"
+  refute_line 'DV1'
+}
+
+@test "contract: a guarded chmod failure blocks the consumer with git_error, nothing landed" {
+  LAND_REAL_GIT="$(command -v git)"
+  export LAND_REAL_GIT
+  # A LAND_SHIM_CORRUPT_OID that matches no real oid neutralises the git
+  # shim's default (unset => corrupt every cat-file) so only the chmod shim
+  # in the same fixture bin/ is exercised.
+  export LAND_SHIM_CORRUPT_OID="0000000000000000000000000000000000000000"
+  local old_path="$PATH"
+  PATH="$FIXDIR/bin:$PATH"
+  run_land --producer DV0
+  PATH="$old_path"
+  unset LAND_SHIM_CORRUPT_OID
+
+  assert_equal "$status" 1
+  [ ! -e "$C_REAL/contract.yaml" ]
+  assert_equal "$(jq -r '.tasks.DV1.status' "$STATE")" 'blocked'
+  assert_equal "$(reason_of)" 'git_error'
+  assert_equal "$(jq -r '.tasks.DV1.metadata.landed_paths // [] | length' "$STATE")" 0
 }
 
 @test "contract: a failed git blob read surfaces as git_error, not a raw git exit code" {
@@ -458,6 +517,28 @@ assert_refused() {
     --meta reason=bad_declaration --count 1
 }
 
+@test "contract: bad_declaration is refused for a from id holding a trailing newline" {
+  # The newline lives in the jq literal: "$(printf 'DV0\n')" would strip it.
+  # The gate, not the boundary: a boundary pass for DV0 skips a row whose raw
+  # `from` never equals "DV0".
+  patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0\n", "paths": ["contract.yaml"]}]'
+  run_land --consumer DV1
+  assert_equal "$status" 1
+  assert_equal "$(reason_of)" 'bad_declaration'
+  [ ! -e "$C_REAL/contract.yaml" ]
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
+    --meta reason=bad_declaration --count 1
+}
+
+@test "contract: bad_declaration is refused for an empty-string path" {
+  patch_state '(.tasks.DV1.metadata.consumes) = [{"from": "DV0", "paths": [""]}]'
+  run_land --producer DV0
+  assert_equal "$status" 1
+  assert_equal "$(reason_of)" 'bad_declaration'
+  assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
+    --meta reason=bad_declaration --count 1
+}
+
 # ---------------------------------------------------------------------------
 # same-tree landing and row cardinality
 # ---------------------------------------------------------------------------
@@ -478,6 +559,16 @@ assert_refused() {
   local n
   n=$(jq -r '[.tasks.DV1.metadata.landed_paths[] | select(. == "contract.yaml")] | length' "$STATE")
   assert_equal "$n" 1
+}
+
+@test "contract: commit_landed drops a stored entry holding an embedded newline instead of laundering it" {
+  jq --arg stray "$(printf 'ok.md\nevil')" \
+    '(.tasks.DV1.metadata.landed_paths) = [$stray]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run_land --producer DV0
+  assert_equal "$status" 0
+  run jq -c '.tasks.DV1.metadata.landed_paths' "$STATE"
+  assert_output '["contract.yaml"]'
 }
 
 @test "contract: the dispatch gate after a boundary pass is a no-op (no new row)" {
@@ -570,6 +661,19 @@ assert_refused() {
 @test "contract: --list-landed drops an entry containing a space or a newline" {
   jq --arg c "$C_REAL" --arg nl "$(printf 'a\nb.yaml')" \
     '(.tasks.DV1.metadata.landed_paths) = ["good.yaml", "bad name.yaml", $nl]
+     | (.tasks.DV1.metadata.landed_roots) = [$c]' \
+    "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --state "$STATE"
+  assert_equal "$status" 0
+  assert_equal "$output" "good.yaml"
+}
+
+@test "contract: a non-strict --list-landed --tree read drops an entry with a trailing newline" {
+  # Oniguruma's $ matches just before a FINAL trailing newline, not only at the
+  # true end of string — a plain ^...$ anchor lets "foo.md\n" through; \A..\z
+  # does not.
+  jq --arg c "$C_REAL" \
+    '(.tasks.DV1.metadata.landed_paths) = ["good.yaml", "foo.md\n"]
      | (.tasks.DV1.metadata.landed_roots) = [$c]' \
     "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
   run bash "$PLUGIN_ROOT/$SCRIPT" --list-landed --tree "$C_REAL" --state "$STATE"

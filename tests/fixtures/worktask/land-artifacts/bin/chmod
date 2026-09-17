@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# tests/fixtures/worktask/land-artifacts/bin/chmod — PATH shim that always
+# fails, for exercising land-artifacts.sh's guarded `chmod "$perm" -- "$tmp"`
+# in write_blob (the only chmod call the script makes). git_hygiene does not
+# reset PATH, so this shim, once prepended, stays in effect for the run.
+#
+# Minimum shell: bash 3.2+ (macOS default), matching the script under test.
+
+set -euo pipefail
+
+printf >&2 'chmod: simulated permission failure\n'
+exit 1
