@@ -179,6 +179,13 @@ Optimise startup perf|perf
 Document the public API|docs
 Improve test coverage|test
 Bump the dependency|chore
+Build multiplatform leaderboard|feat
+build|feat
+Update build scripts|build
+Fix the build|bugfix
+Build the docs site|docs
+Build fix for the cache|bugfix
+Build-time cache warmup|build
 TABLE
     exit \$rc
   "

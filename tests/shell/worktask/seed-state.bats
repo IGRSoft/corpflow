@@ -140,6 +140,19 @@ _repo() {
   assert_success
 }
 
+@test "goal: word boundary — spaced goal over 240 ends on whole word plus ellipsis" {
+  _repo "$WD/r"
+  mkdir -p "$WD/r/a"
+  run_script_env --separate-stderr --cwd "$WD/r" "$SCRIPT" --worktask-id wt-7b \
+    --goal "$(jq -nr '[range(30) | "abcdefghi "] | add')" --context-dir "$WD/r/a"
+  assert_success
+  run jq -e '(.facts.goal | length) == 240
+    and (.facts.goal | endswith([8230] | implode))
+    and (.facts.goal == (([range(24) | "abcdefghi"] | join(" ")) + ([8230] | implode)))' \
+    "$WD/r/a/state.json"
+  assert_success
+}
+
 @test "ladder: a linked worktree seeds its own ledger, not CLAUDE_PROJECT_DIR's" {
   _repo "$WD/main" --context
   git -C "$WD/main" worktree add -q --detach "$WD/wt"

@@ -53,6 +53,11 @@ SCRIPT="skills/shared/milestone-helpers/scripts/milestone-helpers.sh"
   run_script "$SCRIPT" branch-name 45 "Add dark mode toggle"
   assert_success
   assert_output "feature/45-add-dark-mode-toggle"
+
+  # A leading "Build" verb derives the short form `feat`, not the build-system type.
+  run_script "$SCRIPT" branch-name 7 "Build multiplatform leaderboard"
+  assert_success
+  assert_output "feat/7-build-multiplatform-leaderboard"
 }
 
 @test "cross-check: the type matches branch-lib derive_type for the same title" {
@@ -61,7 +66,8 @@ SCRIPT="skills/shared/milestone-helpers/scripts/milestone-helpers.sh"
     "Fix: crash on startup!!!" \
     "Refactor the reconnect backoff" \
     "Add dark mode toggle" \
-    "Ship a hotfix for the release pipeline"; do
+    "Ship a hotfix for the release pipeline" \
+    "Build multiplatform leaderboard"; do
     derived="$(bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; derive_type \"\$1\"" _ "$title")"
     run_script "$SCRIPT" branch-name 7 "$title"
     assert_success

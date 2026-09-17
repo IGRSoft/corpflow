@@ -44,7 +44,7 @@ Same rule as `derive_slug` in `skills/worktask/scripts/branch-lib.sh`; the two a
 
 ### Branch type: derived, not fixed
 
-`branch-name` derives the type from the issue title via `derive_type`, **sourced** from `skills/worktask/scripts/branch-lib.sh` — the same function worktask uses, never a second copy. `feature` is the default for titles that read as new work; defect, refactor, docs, chore, and the rest resolve to their own prefix. If `branch-lib.sh` is unreachable the dispatcher exits 2 rather than falling back to `feature/`: a plausible-looking wrong branch name is worse than a loud stop.
+`branch-name` derives the type from the issue title via `derive_type`, **sourced** from `skills/worktask/scripts/branch-lib.sh` — the same function worktask uses, never a second copy. `feature` is the default for titles that read as new work; a title starting with "Build" derives `feat` (`"Build multiplatform leaderboard"` → `feat/7-build-multiplatform-leaderboard`); defect, refactor, docs, chore, and the rest resolve to their own prefix. If `branch-lib.sh` is unreachable the dispatcher exits 2 rather than falling back to `feature/`: a plausible-looking wrong branch name is worse than a loud stop.
 
 #### Where each constant is canonical
 

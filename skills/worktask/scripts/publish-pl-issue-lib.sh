@@ -134,6 +134,30 @@ sanitise_body() {
   ' | corpflow_path_scrub
 }
 
+# ---------- title-cap helpers ------------------------------------------------
+# Caps each line at $1 codepoints including the `…`, cut on the last whitespace
+# boundary with trailing `,;:-` trimmed; no boundary hard-cuts to $1-1. jq, not
+# `cut -c`, because it counts codepoints; `+` quantifiers only for jq 1.6.
+title_cap_word_boundary() {
+  local limit="$1"
+  jq -Rr --argjson n "$limit" '
+    def wb_cap($n):
+      if length <= $n then .
+      else
+        (.[0:$n] | sub("[^[:space:]]+$"; "") | sub("[[:space:],;:-]+$"; "")) as $w
+        | if ($w | length) > 0 then $w + "…" else .[0:$n-1] + "…" end
+      end;
+    wb_cap($n)
+  '
+}
+
+# Reproduces the pre-word-boundary title cut byte-for-byte (`cut -c1-100`), so
+# resolve_context_issue_search can still probe for an issue published under the
+# old scheme. The mid-word cut is the point here, not a bug to fix.
+title_legacy_cut() {
+  head -1 | cut -c1-100 | sanitise_body | tr -d '\n'
+}
+
 # ---------- plan extraction -------------------------------------------------
 extract_anchor() {
   # $1=plan_file, $2=anchor name (without ##); returns anchor body lines.
@@ -336,8 +360,17 @@ resolve_context_issue_local() {
 # (case-insensitive, trimmed). Accepts a single hit only — an ambiguous / multi-hit
 # result is ignored so an unrelated same-worded issue never captures a fresh context.
 # Needs $TITLE, so it runs AFTER the title is built. Sets RESOLVED_ISSUE_* on hit.
+# Falls back to $TITLE_LEGACY (the pre-word-boundary cut, same ticket-prefix applied)
+# when it differs, so an issue published under the old fixed-100 title is still found.
 resolve_context_issue_search() {
-  resolve_context_issue_search_for "$TITLE"
+  resolve_context_issue_search_for "$TITLE" && return 0
+  local legacy="${TITLE_LEGACY:-}"
+  [ -n "$legacy" ] || return 1
+  local t_lc l_lc
+  t_lc=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]')
+  l_lc=$(printf '%s' "$legacy" | tr '[:upper:]' '[:lower:]')
+  [ "$t_lc" != "$l_lc" ] || return 1
+  resolve_context_issue_search_for "$legacy"
 }
 
 resolve_context_issue_search_for() {
