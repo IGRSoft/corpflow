@@ -11,11 +11,11 @@ related:
 
 # Cost Optimization
 
-Model right-sizing, token discipline, per-stage tracking, budget gates. Per-stage baselines, CC context-efficiency knobs and caps, and ethics cost budgeting: `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
+Model right-sizing, token discipline, per-stage tracking, budget gates. Per-stage budgets and typical token ranges: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md § Stage Budget Table`. CC context-efficiency knobs and caps, and ethics cost budgeting: `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
 
 ## Model Cost Tiers & Selection Matrix
 
-Canonical tables: `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Matrix by Task Type). Two settings pay for themselves: explicit `effort: medium` on cost-sensitive stages (QA, DC, RE) — non-Pro plans default to `high` — and `ENABLE_PROMPT_CACHING_1H=1` when stages outlast the 5-minute default cache TTL.
+Canonical tables: `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Criteria); a worktask stage's model and effort are its row in `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`. Two settings pay for themselves: explicit `effort: medium` on cost-sensitive stages (QA, DC, RE) — non-Pro plans default to `high` — and `ENABLE_PROMPT_CACHING_1H=1` when stages outlast the 5-minute default cache TTL.
 
 ## Per-Effort Thinking-Budget Ceilings
 
@@ -37,7 +37,7 @@ Effort (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) maps to a t
 
 ### 1. Model Right-Sizing
 
-Cheapest model that can do the task (mapping: `../shared/model-selection.md § Selection Matrix by Task Type`). Moving procedural work — status checks, formatting, simple validation — off sonnet saves ~30% on those stages; reserve opus for architecture-grade reasoning.
+Cheapest model that can do the task (mapping: `../shared/model-selection.md § Selection Criteria`; worktask stages take theirs from `../shared/stage-codes.md`). Moving procedural work — status checks, formatting, simple validation — off sonnet saves ~30% on those stages; reserve opus for architecture-grade reasoning.
 
 ### 2. Context Compression
 

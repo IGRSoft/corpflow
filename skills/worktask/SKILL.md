@@ -381,14 +381,14 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
-Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses, and it is why section [3] carries one even though nothing compares [3]. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. The orchestrator copies these blocks, never composes them.
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. The orchestrator copies these blocks, never composes them.
 
 #### Preamble layout (binding)
 
 ```
-[1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
+[1] Contract reminder (references/contract-reminder.md) ← stable across ALL stages (cacheable)
 [2] Worktask header (id, plan, exploration)← stable across ALL stages (cacheable)
-[3] state.json blob (inlined JSON)         ← evolves per stage
+[3] Ledger pointer + readiness digest (from ledger-digest.sh) ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 [4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
@@ -397,14 +397,15 @@ Each section opens with its own `<<<marker>>>` line and runs to the next marker 
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
-#### Step 0 (NEW) — Read state.json before each delegation
+#### Step 0 — compose section [3] via ledger-digest.sh before each delegation
 
 ```typescript
-const stateRaw = fs.existsSync(".context/state.json")
-  ? fs.readFileSync(".context/state.json", "utf8")
-  : null;
-// stateRaw goes inline into preamble section [3] as a fenced JSON code block.
-// The ledger is mandatory: a null here is a hard failure, not a degraded mode.
+// Section [3] body: the ledger pointer plus readiness digest, grammar in
+// references/handoff-protocol.md#cache-prefix. The script is the only composer, so [3]
+// cannot drift from the lint that checks it.
+const digest = execFileSync("bash", ["skills/worktask/scripts/ledger-digest.sh",
+                                     "--state", ".context/state.json"], { encoding: "utf8" });
+// Exit 3 means the ledger is missing or unparseable: a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -456,7 +457,7 @@ below.
 
 > "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
 
-###### Dispatch-tracking helpers (steps 6a/6.5 — write only cache section [3])
+###### Dispatch-tracking helpers (steps 6a/6.5 — ledger writes; [3] only points at the ledger)
 
 ```typescript
 // markDispatchStatus — dispatched_agents[] with the task_id entry flipped to `status`,
@@ -1151,7 +1152,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     // 6a. dispatched_agents[] — one entry per task_id; writer = orchestrator ONLY, through
     //     `state-patch.sh --dispatch <TASK_ID> <agent_id> <status>` (upserts by task_id, clamps
     //     the array). status:"launched" now, flipped to completed/failed by Step 6.5. Read by
-    //     resume.md step 0. Cache section [3]. The dispatched agent claims its own row with
+    //     resume.md step 0. Ledger only; [3] digests it. The dispatched agent claims its own row with
     //     `state-patch.sh --claim <TASK_ID>` (agents/developer.md § D0.0b), never the orchestrator.
     if (fs.existsSync(".context/state.json")) {
       if (launchAck?.agent_id) {
@@ -1673,7 +1674,8 @@ const rowMatchesHandoff = (row, h) =>
     //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
     //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
-    //      either way, and never swap in a higher-frontmatter agent to make the tier real.
+    //      either way. In-process the row records effort_resolved "requested, not applied"
+    //      until upstream U7 lands. Never swap in a higher-frontmatter agent to make it real.
 ```
 
 ##### Step 6.6b — render the remainder
@@ -1955,7 +1957,7 @@ function loopBackToDV(ledger, gateId, gateRow) {
 
 ##### Title and Summary resolution — invariants
 
-`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. The `head -1 | cut -c1-100 | sanitise_body` pipeline applies at every rank, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, so changing title generation orphans issues published under an older title scheme.
+`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. At every rank the title is reduced to its first line, sanitised, then capped at 100 characters on the last word boundary with `…` counted inside the budget, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, and also probes the legacy fixed-100 title when it differs, so an issue published under the older scheme is still recovered rather than duplicated.
 
 #### External-ticket extraction
 

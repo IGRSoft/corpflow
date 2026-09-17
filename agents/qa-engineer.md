@@ -164,6 +164,7 @@ Gate open → compare during Q1, after functional testing, per `skills/worktask/
 ### Output Budget (QA)
 
 Artifact ≤250 lines, H2 set per § Artifact anchors: `§ Notes` and `§ Selected Tests (QA additions)` are H3s under `## results`. Failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok. Progressive loading and compression per `skills/context-compression/SKILL.md`.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, QA row.
 
 ### Visual Evidence (artifact section in testing-N.md)
 

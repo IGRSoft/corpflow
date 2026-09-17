@@ -605,6 +605,7 @@ When threshold met, PL0: (1) seed an `ET0` ethics-review task *before* AR0 with 
 ### Output Budget (PL)
 
 The plan is WRITTEN to `planning-N.md` (≤350 lines, tiered detail), never emitted in the final chat text. Final return ≤250 tok.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, PL row.
 
 ## Scope-Term Disambiguation
 

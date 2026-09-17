@@ -110,6 +110,7 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 - Write `complete-summary-N.md` (including the Stage Timings recap) and `release.md`.
 - **Output budget**: `complete-summary-N.md` ≤200 lines — tables over prose, link anchors not
   pasted bodies. Final return ≤200 tokens.
+  Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, FN row.
 
 #### Pre-commit scope check (build-tool churn)
 

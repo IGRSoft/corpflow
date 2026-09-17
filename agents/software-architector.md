@@ -195,6 +195,7 @@ review earns its cost.
 ### Output Budget (AR)
 
 Artifact ≤250 lines; no full-file listings — pass anchors, not pasted bodies. Final return ≤250 tok.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, AR row.
 
 ## Dispatch Injection (BINDING)
 

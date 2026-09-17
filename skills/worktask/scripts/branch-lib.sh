@@ -31,9 +31,10 @@ fi
 # Newline-delimited, NOT an array and NOT `readonly`: a second `readonly` assignment
 # is rc 1 and kills a `set -e` caller (this file's own bats source it twice), and a
 # space-delimited list yields one token under a caller's `IFS=$'\n\t'`. Accept list
-# (13) is deliberately wider than what derive_type ever emits (11): `feat` and `style`
-# are accepted so an existing short-form/style branch is never churned, but neither is
-# ever generated. `fix` is intentionally absent — removed cleanly, not kept as a
+# (13) is deliberately wider than what derive_type ever emits (12): `style` is
+# accepted but never generated; `feat` is emitted only for a leading "build" verb
+# and otherwise accepted so an existing short-form branch is never churned.
+# `fix` is intentionally absent — removed cleanly, not kept as a
 # compatibility token — so a pre-existing `fix/<slug>` branch reads as non-conventional
 # and gets renamed onto the derived `bugfix/`/`hotfix/` target. Canonical prose:
 # skills/shared/git-conventions.md § Branch Naming.
@@ -111,8 +112,8 @@ resolve_goal() {
 
 # ---------- Pure derivation (no state, no git) ----------
 # Conventional-commit type from a free-text goal. Unmatched goals fall back to
-# `feature` — the long form is now the canonical generated default (Q3); `feat` is
-# never emitted, only accepted for pre-existing short-form branches.
+# `feature` — the long form is the canonical generated default. A title whose
+# first word is "build" emits the short form `feat` instead.
 derive_type() {
   local g t="feature"
   g=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
@@ -134,6 +135,9 @@ derive_type() {
     *docs* | *document*) t="docs" ;;
     *test* | *coverage*) t="test" ;;
     *ci\ * | *pipeline*) t="ci" ;;
+    # Leading verb "build" names new work; "build" anywhere else (build-time,
+    # build:, builds, rebuild) still names the build system, below.
+    build | build[[:space:]]*) t="feat" ;;
     *build* | *packaging*) t="build" ;;
     *chore* | *bump* | *dependency*) t="chore" ;;
     *) t="feature" ;;

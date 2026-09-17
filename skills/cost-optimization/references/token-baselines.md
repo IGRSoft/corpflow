@@ -2,18 +2,7 @@
 
 ## Per-Stage Token Baselines
 
-Typical usage per worktask stage on sonnet; stage codes per `skills/shared/stage-codes.md`.
-
-| Stage | Typical Range | Estimated Cost |
-|-------|---------------|----------------|
-| PL | 5,000-10,000 | $0.015-0.03 |
-| AR | 10,000-20,000 | $0.03-0.06 |
-| TL | 3,000-5,000 | $0.01-0.015 |
-| DV | 20,000-50,000 | $0.06-0.15 |
-| QA | 10,000-20,000 | $0.03-0.06 |
-| DC | 5,000-10,000 | $0.015-0.03 |
-| FN | 3,000-5,000 | $0.01-0.015 |
-| ST | 2,000-3,000 | $0.006-0.01 |
+Per-stage typical token ranges are the **Typical tokens** column of `skills/context-compression/SKILL.md § Stage Budget Table`; price a row with the tier rate in `skills/shared/model-selection.md § Cost Tiers`.
 
 **Total Worktask Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet).
 
