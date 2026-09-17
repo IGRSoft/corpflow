@@ -356,3 +356,70 @@ lib_only() {  # lib_only <snippet> — run a snippet with the helper library loa
   assert_line --index 1 '{"a":1}'
   assert_line --index 2 --regexp '^ *0$'
 }
+
+# ---------------------------------------------------------------------------
+# title_cap_word_boundary — the live title cap trims to a whole-word
+# prefix within the limit rather than the old mid-word cut.
+# ---------------------------------------------------------------------------
+@test "title word boundary: spaced title over 100 ends on a whole word plus ellipsis" {
+  local input="" expected="" i
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do input="${input}abcdefghi "; done
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ "$i" = 1 ]; then expected="abcdefghi"; else expected="$expected abcdefghi"; fi
+  done
+  expected="${expected}…"
+  lib_only "printf '%s' '$input' | title_cap_word_boundary 100"
+  assert_success
+  assert_equal "$output" "$expected"
+}
+
+@test "title word boundary: no-whitespace title over 100 hard-cuts to 99 plus ellipsis" {
+  local input expected
+  input="$(head -c 120 /dev/zero | tr '\0' 'x')"
+  expected="$(head -c 99 /dev/zero | tr '\0' 'x')…"
+  lib_only "printf '%s' '$input' | title_cap_word_boundary 100"
+  assert_success
+  assert_equal "$output" "$expected"
+}
+
+@test "title word boundary: title of 100 or fewer is unchanged" {
+  local input="Short title well under the one hundred character cap"
+  lib_only "printf '%s' '$input' | title_cap_word_boundary 100"
+  assert_success
+  assert_equal "$output" "$input"
+}
+
+@test "title word boundary: trailing punctuation trimmed before ellipsis" {
+  lib_only "printf '%s' 'hello, world again' | title_cap_word_boundary 12"
+  assert_success
+  assert_equal "$output" "hello…"
+}
+
+@test "title word boundary: legacy fixed-100 title is matched by recovery search" {
+  cd "$WD"
+  local raw="" i
+  for i in 1 2 3 4 5 6 7 8 9 10; do raw="${raw}abcdefghij "; done
+  printf '%s' "$raw" > "$WD/raw.txt"
+
+  cat > "$WD/legacy.sh" <<EOS
+PUBLISH_LIB_ONLY=1 . '$PLUGIN_ROOT/$SCRIPT' > /dev/null 2>&1
+title_legacy_cut < '$WD/raw.txt'
+EOS
+  run bash "$WD/legacy.sh"
+  assert_success
+  local legacy="$output"
+
+  mock_gh --default-exit 0 \
+    --route "issue list=0:[{\"number\":9,\"title\":\"$legacy\",\"url\":\"https://github.com/o/r/issues/9\"}]"
+
+  cat > "$WD/probe.sh" <<EOS
+PUBLISH_LIB_ONLY=1 . '$PLUGIN_ROOT/$SCRIPT' > /dev/null 2>&1
+TITLE=\$(head -1 '$WD/raw.txt' | sanitise_body | tr -d '\n' | title_cap_word_boundary 100)
+TITLE_LEGACY=\$(title_legacy_cut < '$WD/raw.txt')
+GH_ISSUE_SEARCH=1 DRY_RUN=0 GH_BIN=gh PATH="\$STUB_PATH" resolve_context_issue_search
+printf 'rc=%s number=%s' \$? "\$RESOLVED_ISSUE_NUMBER"
+EOS
+  run bash "$WD/probe.sh"
+  assert_success
+  assert_output --partial 'rc=0 number=9'
+}
