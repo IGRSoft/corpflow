@@ -21,7 +21,7 @@ factor scores); the script does the arithmetic.
 ### Invocation
 
 ```
-python3 skills/estimation-methodology/scripts/estimate-calc.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py \
   --size <XS|S|M|L|XL> [--level <junior|mid|senior|expert>] [--multiplier <h>] \
   [--rate <hourly>] \
   [--factors <f1> <f2> <f3> <f4> <f5>] \

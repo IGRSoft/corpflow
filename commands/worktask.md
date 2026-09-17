@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh":*), Bash(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh":*), Bash(bash skills/worktask/scripts/workspace-root-banner.sh:*)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -148,7 +148,7 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
    already-`completed` dependents, marked *these may now be stale* (warn only — never auto-reset);
    a plan-unapproved warning when no `approval_received` row exists for `PL<run_index>`; and under
    `--cascade` the member list plus the skipped FN/RE members. There is no bypass flag.
-3. Run `bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-replay <ID> [--cascade]`.
+3. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-replay <ID> [--cascade]`.
 
 ### Phase 0 — procedure, steps 4–6
 
@@ -216,13 +216,11 @@ PF_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-preflight.XXXXXX")
 set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,platform] or none>"
 [ -n "$ACCEPT_ABSENT" ] && set -- "$@" --accept-absent "$ACCEPT_ABSENT"
 pf_rc=0
-bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@" > "$PF_BUF" || pf_rc=$?
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@" > "$PF_BUF" || pf_rc=$?
 echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
 if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
 else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
 ```
-
-`$PLUGIN_ROOT` comes from § Snippet preamble below.
 
 #### Step 2a-pre — the exit code decides
 
@@ -254,7 +252,11 @@ is still preventable. Append `--no-gh-issue` to the invocation when that flag wa
 `--auto` contains `plan`, nobody is there to answer the gate: run § Step 2a — unattended instead of
 the snippet and gate below.
 
-#### Snippet preamble (every snippet in this file)
+#### Snippet preamble (snippets that reference an ungranted plugin file)
+
+A script granted in `allowed-tools:` is never reached through this variable: it runs as the exact
+text its grant matches, such as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`
+(`skills/shared/plugin-root-resolution.md § Granted-script invocation shape`).
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
@@ -264,9 +266,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve 
 #### Step 2a snippet — invoke the scan, non-blocking
 
 ```bash
-SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
-scan_out=""
-if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
+# A missing script exits 127; `|| true` turns that into "no candidates", as for any scan failure.
+scan_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh --goal "<task description>") || true
 scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
 ```
 
@@ -299,8 +300,7 @@ that issue instead of opening a second one.
 
 ```bash
 SCAN_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-issue-scan.XXXXXX")
-SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
-if [ -f "$SCAN" ]; then bash "$SCAN" --goal "<task description>" < /dev/null > "$SCAN_BUF" || true; fi
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh --goal "<task description>" < /dev/null > "$SCAN_BUF" || true
 echo "SCAN_BUF=$SCAN_BUF"; grep -E '^(result|reason|candidates)=' "$SCAN_BUF"
 ```
 
@@ -336,7 +336,7 @@ taken, and the exact-title auto-bind in `publish-pl-issue.sh` still applies. Kee
 ### Steps 3–3a — Context folders and state.json seed
 
 3. `mkdir -p .context/designs .context/images .context/errors .context/logs`
-3a. Seed `.context/state.json` by running `skills/worktask/scripts/seed-state.sh`, the seed's only
+3a. Seed `.context/state.json` by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh`, the seed's only
 definition: next free planning index, `facts.goal` escaped and capped at 240 chars, the
 unconditional `metadata.workspace_path` (`initialization-patterns.md § Seeded workspace_path`), and
 the atomic write. It resolves `.context/` inside this worktree only, never from cwd. Resulting
@@ -349,11 +349,11 @@ set -- --worktask-id "<slug>" --goal "<task description; the issue title under /
 PLATFORM="<the --platform value, verbatim; empty when not given>"
 [ -n "$PLATFORM" ] && set -- "$@" --platform "$PLATFORM"
 seed_rc=0
-seed_out=$(bash "$PLUGIN_ROOT/skills/worktask/scripts/seed-state.sh" "$@") || seed_rc=$?
+seed_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh "$@") || seed_rc=$?
 printf '%s\nseed_rc=%s\n' "$seed_out" "$seed_rc"
 if [ "$seed_rc" -eq 3 ]; then
   seed_state=$(printf '%s\n' "$seed_out" | sed -n 's/^state=//p')
-  bash skills/worktask/scripts/state-patch.sh --state "$seed_state" --task-status PL0 in_progress
+  bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --state "$seed_state" --task-status PL0 in_progress
 fi
 ```
 
@@ -390,7 +390,7 @@ PF_BUF="<path Step 2a-pre printed>"; SCAN_BUF="<path Step 2a printed, or empty>"
 set -- --record "$PF_BUF" --context .context
 [ -n "$SCAN_BUF" ] && set -- "$@" --candidates "$SCAN_BUF"
 rec_rc=0
-rec_out=$(bash "$PLUGIN_ROOT/skills/worktask/scripts/autonomy-preflight.sh" "$@") || rec_rc=$?
+rec_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@") || rec_rc=$?
 printf '%s\nrec_rc=%s\n' "$rec_out" "$rec_rc"
 ```
 
@@ -451,7 +451,7 @@ state.json when agents skip self-patching (`initialization-patterns.md#hook-inst
 
 3c. **UNCONDITIONAL**, on every worktask with no precondition (Conductor workspaces and manual
 `git checkout -b` branches included): after the seed and before Step 4, run
-`bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the ONLY
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the ONLY
 place a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch
 Naming`); the *planned* ledger name may be refined once more without git mutation (§ Step A.4b).
 Every outcome exits 0 — a naming problem must never stop planning — and the step self-disables
@@ -477,7 +477,8 @@ it is still free to change.
 #### Step 3c — who decides conventionality (BINDING)
 
 > Never judge conventionality by eye. The sole authority is `branch_is_conventional()` from
-> `skills/worktask/scripts/branch-lib.sh`, reachable as `branch-name.sh --check "<name>"`
+> `skills/worktask/scripts/branch-lib.sh`, reachable as
+> `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "<name>"`
 > (0 = conventional, 1 = not, 2 = internal fault). "This looks like a real branch name, skip" is how
 > `fix/catalog-image-blinking` reached `facts.branch` after `fix` left `BRANCH_TYPES`.
 
@@ -507,7 +508,7 @@ the predicate, so an empty stamp is the honest "no planned name" outcome (FN pus
    ```bash
    # A TITLE (≤60 chars), never the raw task description — the 48-char slug budget
    # drops the overflow silently.
-   out=$(bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
+   out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
    local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
    target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
    truncated=$(printf '%s\n' "$out" | sed -n 's/^slug_truncated=//p' | tail -n 1)
@@ -515,7 +516,7 @@ the predicate, so an empty stamp is the honest "no planned name" outcome (FN pus
    # target_branch wins whenever the local name is unusable as a PR head; falling back
    # to the local name here is what shipped a `<city>-v<n>` branch as a PR head.
    stamp="$local_branch"
-   if [ -z "$stamp" ] || ! bash skills/worktask/scripts/branch-name.sh --check "$stamp"; then
+   if [ -z "$stamp" ] || ! bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "$stamp"; then
      [ -n "$target" ] && stamp="$target"
    fi
    ```
@@ -528,7 +529,7 @@ re-invoke in **rename mode** (that writes a second audit row). `BRANCH_NAME_PRIN
 
    ```bash
    stamped=$(jq -r '.facts.branch // ""' .context/state.json)
-   if [ -n "$stamped" ] && ! bash skills/worktask/scripts/branch-name.sh --check "$stamped"; then
+   if [ -n "$stamped" ] && ! bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "$stamped"; then
      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg a "$stamped" --arg d "$target" \
        '{ts:$ts, actor:"orchestrator", action:"branch_convention_check", subject:"PL0",
          result:"warn", metadata:{actual:$a, derived_target:$d}}' \
@@ -570,7 +571,7 @@ there is a **bug report**: a conventional target existed and something stamped p
 
 4. The Step 3a seed already created `tasks.PL0`, so this step MERGES metadata rather than creating
 the task — `--task-create` would hit the create op's idempotent early-exit and drop the payload
-silently. `state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
+silently. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
 — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
 
 #### Step 4 — workspace_path stamping
@@ -600,7 +601,7 @@ Batching`) and Step A.4.
 
 ### Steps 5–8 — Dispatch PL, then present the plan
 
-5. **PL0 → in_progress**: `state-patch.sh --task-status PL0 in_progress`
+5. **PL0 → in_progress**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 in_progress`
 6. **Delegate**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
    — PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
    glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
@@ -608,7 +609,7 @@ Batching`) and Step A.4.
    `plan_file`/`run_index` are provisional — PM recomputes and is authoritative. Glob+increment
    applies to a **new run** only: a plan-gate revision reuses the frozen index (§ Plan-revision
    re-dispatch).
-7. **PL0 → completed**: `state-patch.sh --task-status PL0 completed`
+7. **PL0 → completed**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 completed`
 8. **Present the plan summary** (contents per § Plan gate checkpoint path), then continue to Phase 2.
 
 #### Step 6 — record dropped and added stages
@@ -745,15 +746,14 @@ rule`). Placed here so the Step A.5 summary carries the final name before anythi
 
 #### Step A.4b snippet — invoke the helper, non-blocking
 
-    # $PLUGIN_ROOT per § Snippet preamble
-    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/refine-branch-target.sh"
-    ref_out=""; if [ -f "$HELPER" ]; then ref_out=$(bash "$HELPER") || true; fi
+    # A missing helper exits 127 with empty output, which reads as "no refinement".
+    ref_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh) || true
     ledger_branch=$(printf '%s\n' "$ref_out" | sed -n 's/^ledger_branch=//p' | tail -n 1)
 
 #### Step A.4b invariants
 
 - The trailing `|| true` is mandatory — non-blocking by contract, like the Step A publish helper. A
-  helper failure does not fail the worktask.
+  helper failure, a missing helper (exit 127) included, does not fail the worktask.
 - **Self-guarding**: it scans `audit.jsonl` for a prior successful `branch_target_refined` row at
   this run index, so a duplicate invocation after a resume is a `noop`, never a second refinement.
 - Exactly one audit row per invocation **whenever `jq` is available**; the `jq_unavailable` arm alone
@@ -848,7 +848,7 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
-4. **On approval**, first stamp the carrier: `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`.
+4. **On approval**, first stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`.
    The stamp precedes the row by contract — a crash between them leaves state approving with no row,
    and the resume path re-prompts a human; the reverse order resumes into the stage loop with the
    carrier unset, which is the block this stamp exists to prevent. Then append one line to
@@ -896,39 +896,38 @@ Step A still runs exactly once per run (the issue is published after the *approv
 #### Plan gate bypass path
 
 **If `plan_gate == "bypass"` AND Step A.4 left no unresolved `escalate` items**: stamp
-`state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No
 prompt, no approval line, no audit row — the requested bypass carrier IS the approval, and without
 the stamp every stage agent blocks. The guard is a precondition: stamping ahead of the stop lets a
 crash resume into the stage loop with escalation-class questions unanswered and the check passing.
 
 Exception: unresolved `escalate` items force a `checkpoint`-style stop first (§ Escalation guard).
-Once answered, stamp `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
+Once answered, stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
 standard `approval_received subject:"PL<N>"` row (required as the escalate resolution), then resume
 at Step A — NOT at the arm above, which this run can no longer reach: re-entering it would overwrite
 a real human approval with `auto`. Stamp before row, as in the approval arm.
 
 ### Step A — Publish plan to GitHub (run BEFORE the stage loop)
 
-    # $PLUGIN_ROOT per § Snippet preamble
-    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
+    pub_rc=0
+    bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
 
-#### Step A snippet — continued: invoke helper, or audit a deferred row
+#### Step A snippet — continued: audit a deferred row when the helper is missing
 
-    if [ -f "$HELPER" ]; then
-      bash "$HELPER"; true
-    else
+    # Exit 127 means bash found no helper at that path; the helper audits every other outcome itself.
+    if [ "$pub_rc" -eq 127 ]; then
       LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
       mkdir -p "$LOG_DIR"
       STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
       jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
         '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
         >> "$LOG_DIR/audit.jsonl"; true
-    fi
+    fi; true
 
 #### Step A publish invariants
 
-- The trailing `; true` is mandatory — non-blocking by contract. A helper failure does not fail the
-  worktask.
+- The `|| pub_rc=$?` capture and the trailing `; true` are mandatory — non-blocking by contract. A
+  helper failure does not fail the worktask.
 - The helper self-skips (`--no-gh-issue`; megatask per-issue mode, detected via `workspace.json` /
   `metadata.milestone`; already published; missing `gh`/auth/remote) — each exits 0 and audits a
   `deferred` row. Sanitiser rules: `skills/worktask/SKILL.md § PL Issue Publish`.
@@ -973,14 +972,15 @@ fi
 
 ##### Banner injection
 
-The orchestrator MUST also append the task's `WORKSPACE_ROOT=` line as the first line of every stage
-prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to
-target. The value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root —
-never the ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
+The task's `WORKSPACE_ROOT=` line opens section [7] of every stage prompt (the suffix, per the
+cache-prefix spec) so the subagent knows which directory to target. It arrives through the composer,
+which emits `workspace-root-banner.sh`'s stdout as [7]'s first line; do not append it again. The
+value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root — never the
+ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
 
 ```bash
-bash skills/worktask/scripts/workspace-root-banner.sh --task "<TASK_ID>" --orch-root "$_orch_root"
-# stdout is the banner line verbatim; exit 2 (unknown task id) means do not call Task()
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh "<TASK_ID>" --orch-root "$_orch_root"
+# stdout is the whole brief, [7] opening with the banner line; exit 1 or 2 means do not call Task()
 ```
 
 Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
@@ -1022,7 +1022,7 @@ STRICT_FLAG=""
 DEV_ARTIFACT=$(jq -r --arg id "$TASK_ID" \
   '.tasks[$id] | .artifact // .metadata.artifact // empty' .context/state.json)
 # shellcheck disable=SC2086
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$DEV_ARTIFACT" \
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$DEV_ARTIFACT" \
   --state .context/state.json $STRICT_FLAG $LEGACY_TE_FLAG
 ```
 
@@ -1071,7 +1071,7 @@ step 6.5) and before § Step C.0 renders its blocking items or the next stage is
 ```bash
 ART=$(jq -r --arg id "<CODE><N>" '.tasks[$id].artifact // empty' .context/state.json)
 # shellcheck disable=SC2086
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json \
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json \
   $LEGACY_TE_FLAG
 ```
 
@@ -1341,8 +1341,9 @@ the case it exists for. `handoff-harness.sh` checks parity against the same unio
 ###### Step C.1 — the decisions spill is a different reader
 
 `.context/decisions-<run_index>.jsonl` is **not** read here: this gate renders questions. It is no
-longer readerless, though — `state-patch.sh --read-decisions` returns `facts.decisions[] ∪ spill`
-under the same union rule, and that is the path for anything asking what this run decided. Reading
+longer readerless, though —
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --read-decisions` returns
+`facts.decisions[] ∪ spill` under the same union rule, and that is the path for anything asking what this run decided. Reading
 `facts.decisions[]` alone under-reports the moment one task records more than eight.
 
 ##### Step C.1 — the artifact fallback and its warning
@@ -1412,8 +1413,8 @@ than joining the resolver contract.
 
 ##### Step C.5 — the write-back is a whole stub
 
-The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class`, `ref` and
-`blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
+The write goes through `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts`
+as the **complete** item — `id`, `class`, `ref` and `blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
 union REPLACES the incumbent object for that id, so a partial item would drop the very anchor C.4
 resolves its question text from; `--facts` now rejects one by name rather than persisting it.
 
@@ -1535,7 +1536,7 @@ and the decision the user owes`. The ledger stays resumable either way: `/workta
 ### Output Format — unresolved decisions open the final message
 
 After FN, the final message opens with the stdout of
-`bash skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
 non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN wrote at the top of
 the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
 nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the

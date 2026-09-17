@@ -20,9 +20,11 @@
 #              re-probes the check with autonomy-preflight.sh in check mode and writes `probed`;
 #              a pass clears it and prints resume_block, anything else parks it as a user_action.
 #              user_decision: parks natively and writes `asked` (no fallback_from/owner_issue —
-#              the arm is landed). Every other kind parks as a user_action (fallback_from/
-#              owner_issue for a pending arm) and writes `requested`. Prints one JSON line
-#              {task_id, kind, arm, leg, source, parked, audit_row_written,
+#              the arm is landed). artifact: parks; a path the landing ladder admits that is
+#              already in its tree's landed set clears it and writes `landed`, anything else
+#              stays parked as a user_action. Every other kind parks as a user_action
+#              (fallback_from/owner_issue for a pending arm) and writes `requested`. Prints
+#              one JSON line {task_id, kind, arm, leg, source, parked, audit_row_written,
 #              [fallback_from, owner_issue], [decision_ref, resume_block]}.
 # @arg batch   Every blocked task whose blocked_on.kind is not permission. Interactive:
 #              {mode:"ask", needs, payloads:[{questions:[<=4]}]}. user_decision needs render
@@ -33,11 +35,15 @@
 # @arg resume  --claim, blocked_on set to null, one closing-leg row. For user_decision (--leg
 #              resumed): --decision-ref <ud-id>, else the newest valid unconsumed row
 #              ud_find_covering finds, verified before use; decision_ref is that ud- id and the
-#              resume instruction carries no answer text. For every other kind: decision_ref
+#              resume instruction carries no answer text. artifact accepts its own closing leg
+#              (`landed`) once the path is confirmed in its tree's landed set. Every other need
+#              resumes on the user_action closing leg with decision_ref
 #              blocked_on:<task_id>:<kind>:<n>. Prints {resume_block, cleared, audit_row_written}.
 #
 # @env BLOCKED_ON_PREFLIGHT  Script run for the host_environment re-probe (default: the sibling
 #                            autonomy-preflight.sh). A test seam, as GH_BIN is for the preflight.
+# @env BLOCKED_ON_LAND       Script run for the artifact landed check (default: the sibling
+#                            land-artifacts.sh). A test seam, as BLOCKED_ON_PREFLIGHT is above.
 #
 # @exitcode 0 success
 # @exitcode 1 route: an invalid need, one `fail:` line on stderr, nothing written; resume: the
@@ -51,6 +57,7 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 _BO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../../.." && pwd -P)"
 STATE_PATCH="$SCRIPT_DIR/state-patch.sh"
 PREFLIGHT="${BLOCKED_ON_PREFLIGHT:-$SCRIPT_DIR/autonomy-preflight.sh}"
+LAND="${BLOCKED_ON_LAND:-$SCRIPT_DIR/land-artifacts.sh}"
 
 die() {
   printf >&2 'blocked-on-dispatch: %s\n' "$2"
@@ -320,6 +327,31 @@ route_user_decision() {
   bo_route_out user_decision asked true "$written" "" "" "" null
 }
 
+# artifact_landed <blocked_on json> <task id> — 0 iff detail.path is already in the landed set
+# scoped to that task's tree. No tree (the task carries no workspace_path) is an empty landed
+# set: nothing can be landed nowhere. A LAND failure of any kind fails closed, same as no match.
+artifact_landed() {
+  local bo="$1" id="$2" tree path out
+  tree=$(jq -r --arg id "$id" '.tasks[$id].metadata.workspace_path // "" | if type == "string" then . else "" end' "$STATE_PATH")
+  [ -n "$tree" ] || return 1
+  path=$(printf '%s' "$bo" | jq -r '.detail.path // "" | tostring')
+  out=$(bash "$LAND" --list-landed --tree "$tree" --strict --state "$STATE_PATH" < /dev/null 2> /dev/null) || return 1
+  printf '%s\n' "$out" | grep -Fxq -- "$path"
+}
+
+# artifact_path_check <path> — 0 iff land-artifacts.sh's own lexical ladder admits the path. A
+# refused path can never be landed, so the landed set is never consulted for it: a stage-written
+# path reaches grep and the resume block only after the same ladder every landing passes.
+artifact_path_check() {
+  local rc=0
+  bash "$LAND" --check-path "$1" < /dev/null > /dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die 2 "plugin install broken — land-artifacts.sh --check-path failed" ;;
+  esac
+}
+
 route_host_environment() {
   local check platforms out result_json dr rb written=true
   local args=(--auto plan)
@@ -356,6 +388,28 @@ route_host_environment() {
   route_user_action host_environment true "$written"
 }
 
+# route_artifact — the landed arm. A path already in its tree's landed set clears the need on the
+# spot. A path landing can never produce (a stage file under .context/, or one the ladder refuses)
+# or a producer_task that is not a task id parks as the user_action fallback: the user, not the
+# landing, is the only one who can see it met.
+route_artifact() {
+  local producer path dr rb
+  producer=$(printf '%s' "$BO" | jq -r '.detail.producer_task | tostring')
+  path=$(printf '%s' "$BO" | jq -r '.detail.path | tostring')
+  bo_park "$BO"
+  if is_task_id "$producer" && artifact_path_check "$path" && artifact_landed "$BO" "$TASK_ARG"; then
+    ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+    ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+      || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+    dr=$(bo_next_ref artifact)
+    bo_row ok "$(bo_meta artifact artifact landed "" "" '{}' "$dr")"
+    rb=$(bo_resume_block "$BO" artifact landed "$dr" "$path")
+    bo_route_out artifact landed false "$BO_ROW_WRITTEN" "" "" "$dr" "$rb"
+    return 0
+  fi
+  route_user_action artifact true true
+}
+
 cmd_route() {
   local handoff norm
   is_task_id "$TASK_ARG" || die 2 "route needs --task-id <STAGE><N>"
@@ -377,6 +431,7 @@ cmd_route() {
   case "$BO_KIND" in
     permission) bo_route_out permission "" false false "" "" "" null ;;
     host_environment) route_host_environment ;;
+    artifact) route_artifact ;;
     user_action) route_user_action "" false true ;;
     user_decision) route_user_decision ;;
     *) route_user_action "$BO_KIND" false true ;;
@@ -581,12 +636,12 @@ cmd_resume_user_decision() {
   rb=$(jq -cn --arg id "$TASK_ARG" --arg dr "$dr" '
     {task_id: $id, kind: "user_decision", arm: "user_decision", leg: "resumed", decision_ref: $dr,
      resume_with: "decision_ref", do_not_rerun: true,
-     instruction: ("The user_decision need below, which stopped this stage, is resolved. Before continuing, confirm it: state-patch.sh --verify-decision " + $dr + " --task-id " + $id + ". Do not re-run any step that already completed.")}')
+     instruction: ("The user_decision need below, which stopped this stage, is resolved. Before continuing, confirm it: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --verify-decision " + $dr + " --task-id " + $id + ". Do not re-run any step that already completed.")}')
   jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
 }
 
 cmd_resume() {
-  local row closing ff="" oi="" head='{}' dr ap="" target rb
+  local row closing ff="" oi="" head='{}' dr ap="" target rb path
   is_task_id "$TASK_ARG" || die 2 "resume needs --task-id <STAGE><N>"
   [[ "$LEG_ARG" =~ ^[a-z_]+$ ]] || die 2 "resume needs --leg <leg>"
   resolve_state
@@ -595,12 +650,30 @@ cmd_resume() {
   if [ -z "$BO_KIND" ] || [ "$BO_KIND" = "permission" ] || ! blocked_on_arm "$BO_KIND" > /dev/null; then
     die 1 "tasks.$TASK_ARG is not parked on a non-permission blocked_on"
   fi
+
   if [ "$BO_KIND" = "user_decision" ]; then
     cmd_resume_user_decision
     return 0
   fi
-  # Every parked non-permission, non-user_decision need was parked by the user_action arm
-  # (native or fallback), so that arm's closing leg is the one resume accepts.
+
+  # The artifact arm resumes on its own native closing leg, verified against the same landed
+  # set route_artifact checks, before it ever falls through to the user_action closing leg below.
+  if [ "$BO_KIND" = "artifact" ] && [ "$LEG_ARG" = "$(bo_field "$(blocked_on_arm artifact)" 5)" ]; then
+    path=$(printf '%s' "$BO" | jq -r '.detail.path // "" | tostring')
+    artifact_path_check "$path" || die 1 "tasks.$TASK_ARG: detail.path is not a path landing can produce"
+    artifact_landed "$BO" "$TASK_ARG" || die 1 "tasks.$TASK_ARG: detail.path has not landed in its tree"
+    ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+    ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+      || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+    dr=$(bo_next_ref artifact)
+    bo_row ok "$(bo_meta artifact artifact landed "" "" '{}' "$dr")"
+    rb=$(bo_resume_block "$BO" artifact landed "$dr" "$path")
+    jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
+    return 0
+  fi
+
+  # Every other parked non-permission need was parked by the user_action arm (native or
+  # fallback), so that arm's closing leg is the one resume accepts.
   closing=$(bo_field "$(blocked_on_arm user_action)" 5)
   [ "$LEG_ARG" = "$closing" ] || die 1 "--leg $LEG_ARG is not the closing leg ($closing) of tasks.$TASK_ARG"
 

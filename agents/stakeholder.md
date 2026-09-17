@@ -9,7 +9,7 @@ maxTurns: 20
 # tools: Skill is REQUIRED — `## Step 4` makes the self-improvement retrospective
 # mandatory for every ST completion, and it has no non-Skill path. Without the grant
 # the step silently never runs and the failure-label dataset stays empty.
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write, Skill
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write, Skill
 hooks:
   Stop:
     - type: command
@@ -189,14 +189,14 @@ User consent: `stage-contracts.md § A user decision is accepted only from the l
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ST --prev FN` (`skills/worktask/scripts/`) to atomically patch `tasks.ST0` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev FN` to atomically patch `tasks.ST0` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage ST --prev FN --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev FN --facts '{
   "decisions": [{"id":"st1","summary":"≤160 chars","ref":"retrospective-0.md#decision"}],
   "open_questions": [{"id":"sw-ST0-1","class":"decision","ref":"retrospective-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```

@@ -172,7 +172,7 @@ emits a deny, so it cannot loosen a deny or ask from another hook, and it has no
 ## Verifier
 
 ```bash
-bash skills/worktask/scripts/state-patch.sh --verify-decision <ud-id> --task-id <ID> [--expect-answer <text>]
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --verify-decision <ud-id> --task-id <ID> [--expect-answer <text>]
 ```
 
 Read-only: no lock, no log, no audit row, no state write. It runs right after the root ladder,

@@ -34,7 +34,7 @@ _BLOCKED_ON_TABLE='user_decision|question,options|recommended,item|decision_ref|
 user_action|request,command|verify|decision_ref|requested,verified|verified|394|yes
 permission|tool,command,classifier_reason,allow_rule||decision_ref|denied,granted,resumed|resumed|393|yes
 peer_session|to,question|deadline|reply_ref|sent,delivered,answered,relayed,expired|relayed|405|no
-artifact|producer_task,path||artifact_path|landed|landed|399|no
+artifact|producer_task,path||artifact_path|landed|landed|399|yes
 correction|target_task,finding,evidence_ref,severity||artifact_path|opened,closed|closed|404|no
 host_environment|check,observed||decision_ref|probed|probed|390|yes'
 

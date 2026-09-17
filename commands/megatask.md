@@ -4,7 +4,7 @@ description: Orchestrate many worktasks across a GitHub milestone or an explicit
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/megatask/scripts/build-orchestrator.sh:*), Bash(bash skills/megatask/scripts/init-worktree.sh:*), Bash(bash skills/megatask/scripts/resolve-pbxproj-membership.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -31,7 +31,7 @@ Issues run in **topological + priority order** — never one whose blockers have
 mechanics: `skills/megatask/SKILL.md`.
 
 > **CRITICAL CONSTRAINTS**
-> - Orchestrator + per-issue state lives in `.context/state.json` `tasks{}`, written only via `state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
+> - Orchestrator + per-issue state lives in `.context/state.json` `tasks{}`, written only via `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
 > - On a dependency **cycle**, or when the ledger cannot be read or written: STOP and report. Never guess an order, never fall back to alternative planning.
 
 ## Usage

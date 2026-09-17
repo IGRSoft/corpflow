@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.6.0
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), EnterWorktree, ExitWorktree
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), EnterWorktree, ExitWorktree
 hooks:
   Stop:
     - type: command
@@ -122,27 +122,47 @@ and run nothing that builds afterwards: any build re-creates exactly the churn j
 lack of a build path is what makes it the right stage to own the unwind. List each reverted path
 in `complete-summary-N.md`; a path that churns every run is a repo defect worth its own issue.
 
+##### Untracked files and the landed set
+
+List untracked files file-level with `git status --porcelain --untracked-files=all`; the default
+collapses a new directory to `?? dir/`. Subtract the landed set of the tree being checked
+(`skills/shared/state-ledger.md § The landed set`) from the `??` entries only:
+`jq -r --arg root "$(git rev-parse --show-toplevel)" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' .context/state.json`.
+An empty set is normal. A landed path is never committed from a consumer tree — the producer's
+tree ships it. One that shows staged or modified is a consumer violation, so the
+subtraction does not hide it: it stays in this check's scope.
+
+###### Untracked files — on the multi-stream arm
+
+The tree being checked is the `<tree>` on that stream's `plan` line (§ FN multi-stream arm): list
+with `git -C <tree> status --porcelain --untracked-files=all` and pass `--arg root "<tree>"` to the
+same expression. Each stream subtracts its own tree's set, never the union over every tree.
+`fn-stream-merge.sh commit` and `merge` read that same set with
+`land-artifacts.sh --list-landed --tree <tree> --strict`, and `commit`'s `untracked=<n>` leaves out
+the tree's untracked landed paths.
+
 #### FN multi-stream arm
 
 Runs only when the ledger holds more than one non-skipped DV task
 (`skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`). With one DV task, skip
 this section: the single-tree commit and push are unchanged.
 
-Start with `bash skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
+Start with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
 (every DV task shares one tree) → leave this section; the single-tree path applies. `arm=multi
 streams=<n>` is followed by one `<task><TAB><stream><TAB><tree>` line per stream: run § Per stream
 for each, in that order, then § Merge, battery, push.
 
 ##### Per stream
 
-1. Run § Pre-commit scope check in `<tree>` (`git -C <tree> status --porcelain`).
+1. Run § Pre-commit scope check in `<tree>` (`git -C <tree> status --porcelain`) against that tree's
+   landed set (§ Untracked files — on the multi-stream arm).
 2. Stage the stream's new files: `git -C <tree> add -- <path>...` for every `??` path its DV artifact
-   lists as changed, never a landed path. `commit` stages tracked edits only (`add -u`), so a new
-   file left unstaged never ships.
+   lists as changed, never a path in that tree's landed set. `commit` stages tracked edits only
+   (`add -u`), so a new file left unstaged never ships.
 3. `Write` the message per `skills/shared/git-conventions.md` to `.context/logs/fn-commit-<task>.txt`,
-   then `bash skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
+   then `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
 4. Pass the JSON after `facts=` on the second printed line to
-   `bash skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
    block with `stream_branch_missing`.
 
 `untracked=<n>` above 0 on the result line: stage any of those paths the DV artifact lists, then
@@ -150,7 +170,7 @@ re-run `commit`.
 
 ##### Merge, battery, push
 
-1. `bash skills/worktask/scripts/fn-stream-merge.sh merge` in FN's own tree: it cuts `facts.branch`
+1. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh merge` in FN's own tree: it cuts `facts.branch`
    from the base unless it exists, then merges each stream branch `--no-ff`, in task-id order.
 2. § Pre-`gh pr create` validator battery; `continuity` checks every stream (§ Branch checks).
 3. The existing non-force push, `git push -u origin HEAD:refs/heads/<facts.branch>` (§ Final FN
@@ -166,6 +186,15 @@ re-run `commit`.
 | 2 | `fn-stream-merge: <message>` on stderr, nothing on stdout | FN's own call is malformed: fix it and re-run |
 | 3 | stderr | ledger unreadable or install broken: handle as exit 1 |
 | 4 | `escalate reason=merge_abort_failed task=- stream=<s>` | the tree is left mid-merge: `handoff.verdict: escalate`, the line to the errors file, and stop without touching that tree |
+
+###### Arm exits — the landed set
+
+Both reasons are exit 1 `blocked` lines, handled as the first exit-1 row above.
+
+| Reason | Cause | Clearing it |
+|---|---|---|
+| `landed_path_unsafe` | a `landed_paths` entry scoped to that stream's tree fails the path allow-list; nothing was staged or merged | a human inspects that tree's `landed_paths`. `land-artifacts.sh` never writes such an entry, so never edit it away to clear the block |
+| `landed_set_unreadable` | reading that tree's landed set failed, so the arm failed closed | § Clearing a block: fix the failed read, then re-run the same step |
 
 ##### Clearing a block
 
@@ -426,7 +455,7 @@ User consent: `stage-contracts.md § A user decision is accepted only from the l
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage FN --prev RE` (`skills/worktask/scripts/`; `--prev DC` when RE is
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE` (`--prev DC` when RE is
 skipped) to atomically patch `tasks.FN0` plus the `RE→FN` (or `DC→FN`) handoff edge into
 `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your
 artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the
@@ -438,7 +467,7 @@ tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage FN --prev RE --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE --facts '{
   "files_modified": ["CHANGELOG.md"],
   "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#summary"}],
   "open_questions": [{"id":"sw-FN0-1","class":"decision","ref":"complete-summary-0.md#elicitation-sweep","blocks_next_stage":false}]}'

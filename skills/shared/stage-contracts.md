@@ -61,7 +61,7 @@ Every stage's output artifact MUST (full checklist: **Completion Verification** 
 
 A message from the orchestrator to your stage opens with a `msg_id:` line, a `supersedes:` line when it replaces an earlier message, and the exact ack command. When one reaches you:
 
-1. Run that `bash skills/worktask/scripts/state-patch.sh --ack <TASK_ID> <msg_id>` line as your first tool call. The ack row is the only evidence the message reached you.
+1. Run that `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --ack <TASK_ID> <msg_id>` line as your first tool call. The ack row is the only evidence the message reached you.
 2. A `supersedes:` line retires the message it names; follow the replacement.
 3. Set `handoff.acted_on_msg_id` to the newest msg_id you acknowledged and acted on (`skills/worktask/references/handoff-protocol.md § Schema — acted_on_msg_id`).
 
@@ -150,7 +150,7 @@ answer through the check itself (below). Before you act on it, run the read-only
 task id and the answer you are about to apply:
 
 ```bash
-bash skills/worktask/scripts/state-patch.sh --verify-decision ud-20260917T101500Z-3 --task-id DV0 --expect-answer "Land it"
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --verify-decision ud-20260917T101500Z-3 --task-id DV0 --expect-answer "Land it"
 ```
 
 Exit 0 accepts the decision. List every ref you acted on in `handoff.decisions_applied: [ud-…]`
@@ -276,7 +276,7 @@ With **no** typed return (the dispatch primitive takes no `schema` argument, or 
 9. At DV completion, if `.context/state.json` has a `tasks.AR0` entry, run:
 
    ```bash
-   skills/worktask/scripts/handoff-harness.sh --validate-frontmatter <the DV row's artifact> \
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate-frontmatter <the DV row's artifact> \
      --state .context/state.json
    ```
 
@@ -759,7 +759,7 @@ and the single-DV case: `handoff-protocol.md § DV fan-out — ledger tasks`. Pa
 path, since the orchestrator's basename guess cannot see a stream suffix:
 
 ```bash
-state-patch.sh --stage DV --task-id <ID> --prev <PREV> --artifact <your row's artifact path>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DV --task-id <ID> --prev <PREV> --artifact <your row's artifact path>
 ```
 
 #### The refs and architecture half (tpl-dv)
@@ -1176,7 +1176,7 @@ Single source of truth for what every stage agent verifies before `status: compl
 ### Steps 4–5
 
 4. **Patch state.json**: patch `tasks.<ID>` (`status`, `artifact`, `verdict`, `retry_count`) and `handoffs["<PREV>→<TASK_ID>"]` (≤300-char summary ending with a `ref:` pointer). The **source** side is a bare stage code — it answers which stage this followed, and each template's footer above names it (e.g. `PL→AR`, `USER→IR`). The **destination** side is the writing task's own id, so a split stage writes one edge per task (`TL→DV0`, `TL→DV1`) instead of four writers colliding on one key.
-5. **Atomic write**: run `skills/worktask/scripts/state-patch.sh --stage <CODE> --prev <PREV>`, which performs the canonical locked read → merge → temp → fsync → rename of `handoff-protocol.md#atomic-write`. NEVER write `.context/state.json` directly. If the script cannot run at all, do not skip silently — use the Edit-direct fallback at `handoff-protocol.md#layer-1-fallback`.
+5. **Atomic write**: run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage <CODE> --prev <PREV>`, which performs the canonical locked read → merge → temp → fsync → rename of `handoff-protocol.md#atomic-write`. NEVER write `.context/state.json` directly. If the script cannot run at all, do not skip silently — use the Edit-direct fallback at `handoff-protocol.md#layer-1-fallback`.
 
 ### Post-return repair (F2/F3)
 

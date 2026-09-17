@@ -116,6 +116,51 @@ setup() {
   [[ "$output" == *"not yet"* ]]
 }
 
+
+# --- dataset resolution (plugin-data-lib.sh) --------------------------
+# label-stats.sh is read-only, but the resolver mkdirs unconditionally on the
+# plugin-data/env rungs (see plugin-data-lib.sh @return) — every case here uses
+# a throwaway $BATS_TEST_TMPDIR data dir / git repo, never the real plugin root.
+
+@test "--plugin-data reads the dataset from <dir>/self-improvement/" {
+  local data="$BATS_TEST_TMPDIR/data"
+  mkdir -p "$data/self-improvement"
+  cp "$DS" "$data/self-improvement/failure-labels.jsonl"
+  run_script_env --unset CLAUDE_PLUGIN_DATA "$SCRIPT" --plugin-data="$data" --format=json
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | jq -r '.total')" = "3" ]
+}
+
+@test "flag beats env: --plugin-data wins over CLAUDE_PLUGIN_DATA" {
+  local flag_dir="$BATS_TEST_TMPDIR/flag-data"
+  local env_dir="$BATS_TEST_TMPDIR/env-data"
+  mkdir -p "$flag_dir/self-improvement"
+  cp "$DS" "$flag_dir/self-improvement/failure-labels.jsonl"
+  run_script_env --env "CLAUDE_PLUGIN_DATA=$env_dir" "$SCRIPT" --plugin-data="$flag_dir" --format=json
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | jq -r '.total')" = "3" ]
+  [ ! -e "$env_dir/self-improvement/failure-labels.jsonl" ]
+}
+
+@test "relative --plugin-data exits 1" {
+  run_script_env "$SCRIPT" --plugin-data="relative/dir"
+  [ "$status" -eq 1 ]
+}
+
+@test "unset CLAUDE_PLUGIN_DATA falls back to the fixture repo's evals/ with a stderr notice" {
+  local repo; repo="$(mk_git_fixture)"
+  run_script_env --cwd "$repo" --env "CLAUDE_PROJECT_DIR=$repo" --unset CLAUDE_PLUGIN_DATA \
+    --separate-stderr "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"plugin data dir unavailable"* ]]
+  [[ "$output" == *"no labels yet"* ]]
+}
+
+@test "the real repo's evals/failure-labels.jsonl is unchanged by this suite" {
+  run bash -c "git -C '$PLUGIN_ROOT' diff --quiet -- evals/failure-labels.jsonl"
+  [ "$status" -eq 0 ]
+}
+
 @test "taxonomy trigger flips to READY at the threshold" {
   local big="$WD/big.jsonl"
   : > "$big"

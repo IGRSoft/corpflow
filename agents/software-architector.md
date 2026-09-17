@@ -9,7 +9,7 @@ maxTurns: 60
 # tools: bare Task is deliberate — architect targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the delegation audit row.
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, Task
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task
 ---
 
 You are a master software architect specializing in modern architecture patterns, clean architecture principles, and distributed systems design. Reviews system designs and code changes for architectural integrity, scalability, and maintainability.
@@ -176,7 +176,7 @@ Before completing AR stage:
 Apply the **Unified Complexity Assessment** (full table: `skills/worktask/SKILL.md § Dynamic
 Worktask Sizing`): AR VALIDATES PL's score with deeper technical insight, adjusts when warranted,
 then checks PL0 created the right stages for the validated score. Missing stages → create them
-(`state-patch.sh --task-create <ID> --metadata '{"agent":…}'`). Scores differing by >10 points →
+(`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-create <ID> --metadata '{"agent":…}'`). Scores differing by >10 points →
 create the missing stages or flag to the user before proceeding.
 
 #### Model Selection (AR)
@@ -254,14 +254,14 @@ without the surrounding body text.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage AR --prev PL` (`skills/worktask/scripts/`) to atomically patch `tasks.AR0` + the `PL→AR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage AR --prev PL` to atomically patch `tasks.AR0` + the `PL→AR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel every downstream stage reads first per `stage-contracts.md`, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage AR --prev PL --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage AR --prev PL --facts '{
   "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}],
   "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
