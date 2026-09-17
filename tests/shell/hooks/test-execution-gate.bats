@@ -533,6 +533,7 @@ teardown() {
   mkdir -p "$WD/hooks"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
   cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+  mkdir -p "$WD/hooks/lib" && cp "$PLUGIN_ROOT/hooks/lib/command-head-lib.sh" "$WD/hooks/lib/"
   [ ! -e "$WD/hooks/lib/dedupe-lib.sh" ]
 
   local payload='{"tool_name":"Skill","tool_input":{"skill":"system-developer:build-test"}}'
@@ -547,11 +548,61 @@ teardown() {
   mkdir -p "$WD/hooks"
   cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
   cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+  mkdir -p "$WD/hooks/lib" && cp "$PLUGIN_ROOT/hooks/lib/command-head-lib.sh" "$WD/hooks/lib/"
 
   run env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" \
     <<< "$(bash_payload './run-tests.sh')"
   assert_success
   [ -z "$output" ]
+}
+
+@test "R3-4: a MISSING command-head library degrades the strip, announced, and quoted values still deny" {
+  # Deleting one file must not become an off-switch outside the CORPFLOW_TEST_GATE hatch: a
+  # leading assignment, quoted or bare, is what hides the runner from the prefilter.
+  state_with SR
+  mkdir -p "$WD/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
+  cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+  [ ! -e "$WD/hooks/lib/command-head-lib.sh" ]
+  local cmd
+  for cmd in 'API_KEY=sk-x bats tests/shell' 'FOO="a b" bats tests/shell' "FOO='a b' pytest"; do
+    run --separate-stderr env CLAUDE_PROJECT_DIR="$WD" bash "$WD/hooks/test-execution-gate.sh" \
+      <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+      || fail "fallback allowed: $cmd"
+    [[ "$stderr" == *"assignment strip degraded"* ]] || fail "no degradation notice for: $cmd"
+    [[ "$stderr" != *"command not found"* ]] || fail "unbound strip for: $cmd"
+  done
+  [ -f "$WD/.context/logs/.corpflow-lib-missing" ]
+}
+
+@test "R3-4: an inherited include guard cannot suppress the library" {
+  state_with SR
+  local cmd
+  for cmd in 'FOO="a b" bats tests/shell' "FOO='a b' pytest"; do
+    run --separate-stderr env CLAUDE_PROJECT_DIR="$WD" _CORPFLOW_CMDHEAD_LIB=1 bash "$PLUGIN_ROOT/$SCRIPT" \
+      <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+      || fail "inherited guard allowed: $cmd"
+    [[ "$stderr" != *"degraded"* ]] || fail "the real library did not load for: $cmd"
+  done
+}
+
+@test "R3-4: the inline strip fallback answers exactly as the library does" {
+  mkdir -p "$WD/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/hooks/"
+  cp "$PLUGIN_ROOT/hooks/model-switch-lib.sh" "$WD/hooks/"
+  local inp lib fb
+  for inp in 'FOO="a b" bats tests/shell' "FOO='a b' pytest" 'env A=1 B="x y" jest -t z' \
+    'X=1 Y=2' 'pytest -k x' "$(printf 'A=1 go test\nB=2 pytest')" 'K="unterminated pytest'; do
+    lib=$(IN="$inp" bash -c ". '$PLUGIN_ROOT/hooks/lib/command-head-lib.sh'; strip_assignments \"\$IN\"")
+    fb=$(cd "$WD/hooks" && IN="$inp" bash -c '. ./test-execution-gate.sh --lib-only
+      [ "$CMDHEAD_FALLBACK" = 1 ] || exit 9
+      strip_assignments "$IN"')
+    [ "$lib" = "$fb" ] || fail "fallback '$fb' != library '$lib' for input: $inp"
+  done
 }
 
 @test "R3-2: 'make test' and 'make test-ios' deny at DR (both were dropped by the zero-fork prefilter)" {

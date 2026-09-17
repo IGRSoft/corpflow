@@ -732,6 +732,16 @@ _lock_break_if_stale() {
   fi
 }
 
+# _audit_task_ref — the ledger key this invocation names, for an audit row's task_id;
+# "unknown" when it names none.
+_audit_task_ref() {
+  local t
+  for t in "${TASK_OP_ID:-}" "${TASK_ID_ARG:-}"; do
+    [[ "$t" =~ ^[A-Z]{2}[0-9]+$ ]] && { printf '%s' "$t"; return 0; }
+  done
+  printf 'unknown'
+}
+
 # _lock_audit <action> <key=value>... — one audit row about the lock, never a gate.
 #
 # The audit library is probed HERE rather than reusing the --facts probe near the bottom of
@@ -759,8 +769,8 @@ _lock_audit() {
   local kv=()
   for pair in "$@"; do kv[${#kv[@]}]="--meta-kv"; kv[${#kv[@]}]="$pair"; done
   corpflow_audit_row --file "${dir}/logs/audit.jsonl" \
-    --actor "${VIA_ARG:-agent}:state-patch" --action "$action" --result degraded \
-    ${kv[@]+"${kv[@]}"} || true
+    --actor "${VIA_ARG:-agent}:state-patch" --action "$action" --subject "${sp##*/}" \
+    --result degraded --task-id "$(_audit_task_ref)" ${kv[@]+"${kv[@]}"} || true
 }
 
 # _lock_owner_read <lockdir> — the owner token, bounded, empty when there is none.
@@ -2235,7 +2245,8 @@ ${FACTS_REJECT_LIST}"
     # did this run reject" is exactly the question nobody could answer afterwards.
     if [[ -n "$_FACTS_AUDIT_OK" ]]; then
       corpflow_audit_row --file "${STATE_PATH%/*}/logs/audit.jsonl" \
-        --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --result degraded \
+        --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --subject facts --result degraded \
+        --task-id "$(_audit_task_ref)" \
         --meta "$(printf '%s' "$FACTS_PART" | jq -c '{rejected: [.rejects[] | {key, label, reason}]}')"
     fi
   fi

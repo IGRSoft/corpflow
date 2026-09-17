@@ -244,3 +244,10 @@ _run_gate() {
   [ -z "$output" ]
   [ ! -e "$cwd/.context" ]
 }
+
+@test "SR: every appender call guards subject as it guards task_id" {
+  # An unguarded --subject would drop the whole evidence row under the appender's required-key
+  # contract, and the invariant keeping _task_id non-empty lives in another file.
+  run grep -c -- '--subject "$_task_id"' "$PLUGIN_ROOT/hooks/model-switch-gate.sh"
+  assert_output "0"
+}

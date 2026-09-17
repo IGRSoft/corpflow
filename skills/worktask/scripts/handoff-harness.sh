@@ -1165,8 +1165,9 @@ summary_line_corroborated() {  # <artifact> <line>
 # checked. It rides the shared appender rather than a second writer, and a missing
 # library degrades to silence: an audit row is never a gate.
 summary_line_audit() {  # <artifact> <stage> <executed> <line> [runner]
-  local artifact="$1" stage="$2" executed="$3" line="$4" runner="${5-}" lib
+  local artifact="$1" stage="$2" executed="$3" line="$4" runner="${5-}" lib tid="$2"
   local -a runner_kv=()
+  [[ $tid =~ ^[A-Z]{2}[0-9]+$ ]] || tid=unknown
   [[ -z "$runner" ]] || runner_kv=(--meta-kv "runner=$runner")
   lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
   [[ -r "$lib" ]] || return 0
@@ -1175,7 +1176,7 @@ summary_line_audit() {  # <artifact> <stage> <executed> <line> [runner]
   command -v corpflow_audit_row > /dev/null 2>&1 || return 0
   corpflow_audit_row --file "$(dirname "$artifact")/logs/audit.jsonl" \
     --actor "handoff-harness" --action "count_corroboration" --result "degraded" \
-    --subject "$stage" --meta-kv "tests_executed=$executed" \
+    --subject "$stage" --task-id "$tid" --meta-kv "tests_executed=$executed" \
     ${runner_kv[@]+"${runner_kv[@]}"} --meta-kv "summary_line=$line" || return 0
 }
 

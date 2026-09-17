@@ -8,7 +8,7 @@
 #   tests/shell/meta/hook-symbol-parity.bats enumerates.
 #
 #   Symbols: pd_detail_from_event, pd_normalize_detail, pd_key_command, pd_dedupe_key,
-#   pd_command_head, pd_audit_meta, pd_audit_has_key, pd_audit_has_twin, PD_HEAD_MAX,
+#   pd_command_head, pd_audit_meta, pd_audit_has_key, pd_audit_has_twin,
 #   PD_JQ_DEFS (pd_bound, pd_truncated, pd_fence, pd_rule, pd_detail, pd_mask).
 #
 #   Audit rows never carry the denied command, classifier_reason, allow_rule or tool_input:
@@ -27,7 +27,6 @@ fi
 [ -n "${_PD_LIB:-}" ] && return 0
 _PD_LIB=1
 _PD_LIB_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2> /dev/null && pwd -P)" || _PD_LIB_DIR=""
-PD_HEAD_MAX=80
 
 # Denied-command text is untrusted and reaches both a user prompt and the committed audit
 # log, so every field is bounded before either sees it. Control characters and the U+2028/2029
@@ -129,9 +128,9 @@ pd_dedupe_key() {
 }
 
 # pd_key_command <command> — the command as every dedupe key hashes it: bounded to 512, then
-# masked. A row's command_head shows everything around each [masked], so a key over the raw text
-# would let a guessed secret be confirmed offline. Empty on failure; a caller holding a non-empty
-# command must then write no key at all.
+# masked. The key is committed with the row, so a key over the raw text would let a guessed secret
+# be confirmed offline. Empty on failure; a caller holding a non-empty command must then write no
+# key at all.
 pd_key_command() {
   command -v jq > /dev/null 2>&1 || return 0
   local _pd_k
@@ -166,35 +165,41 @@ pd_audit_has_twin() {
   return 1
 }
 
-# pd_command_head <command> — `{"command_head":"…","truncated":bool}` for an audit row, or `{}`
-# when no head may be written. Secret shapes are masked, then host paths are scrubbed, and only
-# then is the text cut to PD_HEAD_MAX: masking first keeps the literal out of the scrub's
-# pipeline and lets the patterns see the original token boundaries, and cutting last means a
-# bound can never leave half a secret that the patterns would no longer recognise.
-#
-# path-scrub.sh is consumed per its sourcing contract: `[ -r ]` before `.`, because `.` on a
-# missing file exits the caller. A missing file, function or pattern, or a non-zero scrub,
-# yields `{}`: an unscrubbed head would carry the host paths the scrub exists to remove.
+# pd_command_head <command> — `{"command_head":"…","truncated":bool}` for an audit row. The head is
+# the one every committed audit row carries: audit_command_head from hooks/lib/command-head-lib.sh,
+# taken over the already-masked command so no literal reaches that library. `truncated` is true when
+# the head shows less than the whole command (a [redacted] token, or fewer tokens). When that
+# library or its path scrub is unavailable the head is "[redacted]" and `redaction:
+# "scrub_unavailable"` is added: a placeholder, never raw or unscrubbed text. An empty command has
+# an empty head.
 pd_command_head() {
   command -v jq > /dev/null 2>&1 || { printf '{}'; return 0; }
+  [ -n "${1:-}" ] || { printf '{"command_head":"","truncated":false}'; return 0; }
   local _pd_head
   _pd_head=$(
-    set -o pipefail
-    _pd_scrub="${_PD_LIB_DIR:-}/../../skills/shared/scripts/path-scrub.sh"
-    [ -n "${_PD_LIB_DIR:-}" ] && [ -r "$_pd_scrub" ] || exit 1
-    # shellcheck source=/dev/null
-    . "$_pd_scrub" > /dev/null 2>&1 || exit 1
-    command -v corpflow_path_scrub > /dev/null 2>&1 || exit 1
-    [ -n "${CORPFLOW_HOST_PATH_ERE:-}" ] && [ -n "${CORPFLOW_DRIVE_PATH_ERE:-}" ] || exit 1
     _pd_masked=$(pd_key_command "${1:-}")
-    [ -n "$_pd_masked" ] || [ -z "${1:-}" ] || exit 1
-    _pd_clean=$(printf '%s\n' "$_pd_masked" | corpflow_path_scrub) || exit 1
-    printf '%s' "$_pd_clean" | jq -Rsc --argjson n "$PD_HEAD_MAX" "$PD_JQ_DEFS"'
-      pd_bound(4096) | {command_head: pd_bound($n), truncated: (length > $n)}'
+    [ -n "$_pd_masked" ] || _pd_masked="[masked]"
+    AUDIT_COMMAND_HEAD="[redacted]"
+    AUDIT_REDACTION="scrub_unavailable"
+    _pd_chl="${_PD_LIB_DIR:-}/command-head-lib.sh"
+    # `[ -r ]` before `.`, which exits the caller on a missing file; an include guard or scrub
+    # state inherited from the environment would otherwise skip the real load.
+    unset _CORPFLOW_CMDHEAD_LIB _CH_SCRUB_STATE
+    if [ -n "${_PD_LIB_DIR:-}" ] && [ -r "$_pd_chl" ]; then
+      # shellcheck source=hooks/lib/command-head-lib.sh
+      . "$_pd_chl" > /dev/null 2>&1 \
+        && command -v audit_command_head > /dev/null 2>&1 \
+        && audit_command_head "$_pd_masked" > /dev/null 2>&1
+    fi
+    jq -cn --arg h "$AUDIT_COMMAND_HEAD" --arg r "$AUDIT_REDACTION" --arg c "$_pd_masked" '
+      ([$c | splits("[[:space:]]+") | select(length > 0)] | length) as $cn
+      | ([$h | splits(" ") | select(length > 0)] | length) as $hn
+      | {command_head: $h, truncated: (($h | contains("[redacted]")) or $cn > $hn)}
+      + (if $r == "" then {} else {redaction: $r} end)'
   ) || _pd_head=""
   case "$_pd_head" in
     '{"command_head":'*) printf '%s' "$_pd_head" ;;
-    *) printf '{}' ;;
+    *) printf '%s' '{"command_head":"[redacted]","truncated":true,"redaction":"scrub_unavailable"}' ;;
   esac
   return 0
 }

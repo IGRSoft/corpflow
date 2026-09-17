@@ -112,7 +112,7 @@ mkdir -p "$LOGS_DIR" "$IMAGES_DIR"
 # the shared appender.
 audit() {
     corpflow_audit_row --file "$AUDIT_LOG" --actor "qa-visual-diff" \
-      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --meta "${3:-}"
+      --action "$1" --subject "${WORKTASK_ID}/${SLUG}" --result "$2" --task-id unknown --meta "${3:-}"
 }
 
 # Graceful-degrade if magick is not on PATH

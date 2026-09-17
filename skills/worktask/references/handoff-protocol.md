@@ -228,7 +228,7 @@ task was parked stays in that history.
 
 `.context/logs/audit.jsonl` is treated as committed, so it gets the redacted shape alone: `permission_denied` and `permission_resumed` rows carry `tool`, `dedupe_key`,
 `command_head` and `truncated`, and `escalation_parked` lists `{tool, command_head, truncated}` per
-need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks the 80-character head cut, not the 512-character command cut.
+need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks a head that shows less than the whole command, not the 512-character command cut.
 
 ### Schema — $defs: SweepItem and SweepStub
 

@@ -25,7 +25,7 @@ _CORPFLOW_AUDIT_LIB=1
 # readonly assignment is rc 1, which kills a `set -e` caller.
 
 # corpflow_audit_row --file <path> --actor <a> --action <x> --result <r>
-#                    [--subject <s>] [--task-id <t>] [--meta <compact-json>]
+#                    --subject <s> --task-id <t> [--meta <compact-json>]
 #                    [--meta-kv <key>=<value>]...
 #
 # Appends exactly one row and always returns 0: an audit row is evidence, never a gate, so
@@ -37,9 +37,10 @@ _CORPFLOW_AUDIT_LIB=1
 # positional signature lets a transposition emit a VALID ROW THAT LIES — the worst failure an
 # audit log has. Same reasoning as hooks/model-switch-lib.sh.
 #
-# `subject` and `task_id` are emitted only when their flag was passed, so a caller with no
-# subject produces no `subject` key rather than an empty one that reads as "blank" instead
-# of "absent".
+# `subject` and `task_id` are required and non-empty on both paths below: a row nobody can
+# attribute to a task reads as a record while being a gap. A call missing either writes
+# nothing and names the key on one stderr line. A caller holding no ledger key passes
+# "none" (no stage is active) or "unknown" (one is, but cannot be resolved).
 #
 # Without jq the row degrades to a minimal form built by printf over values reduced to an
 # alphabet that cannot break the literal. Degrading the value beats emitting a line that
@@ -48,8 +49,8 @@ _CORPFLOW_AUDIT_LIB=1
 # caller whose metadata must survive a jq-less host passes it as `--meta-kv key=value`
 # pairs instead: those are flat scalars the sanitiser can guarantee.
 corpflow_audit_row() {
-  local _file="" _actor="" _action="" _result="" _subject="" _meta="" _has_subject=0
-  local _task_id="" _has_task_id=0 _pair _k _v
+  local _file="" _actor="" _action="" _result="" _subject="" _meta="" _task_id=""
+  local _missing="" _pair _k _v
   local _kv=()
   local _dir _ts _row
   # shellcheck disable=SC2034  # out-parameter; read by publish-pl-issue.sh audit_row
@@ -60,8 +61,8 @@ corpflow_audit_row() {
       --actor) _actor="${2:-}" ;;
       --action) _action="${2:-}" ;;
       --result) _result="${2:-}" ;;
-      --subject) _subject="${2:-}"; _has_subject=1 ;;
-      --task-id) _task_id="${2:-}"; _has_task_id=1 ;;
+      --subject) _subject="${2:-}" ;;
+      --task-id) _task_id="${2:-}" ;;
       --meta) _meta="${2:-}" ;;
       --meta-kv) _kv[${#_kv[@]}]="${2:-}" ;;
       *) shift; continue ;;
@@ -75,6 +76,14 @@ corpflow_audit_row() {
   [ -n "$_actor" ] || return 0
   [ -n "$_action" ] || return 0
   [ -n "$_result" ] || return 0
+
+  [ -n "$_subject" ] || _missing="subject"
+  [ -n "$_task_id" ] || _missing="${_missing:+$_missing and }task_id"
+  if [ -n "$_missing" ]; then
+    printf >&2 'corpflow_audit_row: %s row not written, missing %s\n' \
+      "${_action//[^A-Za-z0-9_.:-]/_}" "$_missing" || :
+    return 0
+  fi
 
   _dir=$(dirname -- "$_file")
   mkdir -p "$_dir" 2> /dev/null || return 0
@@ -100,17 +109,13 @@ corpflow_audit_row() {
     # Key order is pinned by construction, not by jq's sort: assert with keys_unsorted.
     _row=$(jq -cn --arg ts "$_ts" --arg actor "$_actor" --arg action "$_action" \
       --arg subject "$_subject" --arg result "$_result" --argjson meta "$_meta" \
-      --arg task_id "$_task_id" --argjson has_subject "$_has_subject" \
-      --argjson has_task_id "$_has_task_id" '
-      {ts: $ts, actor: $actor, action: $action}
-      + (if $has_subject == 1 then {subject: $subject} else {} end)
-      + {result: $result}
-      + (if $has_task_id == 1 then {task_id: $task_id} else {} end)
-      + {metadata: $meta}
+      --arg task_id "$_task_id" '
+      {ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result,
+       task_id: $task_id, metadata: $meta}
     ' 2> /dev/null) || return 0
   else
     _row=$(_corpflow_audit_row_nojq "$_ts" "$_actor" "$_action" "$_result" \
-      "$_has_subject" "$_subject" ${_kv[@]+"${_kv[@]}"}) || return 0
+      "$_subject" "$_task_id" ${_kv[@]+"${_kv[@]}"}) || return 0
   fi
 
   # The `2>/dev/null` on the jq pipeline above silences jq alone; this append is the
@@ -128,16 +133,11 @@ corpflow_audit_row() {
 _corpflow_audit_row_nojq() {
   local ts="${1//[^A-Za-z0-9_.:\/@+-]/_}" actor="${2//[^A-Za-z0-9_.:\/@+-]/_}"
   local action="${3//[^A-Za-z0-9_.:\/@+-]/_}" result="${4//[^A-Za-z0-9_.:\/@+-]/_}"
-  local has_subject="$5" subject="${6//[^A-Za-z0-9_.:\/@+-]/_}"
+  local subject="${5//[^A-Za-z0-9_.:\/@+-]/_}" task_id="${6//[^A-Za-z0-9_.:\/@+-]/_}"
   shift 6
   local head meta="" pair k v
-  if [ "$has_subject" = "1" ]; then
-    head=$(printf '{"ts":"%s","actor":"%s","action":"%s","subject":"%s","result":"%s"' \
-      "$ts" "$actor" "$action" "$subject" "$result")
-  else
-    head=$(printf '{"ts":"%s","actor":"%s","action":"%s","result":"%s"' \
-      "$ts" "$actor" "$action" "$result")
-  fi
+  head=$(printf '{"ts":"%s","actor":"%s","action":"%s","subject":"%s","result":"%s","task_id":"%s"' \
+    "$ts" "$actor" "$action" "$subject" "$result" "$task_id")
   for pair in "$@"; do
     k="${pair%%=*}"; k="${k//[^A-Za-z0-9_]/_}"
     v="${pair#*=}"; v="${v//[^A-Za-z0-9_.:\/@+-]/_}"

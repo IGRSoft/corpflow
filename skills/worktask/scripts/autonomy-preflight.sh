@@ -909,9 +909,16 @@ record_main() {
 
   # shellcheck source=skills/shared/lib/audit-lib.sh
   . "$lib"
+  # The rows name the ledger's one in-progress task: "none" before any stage runs, "unknown" when
+  # several run or the ledger cannot be read.
+  ptask=$(jq -r '[(.tasks // {}) | to_entries[] | select(.value.status == "in_progress") | .key
+    | select(test("^[A-Z]{2}[0-9]+$"))]
+    | if length == 0 then "none" elif length == 1 then .[0] else "unknown" end' "$state" 2> /dev/null) \
+    || ptask="unknown"
+  [ -n "$ptask" ] || ptask="unknown"
   meta=$(printf '%s' "$json" | jq -c '{result, platforms, tools_absent}')
   corpflow_audit_row --file "$CONTEXT_DIR/logs/audit.jsonl" --actor orchestrator \
-    --action autonomy_preflight --result ok --meta "$meta"
+    --action autonomy_preflight --subject preflight --result ok --task-id "$ptask" --meta "$meta"
   if [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -ne 0 ]; then
     printf >&2 'autonomy-preflight: autonomy_preflight audit row not written\n'
     exit 1
@@ -921,7 +928,7 @@ record_main() {
   if [ -n "$CANDIDATES_BUF" ]; then
     meta=$(jq -cn --arg r "$cand_result" --argjson c "$cand_json" '{result: $r, candidates: $c}')
     corpflow_audit_row --file "$CONTEXT_DIR/logs/audit.jsonl" --actor orchestrator \
-      --action preflight_issue_candidates --result ok --meta "$meta"
+      --action preflight_issue_candidates --subject preflight --result ok --task-id "$ptask" --meta "$meta"
     if [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -ne 0 ]; then
       printf >&2 'autonomy-preflight: preflight_issue_candidates audit row not written\n'
       exit 1
