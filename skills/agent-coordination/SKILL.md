@@ -181,7 +181,7 @@ Known limit: re-denying the same command in the same task after a grant writes n
 
 #### Writers — redacted permission rows
 
-`.context/logs/audit.jsonl` is committed, so the `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only a redacted head of the denied command: masked for secret shapes, path-scrubbed through `skills/shared/scripts/path-scrub.sh`, cut at 80 characters, with `truncated: true` when cut. `command_head` and `truncated` are both omitted when the scrub is unavailable. No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
+`.context/logs/audit.jsonl` is committed, so the `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only the redacted head every committed row carries: `audit_command_head` from `hooks/lib/command-head-lib.sh` over the secret-masked command, at most 4 tokens (the program plus flag, task-id or status grammar, anything else `[redacted]`), path-scrubbed through `skills/shared/scripts/path-scrub.sh` and at most 120 characters, with `truncated: true` when the head shows less than the whole command. When that library or the scrub is unavailable, `command_head` is `[redacted]` and `redaction` is `scrub_unavailable`. No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
 
 #### Writers — where the full permission detail lives
 
@@ -208,8 +208,8 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 | Actor | Action Examples |
 |-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
-| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
-| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`; one-shot `state_merge_noop` when the stop carried no stage and no artifact |
+| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort`, a redacted `command_head` on Bash rows and scrubbed `targets` paths — never the command line or file content |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`; one-shot `state_merge_noop` (`result: skipped`, `subject` and `task_id` `none`) when the stop carried no stage and no artifact |
 | `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
 | `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with `metadata.stage` |
 | `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus one-shot `test_gate_disabled` / `test_dedupe_disabled` |
@@ -267,13 +267,15 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 
 ```jsonc
 // …continued: the same object
-  "subject": "task ID or artifact path",
-  "result": "ok|error|deferred|blocked|block",   // block: hook-tree appender rows, e.g. permission_denied
-  "task_id": "optional — ledger key, e.g. DV0",
+  "subject": "required — task ID or artifact path",
+  "result": "ok|error|deferred|blocked|block|skipped",   // block: hook-tree appender rows, e.g. permission_denied
+  "task_id": "required — ledger key, e.g. DV0; \"none\" when no stage is active, \"unknown\" when one is but cannot be resolved",
   "artifact": "optional — .context/ path",
   "metadata": { "...": "action-specific extras" }
 }
 ```
+
+Both shared appenders, `corpflow_audit_row` (skills) and `corpflow_hook_audit_row` (hooks), refuse a row without a non-empty `subject` and `task_id`: nothing is written and one stderr line names the missing key.
 
 #### Hook-written metadata fields
 
@@ -293,7 +295,7 @@ Optional `metadata` fields on hook-written `subagent_stopped` / `stage_completio
 ```bash
 mkdir -p .context/logs
 jq -c --arg ts "$(date -u +%FT%TZ)" \
-  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"4"}' \
+  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"DV0"}' \
   >> .context/logs/audit.jsonl
 ```
 
@@ -653,7 +655,7 @@ Combinations: API endpoint, data model → Security + Performance + Architecture
 
 TL can split DV0 into parallel streams (DV0, DV1, DV2…) during coordination; each runs in its own worktree after TL completes, and the orchestrator picks up the new tasks on its next ledger re-read — no loop changes needed.
 
-**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split in `.context/coordination-N.md § Parallel Streams` — per-stream scope, file ownership, interface contracts.
+**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split as a `### Parallel Streams` H3 under `## fan-out` in `.context/coordination-N.md` — per-stream scope, file ownership, interface contracts.
 
 **Anti-patterns**: splitting tightly coupled files across streams (merge conflicts); splitting small scope (coordination overhead exceeds time saved); missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0).
 

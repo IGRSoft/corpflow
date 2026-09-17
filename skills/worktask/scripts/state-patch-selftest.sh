@@ -1243,6 +1243,50 @@ EOART
   fi
   rm -f .context/state.json.snapack
 
+  # ---- T35: tests_executed mirror; a replayed round is filed under rework_runs[] ----
+  if command -v yq > /dev/null 2>&1; then
+    make_state
+    printf '[]\n' > agents-gone.json
+    bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" \
+      > /dev/null
+    _t35_art() {  # <count> [summary-count]
+      printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "round with %s"\n  tests_executed:\n    - { runner: bats, count: %s, summary_line: "1..%s" }\n---\n' \
+        "${2:-$1}" "$1" "$1" > .context/development-0.md
+    }
+    _t35_art 12
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    bash "$SELF" --task-replay DV0 --agents-json agents-gone.json > /dev/null 2>&1 || true
+    _t35_art 14
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    cp .context/state.json .context/state.json.snap35
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    if jq -e '.tasks.DV0.tests_executed == [{runner:"bats",count:14,summary_line:"1..14"}]
+              and .tasks.DV0.rework_runs == [{round:1,tests_executed:[{runner:"bats",count:12,summary_line:"1..12"}]}]
+              and (.tasks.DV0 | has("rework_pending") | not)' .context/state.json > /dev/null \
+      && diff -q .context/state.json .context/state.json.snap35 > /dev/null; then
+      printf 'T35: replayed round filed once under rework_runs, re-merge is a no-op: ok\n'
+    else
+      printf 'T35: rework_runs append: FAIL\n' >&2
+      jq '.tasks.DV0' .context/state.json >&2
+      exit 1
+    fi
+    rm -f .context/state.json.snap35
+    # Same artifact, verdict and summary with only the list changed: the empty gate_from_stage
+    # field must not hide the difference and turn the merge into a no-op.
+    _t35_art 16 14
+    bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null 2>&1 || true
+    if jq -e '.tasks.DV0.tests_executed == [{runner:"bats",count:16,summary_line:"1..16"}]
+              and (.tasks.DV0.rework_runs | length) == 1' .context/state.json > /dev/null; then
+      printf 'T35: a changed list under the same artifact and verdict re-merges: ok\n'
+    else
+      printf 'T35: changed-list re-merge: FAIL\n' >&2
+      jq '.tasks.DV0' .context/state.json >&2
+      exit 1
+    fi
+  else
+    printf 'T35: rework_runs append: SKIP (yq unavailable)\n'
+  fi
+
   # ---- T-stream: a DV per-stream artifact name is canonical; a malformed slug still warns ----
   make_state
   cp .context/development-0.md .context/development-0-swift-app.md 2> /dev/null \

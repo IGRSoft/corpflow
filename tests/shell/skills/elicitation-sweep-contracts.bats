@@ -785,7 +785,7 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
     # The anchor the stub points at: present by default so each test isolates one contract.
     # Each item carries two options, so the harness's item-body check never decides a verdict here.
     if [ "${3:-with-anchor}" = "with-anchor" ]; then
-      printf '\n## elicitation-sweep\n\n'
+      printf '\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\n'
       for id in sw-DC0-1 sw-DC0-2; do
         printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$id"
         printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
@@ -1065,7 +1065,7 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
     printf '  summary: "fixture"\n  files_touched: [a.md]\n'
     printf '  open_questions: "none"\n'
     printf '  refs: { dev: development-0.md#files-changed }\n'
-    printf -- '---\n\n# Documentation\n\n## elicitation-sweep\n\nnothing to elicit\n'
+    printf -- '---\n\n# Documentation\n\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to elicit\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_failure
@@ -1564,7 +1564,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     # The prose half of an empty sweep: the array says nothing was asked, the heading says a
     # sweep ran. Both are required — this fixture is exercising the LEDGER-parity arm, which
     # must stay silent when there are no stubs, and it needs a compliant artifact to do so.
-    printf '\n## elicitation-sweep\n\nNothing to elicit.\n'
+    printf '\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nNothing to elicit.\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
   assert_success

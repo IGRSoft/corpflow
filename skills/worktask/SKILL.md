@@ -2219,8 +2219,9 @@ line. It grants nothing, writes no Claude Code configuration, and emits no retry
 `permission_resumed:<task_id>:<dedupe_key>:<n>`, where `n` is 1 plus the earlier rows with that
 subject and key. It is the record `blocked_on.resume_with: decision_ref` points at, and it comes
 back as `resume_block.decision_ref` (§ Step 7a). The row never holds the command:
-`command_head` is masked, path-scrubbed and cut at 80 characters, its `truncated` marks that cut,
-and both are omitted when the scrub is unavailable. `resume_block.truncated` is a different flag:
+`command_head` is the redacted head every committed row carries (at most 4 tokens, masked,
+path-scrubbed, at most 120 characters), `truncated` marks a head showing less than the whole
+command, and an unavailable scrub gives `[redacted]` with `redaction: "scrub_unavailable"`. `resume_block.truncated` is a different flag:
 the stored command was cut at 512 characters.
 
 ### blocked-on-dispatch.sh and blocked-on-lib.sh

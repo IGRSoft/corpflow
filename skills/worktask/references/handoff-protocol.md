@@ -244,7 +244,7 @@ task was parked stays in that history.
 
 `.context/logs/audit.jsonl` is treated as committed, so it gets the redacted shape alone: `permission_denied` and `permission_resumed` rows carry `tool`, `dedupe_key`,
 `command_head` and `truncated`, and `escalation_parked` lists `{tool, command_head, truncated}` per
-need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks the 80-character head cut, not the 512-character command cut.
+need (`skills/agent-coordination/SKILL.md § Writers — redacted permission rows`). There `truncated` marks a head that shows less than the whole command, not the 512-character command cut.
 
 #### Schema — blocked_on, the user_decision arm
 
@@ -456,6 +456,27 @@ $defs:
       resolution:        { type: string, maxLength: 160 }
 ```
 
+### Schema — $defs: TestRunEntry
+
+One entry per runner invocation that printed its own summary line — the item shape of
+`tests_executed` in DV and QA on both transports and on the ledger task row. A runner may repeat
+(two scoped bats runs are two entries), entries are never folded into one count, and `[]` is legal.
+Field rules: § DVHandoff — test-evidence field notes.
+
+```yaml
+# …continued: HandoffFrontmatter.$defs — also referenced by #handoff-schemas and #state-json-schema
+$defs:
+  TestRunEntry:
+    type: object
+    required: [runner, count]
+    properties:
+      runner:       { type: string, minLength: 1 }                   # free-form: bats, pytest, swift, …
+      count:        { type: integer, minimum: 0 }                    # cases that RAN
+      summary_line: { type: string, minLength: 1, pattern: '[0-9]' } # verbatim runner line
+    if:   { required: [count], properties: { count: { minimum: 1 } } }
+    then: { required: [summary_line] }
+```
+
 ### Schema — subagents_spawned (B2 governance)
 
 ```yaml
@@ -523,7 +544,7 @@ own vocabulary changes.
 | PL | next_stage_focus, key_decisions, open_questions | files_touched | ok / blocked / escalate |
 | AR | key_decisions, next_stage_focus, open_questions | files_touched, subagents_spawned | ok / blocked / escalate |
 | TL | next_stage_focus, open_questions | key_decisions, files_touched | ok / blocked / escalate |
-| DV | files_touched, next_stage_focus, tests_executed, open_questions | key_decisions, subagents_spawned, test_summary_line (REQUIRED when tests_executed is non-zero), test_suite_compiles (REQUIRED when tests_executed is 0) | ok / blocked / escalate |
+| DV | files_touched, next_stage_focus, tests_executed (TestRunEntry list), open_questions | key_decisions, subagents_spawned, test_suite_compiles (REQUIRED when tests_executed is empty or every count is 0) | ok / blocked / escalate |
 | DR | key_decisions (= findings), open_questions | files_touched | pass / fail |
 
 DR lists no `blocked`, yet still returns `verdict: blocked` with a `blocked_on` under the
@@ -534,7 +555,7 @@ cross-stage blocked exception above.
 | Stage | Required (beyond base 4) | Optional | Verdict vocabulary |
 |-------|--------------------------|----------|--------------------|
 | SR | key_decisions (= findings), open_questions | files_touched | pass / fail |
-| QA | files_touched (= tests added), key_decisions (= results), tests_executed, open_questions | test_summary_line (REQUIRED when tests_executed is non-zero) | go / no-go |
+| QA | files_touched (= tests added), key_decisions (= results), tests_executed (TestRunEntry list), open_questions | — | go / no-go |
 | DC | files_touched, open_questions | key_decisions | ok / blocked / escalate |
 | RE | files_touched, key_decisions (= version), open_questions | — | ok / blocked |
 | FN | next_stage_focus, files_touched, open_questions | key_decisions, deep_reads | ok / blocked |
@@ -551,6 +572,8 @@ is never returned as `fail`, `no-go` or `reject`.
 ### Token budget
 
 Frontmatter is the canonical compression form: downstream stages read this block instead of the full upstream artifact whenever they only need the verdict, decisions, or refs. Over ≤200 tokens, every downstream stage pays.
+
+A valid `tests_executed` list is excluded from that count up to 96 proxy tokens (about four entries), so recording every runner never costs budget; a list that fails validation is counted in full.
 
 ---
 
@@ -578,7 +601,7 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 ###### Conventions — the $defs pointer is an obligation
 
-The stage schemas below are printed without it, so the item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline that `$defs` block alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.
+The stage schemas below are printed without it, or without `TestRunEntry` (`#frontmatter-schema § Schema — $defs: TestRunEntry`, referenced by DVHandoff and QAHandoff), so an item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline those `$defs` blocks alongside it; **no shipped file implements that step today**, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution. Stated as an obligation, not as an accomplished fact.
 
 > **Cache-prefix note (binding, PRESERVE §4.1).** The schema is passed as a `Task()`/`agent()` **argument**, never inserted into preamble sections [1][2][4][4b]. Adding schema dispatch therefore does NOT touch cache-prefix byte-identity (`#cache-prefix`).
 
@@ -662,8 +685,7 @@ The stage schemas below are printed without it, so the item shape is never resta
 {
   "…continued": "DVHandoff.properties",
   "build_status": { "type": "string", "enum": ["pass", "fail", "skipped"] },
-  "tests_executed": { "type": "integer", "minimum": 0 },
-  "test_summary_line": { "type": "string", "minLength": 1, "pattern": "[0-9]" },
+  "tests_executed": { "type": "array", "items": { "$ref": "#/$defs/TestRunEntry" } },
   "test_suite_compiles": { "enum": [true, false, "unknown"] },
   "architecture": {
     "type": "object",
@@ -678,17 +700,32 @@ The stage schemas below are printed without it, so the item shape is never resta
 
 #### DVHandoff — test-evidence field notes
 
-`test_summary_line` is the runner's summary line copied byte-for-byte, required of DV and QA
-whenever `tests_executed` is non-zero and checked against the artifact body or a named
-`.context/logs/` capture; the count-token match inside it is warn-only, since not every formatter
-repeats the number. Contract: `stage-contracts.md#tpl-dv § test_summary_line is the checked half`.
+`tests_executed` is a list of `TestRunEntry`, one per runner invocation, in DV and QA alike. `count`
+is the cases that **ran** under that runner, never cases it enumerated. `summary_line` is that
+runner's summary line copied byte-for-byte, required whenever `count` is above 0 and checked against
+the artifact body or a named `.context/logs/` capture; the count-token match inside it is warn-only,
+since not every formatter repeats the number. Several runners are several entries, never one summed
+count; QA's `tests_passed` / `tests_failed` stay grand totals, expected to equal the sum of `count`,
+which DR spot-checks and the harness does not. Contract: `stage-contracts.md#tpl-dv § summary_line
+is the checked half`.
 
-`tests_executed` counts cases that **ran**, never cases a runner enumerated. `test_suite_compiles`
-is required whenever `tests_executed` is `0` and optional otherwise — the distinction between
-gate-blocked and never-built, answerable without test-execution authority. It is deliberately not
-folded into `build_status`, which reports the app build: a test target can fail to compile against a
-clean app build. Contract and rationale: `stage-contracts.md#tpl-dv § Zero executed tests must say
-whether the suite compiles`. Enforced by `handoff-harness.sh --validate-frontmatter`.
+##### DVHandoff — zero executed tests
+
+`test_suite_compiles` is required whenever the `tests_executed` list is empty or every `count` is `0`,
+and optional otherwise — the distinction between gate-blocked and never-built, answerable without
+test-execution authority. It is deliberately not folded into `build_status`, which reports the app
+build: a test target can fail to compile against a clean app build. Contract and rationale:
+`stage-contracts.md#tpl-dv § Zero executed tests must say whether the suite compiles`. Enforced by
+`handoff-harness.sh --validate-frontmatter`.
+
+##### DVHandoff — the legacy scalar
+
+A scalar `tests_executed` fails validation by default. Under `--legacy-tests-executed` (or
+`CORPFLOW_LEGACY_TESTS_EXECUTED=1`) a legacy scalar and its legacy top-level
+`test_summary_line` validate under the old integer rules with one deprecation `warn:`; the
+opt-in never relaxes a list and is removed in the next minor release. A top-level
+`test_summary_line` beside a list is a legacy leftover, ignored as evidence with a `warn:`; its
+line belongs in that runner's `summary_line`.
 
 #### DVHandoff — architecture field notes
 
@@ -749,8 +786,7 @@ fails an undeclared one.
   "required": ["verdict", "tests_executed", "tests_passed", "tests_failed", "open_questions"],
   "properties": {
     "verdict": { "type": "string", "enum": ["go", "no-go"] },
-    "tests_executed": { "type": "integer", "minimum": 0 },
-    "test_summary_line": { "type": "string", "minLength": 1, "pattern": "[0-9]" },
+    "tests_executed": { "type": "array", "items": { "$ref": "#/$defs/TestRunEntry" } },
     "tests_passed": { "type": "integer", "minimum": 0 },
     "tests_failed": { "type": "integer", "minimum": 0 },
     "blocking_defects": { "type": "array", "items": { "type": "string" } },
@@ -895,6 +931,7 @@ its own artifact (§ DV fan-out — ledger tasks).
 | `DV.files_modified` | `facts.files_modified` (union) | `<dev-artifact>` `## files-changed` |
 | `DV.tests_added` | `facts.tests_added` (union) | `<dev-artifact>` `## tests-added` |
 | `DV.build_status` | (artifact only; status follows the verdict) | `<dev-artifact>` `## deviations` |
+| `DV.tests_executed` | `tasks.<DV>.tests_executed` (current round) + `tasks.<DV>.rework_runs[]` (earlier rounds of a replayed row) | `<dev-artifact>` `## tests-added` |
 | `DV.decisions` | `facts.decisions[]` | `<dev-artifact>` (inline) |
 
 #### Map — DR, SR, QA, DC, RE
@@ -905,6 +942,7 @@ its own artifact (§ DV fan-out — ledger tasks).
 | `DR.findings`/`blockers` | `facts.decisions[]` (= findings) | developer-review-N.md `## findings`/`## blockers` |
 | `SR.*` | mirrors DR targets (`facts.verdicts.SR0`, derived `facts.verdicts.SR`) | security-review-N.md |
 | `QA.verdict` | `tasks.QA0.verdict` + `facts.verdicts.QA0` + derived `facts.verdicts.QA` | testing-N.md `## verdict` |
+| `QA.tests_executed` | `tasks.QA0.tests_executed` (current round) + `tasks.QA0.rework_runs[]` (earlier rounds) | testing-N.md `## results` |
 | `QA.tests_passed`/`failed` | (artifact only; `facts.verdicts.*` holds verdicts, never counts) | testing-N.md `## results` |
 
 #### Map — DC, RE
@@ -1217,9 +1255,29 @@ A stage patch sets `status` from the artifact's `handoff.verdict`; `state-patch.
 
 ##### tasks — loop-back, claim, create
 
-The patch writes only its own row. Moving a failure back to DV is the orchestrator loop's job: it copies `gate_from_stage` onto the DV row it replays. `--claim <TASK_ID>` moves a `pending`/`blocked` row to `in_progress` and stamps `claimed_at`; a re-claim is a no-op, and a settled row (`completed`/`skipped`/`failed`) exits 4 — use `--task-replay`.
+The patch writes only its own row. Moving a failure back to DV is the orchestrator loop's job: it copies `gate_from_stage` onto the DV row it replays. `--claim <TASK_ID>` moves a `pending`/`blocked` row to `in_progress` and stamps `claimed_at`; a re-claim is a no-op, and a settled row (`completed`/`skipped`/`failed`) exits 4 — use `--task-replay`. A replay also sets `rework_pending` on a row holding `tests_executed`, so its next completion files the earlier round (§ Field notes — tests_executed, rework_runs).
 
 `--task-create` refuses a row whose metadata lacks `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (absent, `null` or `""`; `false` counts as present) with exit 2 and `state.json` untouched. `PL`/`IR` rows are exempt: PL0 is the stage that decides `base_ref` and `requires_screenshots`.
+
+#### tasks — tests_executed, rework_runs
+
+```yaml
+# …continued: WorktaskStateLedger.properties.tasks.additionalProperties.properties
+        tests_executed:
+          type: array
+          items: { $ref: '#/$defs/TestRunEntry' }
+          description: "OPTIONAL (DV, QA). Mirrors the current round's handoff.tests_executed — see field notes"
+        rework_runs:
+          type: array
+          description: "OPTIONAL, append-only. One entry per earlier round of a replayed row"
+          items:
+            type: object
+            required: [round, tests_executed]
+            properties:
+              round: { type: integer, minimum: 1 }
+              tests_executed: { type: array, items: { $ref: '#/$defs/TestRunEntry' } }
+        rework_pending: { type: boolean, description: "Transient. Set by --task-replay, consumed by the next completion merge" }
+```
 
 #### tasks — completed_via, last_error
 
@@ -1505,6 +1563,14 @@ OPTIONAL (additive). Written by the orchestrator Step-6.5 errored-return branch 
 
 OPTIONAL (additive; DV primarily). Records WHICH worktree the stage ran in, not just `worktree: true`. Written by mapping the DV handoff frontmatter `worktree_path`/`worktree_branch` (`state-patch.sh`). Lets resume re-enter the exact worktree via `EnterWorktree(path)`, DR/QA run in the right dir, and FN carry PR context. The PR *head* comes from `facts.branch`, not here (disambiguation below). Kept through FN; dropped at archival.
 
+#### Field notes — tests_executed, rework_runs
+
+OPTIONAL (DV and QA rows), written only by `state-patch.sh`. The completion merge mirrors the artifact's `handoff.tests_executed` list into `tests_executed`, and drops the key when the artifact carries none. `--task-replay` sets `rework_pending: true` on a row that holds `tests_executed`; the next completion merge appends `{round: <last round + 1>, tests_executed: <the row's previous list>}` to `rework_runs`, deletes the marker, then mirrors the new list. Entries are never rewritten, so an artifact carries only its own round and no stage copies an earlier one forward. A re-merge of the same artifact without a replay appends nothing, and a blocked round resumed through `--claim` stays one round.
+
+##### Field notes — rework_runs, where no round is filed
+
+Without `yq` the merge cannot parse the list, so it leaves the mirror and the marker as they were. The Edit-direct fallback (`#layer-1-fallback`) does not maintain these keys: leave `tests_executed`, `rework_runs` and `rework_pending` untouched and never write a round by hand; the next scripted completion files it.
+
 #### Field notes — branch
 
 OPTIONAL (additive). The worktask's **planned** working-branch name — the host-session branch as
@@ -1602,11 +1668,10 @@ When state.json approaches the 500-token cap:
 
 ### PL0 seed (initial state) {#pl0-seed}
 
-PL0 (or `commands/worktask.md` Phase 1) writes the initial ledger. The seed is **re-run aware**:
-`plan_file` and `run_index` take the next free planning index `N` computed from any pre-existing
-`.context/planning-*.md` (`0` on a fresh `.context/`) — hard-coding `0` would pin an old plan and
-make PL0 overwrite `planning-0.md`. Use the canonical executable snippet in
-`commands/worktask.md` Phase 1 step 3a verbatim; the JSON below shows only the resulting shape.
+`commands/worktask.md` Phase 1 Step 3a writes the initial ledger by running
+`skills/worktask/scripts/seed-state.sh`, the seed's only definition (next free planning index `N`
+from `.context/planning-*.md`, `0` on a fresh `.context/`; goal escaping and truncation; atomic
+write). This section keeps only the resulting shape.
 
 #### Seed shape (resulting JSON)
 
@@ -1620,6 +1685,7 @@ the `plan_file` shape boundary under § state.json schema.
   "plan_file": ".context/planning-${N}.md",
   "platform": "all",
   "run_index": ${N},
+  "metadata": { "workspace_path": "<absolute worktree root>" },
   "tasks": {
     "PL0": { "status": "in_progress" }
   },
@@ -1644,9 +1710,11 @@ additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`, `facts.capa
 written on demand and MUST NOT be seeded — their absence is meaningful (Layer-1 self-patch, no
 error, no worktree record, no observed capability hard-fail).
 
-**On a new PL run in an existing `.context/`**: the seed sets `run_index = N` up front; PL0 then
-atomically resets `stages` to `{PL: in_progress}` and `facts.*` to empty. Historical run data
-lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
+**On a new run in an existing `.context/`**: `seed-state.sh` refuses (exit 3) and leaves
+`state.json` byte-unchanged; it has no overwrite path. Step 3a only reopens PL0
+(`--task-status PL0 in_progress`). PL0's `pl0-procedure.md § Step 4 — state.json reset` is the
+sole reset writer: `run_index = N`, `plan_file`, `tasks` reset to `{PL0: in_progress}`, `facts.*`
+emptied. Historical run data lives in the on-disk `<stage>-N.md` artifacts, not in state.json.
 
 ---
 
@@ -1931,7 +1999,7 @@ Prefix-lint consumes a `prompt-log.jsonl` (`{worktask_id, stage, model, prompt}`
 
 ## #anchor-allow-list
 
-All stage artifacts MUST contain exactly the H2 headings (kebab-case, no underscores, no spaces) listed below plus the one universal anchor. Anchor-lint runs twice: proactively via the managed `PostToolUse` hook (`hooks/anchor-preflight.sh`, shipped default-on in `.claude-plugin/plugin.json`) and again at the DR gate. Neither is a CI check: the lint job runs the four repo lints, and anchor-lint mode is deliberately not among them.
+Every stage artifact carries its stage's required H2 anchors plus the universal one, and any other H2 only from the allowed and optional sets below. The tables are generated from `skills/worktask/scripts/cache-lint.sh` by `output-sections.sh --write`, which renders the same set into each stage agent's § Artifact anchors; `output-sections.sh --check` fails `make test` on drift. Enforcement runs at the write and at the stage boundary (§ Anchor Pre-Flight). None of it is a CI lint job: that job runs the four repo lints, and anchor-lint mode is deliberately not among them.
 
 ### Anchors — required in every artifact
 
@@ -1950,6 +2018,7 @@ These anchors are **allowed in every artifact and required in none**, so none re
 
 ### Anchors — PL to DR
 
+<!-- output-sections:begin table=required-pl-dr -->
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | PL | planning-N.md | `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary` |
@@ -1957,9 +2026,11 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | TL | coordination-N.md | `## fan-out`, `## shared-snippets`, `## sequence`, `## risks` |
 | DV | development-<N>[-<stream>].md | `## files-changed`, `## tests-added`, `## deviations`, `## follow-ups` |
 | DR | developer-review-N.md | `## findings`, `## verdict`, `## blockers`, `## follow-ups` |
+<!-- output-sections:end table=required-pl-dr -->
 
 ### Anchors — SR to ET
 
+<!-- output-sections:begin table=required-sr-et -->
 | Stage | Artifact | Mandatory H2 anchors |
 |-------|----------|-----------------------|
 | SR | security-review-N.md | `## findings`, `## verdict`, `## blockers`, `## threat-model` |
@@ -1970,33 +2041,53 @@ These anchors are **allowed in every artifact and required in none**, so none re
 | ST | retrospective-N.md | `## decision`, `## learnings`, `## followups` |
 | IR | incident-N.md | `## root-cause`, `## fix-plan`, `## blast-radius` |
 | ET | ethics-review-N.md | `## findings`, `## verdict`, `## mitigations` |
+<!-- output-sections:end table=required-sr-et -->
+
+### Anchors — optional per stage
+
+Allowed in that stage's artifact only, required in none; title-case entries are matched literally.
+
+<!-- output-sections:begin table=optional -->
+| Stage | Optional H2 anchors |
+|-------|---------------------|
+| AR | `## <Platform> App Architecture`, `## Test Architecture` |
+| TL | `## Blockers` |
+| DV | `## verification-command`, `## decisions`, `## Blockers`, `## DV Completion Checklist` |
+| QA | `## Visual Evidence`, `## Design Comparison` |
+| RE | `## Release Preparation Summary` |
+| ST | `## Self-Improvement` |
+| IR | `## Incident Report` |
+<!-- output-sections:end table=optional -->
 
 ### Convention rules
 
 1. H2 only. H1 is the artifact's title (exempt from anchor lint).
-2. Kebab-case. No spaces, no underscores, no camelCase.
+2. Kebab-case. No spaces, no underscores, no camelCase. The title-case optional entries above are the only exceptions.
 3. Anchor IDs come from GitHub-style slugify, but the H2 title MUST already be the kebab-case form — do not rely on slugify.
 4. `key_decisions[].anchor` and `refs.*` MUST resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution **only for the AR→DV edge** (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
-### Anchor Pre-Flight (PostToolUse hook)
+### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
 
-The DR-gate lint is post-hoc — a missing anchor in `planning-N.md` surfaces only after AR/TL/DV have paid the full-file re-read cost. To catch omissions at the producing stage, anchor-lint also runs as a **managed plugin hook (shipped in `.claude-plugin/plugin.json`, default-on)**, not an opt-in registration. The managed PostToolUse `Write|Edit` entry invokes `${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh`, which first scans every write whose extension is on the control-byte text allowlist for raw C0 control bytes, then gates on the artifact regex below and delegates matching writes to `skills/worktask/scripts/cache-lint.sh --anchor-lint`:
+One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude-plugin/plugin.json`) checks anchors at the write under both events, before a stray H2 costs a rework round; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-#### Managed hook entry (plugin.json)
+- **`PreToolUse` deny.** Path on the artifact regex below, basename exactly `<canonical>-<N>.md` (or a DV task's `development-<N>-<stream>.md`, judged against the DV set), `state.json` beside it: the Write `content` (or Edit `new_string`, `old_string` H2s as baseline) with an unexpected H2 gets `permissionDecision: "deny"` naming those H2s and the allowed set. A missing required H2 never denies; any hook error allows.
+- **`PostToolUse` advisory.** Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost).
+- **Stage boundary.** `handoff-harness.sh --validate-frontmatter` fails on a missing required or unexpected H2 for all 13 stages, and fails closed when `cache-lint.sh` cannot run.
+
+#### Managed hook entries (plugin.json)
 
 ```jsonc
-// .claude-plugin/plugin.json → hooks.PostToolUse (managed entry, alongside audit-tooluse)
-{
-  "matcher": "Write|Edit",
-  "hooks": [
-    { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "continueOnBlock": true }
-  ]
-}
+// hooks.PreToolUse, after test-execution-gate: a JSON deny needs no continueOnBlock
+{ "matcher": "Write|Edit",
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "pre"] } ] }
+// hooks.PostToolUse, alongside audit-tooluse
+{ "matcher": "Write|Edit",
+  "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "post"], "continueOnBlock": true } ] }
 ```
 
 #### Preflight behavior and cost
 
-`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the DR-gate lint is the only safety net — there is no CI counterpart.
+`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the stage-boundary harness is the only check — there is no CI counterpart.
 
 **Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 

@@ -220,7 +220,7 @@ cmd_park() {
     meta=$(pd_audit_meta "$tool" "$cmd" "$key")
     # The kv pairs keep a degraded row pairable by key; none carries command text.
     corpflow_audit_row --file "$AUDIT" --actor orchestrator --action permission_denied \
-      --result block --subject "$TASK_ARG" --meta "$meta" \
+      --result block --subject "$TASK_ARG" --task-id "$TASK_ARG" --meta "$meta" \
       --meta-kv "tool=$tool" --meta-kv "dedupe_key=$key"
     [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ] && written=true
   fi
@@ -325,6 +325,8 @@ cmd_batch() {
   fi
   boundary="$BOUNDARY_ARG"
   [ -n "$boundary" ] || boundary=$(printf '%s' "$needs" | jq -r '.[0].task_id')
+  boundary_task="$boundary"
+  is_task_id "$boundary_task" || boundary_task="unknown"
   is_task_id "$boundary" || die 2 "invalid --boundary: $boundary"
   # The row names each need by tool and redacted head only; the full detail stays in blocked_on.
   escalated="[]"
@@ -344,7 +346,7 @@ cmd_batch() {
         and .subject == $b and .metadata.escalated == $e)] | length > 0' \
     "$AUDIT" > /dev/null 2>&1; then
     corpflow_audit_row --file "$AUDIT" --actor orchestrator --action escalation_parked \
-      --result block --subject "$boundary" \
+      --result block --subject "$boundary" --task-id "$boundary_task" \
       --meta "$(jq -cn --argjson e "$escalated" '{escalated: $e, reason: "parked_escalation", kind: "permission"}')"
     [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ] && row_written=true
   fi
@@ -390,7 +392,7 @@ cmd_resume() {
   meta=$(pd_audit_meta "$tool" "$cmd" "$key")
   [ -n "$meta" ] || meta='{}'
   corpflow_audit_row --file "$AUDIT" --actor orchestrator --action permission_resumed \
-    --result ok --subject "$TASK_ARG" \
+    --result ok --subject "$TASK_ARG" --task-id "$TASK_ARG" \
     --meta "$(jq -cn --argjson m "$meta" --arg a "$ANSWER_ARG" --arg r "$ref" \
       '$m + {answer: $a, decision_ref: $r}')" \
     --meta-kv "tool=$tool" --meta-kv "dedupe_key=$key" \

@@ -13,9 +13,10 @@ LIB="${BATS_TEST_DIRNAME}/../../../hooks/model-switch-lib.sh"
 # skills/shared/lib/ and consumer suites source it twice per process — so it supplies
 # symbols to P1/P4 but is outside the readonly -f isolation contract P2/P3 police.
 BASE_LIB="${BATS_TEST_DIRNAME}/../../../hooks/lib/corpflow-base.sh"
-# The third symbol source. A hook helper sources it inside a per-call subshell, never
-# process-wide, so like BASE_LIB it feeds P1/P4 and stays outside P2/P3. It matters here
-# because that consumer fails open to an empty result, so a rename is otherwise silent.
+# The third symbol source. Hook code sources it only where it scrubs — one helper inside a
+# per-call subshell, hooks/lib/command-head-lib.sh lazily on its first redaction — so like
+# BASE_LIB it feeds P1/P4 and stays outside P2/P3. It matters here because both consumers
+# fail open to an empty or redacted result, so a rename is otherwise silent.
 PS_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/scripts/path-scrub.sh"
 HOOKDIR="${BATS_TEST_DIRNAME}/../../../hooks"
 

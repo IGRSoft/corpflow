@@ -39,7 +39,7 @@ matrix_target() {
   assert_output ""
 }
 
-@test "matrix: expected alias set is complete (6 entry + 24 role + 2 release + 2 support)" {
+@test "matrix: expected alias set is complete (6 entry + 24 role + 2 release + 2 ui-verifier + 2 support)" {
   local p role count
   for p in $DEV_PLUGINS; do
     [ -n "$(matrix_target "${p}")" ] || { echo "missing entry alias corpflow:$p" >&2; return 1; }
@@ -51,7 +51,7 @@ matrix_target() {
     done
   done
   count="$(matrix_rows | wc -l | tr -d ' ')"
-  [ "$count" -eq 34 ] || { echo "expected 34 matrix rows, found $count" >&2; return 1; }
+  [ "$count" -eq 36 ] || { echo "expected 36 matrix rows, found $count" >&2; return 1; }
 }
 
 @test "matrix: release-engineer aliases exist for the two platforms with a store" {
@@ -72,6 +72,33 @@ matrix_target() {
     [ -z "$(matrix_target "${p}-release-engineer")" ] \
       || { echo "corpflow:${p}-release-engineer must not exist — no such target" >&2; return 1; }
   done
+}
+
+@test "matrix: ui-verifier aliases exist for the two native-runtime platforms, on their own plugin" {
+  # Same guard as the release-engineer pair: the row count alone would accept any
+  # two new rows. The plugin prefix pins each alias to the plugin whose agents
+  # hold that platform's simulator or emulator tools.
+  local p plugin target
+  for p in apple:apple-developer android:android-developer; do
+    plugin="${p#*:}"
+    target="$(matrix_target "${p%%:*}-ui-verifier")"
+    [ -n "$target" ] || { echo "missing corpflow:${p%%:*}-ui-verifier" >&2; return 1; }
+    [ "${target%%:*}" = "$plugin" ] \
+      || { echo "corpflow:${p%%:*}-ui-verifier targets $target, not a $plugin agent" >&2; return 1; }
+  done
+}
+
+@test "matrix: no ui-verifier alias exists for a platform with no native runtime" {
+  # systems, web, backend and ai have no simulator or emulator to drive, and a
+  # browser leg is not a native UI leg; any such row would route QA to an agent
+  # that cannot run the leg.
+  local p extra
+  for p in systems web backend ai; do
+    [ -z "$(matrix_target "${p}-ui-verifier")" ] \
+      || { echo "corpflow:${p}-ui-verifier must not exist — no native runtime" >&2; return 1; }
+  done
+  extra="$(matrix_rows | awk '$1 ~ /-ui-verifier$/ && $1 != "corpflow:apple-ui-verifier" && $1 != "corpflow:android-ui-verifier" {print $1}')"
+  [ -z "$extra" ] || { echo "unexpected ui-verifier aliases: $extra" >&2; return 1; }
 }
 
 @test "matrix: no alias collides with a real corpflow agent name" {
@@ -137,6 +164,19 @@ matrix_target() {
     grep -qF "$p → \`$target\`" "$PLUGIN_ROOT/agents/qa-engineer.md" \
       || { echo "qa-engineer.md entry for $p != $target" >&2; return 1; }
   done
+}
+
+@test "copy: qa-engineer.md ui-verifier table matches matrix rows" {
+  # The QA copy is the whole table row, not just the target, so the Platform
+  # column cannot drift either. Non-empty guard: two empty greps compare equal.
+  # Backticks are literal markdown code spans, not command substitution.
+  # shellcheck disable=SC2016
+  local pattern='^\| `corpflow:[a-z]+-ui-verifier` \|' matrix qa
+  matrix="$(grep -E "$pattern" "$PLUGIN_ROOT/$MATRIX")"
+  qa="$(grep -E "$pattern" "$PLUGIN_ROOT/agents/qa-engineer.md")"
+  [ -n "$matrix" ] || { echo "no ui-verifier rows in $MATRIX" >&2; return 1; }
+  [ "$qa" = "$matrix" ] \
+    || { printf 'qa-engineer.md rows:\n%s\nmatrix rows:\n%s\n' "$qa" "$matrix" >&2; return 1; }
 }
 
 @test "copy: plugin-protocols.md role cells match matrix basenames" {

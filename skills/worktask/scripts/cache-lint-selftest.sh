@@ -117,6 +117,38 @@ EOF
     echo "self-test: anchor-lint reject: ok"
   fi
 
+  # --allow-list and --anchor-diff: the shared core the hook and the harness read.
+  local al_out="" diff_out="" diff_rc=0
+  al_out=$("$0" --allow-list --stage DV 2>&1) || true
+  if printf '%s\n' "$al_out" | grep -qx "DV	developer	development	optional	verification-command" \
+    && printf '%s\n' "$al_out" | grep -qx "\*			any-optional	rework-<N>"; then
+    echo "self-test: allow-list rows: ok"
+  else
+    echo "self-test: allow-list rows: FAIL" >&2; exit 1
+  fi
+  printf '## Stage Timings\n' > "$td/baseline.md"
+  diff_out=$(printf '## Stage Timings\n## decisions\n## Notes\n' \
+    | "$0" --anchor-diff --for-path "/p/.context/development-3.md" --baseline "$td/baseline.md" - 2>&1) || diff_rc=$?
+  if [[ "$diff_rc" -eq 1 ]] && [[ "$(printf '%s\n' "$diff_out" | grep '^unexpected')" == "unexpected	Notes" ]]; then
+    echo "self-test: anchor-diff baseline + optional: ok"
+  else
+    echo "self-test: anchor-diff baseline + optional: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+  diff_rc=0
+  diff_out=$(printf '## x\n' | "$0" --anchor-diff --for-path "/p/.context/development-3-stream.md" - 2>&1) || diff_rc=$?
+  if [[ "$diff_rc" -eq 1 ]] && printf '%s\n' "$diff_out" | grep -qx 'missing	files-changed'; then
+    echo "self-test: anchor-diff DV stream path resolves to DV: ok"
+  else
+    echo "self-test: anchor-diff DV stream path resolves to DV: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+  diff_rc=0
+  printf '## x\n' | "$0" --anchor-diff --for-path "/p/.context/testing-3-ui.md" - >/dev/null 2>&1 || diff_rc=$?
+  if [[ "$diff_rc" -eq 2 ]]; then
+    echo "self-test: anchor-diff non-DV suffixed path unresolved: ok"
+  else
+    echo "self-test: anchor-diff non-DV suffixed path unresolved: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+
   # Prefix lint fixture: two prompts, identical sections [1][2]
   local log="$td/log.jsonl"
   : > "$log"

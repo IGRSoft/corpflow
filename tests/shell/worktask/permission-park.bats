@@ -9,6 +9,7 @@ LIB="hooks/lib/permission-denied-lib.sh"
 SELFTEST="skills/worktask/scripts/permission-park-selftest.sh"
 FIX="${FIXTURES}/worktask/permission-park"
 MERGE_CMD="gh pr merge 412 --squash --delete-branch"
+MERGE_CMD_HEAD="gh [redacted] [redacted] [redacted]"
 RESET_CMD="git reset --hard origin/develop"
 # Split so no static secret scanner reads a literal token in this file.
 GH_TOK="ghp_""Ab12Cd34Ef56Gh78Ij90Kl12Mn"
@@ -212,8 +213,8 @@ _section() {
     and (.tasks.FN0.metadata.blocked_on.detail | keys) == ["allow_rule", "classifier_reason", "command", "tool"]' "$STATE"
   assert_success
   [ "$(_rows)" = 1 ] || fail "expected one row, got $(_rows)"
-  run jq -e --argjson k "$HEAD_KEYS" --arg c "$MERGE_CMD" 'select(.action == "permission_denied")
-    | .actor == "orchestrator" and .subject == "FN0" and .result == "block"
+  run jq -e --argjson k "$HEAD_KEYS" --arg c "$MERGE_CMD_HEAD" 'select(.action == "permission_denied")
+    | .actor == "orchestrator" and .subject == "FN0" and .task_id == "FN0" and .result == "block"
     and (.metadata | keys_unsorted) == $k and .metadata.command_head == $c' "$AUDIT"
   assert_success
 }
@@ -224,8 +225,7 @@ _section() {
     '{tool: "Bash", command: $c, classifier_reason: "Blocked by classifier: token literal", allow_rule: ""}')"
   assert_success
   run jq -e --argjson k "$HEAD_KEYS" 'select(.action == "permission_denied") | .metadata
-    | keys_unsorted == $k and .truncated == true and (.command_head | length) <= 80
-    and (.command_head | startswith("GITHUB_TOKEN=[masked] gh api -X PUT /repos/o/r/pulls/412/merge --input [local"))' "$AUDIT"
+    | keys_unsorted == $k and .truncated == true and .command_head == "gh [redacted] -X [redacted]"' "$AUDIT"
   assert_success
   local row_key unmasked_key masked_key
   row_key="$(jq -r 'select(.action == "permission_denied") | .metadata.dedupe_key' "$AUDIT")"
@@ -473,12 +473,12 @@ _section() {
   assert_success
   [ -z "$(find "$WD" -maxdepth 1 -name '.workspace.json.*')" ] || fail "temp file left beside workspace.json"
   [ "$(_rows escalation_parked)" = 1 ] || fail "expected one escalation_parked row, got $(_rows escalation_parked)"
-  run jq -e --arg c "$MERGE_CMD" 'select(.action == "escalation_parked")
+  run jq -e --arg c "$MERGE_CMD_HEAD" 'select(.action == "escalation_parked")
     | .subject == "FN0"
-    and .metadata.escalated[0] == {tool: "Bash", command_head: $c, truncated: false}
+    and .metadata.escalated[0] == {tool: "Bash", command_head: $c, truncated: true}
     and (.metadata.escalated | length) == 2
     and ([.metadata.escalated[] | keys_unsorted] | all(. == ["tool", "command_head", "truncated"]))
-    and (.metadata.escalated[1].command_head | startswith("GITHUB_TOKEN=[masked] gh api"))' "$AUDIT"
+    and .metadata.escalated[1].command_head == "gh [redacted] -X [redacted]"' "$AUDIT"
   assert_success
   local needle
   for needle in "$GH_TOK" "$SECRET_CMD" "Bash($MERGE_CMD)" 'allow_rule' 'classifier_reason' '"command"'; do
@@ -553,10 +553,10 @@ _section() {
   [ "$ref" = "permission_resumed:FN0:$key:1" ] || fail "unexpected decision_ref: $ref"
   jq -e '.audit_row_written == true' <<< "$output"
   [ "$(_rows permission_resumed)" = 1 ] || fail "expected one permission_resumed row, got $(_rows permission_resumed)"
-  run jq -e --arg c "$MERGE_CMD" --arg k "$key" --arg r "$ref" 'select(.action == "permission_resumed")
+  run jq -e --arg c "$MERGE_CMD_HEAD" --arg k "$key" --arg r "$ref" 'select(.action == "permission_resumed")
     | .actor == "orchestrator" and .subject == "FN0" and .result == "ok"
     and (.metadata | keys_unsorted) == ["tool", "dedupe_key", "command_head", "truncated", "answer", "decision_ref"]
-    and .metadata == {tool: "Bash", dedupe_key: $k, command_head: $c, truncated: false,
+    and .metadata == {tool: "Bash", dedupe_key: $k, command_head: $c, truncated: true,
       answer: "manual", decision_ref: $r}' "$AUDIT"
   assert_success
 

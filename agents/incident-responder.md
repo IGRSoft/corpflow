@@ -97,18 +97,20 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 
 ### Output Artifact
 
-Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run writes `incident-0.md`) — an `## Incident Report` H2 over these H3 sections, in order:
+Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run writes `incident-0.md`). H2 set: § Artifact anchors (end of file).
 
-| Section | Content |
-|---|---|
-| Incident Summary | ID `INC-[number]`, severity P[0-3], status Active/Mitigated/Resolved, timestamps started · detected · mitigated · resolved |
-| Impact Assessment | Users affected, services impacted, business impact, blast radius |
-| Timeline | `Time`/`Event` table, one row per event |
-| Root Cause Analysis | Immediate cause, contributing factors, root cause (the systemic one) |
-| Response Actions | Numbered, each with its timestamp |
-| Resolution | Fix applied, verification (how it was confirmed), rollback used (yes/no + details) |
-| Action Items | `Priority`/`Action`/`Owner`/`Due` table — P1 prevent recurrence, P2 improve detection |
-| Lessons Learned | What worked, what to improve, process changes needed |
+#### Sections, in order
+
+| Under | Section | Content |
+|---|---|---|
+| H1 title | Incident Summary | ID `INC-[number]`, severity P[0-3], status Active/Mitigated/Resolved, timestamps started · detected · mitigated · resolved |
+| `## blast-radius` | Impact Assessment | Users affected, services impacted, business impact, blast radius |
+| `## root-cause` | Timeline | `Time`/`Event` table, one row per event |
+| `## root-cause` | Root Cause Analysis | Immediate cause, contributing factors, root cause (the systemic one) |
+| `## fix-plan` | Response Actions | Numbered, each with its timestamp |
+| `## fix-plan` | Resolution | Fix applied, verification (how it was confirmed), rollback used (yes/no + details) |
+| `## fix-plan` | Action Items | `Priority`/`Action`/`Owner`/`Due` table — P1 prevent recurrence, P2 improve detection |
+| `## fix-plan` | Lessons Learned | What worked, what to improve, process changes needed |
 
 ## Severity Classification
 
@@ -215,3 +217,13 @@ state-patch.sh --stage IR --prev USER --facts '{
 ```
 
 Union by `.id` (last writer wins, newest at the tail), so a re-run is byte-identical. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=IR -->
+### Artifact anchors
+
+`incident-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## root-cause`, `## fix-plan`, `## blast-radius`, `## elicitation-sweep`
+- Optional for IR: `## Incident Report`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=IR -->

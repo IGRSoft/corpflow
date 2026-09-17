@@ -17,8 +17,16 @@
 #       and state.json schemas using yq + jq. Exits 0 on pass.
 #
 #   handoff-harness.sh --validate-frontmatter <artifact.md> [--state <state.json>] [--strict]
+#                      [--legacy-tests-executed]
 #       Validates the artifact's `handoff:` frontmatter against the per-stage
 #       required-field matrix. Exits 0 on pass, 1 on fail.
+#
+#       DV and QA carry tests_executed as a list, one entry per runner
+#       invocation: [{runner, count, summary_line}]. A scalar fails.
+#       --legacy-tests-executed (or CORPFLOW_LEGACY_TESTS_EXECUTED=1) validates
+#       a legacy scalar count with its top-level test_summary_line under the
+#       integer rules instead, printing one deprecation warn; the opt-in is
+#       removed in the next minor release. A map never validates.
 #
 #       --state adds the AR->DV architecture-reference gate: when the artifact
 #       is a DV handoff and the state ledger has a tasks.AR<N> entry, the
@@ -36,6 +44,10 @@
 #
 #       The inverse guard (an architecture reference with no tasks.AR<N> entry)
 #       always warns and never fails, in either mode.
+#
+#       The artifact's H2 set is checked for every stage against cache-lint.sh
+#       --anchor-diff (missing required or unexpected H2 = one `fail:` line each), in both
+#       modes and with or without yq; an unreachable lint fails the gate.
 #
 #       The three closing-sweep checks (stub shape, ref anchor, ledger parity)
 #       ride on the same invocation for EVERY stage and hard-fail in both modes.
@@ -81,6 +93,10 @@ STATE_ARG=""
 # forgets the --strict flag; --strict alone can only turn it on.
 STRICT=0
 if [[ "${CORPFLOW_AR_REF_STRICT:-0}" == "1" ]]; then STRICT=1; fi
+# Same posture for the legacy scalar read: the env can only turn it on, so an
+# orchestrator that drops the flag cannot silently re-enable a scalar count.
+LEGACY_TE=0
+if [[ "${CORPFLOW_LEGACY_TESTS_EXECUTED:-0}" == "1" ]]; then LEGACY_TE=1; fi
 
 usage() {
   sed -n 's/^# \{0,1\}//p' "$0" | sed -n '1,/^$/p'
@@ -97,6 +113,7 @@ while [[ $# -gt 0 ]]; do
     --read-blocked-on) MODE="read-bo"; shift; ARG="${1:-}"; shift ;;
     --state) shift; STATE_ARG="${1:-}"; shift ;;
     --strict) STRICT=1; shift ;;
+    --legacy-tests-executed) LEGACY_TE=1; shift ;;
     *) echo "unknown arg: $1" >&2; usage ;;
   esac
 done
@@ -109,15 +126,15 @@ toks() {
   awk -v w="$words" 'BEGIN { printf "%d", w * 1.33 }'
 }
 
-# Tokens spent on the open_questions block alone, for the AD-2 discretionary budget.
+# Tokens spent on one handoff key's block alone, for the AD-2 discretionary budget.
 # Measured over the SAME source text `toks` counts — the frontmatter as written, not a
 # re-emitted copy — so the subtraction is exact rather than an estimate of a re-render.
-# The block runs from the `open_questions:` key to the next line indented no deeper, which
-# is how YAML already delimits it; a file without the key yields 0.
-toks_open_questions_block() {
-  local f="$1" words
-  words=$(awk '
-    /^[[:space:]]*open_questions:/ && !inblock {
+# The block runs from the `<key>:` line to the next line indented no deeper, which is how
+# YAML already delimits it; a file without the key yields 0.
+toks_key_block() {  # <file> <key>
+  local f="$1" key="$2" words
+  words=$(awk -v key="$key" '
+    !inblock && $0 ~ ("^[[:space:]]*" key ":") {
       match($0, /^[[:space:]]*/); indent = RLENGTH; inblock = 1; print; next
     }
     inblock {
@@ -1050,6 +1067,69 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
   return "$failed"
 }
 
+# ---------- tests_executed evidence (DV, QA) ----------
+# One entry per runner invocation: {runner, count, summary_line}. A list, never a folded
+# number: a stage running several runners had to squeeze them into one count, and every
+# runner but one then had no checkable record.
+
+# te_tag <fmfile> -> the yq tag of handoff.tests_executed; `!!null` when absent.
+te_tag() {
+  local t
+  t=$(yq eval '.handoff.tests_executed | tag' "$1" 2> /dev/null) || t='!!null'
+  printf '%s' "${t:-!!null}"
+}
+
+# te_rows <fmfile> -> one line per list entry, in order:
+#   map entries:   !!map|<runner-tag>|<count-tag>|<summary_line-tag>|<count when !!int>
+#   other entries: <entry-tag>
+# Tags and integers only, so the line never carries free text that could hold the
+# delimiter or a newline; runner and summary_line are read by index when needed.
+# Two yq calls rather than one: a single expression with a `select` alternative drops
+# non-map entries silently, and a dropped entry is a fault nobody would see.
+te_rows() {
+  local fm="$1" etag j=0
+  local -a etags=() mrows=()
+  while IFS= read -r etag; do
+    [[ -n "$etag" ]] && etags+=("$etag")
+  done < <(yq eval '.handoff.tests_executed[] | tag' "$fm" 2> /dev/null)
+  while IFS= read -r etag; do
+    [[ -n "$etag" ]] && mrows+=("$etag")
+  done < <(yq eval '.handoff.tests_executed[] | select(tag == "!!map")
+      | [(.runner | tag), (.count | tag), (.summary_line | tag),
+         (.count | select(tag == "!!int") | to_string)] | join("|")' "$fm" 2> /dev/null)
+  local i=0 n=${#etags[@]}
+  while [[ "$i" -lt "$n" ]]; do
+    if [[ "${etags[$i]}" == '!!map' ]]; then
+      printf '!!map|%s\n' "${mrows[$j]:-}"
+      j=$((j + 1))
+    else
+      printf '%s\n' "${etags[$i]}"
+    fi
+    i=$((i + 1))
+  done
+}
+
+# A valid count is a YAML integer written as plain digits. The tag alone would admit
+# `0x1F` and `+5`; the digits alone would admit the quoted "12" a JSON reader sees as text.
+te_count_valid() {  # <count-tag> <count>
+  [[ "$1" == '!!int' && "$2" =~ ^[0-9]+$ ]]
+}
+
+# rc 0 when the list reports nothing executed: empty, or every entry a map whose count is
+# a valid 0. Any invalid entry answers "no", so a malformed entry is reported once, by
+# check_summary_line, and not a second time as missing compile evidence.
+te_list_reports_zero() {  # <fmfile>
+  local row etag rtag ctag stag cval
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    IFS='|' read -r etag rtag ctag stag cval <<< "$row"
+    [[ "$etag" == '!!map' ]] || return 1
+    te_count_valid "$ctag" "$cval" || return 1
+    [[ $((10#$cval)) -eq 0 ]] || return 1
+  done < <(te_rows "$1")
+  return 0
+}
+
 # A DV stage reporting zero executed tests must say whether the suite COMPILES.
 # Zero is a legal outcome; being unable to tell it from "never built" is not — that
 # ambiguity let a platform reach a merge decision with no test ever run, while four
@@ -1062,17 +1142,27 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
 # Contract: stage-contracts.md#tpl-dv § Zero executed tests must say whether the
 # suite compiles.
 check_test_evidence() {
-  local fmfile="$1" executed compiles
+  local fmfile="$1" tag executed compiles missing_msg
 
-  executed=$(yq eval '.handoff.tests_executed // ""' "$fmfile")
-  [[ "$executed" == "null" ]] && executed=""
-  # An absent value is the required-field loop's business and a non-numeric one is
-  # check_summary_line's, which blocks it for both DV and QA: reporting it twice
-  # would send the stage two failures for one slip.
-  case "$executed" in
-    '' | *[!0-9]*) return 0 ;;
+  tag=$(te_tag "$fmfile")
+  case "$tag" in
+    '!!seq')
+      te_list_reports_zero "$fmfile" || return 0
+      missing_msg="fail: stage=DV reports no executed tests (an empty tests_executed list or every count 0) with no test_suite_compiles — add test_suite_compiles: true|false|unknown. It is checkable without test-execution authority, and it is what separates gate-blocked from never-built"
+      ;;
+    '!!null' | '!!map') return 0 ;;
+    *)
+      # A scalar outside the legacy opt-in is already refused by check_summary_line;
+      # asking it for compile evidence too would send two failures for one slip.
+      [[ "$LEGACY_TE" -eq 1 ]] || return 0
+      executed=$(yq eval '.handoff.tests_executed' "$fmfile")
+      case "$executed" in
+        '' | *[!0-9]*) return 0 ;;
+      esac
+      [[ $((10#$executed)) -eq 0 ]] || return 0
+      missing_msg="fail: stage=DV reports legacy tests_executed: 0 with no test_suite_compiles — add test_suite_compiles: true|false|unknown. It is checkable without test-execution authority, and it is what separates gate-blocked from never-built"
+      ;;
   esac
-  [[ "$executed" -eq 0 ]] || return 0
 
   # NOT `// ""`: yq's alternative operator treats a literal `false` as falsy and
   # hands back the default, which would silently turn one of the three legal
@@ -1082,7 +1172,7 @@ check_test_evidence() {
   case "$compiles" in
     true | false | unknown) return 0 ;;
     "")
-      echo "fail: stage=DV reports tests_executed: 0 with no test_suite_compiles — add test_suite_compiles: true|false|unknown. It is checkable without test-execution authority, and it is what separates gate-blocked from never-built" >&2
+      echo "$missing_msg" >&2
       return 1 ;;
     *)
       echo "fail: stage=DV test_suite_compiles is \"$compiles\" — expected true, false or unknown" >&2
@@ -1090,61 +1180,159 @@ check_test_evidence() {
   esac
 }
 
-# AD-4 — a non-zero execution count is checked against the words the runner used.
-# Until this arm existed the count was checked against NOTHING: check_test_evidence
-# returns early unless it is zero, so `tests_executed: 4000` validated clean for a
-# stage that ran nothing, which is the same absence-reads-as-success defect the
-# zero arm above closes from the other side.
+# A non-zero execution count is checked against the words the runner used; otherwise
+# `count: 4000` would validate clean for a stage that ran nothing.
 #
 # Two tiers, because "verbatim" is not mechanically decidable. Tier 1 asks only
 # that the excerpt EXIST somewhere durable — the artifact body, or a .context/logs/
 # capture the artifact names — which is platform-neutral and decidable. Tier 2, the
 # count-token match, is warn-only: it holds for bats and pytest but not for every
 # Gradle or Xcode formatter this cross-platform contract also governs, and a check
-# that guesses wrong fails honest stages. Same posture as ar_ref_violation above.
+# that guesses wrong fails honest stages. Same posture as ar_ref_violation below.
 #
 # DV and QA only: they are the two stages holding test-execution authority, so no
 # other stage can produce the line honestly.
 # Contract: stage-contracts.md#tpl-dv § Verification Command carries the runner's
 # verbatim summary line.
+#
+# Shape dispatcher. Absence is the required-field loop's business. A map is refused
+# in every mode; a scalar passes only through the legacy opt-in.
 check_summary_line() {  # <artifact> <fmfile> <stage>
-  local artifact="$1" fmfile="$2" stage="$3" executed line
+  local artifact="$1" fmfile="$2" stage="$3" tag val
 
-  executed=$(yq eval '.handoff.tests_executed // ""' "$fmfile")
-  [[ "$executed" == "null" ]] && executed=""
-  # Absence is the required-field loop's business — it is the one shape that loop
-  # decides. A PRESENT non-numeric value is this arm's: the loop tests only that a
-  # value is there, so delegating it let `tests_executed: "1841 (scoped)"` skip every
-  # tier below and validate clean for a stage that ran nothing.
-  case "$executed" in
-    '') return 0 ;;
-    *[!0-9]*)
-      echo "fail: stage=$stage tests_executed is \"$executed\" — a count is a whole number and nothing else; a value carrying units, a range or a parenthetical skips the whole evidence contract below it" >&2
+  tag=$(te_tag "$fmfile")
+  case "$tag" in
+    '!!null') return 0 ;;
+    '!!seq')
+      check_summary_line_list "$artifact" "$fmfile" "$stage" || return 1
+      return 0 ;;
+    '!!map')
+      echo "fail: stage=$stage tests_executed is a map, not a list — record one entry per runner: tests_executed: [{runner, count, summary_line}]" >&2
       return 1 ;;
   esac
-  [[ "$executed" -gt 0 ]] || return 0
+
+  val=$(yq eval '.handoff.tests_executed' "$fmfile")
+  # An empty scalar is reported by the required-field loop already.
+  [[ -n "$val" ]] || return 0
+  if [[ "$LEGACY_TE" -eq 1 ]]; then
+    check_summary_line_legacy "$artifact" "$fmfile" "$stage" || return 1
+    return 0
+  fi
+  echo "fail: stage=$stage tests_executed is a scalar (\"$val\") — record one entry per runner: tests_executed: [{runner, count, summary_line}]; a legacy scalar validates only under --legacy-tests-executed" >&2
+  return 1
+}
+
+# Every entry is checked and every fault gets its own line, so one run reports them all.
+# Within an entry: a non-map stops that entry; runner and count are independent; the
+# summary_line checks run only for a valid count > 0 and stop at the first fault, since
+# each assumes the one before it held.
+check_summary_line_list() {  # <artifact> <fmfile> <stage>
+  local artifact="$1" fmfile="$2" stage="$3" rc=0 i=0
+  local row etag rtag ctag stag cval runner count line
+
+  # fd 3, not stdin: the loop body runs yq and the audit appender, and neither may drain
+  # the rows still to be read.
+  while IFS= read -r row <&3; do
+    [[ -n "$row" ]] || continue
+    IFS='|' read -r etag rtag ctag stag cval <<< "$row"
+    if [[ "$etag" != '!!map' ]]; then
+      echo "fail: stage=$stage tests_executed[$i] is not a map — each entry is {runner, count, summary_line}" >&2
+      rc=1; i=$((i + 1)); continue
+    fi
+
+    # A collection has no one-line spelling to echo back; only scalars are quoted.
+    runner=""
+    case "$rtag" in
+      '!!null' | '!!map' | '!!seq') ;;
+      *) runner=$(yq eval ".handoff.tests_executed[$i].runner" "$fmfile") ;;
+    esac
+    if [[ "$rtag" != '!!str' || -z "${runner//[[:space:]]/}" ]]; then
+      echo "fail: stage=$stage tests_executed[$i] has no runner — name the runner that produced this count as a non-empty string (bats, pytest, swift, …)" >&2
+      rc=1
+    fi
+
+    if ! te_count_valid "$ctag" "$cval"; then
+      count=""
+      case "$ctag" in
+        '!!int') count="$cval" ;;
+        '!!null' | '!!map' | '!!seq') ;;
+        *) count=$(yq eval ".handoff.tests_executed[$i].count" "$fmfile") ;;
+      esac
+      echo "fail: stage=$stage tests_executed[$i] runner=$runner count is \"$count\" — a count is a whole number and nothing else; a value carrying units, a range or a parenthetical skips the evidence contract below it" >&2
+      rc=1; i=$((i + 1)); continue
+    fi
+    count="$cval"
+    if [[ $((10#$count)) -eq 0 ]]; then
+      i=$((i + 1)); continue
+    fi
+
+    # The tag, not the value: yq prints `null` for an absent key and for the string
+    # "null" alike, and those are different mistakes.
+    if [[ "$stag" == '!!null' ]]; then
+      echo "fail: stage=$stage tests_executed[$i] runner=$runner reports count: $count with no summary_line — copy the runner's own summary line in verbatim; it is the only record downstream that a count was ever observed" >&2
+      rc=1; i=$((i + 1)); continue
+    fi
+    line=$(yq eval ".handoff.tests_executed[$i].summary_line" "$fmfile")
+    if [[ -z "${line//[[:space:]]/}" || "$line" != *[0-9]* ]]; then
+      echo "fail: stage=$stage tests_executed[$i] runner=$runner summary_line carries no digit: \"$line\" — a runner's summary line reports numbers; a label is not evidence" >&2
+      rc=1; i=$((i + 1)); continue
+    fi
+    if ! summary_line_corroborated "$artifact" "$line"; then
+      echo "fail: stage=$stage tests_executed[$i] runner=$runner summary_line is uncorroborated: \"$line\" appears neither in $(basename "$artifact") nor in a .context/logs/ capture it names — an excerpt nobody can check is the unverifiable claim this arm refuses" >&2
+      rc=1; i=$((i + 1)); continue
+    fi
+    if ! printf '%s' "$line" | grep -qE "(^|[^0-9])${count}([^0-9]|\$)"; then
+      echo "warn: stage=$stage tests_executed[$i] runner=$runner count: $count is not a whole-number token of summary_line \"$line\" — the excerpt is corroborated, the count is not" >&2
+      summary_line_audit "$artifact" "$stage" "$count" "$line" "$runner"
+    fi
+    i=$((i + 1))
+  done 3< <(te_rows "$fmfile")
+
+  # Warn, not ignore silently: a stale top-level line left beside the list would read as
+  # evidence to anyone skimming the frontmatter.
+  if [[ "$(yq eval '.handoff.test_summary_line | tag' "$fmfile" 2> /dev/null)" != '!!null' ]]; then  # legacy key
+    echo "warn: stage=$stage carries a legacy top-level test_summary_line next to a tests_executed list — it is ignored as evidence; move it into that runner's summary_line and delete the top-level key" >&2
+  fi
+  return "$rc"
+}
+
+# The legacy scalar shape under the opt-in: one count for the whole stage and one
+# top-level summary line, checked with the integer rules the list replaced. Removed in
+# the next minor release together with --legacy-tests-executed.
+check_summary_line_legacy() {  # <artifact> <fmfile> <stage>
+  local artifact="$1" fmfile="$2" stage="$3" executed line
+
+  echo "warn: stage=$stage tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated, removed in the next minor release; rewrite it as tests_executed: [{runner, count, summary_line}]" >&2
+
+  executed=$(yq eval '.handoff.tests_executed' "$fmfile")
+  case "$executed" in
+    *[!0-9]*)
+      echo "fail: stage=$stage legacy tests_executed is \"$executed\" — a count is a whole number and nothing else; a value carrying units, a range or a parenthetical skips the whole evidence contract below it" >&2
+      return 1 ;;
+  esac
+  [[ $((10#$executed)) -gt 0 ]] || return 0
 
   # NOT `// ""`: the alternative operator cannot tell an absent field from an
   # empty one, and those two get different messages because they are different
   # mistakes — nothing written versus a placeholder left behind.
-  line=$(yq eval '.handoff.test_summary_line' "$fmfile")
+  line=$(yq eval '.handoff.test_summary_line' "$fmfile")  # legacy top-level key
 
   if [[ "$line" == "null" ]]; then
-    echo "fail: stage=$stage reports tests_executed: $executed with no test_summary_line — copy the runner's own summary line in verbatim; it is the only record downstream that a count was ever observed" >&2
+    echo "fail: stage=$stage reports legacy tests_executed: $executed with no test_summary_line — copy the runner's own summary line in verbatim; it is the only record downstream that a count was ever observed" >&2
     return 1
   fi
   if [[ -z "${line//[[:space:]]/}" || "$line" != *[0-9]* ]]; then
-    echo "fail: stage=$stage test_summary_line carries no digit: \"$line\" — a runner's summary line reports numbers; a label is not evidence" >&2
+    echo "fail: stage=$stage legacy test_summary_line carries no digit: \"$line\" — a runner's summary line reports numbers; a label is not evidence" >&2
     return 1
   fi
 
   if ! summary_line_corroborated "$artifact" "$line"; then
-    echo "fail: stage=$stage test_summary_line is uncorroborated: \"$line\" appears neither in $(basename "$artifact") nor in a .context/logs/ capture it names — an excerpt nobody can check is the unverifiable claim this arm refuses" >&2
+    echo "fail: stage=$stage legacy test_summary_line is uncorroborated: \"$line\" appears neither in $(basename "$artifact") nor in a .context/logs/ capture it names — an excerpt nobody can check is the unverifiable claim this arm refuses" >&2
     return 1
   fi
 
   if ! printf '%s' "$line" | grep -qE "(^|[^0-9])${executed}([^0-9]|\$)"; then
-    echo "warn: stage=$stage tests_executed: $executed is not a whole-number token of test_summary_line \"$line\" — the excerpt is corroborated, the count is not" >&2
+    echo "warn: stage=$stage legacy tests_executed: $executed is not a whole-number token of test_summary_line \"$line\" — the excerpt is corroborated, the count is not" >&2
     summary_line_audit "$artifact" "$stage" "$executed" "$line"
   fi
   return 0
@@ -1183,8 +1371,11 @@ summary_line_corroborated() {  # <artifact> <line>
 # so a later reader can tell a formatter this arm cannot parse from a count nobody
 # checked. It rides the shared appender rather than a second writer, and a missing
 # library degrades to silence: an audit row is never a gate.
-summary_line_audit() {  # <artifact> <stage> <executed> <line>
-  local artifact="$1" stage="$2" executed="$3" line="$4" lib
+summary_line_audit() {  # <artifact> <stage> <executed> <line> [runner]
+  local artifact="$1" stage="$2" executed="$3" line="$4" runner="${5-}" lib tid="$2"
+  local -a runner_kv=()
+  [[ $tid =~ ^[A-Z]{2}[0-9]+$ ]] || tid=unknown
+  [[ -z "$runner" ]] || runner_kv=(--meta-kv "runner=$runner")
   lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
   [[ -r "$lib" ]] || return 0
   # shellcheck source=../../shared/lib/audit-lib.sh
@@ -1192,8 +1383,8 @@ summary_line_audit() {  # <artifact> <stage> <executed> <line>
   command -v corpflow_audit_row > /dev/null 2>&1 || return 0
   corpflow_audit_row --file "$(dirname "$artifact")/logs/audit.jsonl" \
     --actor "handoff-harness" --action "count_corroboration" --result "degraded" \
-    --subject "$stage" --meta-kv "tests_executed=$executed" \
-    --meta-kv "summary_line=$line" || return 0
+    --subject "$stage" --task-id "$tid" --meta-kv "tests_executed=$executed" \
+    ${runner_kv[@]+"${runner_kv[@]}"} --meta-kv "summary_line=$line" || return 0
 }
 
 ARCH_REF_RE='^architecture-[0-9]+\.md(#[a-z-]+)?$'
@@ -1266,6 +1457,32 @@ check_ar_ref() {
   return 0
 }
 
+# check_anchors <artifact> <stage> — one `fail:` line per missing or unexpected H2. Fails
+# closed: an unreachable lint is a gate failure, unlike the pre-write hook, which fails open.
+check_anchors() {
+  local f="$1" stage="$2" name rows drc=0 kind h
+  name="$(basename "$f")"
+  local lint
+  lint="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cache-lint.sh"
+  if [[ ! -r "$lint" ]]; then
+    echo "fail: anchor gate cannot run on $name: cache-lint.sh unreachable at $lint" >&2
+    return 1
+  fi
+  rows=$(bash "$lint" --anchor-diff --stage "$stage" "$f" 2>&1) || drc=$?
+  [[ "$drc" -ne 0 ]] || return 0
+  if [[ "$drc" -ne 1 ]]; then
+    echo "fail: anchor gate cannot run on $name: ${rows%%$'\n'*}" >&2
+    return 1
+  fi
+  while IFS=$'\t' read -r kind h; do
+    case "$kind" in
+      missing) echo "fail: anchor-lint stage=$stage missing required H2 '## $h' in $name" >&2 ;;
+      unexpected) echo "fail: anchor-lint stage=$stage unexpected H2 '## $h' in $name — nest it as H3 (handoff-protocol.md#anchor-allow-list)" >&2 ;;
+    esac
+  done <<< "$rows"
+  return 1
+}
+
 validate_frontmatter() {
   local f="$1"
   [[ -f "$f" ]] || { echo "frontmatter: file not found: $f" >&2; return 1; }
@@ -1322,10 +1539,19 @@ validate_frontmatter() {
   local bo_rc=0
   check_blocked_on "$fmfile" || bo_rc=1
 
+  # Before the yq gate so H2 enforcement never depends on yq; an unknown or absent stage is
+  # left to the stage checks below.
+  local anchor_rc=0 fm_stage
+  fm_stage=$(corpflow_fm_field "$fmfile" stage)
+  if [[ -n "$fm_stage" && "$fm_stage" != "null" && -n "$(required_for "$fm_stage")" ]]; then
+    check_anchors "$f" "$fm_stage" || anchor_rc=1
+  fi
+  local pre_rc=$((bo_rc | anchor_rc))
+
   command -v yq >/dev/null 2>&1 || {
     echo "frontmatter: yq required for full validation; running grep-only fallback" >&2
     head -1 "$f" | grep -q '^---$' || { echo "fail: missing leading ---" >&2; return 1; }
-    return "$bo_rc"
+    return "$pre_rc"
   }
 
   local stage
@@ -1342,7 +1568,7 @@ validate_frontmatter() {
   # round per defect. Each check keeps its own message text and its own line: Step B.1
   # re-dispatches with the `fail:` line verbatim and the orchestrator greps for one naming a
   # sweep id, so aggregating them into a single line would break that reader.
-  local rc="$bo_rc"
+  local rc="$pre_rc"
 
   local field
   for field in $req; do
@@ -1369,8 +1595,9 @@ validate_frontmatter() {
     check_test_evidence "$fmfile" || rc=1
   fi
 
+  local te_arm_ok=0
   if [[ "$stage" == "DV" || "$stage" == "QA" ]]; then
-    check_summary_line "$f" "$fmfile" "$stage" || rc=1
+    if check_summary_line "$f" "$fmfile" "$stage"; then te_arm_ok=1; else rc=1; fi
   fi
 
   check_files_touched_cap "$fmfile" "$stage" "$(basename "$f")" || rc=1
@@ -1386,42 +1613,53 @@ validate_frontmatter() {
   fi
 
   # Token budget (AD-2). The budget constrains DISCRETIONARY prose — summary,
-  # next_stage_focus, decision bodies — so the mandatory open_questions stubs are excluded
-  # from it: counting them made the check measure the wrong thing and rewarded a stage for
-  # asking fewer questions, which is the incentive AC-8 names.
+  # next_stage_focus, decision bodies — so the mandatory open_questions stubs and the
+  # tests_executed evidence list are excluded from it: counting them made the check measure
+  # the wrong thing and rewarded a stage for asking fewer questions, or for folding several
+  # runners into one entry, since a verbatim summary line cannot be shortened.
   #
   #   discretionary = toks(frontmatter) - min( toks(stub block), 4 x 16 )
+  #                                     - min( toks(tests_executed block), 4 x 24 )
   #   fail  when discretionary > 200
-  #   warn  when total        > 264      # advisory; keeps the real absolute cost visible
+  #   warn  when total        > 360      # advisory; keeps the real absolute cost visible
   #
-  # The exclusion caps at four stubs' worth (12 measured tokens plus a third of headroom),
-  # so it cannot be gamed by inflating `ref` strings or emitting extra stubs: 264 is a
-  # deterministic ceiling. check_sweep_stub_shape has already run above, so only
-  # shape-valid stubs are ever excluded — that ordering is what makes the cap safe.
+  # Each exclusion is capped (four stubs; four runner entries, a verbatim Xcode line being
+  # about 19 tokens), so neither can be gamed by inflating strings or emitting extra items:
+  # 360 is a deterministic ceiling. Both shape checks have already run above, so only a
+  # shape-valid block is ever excluded — that ordering is what makes the caps safe.
   #
-  # Under collect-all the stub-shape check may have FAILED above, and the exclusion is only
-  # sound once it passes. The arm then counts the stubs in full and says so, rather than
-  # skipping: a skip lets a broken stub hide an over-budget block for a round, which is the
-  # cost collect-all exists to remove.
-  local tcount stubtoks discretionary budget_note=""
+  # Under collect-all a shape check may have FAILED above, and its exclusion is only sound
+  # once it passes. The block is then counted in full and the failure says so, rather than
+  # skipping: a skip lets a broken block hide an over-budget frontmatter for a round, which
+  # is the cost collect-all exists to remove.
+  local tcount stubtoks tetoks=0 discretionary budget_note="" te_shape
   tcount=$(toks "$fmfile")
   if [[ "$stub_shape_ok" -eq 1 ]]; then
-    stubtoks=$(toks_open_questions_block "$fmfile")
+    stubtoks=$(toks_key_block "$fmfile" open_questions)
     [[ "$stubtoks" -le 64 ]] || stubtoks=64
   else
     stubtoks=0
     budget_note="(stub-shape invalid: sweep stubs counted in full) "
   fi
-  discretionary=$((tcount - stubtoks))
-  # The advisory line is emitted BEFORE the failure, not after: 264 is exactly 200 plus the
-  # 64-token exclusion cap, so every artifact over the ceiling is already over the budget and
-  # a warn placed after the `return 1` could never print. Ordering it first is what keeps the
+  if [[ "$stage" == "DV" || "$stage" == "QA" ]]; then
+    te_shape=$(te_tag "$fmfile")
+    if [[ "$te_shape" == '!!seq' && "$te_arm_ok" -eq 1 ]]; then
+      tetoks=$(toks_key_block "$fmfile" tests_executed)
+      [[ "$tetoks" -le 96 ]] || tetoks=96
+    elif [[ "$te_shape" != '!!null' && "$te_arm_ok" -eq 0 ]]; then
+      budget_note="${budget_note}(tests_executed invalid: counted in full) "
+    fi
+  fi
+  discretionary=$((tcount - stubtoks - tetoks))
+  # The advisory line is emitted BEFORE the failure, not after: 360 is exactly 200 plus both
+  # exclusion caps, so every artifact over the ceiling is already over the budget and a warn
+  # placed after the `return 1` could never print. Ordering it first is what keeps the
   # absolute cost visible on the report that matters — the failing one.
-  if [[ "$tcount" -gt 264 ]]; then
-    echo "warn: stage=$stage frontmatter ${tcount} tokens > 264 absolute ceiling" >&2
+  if [[ "$tcount" -gt 360 ]]; then
+    echo "warn: stage=$stage frontmatter ${tcount} tokens > 360 absolute ceiling" >&2
   fi
   if [[ "$discretionary" -gt 200 ]]; then
-    echo "fail: ${budget_note}stage=$stage frontmatter ${discretionary} discretionary tokens > 200 budget (${tcount} total - ${stubtoks} sweep-stub tokens excluded)" >&2
+    echo "fail: ${budget_note}stage=$stage frontmatter ${discretionary} discretionary tokens > 200 budget (${tcount} total - ${stubtoks} sweep-stub tokens - ${tetoks} tests_executed tokens excluded)" >&2
     rc=1
   fi
 
@@ -1598,6 +1836,10 @@ Score 38.
 ## stages
 
 PL AR TL DV DR QA DC FN ST.
+
+## summary
+
+Demo plan.
 EOF
 
   cat > "$d/.context/architecture.md" <<'EOF'
@@ -1661,8 +1903,8 @@ handoff:
   stage: DV
   verdict: ok
   summary: "Implemented."
-  tests_executed: 12
-  test_summary_line: "12 tests, 0 failures"
+  tests_executed:
+    - { runner: bats, count: 12, summary_line: "12 tests, 0 failures" }
   files_touched: [a.md, b.md]
   next_stage_focus: "DR reviews"
   open_questions: []

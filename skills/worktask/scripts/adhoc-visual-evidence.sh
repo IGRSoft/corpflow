@@ -81,7 +81,7 @@ audit_adhoc() {
   meta=$(jq -cn --arg reason "$2" --argjson extra "${3:-\{\}}" \
     '$extra + {reason:$reason}' 2>/dev/null) || meta='{}'
   corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
-    --action adhoc_visual_evidence --result "$1" --meta "$meta"
+    --action adhoc_visual_evidence --subject adhoc --result "$1" --task-id none --meta "$meta"
 }
 
 # ---------- gating ----------------------------------------------------------
