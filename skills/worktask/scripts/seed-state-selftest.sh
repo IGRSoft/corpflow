@@ -128,6 +128,17 @@ _st_s6_goal_cap() {
     and (.facts.goal | endswith("\u2026"))' "$r/c/.context/state.json" > /dev/null
 }
 
+_st_s6b_goal_word_boundary() {
+  local r="$_ST_TD/s6b" g want
+  _st_repo "$r" || return 1
+  mkdir -p "$r/.context" || return 1
+  g=$(jq -nr '[range(30) | "abcdefghi "] | add') || return 1
+  want=$(jq -nr '([range(24) | "abcdefghi"] | join(" ")) + "…"') || return 1
+  _st_run "$r" - --worktask-id wt-6b --goal "$g"
+  [ "$_ST_RC" -eq 0 ] || return 1
+  jq -e --arg want "$want" '.facts.goal == $want' "$r/.context/state.json" > /dev/null
+}
+
 _st_s7_worktree_own() {
   local m="$_ST_TD/s7main" wt="$_ST_TD/s7wt"
   _st_repo "$m" && mkdir "$m/.context" || return 1
@@ -279,6 +290,8 @@ self_test() {
   _st_case "S4 existing ledger refused byte-identical" _st_s4_exists
   _st_case "S5 goal escaping, nothing evaluated" _st_s5_goal_escaping
   _st_case "S6 goal capped at 240 codepoints" _st_s6_goal_cap
+  _st_case "S6b goal word boundary: spaced goal over 240 ends on whole word plus ellipsis" \
+    _st_s6b_goal_word_boundary
   _st_case "S7 linked worktree seeds its own ledger" _st_s7_worktree_own
   _st_case "S7b worktree without .context exits 4" _st_s7b_worktree_unresolved
   _st_case "S7c CLAUDE_PROJECT_DIR inside toplevel" _st_s7c_project_dir_inside
