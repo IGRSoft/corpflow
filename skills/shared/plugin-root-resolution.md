@@ -86,6 +86,11 @@ Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)
 - **Agent `tools:` substitution is not explicitly documented** (skill content, agent content
   and skill `allowed-tools` are). A grant that does not match denies the call, and the stage
   takes the permission-denied park path (`skills/worktask/SKILL.md § Step 6.5a4`).
+- **A fixed literal argument prefix may sit before the space-star** to scope the grant to one
+  subcommand, e.g. `Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh
+  --consumer *)`. The prefix is literal — letters, digits, `_ . , = / -` and single spaces,
+  never `*`, `$`, quotes or other shell metacharacters — so rewriting such a grant to the bare
+  script form would widen it, and it is never collapsed.
 
 ### Invocation
 
