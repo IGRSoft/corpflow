@@ -187,10 +187,16 @@ ud_transcript_check() {
       | (if type == "array" then .[] else empty end)
       | select(type == "object" and .type == "tool_use" and .id == $id and .name == "AskUserQuestion");
   '
+  # P4 also requires the recorded call's own questions to be the ones this payload reports: the
+  # comparison is byte-equal and happens entirely inside jq, with the payload slurped as a file.
   _found=0
   for _try in 1 2 3; do
     if [ -f "$_tp" ] && [ ! -L "$_tp" ] \
-      && jq -sce --arg id "$_tuid" "${_def}"'[.[] | ud_tool_uses($id)] | length > 0' \
+      && jq -sce --arg id "$_tuid" --slurpfile pay "$_payload" "${_def}"'
+          [.[] | ud_tool_uses($id)] as $tu
+          | (($pay[0].tool_input.questions // []) | map(.question)) as $pq
+          | ($tu | length > 0)
+            and any($tu[]; ((.input.questions // []) | map(.question)) == $pq)' \
         "$_tp" > /dev/null 2>&1; then
       _found=1
       break
@@ -620,7 +626,8 @@ ud_chain_walk() {
     return 2
   fi
 
-  printf '%s\n' "$_shaout" | jq -Rn --rawfile meta "$_td/meta" --argjson n "$_n" \
+  # -r: each row leaves as its own JSON line, not as a quoted JSON string of that line.
+  printf '%s\n' "$_shaout" | jq -Rnr --rawfile meta "$_td/meta" --argjson n "$_n" \
     --argjson notail "$_notail" --arg actor "$UD_ACTOR" '
     def digline: capture("^(?<h>[0-9a-f]{64})[ *]+(?<p>\\S.*)$");
     ([inputs | select(length > 0) | digline]) as $digs

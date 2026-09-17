@@ -202,7 +202,7 @@ continue, in the shape the megatask Shared Seams registry declares
 
 | kind | detail keys, required first, `[optional]` | resume_with |
 |---|---|---|
-| `user_decision` | question, options, [recommended, item] | decision_ref |
+| `user_decision` | question, options, [recommended], [item] | decision_ref |
 | `user_action` | request, command, [verify] | decision_ref |
 | `permission` | tool, command, classifier_reason, allow_rule | decision_ref |
 | `peer_session` | to, question, [deadline] | reply_ref |
