@@ -7,6 +7,7 @@
 #   - an unknown or malformed task id is a usage-class failure: exit 2, no stdout
 #   - the orchestrator loop wires brief-compose.sh into SKILL.md and commands/worktask.md
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
+bats_require_minimum_version 1.5.0
 
 SCRIPT="skills/worktask/scripts/brief-compose.sh"
 
@@ -68,11 +69,11 @@ EOF
   }
 }
 EOF
-  run bash "$PLUGIN_ROOT/$SCRIPT" ZZ9 --state "$WD/.context/state.json" --orch-root "$WD"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" ZZ9 --state "$WD/.context/state.json" --orch-root "$WD"
   assert_failure 2
   assert_output ""
 
-  run bash "$PLUGIN_ROOT/$SCRIPT" 'not-an-id' --state "$WD/.context/state.json" --orch-root "$WD"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" 'not-an-id' --state "$WD/.context/state.json" --orch-root "$WD"
   assert_failure 2
   assert_output ""
 }

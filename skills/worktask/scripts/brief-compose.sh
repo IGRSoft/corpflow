@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # @description brief-compose.sh — composes a stage dispatch brief from contracts and the
-#   ledger, never from hand-written prose. Every fact in the brief is a `file:line` or
-#   `artifact#anchor` ref the receiving agent resolves itself (skills/worktask/references/
-#   handoff-protocol.md#cache-prefix). The orchestrator is the only caller.
+#   ledger, never from hand-written prose. Every fact in the brief is a `file:line` ref, an
+#   `artifact#anchor` ref, or a plain existing-file path ref the receiving agent resolves
+#   itself (skills/worktask/references/handoff-protocol.md#cache-prefix). The orchestrator
+#   is the only caller.
 #
 #   Section order mirrors the cache-prefix marker layout exactly, one marker per line:
 #     <<<contract-reminder>>> <<<worktask-header>>> <<<state-json>>> <<<stage-contract>>>
@@ -98,9 +99,13 @@ add_root() {
   ROOTS_STR="${ROOTS_STR}${r}"$'\n'
   # macOS aliases /var and /private/var: a root passed in logical form must also
   # register its physical form, else a token the OS resolved through the symlink
-  # reads as off-root even though it names the same directory.
+  # reads as off-root even though it names the same directory. `if`, not `&&`: phys == r
+  # is the common case and must not become the function's status under set -e.
   phys=$(cd "$r" 2> /dev/null && pwd -P) || phys=""
-  [[ -n "$phys" && "$phys" != "$r" ]] && ROOTS_STR="${ROOTS_STR}${phys}"$'\n'
+  if [[ -n "$phys" && "$phys" != "$r" ]]; then
+    ROOTS_STR="${ROOTS_STR}${phys}"$'\n'
+  fi
+  return 0
 }
 
 # is_allowed_path <token> — rc 0 when token equals a root or sits under one (root or
@@ -120,17 +125,68 @@ record_issue() {
 
 # scan_abs_paths <buffer-file> — flags every absolute-path token in the whole brief
 # (section [3] included) that is not under an allowed root. A token opens at start-of-line
-# or after one of: space, double-quote, single-quote, backtick, "(", "=", ":" — the shapes
-# a path is actually introduced by in prose, JSON and fenced YAML — and is a run of path
-# characters starting with "/". URLs are stripped first so "https://" is never read as a
-# filesystem path (its scheme colon would otherwise satisfy the boundary class).
+# or after one of: space, double-quote, single-quote, backtick, "(", "=", ":", tab, "[",
+# ",", "<", "*", "|", "{" — the shapes a path is actually introduced by in prose, JSON and
+# fenced YAML — and is a run of path characters starting with "/". A bare "/dev/null" is
+# never flagged, and a single-segment "/name" or "/plugin:cmd" token that does not exist on
+# disk reads as a slash command, not a path. URLs are stripped first so "https://" is never
+# read as a filesystem path (its scheme colon would otherwise satisfy the boundary class);
+# "file://" loses only its scheme, so its path is still scanned. Allowed roots are masked
+# out first (literal match, longest first, whole path components only) so a root holding a
+# space or "@" is never cut into a false off-root prefix.
 scan_abs_paths() {
-  local buf="$1" scrubbed dq sq bt cls pattern lineno match token
+  local buf="$1" scrubbed masked roots_file dq sq bt tb cls boundary pattern lineno match token
   scrubbed=$(mktemp)
-  dq='"'; sq="'"; bt='`'
+  masked=$(mktemp)
+  roots_file=$(mktemp)
+  dq='"'; sq="'"; bt='`'; tb=$'\t'
   cls="[^[:space:]${dq}${sq}${bt})]"
-  sed -E "s#[A-Za-z][A-Za-z0-9+.-]*://${cls}*##g" "$buf" > "$scrubbed"
-  pattern="(^|[ ${dq}${sq}${bt}(=:])/[A-Za-z0-9_.+~%-]+(/[A-Za-z0-9_.+~%-]*)*"
+  # file:// names a local path, not a network resource: drop only the scheme so the
+  # path itself, and the boundary character before it, survive into the scan.
+  sed -E "s#(^|[^A-Za-z0-9+.-])file://#\\1#g" "$buf" \
+    | sed -E "s#[A-Za-z][A-Za-z0-9+.-]*://${cls}*##g" > "$scrubbed"
+
+  cp "$scrubbed" "$masked"
+  printf '%s' "$ROOTS_STR" | awk 'NF { print length($0) "\t" $0 }' \
+    | sort -t "$tb" -k1,1nr | cut -f2- > "$roots_file"
+  if [[ -s "$roots_file" ]]; then
+    awk -v rf="$roots_file" '
+      BEGIN {
+        n = 0
+        while ((getline r < rf) > 0) { n++; roots[n] = r }
+        close(rf)
+      }
+      {
+        line = $0
+        for (k = 1; k <= n; k++) {
+          r = roots[k]
+          rlen = length(r)
+          if (rlen == 0) continue
+          out = ""; rest = line
+          while ((i = index(rest, r)) > 0) {
+            before = (i > 1) ? substr(rest, i - 1, 1) : substr(out, length(out), 1)
+            after = substr(rest, i + rlen, 1)
+            okbefore = (before == "" || before !~ /[A-Za-z0-9_.+~%\/-]/)
+            okafter = (after == "" || after == "/" || after !~ /[A-Za-z0-9_.+~%-]/)
+            if (okbefore && okafter) {
+              out = out substr(rest, 1, i - 1) "\001ROOT\001"
+              rest = substr(rest, i + rlen)
+            } else {
+              out = out substr(rest, 1, i)
+              rest = substr(rest, i + 1)
+            }
+          }
+          line = out rest
+        }
+        print line
+      }
+    ' "$masked" > "${masked}.tmp" || die2 "root-masking awk failed"
+    mv "${masked}.tmp" "$masked" || die2 "root-masking temp swap failed"
+  fi
+  rm -f "$roots_file"
+
+  boundary="[ ${dq}${sq}${bt}(=:,[<*|{${tb}]"
+  pattern="(^|${boundary})/[A-Za-z0-9_.+~%-]+(/[A-Za-z0-9_.+~%-]*)*"
   while IFS=: read -r lineno match; do
     [[ -n "$match" ]] || continue
     case "$match" in
@@ -138,16 +194,36 @@ scan_abs_paths() {
       ?*) token="${match#?}" ;;
       *) continue ;;
     esac
-    is_allowed_path "$token" && continue
+    if [[ "$token" == "/dev/null" ]]; then continue; fi
+    if [[ "${token#/}" != */* && "$token" =~ ^/[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$ && ! -e "$token" ]]; then
+      continue
+    fi
+    if is_allowed_path "$token"; then continue; fi
     record_issue "absolute path outside allowed roots" "$token"
-  done < <(grep -noE "$pattern" "$scrubbed" || true)
-  rm -f "$scrubbed"
+  done < <(grep -noE "$pattern" "$masked" || true)
+  rm -f "$scrubbed" "$masked"
+}
+
+# plain_path_exists <path> — rc 0 when a plain-path ref names an existing file:
+# plugin-root-relative, under any ledger workspace_path, under the ledger's .context dir,
+# or under that dir's parent (a path written as ".context/...").
+plain_path_exists() {
+  local path="$1" wp
+  if [[ -f "$PROOT/$path" ]]; then return 0; fi
+  while IFS= read -r wp; do
+    [[ -n "$wp" ]] || continue
+    if [[ -f "$wp/$path" ]]; then return 0; fi
+  done <<< "$WSPATHS_STR"
+  if [[ -f "$CTX_DIR/$path" ]]; then return 0; fi
+  if [[ -f "$(dirname "$CTX_DIR")/$path" ]]; then return 0; fi
+  return 1
 }
 
 # check_ref_resolves <ref> — "path:line" resolves when the file exists
 # (plugin-root-relative, else under a ledger workspace_path) and 1<=line<=line count.
 # "artifact#anchor" resolves when the artifact exists under the ledger's .context dir and
-# carries a "## <anchor>" heading.
+# carries a "## <anchor>" heading. Anything else is a plain path (plain_path_exists).
+# Explicit returns only: a bare false `[[ ]]` or `grep` would trip errexit first.
 check_ref_resolves() {
   local ref="$1" file lineno fpath n wp anchor art apath
   if [[ "$ref" =~ ^(.+):([0-9]+)$ ]]; then
@@ -159,19 +235,21 @@ check_ref_resolves() {
         [[ -n "$wp" ]] || continue
         if [[ -f "$wp/$file" ]]; then fpath="$wp/$file"; break; fi
       done <<< "$WSPATHS_STR"
-      [[ -n "$fpath" ]] || return 1
+      if [[ -z "$fpath" ]]; then return 1; fi
     fi
     n=$(wc -l < "$fpath" | tr -d ' ')
-    [[ "$lineno" -ge 1 && "$lineno" -le "$n" ]]
-    return $?
+    if [[ "$lineno" -ge 1 && "$lineno" -le "$n" ]]; then return 0; fi
+    return 1
   elif [[ "$ref" == *"#"* ]]; then
     art="${ref%%#*}"; anchor="${ref#*#}"
     apath="$CTX_DIR/$art"
-    [[ -f "$apath" ]] || return 1
-    grep -qE "^## $(regex_escape "$anchor")[[:space:]]*\$" "$apath"
-    return $?
+    if [[ ! -f "$apath" ]]; then return 1; fi
+    if grep -qE "^## $(regex_escape "$anchor")[[:space:]]*\$" "$apath"; then return 0; fi
+    return 1
+  else
+    if plain_path_exists "$ref"; then return 0; fi
+    return 1
   fi
-  return 1
 }
 
 # --- canon extraction -----------------------------------------------------------
@@ -192,13 +270,14 @@ model_block_extract() {
   ' "$canon"
 }
 
-# The "### #tpl-<stage> — …" block, heading through the line before the next "### "
-# heading (or EOF) — "####"/"#####" sub-headings stay inside, since they belong to it.
+# The "### #tpl-<stage> — …" block, heading through the line before the next "## " or
+# "### " heading (or EOF) — "####"/"#####" sub-headings stay inside, since they belong to
+# it. The "## " stop keeps the last block before a new H2 from swallowing that section.
 tpl_block_extract() {
   local start="$1" canon="$2"
   awk -v start="$start" '
     NR == start { c = 1 }
-    c && NR > start && /^### / { exit }
+    c && NR > start && /^###? / { exit }
     c { print }
   ' "$canon"
 }
@@ -345,8 +424,46 @@ cmd_render() {
     local ar_n ar_file
     ar_n=$(jq -r '.tasks.AR0.metadata.run_index // .run_index // 0' "$STATE")
     ar_file="architecture-${ar_n}.md"
-    [[ -f "$CTX_DIR/$ar_file" ]] && AR_REF="${ar_file}#decisions"
+    if [[ -f "$CTX_DIR/$ar_file" ]]; then AR_REF="${ar_file}#decisions"; fi
   fi
+
+  # ---- metadata.context_refs: a JSON array, or (state-ledger.md's preferred shape) a
+  # JSON-encoded string holding that array; anything else is a ledger defect, not a ref
+  # to drop silently. Decoded per row since the two shapes can mix across a ledger. ----
+  local RAW_CTXREFS_STR="" ctxrefs_type
+  ctxrefs_type=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs | type' "$STATE")
+  case "$ctxrefs_type" in
+    null) : ;;
+    array)
+      while IFS= read -r r; do
+        if [[ -n "$r" ]]; then RAW_CTXREFS_STR="${RAW_CTXREFS_STR}${r}"$'\n'; fi
+      done < <(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs[]' "$STATE")
+      ;;
+    string)
+      local ctxrefs_raw ctxrefs_decoded
+      ctxrefs_raw=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs' "$STATE")
+      ctxrefs_decoded=$(printf '%s' "$ctxrefs_raw" | jq -r \
+        'if type == "array" then .[] else error("not a JSON array") end' 2> /dev/null) \
+        || die2 "tasks.$TASK_ID.metadata.context_refs is a string but not a JSON array: $ctxrefs_raw"
+      while IFS= read -r r; do
+        if [[ -n "$r" ]]; then RAW_CTXREFS_STR="${RAW_CTXREFS_STR}${r}"$'\n'; fi
+      done <<< "$ctxrefs_decoded"
+      ;;
+    *) die2 "tasks.$TASK_ID.metadata.context_refs has unexpected type: $ctxrefs_type" ;;
+  esac
+
+  # A plain-path entry is emitted only when its file exists, the same gate refs.dev and
+  # AR_REF apply; file:line and artifact#anchor entries always emit, so an unresolved one
+  # fails the guard below.
+  local CONTEXT_REFS_STR="" cr
+  while IFS= read -r cr; do
+    if [[ -z "$cr" ]]; then continue; fi
+    if [[ "$cr" =~ ^.+:[0-9]+$ || "$cr" == *"#"* ]]; then
+      CONTEXT_REFS_STR="${CONTEXT_REFS_STR}${cr}"$'\n'
+    elif plain_path_exists "$cr"; then
+      CONTEXT_REFS_STR="${CONTEXT_REFS_STR}${cr}"$'\n'
+    fi
+  done <<< "$RAW_CTXREFS_STR"
 
   # ---- Assemble: buffer the whole brief before anything reaches stdout ----
   BUF=$(mktemp)
@@ -357,8 +474,9 @@ cmd_render() {
   emit "<<<contract-reminder>>>"
   emit "Every \`ref:\` line below is a fact this brief did not verify for you. Resolve a"
   emit "file:line ref by opening the file at that line; resolve an artifact#anchor ref by"
-  emit "opening the artifact and finding the \"## <anchor>\" heading. Act on it only after"
-  emit "you have checked it yourself."
+  emit "opening the artifact and finding the \"## <anchor>\" heading; resolve a plain path"
+  emit "ref by opening that file directly. Act on it only after you have checked it"
+  emit "yourself."
   emit ""
   emit "Required Inputs: skills/shared/stage-contracts.md:${req_in_line}"
   emit "Required Outputs: skills/shared/stage-contracts.md:${req_out_line}"
@@ -376,26 +494,26 @@ cmd_render() {
   printf '%s\n' "$tpl_block" >> "$BUF"
 
   emit "<<<model-discipline>>>"
-  [[ -n "$model_block" ]] && printf '%s\n' "$model_block" >> "$BUF"
+  if [[ -n "$model_block" ]]; then printf '%s\n' "$model_block" >> "$BUF"; fi
 
   emit "<<<task-description>>>"
   emit "task_id: ${TASK_ID}"
   emit "stage: ${STAGE}"
-  [[ -n "$AGENT" ]] && emit "agent: ${AGENT}"
+  if [[ -n "$AGENT" ]]; then emit "agent: ${AGENT}"; fi
   emit "model: ${MODEL}"
   emit "artifact: ${ARTIFACT}"
-  [[ -n "$SUBJECT" ]] && emit "subject: ${SUBJECT}"
+  if [[ -n "$SUBJECT" ]]; then emit "subject: ${SUBJECT}"; fi
   emit "ref: ${PLAN_BASENAME}#requirements"
   emit "ref: ${PLAN_BASENAME}#acceptance-criteria"
   emit "ref: skills/shared/stage-contracts.md:${tpl_line}"
   emit "ref: ${AGENT_FILE}:${MARKER_LINE}"
   while IFS= read -r r; do
-    [[ -n "$r" ]] && emit "ref: $r"
+    if [[ -n "$r" ]]; then emit "ref: $r"; fi
   done <<< "$DEV_REFS_STR"
   while IFS= read -r r; do
-    [[ -n "$r" ]] && emit "ref: $r"
-  done < <(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.context_refs // [] | .[]' "$STATE")
-  [[ -n "$AR_REF" ]] && emit "ref: ${AR_REF}"
+    if [[ -n "$r" ]]; then emit "ref: $r"; fi
+  done <<< "$CONTEXT_REFS_STR"
+  if [[ -n "$AR_REF" ]]; then emit "ref: ${AR_REF}"; fi
 
   emit "<<<retry-hints>>>"
 

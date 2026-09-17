@@ -46,6 +46,8 @@ self_test() {
   not_grep() { ! grep -q -- "$1" <<< "$2"; }
   # shellcheck disable=SC2329
   not_grep_i() { ! grep -qi -- "$1" <<< "$2"; }
+  # shellcheck disable=SC2329
+  has_line() { grep -qF -- "$1" <<< "$2"; }
 
   # ---- refs: a DV0 fixture — every non-identifier [5] line is a resolvable ref ----
   local d1="$td/ac1"
@@ -90,20 +92,22 @@ EOF
       task_id:* | stage:* | agent:* | model:* | artifact:* | subject:*) continue ;;
       'ref: '*)
         ref_count=$((ref_count + 1))
-        # A resolvable ref is shaped exactly one of two ways: "path:N" (file:line) or
-        # "artifact#anchor" — anything else is a fact this brief did not actually check.
+        # A resolvable ref is shaped one of three ways: "path:N" (file:line),
+        # "artifact#anchor", or a plain existing-file path — an empty value is the only
+        # shape that is not a fact the brief actually checked.
         case "${line#ref: }" in
           *:[0-9]*)
             case "${line#ref: }" in *'#'*) bad_line="$line" ;; esac
             ;;
           *'#'*) : ;;
-          *) bad_line="$line" ;;
+          '') bad_line="$line" ;;
+          *) : ;;
         esac
         ;;
       *) bad_line="$line" ;;
     esac
   done <<< "$sec5"
-  check "refs: every non-identifier [5] line is 'ref: ' + file:line or artifact#anchor" [ -z "$bad_line" ]
+  check "refs: every non-identifier [5] line is 'ref: ' + file:line, artifact#anchor or a plain path" [ -z "$bad_line" ]
   check "refs: [5] carries at least one ref" [ "$ref_count" -gt 0 ]
 
   # Each ref must be proven to RESOLVE, not merely shaped like one: brief-
@@ -139,12 +143,83 @@ EOF
               resolve_fail="${resolve_fail}${rv} "
             fi
             ;;
-          *) resolve_fail="${resolve_fail}${rv} " ;;
+          *)
+            # Plain-path shape: resolved by existing plugin-root-relative, under the
+            # fixture's own workspace_path, or under its .context dir — the same
+            # locations plain_path_exists checks in brief-compose.sh.
+            if [ ! -f "$proot/$rv" ] && [ ! -f "$d1/$rv" ] && [ ! -f "$d1/.context/$rv" ]; then
+              resolve_fail="${resolve_fail}${rv} "
+            fi
+            ;;
         esac
         ;;
     esac
   done <<< "$sec5"
   check "refs: every [5] ref independently resolves " [ -z "$resolve_fail" ]
+
+  # ---- refs: context_refs as a JSON-encoded string (state-ledger.md's preferred
+  # shape) decodes into the same ref line the plain-array shape would emit ----
+  local d5="$td/ac1b"
+  mkdir -p "$d5/.context"
+  cp "$d1/.context/planning-0.md" "$d5/.context/planning-0.md"
+  cat > "$d5/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d5",
+        "context_refs": "[\"planning-0.md#requirements\"]"
+      }
+    }
+  }
+}
+EOF
+  local out5 rc5=0
+  out5=$(bash "$SELF" DV0 --state "$d5/.context/state.json" --orch-root "$d5" 2>/dev/null) || rc5=$?
+  check "refs: context_refs JSON-string shape composes (exit 0)" [ "$rc5" -eq 0 ]
+  check "refs: context_refs JSON-string shape decodes its ref" \
+    has_line "ref: planning-0.md#requirements" "$out5"
+
+  # ---- refs: a plain-path context_refs entry (the
+  # consultant-return channel) is emitted only when the file exists ----
+  local d6="$td/ac1c"
+  mkdir -p "$d6/.context/logs"
+  cp "$d1/.context/planning-0.md" "$d6/.context/planning-0.md"
+  : > "$d6/.context/logs/consultant-return-DR0-x-a1.md"
+  cat > "$d6/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d6",
+        "context_refs": [
+          ".context/logs/consultant-return-DR0-x-a1.md",
+          ".context/logs/consultant-return-DR0-y-a1.md"
+        ]
+      }
+    }
+  }
+}
+EOF
+  local out6 rc6=0
+  out6=$(bash "$SELF" DV0 --state "$d6/.context/state.json" --orch-root "$d6" 2>/dev/null) || rc6=$?
+  check "refs: plain-path context_refs fixture composes (exit 0)" [ "$rc6" -eq 0 ]
+  check "refs: an existing plain-path context_refs entry is emitted" \
+    has_line "ref: .context/logs/consultant-return-DR0-x-a1.md" "$out6"
+  check "refs: a missing plain-path context_refs entry is not emitted" \
+    not_grep "consultant-return-DR0-y-a1" "$out6"
 
   # ---- guard: absolute-path guard — off-root fails closed, on-root passes ----
   local d2="$td/ac2"
@@ -204,6 +279,116 @@ EOF
   check "guard: a path under WORKSPACE_ROOT passes" [ "$rc3" -eq 0 ]
   check "guard: a passing compose is non-empty" [ -n "$out3" ]
 
+  # ---- guard: /dev/null and slash-command tokens in ledger text are not absolute
+  # paths, so neither is flagged off-root ----
+  local d7="$td/ac2c"
+  mkdir -p "$d7/.context"
+  cp "$d1/.context/planning-0.md" "$d7/.context/planning-0.md"
+  cat > "$d7/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d7",
+        "description": "redirects to /dev/null, then run /worktask or /corpflow:worktask"
+      }
+    }
+  }
+}
+EOF
+  local out7 rc7=0
+  out7=$(bash "$SELF" DV0 --state "$d7/.context/state.json" --orch-root "$d7" 2>/dev/null) || rc7=$?
+  check "guard: /dev/null and slash commands in ledger text pass (exit 0)" [ "$rc7" -eq 0 ]
+  check "guard: /dev/null and slash commands fixture is non-empty" [ -n "$out7" ]
+
+  # ---- guard: a workspace root containing a space and "@" is masked whole before
+  # tokenising, so it is never truncated into a false off-root prefix ----
+  local d8="$td/ws dir@x"
+  mkdir -p "$d8/.context"
+  cp "$d1/.context/planning-0.md" "$d8/.context/planning-0.md"
+  cat > "$d8/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d8",
+        "description": "touches $d8/notes/ok.md, under a root with a space and @"
+      }
+    }
+  }
+}
+EOF
+  local out8 rc8=0
+  out8=$(bash "$SELF" DV0 --state "$d8/.context/state.json" --orch-root "$d8" 2>/dev/null) || rc8=$?
+  check "guard: a root containing a space and @ is not truncated (exit 0)" [ "$rc8" -eq 0 ]
+  check "guard: a root containing a space and @ fixture is non-empty" [ -n "$out8" ]
+
+  # ---- guard: a comma boundary and a stripped file:// scheme still surface an
+  # off-root path instead of hiding it ----
+  local d9a="$td/ac2d"
+  mkdir -p "$d9a/.context"
+  cp "$d1/.context/planning-0.md" "$d9a/.context/planning-0.md"
+  cat > "$d9a/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d9a",
+        "description": "see the list: ,/opt/elsewhere/x.md"
+      }
+    }
+  }
+}
+EOF
+  local out9a rc9a=0
+  out9a=$(bash "$SELF" DV0 --state "$d9a/.context/state.json" --orch-root "$d9a" 2>/dev/null) || rc9a=$?
+  check "guard: a comma-prefixed off-root path exits 1" [ "$rc9a" -eq 1 ]
+  check "guard: a comma-prefixed off-root path prints no stdout" [ -z "$out9a" ]
+
+  local d9b="$td/ac2e"
+  mkdir -p "$d9b/.context"
+  cp "$d1/.context/planning-0.md" "$d9b/.context/planning-0.md"
+  cat > "$d9b/.context/state.json" << EOF
+{
+  "worktask_id": "brief-compose-selftest",
+  "plan_file": ".context/planning-0.md",
+  "run_index": 0,
+  "tasks": {
+    "DV0": {
+      "metadata": {
+        "stage": "DV",
+        "model": "opus",
+        "run_index": 0,
+        "workspace_path": "$d9b",
+        "description": "see file:///opt/elsewhere/y.md"
+      }
+    }
+  }
+}
+EOF
+  local out9b rc9b=0
+  out9b=$(bash "$SELF" DV0 --state "$d9b/.context/state.json" --orch-root "$d9b" 2>/dev/null) || rc9b=$?
+  check "guard: a file:// off-root path exits 1" [ "$rc9b" -eq 1 ]
+  check "guard: a file:// off-root path prints no stdout" [ -z "$out9b" ]
+
   # ---- fan-out: a two-stream DV fan-out — refs.dev in ascending task-id order, no override text ----
   local d4="$td/ac3"
   mkdir -p "$d4/.context"
@@ -256,7 +441,7 @@ EOF
   check "fan-out: DR0 fixture composes (exit 0)" [ "$rc4" -eq 0 ]
 
   local dev_refs
-  dev_refs=$(grep -E '^ref: development-0-(service|web)\.md#files-changed$' <<< "$out4")
+  dev_refs=$(grep -E '^ref: development-0-(service|web)\.md#files-changed$' <<< "$out4" || true)
   local want_refs
   want_refs=$(printf 'ref: development-0-service.md#files-changed\nref: development-0-web.md#files-changed')
   check "fan-out: refs.dev is exactly service then web, in that order" str_eq "$dev_refs" "$want_refs"
