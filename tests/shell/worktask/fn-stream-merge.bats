@@ -234,6 +234,7 @@ refs_snapshot() {
   assert_failure 2
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$WD/none.json" plan
   assert_failure 3
+}
 
 @test "help: -h prints the header on stdout and exits 0" {
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" -h
