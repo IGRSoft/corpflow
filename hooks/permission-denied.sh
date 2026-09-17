@@ -36,7 +36,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
     && ! grep -qF 'Blocked by classifier' "$_st_log" \
     && jq -e '.subject == "FN0" and .result == "block"
       and (.metadata | keys_unsorted) == ["tool", "dedupe_key", "command_head", "truncated"]
-      and .metadata.command_head == "gh pr merge 1" and .metadata.truncated == false' \
+      and .metadata.command_head == "gh [redacted] [redacted] [redacted]" and .metadata.truncated == true' \
       "$_st_log" > /dev/null 2>&1; then
     echo "permission-denied: self-test OK"
     exit 0
@@ -72,9 +72,9 @@ DETAIL=$(pd_detail_from_event "$PAYLOAD")
 [ -n "$DETAIL" ] || exit 0
 TOOL=$(printf '%s' "$DETAIL" | jq -r '.tool' 2> /dev/null) || exit 0
 CMD=$(printf '%s' "$DETAIL" | jq -r '.command' 2> /dev/null) || exit 0
-# The row shows every character around each [masked] in command_head, so a key hashed over the
-# raw command would let a guessed secret be confirmed offline. A non-empty command that masks to
-# nothing gets no row: the only key left to write would be over the unmasked text.
+# The dedupe key is committed with the row, so a key hashed over the raw command would let a
+# guessed secret be confirmed offline. A non-empty command that masks to nothing gets no row: the
+# only key left to write would be over the unmasked text.
 KCMD=$(pd_key_command "$CMD")
 [ -n "$KCMD" ] || [ -z "$CMD" ] || exit 0
 AGENT_ID=$(printf '%s' "$PAYLOAD" | jq -r '.agent_id // "" | tostring' 2> /dev/null) || AGENT_ID=""
@@ -115,5 +115,5 @@ fi
 META=$(pd_audit_meta "$TOOL" "$CMD" "$KEY")
 [ -n "$META" ] || exit 0
 corpflow_hook_audit_row --ctx "$CTX" --actor "hook:permission-denied" --action permission_denied \
-  --result block --subject "$TASK" --meta "$META"
+  --result block --subject "$TASK" --task-id "$TASK" --meta "$META"
 exit 0

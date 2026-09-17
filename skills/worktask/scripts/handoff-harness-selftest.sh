@@ -11,7 +11,7 @@
 # measurement mode, calls it too, and moving it would make a non-self-test mode
 # depend on this file.
 #
-# Contract: defines `self_test` and `self_test_ar_gate`; `self_test` owns the
+# Contract: defines `self_test` and its `self_test_*` cases; `self_test` owns the
 # exit for this invocation.
 
 # ---------- Self-test ----------
@@ -33,11 +33,70 @@ self_test() {
   fi
 
   self_test_ar_gate "$td"
+  self_test_tests_executed "$td"
   self_test_anchors "$td"
   self_test_collect_all "$td"
   self_test_control_bytes "$td"
 
   echo "self-test: ALL PASS"
+}
+
+# tests_executed is a per-runner list: a list passes, a scalar fails, an entry without a
+# runner fails, and the legacy opt-in accepts a scalar with exactly one deprecation warn.
+self_test_tests_executed() {
+  local ctx="$1/.context" out rc
+
+  if ! command -v yq > /dev/null 2>&1; then
+    echo "self-test: tests-executed: SKIP (yq unavailable)"
+    return 0
+  fi
+
+  # <path> <tests_executed block lines> [extra handoff lines]
+  _te_artifact() {
+    {
+      echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+      echo '  summary: "Implemented."'
+      printf '%s\n' "$2"
+      [[ -z "${3:-}" ]] || printf '%s\n' "$3"
+      echo '  files_touched: [a.md]'
+      echo '  next_stage_focus: "DR reviews"'
+      echo '  open_questions: []'
+      echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+      echo '# Development'; echo; echo '1..12'; echo '3 passed in 0.4s'
+      printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups
+      echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
+    } > "$1"
+  }
+
+  _te_artifact "$ctx/dv-te-list.md" '  tests_executed:
+    - { runner: bats, count: 12, summary_line: "1..12" }
+    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-list.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "self-test: tests-executed list: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed list: ok"
+
+  _te_artifact "$ctx/dv-te-scalar.md" '  tests_executed: 12' '  test_summary_line: "1..12"  # legacy shape'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF 'tests_executed is a scalar ("12")'; then
+    echo "self-test: tests-executed scalar: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed scalar: ok"
+
+  _te_artifact "$ctx/dv-te-norunner.md" '  tests_executed:
+    - { count: 12, summary_line: "1..12" }'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-norunner.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF 'tests_executed[0] has no runner'; then
+    echo "self-test: tests-executed no-runner: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed no-runner: ok"
+
+  rc=0; out=$(LEGACY_TE=1 validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]] || [[ "$(printf '%s\n' "$out" | grep -c 'is a legacy scalar')" -ne 1 ]]; then
+    echo "self-test: tests-executed legacy opt-in: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed legacy opt-in: ok"
 }
 
 # Every stage's H2 set is enforced: a drifted retrospective names each defect on its own line.
@@ -90,7 +149,7 @@ self_test_collect_all() {
   fi
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Two independent violations in one artifact."'
     echo '  files_touched: [a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]'
     echo '  next_stage_focus: "DR reviews"'
@@ -112,7 +171,7 @@ self_test_collect_all() {
   echo "self-test: collect-all: ok"
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Filename digits must not be harvested."'
     echo '  files_touched: [a.md]'
     echo '  key_decisions:'
@@ -161,7 +220,7 @@ self_test_ar_gate() {
       echo '---'
       echo 'handoff:'
       echo '  stage: DV'
-      echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
+      echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
       echo '  verdict: ok'
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
@@ -233,7 +292,7 @@ self_test_ar_gate() {
   # Sweep ledger parity rides on the same invocation: every stub must be in the
   # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'; echo '  test_summary_line: "12 tests, 0 failures"'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'

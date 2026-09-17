@@ -199,7 +199,8 @@ _backup_paths() {
   # changes is that a sweep over audit.jsonl can now see it happened.
   run bash -c "cd '$WD' && bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
-  run jq -e 'select(.action == "state_merge_noop") | .actor == "hook:state-merge"' \
+  run jq -e 'select(.action == "state_merge_noop") | .actor == "hook:state-merge"
+    and .result == "skipped" and .task_id == "none" and .subject == "none"' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
 

@@ -11,7 +11,8 @@
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
 #   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base, _fork_base_uncached,
-#   _base_ref_ranked, resolve_base_ref, base_ref_source, resolve_git_ref.
+#   _base_ref_ranked, resolve_base_ref, base_ref_source, resolve_git_ref, BRANCH_AUDIT_ACTORS,
+#   branch_audit_actor.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -266,6 +267,48 @@ meta_json() {
   jq -cn "${args[@]}" "$prog"
 }
 
+# branch_audit_actor -> the actor a branch audit row names: CORPFLOW_AUDIT_ACTOR when it is
+# exactly one name from BRANCH_AUDIT_ACTORS and, while a stage runs, that stage's own agent or
+# orchestrator; else the agent owning CLAUDE_TASK_METADATA_STAGE (stage-codes.md § Primary
+# Stages); else orchestrator, which runs the rename when no stage does. branch-name.sh keeps a
+# copy for the one path that cannot source this file.
+BRANCH_AUDIT_ACTORS="orchestrator product-manager software-architector team-lead developer
+technical-lead security-reviewer qa-engineer technical-writer release-engineer project-manager
+stakeholder incident-responder"
+
+branch_audit_actor() {
+  local o="${CORPFLOW_AUDIT_ACTOR:-}" owner=""
+  case "${CLAUDE_TASK_METADATA_STAGE:-}" in
+    PL) owner=product-manager ;;
+    AR) owner=software-architector ;;
+    TL) owner=team-lead ;;
+    DV) owner=developer ;;
+    DR) owner=technical-lead ;;
+    SR) owner=security-reviewer ;;
+    QA) owner=qa-engineer ;;
+    DC) owner=technical-writer ;;
+    RE) owner=release-engineer ;;
+    FN) owner=project-manager ;;
+    ST) owner=stakeholder ;;
+    IR) owner=incident-responder ;;
+  esac
+  # One exact word from a closed set: the row is the committed record of who acted. While a
+  # stage runs, an override may name only that stage's own agent or the orchestrator, so a
+  # stage cannot attribute its rename to an agent that did not act.
+  case "$o" in '' | *[[:space:]]*) o="" ;; esac
+  if [ -n "$o" ]; then
+    case " ${BRANCH_AUDIT_ACTORS//$'\n'/ } " in
+      *" $o "*)
+        if [ -z "$owner" ] || [ "$o" = "$owner" ] || [ "$o" = "orchestrator" ]; then
+          printf '%s' "$o"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+  printf '%s' "${owner:-orchestrator}"
+}
+
 # One audit row per outcome. Identity is read from the environment AT CALL TIME
 # rather than set through a setter: an order-dependent global would silently write
 # the wrong actor on a missed call, and a jq path built from a variable is dynamic
@@ -281,13 +324,16 @@ meta_json() {
 audit_fn() {
   local action="$1" result="$2" meta="${3:-}"
   [ "${AUDIT_DRY_RUN:-0}" = "1" ] && return 0
-  local actor="${AUDIT_ACTOR:-project-manager}"
   local subj="${AUDIT_SUBJECT:-FN0}"
   local stage="${AUDIT_STAGE:-FN}"
   case "$stage" in
     [A-Z][A-Z]) ;;
     *) stage="FN" ;;
   esac
+  local actor="${AUDIT_ACTOR:-}"
+  if [ -z "$actor" ]; then
+    if [ "$stage" = "FN" ]; then actor="project-manager"; else actor=$(branch_audit_actor); fi
+  fi
   [ -n "$meta" ] || meta='{}'
   local ts wid ri tid dk
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)

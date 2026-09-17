@@ -293,13 +293,13 @@ mk_branch_repo() {
   assert_output "already_conventional"
 }
 
-@test "audit row records origin_stage PL and actor product-manager" {
+@test "audit row records origin_stage PL, and actor orchestrator when no stage runs the rename" {
   cd "$WD"
   mk_branch_repo
-  run bash "$PLUGIN_ROOT/$SCRIPT"
+  run env -u CLAUDE_TASK_METADATA_STAGE -u CORPFLOW_AUDIT_ACTOR bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
-  assert_output "product-manager"
+  assert_output "orchestrator"
   run jq -r 'select(.action=="branch_renamed") | .metadata.origin_stage' .context/logs/audit.jsonl
   assert_output "PL"
   run jq -r 'select(.action=="branch_renamed") | .subject' .context/logs/audit.jsonl
@@ -337,6 +337,86 @@ mk_branch_repo() {
   assert_line "bugfix"
   assert_line "hotfix"
   refute_line "fix"
+}
+
+@test "actor: a stage running the rename is named by the agent that owns it" {
+  cd "$WD"
+  mk_branch_repo
+  run env -u CORPFLOW_AUDIT_ACTOR CLAUDE_TASK_METADATA_STAGE=FN bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "project-manager"
+}
+
+@test "actor: with no stage running, an exact in-set override is honoured" {
+  cd "$WD"
+  mk_branch_repo
+  run env -u CLAUDE_TASK_METADATA_STAGE CORPFLOW_AUDIT_ACTOR=developer bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "developer"
+}
+
+@test "actor: while a stage runs, an override naming another stage's agent is refused" {
+  cd "$WD"
+  mk_branch_repo
+  run env CORPFLOW_AUDIT_ACTOR=technical-lead CLAUDE_TASK_METADATA_STAGE=DV bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "developer"
+}
+
+@test "actor: an override carrying two actor names is refused, not matched as a substring" {
+  cd "$WD"
+  mk_branch_repo
+  run env -u CLAUDE_TASK_METADATA_STAGE CORPFLOW_AUDIT_ACTOR='developer technical-lead' bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "orchestrator"
+}
+
+@test "actor: an invalid CORPFLOW_AUDIT_ACTOR is never written; the ladder answers" {
+  cd "$WD"
+  mk_branch_repo
+  run env -u CLAUDE_TASK_METADATA_STAGE CORPFLOW_AUDIT_ACTOR='corpflow:developer' bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "orchestrator"
+}
+
+@test "actor: an override outside the closed actor set is refused" {
+  cd "$WD"
+  mk_branch_repo
+  run env -u CLAUDE_TASK_METADATA_STAGE CORPFLOW_AUDIT_ACTOR=not-a-stage-agent bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r 'select(.action=="branch_renamed") | .actor' .context/logs/audit.jsonl
+  assert_output "orchestrator"
+}
+
+@test "actor: the library-unreachable row follows the same ladder as branch-lib" {
+  cd "$WD"
+  mk_branch_repo
+  mkdir -p lonely
+  cp "$PLUGIN_ROOT/$SCRIPT" lonely/branch-name.sh
+  local code want got
+  for code in PL AR TL DV DR SR QA DC RE FN ST IR XX ""; do
+    want=$(env -u CORPFLOW_AUDIT_ACTOR CLAUDE_TASK_METADATA_STAGE="$code" \
+      bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; branch_audit_actor")
+    env -u CORPFLOW_AUDIT_ACTOR CLAUDE_TASK_METADATA_STAGE="$code" bash lonely/branch-name.sh > /dev/null 2>&1
+    got=$(jq -rs 'map(select(.action=="branch_renamed")) | last | .actor' .context/logs/audit.jsonl)
+    [ "$got" = "$want" ] || fail "stage '$code': fallback wrote '$got', library answers '$want'"
+  done
+  local pair ov
+  for pair in "technical-lead|DV" "orchestrator|DV" "developer|" "developer technical-lead|" \
+    "not-a-stage-agent|QA" "Bad Actor!|QA"; do
+    ov="${pair%%|*}"
+    code="${pair#*|}"
+    want=$(env CORPFLOW_AUDIT_ACTOR="$ov" CLAUDE_TASK_METADATA_STAGE="$code" \
+      bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'; branch_audit_actor")
+    env CORPFLOW_AUDIT_ACTOR="$ov" CLAUDE_TASK_METADATA_STAGE="$code" bash lonely/branch-name.sh > /dev/null 2>&1
+    got=$(jq -rs 'map(select(.action=="branch_renamed")) | last | .actor' .context/logs/audit.jsonl)
+    [ "$got" = "$want" ] || fail "override '$ov' at stage '$code': fallback wrote '$got', library answers '$want'"
+  done
 }
 
 # ---------------------------------------------------------------------------
