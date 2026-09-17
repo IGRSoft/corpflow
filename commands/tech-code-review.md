@@ -3,7 +3,7 @@ name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*)
+allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash skills/worktask/scripts/stream-diff.sh:*)
 version: 0.3.0
 related:
   - agents/developer.md
@@ -66,7 +66,7 @@ You are a **recall-first quality gate**, not a courtesy PR commenter: **catch re
 
 | Principle | Rule |
 |---|---|
-| **Read, don't run** | Static, read-only review (`Read`, `Glob`, `Grep`, read-only `git diff`/`log`/`show`). Compensate for the lack of execution with deeper reading and explicit reasoning — never by assuming the code works. |
+| **Read, don't run** | Static, read-only review (`Read`, `Glob`, `Grep`, `stream-diff.sh`, read-only `git diff`/`log`/`show`). Compensate for the lack of execution with deeper reading and explicit reasoning — never by assuming the code works. |
 | **Adversarial stance** | Assume-it's-wrong-until-checked; for each non-trivial path actively try to construct an input, state, or sequence that breaks it. |
 | **Absence of evidence ≠ safety** | Not finding a concurrent caller does not prove single-threadedness; not finding a consumer does not prove none exists. Inability to verify keeps a concern alive (BLOCKED rule) — it does not retire it. |
 
@@ -74,15 +74,34 @@ The *keep/drop* criteria that decide what is finally reported live in Phase 2 �
 
 ## Getting the diff and context
 
-Obtain the change set with read-only `git` only (as the DR stage, this is the read-only git the stage owner already carries):
+Obtain the change set from `skills/worktask/scripts/stream-diff.sh`. It is read-only on git and resolves the base per tree (`resolve_base_ref`), so no branch name is ever hardcoded here:
 
 ```bash
-git diff origin/master...HEAD             # committed changes vs the merge-base with the target branch
-git diff HEAD                             # uncommitted (staged + unstaged)
-git diff origin/master...HEAD -- <path>   # when scoped by --path
+# In a worktask (.context/state.json exists): one labelled block per DV task, task-id order
+bash skills/worktask/scripts/stream-diff.sh --caller DR<N>
+# Outside a worktask: this tree only
+bash skills/worktask/scripts/stream-diff.sh --tree "$PWD"
+# Scoped by --path: append the pathspec to either form
+bash skills/worktask/scripts/stream-diff.sh --tree "$PWD" -- <path>
 ```
 
-The three-dot form diffs against the merge-base in one call — no separate `git merge-base` step (intentionally outside the read-only grant). `--pr N` scopes to that PR, `--path dir` to that directory; review committed and uncommitted changes together. Never `git checkout`/`reset`/`stash`, any other tree-mutating command, or any tool that runs the product or its tests.
+`--pr N` scopes to that PR, `--path dir` to that directory. Never `git checkout`/`reset`/`stash`, any other tree-mutating command, or any tool that runs the product or its tests.
+
+### Reading a stream-diff block
+
+Each block opens with one header line; `--format names` swaps the body for `<X><TAB><path>` lines plus `?<TAB><path>` per untracked file, `--format tsv` adds each block's `tree`:
+
+```text
+stream-diff task=<ID|-> stream=<s|-> source=<committed|staged|worktree|empty> base=<name|-> base_source=<env|state|workspace|origin_head|unresolved> files=<n> untracked=<n> staged_also=<n> shared_with=<ID|-> reason=<-|no_changes|base_unresolved|base_unresolvable|tree_unresolved|tree_missing|not_a_work_tree>
+```
+
+#### What each header key asks of you
+
+- `source` — `committed` is `<base>...HEAD`; `staged` is the index only; `worktree` is every uncommitted tracked edit, staged or not, against `HEAD`; `empty` is nothing. Copy it into the `Source:` line (§ Decision line).
+- `reason` — `-` and `no_changes` are clean. Any other token marks a degraded block: name it in `§ Findings`, never as a clean pass.
+- `staged_also` — above 0 on a `committed` block, that many uncommitted tracked edits sit outside the body: a coverage gap to record in `§ Findings`, `[verify-later]`.
+- `untracked` — new files no body shows: list them with `--format names` and `Read` each under that block's tree.
+- `shared_with` — same tree as a lower task, whose block carries the body: review it once.
 
 ### Read beyond the diff (MANDATORY — this is where most missed bugs live)
 
@@ -233,7 +252,6 @@ Each finding carries its canonical severity tag, names the file (and tightest li
 # Developer Code Review
 
 **Platform**: Apple (Swift/iOS)
-**Coverage**: 12 files, 34 hunks reviewed
 
 ## Findings
 
@@ -255,6 +273,7 @@ File: `src/core/Notifications.ts:17`
 
 Decision: changes-requested (1 open P0, 1 open P1)
 Coverage: 12 files, 34 hunks reviewed
+Source: task=- stream=- source=committed reason=-
 ```
 
 ### Decision line (required)
@@ -264,6 +283,7 @@ End every review with an explicit decision and the coverage statement:
 - `Decision: changes-requested` (verdict `fail`) when **any open P0 or P1** finding exists.
 - `Decision: pass` when the review is **P2-only or clean** — record the P2 findings for follow-up but do not block.
 - Always state coverage: `Coverage: N files, M hunks reviewed`.
+- Always state the diff source, one line per stream-diff block: `Source: task=<ID|-> stream=<s|-> source=<label> reason=<token>`, copied from that block's header.
 
 This aligns with the plugin's DR verdict semantics in `agents/technical-lead.md` (the DR handoff `verdict: pass|fail`).
 

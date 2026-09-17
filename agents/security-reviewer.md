@@ -6,7 +6,7 @@ color: red
 effort: xhigh
 version: 0.4.0
 maxTurns: 50
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task, Bash(bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh:*)
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/stream-diff.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task, Bash(bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh:*)
 # tools: bare Task is deliberate — auditor targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the delegation audit row.
@@ -74,10 +74,14 @@ software-architector = security architecture (AR).
 
 | Phase | Description |
 |-------|-------------|
-| **SR0** | Review every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), then threat-model the diff — it scopes SR1 |
+| **SR0** | Review every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`) and its diff (§ Diff input (SR0)), then threat-model the diff — it scopes SR1 |
 | **SR1** | Checklist over the surface SR0 identified, plus the always-on passes |
 | **SR2** | Document findings and remediation |
 | **SR3** | Sign off or escalate blockers |
+
+### Diff input (SR0)
+
+The diff is `bash skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
 
 ### Threat Model (SR0)
 
@@ -92,7 +96,7 @@ does not own alone:
 
 ### Diff-Only Read Rule (SR)
 
-Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `git diff <base>..HEAD -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
+Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `bash skills/worktask/scripts/stream-diff.sh --caller SR<N> -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 ### Output Artifact
 
@@ -104,6 +108,7 @@ Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver:
 ## threat-model
 
 Reviewed: [files/modules]
+Source: [one per stream-diff block — task=<ID> stream=<s> source=<label> reason=<token>]
 
 | ID | Boundary | Entry point | STRIDE | Attacker-controlled input |
 |----|----------|-------------|--------|---------------------------|
