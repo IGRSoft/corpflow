@@ -42,9 +42,15 @@ _ID_RE='^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$'
 _PLATFORM_RE='^[a-z][a-z0-9_-]*(,[a-z][a-z0-9_-]*)*$'
 
 # jq-1.6 builtins only (no trim); `+` quantifiers because 1.6 mishandles empty matches.
+# Word-boundary cap, same rule as the publish-side title cap: keep the longest
+# prefix ending in whitespace within the window, else hard-cut to 239 + ellipsis.
 # shellcheck disable=SC2016 # $g is a jq variable, not a shell expansion
 _GOAL_FILTER='$g | gsub("[[:cntrl:]]+"; " ") | sub("^ +"; "") | sub(" +$"; "")
-  | if length > 240 then .[0:239] + "\u2026" else . end'
+  | if length <= 240 then .
+    else
+      (.[0:240] | sub("[^[:space:]]+$"; "") | sub("[[:space:],;:-]+$"; "")) as $w
+      | if ($w | length) > 0 then $w + "\u2026" else .[0:239] + "\u2026" end
+    end'
 
 _TMP=""
 _LOCK_HELD=""

@@ -1957,7 +1957,7 @@ function loopBackToDV(ledger, gateId, gateRow) {
 
 ##### Title and Summary resolution — invariants
 
-`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. The `head -1 | cut -c1-100 | sanitise_body` pipeline applies at every rank, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, so changing title generation orphans issues published under an older title scheme.
+`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. At every rank the title is reduced to its first line, sanitised, then capped at 100 characters on the last word boundary with `…` counted inside the budget, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, and also probes the legacy fixed-100 title when it differs, so an issue published under the older scheme is still recovered rather than duplicated.
 
 #### External-ticket extraction
 
