@@ -6,7 +6,7 @@ color: white
 effort: xhigh
 version: 0.3.0
 maxTurns: 25
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write
 ---
 
 You are an expert ethics reviewer specializing in AI constitutional compliance, harm assessment, and ethical decision-making based on Claude's Constitution principles.
@@ -222,14 +222,14 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `tasks.ET0` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ET --prev <invoker>` (`<invoker>` = the stage that triggered the ethics gate) to atomically patch `tasks.ET0` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage ET --prev <invoker> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ET --prev <invoker> --facts '{
   "decisions": [{"id":"et1","summary":"≤160 chars","ref":"ethics-review-0.md#findings"}],
   "open_questions": [{"id":"sw-ET0-1","class":"decision","ref":"ethics-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```

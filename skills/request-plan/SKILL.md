@@ -48,8 +48,8 @@ Follow `references/context-gathering.md`. Read only what could change the plan: 
 
 #### Start from what already ships
 
-**Run `skills/request-plan/scripts/capability-registry.sh` first, every time, before any grep.** Not
-only for "I want X" requests — deciding whether a request is about a capability is itself a guess
+**Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh` first, every
+time, before any grep.** Not only for "I want X" requests — deciding whether a request is about a capability is itself a guess
 made before you know the answer, and the whole list costs about 7k tokens. It is the complete
 inventory of this plugin's commands, agents, skills, hooks, skill scripts and harness modules, so it
 is not a search and has no stop condition. It is long enough now to be worth reading in one pass

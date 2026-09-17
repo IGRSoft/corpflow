@@ -6,7 +6,7 @@ model: sonnet
 # tools: the Budget and AI Cost rows under `#### Detailed Estimation — Budget & AI Cost
 # Sections` order `estimate-calc.py` as the canonical math, so the grant names that one
 # interpreter and that one script; every other number in the output is read, not computed.
-allowed-tools: Read, Glob, Grep, Write, Bash(python3 skills/estimation-methodology/scripts/estimate-calc.py:*)
+allowed-tools: Read, Glob, Grep, Write, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py *)
 related:
   - skills/worktask/SKILL.md
   - skills/estimation-methodology/SKILL.md
@@ -124,8 +124,8 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 
 | Section | Content |
 |---------|---------|
-| `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate`. **Canonical math**: invoke `skills/estimation-methodology/scripts/estimate-calc.py --size <S> --rate <R>` and read `total_hours` + `budget` from the JSON output. |
-| `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: pass `--tokens <n> --model <m>` to `skills/estimation-methodology/scripts/estimate-calc.py` and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
+| `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate`. **Canonical math**: run `python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py --size <S> --rate <R>` and read `total_hours` + `budget` from the JSON output. |
+| `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: run `python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py --tokens <n> --model <m>` and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
 
 If `--dev-rate` is omitted, the Budget row is replaced by
 `[budget skipped: --dev-rate not set]` and only Base/Buffer/Total Hours are emitted.

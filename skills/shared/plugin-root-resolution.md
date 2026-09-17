@@ -47,8 +47,9 @@ and literal prose.
 
 ## Canonical executable-snippet shape (markdown)
 
-Fenced snippets that call bundled helpers use this preamble, keeping their existing `-f`
-guard and audit-deferral bodies unchanged:
+Fenced snippets that call **ungranted** bundled helpers use this preamble, keeping their
+existing `-f` guard and audit-deferral bodies unchanged. A script the file's frontmatter
+grants takes § Granted-script invocation shape instead:
 
 ```bash
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when loading this file
@@ -67,18 +68,77 @@ or the path it read the file from). If the placeholder is pasted verbatim, the d
 `-f` guard fails exactly like today's unresolved paths — graceful deferral, never a hard
 error.
 
+## Granted-script invocation shape
+
+### Grant
+
+A frontmatter grant for a bundled script names the interpreter, the unquoted token and the
+script path, and ends in space-star. A `.py` script takes `python3` in place of `bash`:
+
+```
+Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)
+```
+
+- **A quoted token never matches:** rules match the command text, and the invocation text
+  is unquoted.
+- **A `$PLUGIN_ROOT` rule never matches:** the variable is not in the Bash tool environment,
+  so no command text ever carries its value.
+- **Agent `tools:` substitution is not explicitly documented** (skill content, agent content
+  and skill `allowed-tools` are). A grant that does not match denies the call, and the stage
+  takes the permission-denied park path (`skills/worktask/SKILL.md § Step 6.5a4`).
+
+### Invocation
+
+In a file whose frontmatter grants a script, every runnable mention of it — a fenced or
+backticked command, or a `Run …` / `invoke …` instruction — is the grant prefix, byte for
+byte, followed by the arguments:
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DR --prev DV
+```
+
+- **Forbidden**, because none can match the grant: a relative `bash skills/…` path; a bare
+  `state-patch.sh --…`; `bash "$PLUGIN_ROOT/…"`; indirection through `$HELPER` or `$SCAN`; a
+  quoted token; an env-prefixed command (`X=1 bash …`); an interpreter-less `skills/…/x.sh`.
+- **Legal:** a capture such as
+  `out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DR --prev DV)`.
+  Allow matching inside `$(…)` is not documented, so a capture may still prompt.
+- **Exempt:** a descriptive mention that is not an instruction to run
+  ("`handoff-harness.sh check_sweep_ledger` fails when …") stays as written.
+- **Deferral:** a snippet keeps its control flow but drops the `-f` guard. `bash` exits 127
+  when the script is absent, and that exit is the deferral signal.
+
+### On-disk references
+
+A file read from disk is never substituted, so it carries the same literal anchored text.
+The reader replaces the literal token with the absolute plugin root its own loaded body
+shows. It never shell-expands the token, which is absent from the Bash tool environment, and
+never falls back to a relative path, which resolves against the working repo rather than the
+installed plugin.
+
 ## Author rules
 
 ### Markdown token form
 
-- **Markdown may contain the token only in its exact bare dollar-brace form** — never
-  compose a longer path by appending a slash and segments after the closing brace, and
-  never use the shell default-value (colon-dash) form inside the braces. Composition breaks
-  the moment the token is not substituted; the default-value form forfeits load-time
-  substitution and risks mangled output from partial matchers. Whitelisted exceptions, all
-  Claude Code-native config parsed only by Claude Code: the `hooks` block of
-  `.claude-plugin/plugin.json`, `hooks:` entries in agent frontmatter, and verbatim
-  documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
+- **Markdown may contain the token in its exact bare dollar-brace form**, never in the shell
+  default-value (colon-dash) form inside the braces: that form forfeits load-time
+  substitution and risks mangled output from partial matchers.
+- **A composed path** — the token, a slash, then segments — breaks the moment the token is
+  not substituted, so it is legal only where arm H or arm S holds. Each occurrence is judged
+  on its own; every other composition, such as a `references/` doc path, is illegal.
+  - **Arm H — hook commands.** The path is `hooks/<name>.sh` in Claude Code-native config
+    parsed only by Claude Code: the `hooks` block of `.claude-plugin/plugin.json`, `hooks:`
+    entries in agent frontmatter, and verbatim documentation of those entries
+    (`skills/worktask/references/handoff-protocol.md`).
+  - **Arm S — granted scripts.** The path is `skills/<skill>/scripts/<name>.sh` or `.py`
+    with no `..`, and the token either follows `Bash(bash ` / `Bash(python3 ` with ` *)`
+    right after the path, or follows `bash ` / `python3 ` at line start or after a backtick,
+    a space, `(` or `$(` — never after `"`. The interpreter fits the extension: `bash` with
+    `.sh`, `python3` with `.py`.
+- `tests/shell/skills/plugin-root-refs.bats` enforces both arms and sources
+  `skills/shared/scripts/grant-lint.sh` for the arm S path rule, so that rule is defined
+  once. `grant-lint.sh` is the checker for frontmatter grants and, with `--invocations`, for
+  runnable body mentions of granted scripts.
 
 ### Prose paths
 
@@ -110,5 +170,5 @@ error.
 
 `tests/shell/skills/plugin-root-refs.bats` codifies both greps:
 
-- Token-plus-slash composition in `*.md` → only the whitelisted config/doc lines.
+- Token-plus-slash composition in `*.md` → only arm H hook lines and arm S script lines.
 - Default-value (colon-dash) form of the token in `*.md` → zero occurrences.

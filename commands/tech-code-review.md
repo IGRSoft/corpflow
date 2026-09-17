@@ -3,7 +3,7 @@ name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash skills/worktask/scripts/stream-diff.sh:*)
+allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
 version: 0.3.0
 related:
   - agents/developer.md
@@ -74,15 +74,15 @@ The *keep/drop* criteria that decide what is finally reported live in Phase 2 â€
 
 ## Getting the diff and context
 
-Obtain the change set from `skills/worktask/scripts/stream-diff.sh`. It is read-only on git and resolves the base per tree (`resolve_base_ref`), so no branch name is ever hardcoded here:
+Obtain the change set from `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh`. It is read-only on git and resolves the base per tree (`resolve_base_ref`), so no branch name is ever hardcoded here:
 
 ```bash
 # In a worktask (.context/state.json exists): one labelled block per DV task, task-id order
-bash skills/worktask/scripts/stream-diff.sh --caller DR<N>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller DR<N>
 # Outside a worktask: this tree only
-bash skills/worktask/scripts/stream-diff.sh --tree "$PWD"
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --tree "$PWD"
 # Scoped by --path: append the pathspec to either form
-bash skills/worktask/scripts/stream-diff.sh --tree "$PWD" -- <path>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --tree "$PWD" -- <path>
 ```
 
 `--pr N` scopes to that PR, `--path dir` to that directory. Never `git checkout`/`reset`/`stash`, any other tree-mutating command, or any tool that runs the product or its tests.

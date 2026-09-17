@@ -12,7 +12,7 @@ maxTurns: 40
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
 # Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command
@@ -152,7 +152,7 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 ### State Patch — REQUIRED before return
 
-PL0's `state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.
+PL0's `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.
 
 <!-- output-sections:begin stage=PL -->
 ### Artifact anchors
