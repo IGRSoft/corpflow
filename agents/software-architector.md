@@ -264,3 +264,13 @@ state-patch.sh --stage AR --prev PL --facts '{
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers PL's entries, and a re-run is byte-identical. Omitting it loses the decision silently — the orchestrator does not digest it for you. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=AR -->
+### Artifact anchors
+
+`architecture-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## decisions`, `## trade-offs`, `## patterns`, `## integration-points`, `## schemas`, `## open-questions`, `## risks`, `## elicitation-sweep`
+- Optional for AR: `## <Platform> App Architecture`, `## Test Architecture`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=AR -->
