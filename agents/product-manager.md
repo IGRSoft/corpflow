@@ -153,3 +153,12 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 ### State Patch — REQUIRED before return
 
 PL0's `state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.
+
+<!-- output-sections:begin stage=PL -->
+### Artifact anchors
+
+`planning-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## requirements`, `## acceptance-criteria`, `## scope`, `## out-of-scope`, `## risks`, `## complexity`, `## stages`, `## summary`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=PL -->

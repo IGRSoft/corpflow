@@ -13,6 +13,12 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="skills/worktask/scripts/handoff-harness.sh"
 
+# The stage's required H2s, read from the allow-list so a fixture tracks the harness's H2 gate.
+anchor_h2s() {  # <stage>
+  bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" --allow-list --stage "$1" \
+    | awk -F'\t' '$4 == "required" { printf "\n## %s\n\nx\n", $5 }'
+}
+
 setup() {
   WD="$(mk_tmpworkdir)"
   # Use our shared DV fixture which has valid frontmatter + DV anchors.
@@ -146,7 +152,7 @@ _dv_test_evidence_artifact() {  # <path> <tests_executed> [test_suite_compiles]
     printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    dev: development-0.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n## verification-command\n\n%s tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n' "$2"
+    printf -- '---\n\n# Development\n\n## verification-command\n\n%s tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to ask\n' "$2"
   } > "$1"
 }
 
@@ -211,10 +217,11 @@ mk_te() {
     echo
     echo '# Artifact'
     echo
-    echo '## verification-command'
+    if [ "$2" = DV ]; then echo '## verification-command'; else echo '### verification-command'; fi
     echo
     [ "$5" = "-" ] || echo "$5"
     echo
+    anchor_h2s "$2"; echo
     echo '## elicitation-sweep'
     echo
     echo 'nothing to ask'
@@ -360,7 +367,7 @@ sweep_artifact() {  # <path> <stub-yaml>
     printf '    - %s\n' "$2"
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\n'
     sweep_item_for "$2"
   } > "$1"
 }
@@ -582,7 +589,7 @@ dv_artifact() {
     printf '  open_questions: []\n'
     printf '  refs:\n'
     printf '    %s\n' "$refs"
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$path"
 }
 
@@ -757,7 +764,7 @@ budget_artifact() {  # <path> <filler-words> <stubs>
     done
     printf '  refs:\n'
     printf '    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\n'
     for ((i = 1; i <= stubs; i++)); do
       sweep_item_for "id: sw-DV0-$i"
     done
@@ -837,6 +844,7 @@ mk_dv_ft() {
     echo
     echo '12 tests, 0 failures'
     echo
+    anchor_h2s DV; echo
     echo '## elicitation-sweep'
     echo
     echo 'nothing to ask'
@@ -885,7 +893,7 @@ mk_qa_dec() {
     echo '  refs: { qa: testing.md#results }'
     echo '---'
     echo
-    echo '## decisions'
+    echo '### decisions'
     echo
     echo "| id | summary |"
     echo "|----|---------|"
@@ -893,6 +901,7 @@ mk_qa_dec() {
     echo
     echo '12 tests, 0 failures'
     echo
+    anchor_h2s QA; echo
     echo '## elicitation-sweep'
     echo
     echo 'nothing to ask'
@@ -1017,12 +1026,13 @@ mk_qa_dec_bullet() {
     echo '  refs: { qa: testing.md#results }'
     echo '---'
     echo
-    echo '## decisions'
+    echo '### decisions'
     echo
     echo "$3"
     echo
     echo '12 tests, 0 failures'
     echo
+    anchor_h2s QA; echo
     echo '## elicitation-sweep'
     echo
     echo 'nothing to ask'
@@ -1287,7 +1297,7 @@ split_artifact() {
       printf '  open_questions: []\n'
     fi
     printf '  refs:\n    dev: development.md#files-changed\n'
-    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## elicitation-sweep\n\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\n'
     if [ -n "$stub_id" ]; then
       printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$stub_id"
       printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
@@ -1393,4 +1403,69 @@ split_state() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/single.md" --state single.json
   assert_success
   refute_output --partial "warn:"
+}
+
+# --- H2 anchor enforcement for all 13 stages ---------------------------------
+
+ANCHORS="$FIXTURES/worktask/anchors"
+
+@test "anchors: an ST artifact with 5 extra H2s and no followups fails, one line per defect" {
+  run bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" --validate-frontmatter "$ANCHORS/retrospective-0.drift.md"
+  assert_failure 1
+  assert_output --partial "fail: anchor-lint stage=ST missing required H2 '## followups' in retrospective-0.drift.md"
+  [ "$(grep -c "unexpected H2 '## " <<< "$output")" -eq 5 ] || fail "want 5 unexpected lines: $output"
+  assert_output --partial "nest it as H3 (handoff-protocol.md#anchor-allow-list)"
+}
+
+@test "anchors: every stage's conforming fixture passes; dropping any one required H2 fails" {
+  local rows stage base heading n=0
+  rows="$(bash "$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh" --allow-list)"
+  for stage in PL AR TL DV DR SR QA DC RE FN ST IR ET; do
+    base="$(awk -F'\t' -v s="$stage" '$1 == s { print $3; exit }' <<< "$rows")"
+    run bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" --validate-frontmatter "$ANCHORS/$base-0.md"
+    assert_success
+    while IFS= read -r heading; do
+      grep -vx "## $heading" "$ANCHORS/$base-0.md" > "$WD/$base-0.md"
+      run bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" --validate-frontmatter "$WD/$base-0.md"
+      assert_failure 1
+      [[ "$output" == *"missing required H2 '## $heading'"* ]] || fail "$stage/$heading: $output"
+      n=$((n + 1))
+    done < <(awk -F'\t' -v s="$stage" '$1 == s && ($4 == "required" || $4 == "universal") { print $5 }' <<< "$rows")
+  done
+  [ "$n" -ge 52 ] || fail "non-vacuity: only $n removals exercised"
+}
+
+@test "anchors: DV and QA optional H2s pass; a DV Stage Timings H2 fails by name" {
+  local H="$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh"
+  run bash "$H" --validate-frontmatter "$ANCHORS/development-0.optional.md"
+  assert_success
+  run bash "$H" --validate-frontmatter "$ANCHORS/testing-0.optional.md"
+  assert_success
+  { cat "$ANCHORS/development-0.optional.md"; printf '\n## Stage Timings\n\nx\n'; } > "$WD/development-0.md"
+  run bash "$H" --validate-frontmatter "$WD/development-0.md"
+  assert_failure 1
+  assert_output --partial "unexpected H2 '## Stage Timings' in development-0.md"
+}
+
+@test "anchors: enforcement does not depend on yq" {
+  local bin="$WD/bin" t
+  mkdir -p "$bin"
+  for t in bash awk sed grep cat cmp mktemp rm tr wc head tail basename dirname od; do
+    ln -s "$(command -v "$t")" "$bin/$t"
+  done
+  run env PATH="$bin" bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" \
+    --validate-frontmatter "$ANCHORS/retrospective-0.drift.md"
+  assert_failure 1
+  assert_output --partial "missing required H2 '## followups'"
+}
+
+@test "anchors: an unreachable cache-lint.sh fails the gate closed" {
+  local copy="$WD/scripts" f
+  mkdir -p "$copy"
+  for f in handoff-harness.sh sweep-stub-lib.sh frontmatter-lib.sh control-byte-lib.sh; do
+    cp "$PLUGIN_ROOT/skills/worktask/scripts/$f" "$copy/$f"
+  done
+  run bash "$copy/handoff-harness.sh" --validate-frontmatter "$ANCHORS/retrospective-0.md"
+  assert_failure 1
+  assert_output --partial "fail: anchor gate cannot run on retrospective-0.md"
 }

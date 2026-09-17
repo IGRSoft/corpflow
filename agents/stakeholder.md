@@ -156,6 +156,8 @@ Mark each `<plan_file>` criterion **PASS**, **PARTIAL**, or **FAIL** against the
 
 ### Step 3: Decision
 
+`retrospective-N.md` takes the H2 set in § Artifact anchors: the decision and each criterion's PASS/PARTIAL/FAIL under `## decision`; business value, what went well and what to improve as H3s under `## learnings`; every carried item under `## followups`.
+
 - **All PASS** → Approve, write retrospective-N.md, mark ST complete
 - **Any PARTIAL** → Request specific changes with clear instructions, return to FN
 - **Any FAIL** → Reject with detailed explanation, escalate to project-manager
@@ -193,8 +195,18 @@ Pass `--facts` in the **same call** to union this stage's facts into `state.json
 
 ```bash
 state-patch.sh --stage ST --prev FN --facts '{
-  "decisions": [{"id":"st1","summary":"≤160 chars","ref":"retrospective-0.md#decisions"}],
+  "decisions": [{"id":"st1","summary":"≤160 chars","ref":"retrospective-0.md#decision"}],
   "open_questions": [{"id":"sw-ST0-1","class":"decision","ref":"retrospective-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=ST -->
+### Artifact anchors
+
+`retrospective-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## decision`, `## learnings`, `## followups`, `## elicitation-sweep`
+- Optional for ST: `## Self-Improvement`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=ST -->
