@@ -235,8 +235,8 @@ so they are exempt.
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| Stage `blocked` with `metadata.blocked_on` of a kind other than `permission` | A `blocked_on` row with `result: "blocked"` and no later closing-leg row for that `task_id` | Parked on a typed need (`SKILL.md § Step 6.5a3`). Do **not** re-delegate, and do **not** call `route` again: a second call writes a second opening leg. Re-enter the loop; § Step 7a's `blocked-on-dispatch.sh batch` asks the user at the next boundary |
-| Stage `blocked` on `peer_session` with a `metadata.ask_id` | A `sent` or `delivered` leg carrying that `ask_id`, and no `relayed` or `expired` leg for it | The ask is durable and outlives the session. On re-entry run `mailbox.sh scan`, `blocked-on-dispatch.sh resume --leg relayed` for every `replied[]` entry, then `mailbox.sh sweep`. Never re-route and never re-send: the request file and the `sent` leg both already exist |
+| Stage `blocked` with `metadata.blocked_on` of a kind other than `permission` | A `blocked_on` row with `result: "blocked"` and no later closing-leg row for that `task_id` | Parked on a typed need (`SKILL.md § Step 6.5a3`). Do **not** re-delegate, and do **not** call `route` again: a second call writes a second opening leg. Re-enter the loop; § Step 7a's `blocked-on-dispatch.sh batch` asks the user at the next boundary — a `user_decision` need only after § Pending communication probes it |
+| Stage `blocked` on `peer_session` with a `metadata.ask_id` | A `sent` or `delivered` leg carrying that `ask_id`, and no `relayed` or `expired` leg for it | The ask is durable and outlives the session; § Pending communication fixes the order it is reconciled in. Never re-route and never re-send: the request file and the `sent` leg both exist |
 
 #### Reply routing — the legacy cross_session_ask row
 
@@ -257,6 +257,56 @@ and `handoff-protocol.md § Schema — blocked_on, the peer_session arm`.
 
 A stage that sent its own ask before this rule existed has no path to the answer. Treat it like
 `stage_returned_incomplete` and reattach so the ask is redone through the orchestrator.
+
+### Pending communication
+
+A resumed session reconciles both durable stores **before** it asks the user anything.
+`.context/decisions.jsonl` holds what the user already answered; the mailbox holds what a peer
+already replied. Neither is the orchestrator's working summary, which is exactly what a crash or a
+compaction destroys — so the stores, not the summary, decide whether a parked question is still
+open. Order on re-entry: probe the decisions, reconcile the mailbox, then let § Step 7a's batch ask
+whatever is genuinely still unanswered.
+
+#### Pending communication — the decision probe
+
+For every task parked on `blocked_on.kind: user_decision`, run
+`blocked-on-dispatch.sh resume --task-id <ID> --leg resumed` **before** the boundary batch. Exit 0
+means a valid, unconsumed, in-scope row covers the task: the stage resumes carrying its
+`decision_ref` and the user is not asked. Exit 1 means none does: the probe has written nothing and
+the task stays parked for the batch. Any other exit is an install or ledger fault, not an answer —
+exit 2 can fire after the claim has landed, so stop and report it rather than treating it as exit 1.
+Never read the ledger by hand and never put the question from the resume path — the probe is what
+checks the chain, the scope and the already-consumed set, and asking is the batch's job.
+
+#### Pending communication — a row covers a task, not a question
+
+The probe takes the newest unconsumed row whose scope names the task, whatever that row asked; it
+never compares the recorded question to the parked one. The stage's own `--verify-decision`
+confirmation is where the answer text is read and judged.
+
+#### Pending communication — the reply and expiry arms
+
+Once per re-entry, over every `peer_session` ask: `mailbox.sh scan`, which writes the `answered` leg
+for every verified reply; then one `blocked-on-dispatch.sh resume --task-id <ID> --leg relayed` per
+`replied[]` entry — the only per-ask step; then `mailbox.sh sweep`, which expires every
+ask past its deadline and routes it onward as a `user_decision`. An ask the sweep expires reaches
+the same batch and is asked exactly once; it needs no decision probe of its own, because the need it
+became was raised after the probe ran.
+
+#### Pending communication — why it holds across a session boundary
+
+A ledger row's `scope` carries the worktask identity and the task identities, never a session
+identity, so a decision recorded in one session covers the same task in the next. Age alone does not
+make a row honourable: it still has to pass chain verification and audit corroboration, and a row an
+earlier resume consumed never resumes a second time. With the state file's `facts` emptied — the
+shape a compaction leaves — the outcome is unchanged, because the probe reads the stores.
+
+#### Pending communication — the two stores sit in different places
+
+`decisions.jsonl` sits beside the run's own `state.json`, inside this workspace, so only a session
+resuming that workspace sees it. The mailbox resolves through the project-root resolver to the main
+worktree and is shared by every worktree of the project. A session resuming elsewhere therefore sees
+the mailbox alone, and must not read an absent decision row as a decision never made.
 
 ## Resume Procedure
 
@@ -372,7 +422,7 @@ A stage that sent its own ask before this rule existed has no path to the answer
 3. Cross-reference with `stage-contracts.md` — identify first incomplete stage
 4. Re-read that stage's `.context/*.md` artifact (if partial)
 5. If `metadata.retry_count > 0`, read `.context/errors/<agent>.md` for retry history
-6. Continue from the execution loop's `while (tasks.some(...))` — no need to replay completed stages
+6. Continue from the execution loop's `while (tasks.some(...))` — no need to replay completed stages; reconcile the parked tasks against the decision ledger and the mailbox (§ Pending communication) before the resumed loop reaches its first boundary
 7. Write a `resume` audit entry: `{actor: "orchestrator", action: "resume", subject: "<worktask_id>", result: "ok"}`
 
 See `context-compression.md § PostCompact Recovery` for the compaction-specific flow.
