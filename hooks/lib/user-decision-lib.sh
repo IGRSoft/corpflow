@@ -15,10 +15,10 @@
 #   A JSON-encoded line (a whole ledger row, or a `[question,answer]` canonical form) is not
 #   "decoded" and may sit in a variable; only the unescaped text itself may not.
 #
-#   Symbols: ud_digest, ud_row_sha256, ud_line_sha256, ud_extract_answers, ud_transcript_check,
-#   ud_scope_for, ud_lock_acquire, ud_lock_release, ud_append_call, ud_chain_walk,
-#   ud_audit_corroborates, ud_verify, ud_find_covering.
-#   Constants: UD_ACTOR, UD_ID_RE, UD_ROW_KEYS, UD_REASONS.
+#   Symbols: ud_digest, ud_row_sha256, ud_line_sha256, ud_normalize_answers, ud_extract_answers,
+#   ud_transcript_check, ud_scope_for, ud_lock_acquire, ud_lock_release, ud_append_call,
+#   ud_chain_walk, ud_audit_corroborates, ud_verify, ud_find_covering.
+#   Constants: UD_ACTOR, UD_ASK_TOOL_RE, UD_ID_RE, UD_ROW_KEYS, UD_REASONS.
 #
 # Minimum shell: bash 3.2+ (macOS default). Option-set neutral: correct under both a `set -e`
 # caller (state-patch.sh) and a plain caller (the hook), because it sets none of its own.
@@ -31,6 +31,8 @@ fi
 _UD_LIB=1
 
 UD_ACTOR="hook:user-decision"
+# The native ask tool or any MCP server's proxy of it (a host such as Conductor re-exports it).
+UD_ASK_TOOL_RE='^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$'
 UD_ID_RE='^ud-[0-9]{8}T[0-9]{6}Z-[1-9][0-9]*$'
 UD_ROW_KEYS="id ts actor tool_use_id question answer scope sha256 prev_sha256"
 # shellcheck disable=SC2034  # public constant: the closed reason set ud_verify's callers match against
@@ -113,6 +115,64 @@ ud_line_sha256() {
   printf '%s' "${1:-}" | ud_digest
 }
 
+# ud_normalize_answers <payload-file> — an MCP-proxied ask returns a text content array
+# (`User responses:` then `N. <answer>` per question) instead of an `answers` object; rewrite the
+# file with `tool_response.answers` built from it. Any other shape — an `answers` object already
+# present, a missing header, lines not numbered 1..N in order, a count that differs from
+# tool_input.questions, or duplicate question texts — leaves the file untouched, so P3 still
+# refuses it as no_answer. rc 0 either way, rc 2 on IO.
+ud_normalize_answers() {
+  local _payload _tmp
+  _payload="${1:-}"
+  [ -n "$_payload" ] && [ -f "$_payload" ] && [ ! -L "$_payload" ] || return 2
+  command -v jq > /dev/null 2>&1 || return 2
+  _tmp=$(mktemp 2> /dev/null) || return 2
+  if ! jq -c '
+      def mcp_text:
+        (if type == "array" then . elif type == "object" then (.content? // null) else null end)
+        | if type == "array" then
+            [ .[] | select(type == "object" and .type == "text" and (.text | type) == "string") | .text ]
+            | if length > 0 then join("\n") else null end
+          else null end;
+      . as $root
+      | ($root.tool_response // $root.response) as $resp
+      | ((($root.tool_input // {}).questions // []) | if type == "array" then map(.question? // null) else [] end) as $qt
+      | if (($resp | type) == "object" and (($resp.answers? // null) | type) == "object")
+           or (((($root.tool_input // {}).answers? // null) | type) == "object")
+           or ($qt | length) == 0
+           or ($qt | all(type == "string" and length > 0) | not)
+           or (($qt | unique | length) != ($qt | length))
+        then empty
+        else ($resp | mcp_text) as $t
+        | if $t == null then empty
+          else ($t | sub("\n+$"; "") | split("\n")) as $l
+          | if ($l | length) != (($qt | length) + 1) or $l[0] != "User responses:" then empty
+            else [ range(1; $l | length) as $k
+                   | (($k | tostring) + ". ") as $p
+                   | if ($l[$k] | startswith($p)) and (($l[$k] | length) > ($p | length))
+                     then {key: $qt[$k - 1], value: $l[$k][($p | length):]} else null end ]
+            | if any(. == null) then empty
+              else from_entries as $answers
+              | (if ($resp | type) == "object" then $resp else {content: $resp} end) as $base
+              | $root | .tool_response = ($base + {answers: $answers})
+              end
+            end
+          end
+        end
+    ' "$_payload" > "$_tmp" 2> /dev/null; then
+    rm -f "$_tmp"
+    return 2
+  fi
+  if [ -s "$_tmp" ]; then
+    cat "$_tmp" > "$_payload" 2> /dev/null || {
+      rm -f "$_tmp"
+      return 2
+    }
+  fi
+  rm -f "$_tmp"
+  return 0
+}
+
 # ud_extract_answers <payload-file> — stages one JSONL line per tool_input.questions[] entry,
 # `{index, header, question_ok, answer_ok}`, to a tmp file whose path is printed on rc 0.
 # Whole-call refusals (P3) print a reason token instead: rc 1 idle_auto_answer|no_answer, rc 2
@@ -162,37 +222,41 @@ ud_extract_answers() {
   return 0
 }
 
-# ud_transcript_check <payload-file> — P4 (the transcript holds this tool_use_id, named
-# AskUserQuestion) plus the transcript half of P3 (the ORIGINAL tool_use.input already carried
+# ud_transcript_check <payload-file> — P4 (the transcript holds this tool_use_id, named as the
+# payload's own ask tool) plus the transcript half of P3 (the ORIGINAL tool_use.input already carried
 # `answers`, i.e. pre_answered). Re-reads up to 3 times, 0.2s apart, for a flush race. rc 0 ok,
 # rc 1 refused (reason on stdout: transcript_miss|pre_answered), rc 2 IO.
 ud_transcript_check() {
-  local _payload _tp _sid _tuid _try _found _def
+  local _payload _tp _sid _tuid _tn _try _found _def
   _payload="${1:-}"
   [ -n "$_payload" ] && [ -f "$_payload" ] && [ ! -L "$_payload" ] || return 2
   command -v jq > /dev/null 2>&1 || return 2
   _tp=$(jq -r '.transcript_path // ""' "$_payload" 2> /dev/null) || return 2
   _sid=$(jq -r '.session_id // ""' "$_payload" 2> /dev/null) || return 2
   _tuid=$(jq -r '.tool_use_id // ""' "$_payload" 2> /dev/null) || return 2
-  if [ -z "$_tp" ] || [ -z "$_sid" ] || [ -z "$_tuid" ] || [ "${_tp##*/}" != "${_sid}.jsonl" ]; then
+  _tn=$(jq -r '.tool_name // ""' "$_payload" 2> /dev/null) || return 2
+  if [ -z "$_tp" ] || [ -z "$_sid" ] || [ -z "$_tuid" ] || [ "${_tp##*/}" != "${_sid}.jsonl" ] \
+    || ! [[ "$_tn" =~ $UD_ASK_TOOL_RE ]]; then
     printf 'transcript_miss'
     return 1
   fi
 
-  # shellcheck disable=SC2016  # jq program text: $id is a jq variable, not a shell one
+  # The recorded call must carry the payload's own tool name, so an answer relayed by one MCP
+  # server cannot be matched against a call made to another.
+  # shellcheck disable=SC2016  # jq program text: $id and $tn are jq variables, not shell ones
   _def='
     def ud_tool_uses($id):
       select(type == "object" and .type == "assistant")
       | (.message.content? // empty)
       | (if type == "array" then .[] else empty end)
-      | select(type == "object" and .type == "tool_use" and .id == $id and .name == "AskUserQuestion");
+      | select(type == "object" and .type == "tool_use" and .id == $id and .name == $tn);
   '
   # P4 also requires the recorded call's own questions to be the ones this payload reports: the
   # comparison is byte-equal and happens entirely inside jq, with the payload slurped as a file.
   _found=0
   for _try in 1 2 3; do
     if [ -f "$_tp" ] && [ ! -L "$_tp" ] \
-      && jq -sce --arg id "$_tuid" --slurpfile pay "$_payload" "${_def}"'
+      && jq -sce --arg id "$_tuid" --arg tn "$_tn" --slurpfile pay "$_payload" "${_def}"'
           [.[] | ud_tool_uses($id)] as $tu
           | (($pay[0].tool_input.questions // []) | map(.question)) as $pq
           | ($tu | length > 0)
@@ -208,7 +272,7 @@ ud_transcript_check() {
     return 1
   fi
 
-  if jq -sce --arg id "$_tuid" "${_def}"'[.[] | ud_tool_uses($id)] | any(.input.answers? != null)' \
+  if jq -sce --arg id "$_tuid" --arg tn "$_tn" "${_def}"'[.[] | ud_tool_uses($id)] | any(.input.answers? != null)' \
     "$_tp" > /dev/null 2>&1; then
     printf 'pre_answered'
     return 1
@@ -861,7 +925,8 @@ ud_verify() (
 )
 
 # ud_find_covering <state.json> <ledger> <audit> <task_id> — the newest valid id whose scope
-# covers <task_id> and that no recorded `blocked_on` row for this subject already carries as its
+# covers <task_id> parked on user_decision, whose question and scope.item equal the parked
+# detail's, and that no recorded `blocked_on` row for this subject already carries as its
 # decision_ref. Prints the id, or nothing (rc 0 either way — "not found" is not a failure here).
 ud_find_covering() {
   local _state _ledger _audit _task _ids _id _v _consumed _walk
@@ -877,8 +942,19 @@ ud_find_covering() {
   printf '%s\n' "$_walk" | jq -se 'all(.[]; (.reasons // ["malformed_row"]) | length == 0)' \
     > /dev/null 2>&1 || return 0
 
-  _ids=$(jq -r --arg t "$_task" '
-    select(((.scope.task_ids // []) | index($t)) != null) | .id
+  # A row covers the task only when it answers the question the task is parked on: scope alone
+  # would hand a resume an unrelated answer (say a sweep item) that happens to name the task.
+  [ -f "$_state" ] && [ ! -L "$_state" ] || return 0
+  _ids=$(jq -r --arg t "$_task" --slurpfile st "$_state" '
+    ((($st[0].tasks // {})[$t] // {}) as $pt
+      | if ($pt.status // "") == "blocked"
+           and ((($pt.metadata // {}).blocked_on // {}).kind // "") == "user_decision"
+        then ((($pt.metadata // {}).blocked_on // {}).detail // {}) else null end) as $d
+    | select($d != null
+        and ((.scope.task_ids // []) | index($t)) != null
+        and (.question // null) == ($d.question // null)
+        and ((.scope // {}).item // null) == ($d.item // null))
+    | .id
   ' "$_ledger" 2> /dev/null | sed -n '1!G;h;$p' 2> /dev/null)
   [ -n "$_ids" ] || return 0
 

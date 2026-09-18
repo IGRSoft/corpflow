@@ -35,6 +35,9 @@ _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
 # it safely. Inspecting the hook with git still works from any command that does not name the
 # script itself (`git diff hooks/`, `git checkout -- hooks/`), which this guard never sees.
 _UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck)$'
+# The native ask tool or any MCP server's proxy of it. Must equal UD_ASK_TOOL_RE in the lib; held
+# here too so P2 still refuses a foreign tool as bad_event when the lib failed to load.
+_UD_ASK_TOOL_RE='^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$'
 
 # _ud_refuse <ctx> <reason> [<tool_use_id>] — one user_decision_refused row; tool_use_id is
 # folded in only once P2 (event/tool/id shape) has already passed.
@@ -74,7 +77,7 @@ _ud_cb() {
   return 0
 }
 
-# do_post — PostToolUse AskUserQuestion. Reads $PAYLOAD (already staged as one JSON string).
+# do_post — PostToolUse on the ask tool, native or MCP-proxied. Reads $PAYLOAD (already staged as one JSON string).
 do_post() {
   local CTX TOOL_NAME TUID PFILE preason prc treason trc STATE LEDGER areason arc
   CTX=$(corpflow_context_root)
@@ -91,7 +94,7 @@ do_post() {
   TOOL_NAME=$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // ""' 2> /dev/null) || TOOL_NAME=""
   TUID=$(printf '%s' "$PAYLOAD" | jq -r '.tool_use_id // "" | tostring' 2> /dev/null) || TUID=""
 
-  if [ "$TOOL_NAME" != "AskUserQuestion" ] || ! [[ "$TUID" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; then
+  if ! [[ "$TOOL_NAME" =~ $_UD_ASK_TOOL_RE ]] || ! [[ "$TUID" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; then
     _ud_refuse "$CTX" bad_event
     return 0
   fi
@@ -106,6 +109,7 @@ do_post() {
     return 0
   }
   printf '%s' "$PAYLOAD" > "$PFILE" 2> /dev/null
+  ud_normalize_answers "$PFILE" > /dev/null 2>&1
 
   # AD4 is a ladder and first failure wins, so P3's payload half (idle_auto_answer, no_answer)
   # is asked before P4 reads the transcript. ud_append_call stages the answers again later; one

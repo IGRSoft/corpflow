@@ -290,7 +290,7 @@ _install_project_local() {
   [ ! -d "$fresh/.context" ]
 }
 
-@test "linked-worktree cwd, no declared root -> merge lands in main's ledger" {
+@test "registered stage worktree cwd, no declared root -> merge lands in main's ledger" {
   local base main wt
   base="$(mk_tmpworkdir)"
   main="$base/main"
@@ -304,9 +304,9 @@ _install_project_local() {
   # the resolver always answers physically — compare physical to physical.
   main="$(cd "$main" && pwd -P)"
   mkdir -p "$main/.context"
-  cat > "$main/.context/state.json" <<'EOF'
-{"run_index":0,"worktask_id":"wt-fix","tasks":{"PL0":{"status":"completed","verdict":"ok"},"DV0":{"status":"in_progress"}}}
-EOF
+  # The main ledger lends itself to a linked worktree only when a task registered it.
+  jq -cn --arg w "$wt" '{run_index: 0, worktask_id: "wt-fix", tasks: {PL0: {status: "completed", verdict: "ok"},
+    DV0: {status: "in_progress", metadata: {workspace_path: $w}}}}' > "$main/.context/state.json"
   cat > "$main/.context/development-0.md" <<'EOF'
 ---
 handoff:

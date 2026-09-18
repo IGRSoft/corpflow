@@ -1147,8 +1147,25 @@ gate_classify_payload() {
   return 0
 }
 
+# gate_ctx <ctx dir or empty> -> the given dir, else the resolved context root;
+# rc 1 when unresolved ("no worktask here"). Resolution forks git and the
+# resolver, so run_gate asks only once a payload is known to need a ledger.
+gate_ctx() {
+  local _c="${1:-}"
+  if [ -z "$_c" ]; then
+    _c=$(corpflow_context_root)
+    [ -n "$_c" ] || return 1
+    # A degraded strip still enforces, so it is announced rather than blocked on.
+    if [ "${CMDHEAD_FALLBACK:-0}" -eq 1 ] && [ -f "$_c/state.json" ]; then
+      echo "test-execution-gate: $_CMDHEAD_LIB unusable — assignment strip degraded to the inline fallback" >&2
+      mkdir -p "$_c/logs" 2>/dev/null && : > "$_c/logs/.corpflow-lib-missing" 2>/dev/null
+    fi
+  fi
+  printf '%s' "$_c"
+}
+
 # ---------------------------------------------------------------------------
-# run_gate <payload json> <ctx dir> -> echoes decision JSON (deny) or nothing
+# run_gate <payload json> <ctx dir or empty> -> echoes decision JSON (deny) or nothing
 # (allow/observe). Appends an audit row for a deny or a Task observation.
 # Parameterized over .context/ so every branch is fixture-reachable, per the
 # dv-screenshot-gate.sh idiom (run_gate <payload> <ctx>).
@@ -1163,7 +1180,9 @@ run_gate() {
   # only the rare hatch path pays for an audit row. Gated on state.json existing
   # at all — otherwise a shell-profile-wide CORPFLOW_TEST_GATE=off would
   # materialize .context/logs/ in every unrelated directory the user opens.
-  if [ "${CORPFLOW_TEST_GATE:-}" = "off" ] && [ -f "$_ctx/state.json" ]; then
+  if [ "${CORPFLOW_TEST_GATE:-}" = "off" ]; then
+    _ctx=$(gate_ctx "$_ctx") || return 0
+    [ -f "$_ctx/state.json" ] || return 0
     _sentinel="$_ctx/logs/.gate-off-noted"
     if [ ! -f "$_sentinel" ]; then
       mkdir -p "$_ctx/logs" 2>/dev/null && : > "$_sentinel" 2>/dev/null
@@ -1188,6 +1207,7 @@ run_gate() {
       # means no worktask is in flight — the common case in a repo where the
       # plugin is merely installed — and such a session must see zero side
       # effects: no directory creation, no log growth.
+      _ctx=$(gate_ctx "$_ctx") || return 0
       _stage=$(corpflow_active_stage "$_ctx")
       if [ -n "$_stage" ]; then
         _subagent=$(printf '%s' "$_payload" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
@@ -1224,6 +1244,7 @@ run_gate() {
   case "$_class" in
     not_test|build_only) return 0 ;;
   esac
+  _ctx=$(gate_ctx "$_ctx") || return 0
 
   # Stage resolution runs only once the command is known to be a test run.
   # Classification never reads the stage, and the overwhelming majority of tool
@@ -1418,17 +1439,7 @@ if [ "$LIB_DEGRADED" -eq 1 ]; then
   exit 0
 fi
 
-# Unresolved is "no worktask here": allow, enforce nothing, create nothing.
-CTX=$(corpflow_context_root)
-[ -n "$CTX" ] || exit 0
-
-# A degraded strip still enforces, so it is announced rather than blocked on. Library-free and
-# gated on an existing ledger, like the degraded branch above, and it writes the same shared
-# sentinel the other degraded hooks do.
-if [ "$CMDHEAD_FALLBACK" -eq 1 ] && [ -f "$CTX/state.json" ]; then
-  echo "test-execution-gate: $_CMDHEAD_LIB unusable — assignment strip degraded to the inline fallback" >&2
-  mkdir -p "$CTX/logs" 2>/dev/null && : > "$CTX/logs/.corpflow-lib-missing" 2>/dev/null
-fi
-
-run_gate "$PAYLOAD" "$CTX"
+# The context root resolves inside run_gate, after classification: nearly every call is not a
+# test run, and an unresolved root is "no worktask here" — allow, enforce nothing, create nothing.
+run_gate "$PAYLOAD" ""
 exit 0

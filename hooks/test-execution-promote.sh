@@ -264,6 +264,9 @@ run_promote() {
     full_test_run|scoped_test_run) ;;
     *) return 0 ;;
   esac
+  # Resolved only now: the root ladder forks git, and nearly every call exits above.
+  [ -n "$_ctx" ] || _ctx=$(corpflow_context_root)
+  [ -n "$_ctx" ] || return 0
 
   # The tree is deliberately NOT consulted here: the run itself may have written
   # un-ignored artifacts, so a fingerprint taken now names a marker the gate
@@ -294,9 +297,6 @@ esac
 IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0
 
-# Unresolved: nothing was gated under this root, so no marker to promote.
-CTX=$(corpflow_context_root)
-[ -n "$CTX" ] || exit 0
-
-run_promote "$PAYLOAD" "$CTX"
+# An unresolved root (inside run_promote) means nothing was gated there: no marker to promote.
+run_promote "$PAYLOAD" ""
 exit 0

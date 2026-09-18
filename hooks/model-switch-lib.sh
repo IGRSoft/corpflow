@@ -33,6 +33,31 @@ fi
 [ -n "${_CORPFLOW_HOOK_LIB:-}" ] && return 0
 _CORPFLOW_HOOK_LIB=1
 
+# _cf_rank6_owns <main-checkout> <git-toplevel> — rc 0 when the session is
+# the main checkout (physical CLAUDE_PROJECT_DIR equals it) or the toplevel is a
+# stage worktree the main ledger registered as some task's metadata.workspace_path.
+# Both sides are compared physically; a missing jq or unreadable ledger is rc 1,
+# which callers read as "no worktask here".
+_cf_rank6_owns() {
+  local _o_main="${1:-}" _o_top="${2:-}" _o_pd _o_wp _o_wpp
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    _o_pd="$(CDPATH='' cd -- "$CLAUDE_PROJECT_DIR" 2> /dev/null && pwd -P)"
+    [ -n "$_o_pd" ] && [ "$_o_pd" = "$_o_main" ] && return 0
+  fi
+  [ -n "$_o_top" ] || return 1
+  _o_top="$(CDPATH='' cd -- "$_o_top" 2> /dev/null && pwd -P)"
+  [ -n "$_o_top" ] || return 1
+  command -v jq > /dev/null 2>&1 || return 1
+  while IFS= read -r _o_wp; do
+    [ -n "$_o_wp" ] || continue
+    _o_wpp="$(CDPATH='' cd -- "$_o_wp" 2> /dev/null && pwd -P)"
+    [ -n "$_o_wpp" ] && [ "$_o_wpp" = "$_o_top" ] && return 0
+  done <<< "$(jq -r '(.tasks // {}) | to_entries[]
+      | (.value.metadata.workspace_path? // empty) | select(type == "string")' \
+    "$_o_main/.context/state.json" 2> /dev/null)"
+  return 1
+}
+
 # corpflow_workspace_root — echoes the absolute workspace root and also
 # assigns it to _CORPFLOW_WS_ROOT, so a caller on a hot path can read the value
 # without paying for a command substitution. Arguments are ignored.
@@ -82,8 +107,12 @@ corpflow_workspace_root() {
     _cf_root=""
     _cf_root=$(bash "$_cf_resolver" --root 2> /dev/null || true)
     # Rank 6 requires an existing ledger, not just a git root; --root doesn't
-    # check this itself (existence-unchecked per its own docstring).
-    if [ -n "$_cf_root" ] && [ -f "$_cf_root/.context/state.json" ]; then
+    # check this itself (existence-unchecked per its own docstring). It also
+    # requires the main checkout's ledger to own THIS tree: any linked worktree
+    # of the repo reaches the same main checkout, and borrowing its ledger from
+    # an unrelated worktree turns that ledger's gates on work it never ran.
+    if [ -n "$_cf_root" ] && [ -f "$_cf_root/.context/state.json" ] \
+      && _cf_rank6_owns "$_cf_root" "$_cf_top"; then
       _CORPFLOW_WS_ROOT="$_cf_root"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
     fi
@@ -400,4 +429,4 @@ corpflow_hook_audit_row() {
 readonly -f corpflow_workspace_root corpflow_context_root corpflow_active_stage \
   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-  corpflow_audit_task_id corpflow_hook_audit_row
+  corpflow_audit_task_id corpflow_hook_audit_row _cf_rank6_owns

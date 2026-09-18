@@ -310,7 +310,7 @@ _gate() {
   assert_success
 }
 
-@test "seam: without --accept-absent the check exits 1, nothing is recorded, and the gate blocks" {
+@test "seam: without --accept-absent the check exits 1 and records nothing, and the gate passes regardless" {
   _no_renderer
   _gate_ledger
   cp "$WD/gw/.context/state.json" "$WD/before.json"
@@ -320,10 +320,10 @@ _gate() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --record "$WD/tmp/corpflow-preflight.seamfail" --context "$WD/gw/.context"
   [ "$status" -eq 1 ]
   cmp -s "$WD/gw/.context/state.json" "$WD/before.json" || fail "a failing preflight reached the ledger"
+  # The gate no longer reads metadata.preflight: a systems tool_missing row passes on its own.
   _gate
   assert_success
-  jq -e '.decision == "block" and (.reason | startswith("tool_missing_unaccepted"))' <<< "$output" > /dev/null \
-    || fail "gate did not block tool_missing_unaccepted: $output"
+  assert_output ''
 }
 
 # --- permission rules -------------------------------------------------------------

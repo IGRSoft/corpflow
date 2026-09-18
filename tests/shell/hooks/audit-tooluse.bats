@@ -270,7 +270,7 @@ refute_log_contains() {
   [ ! -d "$fresh/.context" ]
 }
 
-@test "linked-worktree cwd, no declared root -> row lands in main's ledger" {
+@test "registered stage worktree cwd, no declared root -> row lands in main's ledger" {
   local base main wt
   base="$(mk_tmpworkdir)"
   main="$base/main"
@@ -284,7 +284,9 @@ refute_log_contains() {
   # the resolver always answers physically — compare physical to physical.
   main="$(cd "$main" && pwd -P)"
   mkdir -p "$main/.context"
-  printf '%s' '{"version":2,"tasks":{}}' > "$main/.context/state.json"
+  # The main ledger lends itself to a linked worktree only when a task registered it.
+  jq -cn --arg w "$wt" '{version: 2, tasks: {DV1: {status: "pending", metadata: {workspace_path: $w}}}}' \
+    > "$main/.context/state.json"
 
   run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \

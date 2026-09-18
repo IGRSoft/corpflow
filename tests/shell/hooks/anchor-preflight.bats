@@ -173,6 +173,7 @@ payload() {
 
 @test "control bytes: a NUL in a compliant artifact exits non-zero naming path and offset" {
   mkdir -p "$WD/.context"
+  : > "$WD/.context/state.json"
   mk_compliant_dv "$WD/.context/development-3.md"
   local off
   off=$(wc -c < "$WD/.context/development-3.md" | tr -d ' ')
@@ -184,11 +185,26 @@ payload() {
   assert_output --partial "$WD/.context/development-3.md:$off:0x00"
 }
 
-@test "control bytes: a NUL in a non-artifact text file exits non-zero" {
-  printf 'spellings `\\0` raw \000\n' > "$WD/notes.md"
-  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/notes.md")"
+@test "control bytes: a NUL in a non-artifact text file under a ledger .context/ exits non-zero" {
+  mkdir -p "$WD/.context"
+  : > "$WD/.context/state.json"
+  printf 'spellings `\\0` raw \000\n' > "$WD/.context/notes.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/.context/notes.md")"
   assert_failure 2
-  assert_output --partial "$WD/notes.md:19:0x00"
+  assert_output --partial "$WD/.context/notes.md:19:0x00"
+}
+
+@test "control bytes: R5 — outside any ledger .context/ nothing is scanned" {
+  mkdir -p "$WD/src" "$WD/bare/.context"
+  printf 'page\fbreak\n' > "$WD/src/gen.py"
+  run --separate-stderr env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/src/gen.py")"
+  assert_success
+  [ -z "$stderr" ] || fail "stderr: $stderr"
+  # A .context/ with no state.json is not a ledger either.
+  printf 'raw \000\n' > "$WD/bare/.context/notes.md"
+  run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(payload "$WD/bare/.context/notes.md")"
+  assert_success
+  assert_output ""
 }
 
 @test "control bytes: a clean non-artifact write is a no-op" {
@@ -206,6 +222,7 @@ payload() {
 
 @test "control bytes: an artifact with a NUL and a missing anchor shows both diagnostics" {
   mkdir -p "$WD/.context"
+  : > "$WD/.context/state.json"
   printf -- '---\nhandoff:\n  stage: DV\n  verdict: ok\n  summary: "no anchor"\n---\n\n# Development\n\nraw \001 byte\n' \
     > "$WD/.context/development-4.md"
   local anchor_line
