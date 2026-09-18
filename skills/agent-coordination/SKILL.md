@@ -154,7 +154,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), and legacy `cross_session_ask` alias rows read, never written |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest`, and legacy `cross_session_ask` alias rows read, never written |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 
@@ -194,6 +194,22 @@ The full command, `classifier_reason` and `allow_rule` stay out of the audit log
 | Orchestrator (`blocked-on-dispatch.sh route\|resume`, worktask Steps 6.5a3 and 7a) | `blocked_on`: one row per leg of a non-permission arm. `subject` and `task_id` are the task id; `result: "blocked"` on a leg that leaves the task parked, `"ok"` on the closing leg. `metadata.{kind, arm, leg}`, plus `fallback_from` and `owner_issue` on a fallback, `command_head` and `truncated` on a need with a command, and `decision_ref` on the closing leg |
 
 The permission arm writes no `blocked_on` row: its `denied` leg is the `permission_denied` row, and its `granted` and `resumed` legs are the `permission_resumed` row. A closing row's `decision_ref` is `blocked_on:<task_id>:<kind>:<n>` (`worktask/references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`).
+
+#### Writers — blocked_on rows, the peer_session legs
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`mailbox.sh leg\|comment\|scan\|sweep`, `blocked-on-dispatch.sh resume`) | `blocked_on`: one row per leg per ask, deduped on `(subject, metadata.ask_id, metadata.leg)`. `metadata.{kind, arm, leg, ask_id}`, plus `transport` (`message\|comment`) on `sent` and `delivered`, `transport_result` on `delivered`, `answered_by_kind` on `answered` and `relayed`, and `reply_ref` with `decision_ref` on `relayed` |
+
+Only the originating orchestrator writes these: a session answering from another worktree has no ledger task to cite, and `mailbox-reply.sh` writes no audit row at all. Every key above is a neutral name — the question, its options, the answer and the comment body live only in the mailbox files and `tasks.<ID>.metadata.blocked_on`, never in a row.
+
+#### Writers — mailbox_ingest rows
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`mailbox.sh ingest-comments`) | `mailbox_ingest`: `result: "ok"`, written only when a reply comment was ignored (`ignored > 0`). `metadata.{ask_id, ignored, reasons}`, `reasons` drawn from `author`, `bot`, `grammar`, `stale`, `schema`, `late`, `duplicate` |
+
+The row records that input was refused and why, never who sent it or what it said: no login and no comment body. An accepted reply writes no row of its own — it becomes the `answered` leg above.
 
 #### Writers — blocked_on rows, redacted
 
@@ -457,7 +473,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 > A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly — including resume: a subagent that resumes another agent via `SendMessage` is woken by that agent's completion.
 
-> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.blocked_on` of kind `peer_session` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — blocked_on, the peer_session arm`); the orchestrator routes it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`), and until #405 lands it asks the user to relay the reply.
+> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.blocked_on` of kind `peer_session` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — blocked_on, the peer_session arm`); the orchestrator routes it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`), and the durable mailbox (`scripts/mailbox.sh`) carries the ask and relays the verified reply.
 
 #### Skill discovery & subagent_type resolution
 

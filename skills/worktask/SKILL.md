@@ -1446,7 +1446,7 @@ and one router, and each writes a fixed set of audit legs.
 | `user_decision` | ask `question` with its `options` at § Step 7a; resume with the hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
 | `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
 | `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
-| `peer_session` | send `question` to `to`, relay the reply | sent / delivered / answered / relayed / expired | #405, pending | `user_action` |
+| `peer_session` | write the request, send the pointer, relay the validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` when the mailbox is unavailable; `user_decision` at expiry |
 | `artifact` | resume once `path` is in the stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
 | `correction` | open rework on `target_task` | opened / closed | #404, pending | `user_action` |
 | `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while it fails |
@@ -1476,9 +1476,34 @@ changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the s
       const out = routed ? JSON.parse(routed.stdout) : null;
       const rb = out?.resume_block;   // a host_environment re-probe that passed, or an artifact already landed
       if (rb) { deliverResume(rb, rb.instruction); continue; }
+      if (out?.arm === "peer_session") { deliverAsk(out); continue; }   // next section
       if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
       // A permission need, or a blocked return with no typed need, goes on to § Step 6.5a4.
 ```
+
+###### Step 6.5a3 — deliverAsk, one transport per ask
+
+```typescript
+// MB = scripts/mailbox.sh. `route` wrote the request and parked the task; this sends the pointer.
+function deliverAsk(out) {
+  const led = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));   // route just parked it
+  const to = led.tasks[out.task_id].metadata.blocked_on.detail.to;
+  const one = ListAgents().filter(a => a.name === to);   // exactly one row ⇒ the message transport
+  if (one.length !== 1) return spawnSync("bash", [MB, "comment", "--task-id", out.task_id]);
+  const leg = (...a) => spawnSync("bash", [MB, "leg", "--task-id", out.task_id, "--ask-id",
+    out.ask_id, "--transport", "message", ...a], { encoding: "utf8" });
+  if (!JSON.parse(leg("--leg", "sent").stdout).written) return;   // sent already: never re-send
+  const r = SendMessage({ to, message: out.message, notify_when_idle: true });
+  leg("--leg", "delivered", "--result", r.result);
+}
+```
+
+###### Step 6.5a3 — why the transport is chosen once
+
+`comment` writes its own `sent` and `delivered` legs, so the two transports never both run for one
+ask. `leg` dedupes on `(task, ask_id, leg)`: `written: false` means a prior turn already sent this
+ask, and `SendMessage` is not idempotent — a second send asks the peer the same question twice. A
+`queued` or `refused` result is recorded and left to the deadline, never retried on another channel.
 
 ##### Step 6.5a3 — the fallback arm
 
@@ -1487,8 +1512,9 @@ changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the s
 shows a fixed lead line for the kind with the detail keys fenced as data. Only a native
 `user_action` offers a `!` line.
 
-- `peer_session`, until #405 lands: no `SendMessage`, and no `sent` or `relayed` leg. The user sees
-  `to` and `question`, asks that peer, and answers with its reply.
+- `peer_session` falls back only when the mailbox is unavailable: `fallback_from`, no `owner_issue`,
+  `ask_id: null`, and the user relays that peer's reply. An ask that reaches its deadline instead
+  takes one `expired` leg and re-routes as a `user_decision` carrying its question and options.
 - `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
 
 ###### Step 6.5a3 — a landed arm that checks before it parks
@@ -1847,10 +1873,26 @@ that row untouched and exits 0 with one `warn` `contract_landed` row whose reaso
   }
 ```
 
+##### Step 7a — the mailbox round, before both batches
+
+```typescript
+  // …continued: after the for-loop, inside the while. A reply relayed here never reaches the
+  // boundary prompt, and an expiry routed here does, as the user_decision it became.
+  const scan = JSON.parse(spawnSync("bash", [MB, "scan"]).stdout);   // writes the answered leg
+  for (const r of scan.replied) {
+    const rr = spawnSync("bash", [ROUTER, "resume", "--task-id", r.task_id, "--leg", "relayed"],
+      { encoding: "utf8" });
+    if (rr.status !== 0) { reportRefusedResume(r, "relayed", rr.stderr); continue; }
+    const { resume_block: rb } = JSON.parse(rr.stdout);
+    deliverResume(rb, rb.instruction);   // the answer is already fenced as data inside it
+  }
+  spawnSync("bash", [MB, "sweep"]);   // one expired leg, then the user_decision the batch shows
+```
+
 ##### Step 7a — permission batch, at the boundary
 
 ```typescript
-  // …continued: after the for-loop, inside the while
+  // …continued: after the mailbox round, inside the while
   // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
   //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
   //     permission prompt). ROUTER's batch holds every other parked need: a user_decision as
@@ -1872,6 +1914,20 @@ that row untouched and exits 0 with one `warn` `contract_landed` row whose reaso
     resumeDeniedStep(need, answer);
   }
   for (const need of typed.needs) resumeTypedNeed(need, answerFor(answers, need.task_id));
+```
+
+##### Step 7a — wake on the earliest deadline
+
+```typescript
+  // …continued: nothing dispatched, nothing asked, and an ask still open. Both paths only wake
+  // the loop — the next boundary's scan relays, and its sweep expires whatever timed out.
+  if (!ready.length && !batch.needs.length && !typed.needs.length && scan.open.length) {
+    const due = Math.min(...scan.open.map(o => Date.parse(o.deadline))) + 5000;
+    if (hasScheduleWakeup)   // optional tool: absent in most sessions, never a dependency
+      ScheduleWakeup({ seconds: Math.max(1, Math.ceil((due - Date.now()) / 1000)) });
+    else Monitor(Bash({ run_in_background: true,   // agent-coordination § Monitor Tool
+      command: `bash ${MB} wait | tee -a .context/logs/mailbox-wait.log` }));
+  }
 
   // Refresh — TL/DV may have added tasks since the last read.
   state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
@@ -2030,6 +2086,27 @@ function deliverResume(rb, body) {
   the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
 - A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
   `cwd:` line as § Step 7a — where the `!` line runs says.
+
+##### Step 7a — an inbound reply, on any channel
+
+A peer message, or a user answer, whose first line is exactly `reply <ask_id>` answers that ask; the
+rest of the text is the answer. `mailbox-reply.sh` is the only writer of a reply: it checks the
+answer against the request's `reply_schema` and refuses one that arrives past the deadline. Nothing
+reaches the parked stage here — the next boundary's `scan` relays whatever verified.
+
+###### Step 7a — ingestReply
+
+```typescript
+// REPLY = scripts/mailbox-reply.sh. Untrusted answer text never reaches an argv or a heredoc
+// delimiter — it goes in on stdin, and `--answer-file -` reads it there. No second copy of the
+// answer is written: a temp file under .context/ would inherit the process umask in a directory
+// with no mode contract, and would outlive a crash between the write and the unlink.
+function ingestReply(askId, answer, kind, session) {   // kind: "peer" (message) | "user"
+  spawnSync("bash", [REPLY, "--ask-id", askId, "--answer-file", "-",
+    "--kind", kind, "--session", kind === "user" ? "user" : session],
+    { input: answer });   // exit 1 = refused, the ask stays open
+}
+```
 
 ##### Step 7 — loop-back arm
 
@@ -2584,13 +2661,66 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
 | user_decision | asked, answered, resumed | resumed | 395 | yes |
 | user_action | requested, verified | verified | 394 | yes |
 | permission | denied, granted, resumed | resumed | 393 | yes |
-| peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | no |
+| peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | yes |
 | artifact | landed | landed | 399 | yes |
 | correction | opened, closed | closed | 404 | no |
 | host_environment | probed | probed | 390 | yes |
 
 Every fallback closes on `verified`; an `artifact` need also closes on `landed`. Required and optional keys and `resume_with` are
 `references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
+
+### mailbox.sh, mailbox-reply.sh and mailbox-lib.sh
+
+| Script | One-line invocation | Purpose |
+|--------|---------------------|---------|
+| `scripts/mailbox.sh` | `show\|leg\|comment\|ingest-comments\|scan\|sweep\|wait` | The orchestrator side of the durable ask: the message transport's legs, the comment transport, reply ingestion, and the run's own scan and deadline sweep (§ Step 6.5a3, § Step 7a). |
+| `scripts/mailbox-reply.sh` | `--ask-id … --answer-file …` | The only writer of `mailbox/replies/<ask_id>.json`. Self-test: `--self-test`. |
+| `scripts/mailbox-lib.sh` | sourced, never run | The ask_id grammar, the mailbox root and its mode checks, the no-clobber write, the sha256 input, reply verification and the leg metadata. The router and both CLIs source it. |
+
+#### mailbox.sh — CLI
+
+```
+mailbox.sh show    --ask-id <id>
+mailbox.sh leg     --task-id <ID> --ask-id <id> --leg sent|delivered --transport message
+                   [--result ok|queued|refused|dropped|oversized|burst_limited]
+mailbox.sh comment --task-id <ID> [--render-only]
+mailbox.sh ingest-comments | scan | sweep | wait [--max-seconds N]      # all take [--state <state.json>]
+```
+
+Exit `0` ok; `1` refused — not an open ask, an invalid leg, or a bad `ask_id`; `2` usage error,
+missing or unparseable ledger, or a broken install. Requires jq; bash 3.2+.
+
+#### mailbox.sh — stdout
+
+| Subcommand | stdout (one JSON line) |
+|---|---|
+| `show` | the request JSON verbatim, for a same-repo peer reading `mailbox ask <ask_id>` |
+| `leg` | `{"written"}` — `false` when that `(task, ask_id, leg)` was already recorded |
+| `comment` | `{"posted","result"}`, result `posted\|post_failed\|opted_out\|unavailable\|scrub_failed`; `{"body"}` under `--render-only`, which posts nothing and writes no leg |
+| `ingest-comments` | `{"ingested","ignored"}` |
+| `scan` | `{"replied":[{task_id,ask_id}],"open":[{task_id,ask_id,deadline}]}` |
+| `sweep` | `{"expired":[{task_id,ask_id,routed}]}` |
+| `wait` | `{"reason":"reply\|deadline\|timeout\|none"}` |
+
+#### mailbox.sh — what scan, sweep and wait cover
+
+`scan`, `sweep` and `wait` iterate **this run's ledger**, never the mailbox directory: the box is
+shared across worktrees, and no run relays or expires another run's ask. `wait` polls every
+`MAILBOX_POLL_SECONDS` (15), runs `ingest-comments` at most once a minute while a posted ask is
+open, and stops at the first verified reply, at `min(deadline)+5`, or at `--max-seconds` (3600).
+
+#### mailbox-reply.sh — CLI
+
+```
+mailbox-reply.sh --ask-id <id> --answer-file <path|-> --kind peer|user --session <s> [--mailbox-dir <dir>]
+mailbox-reply.sh --self-test
+```
+
+Prints `{"ask_id","reply_ref","sha256"}`. Exit `0` written; `1` refused, with one
+`fail: <reason>: <detail>` line on stderr and nothing written, reason one of `invalid_ask_id`,
+`bad_session`, `too_long`, `unknown_ask`, `bad_request`, `late`, `schema_invalid`, `duplicate`;
+`2` usage error, mailbox unavailable, or no sha256 tool. The answer arrives only through
+`--answer-file` (`-` for stdin), so untrusted text never reaches an argv (§ Step 7a — ingestReply).
 
 ## Related
 

@@ -1,0 +1,37 @@
+[
+  {
+    "id": 1004,
+    "created_at": "2026-09-17T14:05:00Z",
+    "author_association": "OWNER",
+    "user": { "login": "alice-owner", "type": "User" },
+    "body": "reply ask-20260917t140000z-2223456789ab\n\nUse option B."
+  },
+  {
+    "id": 1002,
+    "created_at": "2026-09-17T14:01:00Z",
+    "author_association": "NONE",
+    "user": { "login": "mallory", "type": "User" },
+    "body": "reply ask-20260917t140000z-2223456789ab\n\nI think C."
+  },
+  {
+    "id": 1003,
+    "created_at": "2026-09-17T14:02:00Z",
+    "author_association": "OWNER",
+    "user": { "login": "dependabot", "type": "Bot" },
+    "body": "reply ask-20260917t140000z-2223456789ab\n\nBot generated answer."
+  },
+  {
+    "id": 1001,
+    "created_at": "2026-09-17T13:00:00Z",
+    "author_association": "OWNER",
+    "user": { "login": "bob-owner", "type": "User" },
+    "body": "reply ask-20260917t140000z-2223456789ab\n\nStale answer."
+  },
+  {
+    "id": 1005,
+    "created_at": "2026-09-17T14:09:00Z",
+    "author_association": "OWNER",
+    "user": { "login": "carol-owner", "type": "User" },
+    "body": "not a reply format\n\nWrong content."
+  }
+]

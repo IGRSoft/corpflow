@@ -236,6 +236,7 @@ so they are exempt.
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
 | Stage `blocked` with `metadata.blocked_on` of a kind other than `permission` | A `blocked_on` row with `result: "blocked"` and no later closing-leg row for that `task_id` | Parked on a typed need (`SKILL.md § Step 6.5a3`). Do **not** re-delegate, and do **not** call `route` again: a second call writes a second opening leg. Re-enter the loop; § Step 7a's `blocked-on-dispatch.sh batch` asks the user at the next boundary |
+| Stage `blocked` on `peer_session` with a `metadata.ask_id` | A `sent` or `delivered` leg carrying that `ask_id`, and no `relayed` or `expired` leg for it | The ask is durable and outlives the session. On re-entry run `mailbox.sh scan`, `blocked-on-dispatch.sh resume --leg relayed` for every `replied[]` entry, then `mailbox.sh sweep`. Never re-route and never re-send: the request file and the `sent` leg both already exist |
 
 #### Reply routing — the legacy cross_session_ask row
 
@@ -250,7 +251,7 @@ Runs already in flight may still hold rows of the legacy alias; new returns rout
 A subagent's `SendMessage` to another **session** delivers its reply to the parent session's
 conversation, so a stage agent that sends its own cross-session ask can never receive the answer —
 it would wait forever. The stage returns `blocked_on` of kind `peer_session` naming who to ask and
-what; the orchestrator routes it, and until #405 lands asks the user to relay the reply. Rule and
+what; the orchestrator routes it through the mailbox and relays the verified reply. Rule and
 schema: `agent-coordination/SKILL.md § Replies from a subagent land in the parent conversation`
 and `handoff-protocol.md § Schema — blocked_on, the peer_session arm`.
 

@@ -91,7 +91,7 @@ _lib() {
   _lib "blocked_on_table_json"
   assert_success
   jq -e '(keys | length) == 7 and all(.[]; (.owner_issue | type) == "number" and (.landed | type) == "boolean")
-    and .user_action.landed and .host_environment.landed and .permission.landed
+    and .user_action.landed and .host_environment.landed and .permission.landed and .peer_session.landed
     and (.correction.landed | not) and .correction.owner_issue == 404
     and .artifact.landed and .artifact.owner_issue == 399' <<< "$output"
 }
