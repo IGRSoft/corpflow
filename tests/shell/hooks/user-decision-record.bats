@@ -192,6 +192,79 @@ _assert_allowed() {
   _assert_refused bad_event
 }
 
+# --- MCP-proxied ask tool (Conductor) --------------------------------------------------------
+
+MCP_TOOL="mcp__conductor__AskUserQuestion"
+
+# _mcp_post <response-text> — the valid payload as an MCP proxy delivers it: its tool name and a
+# text content array in place of the answers object; the transcript's call carries the same name.
+_mcp_post() {
+  jq -c --arg tp "$TRANSCRIPT" --arg tn "$MCP_TOOL" --arg t "$1" \
+    '.transcript_path = $tp | .tool_name = $tn | .tool_response = [{type: "text", text: $t}]' \
+    "$UD_FIX/post.valid.payload.json" > "$PAYLOAD_FILE"
+  sed "s/\"name\":\"AskUserQuestion\"/\"name\":\"$MCP_TOOL\"/" "$UD_FIX/transcript.valid.jsonl" > "$TRANSCRIPT"
+}
+
+@test "R1: an mcp__<server>__AskUserQuestion text answer records one row with the numbered answer" {
+  _mcp_post "User responses:
+1. $A1"
+  _hook
+  assert_success
+  assert_output ""
+  [ "$(_ledger_rows)" = 1 ] || fail "expected one row, got $(_ledger_rows); audit: $(cat "$AUDIT" 2> /dev/null)"
+  run jq -e --arg q "$Q1" --arg a "$A1" --arg c "$C1" '.question == $q and .answer == $a and .sha256 == $c
+    and .scope.task_ids == ["DV0"]' "$LEDGER"
+  assert_success
+}
+
+@test "R1: a lookalike tool name refuses as bad_event; unnumbered or miscounted text refuses as no_answer" {
+  _post post.valid.payload.json '.tool_name = "mcp__x__AskUserQuestionEvil"'
+  _hook
+  _assert_refused bad_event
+
+  local text
+  for text in "User responses:
+$A1" "User responses:
+1. $A1
+2. extra" "1. $A1" "User responses:
+2. $A1"; do
+    rm -f "$AUDIT" "$LEDGER"
+    _mcp_post "$text"
+    _hook
+    _assert_refused no_answer toolu_01UdFixture0001
+  done
+}
+
+@test "R1: an MCP answer whose transcript call carries another tool name refuses as transcript_miss" {
+  _mcp_post "User responses:
+1. $A1"
+  cp "$UD_FIX/transcript.valid.jsonl" "$TRANSCRIPT"
+  _hook
+  _assert_refused transcript_miss toolu_01UdFixture0001
+}
+
+@test "R1 (QA): an object-shaped content wrapper ({content:[...]}) normalizes the same as a bare array" {
+  jq -c --arg tp "$TRANSCRIPT" --arg tn "$MCP_TOOL" --arg t "User responses:
+1. $A1" \
+    '.transcript_path = $tp | .tool_name = $tn | .tool_response = {content: [{type: "text", text: $t}]}' \
+    "$UD_FIX/post.valid.payload.json" > "$PAYLOAD_FILE"
+  sed "s/\"name\":\"AskUserQuestion\"/\"name\":\"$MCP_TOOL\"/" "$UD_FIX/transcript.valid.jsonl" > "$TRANSCRIPT"
+  _hook
+  assert_success
+  assert_output ""
+  [ "$(_ledger_rows)" = 1 ] || fail "expected one row, got $(_ledger_rows); audit: $(cat "$AUDIT" 2> /dev/null)"
+  run jq -e --arg q "$Q1" --arg a "$A1" --arg c "$C1" '.question == $q and .answer == $a and .sha256 == $c
+    and .scope.task_ids == ["DV0"]' "$LEDGER"
+  assert_success
+}
+
+@test "R1: the hook's and the library's ask-tool patterns are the same literal" {
+  local hook lib
+  hook="$(grep -E "^_UD_ASK_TOOL_RE=" "$PLUGIN_ROOT/$SCRIPT" | cut -d= -f2-)"
+  lib="$(grep -E "^UD_ASK_TOOL_RE=" "$PLUGIN_ROOT/hooks/lib/user-decision-lib.sh" | cut -d= -f2-)"
+  [ -n "$hook" ] && [ "$hook" = "$lib" ] || fail "hook=$hook lib=$lib"
+}
+
 @test "AC2: a tool_use_id outside ^[A-Za-z0-9_-]{1,128}\$ refuses as bad_event" {
   local bad
   for bad in 'toolu bad' 'toolu;rm' '' "$(printf '%0129d' 0 | tr 0 x)"; do

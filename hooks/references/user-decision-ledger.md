@@ -90,7 +90,8 @@ audit rows either way.
 
 ## Provenance
 
-The hook runs on PostToolUse `AskUserQuestion`. Its checks run in order and the first failure wins.
+The hook runs on PostToolUse for the ask tool: `AskUserQuestion`, or any MCP proxy of it named
+`mcp__<server>__AskUserQuestion`. Its checks run in order and the first failure wins.
 On a failure it writes no row and one `user_decision_refused` audit row, then exits 0 with no
 stdout. A fork subagent's call (`agent_id` present) is accepted: the answer is still the user's.
 
@@ -98,17 +99,20 @@ stdout. A fork subagent's call (`agent_id` present) is accepted: the answer is s
 
 - **P1 context.** `corpflow_context_root` finds a `state.json` with a non-empty `.worktask_id`.
   Otherwise the hook exits silently, because there is no context to audit into.
-- **P2 event.** `hook_event_name` is `PostToolUse`, `tool_name` is `AskUserQuestion`, and
-  `tool_use_id` matches `^[A-Za-z0-9_-]{1,128}$` (`bad_event`).
+- **P2 event.** `hook_event_name` is `PostToolUse`, `tool_name` matches
+  `^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$`, and `tool_use_id` matches `^[A-Za-z0-9_-]{1,128}$` (`bad_event`).
 - **P3 the user answered.** `tool_input.answers` alone is no signal, since the permission UI fills it
   for genuine answers. A pre-answer shows as `answers` in the transcript's own `tool_use.input`
   (`pre_answered`). A `tool_response.afkTimeoutMs` is an idle auto-answer (`idle_auto_answer`), and
-  a response with no per-question answers is `no_answer`.
+  a response with no per-question answers is `no_answer`. An MCP proxy answers with a text content
+  array (`User responses:`, then `N. <answer>` per question); it is normalized to
+  `tool_response.answers` before this check, and a text that is not numbered 1..N in order, or has
+  the wrong count, synthesizes nothing and stays `no_answer`.
 
 ### Provenance — P4 to P7
 
 - **P4 transcript.** `transcript_path` is a regular file, not a symlink, named `<session_id>.jsonl`.
-  It holds an assistant `tool_use` with this id, name `AskUserQuestion` and the same
+  It holds an assistant `tool_use` with this id, the payload's own `tool_name` and the same
   `input.questions[].question` values. It is re-read up to 3 times, 0.2 s apart, for a flush race
   (`transcript_miss`).
 - **P5 dedupe.** The `tool_use_id` is not already in the ledger (`replay`).
@@ -245,7 +249,8 @@ answer text.
 2. `batch` asks the stage's question verbatim, with `header` set to the lowest covered task id.
 3. The user answers. The hook writes the row and its `user_decision_recorded` audit row.
 4. `blocked-on-dispatch.sh resume --task-id <ID> --leg resumed [--decision-ref <ud-id>]` finds a
-   verified row covering the task, writes `resumed` with that `decision_ref`, and returns an
+   verified row covering the task whose `question` and `scope.item` equal the parked
+   `blocked_on.detail`, writes `resumed` with that `decision_ref`, and returns an
    `instruction` that names the verify command and no answer text.
 5. The orchestrator delivers that instruction unmodified and never appends the answer it saw
    (`skills/worktask/SKILL.md § Step 7a — a user decision resumes by reference`).

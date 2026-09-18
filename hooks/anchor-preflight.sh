@@ -15,7 +15,9 @@
 # An Edit is judged on new_string, minus the H2s old_string already carries. Fails open
 # (allows) without jq, without a state.json beside the artifact, or without a plugin root.
 #
-# PostToolUse: every write whose extension is on the control-byte-lib text allowlist is scanned for raw C0 control bytes;
+# PostToolUse: a write under a .context/ that holds a state.json, whose extension is on the
+# control-byte-lib text allowlist, is scanned for raw C0 control bytes (a form feed in a project's
+# own source is not the plugin's business);
 # a path matching the canonical .context/<stage>-N.md regex also runs cache-lint.sh
 # --anchor-lint, so a bad H2 anchor surfaces at the producing write rather than at the DR gate.
 #
@@ -134,12 +136,21 @@ if [ "$SELF_TEST" -eq 1 ]; then
   done
   _st_nojq() {  # [--event pre] -> the hook's exit status with jq hidden
     _st_rc=0
-    env PATH="$_st_td/bin" CLAUDE_TOOL_INPUT_FILE_PATH="$_st_td/nul.md" \
+    env PATH="$_st_td/bin" CLAUDE_TOOL_INPUT_FILE_PATH="$_st_file" \
       CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname -- "$0")/..}" \
       "$BASH" "$0" "$@" < /dev/null > /dev/null 2>&1 || _st_rc=$?
   }
+  # The Post scan covers only a ledger's .context/, so the biting fixture lives in one.
+  mkdir -p "$_st_td/.context"
+  : > "$_st_td/.context/state.json"
+  cp "$_st_td/nul.md" "$_st_td/.context/nul.md"
+  _st_file="$_st_td/.context/nul.md"
   _st_nojq
   [ "$_st_rc" -eq 2 ] || { echo "anchor-preflight: self-test FAIL (no-jq Post fixture exited $_st_rc, want 2)"; exit 1; }
+  _st_file="$_st_td/nul.md"
+  _st_nojq
+  [ "$_st_rc" -eq 0 ] || { echo "anchor-preflight: self-test FAIL (NUL outside any .context/ exited $_st_rc, want 0)"; exit 1; }
+  _st_file="$_st_td/.context/nul.md"
   _st_nojq --event pre
   [ "$_st_rc" -eq 0 ] || { echo "anchor-preflight: self-test FAIL (no-jq --event pre exited $_st_rc)"; exit 1; }
 
@@ -250,9 +261,29 @@ resolve_plugin_root
 # Never fall back to `.`: an empty root would load skills/ out of the user's project (CWE-427).
 [ -n "$PLUGIN_ROOT" ] || exit 0
 
+# in_ledger_context <path> — rc 0 when the nearest ancestor directory named .context holds a
+# state.json; rc 1 otherwise, including a path under no .context at all.
+in_ledger_context() {
+  local d="${1%/*}"
+  [ "$d" != "$1" ] || return 1
+  while [ -n "$d" ]; do
+    case "$d" in
+      */.context | .context)
+        [ -f "$d/state.json" ]
+        return
+        ;;
+    esac
+    case "$d" in
+      */*) d="${d%/*}" ;;
+      *) return 1 ;;
+    esac
+  done
+  return 1
+}
+
 cbrc=0
 CB_LIB="$PLUGIN_ROOT/skills/worktask/scripts/control-byte-lib.sh"
-if [ -f "$FILE_PATH" ] && [ -r "$CB_LIB" ]; then
+if [ -f "$FILE_PATH" ] && [ -r "$CB_LIB" ] && in_ledger_context "$FILE_PATH"; then
   _cf_opts=$-
   set +e
   # shellcheck source=skills/worktask/scripts/control-byte-lib.sh

@@ -278,11 +278,13 @@ exit 2 can fire after the claim has landed, so stop and report it rather than tr
 Never read the ledger by hand and never put the question from the resume path — the probe is what
 checks the chain, the scope and the already-consumed set, and asking is the batch's job.
 
-#### Pending communication — a row covers a task, not a question
+#### Pending communication — a row covers the parked question
 
-The probe takes the newest unconsumed row whose scope names the task, whatever that row asked; it
-never compares the recorded question to the parked one. The stage's own `--verify-decision`
-confirmation is where the answer text is read and judged.
+The probe takes the newest unconsumed row whose scope names the task and that answers the question
+the task is parked on: the row's `question` is byte-equal to `blocked_on.detail.question` and its
+`scope.item` equals `detail.item` (null matches null). A sweep answer or any other row that merely
+names the task is not a cover. The stage's own `--verify-decision` confirmation is still where the
+answer text is read and judged.
 
 #### Pending communication — the reply and expiry arms
 

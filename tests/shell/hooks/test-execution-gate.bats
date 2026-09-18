@@ -1734,3 +1734,48 @@ _scanner_launchers() {
   [ -z "$output" ]
   [ ! -e "$cwd/.context" ]
 }
+
+# --- root resolution: where and when --------------------------------------------
+
+@test "R6: a non-test Bash call resolves no context root in the gate or the promote hook; a test run does" {
+  git_ctx DV
+  local stub="$WD/stubbin" real
+  real="$(command -v git)"
+  mkdir -p "$stub"
+  printf '#!/bin/sh\necho "$*" >> "%s/git.calls"\nexec "%s" "$@"\n' "$WD" "$real" > "$stub/git"
+  chmod +x "$stub/git"
+
+  local hook
+  for hook in "$SCRIPT" "$PROMOTE"; do
+    run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --env "PATH=$stub:$PATH" \
+      --stdin-string "$(bash_payload 'ls -la')" "$hook"
+    assert_success
+    [ ! -s "$WD/git.calls" ] || fail "$hook resolved a root for ls: $(cat "$WD/git.calls")"
+  done
+
+  run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --env "PATH=$stub:$PATH" \
+    --stdin-string "$(bash_payload 'bats tests/x.bats')" "$SCRIPT"
+  assert_success
+  grep -q 'rev-parse' "$WD/git.calls" || fail "a test run never resolved the root"
+}
+
+@test "R2: an unregistered linked worktree with no ledger of its own does not inherit the main checkout's settled ledger" {
+  git_ctx QA
+  printf '{"run_index":0,"tasks":{"DV0":{"status":"completed"},"QA0":{"status":"completed"}}}' > "$WD/.context/state.json"
+  local wt="$WD/wt"
+  git -C "$WD" worktree add -q -b feat "$wt"
+
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$(bash_payload 'bats tests/x.bats')" "$SCRIPT"
+  assert_success
+  assert_output ""
+
+  # Registered as a stage worktree, it is governed by the main ledger again (settled: deny).
+  jq --arg w "$wt" '.tasks.DV0.metadata.workspace_path = $w' "$WD/.context/state.json" > "$WD/st.new"
+  mv "$WD/st.new" "$WD/.context/state.json"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --stdin-string "$(bash_payload 'bats tests/x.bats')" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+    || fail "registered worktree was not governed: $output"
+}

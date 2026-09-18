@@ -15,9 +15,9 @@ REPLY="skills/worktask/scripts/mailbox-reply.sh"
 UD_FIX="${FIXTURES}/worktask/user-decision"
 MB_FIX="${FIXTURES}/worktask/mailbox"
 
-# The chain fixture covers DV0 twice: row 1 alone, row 3 with DV1. A probe given no --decision-ref
-# takes the newest covering row, so DV0 resumes on row 3.
-UD_NEWEST="ud-20260917T101700Z-3"
+# The chain fixture names DV0 twice: row 1 alone, row 3 with DV1. Only row 1 answers the question
+# DV0 is parked on, so a probe given no --decision-ref resumes DV0 on row 1, never the newer row 3.
+UD_NEWEST="ud-20260917T101500Z-1"
 # The question row 1 answers is the one state.rung1.json parks DV0 on; a resume must never relay it.
 UD_Q="Ship the ledger now?"
 UD_A="Yes, ship it"

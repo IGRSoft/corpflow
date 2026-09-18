@@ -108,7 +108,7 @@
         ]
       },
       {
-        "matcher": "AskUserQuestion",
+        "matcher": "^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$",
         "hooks": [
           {
             "type": "command",

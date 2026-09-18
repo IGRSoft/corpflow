@@ -391,14 +391,14 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 | 1 | `invalid`: a row breaks § Row grammar, or an image on disk has no row | block `invalid_evidence` |
 | 2 | `usage`: bad task id, unresolved ledger or `worktask_id`, jq absent | block `gate_unresolved` |
 | 3 | `no_captures`: no rows and no `dv-<TASK_ID>-*` image | pass on `backend`/`systems`, else block `no_captures` |
-| 4 | `tool_missing_only`: valid tool_missing rows, no image row | pass on `backend`/`systems` with an accepted preflight record, else block `tool_missing_unaccepted` |
+| 4 | `tool_missing_only`: valid tool_missing rows, no image row | pass on `backend`/`systems`, else block `tool_missing_ui` |
 
 #### Gate scope and inputs
 
 - **Task**: the `task_id` of the `facts.dispatched_agents[]` row for the payload `agent_id`; with no row, the one in_progress DV task whose `metadata.agent` is the payload `agent_type` (`corpflow:developer` matches any in_progress DV task). No DV task in progress, or none naming that agent type, is a no-op. Any other miss blocks `task_unresolved`, unless the ledger flag is `false`.
 - **Flag**: `requires_screenshots` from the task's metadata, then the ledger's, else `true`. `false` passes unclassified.
 - **Platform**: `tasks.<TASK_ID>.metadata.platform`, else the ledger `platform`.
-- **Accepted preflight record**: ledger `metadata.preflight` is an object with `version` 1 whose `tools_absent` array holds, for every tool the row lists, an entry `{tool, platform, accepted}` naming that tool, the task platform and the boolean `true`. Absent, malformed, another version or unmatched blocks.
+- **No preflight input**: the gate never reads `metadata.preflight`. A `tool_missing` row passes on the platform alone.
 
 ### Gate and tool failures
 

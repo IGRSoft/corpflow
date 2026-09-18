@@ -84,6 +84,21 @@ _forged() {
   printf '%s' "$row" | jq -c --arg s "$(_canon_sha "$row")" '.sha256 = $s'
 }
 
+# _append_row <id> <question-json> <answer-json> <scope-jq> <tool_use_id> — one well-chained row
+# plus its corroborating audit row; digests come from shasum, not the library.
+_append_row() {
+  local prev row
+  prev="$(tail -n 1 "$LEDGER" | tr -d '\n' | shasum -a 256 | cut -d' ' -f1)"
+  row="$(jq -cn --arg id "$1" --argjson q "$2" --argjson a "$3" --arg t "$5" --arg prev "$prev" \
+    "{id: \$id, ts: \"2026-09-17T10:18:00Z\", actor: \"hook:user-decision\", tool_use_id: \$t,
+      question: \$q, answer: \$a, scope: $4, sha256: null, prev_sha256: \$prev}")"
+  row="$(printf '%s' "$row" | jq -c --arg s "$(_canon_sha "$row")" '.sha256 = $s')"
+  printf '%s\n' "$row" >> "$LEDGER"
+  printf '%s' "$row" | jq -c '{ts: "2026-09-17T10:18:00Z", actor: "hook:user-decision",
+    action: "user_decision_recorded", subject: .id, result: "ok", task_id: .scope.task_ids[0],
+    metadata: {decision_id: .id, tool_use_id: .tool_use_id, row_sha256: .sha256, item: .scope.item}}' >> "$AUDIT"
+}
+
 # _assert_refused_all <reason> <id>... — every id is refused with null text and names <reason>.
 _assert_refused_all() {
   local reason="$1" id
@@ -310,25 +325,53 @@ _assert_refused_all() {
   assert_failure 1
 }
 
-@test "ud_find_covering: the newest valid unconsumed covering row; a consuming blocked_on row skips it; an edit anywhere finds nothing" {
+@test "ud_find_covering: the newest valid unconsumed row answering the parked question; a consuming blocked_on row skips it; an edit anywhere finds nothing" {
   # shellcheck disable=SC2016  # expanded by the inner shell
   local probe='ud_find_covering "$STATE" "$LEDGER" "$AUDIT" "$1"'
-  _lib "$probe" DV0
-  assert_success
-  assert_output "$ID3"
-
-  jq -cn --arg dr "$ID3" '{ts: "2026-09-17T10:20:00Z", actor: "orchestrator", action: "blocked_on", subject: "DV0",
-    result: "ok", task_id: "DV0", metadata: {kind: "user_decision", arm: "user_decision", leg: "resumed", decision_ref: $dr}}' >> "$AUDIT"
+  # Row 3 is newer and names DV0, but asks another question than the one DV0 is parked on.
   _lib "$probe" DV0
   assert_success
   assert_output "$ID1"
+
+  jq -cn --arg dr "$ID1" '{ts: "2026-09-17T10:20:00Z", actor: "orchestrator", action: "blocked_on", subject: "DV0",
+    result: "ok", task_id: "DV0", metadata: {kind: "user_decision", arm: "user_decision", leg: "resumed", decision_ref: $dr}}' >> "$AUDIT"
+  _lib "$probe" DV0
+  assert_success
+  assert_output ""
 
   _lib "$probe" DR0
   assert_success
   assert_output ""
 
+  cp "$UD_FIX/audit.chain3.jsonl" "$AUDIT"
   _set_line 2 "$(_line 2 | jq -c '.answer = "Write nothing"')"
   _lib "$probe" DV0
+  assert_success
+  assert_output ""
+}
+
+@test "R4: a sweep answer naming the parked task is not a cover; the row with the parked question and item is" {
+  # shellcheck disable=SC2016  # expanded by the inner shell
+  local probe='ud_find_covering "$STATE" "$LEDGER" "$AUDIT" "$1"'
+  # DV1 parked on row 3's question, but the newest row naming DV1 is a sweep answer to another.
+  jq '.tasks.DV1 = {status: "blocked", metadata: {stage: "DV", blocked_on: {kind: "user_decision",
+      detail: {question: "Which targets must pass?", options: ["macOS", "Linux"], item: null}}}}' \
+    "$STATE" > "$STATE.new" && mv "$STATE.new" "$STATE"
+  _append_row "ud-20260917T101800Z-4" '"Should rung-3 answers be recorded?"' '"Record with empty task_ids"' \
+    '{worktask_id: "wt-ud-fixture", task_ids: ["DV1"], item: "sw-DV1-3"}' toolu_01UdSweep0004
+  _lib "$probe" DV1
+  assert_success
+  assert_output "$ID3"
+
+  # The parked item must match too: a sweep-parked DV1 is not covered by a null-item row.
+  jq '.tasks.DV1.metadata.blocked_on.detail.item = "sw-DV1-9"' "$STATE" > "$STATE.new" && mv "$STATE.new" "$STATE"
+  _lib "$probe" DV1
+  assert_success
+  assert_output ""
+
+  # A task that is not parked on a user_decision has no cover at all.
+  jq '.tasks.DV1.status = "in_progress"' "$STATE" > "$STATE.new" && mv "$STATE.new" "$STATE"
+  _lib "$probe" DV1
   assert_success
   assert_output ""
 }

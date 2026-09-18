@@ -54,21 +54,40 @@ _ledger() {
   assert_output ""
 }
 
-@test "context_root: rank 6 (resolve-root.sh) recovers the linked-worktree case" {
-  local repo wt
+@test "context_root: rank 6 lends the main ledger to a linked worktree only when it owns that tree" {
+  local repo wt want
   repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
   mkdir -p "$repo/.context"
-  printf '{}' > "$repo/.context/state.json"
+  printf '{"tasks":{"DV0":{"status":"completed","metadata":{}}}}' > "$repo/.context/state.json"
   wt="$repo/wt"
   git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
     || skip "git worktree unavailable"
+  # resolve-root.sh resolves through `cd && pwd -P`, so compare physical paths: on
+  # macOS $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
+  want="$(cd "$repo" && pwd -P)/.context"
+
+  # An unrelated worktree of the repo: the main checkout's ledger is not its ledger.
   run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
     --source "$LIB" corpflow_context_root
   assert_success
-  # resolve-root.sh resolves through `cd && pwd -P`, so compare physical paths: on
-  # macOS $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
-  local want
-  want="$(cd "$repo" && pwd -P)/.context"
+  assert_output ""
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
+
+  # The session is the main checkout itself (rank 4 answers it as given, so compare physically).
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$repo" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  [ "$(cd "$output" && pwd -P)" = "$want" ]
+
+  # The worktree is a registered stage worktree (logical path recorded, physical compared).
+  jq --arg w "$wt" '.tasks.DV0.metadata.workspace_path = $w' "$repo/.context/state.json" > "$repo/st.new"
+  mv "$repo/st.new" "$repo/.context/state.json"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --source "$LIB" corpflow_context_root
+  assert_success
   [ "$output" = "$want" ]
 }
 
