@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# tests/fixtures/worktask/land-artifacts/bin/git — PATH shim for a corrupted
+# blob read (sha256_mismatch) and a hard git-read failure (git_error).
+#
+# Delegates every subcommand to the real git at $LAND_REAL_GIT unchanged, EXCEPT
+# `cat-file blob <oid>`, which can be told to corrupt or fail for one keyed oid
+# only — so a multi-path run keeps every OTHER blob read genuine, and a
+# rollback assertion is testing real recovery rather than a globally broken git.
+#
+#   LAND_SHIM_CORRUPT_OID=<oid>  corrupt only that oid's cat-file stdout (one
+#                                 extra trailing byte, so the blob no longer
+#                                 verifies against the oid it was read for).
+#                                 Unset: corrupt EVERY cat-file read — the
+#                                 original, still-used single-path trigger.
+#   LAND_SHIM_FAIL_OID=<oid>     that oid's cat-file exits non-zero instead of
+#                                 streaming anything, simulating a git
+#                                 object-store read failure.
+#   LAND_SHIM_TERM_OID=<oid>     that oid's cat-file sends SIGTERM to its own
+#                                 parent (the land-artifacts.sh process) before
+#                                 exiting, simulating a signal landing mid-write.
+#
+# The subcommand (and, for cat-file, the oid) is found after skipping any
+# leading `-C <dir>` and `-c <kv>` pairs, since land-artifacts.sh always calls
+# `git -c core.fsmonitor=false -C <root> <subcommand> ...`, and `cat-file blob
+# <oid>` puts the oid at a fixed offset from the subcommand.
+#
+# Minimum shell: bash 3.2+ (macOS default), matching the script under test.
+
+set -euo pipefail
+
+: "${LAND_REAL_GIT:?LAND_REAL_GIT must be set by the test before PATH is shimmed}"
+
+_args=("$@")
+_n=$#
+_i=0
+while [ "$_i" -lt "$_n" ]; do
+  case "${_args[$_i]}" in
+    -C | -c)
+      _i=$((_i + 2))
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+_sub="${_args[$_i]:-}"
+_oid="${_args[$((_i + 2))]:-}"
+
+if [ "$_sub" = "cat-file" ] && [ -n "${LAND_SHIM_FAIL_OID:-}" ] && [ "$_oid" = "$LAND_SHIM_FAIL_OID" ]; then
+  printf >&2 'git: fatal: simulated read failure for %s\n' "$_oid"
+  exit 128
+fi
+
+if [ "$_sub" = "cat-file" ] && [ -n "${LAND_SHIM_TERM_OID:-}" ] && [ "$_oid" = "$LAND_SHIM_TERM_OID" ]; then
+  kill -TERM "$PPID" 2> /dev/null || true
+  exit 1
+fi
+
+if [ "$_sub" = "cat-file" ]; then
+  # A caller that keyed the corruption to one oid gets every OTHER blob read
+  # streamed through genuine, so an unrelated path in the same run is never
+  # touched by this shim.
+  if [ -n "${LAND_SHIM_CORRUPT_OID:-}" ] && [ "$_oid" != "$LAND_SHIM_CORRUPT_OID" ]; then
+    exec "$LAND_REAL_GIT" "$@"
+  fi
+  # Stream the real blob through unchanged, then corrupt with one trailing byte.
+  # A command-substitution round trip would mangle binary blobs; this does not.
+  "$LAND_REAL_GIT" "$@"
+  printf 'X'
+  exit 0
+fi
+
+exec "$LAND_REAL_GIT" "$@"

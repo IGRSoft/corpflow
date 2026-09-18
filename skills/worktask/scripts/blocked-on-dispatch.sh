@@ -12,27 +12,43 @@
 #   blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
 #   blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>]
 #                                 [--state <state.json>]
-#   blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--state <state.json>]
+#   blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
 #   blocked-on-dispatch.sh --self-test
 #
 # @arg route   Normalizes (legacy cross_session_ask becomes peer_session) and validates the
 #              need against its arm. permission: writes nothing. host_environment: parks,
 #              re-probes the check with autonomy-preflight.sh in check mode and writes `probed`;
 #              a pass clears it and prints resume_block, anything else parks it as a user_action.
-#              Every other kind parks as a user_action (fallback_from/owner_issue for a pending
-#              arm) and writes `requested`. Prints one JSON line {task_id, kind, arm, leg, source,
-#              parked, audit_row_written, [fallback_from, owner_issue], [decision_ref, resume_block]}.
+#              user_decision: parks natively and writes `asked` (no fallback_from/owner_issue —
+#              the arm is landed). artifact: parks; a path the landing ladder admits that is
+#              already in its tree's landed set clears it and writes `landed`, anything else
+#              stays parked as a user_action. peer_session: parks natively, writes the request
+#              and sends the pointer when the mailbox is available, else falls back to a
+#              user_action. Every other kind parks as a user_action (fallback_from/owner_issue
+#              for a pending arm) and writes `requested`. Prints one JSON line {task_id, kind,
+#              arm, leg, source, parked, audit_row_written, [fallback_from, owner_issue],
+#              [decision_ref, resume_block]}.
 # @arg batch   Every blocked task whose blocked_on.kind is not permission, minus the peer asks
 #              still inside their deadline: those wait on the mailbox, and only their expiry
 #              (a user_decision need) reaches the user. Interactive:
-#              {mode:"ask", needs, payloads:[{questions:[<=4]}]}. Under a megatask per-issue run:
-#              no question; parks the issue like permission-park.sh batch, with one
-#              escalation_parked row whose escalated[] is {kind, [command_head, truncated]}.
-# @arg resume  --claim, blocked_on set to null, one closing-leg row carrying decision_ref
+#              {mode:"ask", needs, payloads:[{questions:[<=4]}]}. user_decision needs render
+#              their own question/options, grouped by (question, options, item); every other
+#              kind renders its fixed lead line. Under a megatask per-issue run: no question;
+#              parks the issue like permission-park.sh batch, with one escalation_parked row
+#              whose escalated[] is {kind, [command_head, truncated]}.
+# @arg resume  --claim, blocked_on set to null, one closing-leg row. For user_decision (--leg
+#              resumed): --decision-ref <ud-id>, else the newest valid unconsumed row
+#              ud_find_covering finds, verified before use; decision_ref is that ud- id and the
+#              resume instruction carries no answer text. artifact accepts its own closing leg
+#              (`landed`) once the path is confirmed in its tree's landed set. peer_session
+#              accepts its own closing leg (`relayed`) once the reply verifies. Every other need
+#              resumes on the user_action closing leg with decision_ref
 #              blocked_on:<task_id>:<kind>:<n>. Prints {resume_block, cleared, audit_row_written}.
 #
 # @env BLOCKED_ON_PREFLIGHT  Script run for the host_environment re-probe (default: the sibling
 #                            autonomy-preflight.sh). A test seam, as GH_BIN is for the preflight.
+# @env BLOCKED_ON_LAND       Script run for the artifact landed check (default: the sibling
+#                            land-artifacts.sh). A test seam, as BLOCKED_ON_PREFLIGHT is above.
 #
 # @exitcode 0 success
 # @exitcode 1 route: an invalid need, one `fail:` line on stderr, nothing written; resume: the
@@ -46,6 +62,7 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 _BO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../../.." && pwd -P)"
 STATE_PATCH="$SCRIPT_DIR/state-patch.sh"
 PREFLIGHT="${BLOCKED_ON_PREFLIGHT:-$SCRIPT_DIR/autonomy-preflight.sh}"
+LAND="${BLOCKED_ON_LAND:-$SCRIPT_DIR/land-artifacts.sh}"
 
 die() {
   printf >&2 'blocked-on-dispatch: %s\n' "$2"
@@ -66,6 +83,7 @@ fi
 
 command -v jq > /dev/null 2>&1 || die 2 "jq is required"
 for _bo_lib in "$_BO_ROOT/hooks/lib/permission-denied-lib.sh" \
+  "$_BO_ROOT/hooks/lib/user-decision-lib.sh" \
   "$_BO_ROOT/skills/shared/lib/audit-lib.sh" \
   "$_BO_ROOT/skills/shared/lib/state-read-lib.sh" \
   "$SCRIPT_DIR/blocked-on-lib.sh" \
@@ -79,7 +97,7 @@ BO_TABLE="$(blocked_on_table_json)" || die 2 "plugin install broken — blocked_
 SUBCMD="${1:-}"
 [ "$#" -gt 0 ] && shift
 PAYLOAD_ARG="" PAYLOAD_GIVEN=0 TASK_ARG="" TASKS_ARG="" BOUNDARY_ARG="" WS_JSON_ARG="" LEG_ARG=""
-STATE_PATH=""
+STATE_PATH="" DECISION_REF_ARG=""
 while [ "$#" -gt 0 ]; do
   [ "$#" -ge 2 ] || die 2 "missing value for $1"
   case "$1" in
@@ -90,6 +108,7 @@ while [ "$#" -gt 0 ]; do
     --workspace-json) WS_JSON_ARG="$2" ;;
     --leg) LEG_ARG="$2" ;;
     --state) STATE_PATH="$2" ;;
+    --decision-ref) DECISION_REF_ARG="$2" ;;
     *) die 2 "unknown flag: $1" ;;
   esac
   shift 2
@@ -298,6 +317,47 @@ route_user_action() {
   bo_route_out user_action requested true "$written" "$ff" "$oi" "" null
 }
 
+# route_user_decision — the second landed native arm: parks the need as-is (its own question and
+# options are the prompt, built at `batch` time) and writes an `asked` row with no fallback_from
+# or owner_issue, since the arm is landed. No re-probe, no auto-resolution: this arm resumes only
+# when a genuine ud- row from the hook covers the task (`resume --leg resumed`).
+route_user_decision() {
+  local written=true
+  bo_park "$BO"
+  if bo_leg_recorded user_decision asked; then
+    written=false
+  else
+    bo_row blocked "$(bo_meta user_decision user_decision asked "" "" '{}' "")"
+    written="$BO_ROW_WRITTEN"
+  fi
+  bo_route_out user_decision asked true "$written" "" "" "" null
+}
+
+# artifact_landed <blocked_on json> <task id> — 0 iff detail.path is already in the landed set
+# scoped to that task's tree. No tree (the task carries no workspace_path) is an empty landed
+# set: nothing can be landed nowhere. A LAND failure of any kind fails closed, same as no match.
+artifact_landed() {
+  local bo="$1" id="$2" tree path out
+  tree=$(jq -r --arg id "$id" '.tasks[$id].metadata.workspace_path // "" | if type == "string" then . else "" end' "$STATE_PATH")
+  [ -n "$tree" ] || return 1
+  path=$(printf '%s' "$bo" | jq -r '.detail.path // "" | tostring')
+  out=$(bash "$LAND" --list-landed --tree "$tree" --strict --state "$STATE_PATH" < /dev/null 2> /dev/null) || return 1
+  printf '%s\n' "$out" | grep -Fxq -- "$path"
+}
+
+# artifact_path_check <path> — 0 iff land-artifacts.sh's own lexical ladder admits the path. A
+# refused path can never be landed, so the landed set is never consulted for it: a stage-written
+# path reaches grep and the resume block only after the same ladder every landing passes.
+artifact_path_check() {
+  local rc=0
+  bash "$LAND" --check-path "$1" < /dev/null > /dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) die 2 "plugin install broken — land-artifacts.sh --check-path failed" ;;
+  esac
+}
+
 route_host_environment() {
   local check platforms out result_json dr rb written=true
   local args=(--auto plan)
@@ -388,6 +448,28 @@ route_peer_session() {
      message: ("mailbox ask " + $a)}'
 }
 
+# route_artifact — the landed arm. A path already in its tree's landed set clears the need on the
+# spot. A path landing can never produce (a stage file under .context/, or one the ladder refuses)
+# or a producer_task that is not a task id parks as the user_action fallback: the user, not the
+# landing, is the only one who can see it met.
+route_artifact() {
+  local producer path dr rb
+  producer=$(printf '%s' "$BO" | jq -r '.detail.producer_task | tostring')
+  path=$(printf '%s' "$BO" | jq -r '.detail.path | tostring')
+  bo_park "$BO"
+  if is_task_id "$producer" && artifact_path_check "$path" && artifact_landed "$BO" "$TASK_ARG"; then
+    ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+    ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+      || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+    dr=$(bo_next_ref artifact)
+    bo_row ok "$(bo_meta artifact artifact landed "" "" '{}' "$dr")"
+    rb=$(bo_resume_block "$BO" artifact landed "$dr" "$path")
+    bo_route_out artifact landed false "$BO_ROW_WRITTEN" "" "" "$dr" "$rb"
+    return 0
+  fi
+  route_user_action artifact true true
+}
+
 cmd_route() {
   local handoff norm
   is_task_id "$TASK_ARG" || die 2 "route needs --task-id <STAGE><N>"
@@ -409,8 +491,10 @@ cmd_route() {
   case "$BO_KIND" in
     permission) bo_route_out permission "" false false "" "" "" null ;;
     host_environment) route_host_environment ;;
+    artifact) route_artifact ;;
     user_action) route_user_action "" false true ;;
     peer_session) route_peer_session ;;
+    user_decision) route_user_decision ;;
     *) route_user_action "$BO_KIND" false true ;;
   esac
 }
@@ -452,11 +536,13 @@ cmd_batch() {
     done
   fi
   resolve_state
-  # A parked need reaches the user as a user_action whatever its kind: the native arm shows the
-  # stage's request, a fallback shows its kind's fixed lead line. cwd comes from the ledger, never
-  # from blocked_on, because the directory a user runs a command in is not the stage's to choose.
-  # An open peer ask is the exception: another session owns the answer, so asking the user too
-  # would ask the same question twice. Its deadline converts it to user_decision, which batches.
+  # A parked need reaches the user as a user_action whatever its kind, EXCEPT the two landed
+  # native arms (user_action itself, and user_decision): those show the stage's own request or
+  # question verbatim, everything else shows its kind's fixed lead line. cwd comes from the
+  # ledger, never from blocked_on, because the directory a user runs a command in is not the
+  # stage's to choose. An open peer ask is a further exception: another session owns the answer,
+  # so asking the user too would ask the same question twice. Its deadline converts it to
+  # user_decision, which batches.
   full=$(jq -c --arg ids "$TASKS_ARG" --argjson t "$BO_TABLE" "$PD_JQ_DEFS$BO_JQ_DEFS"'
     . as $s
     | ($ids | if . == "" then null else split(",") end) as $want
@@ -472,19 +558,39 @@ cmd_batch() {
        | .key as $id
        | .value.metadata.blocked_on as $b
        | ($b.detail | if type == "object" then . else {} end) as $d
-       | ($b.kind == "user_action") as $native
        | ((.value.metadata.workspace_path? // $s.metadata.workspace_path? // "") | pd_bound(600)) as $cwd
-       | {task_id: $id, kind: $b.kind, arm: "user_action", resume_leg: $t.user_action.closing_leg,
-          request: (if $native then ($d.request | pd_bound(512)) else bo_lead($id; $b.kind) end),
-          command: (if $native then ($d.command | pd_bound(512)) else "" end),
-          verify: (if $native then ($d.verify | pd_bound(512)) else "" end)}
-       | . + {truncated: (.command | pd_truncated(512)), cwd: $cwd}
-       | if $native then .
-         else . + {fallback_from: $b.kind}
-           + (if $t[$b.kind].landed then {} else {owner_issue: $t[$b.kind].owner_issue} end) end
-       | . + {_lines: ($d | bo_lines)}]' \
+       | if $b.kind == "user_action" then
+           {task_id: $id, kind: $b.kind, arm: "user_action", resume_leg: $t.user_action.closing_leg,
+            request: ($d.request | pd_bound(512)), command: ($d.command | pd_bound(512)),
+            verify: ($d.verify | pd_bound(512))}
+           | . + {truncated: (.command | pd_truncated(512)), cwd: $cwd, _lines: ($d | bo_lines)}
+         elif $b.kind == "user_decision" then
+           {task_id: $id, kind: $b.kind, arm: "user_decision", resume_leg: "resumed",
+            question: ($d.question | pd_bound(512)),
+            options: (($d.options // []) | map(pd_bound(200))),
+            recommended: ($d.recommended // null), item: ($d.item // null)}
+           | . + {truncated: false, cwd: $cwd, _lines: ($d | bo_lines)}
+         else
+           {task_id: $id, kind: $b.kind, arm: "user_action", resume_leg: $t.user_action.closing_leg,
+            request: bo_lead($id; $b.kind), command: "", verify: ""}
+           | . + {truncated: false, cwd: $cwd}
+           | . + {fallback_from: $b.kind}
+             + (if $t[$b.kind].landed then {} else {owner_issue: $t[$b.kind].owner_issue} end)
+           | . + {_lines: ($d | bo_lines)}
+         end]' \
     "$STATE_PATH")
-  needs=$(printf '%s' "$full" | jq -c 'map(del(._lines))')
+  # AD10: a user_decision need carries the `header` its question will be asked under — the lowest
+  # task id of its (question, options, item) group — so the orchestrator can map an answer back
+  # to every task in that group. The grouping is the same one the payloads use below.
+  needs=$(printf '%s' "$full" | jq -c '
+    map(del(._lines)) as $n
+    | ($n | map(select(.kind == "user_decision"))
+       | group_by([.question, .options, .item])
+       | map(. as $g | ($g | map(.task_id) | sort | .[0] | .[0:12]) as $h
+             | $g | map({(.task_id): $h}))
+       | flatten | add // {}) as $hdr
+    | $n | map(if .kind == "user_decision"
+               then . + {header: ($hdr[.task_id] // (.task_id | .[0:12]))} else . end)')
   megatask=$(jq -r '(.tasks["PL\(.run_index // 0)"].metadata.megatask_group // "") | tostring' "$STATE_PATH")
 
   if [ -z "$megatask" ]; then
@@ -492,21 +598,46 @@ cmd_batch() {
     # so stage text can neither close the fence nor render as markup. A `!` line is offered only
     # for a native user_action whose command was not cut: a cut command pasted would run
     # something other than what the stage asked for.
+    #
+    # user_decision is the second native arm: its question reaches the prompt UNFENCED and
+    # byte-verbatim (blocked_on_validate_arm already bounds it to <=512/<=200), grouped by
+    # (question, options, item) so two tasks blocked on the identical choice ask it once. Two
+    # groups sharing one question TEXT would collide in AskUserQuestion's own answers-by-text
+    # keying, so a duplicate question text after grouping is dropped rather than sent twice.
     payloads=$(printf '%s' "$full" | jq -c "$PD_JQ_DEFS$BO_JQ_DEFS"'
-      map((.cwd != "") as $has_cwd | {
-        header: (.task_id | .[0:12]),
-        question: (bo_lead(.task_id; .kind) + "\n\n"
-          + ((._lines + (if $has_cwd then "\ncwd: \(.cwd)" else "" end)) | pd_fence)
-          + (if .kind == "user_action" and .command != "" and (.truncated | not)
-             then "\n\nTo run it yourself" + (if $has_cwd then ", from that directory (the cwd line above)" else "" end)
-               + ", enter:\n\n" + ("! \(.command)" | pd_fence)
-             else "" end)),
-        multiSelect: false,
-        options: [
-          {label: "done", description: "The need above is met; the stage resumes from the step it blocked."},
-          {label: "stop here", description: "Leave the stage parked and stop this run; a later --resume asks again."}
-        ]})
-      | [range(0; length; 4) as $i | {questions: .[$i:($i + 4)]}]')
+      . as $all
+      | ($all | map(select(.kind != "user_decision"))
+         | map((.cwd != "") as $has_cwd | {
+             header: (.task_id | .[0:12]),
+             question: (bo_lead(.task_id; .kind) + "\n\n"
+               + ((._lines + (if $has_cwd then "\ncwd: \(.cwd)" else "" end)) | pd_fence)
+               + (if .kind == "user_action" and .command != "" and (.truncated | not)
+                  then "\n\nTo run it yourself" + (if $has_cwd then ", from that directory (the cwd line above)" else "" end)
+                    + ", enter:\n\n" + ("! \(.command)" | pd_fence)
+                  else "" end)),
+             multiSelect: false,
+             options: [
+               {label: "done", description: "The need above is met; the stage resumes from the step it blocked."},
+               {label: "stop here", description: "Leave the stage parked and stop this run; a later --resume asks again."}
+             ]})) as $restq
+      | ($all | map(select(.kind == "user_decision"))
+         | group_by([.question, .options, .item])
+         | map(
+             . as $g
+             | ($g | map(.task_id) | sort | .[0] | .[0:12]) as $header
+             | ($g[0].recommended) as $rec
+             | {
+                 header: $header,
+                 question: $g[0].question,
+                 multiSelect: false,
+                 options: ($g[0].options | map({
+                   label: .,
+                   description: (if . == $rec then "Recommended" else "Offered by \($header)" end)
+                 }))
+               })
+         | unique_by(.question)) as $udq
+      | ($restq + $udq) as $allq
+      | [range(0; ($allq | length); 4) as $i | {questions: $allq[$i:($i + 4)]}]')
     jq -cn --argjson n "$needs" --argjson p "$payloads" '{mode: "ask", needs: $n, payloads: $p}'
     return 0
   fi
@@ -592,8 +723,50 @@ resume_peer_session() {
   jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
 }
 
+# cmd_resume_user_decision — the closing leg of the OTHER landed native arm. Its ref is a real
+# ud- ledger id, not the synthetic blocked_on:<id>:<kind>:<n> form every fallback kind gets,
+# because a stage's acceptance paragraph verifies it independently through the same lib.
+cmd_resume_user_decision() {
+  local closing="resumed" ledger_path dr vout rb
+  [ "$LEG_ARG" = "$closing" ] || die 1 "--leg $LEG_ARG is not the closing leg ($closing) of tasks.$TASK_ARG"
+  command -v ud_verify > /dev/null 2>&1 || die 2 "plugin install broken — user-decision-lib.sh unavailable"
+
+  ledger_path="${STATE_PATH%/*}/decisions.jsonl"
+  if [ -n "$DECISION_REF_ARG" ]; then
+    dr="$DECISION_REF_ARG"
+    # ud_find_covering refuses a consumed row; an explicit ref gets the same check, or a
+    # re-raised need could be resumed twice off one decision.
+    if [ -f "$AUDIT" ] && jq -nRe --arg id "$dr" --arg t "$TASK_ARG" '
+      any(inputs | (try fromjson catch null); . != null and type == "object"
+        and .action == "blocked_on" and .subject == $t
+        and (.metadata.decision_ref? // "") == $id)' "$AUDIT" > /dev/null 2>&1; then
+      die 1 "$dr was already consumed by an earlier resume of tasks.$TASK_ARG"
+    fi
+  else
+    dr=$(ud_find_covering "$STATE_PATH" "$ledger_path" "$AUDIT" "$TASK_ARG")
+  fi
+  [ -n "$dr" ] || die 1 "no valid, unconsumed user-decision row covers tasks.$TASK_ARG"
+
+  # ud_verify's normal outcome here is rc 1 (a stale or wrong ref): `|| true` keeps set -e from
+  # treating that as a script error before the die below can name it.
+  vout=$(ud_verify "$STATE_PATH" "$ledger_path" "$AUDIT" "$dr" "$TASK_ARG" 2> /dev/null) || true
+  printf '%s' "$vout" | jq -e '.valid == true' > /dev/null 2>&1 \
+    || die 1 "$dr does not verify for tasks.$TASK_ARG"
+
+  ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+  ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+    || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+
+  bo_row ok "$(bo_meta user_decision user_decision resumed "" "" '{}' "$dr")"
+  rb=$(jq -cn --arg id "$TASK_ARG" --arg dr "$dr" '
+    {task_id: $id, kind: "user_decision", arm: "user_decision", leg: "resumed", decision_ref: $dr,
+     resume_with: "decision_ref", do_not_rerun: true,
+     instruction: ("The user_decision need below, which stopped this stage, is resolved. Before continuing, confirm it: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --verify-decision " + $dr + " --task-id " + $id + ". Do not re-run any step that already completed.")}')
+  jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
+}
+
 cmd_resume() {
-  local row closing ff="" oi="" head='{}' dr ap="" target rb ask=""
+  local row closing ff="" oi="" head='{}' dr ap="" target rb ask="" path
   is_task_id "$TASK_ARG" || die 2 "resume needs --task-id <STAGE><N>"
   [[ "$LEG_ARG" =~ ^[a-z_]+$ ]] || die 2 "resume needs --leg <leg>"
   resolve_state
@@ -610,8 +783,29 @@ cmd_resume() {
     fi
   fi
 
-  # Every other parked non-permission need was parked by the user_action arm (native or fallback),
-  # so that arm's closing leg is the one resume accepts. Landing another arm adds its own branch.
+  if [ "$BO_KIND" = "user_decision" ]; then
+    cmd_resume_user_decision
+    return 0
+  fi
+
+  # The artifact arm resumes on its own native closing leg, verified against the same landed
+  # set route_artifact checks, before it ever falls through to the user_action closing leg below.
+  if [ "$BO_KIND" = "artifact" ] && [ "$LEG_ARG" = "$(bo_field "$(blocked_on_arm artifact)" 5)" ]; then
+    path=$(printf '%s' "$BO" | jq -r '.detail.path // "" | tostring')
+    artifact_path_check "$path" || die 1 "tasks.$TASK_ARG: detail.path is not a path landing can produce"
+    artifact_landed "$BO" "$TASK_ARG" || die 1 "tasks.$TASK_ARG: detail.path has not landed in its tree"
+    ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+    ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+      || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+    dr=$(bo_next_ref artifact)
+    bo_row ok "$(bo_meta artifact artifact landed "" "" '{}' "$dr")"
+    rb=$(bo_resume_block "$BO" artifact landed "$dr" "$path")
+    jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
+    return 0
+  fi
+
+  # Every other parked non-permission need was parked by the user_action arm (native or
+  # fallback), so that arm's closing leg is the one resume accepts.
   closing=$(bo_field "$(blocked_on_arm user_action)" 5)
   [ "$LEG_ARG" = "$closing" ] || die 1 "--leg $LEG_ARG is not the closing leg ($closing) of tasks.$TASK_ARG"
 

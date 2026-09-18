@@ -164,6 +164,23 @@ constraints:
           reached this dispatch. Checked at the boundary by ack-check.sh, not by the harness.
 ```
 
+### Schema — decisions_applied
+
+```yaml
+# …continued: handoff.properties, beside acted_on_msg_id
+      decisions_applied:
+        type: array
+        items: { type: string, pattern: '^ud-[0-9]{8}T[0-9]{6}Z-[0-9]+$' }   # UD_ID_RE
+        description: >
+          OPTIONAL, every stage. Each user-decision ledger row this stage acted on, once
+          `state-patch.sh --verify-decision <ud-id> --task-id <own id> --expect-answer <applied>`
+          exited 0 for it. Absent: the stage applied no user decision.
+```
+
+The item grammar is the ledger's row id, `ud-<YYYYMMDDTHHMMSSZ>-<n>`, where `n` is the row's 1-based
+line number (`UD_ID_RE` in `hooks/lib/user-decision-lib.sh`). The acceptance rule is
+`skills/shared/stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### Schema — blocked_on
 
 ```yaml
@@ -185,7 +202,7 @@ continue, in the shape the megatask Shared Seams registry declares
 
 | kind | detail keys, required first, `[optional]` | resume_with |
 |---|---|---|
-| `user_decision` | question, options, [recommended] | decision_ref |
+| `user_decision` | question, options, [recommended], [item] | decision_ref |
 | `user_action` | request, command, [verify] | decision_ref |
 | `permission` | tool, command, classifier_reason, allow_rule | decision_ref |
 | `peer_session` | to, question, [deadline] | reply_ref |
@@ -257,11 +274,25 @@ need (`skills/agent-coordination/SKILL.md § Writers — redacted permission row
             question: { type: string, maxLength: 512 }
             options: { type: array, minItems: 2, maxItems: 4, items: { type: string, maxLength: 200 } }
             recommended: { type: string, maxLength: 200 }   # one of options
+            item: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }   # sweep item it settles
         resume_with: { const: decision_ref }
 ```
 
 A choice only the user can make, with the options the stage weighed. It is not a closing-sweep
-item: a sweep item lets the stage finish, and this need stops it.
+item: a sweep item lets the stage finish, and this need stops it. The options are unique and
+non-empty.
+
+##### Schema — blocked_on, the user_decision legs and decision_ref
+
+- `asked`: `route` parked the need for the next boundary's question.
+- `answered`: the hook's `user_decision_recorded` audit row, written when the user answered.
+- `resumed`: the closing leg, written by `resume` once a verified ledger row covers the task.
+
+Its `decision_ref` is the `ud-<YYYYMMDDTHHMMSSZ>-<n>` id of that row in `.context/decisions.jsonl`,
+never the `blocked_on:<task_id>:<kind>:<n>` form. `resume` writes it on the `resumed` row and returns
+it as `resume_block.decision_ref`. The answer text stays in the ledger: no audit row and no
+`resume_block.instruction` carries it. The stage reads it through `state-patch.sh --verify-decision`
+(`hooks/references/user-decision-ledger.md`).
 
 #### Schema — blocked_on, the user_action arm
 
@@ -332,6 +363,18 @@ is unavailable, its `reply_ref` is the `decision_ref` below instead.
 A file another task produces, which this stage must read before it can continue. Its
 `artifact_path` is `detail.path`.
 
+##### Schema — blocked_on, the artifact arm's landed leg
+
+`route` parks the need, then reads the landed set only for a `path` the path ladder admits
+(`land-artifacts.sh --check-path`); a stage file under `.context/` never lands, so it always takes
+the fallback.
+When `path` is in the landed set of the task's `metadata.workspace_path` tree, read with `--strict`,
+the `landed` leg closes the need at once: one ok `landed` row carrying the `decision_ref`, and a
+`resume_block` with `artifact_path`. Otherwise it parks as a `user_action` fallback
+(`fallback_from: artifact`, no `owner_issue`, no `landed` row), and `resume --leg landed` closes it
+once the path has landed. The landing that puts it there is the `contract_landed` ok row
+(§ Landing — the audit row).
+
 #### Schema — blocked_on, the correction arm
 
 ```yaml
@@ -370,12 +413,13 @@ host need no probe covers is a `user_action`.
 
 #### Schema — blocked_on, decision_ref on the other arms
 
-For every arm but `permission`, `decision_ref` is `blocked_on:<task_id>:<kind>:<n>`, the
-`metadata.decision_ref` of the closing-leg `blocked_on` audit row. `blocked-on-dispatch.sh resume`
-appends and prints it; for a `host_environment` probe that passes, `route` does. `<kind>` is the
-stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the earlier closing
-rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
-its `artifact_path` is resolved as the arm above says and printed beside it.
+For every arm but `permission` and `user_decision`, `decision_ref` is
+`blocked_on:<task_id>:<kind>:<n>`, the `metadata.decision_ref` of the closing-leg `blocked_on` audit
+row. `blocked-on-dispatch.sh resume` appends and prints it; for a `host_environment` probe that
+passes, or an `artifact` path already landed, `route` does. `<kind>` is the stage's own kind even
+when a fallback arm closed the need, and `n` is 1 plus the earlier closing rows for that task and
+kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and its `artifact_path` is
+resolved as the arm above says and printed beside it.
 
 A landed `peer_session` closes on both: its `relayed` row's metadata carries `reply_ref` beside
 `decision_ref`, and `resume` prints both in `resume_block`.
@@ -618,6 +662,8 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 `cross_session_ask`, the legacy alias of `blocked_on` kind `peer_session`, is still read on every stage on the same terms (§ Schema — blocked_on, the cross_session_ask alias).
 
 `acted_on_msg_id` is optional on every stage with the same absent-means-none reading: absent, no message carrying a `msg_id` reached this dispatch. Once one did, it names the newest id the stage acked (`state-patch.sh --ack`) and followed; `ack-check.sh` enforces that, not the validator.
+
+`decisions_applied` is optional on every stage too: absent, the stage applied no user decision.
 
 ###### Conventions — the $defs pointer is an obligation
 
@@ -1925,6 +1971,136 @@ replace the last line with:
   | .[] | ((.value.artifact // .value.metadata.artifact // empty) | split("/") | last) + "#files-changed"
 ```
 
+#### Landing consumed artifacts
+
+One DV row can consume a file another DV row produces, such as an interface contract, without the
+producer committing it. The rows declare the pair with `produces` and `consumes`
+(`skills/shared/state-ledger.md § Landing fields (DV rows)`):
+
+```text
+produces := tasks.<P>.metadata.produces = [path, ...]
+consumes := tasks.<C>.metadata.consumes = [{"from": "<P>", "paths": [path, ...]}, ...]
+path     := repo-relative, post-merge; alphabet [A-Za-z0-9._@+/-]
+rule     := C.blocked_by holds every from, and every path is in that producer's produces
+writer   := PL0, or TL when TL runs; never the DV agent
+source   := P's index blob: P runs `git add -- <path>` per produced path before its completion patch
+```
+
+C treats a landed path as read-only and never edits or stages it, because P's tree ships it.
+
+##### Landing — the two passes
+
+`skills/worktask/scripts/land-artifacts.sh` runs from two points in `skills/worktask/SKILL.md`:
+
+| Pass | Where | Call | Effect |
+|---|---|---|---|
+| Boundary | § Step 6.5d, once P is `completed`, before the next ready-filter pass | `--producer P` | Lands into every `pending` consumer's current tree; skips a `blocked` one, keeping its `landing_error`, and leaves any other status untouched with one `warn` row |
+| Gate | § Step 4.8, after any re-pin, before Step 5 stamps `in_progress` | `--consumer C` | Re-lands every pair of C into its final tree; an unchanged tree is a no-op that writes nothing |
+
+When P and C resolve to the same physical tree nothing is copied and no `landed_paths` are
+recorded; a boundary pass still writes its `same_tree` ok row.
+
+##### Landing — what one consumer's pass does
+
+1. **Preflight.** Every path of every pair of C is checked before the first write, so C lands all or
+   nothing.
+2. **Source.** Exactly one stage-0 index entry in P, mode `100644` or `100755`, no filter attribute,
+   no symlink on its way, and a worktree file unchanged since `git add`.
+3. **Destination.** Under C's physical root, every parent a real directory, the file untracked. A
+   tracked file is refused unless byte-identical (`already_present`, not recorded). An untracked one
+   with a different sha is refused unless C's `landed_paths` already lists it (a producer re-run).
+4. **Write.** The blob goes to a temp file beside the destination, is checked against its git
+   object id, then renamed into place and re-verified by sha256.
+5. **Record.** `landed_paths` and `landed_roots` (every spelling of C's tree) become sorted unions;
+   `landing_error` `null`.
+
+A refusal rolls back only files and directories this pass created.
+
+##### Landing — refusal reasons
+
+Each refusal writes exactly one `reason` into `landing_error` and the fail row:
+
+| Check | Reasons |
+|---|---|
+| Pair | `consumer_already_dispatched` (gate only), `producer_not_completed`, `not_blocked_on_producer`, `self_consume`, `bad_declaration`, `not_produced` |
+| Path shape | `bad_path`, `absolute_path`, `dotdot`, `reserved_segment`, `reserved_destination`, `control_char`, `leading_dash`, `unsafe_char` |
+| Source | `symlink_source`, `gitlink`, `not_staged`, `conflicted`, `filtered_path`, `staged_then_modified` |
+| Destination | `symlink_segment`, `not_dir`, `dest_escape`, `symlink_dest`, `dest_not_regular`, `dest_tracked`, `dest_exists` |
+| Copy | `sha256_mismatch`, `dest_race` |
+| Any git read | `git_error`, the read failed |
+| Gate, exit neither 0 nor 1 | `tool_error`, written by the orchestrator |
+
+###### Landing — reserved names
+
+`reserved_segment` is a segment equal to `.git` or `.context`; `reserved_destination` is one equal to
+`.claude`, `.github`, `.mcp.json`, `.envrc`, `.gitattributes` or `.gitmodules`. Both compare
+case-insensitively.
+
+##### Landing — exits and the audit row
+
+| Exit | Meaning |
+|---|---|
+| `0` | Landed, same tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
+| `1` | A consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
+| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, a failed ledger write, or an interrupting signal (INT, TERM, HUP) or unexpected command failure, after rolling back this run's writes. A ledger write for C that completed before the interruption stays: a `blocked` row fails closed, a `landed_paths` entry naming a rolled-back file is copied again on the next pass |
+
+No other exit exists: a signal or an unexpected command failure exits `2`, never a stray `1`, so
+exit 1 always means a `landing_error` recorded on a `blocked` row, or a refused `--check-path` or
+unsafe `--strict` entry (§ Landing — strict readers).
+
+###### Landing — the audit row
+
+Each row is `corpflow_audit_row` with actor `orchestrator`, action `contract_landed`, subject C:
+
+```text
+ok:   {"producer":"DV0","consumer":"DV1","mode":"copied","files":[{"path":"src/api.h","sha256":"<hex>"}]}
+warn: {"producer":"DV0","consumer":"DV1","reason":"consumer_not_pending","status":"completed","paths":["src/api.h"]}
+fail: {"producer":"DV0","consumer":"DV1","reason":"dest_tracked","path":"src/api.h"}
+```
+
+`mode` is `copied`, `same_tree` or `already_present`. A lost audit row warns on stderr and never
+changes the exit code.
+
+###### Landing — a consumer that already ran
+
+A producer re-run, such as a DR rework, can reach a consumer that is `in_progress`, `completed`,
+`failed` or `skipped`. A boundary pass writes no file and no ledger field for that row, exits 0, and
+writes the one `warn` row above, so a rework never flips a dispatched stream to `blocked`. The gate
+still refuses such a row with `consumer_already_dispatched` (exit 1). `--dry-run` writes no row.
+
+##### Landing — release and readiness
+
+On a gate exit other than 0 or 1 the orchestrator writes `landing_error {reason: "tool_error"}`,
+then `--task-status C blocked`; at the boundary that exit is reported only. Release, once the cause is fixed:
+
+```bash
+state-patch.sh --task-meta C --set '{"landing_error":null}'
+state-patch.sh --task-status C pending
+```
+
+Until then C is not ready: the ready filter (`skills/worktask/SKILL.md § Readiness is mechanical`)
+selects `pending` rows only, so for a `blocked` C this prints nothing:
+
+```bash
+jq -r --arg c DV1 '.tasks as $t | $t | to_entries[]
+  | select(.value.status == "pending")
+  | select([(.value.blocked_by // [])[] | $t[.].status] | all(. == "completed"))
+  | .key | select(. == $c)' .context/state.json
+```
+
+##### Landing — strict readers
+
+`land-artifacts.sh --list-landed --tree <tree> --strict` prints the same set as the plain call
+(`skills/shared/state-ledger.md § The landed set`), but exits 1 with empty stdout when any raw
+`landed_paths` entry scoped to that tree fails the path ladder: not a string, a control character,
+or a lexical refusal (§ Landing — refusal reasons). The script never writes such an entry, so one
+means a hand-edited ledger, and a strict reader fails closed instead of dropping it. Two readers are
+strict. `fn-stream-merge.sh` reads each stream's own tree set, never a union: an unsafe entry is
+`blocked reason=landed_path_unsafe`, a failed read `landed_set_unreadable`. The `blocked_on`
+`artifact` arm reads the parked task's tree (§ Schema — blocked_on, the artifact arm's landed leg).
+`--check-path <path>` runs the same ladder with no ledger, silent exit 0 when safe and exit 1 with
+`reason=<token>` when refused; the router runs it on `detail.path`.
+
 ### Run-index resolution
 
 The same N is shared across all stages within a worktask run. `metadata.plan_file` pins the active plan; `metadata.run_index` (integer ≥ 0) resolves `<basename>-N.md` for every other stage. Full resolver and propagation algorithm: `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`.
@@ -1960,7 +2136,7 @@ Anthropic prompt cache matches by **prefix-prefix equality**, not full-block equ
 [4b] Model discipline block                 ← stable WITHIN stage type
 ─────── (cache prefix boundary for sections 1+2+4+4b sharing) ───────
 <<<task-description>>>
-[5]  task.description                       ← dynamic per delegation
+[5]  Task identifiers + ref: lines          ← dynamic per delegation
 <<<retry-hints>>>
 [6]  retry hints (if retry_count > 0)       ← dynamic per delegation
 <<<stage-banners>>>
@@ -1979,8 +2155,8 @@ optional:
   and swallows the digest, which evolves every stage — byte-identity then fails on a section that
   never changed. [3] itself is a ledger pointer plus a readiness digest, never the ledger JSON
   (§ Section [3] — ledger pointer and readiness digest).
-- **They separate instruction from data.** [3] is a `key: value` digest and [5] is free-form text,
-  both sitting between blocks of instructions.
+- **They separate instruction from data.** [3] is a `key: value` digest and [5] is ledger-copied
+  identifier and `ref:` lines, both sitting between blocks of instructions.
 
 #### Section [3] — ledger pointer and readiness digest
 
@@ -2015,6 +2191,19 @@ section count does not vary by model.
 The orchestrator never composes this text. A block assembled at dispatch instead of copied is
 the drift `cache-lint.sh` exists to catch — and the reason the blocks live in one canon file
 rather than in the agent definitions is in `model-prompting.md § Why this lives at dispatch`.
+
+### Section [5] — task identifiers and refs
+
+`brief-compose.sh` writes [5]; the ledger's `task.description` is not copied into it — the agent
+reads it from `.context/state.json` on disk, the file [3] points at. The section
+is identifier lines copied verbatim from the ledger (`task_id`, `stage`, `agent`, `model`,
+`artifact`, `subject`), then `ref:` lines only. A ref value has one of three shapes:
+
+- `file:line` — plugin-root-relative, else under a `workspace_path`;
+- `artifact#anchor` — an artifact in the resolved `.context` directory with a `## <anchor>` heading;
+- a plain path to an existing file — from `metadata.context_refs` only.
+
+A ref that does not resolve fails the compose with exit 1 and an empty stdout.
 
 ### Forbidden tokens in sections [1], [2], [4], [4b]
 
@@ -2055,6 +2244,8 @@ Documented in `skills/cost-optimization/SKILL.md`. Without the 1h flag the defau
 ### Lint
 
 `skills/worktask/scripts/cache-lint.sh` asserts byte-identity of sections [1]+[2] across consecutive stages of the same `worktask_id`, and of sections [4]+[4b] across calls sharing a `(worktask_id, stage)` pair. When a log line carries `model`, it also asserts that [4b] matches the block `model-prompting.md` carries for that alias — a stage dispatched on one model carrying another's block is a routing miss that byte-identity alone cannot see. Lines without the field skip that check, so an emitter that omits it leaves the check dormant. A line carrying `"contract_canon": true` opts in the same way for [1], which must then equal the fenced block in `contract-reminder.md`. Every line with a [3] section is checked for the `ledger: .context/state.json` first line, all six keys in order, and no embedded ledger.
+
+`brief-compose.sh` is the assembler this spec binds; it writes no `prompt-log.jsonl`, so prefix mode stays fixture-gated.
 
 #### Fixture-gated, not log-gated
 

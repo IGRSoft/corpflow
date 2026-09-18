@@ -30,11 +30,11 @@ BLOCKED_ON_KINDS="user_decision user_action permission peer_session artifact cor
 BLOCKED_ON_RESUME_WITH="decision_ref artifact_path reply_ref"
 
 # kind|required|optional|resume_with|legs|closing_leg|owner_issue|landed — rows in registry order.
-_BLOCKED_ON_TABLE='user_decision|question,options|recommended|decision_ref|asked,answered,resumed|resumed|395|no
+_BLOCKED_ON_TABLE='user_decision|question,options|recommended,item|decision_ref|asked,answered,resumed|resumed|395|yes
 user_action|request,command|verify|decision_ref|requested,verified|verified|394|yes
 permission|tool,command,classifier_reason,allow_rule||decision_ref|denied,granted,resumed|resumed|393|yes
 peer_session|to,question|deadline|reply_ref|sent,delivered,answered,relayed,expired|relayed|405|yes
-artifact|producer_task,path||artifact_path|landed|landed|399|no
+artifact|producer_task,path||artifact_path|landed|landed|399|yes
 correction|target_task,finding,evidence_ref,severity||artifact_path|opened,closed|closed|404|no
 host_environment|check,observed||decision_ref|probed|probed|390|yes'
 
@@ -122,9 +122,36 @@ blocked_on_validate() {
   return 1
 }
 
+# A closed-shape check for the one kind whose detail reaches an AskUserQuestion prompt
+# byte-verbatim (SR0 posture: unbounded text there is a second injection surface, not just a
+# ledger row). Every other kind's detail is free-form and only the required-key check above
+# bounds it.
+# shellcheck disable=SC2016  # jq program text: its $names are jq variables, not shell ones
+_BLOCKED_ON_JQ_UD='
+def ud_shape:
+  (.detail.question) as $q
+  | (.detail.options // []) as $opts
+  | (.detail.recommended) as $rec
+  | (.detail.item) as $item
+  | if ($q | type) != "string" or ($q | length) == 0 or ($q | length) > 512 then
+      "blocked_on.detail.question for kind user_decision must be a 1-512 char string"
+    elif ($opts | type) != "array" or ($opts | length) < 2 or ($opts | length) > 4 then
+      "blocked_on.detail.options for kind user_decision must be 2-4 options"
+    elif (($opts | map(select((type != "string") or length == 0 or length > 200))) | length) > 0 then
+      "blocked_on.detail.options for kind user_decision must each be a 1-200 char string"
+    elif ($opts | unique | length) != ($opts | length) then
+      "blocked_on.detail.options for kind user_decision must be unique"
+    elif $rec != null and (($opts | index($rec)) == null) then
+      "blocked_on.detail.recommended for kind user_decision must be one of options"
+    elif $item != null and (($item | type) != "string" or ($item | test("^sw-[A-Z]{2}[0-9]+-[0-9]+$") | not)) then
+      "blocked_on.detail.item for kind user_decision must match the sweep-id grammar"
+    else empty end;
+'
+
 # blocked_on_validate_arm <blocked_on json> — blocked_on_validate, then every required key of the
-# kind's arm present and non-null, then the kind's one resume_with. A null counts as missing:
-# `"command": null` reaches the user prompt as nothing to run, which is not what "" declares.
+# kind's arm present and non-null, then the kind's one resume_with, then user_decision's own
+# closed shape. A null counts as missing: `"command": null` reaches the user prompt as nothing
+# to run, which is not what "" declares.
 blocked_on_validate_arm() {
   local _bo_msg _bo_table
   blocked_on_validate "${1:-}" || return 1
@@ -133,12 +160,13 @@ blocked_on_validate_arm() {
     return 1
   }
   _bo_msg=$(printf '%s' "$1" | jq -r --argjson t "$_bo_table" \
-    "$_BLOCKED_ON_JQ_SHOW"'
+    "$_BLOCKED_ON_JQ_SHOW$_BLOCKED_ON_JQ_UD"'
     $t[.kind] as $a
     | ([$a.required[] as $key | select(.detail[$key] == null) | $key] | .[0]) as $miss
     | if $miss != null then "blocked_on.detail for kind \(.kind) is missing required key: \($miss)"
       elif .resume_with != $a.resume_with then
         "blocked_on.resume_with for kind \(.kind) must be \($a.resume_with), not \(.resume_with | bo_show)"
+      elif .kind == "user_decision" then ud_shape
       else empty end' 2> /dev/null) || _bo_msg="blocked_on arm check could not run"
   [ -n "$_bo_msg" ] || return 0
   printf >&2 'fail: %s\n' "$_bo_msg"

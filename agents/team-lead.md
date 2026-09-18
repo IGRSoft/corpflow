@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.5.0
 maxTurns: 30
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Write, Edit, Task(corpflow:technical-lead)
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task(corpflow:technical-lead)
 ---
 
 Expert engineering team lead combining people management with technical awareness; owns team productivity, coordination, individual growth, and a high-performing team culture.
@@ -99,7 +99,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
 #### Procedure
 
 1. **Inputs**: `state.json` facts first. **AR ran** (a `tasks.AR0` entry exists) → read the `handoff:` frontmatter of `architecture-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `architecture-*.md`) and anchor-read `architecture-N.md#decisions` to identify work streams. **AR excluded** → derive the streams from the plan alone and skip every architecture read. **Only when** AR's `next_stage_focus` does NOT already enumerate the work streams, anchor-read `planning-N.md#requirements` + `planning-N.md#acceptance-criteria` (plan path: `.context/${task.metadata.plan_file}`, fallback: newest `.context/planning-*.md`). Full-read either file only if an anchor is absent or `retry_count > 0`.
-2. Per stream, define: exclusive file ownership list, interface contracts, acceptance criteria
+2. Per stream, define: exclusive file ownership list, interface contracts, acceptance criteria, and any file it hands another stream (Step 5 declarations)
 
 ##### Steps 3-4: Locate and Narrow DV0
 
@@ -108,7 +108,7 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
    kebab, unique within the run, assigned here, and never changed once stamped
    (`handoff-protocol.md § Artifact naming (S1)`):
    ```bash
-   state-patch.sh --task-meta DV0 --set '{"description":"{primary stream scope}",
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta DV0 --set '{"description":"{primary stream scope}",
      "stream":"{primary-slug}","artifact":".context/development-{N}-{primary-slug}.md"}'
    ```
 
@@ -118,9 +118,9 @@ TL is the **canonical and sole owner** of the intra-issue async decision: whethe
    fields. Retry sections stay scoped per task (`## DV1 Retry N`, `## DV2 Retry N`):
    ```bash
    DV0_META=$(jq -c '.tasks.DV0.metadata' .context/state.json)
-   state-patch.sh --task-create "DV${N}" --metadata "$(jq -n \
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-create "DV${N}" --metadata "$(jq -n \
      --argjson m "$DV0_META" --arg slug "$STREAM_SLUG" --arg desc "$STREAM_SCOPE" \
-     '$m + {description:$desc, stream:$slug,
+     '($m | del(.produces, .consumes)) + {description:$desc, stream:$slug,
             artifact:".context/development-\($m.run_index)-\($slug).md"}')"
    ```
 ##### Step 5 field notes
@@ -129,15 +129,20 @@ The clone is what keeps the row valid: `--task-create` refuses a row missing `ef
 
 `$STREAM_SCOPE` is that stream's scope, file ownership, interface contracts and acceptance criteria. Leave `workspace_path` as DV0's cloned path; TL never creates a worktree. The orchestrator re-pins a parallel stream to its own worktree at dispatch, so whether a stream gets its own tree follows from the `blocked_by` edges you wire in Steps 6-8 (rule: `skills/worktask/references/handoff-protocol.md § Pinning a row's tree`).
 
+##### Step 5 declarations
+
+A file one stream writes and another reads is declared on both rows, inside the object that row's step already writes: DV0's Step 4 `--set`, or a stream's Step 5 `--task-create --metadata`. The producer carries `produces` (`["<path>", …]`), the consumer `consumes` (`[{from: "DV<n>", paths: ["<path>"]}]`). Each path names one file, post-merge repo-relative, using only `[A-Za-z0-9._@+/-]`. The Step 5 clone drops DV0's declarations, so a stream never inherits them.
+
 ##### Steps 6-8: Wire Dependencies and Document
 
-6. Block each new DVN on TL0, not on DV0 — they run in parallel:
+6. Block each new DVN on TL0, not on DV0 — they run in parallel. A row with `consumes` is also blocked on each producer it names, DV0 included (`--task-block` unions):
    ```bash
-   state-patch.sh --task-block "DV${N}" --on TL0
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block "DV${N}" --on TL0
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block "$CONSUMER" --on "$PRODUCER"   # once per consumes[].from
    ```
 7. Rewire DR0 to wait for ALL DV tasks (`--task-block` unions, so DR0's existing DV0 edge survives):
    ```bash
-   state-patch.sh --task-block DR0 --on DV1,DV2
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DR0 --on DV1,DV2
    ```
 8. Document the split in `.context/coordination-N.md` under a "Parallel Streams" section, one row per
    stream: slug, owning agent, file ownership, artifact. The ledger row is authoritative; that
@@ -145,7 +150,7 @@ The clone is what keeps the row valid: `--task-create` refuses a row missing `ef
 
 #### File Ownership Rules
 
-Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary.
+Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary. A contract file one stream produces for another is declared `produces`/`consumes` (Step 5 declarations) with the consumer blocked on its producer (Step 6), and landing it into the consumer's tree is automatic (`skills/worktask/references/handoff-protocol.md § Landing consumed artifacts`).
 
 ### Multi-Reviewer Coordination
 
@@ -227,20 +232,22 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### Skip-exploration short-circuit
 
 When `task.metadata.skip_exploration === true`, treat `metadata.exploration_anchors` as authoritative and plan fan-out from the AR-stage `architecture-N.md` anchors (when AR ran; otherwise `planning-N.md#requirements` is the sole anchor source). Do NOT re-Glob/Grep files PL/AR already explored. See `skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage TL --prev <PREV>` (`skills/worktask/scripts/`), `<PREV>` = `AR` when AR ran, `PL` when AR was excluded. It atomically patches `tasks.TL0` plus the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage TL --prev <PREV>`, `<PREV>` = `AR` when AR ran, `PL` when AR was excluded. It atomically patches `tasks.TL0` plus the corresponding `AR→TL` / `PL→TL` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage TL --prev <PREV> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage TL --prev <PREV> --facts '{
   "decisions": [{"id":"tl1","summary":"≤160 chars","ref":"coordination-0.md#fan-out"}],
   "open_questions": [{"id":"sw-TL0-1","class":"decision","ref":"coordination-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```

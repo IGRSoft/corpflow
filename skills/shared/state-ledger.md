@@ -119,7 +119,67 @@ Set on DV rows only. Canonical model, naming grammar and the single-DV case:
 |-------|---------|
 | `stream` | Kebab slug naming this row's artifact, unique among the run's DV rows. Assigned by the row's creator (PL0, or TL when TL runs) — DV never invents one. Mandatory once a run carries ≥2 DV rows; omittable for a lone DV row |
 | `artifact` | The path this row writes, `.context/development-<N>-<stream>.md` (`.context/development-<N>.md` for a lone row). Planned value only: `tasks.<ID>.artifact`, stamped by `state-patch.sh --artifact` at completion, outranks it |
-| `landed_paths` | Reserved (#399): paths this task's outputs landed at. DR's untracked-file check excludes the union across **every** task row, so neither side has to agree on which row is the consumer. Empty until #399 populates it |
+
+### Landing fields (DV rows)
+
+Written on DV rows and read by `skills/worktask/scripts/land-artifacts.sh`. Declarations, passes and
+refusal reasons: `skills/worktask/references/handoff-protocol.md § Landing consumed artifacts`.
+
+| Field | Purpose |
+|-------|---------|
+| `produces` | Producer rows: repo-relative, post-merge paths this row `git add`s for its consumers before its completion patch. Written by PL0 or TL only |
+| `consumes` | Consumer rows: `[{from: "DV<n>", paths: [path]}]`, each path one the producer lists in `produces`. The row is also `blocked_by` every `from`. Written by PL0 or TL only |
+
+#### Landing results
+
+| Field | Purpose |
+|-------|---------|
+| `landed_paths` | Consumer rows: sorted unique paths landed untracked into this row's tree. Written only by `land-artifacts.sh`; absent or `[]` is normal (§ The landed set) |
+| `landed_roots` | Consumer rows: every spelling of each tree those paths landed into — the banner path, `git rev-parse --show-toplevel`, the physical root. Written only by `land-artifacts.sh`, in the same write as `landed_paths` |
+| `landing_error` | `{reason, path, producer}` while a refused landing holds this row `blocked`; `null` once released |
+
+#### The landed set
+
+The paths landed into **one tree**: `landed_paths` from every row whose `landed_roots` holds that
+tree, so no reader has to decide which row is the consumer. Every reader computes it with this
+expression, byte for byte, always passing the tree as `--arg root`:
+
+```jq
+[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]
+```
+
+The key is the tree that received the landing, not a row's assigned `workspace_path`: a re-pin
+rewrites that path, and a copy left in the old tree must stay excluded there. An entry outside the
+`[A-Za-z0-9._@+/-]` alphabet is dropped, so it never becomes a match pattern; the match is
+whole-string, so an entry with a trailing newline is dropped too.
+
+##### The landed set — each reader's root
+
+| Reader | `$root` |
+|--------|---------|
+| Script transports (fn-preflight base-sanity, `skills/worktask/SKILL.md` Step 4.7a) | `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`. `--tree` is required (exit 2 without it); the script matches the tree's physical path |
+| `fn-stream-merge.sh` | `--list-landed --tree <tree> --strict`, each stream's `<tree>` from `plan`, never a union |
+| `blocked-on-dispatch.sh` (`artifact` arm) | `--list-landed --tree <workspace_path> --strict`, the parked task's `metadata.workspace_path` |
+| `hooks/dv-comment-density-gate.sh` | Its physical `_root`, resolved with `cd -P` and `pwd -P` |
+
+`--strict` fails closed on an entry the path ladder refuses instead of dropping it; the FN arm and
+the artifact arm use it.
+
+##### The landed set — each agent's root
+
+| Reader | `$root` |
+|--------|---------|
+| `agents/project-manager.md` (FN scope check) | Single tree: `git rev-parse --show-toplevel`. Multi-stream arm: the stream's `<tree>` from `fn-stream-merge.sh plan` |
+| `agents/technical-lead.md` (DR untracked check) | The DV row's `metadata.workspace_path` as the ledger holds it, else the orchestrator's `git rev-parse --show-toplevel` |
+| Any reader with no tree to hand | `--arg root ""`, which matches no row: the set is empty, never the union over every tree |
+
+##### The landed set — subtracting it
+
+A reader subtracts the set from **untracked** entries only, enumerated file-level
+(`git status --porcelain --untracked-files=all` or `git ls-files --others --exclude-standard`),
+since default porcelain collapses a new directory to `?? dir/`. It never subtracts from `M`, `A` or
+`D` lines: a staged landed path is a consumer violation and stays visible. An empty set is normal;
+only `land-artifacts.sh` writes it, and the producer's tree ships every landed file.
 
 ### Dispatch metadata (optional)
 
@@ -188,7 +248,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — run & context properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 2 of 7)
+// …continued: task.metadata JSON Schema "properties" (part 2 of 9)
     "run_index": {
       "type": "integer",
       "minimum": 0,
@@ -209,7 +269,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — error & retry properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 3 of 7)
+// …continued: task.metadata JSON Schema "properties" (part 3 of 9)
     "error_file": {
       "type": "string",
       "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
@@ -232,7 +292,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — worktask properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 4 of 7)
+// …continued: task.metadata JSON Schema "properties" (part 4 of 9)
     "track": {
       "type": "integer",
       "minimum": 1,
@@ -258,7 +318,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — the peer ask pointer
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 5 of 7)
+// …continued: task.metadata JSON Schema "properties" (part 5 of 9)
     "ask_id": {
       "type": "string",
       "pattern": "^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$",
@@ -269,7 +329,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — DV fan-out properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 6 of 7)
+// …continued: task.metadata JSON Schema "properties" (part 6 of 9)
     "stream": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
@@ -279,17 +339,59 @@ uncapped; capping post-append would silently strip those banners from the prompt
       "type": "string",
       "description": "DV rows only: the .context/ path this row writes. Planned value; tasks.<ID>.artifact outranks it once stamped at completion."
     },
+```
+
+#### Schema — landing declarations
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 7 of 9)
+    "produces": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "DV rows: repo-relative paths this row stages for consumers."
+    },
+    "consumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "paths"],
+        "additionalProperties": false,
+        "properties": {
+          "from": { "type": "string", "pattern": "^DV[0-9]+$" },
+          "paths": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      }
+    },
+```
+
+#### Schema — landing results
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 8 of 9)
     "landed_paths": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Reserved (#399): paths this task's outputs landed at. DR excludes the union across every task row from its untracked check. Empty until #399."
+      "description": "Written only by land-artifacts.sh: paths landed untracked into this row's tree. May be absent or empty."
+    },
+    "landed_roots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Written only by land-artifacts.sh with landed_paths: every spelling (banner path, git toplevel, physical) of each tree it landed into. The landed set is scoped by it."
+    },
+    "landing_error": {
+      "type": ["object", "null"],
+      "properties": {
+        "reason": { "type": "string" },
+        "path": { "type": "string" },
+        "producer": { "type": "string" }
+      }
     },
 ```
 
 #### Schema — requires_screenshots + required-fields rule
 
 ```json
-// …continued: task.metadata JSON Schema (part 7 of 7, closes "properties")
+// …continued: task.metadata JSON Schema (part 9 of 9, closes "properties")
     "requires_screenshots": {
       "type": "boolean",
       "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
@@ -358,7 +460,7 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `pending` | Not started, may be blocked |
 | `in_progress` | Active work |
 | `completed` | Done |
-| `blocked` | Waiting on an unsatisfied `blocked_by` entry |
+| `blocked` | Waiting on an unsatisfied `blocked_by` entry, or held by a refused landing (`metadata.landing_error`); released by clearing that field, then `--task-status <ID> pending` |
 | `skipped` | Dropped by dynamic sizing during PL/AR (`state-patch.sh --task-status QA0 skipped`). The entry stays as an audit record of what was sized out; terminal, and never blocks a dependent |
 | `failed` | Terminally failed: retries and per-edge escalations are both exhausted, `last_error.class` is `exhausted`, and no further dispatch will be attempted. Terminal, and settles the completion loop (`skills/worktask/SKILL.md` `SETTLED`) |
 

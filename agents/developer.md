@@ -323,6 +323,11 @@ All DV operations run in the isolated worktree (§ D0.0). Use `EnterWorktree`/`E
 
 Every `Write`/`Edit` MUST target a path under `task.metadata.workspace_path` while a worktree is active. Reading context from outside it is fine; writing back to those external paths is not. Verify the prefix before each write — a path under `.../conductor/workspaces/<repo>/<workspace>/…` proceeds; one under `.../Projects/…` (plugin source repo / canonical clone) is a STOP, rebase onto `workspace_path`. When in doubt prefer `Bash: pwd` plus a relative path over an absolute path inherited from an outside `Read`.
 
+#### Produced and landed files
+
+- **Producer**: a row with `produces` runs `git add -- <path>` for each declared path before its completion patch. Landing copies the staged index blob, so an unstaged path blocks the consumer `not_staged` and an edit after staging blocks it `staged_then_modified`; re-stage after any later edit.
+- **Consumer**: your row's `landed_paths`, also named on the `LANDED (read-only, never edit or stage)` dispatch line, are read-only: never edit, never stage. The producer's tree ships them, and the DR and FN untracked checks exclude them.
+
 ### Output Budget (DV)
 
 Artifact ≤250 lines; no full-file listings — cite `path:line-range` or anchors, not pasted bodies. Final return ≤250 tok. Target ≤80 tool calls/run: batch multi-file edits into one pass (§ D1), never re-Read a file unchanged since your last Read, keep narration lean (no per-file play-by-play, no restating what the artifact holds).
@@ -583,6 +588,8 @@ Set `architecture.applied` to what actually happened, not what was planned. Any 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template: `stage-contracts.md#tpl-dv`. Prev→this label: `TL→DV` (or `AR→DV` when TL was skipped, `PL→DV` when both AR and TL were, `IR→DV` on the emergency pipeline).
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 ### DV frontmatter block
 

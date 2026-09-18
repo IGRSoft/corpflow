@@ -6,7 +6,7 @@ color: white
 effort: low
 version: 0.3.0
 maxTurns: 25
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/doc-option-check.sh:*), Write, Edit
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/doc-option-check.sh *), Write, Edit
 ---
 
 You are an expert technical writer specializing in software documentation, API references, architecture docs, and developer experience. You create clear, maintainable documentation that improves code understanding and developer onboarding.
@@ -130,7 +130,7 @@ context. **State ledger**: Stage DC, Owner: technical-writer — see `skills/sha
 A DC run once documented an env var, `API_BIND`, that no file in its tree defined, and only the orchestrator noticed. This gate catches that class, so it runs before every handoff over every documentation file DC wrote or edited this run:
 
 ```bash
-bash skills/worktask/scripts/doc-option-check.sh --tree <task.metadata.workspace_path> <doc>...
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/doc-option-check.sh --tree <task.metadata.workspace_path> <doc>...
 ```
 
 Add `--tree <path>` for each further worktree the dispatch names, such as fan-out streams. Add `--allow <NAME>` only for a name the host sets and no tracked or untracked, not-ignored file defines, such as a token CI injects at run time, and name that host in `documentation-N.md`.
@@ -223,16 +223,18 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DC --prev QA` (`skills/worktask/scripts/`) to atomically patch `tasks.DC0` + the `QA→DC` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --prev QA` to atomically patch `tasks.DC0` + the `QA→DC` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it:
 
 ```bash
-state-patch.sh --stage DC --prev QA --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --prev QA --facts '{
   "files_modified": ["README.md"],
   "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
@@ -246,7 +248,7 @@ state-patch.sh --stage DC --prev QA --facts '{
 > # ⚠️ MANDATORY CLOSE — DO THIS BEFORE YOU RETURN ⚠️
 > **First-named closing action, non-optional.** Before returning from the DC stage:
 >
-> 1. **Write `documentation-N.md`, then immediately patch the ledger** (`state-patch.sh --stage DC --prev QA`). One closing action, done first — not last, not "if there's time". The artifact leads only because the patch reads it: with none on disk the tool exits 3.
+> 1. **Write `documentation-N.md`, then immediately patch the ledger** (`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --prev QA`). One closing action, done first — not last, not "if there's time". The artifact leads only because the patch reads it: with none on disk the tool exits 3.
 > 2. **Do it even if the artifact is partial.** Partial artifact + correct patch is recoverable; perfect artifact + no patch forces a Layer-3 recovery. With no artifact the tool patches nothing — write `tasks.DC0` and the `QA→DC0` edge with `Edit` instead (`handoff-protocol.md#layer-1-fallback`).
 > 3. **The orchestrator cannot auto-recover reliably without this.** The SubagentStop hook is a backstop, not a substitute — do not rely on it.
 >

@@ -139,10 +139,10 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base by mod
 ### DC + QA Parallel (Default)
 
 ```bash
-state-patch.sh --task-block DR0 --on DV0   # DR ← DV
-state-patch.sh --task-block QA0 --on DR0   # QA ← DR
-state-patch.sh --task-block DC0 --on DR0   # DC ← DR
-state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DR0 --on DV0   # DR ← DV
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block QA0 --on DR0   # QA ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DC0 --on DR0   # DC ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
 ```
 
 Use `--sequential` when DC requires test results.
@@ -261,7 +261,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
 
 ### Validation check 10 — pass a title, preview freely
 
@@ -381,7 +381,11 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
-Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. The orchestrator copies these blocks, never composes them.
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
+
+#### Composing the brief (binding)
+
+Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
 #### Preamble layout (binding)
 
@@ -392,20 +396,23 @@ Each section opens with its own `<<<marker>>>` line and runs to the next marker 
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
 [4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
-[5] task.description                       ← dynamic per delegation
+[5] Task identifiers + ref: lines          ← dynamic per delegation
 [6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
-#### Step 0 — compose section [3] via ledger-digest.sh before each delegation
+[5]'s lines and ref shapes: `references/handoff-protocol.md § Section [5] — task identifiers and refs`.
+
+#### Step 0 — section [3] comes from ledger-digest.sh
 
 ```typescript
 // Section [3] body: the ledger pointer plus readiness digest, grammar in
-// references/handoff-protocol.md#cache-prefix. The script is the only composer, so [3]
-// cannot drift from the lint that checks it.
+// references/handoff-protocol.md#cache-prefix. brief-compose.sh (Step 6) makes this call for
+// every delegation and is its only caller, so [3] cannot drift from the lint that checks it.
 const digest = execFileSync("bash", ["skills/worktask/scripts/ledger-digest.sh",
                                      "--state", ".context/state.json"], { encoding: "utf8" });
-// Exit 3 means the ledger is missing or unparseable: a hard failure, not a degraded mode.
+// Exit 3 means the ledger is missing or unparseable: the composer exits 2 and nothing is
+// dispatched — a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -524,30 +531,27 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 ##### Step 3 — publish snippet
 
      ```bash
-     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
-     [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
-     HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
-     if [ -f "$HELPER" ]; then
-       bash "$HELPER"; true
+     pub_rc=0
+     bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
      ```
 
 ##### Step 3 — publish fallback (helper_not_found)
 
      ```bash
-     # …continued: helper missing → audit one deferred github_issue_created row
-     else
+     # …continued: exit 127 means bash found no helper → audit one deferred github_issue_created row
+     if [ "$pub_rc" -eq 127 ]; then
        LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
        mkdir -p "$LOG_DIR"
        STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
        jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
          '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
          >> "$LOG_DIR/audit.jsonl"; true
-     fi
+     fi; true
      ```
 
 ##### Step 3 — non-blocking & skip rules
 
-     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
+     The `|| pub_rc=$?` capture and the trailing `; true` mask the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
 
 #### Steps 1–3
 
@@ -596,6 +600,10 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
     const full = state.tasks[task.id];
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
+    // [5] is the composer's, so the ledger text is never dispatched. full.description becomes the
+    // injection buffer: text prepended before the sentinel is [6], text appended after it is [7].
+    const INJECTION_SPLIT = "@@injection-split@@";  // no injection text contains it
+    full.description = INJECTION_SPLIT;
 ```
 
 ##### Agent-type resolution
@@ -748,16 +756,26 @@ across three runs, always cleared by the same manual step — this codifies that
     //       actor holding git that is not itself inside the tree under repair.
 ```
 
-##### Step 4.7a — landing and audit
+##### Step 4.7a — the stray set
 
 ```typescript
     if (full.metadata.stage === "DV" && state.tasks?.AR0?.status === "completed") {
       // .context/ is the ledger's own tree and never lands here: it is not what DV reads
       // through an architecture reference, and committing it would put run bookkeeping in
-      // the payload's history.
-      const stray = gitPorcelain()                       // `git status --porcelain`
+      // the payload's history. Landed files are a DV producer's to ship, not AR's: subtract
+      // them from untracked entries only, listed per file, since the default porcelain
+      // folds a new directory into one `?? dir/` line.
+      // `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`; failure = empty set
+      const landed = new Set(listLanded(gitToplevel()));
+      const stray = gitPorcelain()           // `git status --porcelain --untracked-files=all`
         .filter(f => !f.path.startsWith(".context/"))
-        .filter(f => f.worktreeDirty || f.untracked);
+        .filter(f => f.worktreeDirty || (f.untracked && !landed.has(f.path)));
+```
+
+##### Step 4.7a — landing and audit
+
+```typescript
+      // …continued: step 4.7a body
       if (stray.length > 0) {
         gitCommit(stray.map(f => f.path),
                   `AR contract landing for ${task.id} (run ${state.run_index})`);
@@ -780,7 +798,8 @@ takes a full budget to discover it.
 
 Two banners, because isolation and assignment are two claims: a stale worktree of a *different*
 clone is perfectly isolated, satisfies D0.0, and still cannot receive a single edit.
-`dv-tree-preflight.sh` exists for exactly that case.
+`dv-tree-preflight.sh` exists for exactly that case. Neither banner is the `WORKSPACE_ROOT=` line:
+Step 6's composer emits that as [7]'s first line from the same script, after the re-stamp below.
 
 ```typescript
     // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected: every DV stage
@@ -840,6 +859,36 @@ The code implements `references/handoff-protocol.md § Pinning a row's tree`.
                                              "--task", task.id], { encoding: "utf8" })
                          .trim().replace(/^WORKSPACE_ROOT=/, "");
 ```
+
+##### Step 4.8 — land consumed artifacts
+
+After any re-pin and before Step 5 stamps `in_progress`, a row that declares `consumes` has every
+consumed pair landed again into the tree it will run in. A re-pinned stream holds a fresh tree the
+boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that writes nothing.
+
+```typescript
+      // …continued: step 4.8 body
+      const consumes = full.metadata.consumes ?? [];
+      if (consumes.length > 0) {
+        const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                        "--consumer", task.id]);
+        if (land.status !== 0 && land.status !== 1) blockOnToolError(task.id);  // 1: already blocked
+        if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Task()
+        full.description += "\n\nLANDED (read-only, never edit or stage): " +
+          consumes.flatMap(c => c.paths).join(", ");
+      }
+```
+
+##### Step 4.8 — a refused landing, and its release
+
+`blockOnToolError` exists because every status other than 0 or 1 records nothing — exit 2, or a
+signal or crash that bypassed the script's own mapping to 2 — and a row left `pending` is
+re-dispatched every pass. It runs `state-patch.sh --task-meta <ID> --set '{"landing_error":{"reason":"tool_error"}}'`,
+then `--task-status <ID> blocked`; if either write fails, stop per § Error Handling. Exit 1 needs
+neither, since the script already blocked the row. `queueLandingBlock` reports it as § Step 6.5d does.
+
+**Release**, once the cause is fixed: `state-patch.sh --task-meta <ID> --set '{"landing_error":null}'`,
+then `--task-status <ID> pending`. The next ready pass reaches this gate, which re-lands every pair.
 
 ##### Step 4.8 — assigned-tree banner & audit
 
@@ -1024,11 +1073,11 @@ The code implements `references/handoff-protocol.md § Pinning a row's tree`.
     //    write (never agent_type or an env var, so nested delegates inherit it).
     sh(`state-patch.sh --task-status ${task.id} in_progress`);
 
-    // 5a. Embedded commands (DV) — PREPEND the Skill invocation when the worktask carries
+    // 5a. Embedded commands (DV) — APPENDED as suffix [7] when the worktask carries
     //     embedded_commands metadata.
     if (full.metadata.stage === "DV" && worktask_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
-      full.description = skillInvocation + "\n\n" + full.description;
+      full.description = full.description + "\n\n" + skillInvocation;
     }
 ```
 
@@ -1040,8 +1089,7 @@ The code implements `references/handoff-protocol.md § Pinning a row's tree`.
     //     COMMAND, not a skill: there is no skills/tech-code-review/ to invoke, so name
     //     the file and let the stage read it.
     if (full.metadata.stage === "DR") {
-      const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save the findings summary to the path on this brief's \`artifact:\` line.`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 ```
@@ -1063,7 +1111,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
         "  • `.context/attachments/PR instructions.md`",
         "  • `.context/attachments/Review request.md`",
         "Run `mkdir -p .context/attachments` first.",
-        "Also write `.context/complete-summary-N.md` (worktask summary + Stage Timings; N = task.metadata.run_index).",
+        "Also write the worktask summary + Stage Timings to the path on this brief's `artifact:` line.",
         "Then read `PR instructions.md` and follow it as the PR-creation script.",
       ].join("\n");
       full.description = full.description + "\n\n" + fnInjection;
@@ -1128,19 +1176,46 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     }
 ```
 
+##### Step 6 — compose the brief
+
+```typescript
+    // …continued: step 6 body. Runs after Step 4.8's re-stamp, so [7]'s WORKSPACE_ROOT= line and
+    // Step 4.8's banner read one row. _orch_root is set in commands/worktask.md
+    // § Workspace-root cross-check. Contract: § Composing the brief.
+    const composed = spawnSync("bash", ["skills/worktask/scripts/brief-compose.sh", task.id,
+                                        "--orch-root", _orch_root], { encoding: "utf8" });
+    if (composed.status !== 0) {  // 1 = guard failure, 2 = usage/ledger/canon; stdout is empty
+      sh(`state-patch.sh --task-status ${task.id} blocked`);
+      appendAudit({ actor: "orchestrator", action: "brief_compose_failed", subject: task.id,
+                    result: "blocked", metadata: { exit: composed.status, stderr: composed.stderr.trim() } });
+      continue;  // no Task(): surface the stderr per § Escalation Chains
+    }
+```
+
+##### Step 6 — splice the injections
+
+```typescript
+    // …continued: step 6 body. Each injection keeps its section; [1]–[5] stay as composed.
+    const [hints, banners] = full.description.split(INJECTION_SPLIT).map(s => s.trim());
+    const HINTS = "<<<retry-hints>>>\n";
+    const cut = composed.stdout.lastIndexOf(HINTS) + HINTS.length;
+    const prompt = composed.stdout.slice(0, cut) + (hints ? `${hints}\n` : "") +
+                   composed.stdout.slice(cut) + (banners ? `\n${banners}\n` : "");
+```
+
 ##### Step 6 — Task() dispatch
 
 ```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
     // A DV row's tree is fixed at dispatch by the dispatcher: Step 4.8 settled
     // tasks.<ID>.metadata.workspace_path (re-pinned if a concurrent row shared it) before this
-    // call, and the banner carries it. No
+    // call, and the composed [7] banner carries it. No
     // `isolation: "worktree"` argument — the Agent tool's fork is a tree the ledger never
     // recorded, and dv-tree-preflight.sh --assigned blocks every edit inside it.
     const launchAck = Task({
       subagent_type: subagentType,
       model: effectiveModel,
-      prompt: full.description,
+      prompt,  // the composer's stdout with [6]/[7] spliced in, never full.description
       ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
     });
 
@@ -1368,11 +1443,11 @@ and one router, and each writes a fixed set of audit legs.
 
 | kind | Orchestrator action | Audit legs | Owner | Fallback |
 |---|---|---|---|---|
-| `user_decision` | ask `question` with its `options` | asked / answered / resumed | #395, pending | `user_action` |
+| `user_decision` | ask `question` with its `options` at § Step 7a; resume with the hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
 | `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
 | `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
 | `peer_session` | write the request, send the pointer, relay the validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` when the mailbox is unavailable; `user_decision` at expiry |
-| `artifact` | resume once `path` lands | landed | #399, pending | `user_action` |
+| `artifact` | resume once `path` is in the stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
 | `correction` | open rework on `target_task` | opened / closed | #404, pending | `user_action` |
 | `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while it fails |
 
@@ -1399,7 +1474,7 @@ changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the s
       if (routed?.status === 1) { redispatch(task.id, { suffix: routed.stderr }); continue; }
       if (routed && routed.status !== 0) { escalate(task.id); continue; }   // 2: § Error Handling
       const out = routed ? JSON.parse(routed.stdout) : null;
-      const rb = out?.resume_block;   // a host_environment re-probe that passed
+      const rb = out?.resume_block;   // a host_environment re-probe that passed, or an artifact already landed
       if (rb) { deliverResume(rb, rb.instruction); continue; }
       if (out?.arm === "peer_session") { deliverAsk(out); continue; }   // next section
       if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
@@ -1440,10 +1515,18 @@ shows a fixed lead line for the kind with the detail keys fenced as data. Only a
 - `peer_session` falls back only when the mailbox is unavailable: `fallback_from`, no `owner_issue`,
   `ask_id: null`, and the user relays that peer's reply. An ask that reaches its deadline instead
   takes one `expired` leg and re-routes as a `user_decision` carrying its question and options.
-- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
-  need clears only when `check` reads `pass`; otherwise it parks as a `user_action` with
-  `fallback_from` and no `owner_issue`.
 - `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
+
+###### Step 6.5a3 — a landed arm that checks before it parks
+
+A miss on either check below parks the need as a `user_action` with `fallback_from` and no
+`owner_issue`.
+
+- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
+  need clears only when `check` reads `pass`.
+- `artifact`: `route` checks `path` against the landed set of the stage's tree, once the path ladder
+  admits it. A hit clears the need with the ok `landed` row and a `resume_block`; a miss, or a path
+  no landing can produce such as a `.context/` artifact, writes no `landed` row.
 
 ##### Step 6.5a4 — why delivered is not acknowledged
 
@@ -1581,7 +1664,7 @@ function sendStageMessage(state, task, subagentType, body, supersedes = null) {
   const msg_id = `${task.id}-m${sendRows(task.id).length + 1}`;
   const sent = SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
     message: [`msg_id: ${msg_id}`, ...(supersedes ? [`supersedes: ${supersedes}`] : []),
-      `First tool call: bash skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
+      `First tool call: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
       "Set handoff.acted_on_msg_id to the newest msg_id you acted on.", "", body].join("\n") });
 ```
 
@@ -1626,7 +1709,7 @@ const rowMatchesHandoff = (row, h) =>
         const artifactPath = stageArtifactPath(code, runIndex, post.tasks?.[task.id]);  // the row's artifact when it names one
         // Layer 2 (synchronous): state-patch.sh is the single implementation (hooks/state-merge.sh
         // is a thin wrapper); `--via step6_5` stamps completed_via=step6_5 vs the hook default:
-        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
+        //   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
         // (equivalently: STATE_MERGE_VIA=step6_5 bash hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
@@ -1681,6 +1764,62 @@ const rowMatchesHandoff = (row, h) =>
     //       the next stage, re-dispatch this stage with the fail line verbatim. For DV this is
     //       the same call as § Step B (the AR-reference arm rides on it); run it once.
 ```
+
+##### Step 6.5d — land the producer's artifacts
+
+```typescript
+    // 6.5d. After 6.5c and BEFORE the next ready-filter pass: copy this DV row's staged
+    //       `produces` into each consumer's tree (handoff-protocol.md § Landing consumed
+    //       artifacts). Landing at the producer's boundary is what keeps a consumer whose
+    //       landing failed out of the ready set; the ready filter itself is unchanged.
+    const producer = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks[task.id];
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                      "--producer", task.id]);
+      // exit 1: consumers already blocked; any other non-zero is reported, never blocked here
+      if (land.status !== 0) queueLandingBlock(land);
+    }
+```
+
+##### Step 6.5d — resume a stage parked on this producer's artifact
+
+```typescript
+    // …continued, whatever the landing exited. ROUTER as in § Step 6.5a3.
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const tasks = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks;
+      for (const [id, t] of Object.entries(tasks)) {
+        const need = t.metadata?.blocked_on;
+        if (t.status !== "blocked" || need?.kind !== "artifact"
+            || need.detail?.producer_task !== task.id) continue;
+        const r = spawnSync("bash", [ROUTER, "resume", "--task-id", id, "--leg", "landed"]);
+        if (r.status === 0) { const rb = JSON.parse(r.stdout).resume_block; deliverResume(rb, rb.instruction); }
+        else if (r.status !== 1) escalate(id);
+      }
+    }
+```
+
+Exit 0 delivers the resume, exit 1 leaves the stage parked for § Step 7a, and any other exit goes to
+§ Error Handling.
+
+###### Step 6.5d — a parked stage is never landed into
+
+The boundary pass skips a `blocked` consumer, so `resume --leg landed` succeeds here only when
+`path` is already in the parked stage's tree's landed set; otherwise the user answers at § Step 7a.
+
+##### Step 6.5d — reporting a refused landing
+
+`queueLandingBlock` reports each blocked consumer's `metadata.landing_error` (`reason`, `path`,
+`producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
+Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
+
+On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
+signal) the script recorded nothing about any consumer, so the report carries its stderr instead.
+Nothing is blocked here; the consumer's own § Step 4.8 — land consumed artifacts gate refuses its
+dispatch later.
+
+A producer re-run (a DR rework) can reach a consumer that is no longer `pending`. The pass leaves
+that row untouched and exits 0 with one `warn` `contract_landed` row whose reason is
+`consumer_not_pending`, so a rework never flips a running or finished stream to `blocked`.
 
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
@@ -1756,7 +1895,8 @@ const rowMatchesHandoff = (row, h) =>
   // …continued: after the mailbox round, inside the while
   // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
   //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
-  //     permission prompt). ROUTER's batch holds every other parked need, as a user_action.
+  //     permission prompt). ROUTER's batch holds every other parked need: a user_decision as
+  //     its own question, any other kind as a user_action.
   const batch = JSON.parse(spawnSync("bash", [PARK, "batch"]).stdout);
   const typed = JSON.parse(spawnSync("bash", [ROUTER, "batch"]).stdout);
   for (const b of [batch, typed])   // both ran first, so a megatask park records every need
@@ -1885,9 +2025,10 @@ holds the denied command only, and the directory stays data. `cwd` comes from th
 
 ```typescript
 // resume re-claims the row, sets blocked_on to null and appends the closing blocked_on row that
-// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action),
-// so landing an arm changes no line here. Only the user's own answer reaches this function.
+// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action).
+// Only the user's own answer reaches this function, and a user_decision never forwards it.
 function resumeTypedNeed(need, answer) {
+  if (need.arm === "user_decision") return resumeUserDecision(need);   // next section
   if (answer === "stop here") return stopForUser(need);   // stays parked; the run stops
   const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
   if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
@@ -1895,6 +2036,31 @@ function resumeTypedNeed(need, answer) {
   deliverResume(rb, answer === "done" ? rb.instruction : `${rb.instruction}\n\n${fence(answer)}`);
 }
 ```
+
+###### Step 7a — a user decision resumes by reference
+
+```typescript
+// The hook recorded the answer in .context/decisions.jsonl. With no --decision-ref, resume picks the
+// newest verified ud- row covering the task that no earlier resume consumed, and names it in
+// rb.decision_ref. rb.instruction names the verify command and carries no answer text.
+function resumeUserDecision(need) {
+  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
+  if (r.status !== 0) return stopForUser(need);   // no verified row: declined, or refused
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  deliverResume(rb, rb.instruction);   // unmodified: decision_ref: ud-…, never the answer
+}
+```
+
+###### Step 7a — why the answer is never forwarded
+
+The answer is already in this conversation. Forwarding it, whole or paraphrased, is the prose relay
+a stage must refuse (`skills/shared/stage-contracts.md § A user decision is accepted only from the
+ledger`). So `rb.instruction` goes out as is: through `SendMessage` to a live stage, or as a
+re-dispatch suffix. The stage reads the answer only through the verifier.
+
+A non-zero `resume` exit means no verified row covers the task: the user declined the dialog, the
+hook refused to write a row, or the verifier refused the row. Nothing is written, the task stays
+parked, and `stopForUser` stops the run; a later `/worktask --resume` asks again.
 
 ###### Step 7a — deliverResume, live or re-dispatched
 
@@ -1914,8 +2080,10 @@ function deliverResume(rb, body) {
   `verify`, when the need has one, before it continues.
 - "stop here" → nothing is written. The task stays parked, and the run stops per § Escalation
   Chains; a later `/worktask --resume` asks again (`references/resume.md § Reply routing`).
-- Free text → the answer itself: a decision, or the reply the user got from a peer. It resumes like
-  "done" and reaches the stage as a fenced block; no audit row holds it.
+- Free text → the answer itself, such as the reply the user got from a peer. It resumes like "done"
+  and reaches the stage as a fenced block; no audit row holds it. It is never consent.
+- A `user_decision` need offers the stage's own options instead of "done" and "stop here". Whatever
+  the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
 - A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
   `cwd:` line as § Step 7a — where the `!` line runs says.
 
@@ -2259,6 +2427,9 @@ Executable helpers (never read into context — invoke via `bash`):
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 | `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
+| `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed --tree <path>` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
+
+### state-patch.sh — exit codes
 
 Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
 and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
@@ -2303,6 +2474,47 @@ path-scrubbed, at most 120 characters), `truncated` marks a head showing less th
 command, and an unavailable scrub gives `[redacted]` with `redaction: "scrub_unavailable"`. `resume_block.truncated` is a different flag:
 the stored command was cut at 512 characters.
 
+### land-artifacts.sh — CLI
+
+```
+land-artifacts.sh --producer <ID> [--consumer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --consumer <ID> [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --list-landed --tree <path> [--strict] [--state <p>]
+land-artifacts.sh --check-path <path>
+land-artifacts.sh --self-test | -h | --help
+```
+
+Any call with `--producer` is the boundary pass (§ Step 6.5d); `--consumer` alone is the dispatch
+gate (§ Step 4.8 — land consumed artifacts). `--dry-run` checks every path and writes nothing.
+`--list-landed --tree <path>` prints the landed set scoped to that tree
+(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0, and
+no `--tree` is exit 2.
+
+#### land-artifacts.sh — the fail-closed modes
+
+`--strict` prints the same set, but exits 1 with empty stdout and one stderr line that never echoes
+the entry when any raw `landed_paths` entry scoped to that tree fails the path ladder or the
+alphabet. This script never writes such an entry, so one means a hand-edited ledger.
+`--check-path <path>` runs the path ladder alone, with no ledger: silent exit 0 when safe, exit 1
+printing `reason=<token>` when refused. The orchestrator's grant admits a call only when its first
+argument is `--producer`, `--consumer` or `--list-landed`, so every call leads with that argument.
+Scripts make the other calls: `fn-stream-merge.sh` and `blocked-on-dispatch.sh` pass `--strict`, and
+only the router calls `--check-path`.
+
+### land-artifacts.sh — exits
+
+Exits are 0, 1 or 2 only: an interrupting signal (INT, TERM, HUP) or an unexpected command failure
+rolls back what the run wrote and exits 2, so 1 is never a stray status. Exit `0`: landed, same
+tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a
+`blocked` one silently, any other non-`pending` one with one `warn` `contract_landed` row
+(`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
+`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
+refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). Exit 1 is
+also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage, a
+malformed id, a bad ledger, an invalid tree, a missing tool, a failed ledger write, or that signal
+or failure. Refusal reasons and the audit rows:
+`references/handoff-protocol.md § Landing consumed artifacts`.
+
 ### blocked-on-dispatch.sh and blocked-on-lib.sh
 
 | Script | One-line invocation | Purpose |
@@ -2315,15 +2527,16 @@ the stored command was cut at 512 characters.
 ```
 blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
 blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
-blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--state <state.json>]
+blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
 blocked-on-dispatch.sh --self-test
 ```
 
 Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
 unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
-written; for `resume`, a task not parked on a non-permission `blocked_on`, or a `--leg` that is not
-its arm's closing leg. `2`: usage error, missing or unparseable ledger, broken install, or a ledger
-write refused. Requires jq; bash 3.2+.
+written; for `resume`, a task not parked on a non-permission `blocked_on`, a `--leg` that is not
+its arm's closing leg, a `user_decision` with no verified ledger row to resume with, or `--leg landed`
+on an artifact `path` that the path ladder refuses or that has not landed. `2`: usage error, missing
+or unparseable ledger, broken install, or a ledger write refused. Requires jq; bash 3.2+.
 
 ### blocked-on-dispatch.sh — route
 
@@ -2332,16 +2545,28 @@ Normalizes and validates `--payload` through the lib, then acts on the arm the l
 - `permission`: writes nothing; § Step 6.5a4 parks it.
 - `user_action`, or a pending arm: `state-patch.sh --task-meta` with the stage's original
   `blocked_on` (under `--log /dev/null`), then `--task-status blocked`, then one `requested` row.
+- `user_decision`: the same park, then one `asked` row with no fallback fields. It is queued for
+  the next boundary's question, as `requested` is.
 - `host_environment`: `autonomy-preflight.sh --auto plan --platform <metadata.preflight.platforms>`
   in check mode, `--harness` added when `check` is `git-reset-hard`, then one `probed` row. Only a
   `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
   and `decision_ref` on the row. A fail, a skip or an absent id parks it as a `user_action`.
 
+#### blocked-on-dispatch.sh — route, the artifact arm
+
+- `artifact`: parks first. When `detail.producer_task` is a task id, `detail.path` passes
+  `land-artifacts.sh --check-path`, and the landed set of the task's `metadata.workspace_path` tree
+  (`--list-landed --tree <workspace_path> --strict`) holds `detail.path` exactly, it claims, clears
+  `blocked_on`, writes one ok `landed` row with `decision_ref` `blocked_on:<ID>:artifact:<n>`, and
+  prints `resume_block` with `artifact_path` set to `detail.path`. No `workspace_path`, a failed
+  read, a refused path or a non-member leaves it parked as a `user_action`: a `requested` row with `fallback_from: artifact`
+  and no `owner_issue`. `BLOCKED_ON_LAND` swaps the landing script, a test seam.
+
 #### blocked-on-dispatch.sh — route stdout
 
 One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
 `fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
-re-probe. `leg` is `null` for `permission`. `source` names the key the need came from:
+re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from:
 `blocked_on`, or `cross_session_ask` for the legacy alias.
 
 ### blocked-on-dispatch.sh — batch
@@ -2353,6 +2578,18 @@ Selects every `blocked` task whose `metadata.blocked_on.kind` is not `permission
 is `""`. Each question has the task id as `header`, the lead line, then every `detail` key as
 `key: value` data and `cwd:` from the ledger's `workspace_path`, inside a fence one backtick longer
 than its longest run. Options: "done" and "stop here".
+
+#### blocked-on-dispatch.sh — batch, a user decision
+
+`user_decision` needs sharing one `(question, options, item)` become one question:
+
+- `header` is the lowest task id, and `multiSelect` is false.
+- `question` is `detail.question` verbatim and unfenced, because the hook matches its exact bytes.
+- Each option is `{label: <option>, description: "Recommended" | "Offered by <header>"}`.
+- Two questions with the same text never share a call, since the answers are keyed by that text.
+
+Each need is `{task_id, kind, arm: "user_decision", resume_leg: "resumed", header}`. The megatask
+park adds `{kind: "user_decision"}` to `escalated[]`.
 
 #### blocked-on-dispatch.sh — batch, the `!` line and the megatask park
 
@@ -2370,6 +2607,20 @@ entries are `{kind, command_head, truncated}`.
 "instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the
 kind resumes with one. `instruction` restates the need, detail fenced, and forbids re-running any
 step that already completed.
+
+`--leg landed` resumes an `artifact` need: it re-checks `path` safety and landed-set membership
+first, exits 1 when the path has not landed, and otherwise claims, clears and writes the ok
+`landed` row with its `decision_ref`, printing the same stdout. `--leg verified`, the user's "done",
+still resumes it through the fallback.
+
+#### blocked-on-dispatch.sh — resume, a user decision
+
+`resume` first finds the ledger row: `--decision-ref <ud-id>` names it, and without the flag it is
+the newest valid row covering the task that no earlier `blocked_on` row for the task carries. A
+refused or missing row exits 1 with nothing written. Otherwise the `resumed` row and
+`resume_block.decision_ref` carry that `ud-` id. `instruction` names the verify command,
+`state-patch.sh --verify-decision`, and carries no answer text
+(`hooks/references/user-decision-ledger.md`).
 
 #### blocked-on-dispatch.sh — the lead lines
 
@@ -2400,21 +2651,22 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
   otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
 - `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
   non-empty object; exit 1 with one `fail:` line. The harness stops here.
-- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`.
+- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`,
+  and on `user_decision` the question, option, `recommended` and `item` bounds.
 
 #### blocked-on-lib.sh — the arm table
 
 | kind | legs | closing_leg | owner_issue | landed |
 |---|---|---|---|---|
-| user_decision | asked, answered, resumed | resumed | 395 | no |
+| user_decision | asked, answered, resumed | resumed | 395 | yes |
 | user_action | requested, verified | verified | 394 | yes |
 | permission | denied, granted, resumed | resumed | 393 | yes |
 | peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | yes |
-| artifact | landed | landed | 399 | no |
+| artifact | landed | landed | 399 | yes |
 | correction | opened, closed | closed | 404 | no |
 | host_environment | probed | probed | 390 | yes |
 
-A pending arm's fallback closes on `verified`. Required and optional keys and `resume_with` are
+Every fallback closes on `verified`; an `artifact` need also closes on `landed`. Required and optional keys and `resume_with` are
 `references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
 
 ### mailbox.sh, mailbox-reply.sh and mailbox-lib.sh

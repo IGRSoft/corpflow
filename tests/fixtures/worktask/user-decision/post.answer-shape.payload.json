@@ -1,0 +1,53 @@
+{
+  "session_id": "sess-ud-fixture",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/tmp/ud-fixture",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Ship the ledger now?",
+        "header": "DV0",
+        "multiSelect": false,
+        "options": [
+          {
+            "label": "Yes, ship it",
+            "description": "Land it in this release"
+          },
+          {
+            "label": "Not yet",
+            "description": "Hold it for the next release"
+          }
+        ]
+      }
+    ]
+  },
+  "tool_response": {
+    "questions": [
+      {
+        "question": "Ship the ledger now?",
+        "header": "DV0",
+        "multiSelect": false,
+        "options": [
+          {
+            "label": "Yes, ship it",
+            "description": "Land it in this release"
+          },
+          {
+            "label": "Not yet",
+            "description": "Hold it for the next release"
+          }
+        ]
+      }
+    ],
+    "answers": {
+      "Ship the ledger now?": {
+        "label": "Yes, ship it",
+        "selected": true
+      }
+    }
+  },
+  "tool_use_id": "toolu_01UdFixture0001"
+}

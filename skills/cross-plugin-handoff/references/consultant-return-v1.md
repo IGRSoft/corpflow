@@ -3,7 +3,7 @@
 The one shape a sibling plugin's findings-bearing consultation returns to corpflow: the security
 auditor an SR stage dispatches, and a sibling findings review handed to DR. `corpflow:security-reviewer`
 and `corpflow:technical-lead` validate every such return with
-`skills/cross-plugin-handoff/scripts/validate-consultant-return.sh` and merge only what it prints.
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh` and merge only what it prints.
 
 A return is never normalized by hand. A mismatched `schema_version` or a missing `severity_counts`
 is rejected and goes back to the consultant; it is never merged, edited, or retyped into shape.
@@ -67,10 +67,10 @@ identical bytes, and no warnings unless the counts disagree.
 ## CLI
 
 ```bash
-bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <path>
-bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh -             # stdin
-bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --self-test   # "self-test OK"
-bash skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --help        # or -h
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <path>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh -             # stdin
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --self-test   # "self-test OK"
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --help        # or -h
 ```
 
 Consumers run `--file` on a saved return. Stdin is for pipes and tests: a heredoc or `echo` of

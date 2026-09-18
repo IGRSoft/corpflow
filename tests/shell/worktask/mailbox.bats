@@ -65,7 +65,7 @@ _posted_leg() {
 
 # --- AC1: silent remote peer -------------------------------------------------------
 
-@test "AC1: a silent remote peer expires at deadline+5; blocked_on becomes user_decision; one requested row; one batch need; a second sweep adds nothing" {
+@test "AC1: a silent remote peer expires at deadline+5; blocked_on becomes user_decision; one asked row; one batch need; a second sweep adds nothing" {
   local id="ask-20260917t090000z-aaaaaaaaaaaa"
   _ledger_jq ".tasks.DR0.metadata.ask_id = \"$id\""
   _mkreq "$id" "2026-09-17T09:30:00Z" "2026-09-17T09:00:00Z" \
@@ -80,7 +80,7 @@ _posted_leg() {
   assert_audit_row blocked_on --file "$AUDIT" --subject DR0 --result blocked \
     --meta leg=expired --meta ask_id="$id" --count 1
   assert_audit_row blocked_on --file "$AUDIT" --subject DR0 --result blocked \
-    --meta leg=requested --count 1
+    --meta leg=asked --count 1
 
   run jq -e '.tasks.DR0.status == "blocked"
     and .tasks.DR0.metadata.blocked_on.kind == "user_decision"
