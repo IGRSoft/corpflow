@@ -75,7 +75,8 @@ return `verdict: blocked` with one `handoff.blocked_on` whose `kind` names the n
 
 - a choice only the user can make: `user_decision`; something only the user can do: `user_action`
 - a denied tool call: `permission` (below); another session's answer: `peer_session`
-- another task's file: `artifact`; a defect in upstream work: `correction` (`#tpl-dc`)
+- another task's file: `artifact`; a defect in another task's completed work: `correction`
+  (§ The correction return (tpl-dc) — any stage returns it, DC is the worked example)
 - a failing autonomy-preflight check: `host_environment`
 
 List the steps that already completed in the artifact body. The orchestrator routes every kind
@@ -1052,8 +1053,28 @@ time.
 
 `kind`, `detail` and `resume_with` are the three keys of the `handoff.blocked_on` return contract,
 and `correction` is its kind for this case. The `detail` keys are `target_task`, `finding`,
-`evidence_ref`, `severity`, in that order. `finding` is the stderr line verbatim, because the rework
-brief quotes it. `evidence_ref` is `<doc>:<line>`, and DC always sets `severity` to `blocking`.
+`evidence_ref`, `severity`, in that order. `finding` is the offending line verbatim, because the
+rework brief quotes it. `evidence_ref` is `<file>:<line>`, and DC always sets `severity` to
+`blocking`.
+
+#### The correction return — any stage, any resolver (tpl-dc)
+
+The example above is DC's because its option-existence gate fixed the key order, but the arm is not
+DC's: any stage or resolver that finds a defect in work **another task already completed** returns
+this same shape, and the router treats every one of them identically. Two rules bind whoever
+returns it:
+
+- **The target is a `completed` task.** A correction re-opens finished work; the ledger op refuses a
+  target that is missing, is the returning task itself, or is in any other status
+  (`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`). A defect in work
+  still in flight is not a correction — it is that task's own round to finish.
+- **Return it, never route it.** The orchestrator re-opens the target, parks the tasks that consumed
+  its output, and hands the rework brief back. A stage that edits the other task's files, or asks in
+  prose for someone to fix them, has routed by hand and left no ledger row or audit leg.
+
+FN's finalization preflight is the second landed origin: when `control-byte-lint.sh --staged`
+reports a raw control byte in a staged text file, FN is the source and the target is the task whose
+handoff `files_touched` lists that file — the same arm-2 test DC applies above.
 
 ### #tpl-re — Release Engineering (release-engineer)
 
@@ -1101,6 +1122,11 @@ handoff:
 ```
 
 Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+
+`fn-preflight.sh staging` fails on a raw control byte in a staged text file. When the file belongs to
+another task — its handoff `files_touched` lists it — that is a correction FN returns with itself as
+the source and that task as the target, not a byte FN edits out on the way to the commit
+(§ The correction return — any stage, any resolver).
 
 ### #tpl-st — Stakeholder (stakeholder)
 

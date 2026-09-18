@@ -970,6 +970,383 @@ EOART
     exit 1
   fi
 
+  # ---- T-stale-1: `stale` is in the writer's status vocabulary; an unknown one still refuses ----
+  make_state
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --task-status DV0 stale > /dev/null || {
+    printf 'T-stale-1: --task-status stale returned non-zero\n' >&2
+    exit 1
+  }
+  if jq -e '.tasks.DV0.status == "stale"' .context/state.json > /dev/null; then
+    printf 'T-stale-1: --task-status <ID> stale accepted: ok\n'
+  else
+    printf 'T-stale-1: stale not written: FAIL\n' >&2
+    jq -c '.tasks.DV0' .context/state.json >&2
+    exit 1
+  fi
+  # `stalled` is the deliberate near-miss: widening the vocabulary must not turn the case arm
+  # into a prefix match, or any typo beginning with a known status would write a ghost value.
+  cp .context/state.json .context/state.json.snapS1
+  ts1_rc=0
+  bash "$SELF" --task-status DV0 stalled > /dev/null 2>&1 || ts1_rc=$?
+  if [[ "$ts1_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snapS1 > /dev/null; then
+    printf 'T-stale-1: an unknown status still refuses with exit 2, state byte-unchanged: ok\n'
+  else
+    printf 'T-stale-1: unknown-status guard (rc=%s): FAIL\n' "$ts1_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapS1
+
+  # ---- T-stale-2: --claim on a stale row refuses with exit 4, state byte-identical ----
+  # Same refusal class as a settled row, so a dispatcher cannot resume a parked consumer by
+  # claiming it; the message is asserted because callers match the `claim refused:` prefix.
+  cp .context/state.json .context/state.json.snapS2
+  ts2_rc=0
+  ts2_err=$(bash "$SELF" --claim DV0 2>&1 > /dev/null) || ts2_rc=$?
+  if [[ "$ts2_rc" -eq 4 ]] \
+    && diff -q .context/state.json .context/state.json.snapS2 > /dev/null \
+    && [[ "$ts2_err" == *"claim refused: tasks.DV0 is stale"* ]]; then
+    printf 'T-stale-2: claim on a stale row refuses with exit 4, state byte-unchanged: ok\n'
+  else
+    printf 'T-stale-2: claim-on-stale guard (rc=%s): FAIL\n%s\n' "$ts2_rc" "$ts2_err" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapS2
+
+  # ---- T-stale-3: a stale task, and a pending task blocked by it, are absent from the ready set ----
+  # The exclusion is emergent, not coded: the ready filter takes `pending` with every blocker
+  # `completed`, so `stale` falls out of both halves. This case is the lock on that pair — it
+  # fails the moment either list is widened to admit a parked row. QA0 is the live control.
+  make_state
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --task-create DR0 --metadata "$(_r9_meta '{"stage":"DR","agent":"corpflow:technical-lead"}')" > /dev/null
+  bash "$SELF" --task-create QA0 --metadata "$(_r9_meta '{"stage":"QA","agent":"corpflow:qa-engineer"}')" > /dev/null
+  bash "$SELF" --task-block DR0 --on DV0 > /dev/null
+  bash "$SELF" --task-status DV0 stale > /dev/null
+  ts3_digest="$(dirname "$SELF")/ledger-digest.sh"
+  if [[ -f "$ts3_digest" ]]; then
+    ts3_ready=$(bash "$ts3_digest" --state .context/state.json | sed -n 's/^ready: //p')
+    if [[ "$ts3_ready" == "QA0" ]]; then
+      printf 'T-stale-3: stale DV0 and its blocked dependent DR0 are both out of the ready set: ok\n'
+    else
+      printf 'T-stale-3: ready set is "%s", expected "QA0": FAIL\n' "$ts3_ready" >&2
+      exit 1
+    fi
+  else
+    printf 'T-stale-3: ready-set filter: SKIP (ledger-digest.sh unavailable)\n'
+  fi
+
+  # ---- T-reopen-1 (plan T4): --task-reopen guards, then pending + fix_round + gate_from_stage ----
+  # Named `T-reopen-*` rather than the plan's bare T4/T5: this file's own T4-T6 are taken by
+  # unrelated cases, and one id answering two assertions is worse than a longer name.
+  #
+  # The guard half comes FIRST and each rung is checked against a byte-identical ledger,
+  # because the op's whole idempotence story is "a retried route is refused, not re-applied":
+  # if a guard wrote anything before refusing, a second route would double the fix_round.
+  make_state
+  cat > .context/development-0.md << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "self-test artifact T-reopen-1"
+  files_touched: [skills/worktask/scripts/a.sh]
+  next_stage_focus: "DR reviews"
+  refs: { dev: development.md#files-changed }
+---
+EOART
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --task-create DC0 --metadata "$(_r9_meta '{"stage":"DC","agent":"corpflow:technical-writer"}')" > /dev/null
+  bash "$SELF" --task-create QA0 --metadata "$(_r9_meta '{"stage":"QA","agent":"corpflow:qa-engineer"}')" > /dev/null
+  bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null
+  bash "$SELF" --task-status DC0 completed > /dev/null
+  # QA0 is left `pending` on purpose: it is the not-completed target the guard below refuses,
+  # and a source only has to EXIST, so it can still raise the second correction afterwards.
+
+  cp .context/state.json .context/state.json.snapR1
+  _tr1_guard() {  # <expected-rc> <label> <args...>
+    local want="$1" label="$2"
+    shift 2
+    local rc=0
+    printf 'finding\n' | bash "$SELF" "$@" > /dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne "$want" ]]; then
+      printf 'T-reopen-1: %s expected rc %s, got %s: FAIL\n' "$label" "$want" "$rc" >&2
+      exit 1
+    fi
+    if ! diff -q .context/state.json .context/state.json.snapR1 > /dev/null; then
+      printf 'T-reopen-1: %s refused but wrote to state.json: FAIL\n' "$label" >&2
+      exit 1
+    fi
+  }
+  _tr1_guard 1 "unknown target" --task-reopen DR9 --from DC0
+  _tr1_guard 2 "malformed target" --task-reopen notanid --from DC0
+  _tr1_guard 2 "missing --from" --task-reopen DV0
+  _tr1_guard 2 "malformed --from" --task-reopen DV0 --from nope
+  _tr1_guard 4 "target is source" --task-reopen DV0 --from DV0
+  _tr1_guard 1 "unknown source" --task-reopen DV0 --from DC9
+  _tr1_guard 4 "target not completed" --task-reopen QA0 --from DC0
+  printf 'T-reopen-1: every guard refuses with the ledger byte-identical: ok\n'
+  rm -f .context/state.json.snapR1
+
+  # The finding is piped, never passed as an argument: the op reads stdin under
+  # `--finding-file -`, which is what keeps stage-written text out of the process table and
+  # out of the state-patch log.
+  printf 'the --foo option does not exist in the tree\n' \
+    | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null || {
+      printf 'T-reopen-1: --task-reopen returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DV0.status == "pending"
+            and .tasks.DV0.metadata.fix_round == 1
+            and .tasks.DV0.metadata.gate_from_stage == "DC"
+            and .tasks.DV0.metadata.gate_blockers == ["the --foo option does not exist in the tree"]
+            and .tasks.DV0.verdict == "ok"
+            and (.tasks.DV0.artifact | endswith("development-0.md"))' \
+    .context/state.json > /dev/null; then
+    printf 'T-reopen-1: target pending, fix_round 1, gate stamped, artifact and verdict kept: ok\n'
+  else
+    printf 'T-reopen-1: re-open write: FAIL\n' >&2
+    jq -c '.tasks.DV0' .context/state.json >&2
+    exit 1
+  fi
+
+  # Re-running the same route is refused by the `completed` guard itself — the property that
+  # makes a retried correction idempotent, so there is no second fix_round bump.
+  cp .context/state.json .context/state.json.snapR1b
+  tr1_rc=0
+  printf 'same finding\n' | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null 2>&1 || tr1_rc=$?
+  if [[ "$tr1_rc" -eq 4 ]] && diff -q .context/state.json .context/state.json.snapR1b > /dev/null; then
+    printf 'T-reopen-1: a re-routed correction is refused, fix_round stays 1: ok\n'
+  else
+    printf 'T-reopen-1: re-route idempotence (rc=%s): FAIL\n' "$tr1_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapR1b
+
+  # A SECOND, distinct correction — the target completed again in between — is the only path
+  # that bumps the round again, and it re-stamps the source that raised THIS one.
+  bash "$SELF" --task-status DV0 completed > /dev/null
+  printf 'the fix regressed case 7\n' \
+    | bash "$SELF" --task-reopen DV0 --from QA0 --finding-file - > /dev/null
+  if jq -e '.tasks.DV0.metadata.fix_round == 2
+            and .tasks.DV0.metadata.gate_from_stage == "QA"
+            and .tasks.DV0.metadata.gate_blockers == ["the fix regressed case 7"]' \
+    .context/state.json > /dev/null; then
+    printf 'T-reopen-1: a second correction bumps fix_round to 2 and re-stamps the source: ok\n'
+  else
+    printf 'T-reopen-1: second-round bump: FAIL\n' >&2
+    jq -c '.tasks.DV0.metadata' .context/state.json >&2
+    exit 1
+  fi
+
+  # An oversized or control-byte-carrying finding is refused whole (exit 2), never truncated:
+  # R3 promises the finding renders byte-for-byte, and a clipped one still reads as verbatim.
+  bash "$SELF" --task-status DV0 completed > /dev/null
+  cp .context/state.json .context/state.json.snapR1c
+  tr1b_rc=0
+  head -c 2500 < /dev/zero | tr '\0' 'x' \
+    | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null 2>&1 || tr1b_rc=$?
+  tr1c_rc=0
+  printf 'esc\033[2J here\n' \
+    | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null 2>&1 || tr1c_rc=$?
+  if [[ "$tr1b_rc" -eq 2 && "$tr1c_rc" -eq 2 ]] \
+    && diff -q .context/state.json .context/state.json.snapR1c > /dev/null; then
+    printf 'T-reopen-1: an oversized or control-byte finding exits 2, ledger byte-unchanged: ok\n'
+  else
+    printf 'T-reopen-1: finding bounds (oversized rc=%s, control rc=%s): FAIL\n' "$tr1b_rc" "$tr1c_rc" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapR1c
+
+  # ---- T-reopen-2 (plan T5): the D3 consumer set — transitive, completed-only, two exclusions ----
+  # DV0 is the target. DR0 consumes it, QA0 consumes DR0 (transitive, so a direct-only walk
+  # fails here), FN0 consumes QA0 (side-effect stage), DC0 is the SOURCE and also downstream,
+  # ST0 is downstream but never completed, PL0 is completed but not downstream at all.
+  make_state
+  for tr2_id in DV0 DR0 QA0 FN0 DC0 ST0; do
+    bash "$SELF" --task-create "$tr2_id" \
+      --metadata "$(_r9_meta "{\"stage\":\"${tr2_id%%[0-9]*}\",\"agent\":\"corpflow:developer\"}")" > /dev/null
+  done
+  bash "$SELF" --task-block DR0 --on DV0 > /dev/null
+  bash "$SELF" --task-block DC0 --on DV0 > /dev/null
+  bash "$SELF" --task-block QA0 --on DR0 > /dev/null
+  bash "$SELF" --task-block FN0 --on QA0 > /dev/null
+  bash "$SELF" --task-block ST0 --on QA0 > /dev/null
+  cat > .context/developer-review-0.md << 'EOART'
+---
+handoff:
+  stage: DR
+  verdict: approve
+  summary: "self-test review artifact"
+  files_touched: [skills/worktask/scripts/a.sh]
+  next_stage_focus: "QA verifies"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  bash "$SELF" --stage DR --artifact .context/developer-review-0.md > /dev/null
+  bash "$SELF" --stage DV --artifact .context/development-0.md > /dev/null
+  for tr2_id in QA0 FN0 DC0; do
+    bash "$SELF" --task-status "$tr2_id" completed > /dev/null
+  done
+  printf 'the option the docs name does not exist\n' \
+    | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null || {
+      printf 'T-reopen-2: --task-reopen returned non-zero\n' >&2
+      exit 1
+    }
+  if jq -e '.tasks.DR0.status == "stale" and .tasks.QA0.status == "stale"
+            and .tasks.DC0.status == "completed"
+            and .tasks.FN0.status == "completed"
+            and .tasks.ST0.status == "pending"
+            and .tasks.PL0.status == "completed"' .context/state.json > /dev/null; then
+    printf 'T-reopen-2: transitive consumers stale; source, FN/RE, non-completed and unrelated rows untouched: ok\n'
+  else
+    printf 'T-reopen-2: consumer set: FAIL\n' >&2
+    jq -c '.tasks | map_values(.status)' .context/state.json >&2
+    exit 1
+  fi
+  # Parked, not reset: `stale` exists precisely to preserve what a replay would clear.
+  if jq -e '.tasks.DR0.verdict == "approve"
+            and (.tasks.DR0.artifact | endswith("developer-review-0.md"))
+            and (.tasks.DR0 | has("rework_pending") | not)' .context/state.json > /dev/null; then
+    printf 'T-reopen-2: a parked consumer keeps its verdict and artifact: ok\n'
+  else
+    printf 'T-reopen-2: parked consumer was reset: FAIL\n' >&2
+    jq -c '.tasks.DR0' .context/state.json >&2
+    exit 1
+  fi
+
+  # ---- T-settle-1 (plan T6): --task-settle-stale, cited vs uncited vs unknown ----
+  # DR0 cites the file the target changed; QA0 cites something else. The change set comes from
+  # the target's own artifact unless --changed (the test seam) substitutes it.
+  _ts1_restale() {
+    bash "$SELF" --task-status DR0 stale > /dev/null
+    bash "$SELF" --task-status QA0 stale > /dev/null
+  }
+  bash "$SELF" --task-meta DR0 \
+    --set '{"consumes":[{"from":"DV0","paths":["./skills/worktask/scripts/a.sh#files-changed"]}]}' > /dev/null
+  bash "$SELF" --task-meta QA0 \
+    --set '{"consumes":[{"from":"DV0","paths":["skills/worktask/scripts/b.sh:42"]}]}' > /dev/null
+  _ts1_restale
+  ts1_out=$(bash "$SELF" --task-settle-stale DV0) || {
+    printf 'T-settle-1: --task-settle-stale returned non-zero\n' >&2
+    exit 1
+  }
+  # The artifact lists skills/worktask/scripts/a.sh, so DR0's anchored citation matches after
+  # normalisation and QA0's `:42` one does not.
+  if jq -e '.settled == [{"task":"DR0","to":"pending","reason":"cited-file-changed"},
+                         {"task":"QA0","to":"completed","reason":"no-cited-file-changed"}]' \
+    <<< "$ts1_out" > /dev/null \
+    && jq -e '.tasks.DR0.status == "pending" and .tasks.QA0.status == "completed"' \
+      .context/state.json > /dev/null; then
+    printf 'T-settle-1: a cited change re-verifies, an uncited one lets the result stand: ok\n'
+  else
+    printf 'T-settle-1: artifact-sourced settlement: FAIL\n%s\n' "$ts1_out" >&2
+    jq -c '.tasks | map_values(.status)' .context/state.json >&2
+    exit 1
+  fi
+
+  # The seam, and the .context/ exclusion that makes R5 work at all: the target rewrites its
+  # own artifact on every completion, so a change set left empty BY that exclusion is a known
+  # change set that touched nothing cited — not an unknown one.
+  _ts1_restale
+  ts1_ctx=$(bash "$SELF" --task-settle-stale DV0 --changed .context/development-0.md)
+  if jq -e '[.settled[] | select(.to != "completed")] | length == 0' <<< "$ts1_ctx" > /dev/null \
+    && jq -e '.tasks.DR0.status == "completed"' .context/state.json > /dev/null; then
+    printf 'T-settle-1: a .context/-only change set settles every dependent completed: ok\n'
+  else
+    printf 'T-settle-1: .context/ exclusion: FAIL\n%s\n' "$ts1_ctx" >&2
+    exit 1
+  fi
+
+  _ts1_restale
+  ts1_seam=$(bash "$SELF" --task-settle-stale DV0 --changed "skills/worktask/scripts/b.sh,docs/x.md")
+  if jq -e '.settled == [{"task":"DR0","to":"completed","reason":"no-cited-file-changed"},
+                         {"task":"QA0","to":"pending","reason":"cited-file-changed"}]' \
+    <<< "$ts1_seam" > /dev/null; then
+    printf 'T-settle-1: --changed substitutes the change set whole: ok\n'
+  else
+    printf 'T-settle-1: --changed seam: FAIL\n%s\n' "$ts1_seam" >&2
+    exit 1
+  fi
+
+  # Fail-safe direction, both halves. An unreadable change set and an empty cited set each
+  # send the dependent back to pending: re-verifying costs a stage, trusting a result nothing
+  # could check costs the correction.
+  # The other half of D2's cited set: facts.files_read[] for that task's stage code, which is
+  # how a stage that read a file without a declared consumes[] pair is still counted.
+  _ts1_restale
+  bash "$SELF" --task-meta QA0 --set '{"consumes":[]}' > /dev/null
+  bash "$SELF" --files-read QA0 ./skills/worktask/scripts/a.sh > /dev/null
+  ts1_fr=$(bash "$SELF" --task-settle-stale DV0 --changed "skills/worktask/scripts/a.sh")
+  if jq -e '[.settled[] | select(.task == "QA0")]
+            == [{"task":"QA0","to":"pending","reason":"cited-file-changed"}]' \
+    <<< "$ts1_fr" > /dev/null; then
+    printf 'T-settle-1: facts.files_read supplies the cited set when consumes[] is empty: ok\n'
+  else
+    printf 'T-settle-1: files_read cited source: FAIL\n%s\n' "$ts1_fr" >&2
+    exit 1
+  fi
+
+  _ts1_restale
+  ts1_safe=$(bash "$SELF" --task-settle-stale DV0 --changed "")
+  if jq -e '[.settled[] | select(.to == "pending" and .reason == "change-set-unknown")] | length == 2' \
+    <<< "$ts1_safe" > /dev/null \
+    && jq -e '.tasks.DR0.status == "pending" and .tasks.QA0.status == "pending"' \
+      .context/state.json > /dev/null; then
+    printf 'T-settle-1: an empty change set fails safe to pending for every dependent: ok\n'
+  else
+    printf 'T-settle-1: fail-safe direction: FAIL\n%s\n' "$ts1_safe" >&2
+    exit 1
+  fi
+  # ST0 declares no consumes[] and appears in no files_read row, so it cites nothing and
+  # re-verifies even against a change set this call could read perfectly well.
+  bash "$SELF" --task-status ST0 stale > /dev/null
+  ts1_empty=$(bash "$SELF" --task-settle-stale DV0 --changed "skills/worktask/scripts/a.sh")
+  if jq -e '.settled == [{"task":"ST0","to":"pending","reason":"cited-set-empty"}]' \
+    <<< "$ts1_empty" > /dev/null; then
+    printf 'T-settle-1: an empty cited set fails safe to pending: ok\n'
+  else
+    printf 'T-settle-1: empty cited set: FAIL\n%s\n' "$ts1_empty" >&2
+    exit 1
+  fi
+  # An artifact that DECLARES files_touched and leaves it empty is the case the two readers
+  # disagreed on: yq reports a sequence, the awk fallback cannot tell it from a missing key.
+  # Both must call it `absent`, or the fail-safe direction would depend on whether the host
+  # has yq installed — the settle op would complete every dependent on one host and re-verify
+  # them on the other, from the same ledger and the same artifact.
+  cp .context/development-0.md .context/development-0.md.bak
+  cat > .context/development-0.md << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "target artifact with an empty files_touched"
+  files_touched: []
+  next_stage_focus: "DR re-reviews"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  _ts1_restale
+  ts1_declared_empty=$(bash "$SELF" --task-settle-stale DV0)
+  mv .context/development-0.md.bak .context/development-0.md
+  if jq -e '[.settled[] | select(.to == "pending" and .reason == "change-set-unknown")] | length == 2' \
+    <<< "$ts1_declared_empty" > /dev/null; then
+    printf 'T-settle-1: a declared-but-empty files_touched reads absent on both readers: ok\n'
+  else
+    printf 'T-settle-1: empty files_touched: FAIL\n%s\n' "$ts1_declared_empty" >&2
+    exit 1
+  fi
+  # Both dependents are pending again, so the next case starts from an unparked ledger.
+
+  # A ledger with nothing parked settles nothing and says so, rather than failing.
+  ts1_none=$(bash "$SELF" --task-settle-stale DV0 --changed "skills/worktask/scripts/a.sh")
+  if [[ "$ts1_none" == '{"settled":[]}' ]]; then
+    printf 'T-settle-1: no stale row settles to an empty list: ok\n'
+  else
+    printf 'T-settle-1: empty settle list: FAIL\n%s\n' "$ts1_none" >&2
+    exit 1
+  fi
+
   # ---- T31: --dispatch upserts facts.dispatched_agents by task_id, clamps 6-launched-newest ----
   make_state
   bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null

@@ -92,8 +92,19 @@ _lib() {
   assert_success
   jq -e '(keys | length) == 7 and all(.[]; (.owner_issue | type) == "number" and (.landed | type) == "boolean")
     and .user_action.landed and .host_environment.landed and .permission.landed and .peer_session.landed
-    and (.correction.landed | not) and .correction.owner_issue == 404
+    and .correction.landed and .correction.owner_issue == 404
     and .artifact.landed and .artifact.owner_issue == 399' <<< "$output"
+}
+
+# The flag the router's fallback and the batch renderer key on. With #404 landed no kind is
+# pending, so nothing may still be routed to the user_action fallback for want of an arm — the
+# arm-table row is the only place that could re-introduce one.
+@test "every arm in the table is landed, so no kind names an owner issue as pending" {
+  _lib "blocked_on_table_json"
+  assert_success
+  jq -e 'all(.[]; .landed == true)' <<< "$output"
+  run grep -nE '^[a-z_]+\|.*\|no$' "$PLUGIN_ROOT/$LIB"
+  [ "$status" -eq 1 ] || fail "an arm row still reads unlanded: $output"
 }
 
 @test "normalize: blocked_on wins, the alias becomes peer_session, neither exits 1" {

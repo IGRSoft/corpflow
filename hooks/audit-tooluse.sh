@@ -125,7 +125,7 @@ build_row() {
     # First line only, like every other derivation, and a closed status vocabulary so no
     # free text from the command can reach the row.
     ([((.tool_input.command // "") | tostring | split("\n") | .[0] // "")
-      | capture("--task-status\\s+(?<id>[A-Z]{2}[0-9]+)\\s+(?<st>pending|in_progress|completed|blocked|skipped|failed|done)([^A-Za-z0-9_]|$)")?] | first) as $patch
+      | capture("--task-status\\s+(?<id>[A-Z]{2}[0-9]+)\\s+(?<st>pending|in_progress|completed|blocked|skipped|failed|stale|done)([^A-Za-z0-9_]|$)")?] | first) as $patch
     | ((.tool_name // "") | tostring) as $t
     | (if $t == "" then "unknown" else $t end) as $tool
     | {

@@ -217,8 +217,11 @@ _ch_redact() {
       for ((_k = _i + 1; _k < _n && _kept < 4; _k++)); do
         _tok="${_toks[_k]}"
         if ! [[ $_tok =~ $_CH_FLAG_RE || $_tok =~ $_CH_TASK_RE ]]; then
+          # A non-flag, non-task-id token survives the head only when it is a ledger status:
+          # the closed vocabulary is what keeps free text out of a durable audit row, so this
+          # list tracks the writer's status case in state-patch.sh and nothing wider.
           case "$_tok" in
-            pending | in_progress | completed | blocked | skipped | failed) ;;
+            pending | in_progress | completed | blocked | skipped | failed | stale) ;;
             *) _tok="[redacted]" ;;
           esac
         fi

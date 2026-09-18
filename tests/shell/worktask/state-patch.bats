@@ -2770,3 +2770,289 @@ _te_same_summary() {  # [count] — no count writes an artifact with no list
     .context/state.json
   assert_output '[12,true,false]'
 }
+
+# ---------------------------------------------------------------------------
+# --task-reopen / --task-settle-stale — the correction ops.
+# Mirrors the selftest's T-reopen-1/-2 and T-settle-1. As with --task-replay, the
+# load-bearing half is the refusals: the op's idempotence IS its `completed`
+# guard, so a retried correction that wrote anything before refusing would bump
+# fix_round twice. Every guard case asserts a byte-identical ledger.
+# ---------------------------------------------------------------------------
+
+# mk_reopen_wd — the multistage chain PL0→DV0→DR0→QA0→FN0→RE0→ST0 plus a DC0
+# source row, the target's artifact on disk (files_touched drives the settle
+# change set) and a finding file. Prints the workdir.
+mk_reopen_wd() {
+  local w
+  w="$(mk_tmpworkdir)"
+  mkdir -p "$w/.context/logs"
+  cp "$FIXTURES/worktask/state.multistage.json" "$w/.context/state.json"
+  cat > "$w/.context/development-0.md" << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "target artifact"
+  files_touched: [skills/worktask/scripts/a.sh, .context/development-0.md]
+  next_stage_focus: "DR re-reviews"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  printf 'the --foo option does not exist in the tree\n' > "$w/finding.txt"
+  WORKSPACE_ROOT="$w" bash "$PLUGIN_ROOT/$SCRIPT" --state "$w/.context/state.json" \
+    --task-create DC0 --metadata "$(_r9_meta '{"stage":"DC","agent":"corpflow:technical-writer"}')" \
+    > /dev/null
+  WORKSPACE_ROOT="$w" bash "$PLUGIN_ROOT/$SCRIPT" --state "$w/.context/state.json" \
+    --task-status DC0 completed > /dev/null
+  cp "$w/.context/state.json" "$w/before.json"
+  printf '%s\n' "$w"
+}
+
+@test "reopen guard: unknown target exits 1, malformed target exits 2, ledger byte-unchanged" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV7 --from DC0
+  assert_failure 1
+  assert_output --partial "unknown task id"
+  assert_ledger_unchanged "$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen ZZ0 --from DC0
+  assert_failure 2
+  assert_output --partial "invalid task id"
+  assert_ledger_unchanged "$w"
+}
+
+@test "reopen guard: a missing or malformed --from exits 2, ledger byte-unchanged" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0
+  assert_failure 2
+  assert_output --partial "requires --from"
+  assert_ledger_unchanged "$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from nope
+  assert_failure 2
+  assert_output --partial "invalid --from id"
+  assert_ledger_unchanged "$w"
+}
+
+@test "reopen guard: target is the source, or is not completed, refuses exit 4 byte-unchanged" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DV0
+  assert_failure 4
+  assert_output --partial "reopen refused: target-is-source"
+  assert_ledger_unchanged "$w"
+  # DV1 is in_progress and ST0 pending: neither ever produced an output to correct.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV1 --from DC0
+  assert_failure 4
+  assert_output --partial "reopen refused: target-not-completed"
+  assert_ledger_unchanged "$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC9
+  assert_failure 1
+  assert_output --partial "unknown task id"
+  assert_ledger_unchanged "$w"
+}
+
+@test "reopen: target pending with fix_round 1 and gate_from_stage, artifact and verdict kept" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt
+  assert_success
+  run jq -c '.tasks.DV0 | [.status, .metadata.fix_round, .metadata.gate_from_stage,
+                           .metadata.gate_blockers, .verdict, .artifact]' .context/state.json
+  assert_output '["pending",1,"DC",["the --foo option does not exist in the tree"],"ok",".context/development-0.md"]'
+}
+
+@test "reopen: the finding arrives on stdin under --finding-file -" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash -c "printf 'stdin finding\n' | bash '$PLUGIN_ROOT/$SCRIPT' --task-reopen DV0 --from DC0 --finding-file -"
+  assert_success
+  run jq -r '.tasks.DV0.metadata.gate_blockers[0]' .context/state.json
+  assert_output "stdin finding"
+}
+
+@test "reopen: the finding reaches neither the state-patch log nor an argv-shaped echo" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt
+  assert_success
+  # The durable record of a correction is the ledger field and the router's audit leg; the
+  # merge log carries ids and counts only, so stage-written text cannot leak through it.
+  run grep -c "the --foo option" .context/logs/state-merge.log
+  assert_output "0"
+  refute_output --partial "the --foo option"
+}
+
+@test "reopen: an oversized or control-byte finding exits 2, ledger byte-unchanged" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  head -c 2500 < /dev/zero | tr '\0' 'x' > big.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file big.txt
+  assert_failure 2
+  assert_output --partial "2000-byte cap"
+  assert_ledger_unchanged "$w"
+  printf 'esc\033[2J here\n' > ctrl.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file ctrl.txt
+  assert_failure 2
+  assert_output --partial "control byte"
+  assert_ledger_unchanged "$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file absent.txt
+  assert_failure 2
+  assert_ledger_unchanged "$w"
+}
+
+@test "reopen: a re-routed correction is refused by the completed guard, fix_round stays 1" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  cp .context/state.json before.json
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt
+  assert_failure 4
+  assert_output --partial "reopen refused: target-not-completed"
+  assert_ledger_unchanged "$w"
+  run jq -r '.tasks.DV0.metadata.fix_round' .context/state.json
+  assert_output "1"
+}
+
+@test "reopen: a second correction bumps fix_round to 2 and re-stamps the source stage" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV0 completed > /dev/null
+  printf 'the fix regressed case 7\n' > finding2.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from QA0 --finding-file finding2.txt
+  assert_success
+  run jq -c '.tasks.DV0.metadata | [.fix_round, .gate_from_stage, .gate_blockers[0]]' \
+    .context/state.json
+  assert_output '[2,"QA","the fix regressed case 7"]'
+}
+
+@test "reopen consumers: transitive and completed-only, minus the source and the FN/RE stages" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt
+  assert_success
+  # DR0 is direct, QA0 transitive through it. FN0 and RE0 are downstream and completed but
+  # act outside the ledger; ST0 is downstream and never completed; DV1 is not downstream.
+  run jq -r '[.tasks | to_entries[] | select(.value.status == "stale") | .key] | sort | join(",")' \
+    .context/state.json
+  assert_output "DR0,QA0"
+  run jq -c '[.tasks.FN0.status, .tasks.RE0.status, .tasks.ST0.status, .tasks.DV1.status,
+              .tasks.DC0.status]' .context/state.json
+  assert_output '["completed","completed","pending","in_progress","completed"]'
+}
+
+@test "reopen consumers: the source is excluded even when it is downstream of the target" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from QA0 --finding-file finding.txt
+  assert_success
+  run jq -r '[.tasks | to_entries[] | select(.value.status == "stale") | .key] | sort | join(",")' \
+    .context/state.json
+  assert_output "DR0"
+  run jq -r '.tasks.QA0.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "reopen consumers: a parked consumer keeps its verdict and artifact, and is never reset" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt
+  assert_success
+  run jq -c '.tasks.DR0 | [.status, .verdict, .artifact, has("rework_pending")]' .context/state.json
+  assert_output '["stale","ok",".context/developer-review-0.md",false]'
+}
+
+@test "settle: a cited change returns the dependent to pending, an uncited one to completed" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR0 \
+    --set '{"consumes":[{"from":"DV0","paths":["./skills/worktask/scripts/a.sh#files-changed"]}]}' > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-meta QA0 \
+    --set '{"consumes":[{"from":"DV0","paths":["skills/worktask/scripts/b.sh:42"]}]}' > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  # No --changed: the change set comes from the target artifact's files_touched, and the
+  # citations are normalised (a leading ./, a trailing #anchor, a trailing :N).
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0
+  assert_success
+  assert_output '{"settled":[{"task":"DR0","to":"pending","reason":"cited-file-changed"},{"task":"QA0","to":"completed","reason":"no-cited-file-changed"}]}'
+  run jq -c '[.tasks.DR0.status, .tasks.QA0.status, .tasks.QA0.verdict]' .context/state.json
+  assert_output '["pending","completed","go"]'
+}
+
+@test "settle: a .context/-only change set is known and lets every dependent stand" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR0 \
+    --set '{"consumes":[{"from":"DV0","paths":["skills/worktask/scripts/a.sh"]}]}' > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  # The target rewrites its own artifact on every completion. Counting that would return
+  # every dependent and defeat R5 — so the exclusion leaves a KNOWN, empty change set here,
+  # not an unknown one, and the earlier result stands.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0 --changed .context/development-0.md
+  assert_success
+  assert_output --partial '{"task":"DR0","to":"completed","reason":"no-cited-file-changed"}'
+  run jq -r '.tasks.DR0.status' .context/state.json
+  assert_output "completed"
+}
+
+@test "settle: an absent or empty change set fails safe to pending" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR0 \
+    --set '{"consumes":[{"from":"DV0","paths":["skills/worktask/scripts/a.sh"]}]}' > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  rm -f .context/development-0.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0
+  assert_success
+  assert_output --partial '{"task":"DR0","to":"pending","reason":"change-set-unknown"}'
+  run jq -r '.tasks.DR0.status' .context/state.json
+  assert_output "pending"
+}
+
+@test "settle: a declared-but-empty files_touched is absent on both readers, never a known []" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-meta DR0 \
+    --set '{"consumes":[{"from":"DV0","paths":["skills/worktask/scripts/a.sh"]}]}' > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  # yq reports this as a sequence; the awk fallback cannot tell it from a missing key. If the
+  # two readers disagree, the fail-safe direction depends on whether the host has yq — the same
+  # ledger and artifact would complete every dependent on one machine and re-verify them on
+  # another. Both must read it as `absent`.
+  cat > .context/development-0.md << 'EOART'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "target artifact with an empty files_touched"
+  files_touched: []
+  next_stage_focus: "DR re-reviews"
+  refs: { dev: development-0.md#files-changed }
+---
+EOART
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0
+  assert_success
+  assert_output --partial '{"task":"DR0","to":"pending","reason":"change-set-unknown"}'
+  refute_output --partial "no-cited-file-changed"
+  run jq -r '.tasks.DR0.status' .context/state.json
+  assert_output "pending"
+}
+
+@test "settle: a dependent citing nothing fails safe to pending, and an unparked ledger settles []" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  # Neither DR0 nor QA0 declares consumes[], and facts.files_read carries no row for either
+  # stage: nothing could be checked, so both re-verify.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0 --changed skills/worktask/scripts/a.sh
+  assert_success
+  assert_output '{"settled":[{"task":"DR0","to":"pending","reason":"cited-set-empty"},{"task":"QA0","to":"pending","reason":"cited-set-empty"}]}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0 --changed skills/worktask/scripts/a.sh
+  assert_success
+  assert_output '{"settled":[]}'
+}
+
+@test "settle: facts.files_read supplies the cited set when consumes[] is absent" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  bash "$PLUGIN_ROOT/$SCRIPT" --files-read DR0 ./skills/worktask/scripts/a.sh > /dev/null
+  bash "$PLUGIN_ROOT/$SCRIPT" --task-reopen DV0 --from DC0 --finding-file finding.txt > /dev/null
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-settle-stale DV0 --changed skills/worktask/scripts/a.sh
+  assert_success
+  assert_output --partial '{"task":"DR0","to":"pending","reason":"cited-file-changed"}'
+}
+
+@test "correction modifiers: --from, --finding-file and --changed are refused on other ops" {
+  local w; w="$(mk_reopen_wd)"; cd "$w"; export WORKSPACE_ROOT="$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV0 pending --from DC0
+  assert_failure 2
+  assert_output --partial "--from / --finding-file apply to --task-reopen only"
+  assert_ledger_unchanged "$w"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --task-status DV0 pending --changed a.sh
+  assert_failure 2
+  assert_output --partial "--changed applies to --task-settle-stale only"
+  assert_ledger_unchanged "$w"
+}
