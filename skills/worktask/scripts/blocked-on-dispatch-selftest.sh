@@ -33,9 +33,12 @@ self_test() {
 
   _st_pass() { printf '  ok   %s\n' "$1"; }
   _st_fail() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
+  # MAILBOX_DIR and MAILBOX_NOW are set for every case, not just the peer one: without them the
+  # peer arm would resolve the real run's mailbox and write an ask into it from a self-test.
   _st_run() {
     env -u WORKSPACE_ROOT -u CONTEXT_DIR -u CLAUDE_PROJECT_DIR -u MILESTONE_MODE \
-      BLOCKED_ON_PREFLIGHT="$stub" bash "$self" "$@" --state "$state" 2> /dev/null
+      BLOCKED_ON_PREFLIGHT="$stub" MAILBOX_DIR="$td/mailbox" MAILBOX_NOW=1789646700 \
+      bash "$self" "$@" --state "$state" 2> /dev/null
   }
   _st_rows() {
     [ -f "$audit" ] || { echo 0; return 0; }
@@ -86,10 +89,27 @@ self_test() {
 
   rc=0
   out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?  # legacy alias
-  if [ "$rc" -eq 0 ] && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session" and .fallback_from == "peer_session" and .owner_issue == 405' > /dev/null 2>&1; then  # legacy alias
-    _st_pass "route: the legacy cross_session_ask alias routes as peer_session"
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session"
+      and .arm == "peer_session" and .parked == true and .audit_row_written == false
+      and (.ask_id | test("^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$"))
+      and .message == ("mailbox ask " + .ask_id)' > /dev/null 2>&1 \
+    && jq -e --arg a "$(printf '%s' "$out" | jq -r '.ask_id')" \
+      '.tasks.DR0.status == "blocked" and .tasks.DR0.metadata.ask_id == $a' "$state" > /dev/null 2>&1 \
+    && [ -f "$td/mailbox/requests/$(printf '%s' "$out" | jq -r '.ask_id').json" ]; then
+    _st_pass "route: the legacy cross_session_ask alias routes as a native peer_session ask"
   else
-    _st_fail "route: the legacy cross_session_ask alias routes as peer_session"
+    _st_fail "route: the legacy cross_session_ask alias routes as a native peer_session ask"
+  fi
+
+  rc=0
+  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?  # legacy alias
+  if [ "$rc" -eq 0 ] \
+    && printf '%s' "$out" | jq -e '.reused == true and (.ask_id | test("^ask-"))' > /dev/null 2>&1 \
+    && [ "$(find "$td/mailbox/requests" -name 'ask-*.json' | wc -l | tr -d ' ')" = 1 ]; then
+    _st_pass "route: a retried peer return reuses its open ask and mints no second request"
+  else
+    _st_fail "route: a retried peer return reuses its open ask and mints no second request"
   fi
 
   rc=0

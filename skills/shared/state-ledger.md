@@ -188,7 +188,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — run & context properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 2 of 6)
+// …continued: task.metadata JSON Schema "properties" (part 2 of 7)
     "run_index": {
       "type": "integer",
       "minimum": 0,
@@ -209,7 +209,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — error & retry properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 3 of 6)
+// …continued: task.metadata JSON Schema "properties" (part 3 of 7)
     "error_file": {
       "type": "string",
       "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
@@ -232,7 +232,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — worktask properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 4 of 6)
+// …continued: task.metadata JSON Schema "properties" (part 4 of 7)
     "track": {
       "type": "integer",
       "minimum": 1,
@@ -255,10 +255,21 @@ uncapped; capping post-append would silently strip those banners from the prompt
     },
 ```
 
+#### Schema — the peer ask pointer
+
+```json
+// …continued: task.metadata JSON Schema "properties" (part 5 of 7)
+    "ask_id": {
+      "type": "string",
+      "pattern": "^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$",
+      "description": "The task's open mailbox ask, written by the router's peer_session arm. Scan and sweep read it off the ledger, never off the mailbox directory, so one run never relays another run's reply."
+    },
+```
+
 #### Schema — DV fan-out properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 5 of 6)
+// …continued: task.metadata JSON Schema "properties" (part 6 of 7)
     "stream": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
@@ -278,7 +289,7 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — requires_screenshots + required-fields rule
 
 ```json
-// …continued: task.metadata JSON Schema (part 6 of 6, closes "properties")
+// …continued: task.metadata JSON Schema (part 7 of 7, closes "properties")
     "requires_screenshots": {
       "type": "boolean",
       "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."

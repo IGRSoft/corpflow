@@ -1,0 +1,1 @@
+{"ask_id":"ask-20260917t130000z-1123456789ab","from_task":"DR0","to":"peer","question":"Pick one.","deadline":"2026-09-18T00:00:00Z","created_at":"2026-09-17T11:00:00Z","reply_schema":{"type":"string","maxLength":100,"pattern":"^[A-Z]+$"}}

@@ -17,6 +17,10 @@ setup() {
   AUDIT="$WD/.context/logs/audit.jsonl"
   cp "$FIX/state.blocked-on.json" "$STATE"
   unset MILESTONE_MODE BLOCKED_ON_PREFLIGHT
+  # Every case, not only the peer ones: an unset MAILBOX_DIR would resolve the developer's own
+  # mailbox and let a test write an ask into it.
+  export MAILBOX_DIR="$WD/mailbox"
+  export MAILBOX_NOW=1789646700
 }
 
 # _bo <subcommand> [args...] — the router against this test's ledger, stdout and stderr apart.
@@ -189,14 +193,54 @@ _assert_audit_clean() {
 @test "route: the legacy cross_session_ask alias routes as peer_session; blocked_on wins when both are present" {
   _route DR0 legacy-cross-session-ask
   assert_success
-  jq -e '.kind == "peer_session" and .source == "cross_session_ask" and .fallback_from == "peer_session"
-    and .owner_issue == 405' <<< "$output"
+  jq -e '.kind == "peer_session" and .source == "cross_session_ask" and .arm == "peer_session"
+    and .parked == true and (has("fallback_from") | not)
+    and (.ask_id | test("^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$"))
+    and .message == ("mailbox ask " + .ask_id)' <<< "$output"
   run jq -e '.tasks.DR0.metadata.blocked_on == {kind: "peer_session",
     detail: {to: "backend-session", question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' "$STATE"
   assert_success
   _bo route --task-id QA0 --payload "$(jq -c '. + {cross_session_ask: {to: "x", question: "y"}}' "$FIX/artifact.handoff.json")"
   assert_success
   jq -e '.kind == "artifact" and .source == "blocked_on"' <<< "$output"
+}
+
+@test "route: a peer_session return writes the request, parks and records ask_id; the deadline is clamped; a retry reuses it" {
+  _route DR0 peer_session
+  assert_success
+  local ask
+  ask="$(jq -r '.ask_id' <<< "$output")"
+  # The fixture asks for 2026-09-20T00:00:00Z, more than 24 h out, so the clamp caps it at
+  # MAILBOX_NOW + 86400. A stage cannot park a task beyond a day by naming a far deadline.
+  jq -e '.arm == "peer_session" and .parked == true and .audit_row_written == false and .leg == null
+    and .deadline == "2026-09-18T12:05:00Z"' <<< "$output"
+  run jq -e --arg a "$ask" '.tasks.DR0.status == "blocked" and .tasks.DR0.metadata.ask_id == $a' "$STATE"
+  assert_success
+  run jq -e --arg a "$ask" '.ask_id == $a and .from_task == "DR0" and .to == "backend-session"
+    and (has("options") | not) and .reply_schema == {type: "string", minLength: 1, maxLength: 2000}' \
+    "$MAILBOX_DIR/requests/$ask.json"
+  assert_success
+  [ "$(_rows)" = 0 ] || fail "the route itself must write no leg row"
+
+  _route DR0 peer_session
+  assert_success
+  jq -e --arg a "$ask" '.reused == true and .ask_id == $a' <<< "$output"
+  [ "$(find "$MAILBOX_DIR/requests" -name 'ask-*.json' | wc -l | tr -d ' ')" = 1 ] \
+    || fail "a retried return minted a second request"
+}
+
+@test "route: an unusable mailbox falls back to user_action and clears any stale ask_id" {
+  ln -s /nonexistent "$WD/mailbox"
+  # A leftover id from an earlier ask on this task: left in place it would make the next turn
+  # re-announce that old question, and keep the need out of `batch` so nobody is asked at all.
+  _ledger_jq '.tasks.DR0.metadata.ask_id = "ask-20260917t090000z-aaaaaaaaaaaa"'
+  _route DR0 peer_session
+  assert_success
+  jq -e '.kind == "peer_session" and .arm == "user_action" and .leg == "requested" and .parked == true
+    and .fallback_from == "peer_session" and .ask_id == null and (has("owner_issue") | not)' <<< "$output"
+  run jq -e '.tasks.DR0.status == "blocked" and (.tasks.DR0.metadata.ask_id? // null) == null' "$STATE"
+  assert_success
+  _assert_audit_clean "Which base branch does the API change target?"
 }
 
 @test "route: usage errors and a missing ledger exit 2" {
@@ -218,13 +262,15 @@ _assert_audit_clean() {
   _route FN0 permission
   _bo batch
   assert_success
-  jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DR0", "DV1"]
+  # DR0 holds an open peer ask: another session owes the answer, so the user is not asked for it.
+  jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DV1"]
     and all(.needs[]; .arm == "user_action" and .resume_leg == "verified" and .cwd == "/tmp/wt")
     and (.needs[] | select(.task_id == "DC0") | .fallback_from == "correction" and .owner_issue == 404 and .command == ""
          and .request == "DC0 found the defect below in another task\u0027s work. Answer done once it is fixed.")
     and (.needs[] | select(.task_id == "DV1") | (has("fallback_from") | not) and .truncated == false)
-    and (.payloads | length) == 1 and (.payloads[0].questions | length) == 3
+    and (.payloads | length) == 1 and (.payloads[0].questions | length) == 2
     and all(.payloads[0].questions[]; [.options[].label] == ["done", "stop here"])' <<< "$output"
+  jq -e '[.needs[].task_id, .payloads[0].questions[].header] | index("DR0") == null' <<< "$output"
   jq -e '.payloads[0].questions[] | select(.header == "DV1") | .question | contains("! xcrun simctl boot")' <<< "$output"
   jq -e '[.payloads[0].questions[] | select(.header != "DV1") | .question | contains("! ")] | any | not' <<< "$output"
   jq -e '.payloads[0].questions[] | select(.header == "DC0") | .question | contains("finding: CORRECTION-FINDING-TEXT")' <<< "$output"

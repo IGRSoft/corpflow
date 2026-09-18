@@ -299,6 +299,23 @@ An answer only another session holds. The stage never sends the ask itself, beca
 cross-session reply lands in the parent conversation (`skills/agent-coordination/SKILL.md § Replies
 from a subagent land in the parent conversation`).
 
+##### Schema — blocked_on, the peer_session deadline and ask id
+
+`deadline` is the stage's value when it gives one, else `created_at` plus 30 minutes, and either is
+clamped to `[now+60s, now+24h]`; a value that is not an ISO-8601 date-time is refused at `route`
+with a `fail:` line and nothing written. Past its deadline the ask expires to a `user_decision`, so
+the stage is never left waiting on a session that never answers. The ask's id lives on the ledger's
+`tasks.<ID>.metadata.ask_id`, matching `^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$` — the `detail`
+contract above carries no key for it, and no `options` key.
+
+##### Schema — blocked_on, the peer_session reply_ref
+
+`reply_ref` is `mailbox/replies/<ask_id>.json`, relative to the shared root resolver's stdout and
+never absolute. It names the verified reply file that `mailbox-reply.sh` wrote — the record the
+resumed stage re-reads, whose answer `resume` also relays fenced as data inside the instruction
+(`skills/worktask/SKILL.md § mailbox-reply.sh — CLI`). While the arm falls back, because the mailbox
+is unavailable, its `reply_ref` is the `decision_ref` below instead.
+
 #### Schema — blocked_on, the artifact arm
 
 ```yaml
@@ -359,6 +376,9 @@ appends and prints it; for a `host_environment` probe that passes, `route` does.
 stage's own kind even when a fallback arm closed the need, and `n` is 1 plus the earlier closing
 rows for that task and kind. While an arm falls back, its `reply_ref` is that `decision_ref`, and
 its `artifact_path` is resolved as the arm above says and printed beside it.
+
+A landed `peer_session` closes on both: its `relayed` row's metadata carries `reply_ref` beside
+`decision_ref`, and `resume` prints both in `resume_block`.
 
 #### Schema — blocked_on, the other arms' full detail and audit row
 
