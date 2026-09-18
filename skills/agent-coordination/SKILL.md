@@ -203,6 +203,19 @@ The permission arm writes no `blocked_on` row: its `denied` leg is the `permissi
 
 Only the originating orchestrator writes these: a session answering from another worktree has no ledger task to cite, and `mailbox-reply.sh` writes no audit row at all. Every key above is a neutral name — the question, its options, the answer and the comment body live only in the mailbox files and `tasks.<ID>.metadata.blocked_on`, never in a row.
 
+#### Writers — blocked_on rows, the correction legs
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`blocked-on-dispatch.sh route\|resume`) | `blocked_on`: `opened` at the route that re-opened the target (`result: "blocked"`), `closed` at the resume (`result: "ok"`). `metadata.{kind, arm, leg}` on both — `arm` is `correction`, never a fallback — plus `decision_ref` on `closed`. No command head: a correction asks nobody to run a command |
+
+A re-routed correction writes no second `opened` row: the router reads the still-open need's
+recorded leg and re-parks without calling the op, so one correction moves `fix_round` once. The row
+names no task but its own — the target id, the finding, its `evidence_ref` and the count of parked
+consumers all stay off it (§ Writers — blocked_on rows, redacted), and
+`tasks.<ID>.metadata.blocked_on` holds the detail. The finding reaches the re-opened stage only
+through that target's `metadata.gate_blockers` and the remediation injection.
+
 #### Writers — mailbox_ingest rows
 
 | Actor | Action Examples |

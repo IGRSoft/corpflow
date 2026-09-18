@@ -43,6 +43,28 @@ _ledger_jq() {
   jq "$1" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 }
 
+# _correction_state — swap in the AC1 ledger: DV0, DR0, QA0 and FN0 completed and chained through
+# blocked_by, DC0 the correcting stage, DV1 a downstream task that never completed. The default
+# fixture chains nothing, so there the re-open has no consumer to park and no dependent to settle.
+_correction_state() {
+  cp "$FIX/state.correction.json" "$STATE"
+}
+
+# _correction_payload <target_task> — the correction fixture retargeted, so the refusal cases
+# differ from the accepted one in exactly the field under test and keep its marker finding.
+_correction_payload() {
+  jq -c --arg t "$1" '.blocked_on.detail.target_task = $t' "$FIX/correction.handoff.json"
+}
+
+# _settle <target> [changed] — the ledger op the orchestrator runs at the RE-OPENED TARGET's own
+# completion boundary (D5), never this router. --changed is its documented test seam.
+_settle() {
+  local target="$1"
+  shift
+  run --separate-stderr bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" \
+    --state "$STATE" --task-settle-stale "$target" "$@"
+}
+
 # _stub_preflight <check-id> <status> — a preflight double that reports one check, so the probe's
 # verdict is the test's choice rather than the host's.
 _stub_preflight() {
@@ -156,30 +178,130 @@ _tree() {
   [ "$(_rows blocked_on)" = 0 ] || fail "the permission arm must write no blocked_on row"
 }
 
-@test "route: a correction return (owner #404 unlanded) parks as a user_action with one requested row" {
+@test "route: a correction parks the source natively and writes one opened row carrying no finding" {
   _route DC0 correction
   assert_success
-  jq -e '.task_id == "DC0" and .kind == "correction" and .arm == "user_action" and .leg == "requested"
-    and .fallback_from == "correction" and .owner_issue == 404 and .source == "blocked_on"
-    and .parked == true and .audit_row_written == true' <<< "$output"
+  jq -e '.task_id == "DC0" and .kind == "correction" and .arm == "correction" and .leg == "opened"
+    and .source == "blocked_on" and .parked == true and .audit_row_written == true
+    and (has("fallback_from") | not) and (has("owner_issue") | not)
+    and (has("decision_ref") | not)' <<< "$output"
   run jq -e --slurpfile h "$FIX/correction.handoff.json" \
     '.tasks.DC0.status == "blocked" and .tasks.DC0.metadata.blocked_on == $h[0].blocked_on' "$STATE"
   assert_success
   [ "$(_rows)" = 1 ] || fail "expected one blocked_on row, got $(_rows)"
   run jq -e 'select(.action == "blocked_on")
     | .actor == "orchestrator" and .subject == "DC0" and .task_id == "DC0" and .result == "blocked"
-    and (.metadata | keys_unsorted) == ["kind", "arm", "leg", "fallback_from", "owner_issue"]
-    and .metadata == {kind: "correction", arm: "user_action", leg: "requested", fallback_from: "correction", owner_issue: 404}' "$AUDIT"
+    and (.metadata | keys_unsorted) == ["kind", "arm", "leg"]
+    and .metadata == {kind: "correction", arm: "correction", leg: "opened"}' "$AUDIT"
   assert_success
   _assert_audit_clean "CORRECTION-FINDING-TEXT" "evidence_ref" "blocked-on-dispatch.sh:120"
+  # The finding travels on stdin, so it must not reach the ledger writer's own log either.
+  [ ! -f "$WD/.context/logs/state-merge.log" ] \
+    || ! grep -qF "CORRECTION-FINDING-TEXT" "$WD/.context/logs/state-merge.log" \
+    || fail "state-merge.log leaks the finding"
 }
 
-@test "route: re-routing a still-open need adds no second requested row" {
-  _route DC0 correction
+@test "AC1: a documentation stage corrects a development stage — target re-opened, consumers stale" {
+  _correction_state
   _route DC0 correction
   assert_success
-  jq -e '.audit_row_written == false' <<< "$output"
+  jq -e '.arm == "correction" and .leg == "opened" and .parked == true' <<< "$output"
+
+  # R2: re-opened, round bumped, source stage stamped; the prior verdict and artifact survive.
+  run jq -e '.tasks.DV0.status == "pending" and .tasks.DV0.metadata.fix_round == 1
+    and .tasks.DV0.metadata.gate_from_stage == "DC" and .tasks.DV0.verdict == "ok"
+    and .tasks.DV0.metadata.artifact == "development-0.md"' "$STATE"
+  assert_success
+  # R3: the finding verbatim, with the two refs that have no other channel into the brief.
+  run jq -r '.tasks.DV0.metadata.gate_blockers[0]' "$STATE"
+  assert_success
+  assert_output --partial "CORRECTION-FINDING-TEXT: route exits 0 on a refused write"
+  assert_output --partial "evidence_ref: skills/worktask/scripts/blocked-on-dispatch.sh:120"
+  assert_output --partial "source_task: DC0"
+  [ "$(jq -r '.tasks.DV0.metadata.gate_blockers | length' "$STATE")" = 1 ]
+
+  # R4/D3: transitive completed consumers parked, keeping verdict and artifact; the source, the
+  # side-effect stage (FN0) and the downstream task that never completed (DV1) are untouched.
+  run jq -e '.tasks.DR0.status == "stale" and .tasks.DR0.verdict == "ok"
+    and .tasks.DR0.metadata.artifact == "review-0.md"
+    and (.tasks.DR0 | has("rework_pending") | not)
+    and .tasks.QA0.status == "stale" and .tasks.QA0.verdict == "ok"
+    and .tasks.FN0.status == "completed" and .tasks.DV1.status == "in_progress"
+    and .tasks.PL0.status == "completed"
+    and .tasks.DC0.status == "blocked"' "$STATE"
+  assert_success
+  # R7/AC8: one opened leg, enums and ids only.
+  run jq -sc '[.[] | select(.action == "blocked_on") | [.result, .metadata.leg]]' "$AUDIT"
+  assert_output '[["blocked","opened"]]'
+  _assert_audit_clean "CORRECTION-FINDING-TEXT" "route exits 0 on a refused write"
+}
+
+@test "route: re-routing a still-open correction writes no second opened row and bumps no round" {
+  _correction_state
+  _route DC0 correction
+  assert_success
+  _route DC0 correction
+  assert_success
+  jq -e '.arm == "correction" and .leg == "opened" and .parked == true
+    and .audit_row_written == false' <<< "$output"
   [ "$(_rows)" = 1 ] || fail "expected one blocked_on row, got $(_rows)"
+  run jq -e '.tasks.DV0.metadata.fix_round == 1 and .tasks.DV0.status == "pending"' "$STATE"
+  assert_success
+}
+
+@test "route: a correction target that is absent, is the source, or is not completed refuses and writes nothing" {
+  local before spec want
+  _correction_state
+  before="$(cat "$STATE")"
+  for spec in 'DV9|names no task in this ledger' \
+    'DC0|is tasks.DC0 itself' \
+    'DV1|tasks.DV1 is in_progress; a correction re-opens a completed task only'; do
+    want="${spec#*|}"
+    _bo route --task-id DC0 --payload "$(_correction_payload "${spec%%|*}")"
+    [ "$status" -eq 1 ] || fail "${spec%%|*}: exit $status, want 1"
+    [[ "$stderr" == *"$want"* ]] || fail "${spec%%|*}: stderr lacks '$want': $stderr"
+    [ "$(printf '%s\n' "$stderr" | grep -c '^fail:')" = 1 ] || fail "${spec%%|*}: want exactly one fail: line"
+  done
+  [ "$(cat "$STATE")" = "$before" ] || fail "a refused correction changed the ledger"
+  [ ! -f "$AUDIT" ] || fail "a refused correction wrote an audit row"
+
+  # The same refusal after a correction landed: the target is `pending`, so a SECOND, different
+  # correction against it is refused rather than bumping the round twice.
+  _route DC0 correction
+  assert_success
+  before="$(cat "$STATE")"
+  _bo route --task-id QA0 --payload "$(_correction_payload DV0)"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"tasks.DV0 is pending"* ]] || fail "stderr: $stderr"
+  [ "$(cat "$STATE")" = "$before" ] || fail "a refused correction changed the ledger"
+}
+
+@test "AC2: a stale dependent re-verifies on a cited change and stands on an uncited one" {
+  _correction_state
+  _route DC0 correction
+  assert_success
+  run jq -e '.tasks.DR0.status == "stale" and .tasks.QA0.status == "stale"' "$STATE"
+  assert_success
+
+  # DR0 cites the lib (anchored, through metadata.consumes); QA0 cites the dispatch bats (line-
+  # suffixed, through facts.files_read). One settle call therefore exercises both directions and
+  # both citation sources, with D2's normalisation on each.
+  _settle DV0 --changed "skills/worktask/scripts/blocked-on-lib.sh"
+  assert_success
+  jq -e '.settled == [{task: "DR0", to: "pending", reason: "cited-file-changed"},
+                      {task: "QA0", to: "completed", reason: "no-cited-file-changed"}]' <<< "$output"
+  run jq -e '.tasks.DR0.status == "pending" and .tasks.QA0.status == "completed"
+    and .tasks.QA0.verdict == "ok"' "$STATE"
+  assert_success
+
+  # A change set left empty only BY the .context/ exclusion is known, not unknown: the target
+  # rewrote its own artifact and nothing else, so the dependent's earlier result stands.
+  _ledger_jq '.tasks.DR0.status = "stale"'
+  _settle DV0 --changed ".context/development-0.md"
+  assert_success
+  jq -e '.settled == [{task: "DR0", to: "completed", reason: "no-cited-file-changed"}]' <<< "$output"
+  run jq -e '.tasks.DR0.status == "completed" and .tasks.DR0.verdict == "ok"' "$STATE"
+  assert_success
 }
 
 @test "route: a native user_action row carries a redacted head of at most 4 tokens, never the request or command" {
@@ -405,8 +527,10 @@ _tree() {
   assert_success
   # DR0 holds an open peer ask: another session owes the answer, so the user is not asked for it.
   jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DV1"]
-    and all(.needs[]; .arm == "user_action" and .resume_leg == "verified" and .cwd == "/tmp/wt")
-    and (.needs[] | select(.task_id == "DC0") | .fallback_from == "correction" and .owner_issue == 404 and .command == ""
+    and all(.needs[]; .cwd == "/tmp/wt")
+    and (.needs[] | select(.task_id == "DV1") | .arm == "user_action" and .resume_leg == "verified")
+    and (.needs[] | select(.task_id == "DC0") | .arm == "correction" and .resume_leg == "closed"
+         and (has("fallback_from") | not) and (has("owner_issue") | not) and .command == ""
          and .request == "DC0 found the defect below in another task\u0027s work. Answer done once it is fixed.")
     and (.needs[] | select(.task_id == "DV1") | (has("fallback_from") | not) and .truncated == false)
     and (.payloads | length) == 1 and (.payloads[0].questions | length) == 2
@@ -440,27 +564,54 @@ _tree() {
 
 # --- resume ------------------------------------------------------------------------
 
-@test "resume: only the closing leg resumes; decision_ref counts closing rows per task and kind" {
+@test "resume: the correction closing leg clears the park, writes closed and hands back the target artifact" {
+  _correction_state
   _route DC0 correction
   _bo resume --task-id DC0 --leg requested
   [ "$status" -eq 1 ]
-  _bo resume --task-id DC0 --leg verified
+  _bo resume --task-id DC0 --leg closed
   assert_success
   jq -e '.cleared == true and .audit_row_written == true
+    and .resume_block.kind == "correction" and .resume_block.arm == "correction"
+    and .resume_block.leg == "closed"
     and .resume_block.decision_ref == "blocked_on:DC0:correction:1"
     and .resume_block.resume_with == "artifact_path" and .resume_block.artifact_path == "development-0.md"
     and .resume_block.do_not_rerun == true' <<< "$output"
   run jq -e '.tasks.DC0.status == "in_progress" and .tasks.DC0.metadata.blocked_on == null' "$STATE"
   assert_success
   run jq -sc '[.[] | select(.action == "blocked_on") | [.result, .metadata.leg, .metadata.decision_ref]]' "$AUDIT"
-  assert_output '[["blocked","requested",null],["ok","verified","blocked_on:DC0:correction:1"]]'
+  assert_output '[["blocked","opened",null],["ok","closed","blocked_on:DC0:correction:1"]]'
+  # The resume settles nothing: the dependents parked by the route stay stale until the RE-OPENED
+  # TARGET completes and the orchestrator runs --task-settle-stale there (D5).
+  run jq -e '.tasks.DR0.status == "stale" and .tasks.QA0.status == "stale"' "$STATE"
+  assert_success
 
+  # A second round: the target has to complete again before another correction can re-open it,
+  # and that round gets its own ref and its own fix_round.
+  _ledger_jq '.tasks.DV0.status = "completed"'
   _route DC0 correction
-  [ "$(jq -r '.audit_row_written' <<< "$output")" = true ] || fail "a need raised again after resume must write a new requested row"
-  _bo resume --task-id DC0 --leg verified
+  [ "$(jq -r '.audit_row_written' <<< "$output")" = true ] || fail "a need raised again after resume must write a new opened row"
+  run jq -e '.tasks.DV0.metadata.fix_round == 2' "$STATE"
+  assert_success
+  _bo resume --task-id DC0 --leg closed
   assert_success
   [ "$(jq -r '.resume_block.decision_ref' <<< "$output")" = "blocked_on:DC0:correction:2" ]
   _assert_audit_clean "CORRECTION-FINDING-TEXT"
+}
+
+@test "resume: a correction answered in batch still resumes on the user_action closing leg" {
+  _route DC0 correction
+  assert_success
+  _bo resume --task-id DC0 --leg verified
+  assert_success
+  jq -e '.cleared == true and .resume_block.arm == "user_action" and .resume_block.leg == "verified"
+    and .resume_block.resume_with == "artifact_path"
+    and .resume_block.artifact_path == "development-0.md"
+    and .resume_block.decision_ref == "blocked_on:DC0:correction:1"' <<< "$output"
+  run jq -e 'select(.action == "blocked_on" and .metadata.leg == "verified")
+    | .metadata == {kind: "correction", arm: "user_action", leg: "verified",
+                    fallback_from: "correction", decision_ref: "blocked_on:DC0:correction:1"}' "$AUDIT"
+  assert_success
 }
 
 @test "resume: a task not parked on a non-permission need is refused and the ledger is unchanged" {

@@ -30,12 +30,14 @@ BLOCKED_ON_KINDS="user_decision user_action permission peer_session artifact cor
 BLOCKED_ON_RESUME_WITH="decision_ref artifact_path reply_ref"
 
 # kind|required|optional|resume_with|legs|closing_leg|owner_issue|landed — rows in registry order.
+# Every arm reads `yes` as of #404. The column stays: it is what the router's fallback and the
+# batch renderer key on to name an owner issue, and the next kind added lands unlanded first.
 _BLOCKED_ON_TABLE='user_decision|question,options|recommended,item|decision_ref|asked,answered,resumed|resumed|395|yes
 user_action|request,command|verify|decision_ref|requested,verified|verified|394|yes
 permission|tool,command,classifier_reason,allow_rule||decision_ref|denied,granted,resumed|resumed|393|yes
 peer_session|to,question|deadline|reply_ref|sent,delivered,answered,relayed,expired|relayed|405|yes
 artifact|producer_task,path||artifact_path|landed|landed|399|yes
-correction|target_task,finding,evidence_ref,severity||artifact_path|opened,closed|closed|404|no
+correction|target_task,finding,evidence_ref,severity||artifact_path|opened,closed|closed|404|yes
 host_environment|check,observed||decision_ref|probed|probed|390|yes'
 
 # A value echoed into a fail: line is stage-written text: tojson escapes every control

@@ -24,8 +24,12 @@
 #              already in its tree's landed set clears it and writes `landed`, anything else
 #              stays parked as a user_action. peer_session: parks natively, writes the request
 #              and sends the pointer when the mailbox is available, else falls back to a
-#              user_action. Every other kind parks as a user_action (fallback_from/owner_issue
-#              for a pending arm) and writes `requested`. Prints one JSON line {task_id, kind,
+#              user_action. correction: checks the target, re-opens it through state-patch.sh
+#              --task-reopen (the finding on stdin), parks the source natively and writes
+#              `opened`; a target that is absent, is the source, or is not `completed` is a
+#              refused route — one `fail:` line, exit 1, no ledger write. Every other kind parks
+#              as a user_action (fallback_from/owner_issue for a pending arm) and writes
+#              `requested`; no kind reaches that branch today. Prints one JSON line {task_id, kind,
 #              arm, leg, source, parked, audit_row_written, [fallback_from, owner_issue],
 #              [decision_ref, resume_block]}.
 # @arg batch   Every blocked task whose blocked_on.kind is not permission, minus the peer asks
@@ -41,9 +45,12 @@
 #              ud_find_covering finds, verified before use; decision_ref is that ud- id and the
 #              resume instruction carries no answer text. artifact accepts its own closing leg
 #              (`landed`) once the path is confirmed in its tree's landed set. peer_session
-#              accepts its own closing leg (`relayed`) once the reply verifies. Every other need
-#              resumes on the user_action closing leg with decision_ref
-#              blocked_on:<task_id>:<kind>:<n>. Prints {resume_block, cleared, audit_row_written}.
+#              accepts its own closing leg (`relayed`) once the reply verifies. correction
+#              accepts its own closing leg (`closed`) and resumes the SOURCE with the corrected
+#              task's artifact_path; settling the consumers parked `stale` is NOT done here (see
+#              the note on cmd_resume). Every other need resumes on the user_action closing leg
+#              with decision_ref blocked_on:<task_id>:<kind>:<n>.
+#              Prints {resume_block, cleared, audit_row_written}.
 #
 # @env BLOCKED_ON_PREFLIGHT  Script run for the host_environment re-probe (default: the sibling
 #                            autonomy-preflight.sh). A test seam, as GH_BIN is for the preflight.
@@ -51,8 +58,10 @@
 #                            land-artifacts.sh). A test seam, as BLOCKED_ON_PREFLIGHT is above.
 #
 # @exitcode 0 success
-# @exitcode 1 route: an invalid need, one `fail:` line on stderr, nothing written; resume: the
-#             task is not parked on a non-permission blocked_on, or --leg is not its closing leg
+# @exitcode 1 route: an invalid need — including a correction whose target is absent, is the
+#             source, or is not `completed` — one `fail:` line on stderr, nothing written;
+#             resume: the task is not parked on a non-permission blocked_on, or --leg is not its
+#             closing leg
 # @exitcode 2 usage error, missing or unparseable ledger, broken install, or a ledger write refused
 #
 # Minimum shell: bash 3.2+. Requires jq.
@@ -470,6 +479,88 @@ route_artifact() {
   route_user_action artifact true true
 }
 
+# bo_fail_value <message> <stage-written value> — one `fail:` line whose value half is JSON-escaped
+# and bounded by the library's own bo_show, so a hostile target_task can neither forge a second
+# line nor flood the one it gets. Same treatment blocked_on_validate gives a bad kind.
+bo_fail_value() {
+  printf >&2 'fail: %s %s\n' "$1" "$(jq -rn --arg v "$2" "$_BLOCKED_ON_JQ_SHOW"'$v | bo_show')"
+}
+
+# correction_artifact <target id> — the corrected task's artifact: the one its completion merge
+# recorded, else the one the plan seeded. Same precedence --task-settle-stale reads it with, so
+# the resume points at the file the target really produced.
+correction_artifact() {
+  jq -r --arg t "$1" '(.tasks[$t].artifact // .tasks[$t].metadata.artifact // "") | tostring' "$STATE_PATH"
+}
+
+# correction_text — what the target's rework brief renders: the stage's finding byte-for-byte,
+# then the two refs R3 requires beside it. The ledger op stamps gate_from_stage with the SOURCE's
+# stage CODE only, so the source task id and the evidence_ref have no other channel into the
+# brief, and gate_blockers[] is one string. Printed to stdout, never returned through argv:
+# --task-reopen reads it on stdin.
+correction_text() {
+  printf '%s' "$BO" | jq -j --arg src "$TASK_ARG" '
+    (.detail.finding | tostring)
+    + "\n\nevidence_ref: " + (.detail.evidence_ref | tostring)
+    + "\nsource_task: " + $src + "\n"'
+}
+
+# route_correction — the landed correction arm. Order is load-bearing: the read-only R1 guards
+# run first (a refused route must reach the orchestrator as one fail: line it can re-dispatch the
+# source with, and leave the ledger untouched), then --task-reopen, then the source's park, then
+# the `opened` leg. Re-opening BEFORE parking is deliberate — the op can still refuse under its
+# own lock (a raced status, a finding its bounds reject), and a park written ahead of it would
+# leave the source blocked on a correction that never opened and has no row to say so.
+#
+# The consumers of the target's output are parked `stale` by that one op, not here: their set is
+# a transitive walk of the ledger (D3) and computing it twice is how the two answers drift.
+route_correction() {
+  local target status rc=0
+  target=$(printf '%s' "$BO" | jq -r '.detail.target_task | tostring')
+
+  # A retried orchestrator turn returns the identical need. Its first route already re-opened the
+  # target, which is exactly why the target is no longer `completed` — so the status guard below
+  # would read that success as a refusal. The `opened` leg of the still-open need is the record
+  # that says otherwise, and the same dedupe keeps a second row out of the log.
+  if bo_leg_recorded correction opened; then
+    bo_park "$BO"
+    bo_route_out correction opened true false "" "" "" null
+    return 0
+  fi
+
+  if ! is_task_id "$target" \
+    || ! jq -e --arg t "$target" '(.tasks[$t] | type) == "object"' "$STATE_PATH" > /dev/null 2>&1; then
+    bo_fail_value "blocked_on.detail.target_task names no task in this ledger:" "$target"
+    exit 1
+  fi
+  # A task correcting itself is a loop: it would bump its own fix_round on evidence it wrote.
+  if [ "$target" = "$TASK_ARG" ]; then
+    printf >&2 'fail: blocked_on.detail.target_task is tasks.%s itself; a correction names another task\n' "$TASK_ARG"
+    exit 1
+  fi
+  status=$(jq -r --arg t "$target" '(.tasks[$t].status // "") | tostring' "$STATE_PATH")
+  if [ "$status" != "completed" ]; then
+    printf >&2 'fail: tasks.%s is %s; a correction re-opens a completed task only\n' "$target" "${status:-absent}"
+    exit 1
+  fi
+
+  correction_text | ledger --task-reopen "$target" --from "$TASK_ARG" --finding-file - || rc=$?
+  case "$rc" in
+    0) ;;
+    2)
+      # The op's input bounds, not a broken install: the finding is stage-written, so this is the
+      # stage's return to fix, which is exit 1 with a line the orchestrator re-dispatches it with.
+      printf >&2 'fail: the correction finding was refused by the ledger: it must be non-empty, within its byte cap and free of control bytes\n'
+      exit 1
+      ;;
+    *) die 2 "state-patch refused --task-reopen $target" ;;
+  esac
+
+  bo_park "$BO"
+  bo_row blocked "$(bo_meta correction correction opened "" "" '{}' "")"
+  bo_route_out correction opened true "$BO_ROW_WRITTEN" "" "" "" null
+}
+
 cmd_route() {
   local handoff norm
   is_task_id "$TASK_ARG" || die 2 "route needs --task-id <STAGE><N>"
@@ -495,6 +586,10 @@ cmd_route() {
     user_action) route_user_action "" false true ;;
     peer_session) route_peer_session ;;
     user_decision) route_user_decision ;;
+    correction) route_correction ;;
+    # No kind reaches this branch: every row in the arm table is landed as of #404, and
+    # blocked_on_validate_arm already refused anything outside it. It stays as the generic
+    # landing pad for the NEXT kind, which is added to the table before its arm exists.
     *) route_user_action "$BO_KIND" false true ;;
   esac
 }
@@ -569,6 +664,14 @@ cmd_batch() {
             question: ($d.question | pd_bound(512)),
             options: (($d.options // []) | map(pd_bound(200))),
             recommended: ($d.recommended // null), item: ($d.item // null)}
+           | . + {truncated: false, cwd: $cwd, _lines: ($d | bo_lines)}
+         elif $b.kind == "correction" then
+           # The third native arm. It renders its kind fixed lead line and its detail as fenced
+           # data like a fallback, but carries no fallback_from: the correction arm parked it, so
+           # nothing fell back, and it resumes on its OWN closing leg. No `!` line either — a
+           # correction asks nobody to run a command.
+           {task_id: $id, kind: $b.kind, arm: "correction", resume_leg: $t.correction.closing_leg,
+            request: bo_lead($id; $b.kind), command: "", verify: ""}
            | . + {truncated: false, cwd: $cwd, _lines: ($d | bo_lines)}
          else
            {task_id: $id, kind: $b.kind, arm: "user_action", resume_leg: $t.user_action.closing_leg,
@@ -804,6 +907,30 @@ cmd_resume() {
     return 0
   fi
 
+  # The correction arm resumes the SOURCE on its own closing leg (`closed`), with the corrected
+  # task's artifact as the resume_with — that file is what the source stage stopped needing.
+  #
+  # Settlement is NOT run here, by design (D5): the tasks this correction parked `stale` settle
+  # at the RE-OPENED TARGET's own completion boundary, through
+  # `state-patch.sh --task-settle-stale <TARGET>`, which the orchestrator calls in the same slot
+  # as the landing step. The source's resume happens FIRST and against an artifact the target has
+  # not rewritten yet, so settling here would judge every dependent on the uncorrected change set.
+  # The op is deliberately not exposed as a subcommand of this router either: it is not a
+  # blocked_on return, it is keyed on the target rather than on any parked need, and a passthrough
+  # would be a second place keeping one op's contract.
+  if [ "$BO_KIND" = "correction" ] && [ "$LEG_ARG" = "$(bo_field "$(blocked_on_arm correction)" 5)" ]; then
+    target=$(printf '%s' "$BO" | jq -r '.detail.target_task // "" | tostring')
+    ap=$(correction_artifact "$target")
+    ledger --claim "$TASK_ARG" || die 2 "state-patch refused --claim $TASK_ARG"
+    ledger --task-meta "$TASK_ARG" --set '{"blocked_on":null}' \
+      || die 2 "state-patch refused clearing blocked_on on $TASK_ARG"
+    dr=$(bo_next_ref correction)
+    bo_row ok "$(bo_meta correction correction closed "" "" '{}' "$dr")"
+    rb=$(bo_resume_block "$BO" correction closed "$dr" "$ap")
+    jq -cn --argjson rb "$rb" --argjson w "$BO_ROW_WRITTEN" '{resume_block: $rb, cleared: true, audit_row_written: $w}'
+    return 0
+  fi
+
   # Every other parked non-permission need was parked by the user_action arm (native or
   # fallback), so that arm's closing leg is the one resume accepts.
   closing=$(bo_field "$(blocked_on_arm user_action)" 5)
@@ -818,9 +945,12 @@ cmd_resume() {
   fi
   case "$BO_KIND" in
     artifact) ap=$(printf '%s' "$BO" | jq -r '.detail.path // "" | tostring') ;;
+    # Reached only when a correction is resumed on the user_action closing leg instead of its
+    # own — the manual escape a batch answer takes. The artifact_path is resolved the same way
+    # either route.
     correction)
       target=$(printf '%s' "$BO" | jq -r '.detail.target_task // "" | tostring')
-      ap=$(jq -r --arg t "$target" '(.tasks[$t].metadata.artifact? // "") | tostring' "$STATE_PATH")
+      ap=$(correction_artifact "$target")
       ;;
   esac
 

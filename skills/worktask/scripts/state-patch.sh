@@ -74,7 +74,14 @@
 #
 # @arg --task-create  <ID> --metadata <json>  Seed tasks.<ID> as pending; no-op if it exists.
 #                                             --metadata is optional (defaults to {}).
-# @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped|failed.
+# @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped|failed|stale.
+#                                             `stale` parks a task whose consumed input was
+#                                             corrected: it is neither ready (the loop's filter
+#                                             takes `pending` only) nor settled, so tasks blocked
+#                                             by it stay unready until something settles it. It
+#                                             names a ledger status ONLY — unrelated to the
+#                                             liveness sense of "stale" in stale-check.sh and to
+#                                             the `stale_dependents` field of the replay survey.
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
@@ -100,11 +107,69 @@
 #                                             as a new round instead of overwriting it.
 # @arg --agents-json <path>                   Passed through to stale-check.sh for the replay
 #                                             liveness guard.  Test/diagnostic seam only.
+# @arg --task-reopen <TARGET> --from <SOURCE> [--finding-file <path|->]
+#                                             Re-open a task a correction names.  Guards run
+#                                             BEFORE any mutation — target exists, target is
+#                                             not the source, target status is `completed`,
+#                                             source exists — so a refusal (exit 4) leaves
+#                                             state.json byte-identical, as --claim and
+#                                             --task-replay refuse.  One atomic apply then
+#                                             sets the target to `pending`, bumps
+#                                             metadata.fix_round ((fix_round // 0) + 1), stamps
+#                                             metadata.gate_from_stage with the SOURCE's stage
+#                                             code and metadata.gate_blockers to [<finding>],
+#                                             and parks every consumer as `stale`.  Consumers
+#                                             are transitive (downstream through blocked_by),
+#                                             filtered to status == "completed", minus the
+#                                             source and minus every REPLAY_SIDE_EFFECT_STAGES
+#                                             code — the constant the cascading replay skips
+#                                             by.  A consumer is PARKED, not reset: its
+#                                             verdict, artifact and handoff survive, as the
+#                                             target's own do.  Re-running the op is refused by
+#                                             the `completed` guard itself, which is what makes
+#                                             a retried route idempotent: no second bump.
+# @arg --finding-file <path|->                The correction's finding, read from a file or
+#                                             (with `-`) from STDIN — never from argv, so it
+#                                             reaches neither the process table nor the audit
+#                                             row's command head, and it is kept out of the
+#                                             --log line this op writes.  <= 2000 bytes and no
+#                                             control byte beyond TAB/LF, else exit 2 with
+#                                             state.json untouched; a long finding belongs
+#                                             behind the return's evidence_ref, not in a
+#                                             durable ledger field that renders into a prompt.
+#                                             Omitted ⇒ gate_blockers is set to [], never left
+#                                             holding the PREVIOUS round's finding.
+# @arg --task-settle-stale <TARGET> [--changed <path[,path...]>]
+#                                             Settle every `stale` task at the re-opened
+#                                             TARGET's own completion boundary and print one
+#                                             JSON line {"settled":[{task,to,reason}]}.  A
+#                                             dependent whose cited set intersects the change
+#                                             set returns to `pending` (re-verify); one that
+#                                             does not returns to `completed` and its earlier
+#                                             result stands.  Cited set = facts.files_read[]
+#                                             for that task's stage code, unioned with
+#                                             tasks[T].metadata.consumes[].paths[]; change set
+#                                             = handoff.files_touched[] of TARGET's artifact
+#                                             (metadata.artifact) MINUS every .context/ path,
+#                                             since the target always rewrites its own artifact
+#                                             and counting it would return every dependent.
+#                                             Both sides are normalised: a leading ./, a
+#                                             trailing #anchor and a trailing :N are stripped.
+#                                             A change set that is absent, unreadable or empty
+#                                             BEFORE that exclusion, or an empty cited set,
+#                                             fails safe to `pending`; one left empty only BY
+#                                             the exclusion is a known change set that touched
+#                                             no cited file, so the dependent completes.
+#                                             --changed is a TEST SEAM, not an orchestrator
+#                                             argument: it substitutes the change set whole.
 # @arg --claim <ID>                          pending|blocked -> in_progress + claimed_at
 #                                             (date -u +%FT%TZ, top-level tasks.<ID>.claimed_at).
 #                                             in_progress with claimed_at is a no-op (timestamp
 #                                             kept); without it, stamps one.  completed|skipped|
 #                                             failed exits 4 untouched: use --task-replay.
+#                                             A `stale` row exits 4 untouched too: it is parked
+#                                             behind a correction, and resuming it is a
+#                                             settlement decision, not a claim.
 # @arg --dispatch <ID> <agent_id> <status>   Exactly 3 args. status is launched|completed|
 #                                             failed; agent_id matches
 #                                             ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$; the row
@@ -167,7 +232,9 @@
 #               named on stderr. Read stderr to tell them apart — a partial success is the
 #               only exit 2 that wrote. Also: malformed --dispatch/--files-read/--ack args,
 #               --dispatch without the row's metadata.agent, an unreachable lib or resolver,
-#               or (--task-create) a row missing a required metadata key.
+#               or (--task-create) a row missing a required metadata key.  Also: a
+#               --finding-file that is unreadable, empty, over 2000 bytes or carrying a
+#               control byte, and a --task-reopen without --from.
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent),
 #               OR a missing/unknown handoff.verdict on ANY path (--stage/--artifact,
 #               plain or paired with --facts), state.json unchanged either way. An agent
@@ -178,8 +245,9 @@
 #               target is live/parked, of indeterminate liveness, whose planning is
 #               incomplete or whose cascade includes a blocked member; a stage code that
 #               resolves to more than one open instance with nothing to disambiguate it; or
-#               --claim on a settled (completed|skipped|failed) row.  Unknown ids stay 1 and
-#               malformed ids stay 2.
+#               --claim on a settled (completed|skipped|failed) row or on a parked `stale` one;
+#               or a --task-reopen whose target is the source or is not `completed`.
+#               Unknown ids stay 1 and malformed ids stay 2.
 # @exitcode 5   --verify-decision only: the row (or the chain it sits in) is refused — forged,
 #               edited, out of scope, uncorroborated or answer-mismatched.  Every other op in
 #               this file never returns 5.
@@ -698,6 +766,153 @@ replay_audit() {
     || log_msg WARN "audit append failed for replay of tasks.${TASK_OP_ID} (reset already applied)"
 }
 
+# ---------- Correction guards (--task-reopen / --task-settle-stale) ----------
+# Same shape as replay_refuse, and deliberately the same exit class: every exit-4 line starts
+# `reopen refused: <class-token> — ` so a caller matches the token, never the prose.
+reopen_refuse() {
+  local token="$1" detail="$2"
+  printf >&2 'reopen refused: %s — %s\n' "$token" "$detail"
+  log_msg ERROR "reopen refused (${token}) on tasks.${TASK_OP_ID}: ${detail}; state.json unchanged"
+  exit 4
+}
+
+# The finding is stage-written text that lands in a durable ledger field and later renders into
+# a prompt, so it never travels on argv: a command line is visible in the process table and is
+# what the audit hook captures as a command head. It is staged 0600 and removed on exit.
+_FINDING_TMP=""
+# shellcheck disable=SC2329  # invoked indirectly, from the EXIT trap below — never inline
+_finding_cleanup() {
+  [[ -n "$_FINDING_TMP" ]] || return 0
+  rm -f "$_FINDING_TMP" 2> /dev/null || true
+  _FINDING_TMP=""
+}
+
+# reopen_read_finding <path|-> — stage the finding into $_FINDING_TMP, or exit 2 untouched.
+#
+# Bounded and control-byte-free on the way IN, not on the way out: once written, the field is
+# read by the brief builder and by whatever reads the ledger later, and neither of those can
+# tell a pasted log from a finding. Refusal beats truncation here because R3 promises the
+# finding renders byte-for-byte — a silently clipped one would still read as verbatim.
+reopen_read_finding() {
+  local src="$1" bytes=0
+  _FINDING_TMP=$(umask 077 && mktemp -t corpflow-finding-XXXXXX) || {
+    printf >&2 'reopen: cannot stage the finding (mktemp failed); state.json unchanged\n'
+    log_msg ERROR "cannot stage finding for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
+    exit 2
+  }
+  if [[ "$src" == "-" ]]; then
+    cat > "$_FINDING_TMP"
+  else
+    if [[ ! -r "$src" ]]; then
+      printf >&2 'invalid --finding-file: %s is not readable; state.json unchanged\n' "$src"
+      log_msg ERROR "unreadable --finding-file for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
+      exit 2
+    fi
+    cat -- "$src" > "$_FINDING_TMP"
+  fi
+  bytes=$(wc -c < "$_FINDING_TMP" | tr -d '[:space:]')
+  if [[ "${bytes:-0}" -eq 0 ]]; then
+    printf >&2 'invalid --finding-file: the finding is empty; state.json unchanged\n'
+    log_msg ERROR "empty --finding-file for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
+    exit 2
+  fi
+  if [[ "$bytes" -gt 2000 ]]; then
+    printf >&2 'invalid --finding-file: %s bytes exceeds the 2000-byte cap; put the detail behind the return evidence_ref and pass a finding; state.json unchanged\n' "$bytes"
+    log_msg ERROR "oversized --finding-file (${bytes}B) for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
+    exit 2
+  fi
+  # TAB and LF are the only control bytes a finding legitimately carries. Everything else —
+  # NUL, ESC, CR — is either a truncated binary or a terminal-control payload, and this field
+  # is rendered into a prompt and copied into briefs. LC_ALL=C keeps [:cntrl:] at 0x00-0x1F/0x7F
+  # so a UTF-8 finding is not rejected for its continuation bytes.
+  if tr -d '\n\t' < "$_FINDING_TMP" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    printf >&2 'invalid --finding-file: the finding carries a control byte (only TAB and LF are allowed); state.json unchanged\n'
+    log_msg ERROR "control byte in --finding-file for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
+    exit 2
+  fi
+}
+
+# parse_files_touched <artifact> — sets PARSED_FT_STATE (list|absent|unparsed) and
+# PARSED_FT_JSON (a JSON array of strings; [] unless the state is `list`).
+#
+# `unparsed` and `absent` are NOT merged: the settle op fails safe on both, but only one of
+# them means "this host could not read the list", and a later diagnosis needs to tell a missing
+# key from a missing parser. Block extraction and the shape gate come from frontmatter-lib.sh,
+# the one reader of a handoff block; only the sequence read is local, because that library
+# exposes scalars alone.
+parse_files_touched() {
+  local art="$1" fmfile tag json
+  PARSED_FT_STATE="unparsed"
+  PARSED_FT_JSON="[]"
+  [ -r "$art" ] || return 0
+  command -v corpflow_fm_block > /dev/null 2>&1 || return 0
+  fmfile=$(mktemp -t corpflow-ft-XXXXXX) || return 0
+  if ! corpflow_fm_block "$art" > "$fmfile" 2> /dev/null \
+    || ! corpflow_fm_has_handoff "$fmfile"; then
+    rm -f "$fmfile"
+    return 0
+  fi
+  if command -v yq > /dev/null 2>&1; then
+    tag=$(yq eval '.handoff.files_touched | tag' "$fmfile" 2> /dev/null) || tag=""
+    if [[ "$tag" == '!!seq' ]]; then
+      json=$(yq -o=json -I=0 '.handoff.files_touched' "$fmfile" 2> /dev/null \
+        | jq -c 'map(select(type == "string"))' 2> /dev/null) || json=""
+      # A post-filter `[]` — an empty sequence, or one holding no strings — is `absent`, NOT an
+      # empty list, and the two readers must agree on that: the awk branch below cannot tell a
+      # declared-but-empty list from a missing key, so calling it `list` here would make the
+      # settle op's fail-safe invert on a host that happens to have yq. The distinction that
+      # matters to D2 is "did this call read a change set", and neither shape did.
+      if [[ -n "$json" && "$json" != "[]" ]]; then
+        PARSED_FT_STATE="list"
+        PARSED_FT_JSON="$json"
+      elif [[ "$json" == "[]" ]]; then
+        PARSED_FT_STATE="absent"
+      fi
+    else
+      PARSED_FT_STATE="absent"
+    fi
+    rm -f "$fmfile"
+    return 0
+  fi
+  # No yq: read the sequence with the same nesting-aware awk shape corpflow_fm_field uses for
+  # scalars, so a host without yq still settles on evidence instead of failing safe every time.
+  # Both YAML sequence forms appear in real artifacts — block (`- path`) and flow (`[a, b]`).
+  json=$(awk '
+      /^handoff:[[:space:]]*$/ { inblk = 1; next }
+      inblk && /^[^[:space:]#]/ { inblk = 0 }
+      inblk && match($0, /^[[:space:]]+files_touched:[[:space:]]*/) {
+        rest = substr($0, RLENGTH + 1)
+        if (rest ~ /^\[/) {
+          sub(/^\[/, "", rest); sub(/\][[:space:]]*$/, "", rest)
+          n = split(rest, a, ",")
+          for (i = 1; i <= n; i++) { v = a[i]; emit(v) }
+        } else { inseq = 1 }
+        next
+      }
+      inblk && inseq && /^[[:space:]]*-[[:space:]]*/ {
+        v = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", v); emit(v); next
+      }
+      inblk && inseq && /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*:/ { inseq = 0 }
+      function emit(s) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+        gsub(/^"|"$/, "", s); gsub(/^'"'"'|'"'"'$/, "", s)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+        if (s != "") print s
+      }
+    ' "$fmfile" | jq -Rs 'split("\n") | map(select(length > 0))' 2> /dev/null) || json=""
+  rm -f "$fmfile"
+  [[ -n "$json" ]] || return 0
+  # An artifact whose block carries no files_touched yields [] here, which is `absent`, not an
+  # empty list: the awk reader cannot distinguish "key present, empty sequence" from "no key",
+  # and both fail safe the same way.
+  if [[ "$json" == "[]" ]]; then
+    PARSED_FT_STATE="absent"
+  else
+    PARSED_FT_STATE="list"
+    PARSED_FT_JSON="$json"
+  fi
+}
+
 # ENOSPC guard.  Returns 0 (ok/warn), exits 2 (halt).
 disk_guard() {
   local root="${1:-.}"
@@ -898,8 +1113,10 @@ _lock_release() {
   _LOCK_HELD=""
 }
 
-# Release any held lock on process end/failure (added to the existing ERR trap flow).
-trap '_lock_release' EXIT
+# Release any held lock on process end/failure (added to the existing ERR trap flow), and
+# remove the staged finding on EVERY exit path — a refusal leaves the ledger untouched, so the
+# one artefact a failed correction could still leave behind is that 0600 scratch file.
+trap '_lock_release; _finding_cleanup' EXIT
 
 # B3 state bounds are enforced HERE (the single write chokepoint, AD-7) rather than
 # scattered across the 13 stage agents: after every mutation the unbounded arrays are
@@ -1365,6 +1582,13 @@ DISPATCH_AGENT_ID=""
 DISPATCH_STATUS=""
 DISPATCH_ARGC=0
 FILES_READ_PATHS=()
+REOPEN_FROM=""
+REOPEN_FROM_GIVEN=""
+FINDING_FILE=""
+FINDING_FILE_GIVEN=""
+SETTLE_CHANGED=""
+SETTLE_CHANGED_GIVEN=""
+SETTLE_PLAN=""
 
 while [[ $# -gt 0 ]]; do
   # One line per flag. Every value-taking arm was the same five lines —
@@ -1400,6 +1624,14 @@ while [[ $# -gt 0 ]]; do
     --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
     --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-reopen) shift; TASK_OP="reopen"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-settle-stale) shift; TASK_OP="settle_stale"; TASK_OP_ID="${1:-}"; shift ;;
+    # --from is the correction's SOURCE task, not a path; --finding-file takes `-` for stdin.
+    # Both are tracked as "given" separately from their value so an empty value reaches the
+    # op's own refusal rather than reading as absent.
+    --from) shift; REOPEN_FROM="${1:-}"; REOPEN_FROM_GIVEN="1"; shift ;;
+    --finding-file) shift; FINDING_FILE="${1:-}"; FINDING_FILE_GIVEN="1"; shift ;;
+    --changed) shift; SETTLE_CHANGED="${1:-}"; SETTLE_CHANGED_GIVEN="1"; shift ;;
     --claim) shift; TASK_OP="claim"; TASK_OP_ID="${1:-}"; shift ;;
     --dispatch)
       shift
@@ -1751,6 +1983,18 @@ if [[ -n "$TASK_OP" ]]; then
     printf >&2 -- '--cascade / --agents-json apply to --task-replay only (got --task-%s)\n' "$TASK_OP"
     usage
   fi
+  # Same reason for the correction modifiers: `--task-status DV0 pending --from DC0` must not
+  # read as a re-open that stamped a source it never recorded, and a --changed silently
+  # ignored on --task-reopen would look like a settle that ran.
+  if [[ "$TASK_OP" != "reopen" ]] \
+    && { [[ -n "$REOPEN_FROM_GIVEN" ]] || [[ -n "$FINDING_FILE_GIVEN" ]]; }; then
+    printf >&2 -- '--from / --finding-file apply to --task-reopen only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
+  if [[ "$TASK_OP" != "settle_stale" && -n "$SETTLE_CHANGED_GIVEN" ]]; then
+    printf >&2 -- '--changed applies to --task-settle-stale only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
 
   # `metadata.effort` is a dispatch parameter the ledger carries, not free text: the Step
   # C.0a resolver bumps it one rung (`skills/shared/stage-contracts.md § Blocking items are
@@ -1844,7 +2088,10 @@ if [[ -n "$TASK_OP" ]]; then
         # Sole decode of the status enum in the tooling. Readers use bare jq field access, so a
         # value an older copy does not model still round-trips through it untouched; keeping the
         # closed set on the write path alone is what makes `failed` additive rather than breaking.
-        pending | in_progress | completed | blocked | skipped | failed) ;;
+        # `stale` joins on the same terms: non-terminal and non-ready, it parks a task whose
+        # consumed input was corrected without discarding its verdict, artifact or handoff.
+        # Keep this list on ONE line — the status-parity extractors read it as a single match.
+        pending | in_progress | completed | blocked | skipped | failed | stale) ;;
         *)
           printf >&2 'invalid status: %s\n' "$TASK_OP_VALUE"
           usage
@@ -1971,6 +2218,193 @@ if [[ -n "$TASK_OP" ]]; then
           else reduce ($members[]) as $m (.; .tasks[$m] |= blast) end'
       TASK_JQ_ARGS=(--argjson members "$(jq -c '[.members[].id]' <<< "$REPLAY_PLAN")")
       ;;
+    reopen)
+      # Guard ORDER is the contract, not an implementation detail: every check reads the file
+      # and none writes, so a refusal at any rung leaves state.json byte-identical — the same
+      # property --claim and --task-replay promise. Unknown ids stay exit 1 (require_task_exists)
+      # and malformed ones exit 2 (usage), so only a well-formed, existing, wrongly-stated
+      # target reaches exit 4.
+      require_task_exists "$TASK_OP_ID" reopen
+      if [[ -z "$REOPEN_FROM_GIVEN" || -z "$REOPEN_FROM" ]]; then
+        printf >&2 'missing value: --task-reopen %s requires --from <ID>\n' "$TASK_OP_ID"
+        usage
+      fi
+      if ! [[ "$REOPEN_FROM" =~ ^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$ ]]; then
+        printf >&2 'invalid --from id: %s (expected <STAGE><N>, e.g. DC0)\n' "$REOPEN_FROM"
+        usage
+      fi
+      # A task correcting itself is a loop, not a correction: it would bump its own fix_round
+      # and park its own consumers on evidence it produced.
+      if [[ "$REOPEN_FROM" == "$TASK_OP_ID" ]]; then
+        reopen_refuse target-is-source \
+          "tasks.${TASK_OP_ID} cannot correct itself; --from names the task that RAISED the finding"
+      fi
+      _REOPEN_STATUS=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].status // ""' "$STATE_PATH")
+      # THE idempotence guard. A re-routed correction finds the target already `pending` and is
+      # refused here, which is why a retried route cannot bump fix_round twice or re-park a
+      # consumer that has since settled. Re-opening a task that never completed is also
+      # meaningless: nothing downstream consumed an output it never produced.
+      [[ "$_REOPEN_STATUS" == "completed" ]] || reopen_refuse target-not-completed \
+        "tasks.${TASK_OP_ID} is ${_REOPEN_STATUS:-absent}; a correction re-opens a completed task only"
+      require_task_exists "$REOPEN_FROM" reopen
+      _REOPEN_SRC_STAGE="${REOPEN_FROM%%[0-9]*}"
+      # Read AFTER the guards: a refused route must not consume the caller's stdin.
+      _FINDING_SRC="/dev/null"
+      if [[ -n "$FINDING_FILE_GIVEN" ]]; then
+        reopen_read_finding "$FINDING_FILE"
+        _FINDING_SRC="$_FINDING_TMP"
+      fi
+      # --rawfile, never --arg: the finding must not appear in this process's or jq's argv.
+      #
+      # The whole write is ONE filter so the target's re-open and its consumers' parking are
+      # one rename: a ledger holding a pending target whose consumers still read `completed`
+      # would dispatch them against work that is being corrected. The existence and status
+      # re-assertions live INSIDE it for the same reason replay's do — a key that changed
+      # between the guards and the lock makes jq error, atomic_apply drop the tmp, and the
+      # rename never happen (surfacing as exit 1, the write landed nothing, rather than 4).
+      TASK_FILTER='
+        def deps_of($st; $tid):
+          [ ($st.tasks // {}) | to_entries[]
+            | select((.value.blocked_by // []) | index($tid)) | .key ];
+        def is_side_effect($tid; $codes):
+          any($codes[]; . as $c | $tid | test("^" + $c + "[0-9]+$"));
+        . as $st
+        | ($se | split(",")) as $codes
+        # blocked_by has no acyclicity enforcement anywhere, so the task count bounds the walk.
+        | (($st.tasks // {}) | length) as $bound
+        | (if ((($st.tasks // {}) | has($target)) | not)
+              or ((($st.tasks // {}) | has($source)) | not)
+           then error("reopen target or source absent under the lock: " + $target + "/" + $source)
+           elif ((($st.tasks[$target].status) // "") != "completed")
+           then error("reopen target is no longer completed under the lock: " + $target)
+           else . end)
+        | ( { frontier: [$target], visited: [$target], order: [], n: 0 }
+            | until((.frontier | length) == 0 or .n >= $bound;
+                . as $s
+                | ( [ $s.frontier[] | deps_of($st; .) ] | add // [] | unique ) as $next
+                | ( [ $next[] | . as $d | select(($s.visited | index($d)) == null) ]
+                    | sort ) as $new
+                | { frontier: $new,
+                    visited: ($s.visited + $new),
+                    order: ($s.order + $new),
+                    n: ($s.n + 1) })
+            | .order ) as $downstream
+        # D3: transitive consumers, completed only, minus the source (it raised the finding,
+        # it did not consume a bad output) and minus the side-effect stages the cascading
+        # replay already skips — parking FN or RE would re-open a commit or a tag.
+        | [ $downstream[]
+            | select(. != $source)
+            | select(is_side_effect(.; $codes) | not)
+            | select((($st.tasks[.].status) // "") == "completed") ] as $consumers
+        | ($finding | sub("\\s+$"; "")) as $f
+        | .tasks[$target].status = "pending"
+        | .tasks[$target].metadata = ((.tasks[$target].metadata // {})
+            + { fix_round: ((($st.tasks[$target].metadata.fix_round) // 0) + 1),
+                gate_from_stage: $srcstage,
+                gate_blockers: (if $f == "" then [] else [$f] end) })
+        # Status only: a parked consumer keeps its verdict, artifact and handoff, which is the
+        # whole difference between `stale` and a replay reset.
+        | reduce $consumers[] as $c (.; .tasks[$c].status = "stale")'
+      TASK_JQ_ARGS=(--arg target "$TASK_OP_ID" --arg source "$REOPEN_FROM" \
+        --arg srcstage "$_REOPEN_SRC_STAGE" --arg se "$REPLAY_SIDE_EFFECT_STAGES" \
+        --rawfile finding "$_FINDING_SRC")
+      # Logged, so it carries ids and a byte count — never the finding itself.
+      TASK_OP_VALUE="from=${REOPEN_FROM} finding_bytes=$(wc -c < "$_FINDING_SRC" | tr -d '[:space:]')"
+      ;;
+    settle_stale)
+      require_task_exists "$TASK_OP_ID" settle-stale
+      # Two states, not one: `known` means this call read a change set and may conclude that
+      # nothing cited changed; `unknown` means it could not, and every stale dependent
+      # re-verifies. Collapsing them would turn "no evidence" into "no change" — the one
+      # direction R5 must never take.
+      _SETTLE_STATE="unknown"
+      _SETTLE_CHANGED_JSON='[]'
+      if [[ -n "$SETTLE_CHANGED_GIVEN" ]]; then
+        _SETTLE_CHANGED_JSON=$(printf '%s' "$SETTLE_CHANGED" \
+          | jq -Rc 'split(",") | map(select(length > 0))' 2> /dev/null) || _SETTLE_CHANGED_JSON='[]'
+        [[ "$_SETTLE_CHANGED_JSON" == "[]" ]] || _SETTLE_STATE="known"
+      else
+        # Recorded, else planned — the same precedence the id resolver uses. metadata.artifact
+        # is what the plan seeded; .artifact is what the completion merge actually wrote, and
+        # when the two differ the change set must come from the file the stage really produced.
+        _SETTLE_ART=$(jq -r --arg id "$TASK_OP_ID" \
+          '.tasks[$id].artifact // .tasks[$id].metadata.artifact // ""' "$STATE_PATH")
+        if [[ -n "$_SETTLE_ART" ]]; then
+          # Same resolution the artifact path uses: a relative artifact is caller-relative,
+          # i.e. against dirname($CTX), never against cwd.
+          case "$_SETTLE_ART" in
+            /*) _SETTLE_ART_PATH="$_SETTLE_ART" ;;
+            *)
+              if [[ -n "$CTX" && "$CTX" != "." ]]; then
+                _SETTLE_CTX_PARENT="${CTX%/*}"
+                [[ "$_SETTLE_CTX_PARENT" == "$CTX" ]] && _SETTLE_CTX_PARENT="."
+                _SETTLE_ART_PATH="${_SETTLE_CTX_PARENT}/${_SETTLE_ART}"
+              else
+                _SETTLE_ART_PATH="$_SETTLE_ART"
+              fi
+              ;;
+          esac
+          _SETTLE_FM_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/frontmatter-lib.sh"
+          if ! command -v corpflow_fm_block > /dev/null 2>&1 && [ -r "$_SETTLE_FM_LIB" ]; then
+            # shellcheck source=frontmatter-lib.sh
+            . "$_SETTLE_FM_LIB"
+          fi
+          # An unreachable library, an unreadable artifact and a missing list all leave the
+          # state `unknown`, and every stale dependent then re-verifies. This op degrades
+          # toward work, never toward a standing result nothing checked.
+          parse_files_touched "$_SETTLE_ART_PATH"
+          if [[ "$PARSED_FT_STATE" == "list" ]]; then
+            _SETTLE_CHANGED_JSON="$PARSED_FT_JSON"
+            _SETTLE_STATE="known"
+          fi
+        fi
+      fi
+      # Planned pre-lock and re-asserted under it, the way replay surveys then applies: the
+      # decision needs the cited sets of every stale row, and the printed line must name the
+      # same rows the write moved.
+      SETTLE_PLAN=$(jq -c --arg cstate "$_SETTLE_STATE" \
+        --argjson changed "$_SETTLE_CHANGED_JSON" '
+        # D2 normalisation, applied to BOTH sides: a citation reads `docs/x.md#anchor` or
+        # `src/y.sh:42` where files_touched records the bare path, and an unnormalised
+        # comparison would miss every anchored citation — failing toward `completed`.
+        def norm: sub("^\\./"; "") | sub("#.*$"; "") | sub(":[0-9]+$"; "");
+        . as $st
+        | [ $changed[]
+            | select(type == "string")
+            # The files_touched overflow marker is a count, not a path.
+            | select(test("^\\+ [0-9]+ more$") | not)
+            | norm
+            # The target rewrites its own artifact on every completion, so counting .context/
+            # would return every dependent and defeat the intersection test entirely.
+            | select(startswith(".context/") | not)
+            | select(length > 0) ] as $chg
+        | [ ($st.tasks // {}) | to_entries[]
+            | select((.value.status // "") == "stale") | .key ] | sort
+        | { settled: [ .[] | . as $t
+            | ($t | sub("[0-9]+$"; "")) as $code
+            | ( [ ($st.facts.files_read // [])[] | select(.stage == $code) | .path // empty ]
+                + [ ($st.tasks[$t].metadata.consumes // [])[] | (.paths // [])[] ]
+                | map(select(type == "string") | norm) | unique ) as $cited
+            | (if $cstate != "known" then ["pending", "change-set-unknown"]
+               elif ($cited | length) == 0 then ["pending", "cited-set-empty"]
+               elif any($chg[]; . as $p | ($cited | index($p)) != null)
+               then ["pending", "cited-file-changed"]
+               else ["completed", "no-cited-file-changed"] end) as $d
+            | { task: $t, to: $d[0], reason: $d[1] } ] }' "$STATE_PATH") || {
+        printf >&2 'settle plan failed on tasks.%s; state.json unchanged\n' "$TASK_OP_ID"
+        log_msg ERROR "settle plan failed on tasks.${TASK_OP_ID}; state.json unchanged"
+        exit 1
+      }
+      TASK_FILTER='
+        . as $st
+        | [ $plan[] | select((($st.tasks[.task].status) // "") != "stale") ] as $moved
+        | if ($moved | length) > 0
+          then error("settle member(s) no longer stale under the lock: "
+                     + ([$moved[].task] | join(",")))
+          else reduce ($plan[]) as $p (.; .tasks[$p.task].status = $p.to) end'
+      TASK_JQ_ARGS=(--argjson plan "$(jq -c '.settled' <<< "$SETTLE_PLAN")")
+      TASK_OP_VALUE="settled=$(jq -r '.settled | length' <<< "$SETTLE_PLAN") change_set=${_SETTLE_STATE}"
+      ;;
     claim)
       require_task_exists "$TASK_OP_ID" claim
       _CLAIM_STATUS=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].status // ""' "$STATE_PATH")
@@ -1978,6 +2412,16 @@ if [[ -n "$TASK_OP" ]]; then
         completed | skipped | failed)
           printf >&2 'claim refused: tasks.%s is %s; use --task-replay\n' "$TASK_OP_ID" "$_CLAIM_STATUS"
           log_msg ERROR "claim refused: tasks.${TASK_OP_ID} is ${_CLAIM_STATUS}; state.json unchanged"
+          exit 4
+          ;;
+        # A parked row is refused in the same class as a settled one (exit 4, file untouched),
+        # but for the opposite reason: its result still stands and whether it must run again is
+        # decided when the corrected task completes, not by whoever dispatches next. Claiming it
+        # would burn the rework round the settlement is there to grant or withhold. The remedy is
+        # deliberately not --task-replay, which would clear the verdict this status preserves.
+        stale)
+          printf >&2 'claim refused: tasks.%s is stale; it settles when the corrected task completes\n' "$TASK_OP_ID"
+          log_msg ERROR "claim refused: tasks.${TASK_OP_ID} is stale; state.json unchanged"
           exit 4
           ;;
       esac
@@ -2113,6 +2557,11 @@ if [[ -n "$TASK_OP" ]]; then
     log_msg INFO "ledger ${TASK_OP}: tasks.${TASK_OP_ID} ${TASK_OP_VALUE}"
     if [[ "$TASK_OP" == "replay" ]]; then
       replay_audit
+    fi
+    # Printed only after the rename: the caller applies this line without re-deciding
+    # anything, so a plan that did not land must never reach it.
+    if [[ "$TASK_OP" == "settle_stale" ]]; then
+      printf '%s\n' "$SETTLE_PLAN"
     fi
     exit 0
   fi

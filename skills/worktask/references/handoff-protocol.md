@@ -390,9 +390,24 @@ once the path has landed. The landing that puts it there is the `contract_landed
         resume_with: { const: artifact_path }
 ```
 
-A defect in work an upstream task owns, which this stage does not fix itself. Keys and order are
-DC's (`skills/shared/stage-contracts.md § The correction return (tpl-dc)`). Its `artifact_path` is
-the ledger `metadata.artifact` of `target_task`, once corrected.
+A defect in work another task owns, which this stage does not fix itself. Any stage or resolver may
+return one; DC's option-existence gate is the worked example that fixed the key order
+(`skills/shared/stage-contracts.md § The correction return (tpl-dc)`). Its `artifact_path` is
+`target_task`'s own artifact, once corrected: `tasks[<target>].artifact` when its completion merge
+recorded one, else `metadata.artifact`, the path the plan seeded.
+
+##### Schema — blocked_on, the correction arm's two legs
+
+`target_task` must be a `completed` task: a correction re-opens finished work, and the router's
+`--task-reopen` guards refuse any other target with exit 4 and no ledger write (§ tasks — re-open
+and settle). `route` parks the source, re-opens the target, parks that target's consumers `stale`,
+and writes the `opened` leg (`result: blocked`). `resume --leg closed`, at that target's own next
+completion, writes `closed` (`result: ok`) with its `decision_ref` and the corrected
+`artifact_path`. Both rows carry `{kind, arm, leg}` and nothing else but that `decision_ref`: not
+the target id, not the `finding`, not its `evidence_ref`
+(`skills/agent-coordination/SKILL.md § Writers — blocked_on rows, the correction legs`). The finding
+reaches the re-opened target through `metadata.gate_blockers` and the remediation injection, so no
+second rendering path exists to review.
 
 #### Schema — blocked_on, the host_environment arm
 
@@ -1281,7 +1296,7 @@ split stage's four writers collide on one key. Full grammar: § Field notes — 
       type: object
       required: [status, metadata]
       properties:
-        status: { type: string, enum: [pending, in_progress, completed, blocked, skipped, failed] }
+        status: { type: string, enum: [pending, in_progress, completed, blocked, skipped, failed, stale] }
 ```
 
 ##### tasks — routing & dependencies
@@ -1327,11 +1342,74 @@ A stage patch sets `status` from the artifact's `handoff.verdict`; `state-patch.
 | `fail`, `reject`, `no-go` | `pending` | `metadata.gate_from_stage` = the patched stage's code, on the patched row |
 | missing, or any other string | — | refused: exit 3, `state.json` byte-identical, on every caller path |
 
+No verdict maps to `stale`: a stage never reports itself stale. `--task-reopen` is its only writer
+and `--task-settle-stale` its only clearer (§ tasks — re-open and settle).
+
 ##### tasks — loop-back, claim, create
 
 The patch writes only its own row. Moving a failure back to DV is the orchestrator loop's job: it copies `gate_from_stage` onto the DV row it replays. `--claim <TASK_ID>` moves a `pending`/`blocked` row to `in_progress` and stamps `claimed_at`; a re-claim is a no-op, and a settled row (`completed`/`skipped`/`failed`) exits 4 — use `--task-replay`. A replay also sets `rework_pending` on a row holding `tests_executed`, so its next completion files the earlier round (§ Field notes — tests_executed, rework_runs).
 
 `--task-create` refuses a row whose metadata lacks `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (absent, `null` or `""`; `false` counts as present) with exit 2 and `state.json` untouched. `PL`/`IR` rows are exempt: PL0 is the stage that decides `base_ref` and `requires_screenshots`.
+
+##### tasks — re-open and settle
+
+`--task-reopen <TARGET> --from <SOURCE> [--finding-file <path|->]` re-opens a task a correction
+names (`§ Schema — blocked_on, the correction arm`; router behaviour: `skills/worktask/SKILL.md
+§ blocked-on-dispatch.sh — route, the correction arm`). Every guard runs before any mutation — the
+target exists, is not the source, and is `completed`; the source exists — and a refusal is exit 4
+with `state.json` byte-identical, as `--claim` and `--task-replay` refuse (unknown id 1, malformed
+2). One atomic apply then writes:
+
+- the target: `pending`, `metadata.fix_round` = `(fix_round // 0) + 1`, `metadata.gate_from_stage` =
+  the source's stage code, `metadata.gate_blockers` = one string — the stdin text with trailing
+  whitespace stripped, or `[]` when that text is empty. The router composes that text as the
+  `finding` byte-for-byte, a blank line, then `evidence_ref: <ref>` and `source_task: <source id>`,
+  because `gate_from_stage` carries the source's stage **code** only and those two refs have no
+  other channel into the brief. Its artifact, verdict and handoff survive, as they do across a
+  replay, and `fix_round` is what re-arms the remediation brief
+  (`skills/worktask/SKILL.md § Step 4.6`).
+- every consumer: `stale`. The set is transitive — each task reachable downstream of the target
+  through `blocked_by` — filtered to `status == "completed"`, minus the source, minus every stage
+  code in `REPLAY_SIDE_EFFECT_STAGES` (`FN`, `RE`), the one constant the cascading replay already
+  skips by. Nothing is reset: each keeps its verdict, artifact and handoff.
+
+The finding arrives on **stdin** (`--finding-file -`), never argv, and is excluded from the
+state-patch log — the same channel an untrusted peer answer takes to the reply writer. Re-running
+the op is refused by the `completed` guard itself, which is what makes a retried route idempotent:
+no second `fix_round` bump.
+
+##### tasks — settle, the cited set and the change set
+
+`--task-settle-stale <TARGET>` runs at the re-opened target's **own** completion boundary, after its
+completion patch and before the next ready-filter pass (`skills/worktask/SKILL.md § Step 6.5d —
+settle the consumers of a re-opened task`). For each `stale` task it decides one direction and
+prints `{"settled":[{"task","to","reason"}]}`:
+
+| Case, first match wins | `status` becomes | `reason` |
+|---|---|---|
+| the change set could not be **read** at all: no artifact path, an unreadable artifact, no parser, or a `files_touched` that is absent or a declared-empty list | `pending` | `change-set-unknown` |
+| the cited set is empty after normalisation | `pending` | `cited-set-empty` |
+| the two sets intersect | `pending` | `cited-file-changed` |
+| a change set was read and nothing cited is in it — **including** a change set the `.context/` exclusion emptied | `completed` | `no-cited-file-changed` |
+
+Read versus empty is the distinction that carries the fail-safe, and the two empties are not the
+same: a change set nothing could read is **unknown**, so every dependent re-verifies; a change set
+read and then emptied by the filters below is **known**, and a dependent citing nothing in it keeps
+its result. Collapsing them would turn "no evidence" into "no change".
+
+**Cited set** of a stale task `T`: `facts.files_read[] | select(.stage == <T's stage code>) | .path`
+unioned with `tasks[T].metadata.consumes[].paths[]`. **Change set**: `handoff.files_touched[]` of the
+target's artifact, resolved as `tasks[TARGET].artifact` else `tasks[TARGET].metadata.artifact`
+(recorded-else-planned, a relative path taken against the ledger's own directory), then filtered:
+the `+ N more` overflow marker drops as a count rather than a path, and **every `.context/` path
+drops** — the target always rewrites its own artifact, so counting it would return every dependent
+and defeat the intersection test. Both sides are normalised first: a leading `./`, a trailing
+`#anchor` and a trailing `:N` line suffix are stripped. `--changed <path[,path...]>` substitutes the
+change set, and makes the state `known` when it names at least one path; it is a test seam, not an
+orchestrator argument.
+
+`facts.files_read` keeps only its newest 30 entries (§ Field notes — files_read), so an old stage's
+citations can be gone by settle time; that is the empty-cited-set case above and it re-verifies.
 
 #### tasks — tests_executed, rework_runs
 
@@ -1722,6 +1800,8 @@ One-sentence worktask intent, populated by PL0 from the task description (or the
 #### Field notes — files_read
 
 Source files read by prior stages. Populated by DV; consumed by DR/QA, which SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>` for any file listed. Full reads stay permitted when the diff is insufficient. Absent ⇒ normal reads (backward-compat).
+
+Second reader: the stale-settlement check reads it as half of a dependent's cited set (§ tasks — settle, the cited set and the change set).
 
 Scripted writer: `state-patch.sh --files-read <TASK_ID> <path>...` unions `{path, stage, lines: "all"}` — `stage` is the code of `<TASK_ID>`, a leading `./` is stripped, and the newest entry wins per path. A path that is empty, longer than 512 characters, or holds a TAB/CR/LF fails the whole call (exit 2). Past 30 entries the oldest are dropped without a spill file: this is a read hint, not a record.
 

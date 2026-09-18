@@ -58,20 +58,44 @@ self_test() {
   rc=0
   out=$(_st_run route --task-id DC0 --payload '{"verdict":"blocked","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"SECRET-FINDING-TEXT","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}') || rc=$?
   if [ "$rc" -eq 0 ] \
-    && printf '%s' "$out" | jq -e '.arm == "user_action" and .leg == "requested" and .fallback_from == "correction" and .owner_issue == 404 and .parked == true' > /dev/null 2>&1 \
-    && jq -e '.tasks.DC0.status == "blocked" and .tasks.DC0.metadata.blocked_on.kind == "correction"' "$state" > /dev/null 2>&1 \
+    && printf '%s' "$out" | jq -e '.arm == "correction" and .leg == "opened" and .parked == true
+      and (has("fallback_from") | not) and (has("owner_issue") | not)' > /dev/null 2>&1 \
+    && jq -e '.tasks.DC0.status == "blocked" and .tasks.DC0.metadata.blocked_on.kind == "correction"
+      and .tasks.DV0.status == "pending" and .tasks.DV0.metadata.fix_round == 1
+      and .tasks.DV0.metadata.gate_from_stage == "DC"
+      and (.tasks.DV0.metadata.gate_blockers[0] | startswith("SECRET-FINDING-TEXT"))
+      and (.tasks.DV0.metadata.gate_blockers[0] | contains("evidence_ref: a.sh:1"))
+      and (.tasks.DV0.metadata.gate_blockers[0] | contains("source_task: DC0"))
+      and .tasks.DV0.metadata.artifact == "development-0.md"' "$state" > /dev/null 2>&1 \
     && [ "$(_st_rows blocked_on)" = 1 ] && ! grep -qF 'SECRET-FINDING-TEXT' "$audit"; then
-    _st_pass "route: a pending correction arm parks as a user_action with one redacted requested row"
+    _st_pass "route: a correction re-opens its target, parks the source and writes one opened row"
   else
-    _st_fail "route: a pending correction arm parks as a user_action with one redacted requested row"
+    _st_fail "route: a correction re-opens its target, parks the source and writes one opened row"
   fi
 
   rc=0
-  _st_run route --task-id DC0 --payload '{"verdict":"blocked","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"x","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc=$?
-  if [ "$rc" -eq 0 ] && [ "$(_st_rows blocked_on)" = 1 ]; then
-    _st_pass "route: re-routing a need that is still open writes no second requested row"
+  _st_run route --task-id DC0 --payload '{"verdict":"blocked","blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"SECRET-FINDING-TEXT","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc=$?
+  if [ "$rc" -eq 0 ] && [ "$(_st_rows blocked_on)" = 1 ] \
+    && jq -e '.tasks.DV0.metadata.fix_round == 1' "$state" > /dev/null 2>&1; then
+    _st_pass "route: re-routing a still-open correction writes no second opened row and bumps nothing"
   else
-    _st_fail "route: re-routing a need that is still open writes no second requested row"
+    _st_fail "route: re-routing a still-open correction writes no second opened row and bumps nothing"
+  fi
+
+  # Each refusal is the router's own guard, so it must land BEFORE any write: an unchanged file
+  # and an unchanged row count are the assertion, not just the exit code.
+  before=$(cat "$state")
+  rc=0
+  local rc_self=0 rc_absent=0 rows_before
+  rows_before=$(_st_rows blocked_on)
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"correction","detail":{"target_task":"DV0","finding":"f","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc=$?
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"correction","detail":{"target_task":"QA0","finding":"f","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc_self=$?
+  _st_run route --task-id QA0 --payload '{"blocked_on":{"kind":"correction","detail":{"target_task":"DV9","finding":"f","evidence_ref":"a.sh:1","severity":"blocking"},"resume_with":"artifact_path"}}' > /dev/null || rc_absent=$?
+  if [ "$rc" -eq 1 ] && [ "$rc_self" -eq 1 ] && [ "$rc_absent" -eq 1 ] \
+    && [ "$(cat "$state")" = "$before" ] && [ "$(_st_rows blocked_on)" = "$rows_before" ]; then
+    _st_pass "route: a target that is not completed, is the source, or is absent refuses and writes nothing"
+  else
+    _st_fail "route: a target that is not completed, is the source, or is absent refuses and writes nothing"
   fi
 
   before=$(cat "$state")
@@ -136,7 +160,9 @@ self_test() {
   out=$(_st_run batch) || rc=$?
   if [ "$rc" -eq 0 ] \
     && printf '%s' "$out" | jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DR0", "QA0"]
-      and all(.needs[]; .resume_leg == "verified")
+      and (.needs[] | select(.task_id == "DC0") | .arm == "correction" and .resume_leg == "closed"
+           and (has("fallback_from") | not))
+      and all(.needs[] | select(.task_id != "DC0"); .resume_leg == "verified")
       and (.payloads[0].questions | length) == 3
       and all(.payloads[0].questions[]; (.question | contains("! ") | not))' > /dev/null 2>&1; then
     _st_pass "batch: every parked non-permission need is asked, and a fallback offers no ! line"
@@ -147,10 +173,13 @@ self_test() {
   rc=0
   _st_run resume --task-id DC0 --leg requested > /dev/null || rc=$?
   local rc5=0
-  out=$(_st_run resume --task-id DC0 --leg verified) || rc5=$?
+  out=$(_st_run resume --task-id DC0 --leg closed) || rc5=$?
   if [ "$rc" -eq 1 ] && [ "$rc5" -eq 0 ] \
-    && printf '%s' "$out" | jq -e '.cleared == true and .resume_block.decision_ref == "blocked_on:DC0:correction:1" and .resume_block.artifact_path == "development-0.md"' > /dev/null 2>&1 \
-    && jq -e '.tasks.DC0.metadata.blocked_on == null' "$state" > /dev/null 2>&1; then
+    && printf '%s' "$out" | jq -e '.cleared == true and .resume_block.arm == "correction"
+      and .resume_block.leg == "closed" and .resume_block.decision_ref == "blocked_on:DC0:correction:1"
+      and .resume_block.artifact_path == "development-0.md"' > /dev/null 2>&1 \
+    && jq -e '.tasks.DC0.status == "in_progress" and .tasks.DC0.metadata.blocked_on == null' "$state" > /dev/null 2>&1 \
+    && ! grep -qF 'SECRET-FINDING-TEXT' "$audit"; then
     _st_pass "resume: only the closing leg resumes, and the ref and artifact_path are named"
   else
     _st_fail "resume: only the closing leg resumes, and the ref and artifact_path are named"

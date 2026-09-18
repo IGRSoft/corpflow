@@ -52,6 +52,13 @@ tmp→fsync→rename, and the disk guard.
 | Merge metadata | `state-patch.sh --task-meta <ID> --set '<json>'` |
 | Complete from artifact | `state-patch.sh --stage <CODE> [--task-id <ID>] [--prev <CODE>] [--via <layer>]` |
 | Resolve an id (read-only) | `state-patch.sh --resolve-task-id <CODE>` |
+| Re-open on a correction | `state-patch.sh --task-reopen <TARGET> --from <SOURCE> [--finding-file <path\|->]` |
+| Settle the parked consumers | `state-patch.sh --task-settle-stale <TARGET>` |
+
+The last two are the correction pair: the first re-opens one `completed` task and parks its
+consumers `stale`, the second decides each parked row at that target's next completion. Guards,
+exits, the consumer set and the cited-ref rule:
+`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`.
 
 ### Idempotency and key creation
 
@@ -87,6 +94,7 @@ only purpose and normative use.
 |-------|---------|
 | `error_file` | Auto-derived from `agent` when absent (§ error_file derivation). The stage agent reads it to see its own prior retry narrative |
 | `retry_count` | Incremented on retry; resets on escalation or success |
+| `fix_round` | Rounds of correction rework this task has been re-opened for. Written only by `state-patch.sh --task-reopen`; `> 0` re-arms the remediation brief for a target of any stage (`skills/worktask/SKILL.md § Step 4.6`). Distinct from `retry_count`, which counts this task's own failures |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
 | `escalation_counts` | Escalations attempted per edge, keyed by the **full task id** of the target (`{"AR0": 2}`) so a split stage's writers do not share a counter. Survives the escalation handoff that resets `retry_count`; at cap 2 the task is written `failed` with `last_error.class: "exhausted"` |
 
@@ -463,6 +471,15 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `blocked` | Waiting on an unsatisfied `blocked_by` entry, or held by a refused landing (`metadata.landing_error`); released by clearing that field, then `--task-status <ID> pending` |
 | `skipped` | Dropped by dynamic sizing during PL/AR (`state-patch.sh --task-status QA0 skipped`). The entry stays as an audit record of what was sized out; terminal, and never blocks a dependent |
 | `failed` | Terminally failed: retries and per-edge escalations are both exhausted, `last_error.class` is `exhausted`, and no further dispatch will be attempted. Terminal, and settles the completion loop (`skills/worktask/SKILL.md` `SETTLED`) |
+| `stale` | A `completed` task parked because the work it consumed was re-opened by a correction. Its verdict, artifact and handoff stand untouched — parked, never reset. Written only by `state-patch.sh --task-reopen`, left only by `--task-settle-stale`, which sends it back to `pending` or `completed` (`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`). Neither ready (the loop filter takes `pending`) nor settled, so tasks blocked by it stay unready and the loop stays open |
+
+### `stale` names one thing only
+
+The status above is unrelated to two older uses of the word, and no code path joins them: the
+**liveness** sense in `skills/worktask/scripts/stale-check.sh`, which judges whether a dispatched
+agent has gone quiet and never writes a task status; and `--task-replay`'s `stale_dependents`
+survey field, which only *reports* completed dependents a replay may have invalidated and resets
+nothing. A row reads `stale` because a correction re-opened its input, for no other reason.
 
 ## Hook Events for Stage Monitoring
 
