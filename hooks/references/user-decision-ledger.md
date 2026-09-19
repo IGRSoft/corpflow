@@ -99,15 +99,21 @@ stdout. A fork subagent's call (`agent_id` present) is accepted: the answer is s
 
 - **P1 context.** `corpflow_context_root` finds a `state.json` with a non-empty `.worktask_id`.
   Otherwise the hook exits silently, because there is no context to audit into.
-- **P2 event.** `hook_event_name` is `PostToolUse`, `tool_name` matches
-  `^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$`, and `tool_use_id` matches `^[A-Za-z0-9_-]{1,128}$` (`bad_event`).
+- **P2 event.** `hook_event_name` is `PostToolUse`, `tool_name` matches the lib's
+  `UD_ASK_TOOL_RE`, `^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$` (its only shell copy; the plugin.json matcher mirrors it; a
+  missing lib or an empty pattern refuses as `no_digest_tool` before the match), and `tool_use_id` matches `^[A-Za-z0-9_-]{1,128}$` (`bad_event`).
 - **P3 the user answered.** `tool_input.answers` alone is no signal, since the permission UI fills it
   for genuine answers. A pre-answer shows as `answers` in the transcript's own `tool_use.input`
   (`pre_answered`). A `tool_response.afkTimeoutMs` is an idle auto-answer (`idle_auto_answer`), and
   a response with no per-question answers is `no_answer`. An MCP proxy answers with a text content
-  array (`User responses:`, then `N. <answer>` per question); it is normalized to
-  `tool_response.answers` before this check, and a text that is not numbered 1..N in order, or has
-  the wrong count, synthesizes nothing and stays `no_answer`.
+  array (`User responses:`, then a `k. <answer>` block per question); it is normalized to
+  `tool_response.answers` before this check. A line matching `^[1-9][0-9]*\. ` whose number is
+  1..N (N = question count) starts a block; every other line, including a number above N, text
+  that is not numbered and a blank line, continues the block above it, joined with LF and kept
+  verbatim. Only trailing newlines at the end of the whole text are dropped. The block starts must
+  be exactly 1, 2, …, N in order. A missing header, text before block 1, a repeated, missing or
+  out-of-order start, or an answer that is empty or only whitespace synthesizes nothing and stays
+  `no_answer`: a guessed split could record one question's answer against another.
 
 ### Provenance — P4 to P7
 
@@ -159,25 +165,39 @@ rename, and confirmed with `grep -F`; a miss reports `degraded`.
 
 The same script runs on PreToolUse `Write|Edit|Bash` as a separate manifest entry. It only ever
 emits a deny, so it cannot loosen a deny or ask from another hook, and it has no ordering dependency.
+Every name test below is case-blind (`nocasematch`). On a case-insensitive volume
+`.context/DECISIONS.JSONL` and `hooks/User-Decision-Record.sh` are the real files. On a
+case-sensitive one they are other files, and a deny there costs only a false positive.
+The name tests also run on text folded by `_ud_fold`, which maps U+017F to `s` and U+212A to `k`,
+raw or `\u`-escaped: APFS treats those characters as the same file names.
 
-- **Fast path.** Stdin naming neither `decisions.jsonl` nor `user-decision-record.sh` exits 0 at
-  once, as does a tree with no `state.json`. "At once" is measured from the guard's own work: the
-  substring test is a shell builtin and forks nothing, but the script has by then sourced its four
-  libraries and read `hook_event_name` with one `jq`, the same cost every hook entry pays. Reading
-  stdin before the libraries would need the event name before jq is available, so this is the floor.
-- **Write or Edit.** Denied when `file_path`, resolved to its physical parent plus basename, is the
-  ledger or lies under its lock dir. Editing the hook source stays allowed.
-- **Fail closed.** After a fast-path hit, a missing jq or library denies. There is no environment
-  switch.
+- **Fast path.** The script reads stdin first, with one `cat`, and a payload naming none of
+  `decisions.jsonl`, `user-decision-record.sh` and `AskUserQuestion` exits 0 there: no library is
+  sourced and no `jq` runs. A builtin `read` is not used because bash reads a pipe one byte at a
+  time, which is slower than the fork on a large Write payload. Past that, a PreToolUse payload
+  naming neither of the first two strings exits 0 before any further fork, as does a tree with no
+  `state.json` once the context library has loaded.
+- **Write or Edit.** Denied when `file_path`, resolved to its physical parent plus basename, names
+  the ledger or a path under its lock dir. The name compare is case-blind. When the ledger or lock
+  dir exists, it also denies a target that is the same file (`-ef`, which also covers a hard link)
+  or whose parent is the lock dir. Editing the hook source stays allowed.
+- **Fail closed.** After a fast-path hit, a missing jq or library denies, printing the deny
+  document without jq. With no context library there is no root to prove "no worktask here", so
+  that denies too. Without jq the event comes from the raw text: only a single, unescaped top-level
+  `"hook_event_name"` whose value is `"PostToolUse"` (whitespace allowed around the colon) exits 0.
+  Every other shape counts as PreToolUse. A copy of the key inside a Write, Edit or Bash input is a
+  JSON string and so always escaped, which means it cannot fake the match. The parse is one linear
+  `sed | grep` pass, because bash 3.2's `${x//pat/}` is superlinear and would reach the hook timeout
+  (a fail-open) on a payload of tens of KB. There is no environment switch.
 
 ### Write guard — Bash
 
-- **Naming the ledger.** Allowed only when every segment, split on `|`, `;`, `&&`, `||`, `&` and
+- **Naming the ledger** (in any case). Allowed only when every segment, split on `|`, `;`, `&&`, `||`, `&` and
   newline, holds no command substitution, process substitution, `eval`, `xargs` or `tee`, and no
   redirects other than `2>/dev/null`, `>/dev/null`, `2>&1` or `>&2` (checked on the raw segment).
   The program name is derived from assignments stripped and must be one of `cat head tail wc grep
-  jq ls stat file shasum sha256sum`.
-- **Running the hook.** Denied by default when a segment names `user-decision-record.sh`. Allowed only when the program is one of `cat head tail wc grep jq ls stat file shasum sha256sum shellcheck`, or the segment has the form `[path/]bash -n` or `[path/]sh -n`. `git` is deliberately absent: it is a configurable command executor that cannot be guarded by substring checks on one line.
+  jq ls stat file shasum sha256sum`. The program names stay case-sensitive, so `CAT` is denied.
+- **Running the hook.** Denied by default when a segment names `user-decision-record.sh`, in any case. Allowed only when the program is one of `cat head tail wc grep jq ls stat file shasum sha256sum shellcheck`, or the segment has the form `[path/]bash -n` or `[path/]sh -n`. `git` is deliberately absent: it is a configurable command executor that cannot be guarded by substring checks on one line.
 - **The cost.** False denials, such as `jq '.a > 1'` on the ledger. The deny reason names the read
   path.
 

@@ -116,11 +116,14 @@ ud_line_sha256() {
 }
 
 # ud_normalize_answers <payload-file> — an MCP-proxied ask returns a text content array
-# (`User responses:` then `N. <answer>` per question) instead of an `answers` object; rewrite the
-# file with `tool_response.answers` built from it. Any other shape — an `answers` object already
-# present, a missing header, lines not numbered 1..N in order, a count that differs from
-# tool_input.questions, or duplicate question texts — leaves the file untouched, so P3 still
-# refuses it as no_answer. rc 0 either way, rc 2 on IO.
+# (`User responses:` then a `k. <answer>` block per question) instead of an `answers` object;
+# rewrite the file with `tool_response.answers` built from it. A line `^[1-9][0-9]*\. ` numbered
+# 1..N (N = question count) starts a block; every other line continues the block above it. The
+# block starts must be exactly 1..N in order, since a guessed split would record one question's
+# answer against another. Anything else — an `answers` object already present, a missing header,
+# a repeated/missing/out-of-order start, text before block 1, an empty or blank answer, or
+# duplicate question texts — leaves the file untouched, so P3 still refuses it as no_answer.
+# rc 0 either way, rc 2 on IO.
 ud_normalize_answers() {
   local _payload _tmp
   _payload="${1:-}"
@@ -146,15 +149,22 @@ ud_normalize_answers() {
         else ($resp | mcp_text) as $t
         | if $t == null then empty
           else ($t | sub("\n+$"; "") | split("\n")) as $l
-          | if ($l | length) != (($qt | length) + 1) or $l[0] != "User responses:" then empty
-            else [ range(1; $l | length) as $k
-                   | (($k | tostring) + ". ") as $p
-                   | if ($l[$k] | startswith($p)) and (($l[$k] | length) > ($p | length))
-                     then {key: $qt[$k - 1], value: $l[$k][($p | length):]} else null end ]
-            | if any(. == null) then empty
-              else from_entries as $answers
-              | (if ($resp | type) == "object" then $resp else {content: $resp} end) as $base
-              | $root | .tool_response = ($base + {answers: $answers})
+          | ($qt | length) as $n
+          | if $l[0] != "User responses:" then empty
+            else $l[1:] as $b
+            | [ range(0; $b | length) as $i
+                | ([$b[$i] | capture("^(?<k>[1-9][0-9]*)\\. ")] | .[0].k // null) as $k
+                | select($k != null and ($k | tonumber) <= $n)
+                | {i: $i, k: ($k | tonumber), p: (($k | length) + 2)} ] as $c
+            | if ([$c[].k] != [range(1; $n + 1)]) or $c[0].i != 0 then empty
+              else [ range(0; $n) as $j
+                     | (if $j + 1 < $n then $c[$j + 1].i else ($b | length) end) as $e
+                     | ([$b[$c[$j].i][$c[$j].p:]] + $b[($c[$j].i + 1):$e]) | join("\n") ] as $ans
+              | if any($ans[]; test("\\A\\s*\\z")) then empty
+                else [ range(0; $n) as $j | {key: $qt[$j], value: $ans[$j]} ] | from_entries as $answers
+                | (if ($resp | type) == "object" then $resp else {content: $resp} end) as $base
+                | $root | .tool_response = ($base + {answers: $answers})
+                end
               end
             end
           end

@@ -16,6 +16,42 @@
 #        . user-decision-record.sh --lib-only   # selftest only
 set -u
 
+# _ud_fold <text> -> sets FOLDED to <text> with the two non-ASCII characters APFS folds onto ASCII
+# letters, U+017F (long s -> s) and U+212A (Kelvin -> k), rewritten, raw or as JSON \u escapes;
+# nocasematch folds neither. sed rather than ${x//}, which is superlinear on bash 3.2.
+# rc 1 when a fold was needed and sed failed: FOLDED is then the unfolded text, and every caller
+# must fail closed, since the unfolded spelling is exactly the one the name checks miss.
+_ud_fold() {
+  FOLDED="$1"
+  case "$1" in
+    *$'\xc5\xbf'* | *$'\xe2\x84\xaa'* | *'\u017'[fF]* | *'\u212'[aA]*)
+      FOLDED=$(printf '%s' "$1" | LC_ALL=C sed -e $'s/\xc5\xbf/s/g' -e $'s/\xe2\x84\xaa/k/g' \
+        -e 's/\\u017[fF]/s/g' -e 's/\\u212[aA]/k/g') && [ -n "$FOLDED" ] && return 0
+      FOLDED="$1"
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# Hot path: a payload naming none of the strings do_pre and do_post act on exits before any lib
+# or jq. `$(cat)`, not `read -d ''`: bash reads a pipe a byte per syscall, slower on big Writes.
+if [ "${1:-}" != "--lib-only" ]; then
+  PAYLOAD=""
+  [ -t 0 ] || PAYLOAD=$(cat 2> /dev/null)
+  [ -n "$PAYLOAD" ] || exit 0
+  # Case-blind: on a case-insensitive volume DECISIONS.JSONL is the same file.
+  # A failed fold cannot rule the payload out, so it goes on to do_pre, which denies.
+  if _ud_fold "$PAYLOAD"; then
+    shopt -s nocasematch
+    case "$FOLDED" in
+      *decisions.jsonl* | *user-decision-record.sh* | *AskUserQuestion*) : ;;
+      *) exit 0 ;;
+    esac
+    shopt -u nocasematch
+  fi
+fi
+
 _HOOK_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)"
 
 for _ud_libfile in model-switch-lib.sh lib/command-head-lib.sh lib/permission-denied-lib.sh lib/user-decision-lib.sh; do
@@ -28,6 +64,33 @@ done
 set +e
 
 UD_AUDIT_CTX=""
+
+# _ud_icase_has <haystack> <needle> / _ud_icase_eq <a> <b> / _ud_icase_under <path> <dir> —
+# case-blind name tests, leaving the caller's nocasematch setting as it found it.
+_ud_icase_has() {
+  local r=1 was=0
+  shopt -q nocasematch && was=1
+  shopt -s nocasematch
+  case "$1" in *"$2"*) r=0 ;; esac
+  [ "$was" -eq 1 ] || shopt -u nocasematch
+  return "$r"
+}
+_ud_icase_eq() {
+  local r=1 was=0
+  shopt -q nocasematch && was=1
+  shopt -s nocasematch
+  [[ $1 == "$2" ]] && r=0
+  [ "$was" -eq 1 ] || shopt -u nocasematch
+  return "$r"
+}
+_ud_icase_under() {
+  local r=1 was=0
+  shopt -q nocasematch && was=1
+  shopt -s nocasematch
+  [[ $1 == "$2"/* ]] && r=0
+  [ "$was" -eq 1 ] || shopt -u nocasematch
+  return "$r"
+}
 _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
 # git is deliberately absent from BOTH arms. It is a configurable command executor — `git -c
 # alias.x='!bash <hook>' x`, `git difftool -x bash`, `GIT_EXTERNAL_DIFF=<hook> git diff`, pagers
@@ -35,9 +98,6 @@ _UD_LEDGER_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum)$'
 # it safely. Inspecting the hook with git still works from any command that does not name the
 # script itself (`git diff hooks/`, `git checkout -- hooks/`), which this guard never sees.
 _UD_HOOK_ALLOW_RE='^(cat|head|tail|wc|grep|jq|ls|stat|file|shasum|sha256sum|shellcheck)$'
-# The native ask tool or any MCP server's proxy of it. Must equal UD_ASK_TOOL_RE in the lib; held
-# here too so P2 still refuses a foreign tool as bad_event when the lib failed to load.
-_UD_ASK_TOOL_RE='^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$'
 
 # _ud_refuse <ctx> <reason> [<tool_use_id>] — one user_decision_refused row; tool_use_id is
 # folded in only once P2 (event/tool/id shape) has already passed.
@@ -94,13 +154,15 @@ do_post() {
   TOOL_NAME=$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // ""' 2> /dev/null) || TOOL_NAME=""
   TUID=$(printf '%s' "$PAYLOAD" | jq -r '.tool_use_id // "" | tostring' 2> /dev/null) || TUID=""
 
-  if ! [[ "$TOOL_NAME" =~ $_UD_ASK_TOOL_RE ]] || ! [[ "$TUID" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; then
-    _ud_refuse "$CTX" bad_event
+  # UD_ASK_TOOL_RE lives only in the lib. Refuse before the match when the lib is absent or the
+  # pattern is empty: an empty ERE matches every tool name, so an unguarded test would accept all.
+  if ! command -v ud_append_call > /dev/null 2>&1 || [ -z "${UD_ASK_TOOL_RE:-}" ]; then
+    _ud_refuse "$CTX" no_digest_tool
     return 0
   fi
 
-  if ! command -v ud_append_call > /dev/null 2>&1; then
-    _ud_refuse "$CTX" no_digest_tool "$TUID"
+  if ! [[ "$TOOL_NAME" =~ $UD_ASK_TOOL_RE ]] || ! [[ "$TUID" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; then
+    _ud_refuse "$CTX" bad_event
     return 0
   fi
 
@@ -174,8 +236,9 @@ _ud_deny() {
   return 0
 }
 
-# _ud_deny_fail_closed — the prefilter matched, but jq or the lib is unavailable: deny, no
-# audit row (writing one needs the same missing jq), so deleting a file cannot disarm the guard.
+# _ud_deny_fail_closed — the fast path matched, but jq or a library is unavailable: deny, no
+# audit row (writing one needs the same missing jq), so deleting a file or dropping jq from PATH
+# cannot disarm the guard.
 _ud_deny_fail_closed() {
   printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"user-decision-record.sh: jq or its library is unavailable; denying by default after the ledger/hook-script prefilter matched."}}'
   return 0
@@ -188,7 +251,7 @@ _ud_guard_ledger_cmd() {
   local cmd="$1" seg sseg prog scrub segs
   segs=$(printf '%s\n' "$cmd" | tr ';&|' '\n')
   while IFS= read -r seg; do
-    [ -n "${seg//[[:space:]]/}" ] || continue
+    case "$seg" in *[![:space:]]*) ;; *) continue ;; esac
     # AD8's rule is over the command, so the checks below read the RAW segment: an assignment's
     # value is shell the shell still runs (`X=$(tee<a>ledger) cat ledger`), and stripping it
     # first would hide the substitution, the redirect and the denied program alike. The stripped
@@ -236,11 +299,8 @@ _ud_guard_hook_cmd() {
   local cmd="$1" seg sseg prog segs scrub
   segs=$(printf '%s\n' "$cmd" | tr ';&|' '\n')
   while IFS= read -r seg; do
-    [ -n "${seg//[[:space:]]/}" ] || continue
-    case "$seg" in
-      *user-decision-record.sh*) : ;;
-      *) continue ;;
-    esac
+    case "$seg" in *[![:space:]]*) ;; *) continue ;; esac
+    _ud_icase_has "$seg" user-decision-record.sh || continue
     # Raw segment, for the reason spelled out in the ledger arm above: an assignment value like
     # `X=$(./hooks/user-decision-record.sh<p.json)` runs the hook before the allow-listed program
     # on the same line ever starts.
@@ -283,14 +343,21 @@ _ud_guard_hook_cmd() {
 }
 
 # do_pre — PreToolUse Write|Edit|Bash. The fast path is a bare substring test on the raw
-# payload text: with neither string present, nothing below this point ever forks.
+# payload text: with neither string present, nothing below this point ever forks. On a hit, a
+# missing context library denies (no root can be found, so "no worktask here" is unprovable);
+# once a root is found, no state.json still allows, and a missing jq or ledger library denies.
 do_pre() {
-  case "$PAYLOAD" in
-    *decisions.jsonl* | *user-decision-record.sh*) : ;;
-    *) return 0 ;;
-  esac
+  if ! _ud_fold "$PAYLOAD"; then
+    _ud_deny_fail_closed
+    return 0
+  fi
+  _ud_icase_has "$FOLDED" decisions.jsonl || _ud_icase_has "$FOLDED" user-decision-record.sh || return 0
 
   local CTX TOOL FPATH CMD LEDGER LOCKDIR base parent phys target ctxp
+  if ! command -v corpflow_context_root > /dev/null 2>&1; then
+    _ud_deny_fail_closed
+    return 0
+  fi
   CTX=$(corpflow_context_root)
   [ -n "$CTX" ] || return 0
   [ -f "$CTX/state.json" ] || return 0
@@ -312,7 +379,8 @@ do_pre() {
       [ "$parent" != "$FPATH" ] || parent="."
       phys="$(CDPATH='' cd -- "$parent" 2> /dev/null && pwd -P)"
       [ -n "$phys" ] || return 0
-      target="$phys/$base"
+      _ud_fold "$phys/$base" || { _ud_deny_fail_closed; return 0; }
+      target="$FOLDED"
       # Both sides physical: a root reached through a symlink (macOS /var -> /private/var) would
       # otherwise never string-equal the resolved target.
       ctxp="$(CDPATH='' cd -- "$CTX" 2> /dev/null && pwd -P)"
@@ -320,26 +388,37 @@ do_pre() {
         LEDGER="$ctxp/decisions.jsonl"
         LOCKDIR="${LEDGER}.lock"
       fi
-      case "$target" in
-        "$LEDGER")
-          _ud_deny "$TOOL targets the user-decision ledger, which only hooks/user-decision-record.sh may write." "$TOOL" "$FPATH"
-          ;;
-        "$LOCKDIR" | "$LOCKDIR"/*)
-          _ud_deny "$TOOL targets the user-decision ledger's lock directory." "$TOOL" "$FPATH"
-          ;;
-      esac
+      # Name compare is case-blind and -ef adds the same-file test (another spelling, a hard link).
+      if _ud_icase_eq "$target" "$LEDGER" || { [ -e "$LEDGER" ] && [ "$target" -ef "$LEDGER" ]; }; then
+        _ud_deny "$TOOL targets the user-decision ledger, which only hooks/user-decision-record.sh may write." "$TOOL" "$FPATH"
+      elif _ud_icase_eq "$target" "$LOCKDIR" || _ud_icase_under "$target" "$LOCKDIR" \
+        || { [ -e "$LOCKDIR" ] && { [ "$target" -ef "$LOCKDIR" ] || [ "$phys" -ef "$LOCKDIR" ]; }; }; then
+        _ud_deny "$TOOL targets the user-decision ledger's lock directory." "$TOOL" "$FPATH"
+      fi
       ;;
     Bash)
       CMD=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.command // ""' 2> /dev/null) || CMD=""
       [ -n "$CMD" ] || return 0
-      case "$CMD" in
-        *decisions.jsonl*) _ud_guard_ledger_cmd "$CMD" ;;
-      esac
-      case "$CMD" in
-        *user-decision-record.sh*) _ud_guard_hook_cmd "$CMD" ;;
-      esac
+      _ud_fold "$CMD" || { _ud_deny_fail_closed; return 0; }
+      CMD="$FOLDED"
+      _ud_icase_has "$CMD" decisions.jsonl && _ud_guard_ledger_cmd "$CMD"
+      _ud_icase_has "$CMD" user-decision-record.sh && _ud_guard_hook_cmd "$CMD"
       ;;
   esac
+  return 0
+}
+
+# _ud_event_nojq — sets EVENT without jq; PostToolUse only when the one unescaped
+# `"hook_event_name"` key has that value, else PreToolUse, which denies on a fast-path hit.
+# Dropping escapes first means a copy of the key inside a JSON string value never reads as a key.
+# One sed|grep pass: bash 3.2 `${x//pat/}` is superlinear and reaches the hook timeout at ~25 KB.
+_ud_event_nojq() {
+  local hits re='"PostToolUse"$'
+  EVENT=PreToolUse
+  hits=$(printf '%s' "$PAYLOAD" | LC_ALL=C sed -e 's/\\\\//g' -e 's/\\"//g' \
+    | LC_ALL=C grep -oE '"hook_event_name"([[:space:]]*:[[:space:]]*"[A-Za-z]*")?' 2> /dev/null)
+  case "$hits" in '' | *$'\n'*) return 0 ;; esac
+  [[ $hits =~ $re ]] && EVENT=PostToolUse
   return 0
 }
 
@@ -348,12 +427,11 @@ if [ "${1:-}" = "--lib-only" ]; then
   return 0 2> /dev/null || exit 0
 fi
 
-command -v jq > /dev/null 2>&1 || exit 0
-PAYLOAD=""
-[ -t 0 ] || PAYLOAD=$(cat 2> /dev/null)
-[ -n "$PAYLOAD" ] || exit 0
-
-EVENT=$(printf '%s' "$PAYLOAD" | jq -r '.hook_event_name // ""' 2> /dev/null) || EVENT=""
+if command -v jq > /dev/null 2>&1; then
+  EVENT=$(printf '%s' "$PAYLOAD" | jq -r '.hook_event_name // ""' 2> /dev/null) || EVENT=""
+else
+  _ud_event_nojq
+fi
 case "$EVENT" in
   PostToolUse) do_post ;;
   PreToolUse) do_pre ;;

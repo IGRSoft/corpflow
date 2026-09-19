@@ -553,7 +553,8 @@ _tree() {
   _bo batch --boundary DV1
   assert_success
   [ "$(_rows escalation_parked)" = 1 ] || fail "expected one escalation_parked row, got $(_rows escalation_parked)"
-  run jq -e 'select(.action == "escalation_parked") | .subject == "DV1" and .metadata.kind == "user_action"
+  run jq -e 'select(.action == "escalation_parked") | .subject == "DV1" and .task_id == "DV1"
+    and .metadata.kind == "user_action"
     and ([.metadata.escalated[] | select(.kind == "user_action") | keys_unsorted] == [["kind", "command_head", "truncated"]])
     and ([.metadata.escalated[] | select(.kind == "correction")] == [{kind: "correction"}])' "$AUDIT"
   assert_success

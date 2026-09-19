@@ -773,7 +773,7 @@ cmd_batch() {
         and .subject == $b and .metadata.kind == "user_action" and .metadata.escalated == $e)] | length > 0' \
     "$AUDIT" > /dev/null 2>&1; then
     corpflow_audit_row --file "$AUDIT" --actor orchestrator --action escalation_parked \
-      --result block --subject "$boundary" \
+      --result block --subject "$boundary" --task-id "$boundary" \
       --meta "$(jq -cn --argjson e "$escalated" '{escalated: $e, reason: "parked_escalation", kind: "user_action"}')"
     if [ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ]; then row_written=true; fi
   fi

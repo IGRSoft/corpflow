@@ -132,10 +132,98 @@ MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gra
 # Known bypasses, all allow-direction: $(...)/backticks/here-docs are not
 # segment-split; `find -exec`, `xargs`, and a renamed or written-then-executed
 # runner never reach head position; `env -i`, `\pytest`, and `bash -c'x'` (no
-# space) are not unwrapped; nesting past MAX_RECURSE_DEPTH classifies not_test
-# rather than recursing unboundedly; `npm test --dry-run` classifies build_only
-# while npm still runs the script. This hook is a backstop — tool-grant
-# narrowing and the orchestrator's ban banner are the controls without gaps.
+# space) are not unwrapped; `nice`, `stdbuf`, `caffeinate` and `sudo` are not
+# stripped as wrappers, nor is a `{ ...; }` group; a `timeout` option outside
+# the grammar in _gate_timeout_step is read as the duration; nesting past
+# MAX_RECURSE_DEPTH classifies not_test rather than recursing unboundedly;
+# `npm test --dry-run` classifies build_only while npm still runs the script.
+# This hook is a backstop — tool-grant narrowing and the orchestrator's ban
+# banner are the controls without gaps.
+
+# ---------------------------------------------------------------------------
+# The one wrapper definition read by both classify_segment and the fast-path
+# scanner: if the two drift, the scanner heads on a wrapper, finds nothing
+# gateable and allows what the classifier would deny.
+#
+# GATE_LAUNCHERS — prefixes stripped so the real runner reaches head position;
+# `_` joins a two-word phrase. GATE_TIMEOUT_WRAPPERS take options and a duration
+# before the command (_gate_timeout_step). GATE_SHELLS are chased through `-c`.
+# ---------------------------------------------------------------------------
+GATE_LAUNCHERS="env npx uvx uv_run pnpm_exec yarn_dlx bunx time nohup command exec"
+GATE_TIMEOUT_WRAPPERS="timeout gtimeout"
+GATE_SHELLS="sh bash zsh dash ksh"
+
+# Scanner skip set: every one-word launcher, plus the first word of a two-word
+# one unless it is a runner itself (`pnpm test` must head on pnpm).
+GATE_SCAN_SKIP=""
+for _gate_l in $GATE_LAUNCHERS; do
+  case "$_gate_l" in
+    *_*) case " $RUNNERS " in *" ${_gate_l%%_*} "*) continue ;; esac ;;
+  esac
+  GATE_SCAN_SKIP="$GATE_SCAN_SKIP ${_gate_l%%_*}"
+done
+unset _gate_l
+
+# _gate_timeout_step <token> — advances GATE_TMO over timeout's arguments:
+# "opt" reading options, "arg" the next token is an option's value, "" once the
+# duration is consumed and the wrapped command starts.
+_gate_timeout_step() {
+  if [ "$GATE_TMO" = arg ]; then GATE_TMO=opt; return 0; fi
+  case "$1" in
+    -s|-k|--signal|--kill-after) GATE_TMO=arg ;;
+    -s?*|-k?*|--signal=*|--kill-after=*|--preserve-status|--foreground|-v|--verbose|--) GATE_TMO=opt ;;
+    *) GATE_TMO="" ;;
+  esac
+  return 0
+}
+
+# _gate_strip_parens <string> -> sets PARENLESS to <string> without its leading
+# `(` run and trailing `)` run. One regex match per side: stripping a character
+# per iteration, or a `${x%%[!(]*}` glob, is quadratic on bash 3.2.
+_GATE_LPAREN_RE='^[(]+'
+_GATE_RPAREN_RE='[)]+$'
+_gate_strip_parens() {
+  PARENLESS="$1"
+  if [[ $PARENLESS =~ $_GATE_LPAREN_RE ]]; then PARENLESS="${PARENLESS:${#BASH_REMATCH[0]}}"; fi
+  if [[ $PARENLESS =~ $_GATE_RPAREN_RE ]]; then
+    PARENLESS="${PARENLESS:0:$((${#PARENLESS} - ${#BASH_REMATCH[0]}))}"
+  fi
+}
+
+# _gate_strip_wrappers <segment> -> sets STRIPPED to the segment with every
+# leading subshell `(`, trailing `)`, VAR=value, launcher and timeout wrapper
+# removed, repeated until none remains.
+_gate_strip_wrappers() {
+  local _s="$1" _prev _l _p _tok
+  while :; do
+    _prev="$_s"
+    _gate_strip_parens "$_s"
+    _trim "$PARENLESS"; _s="$TRIMMED"
+    # Every pass: a wrapper or `(` can expose an assignment the scanner already skips.
+    _s="$(strip_assignments "$_s")"
+    for _l in $GATE_LAUNCHERS; do
+      _p="${_l//_/ } "
+      case "$_s" in "$_p"*) _s="${_s#"$_p"}"; _trim "$_s"; _s="$TRIMMED" ;; esac
+    done
+    _tok="${_s%% *}"
+    case " $GATE_TIMEOUT_WRAPPERS " in
+      *" ${_tok##*/} "*)
+        GATE_TMO=opt
+        while [ -n "$GATE_TMO" ] && [ -n "$_s" ]; do
+          if [ "$_s" = "$_tok" ]; then _s=""; else _s="${_s#"$_tok"}"; _trim "$_s"; _s="$TRIMMED"; fi
+          _tok="${_s%% *}"
+          [ -n "$_s" ] && _gate_timeout_step "$_tok"
+        done
+        if [ -n "$_s" ]; then
+          if [ "$_s" = "$_tok" ]; then _s=""; else _s="${_s#"$_tok"}"; _trim "$_s"; _s="$TRIMMED"; fi
+        fi
+        GATE_TMO=""
+        ;;
+    esac
+    [ "$_s" != "$_prev" ] || break
+  done
+  STRIPPED="$_s"
+}
 
 # ---------------------------------------------------------------------------
 # _trim <string> -> sets TRIMMED to the string without surrounding whitespace.
@@ -383,16 +471,25 @@ classify_cmd() {
 
   _old_ifs="$IFS"
   _result="not_test"
-  # Segment split on && || ; | and newline. Command substitution, backticks,
+  # Segment split on && || ; | & and newline. Command substitution, backticks,
   # and here-docs are NOT split — a documented, accepted hole (see the
   # bypass note above RUNNERS).
   # Fork-free: bash substitution patterns are globs, where & ; | are all literal,
-  # so four literal passes replace one alternation regex. Order matters — && and
-  # || are consumed before the single-pipe pass can split them.
+  # so literal passes replace one alternation regex. Order matters — && and ||
+  # are consumed before the single-character passes can split them. A bare `&`
+  # (background) splits too, as in the scanner; the redirect forms `>&`, `<&`
+  # and `&>` are parked on control bytes first so `2>&1` stays one segment.
   _norm="${_cmd//&&/$'\n'}"
   _norm="${_norm//||/$'\n'}"
   _norm="${_norm//;/$'\n'}"
   _norm="${_norm//|/$'\n'}"
+  _norm="${_norm//>&/$'\001'}"
+  _norm="${_norm//<&/$'\002'}"
+  _norm="${_norm//&>/$'\003'}"
+  _norm="${_norm//&/$'\n'}"
+  _norm="${_norm//$'\001'/>&}"
+  _norm="${_norm//$'\002'/<&}"
+  _norm="${_norm//$'\003'/&>}"
   while IFS= read -r _seg; do
     [ -n "$_seg" ] || continue
     _class=$(classify_segment "$_seg")
@@ -419,7 +516,7 @@ EOF
 # real latency on a single tool call, not a crash, but not "depth 1" either.
 MAX_RECURSE_DEPTH=2
 classify_segment() {
-  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second
+  local _seg _depth _head_full _head _rest _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second
 
   _seg="$1"
   _depth="${2:-0}"
@@ -434,15 +531,9 @@ classify_segment() {
   _seg="$(strip_assignments "$_seg")"
   [ -n "$_seg" ] || { printf 'not_test'; return; }
 
-  # Strip a package-runner launcher prefix, or a no-op timing/backgrounding
-  # wrapper, so the real runner name reaches the head-token check below
-  # (`npx jest` must classify on `jest`, not `npx`; `time pytest x` on
-  # `pytest`, not `time`).
-  for _launcher in "npx " "uvx " "uv run " "pnpm exec " "yarn dlx " "bunx " "time " "nohup " "command " "exec "; do
-    case "$_seg" in
-      "$_launcher"*) _seg="${_seg#"$_launcher"}" ;;
-    esac
-  done
+  # `npx jest` must classify on `jest`, `timeout 60 pytest` on `pytest`.
+  _gate_strip_wrappers "$_seg"; _seg="$STRIPPED"
+  [ -n "$_seg" ] || { printf 'not_test'; return; }
 
   _head_full="${_seg%% *}"
   _head="${_head_full##*/}"
@@ -451,8 +542,8 @@ classify_segment() {
   # bash -c '...' / sh -c '...' (and the -lc/-ec/-xc combined-short-option
   # spellings, e.g. `bash -lc '...'`) wraps a real command in a string;
   # recurse into it up to MAX_RECURSE_DEPTH.
-  case "$_head" in
-    bash|sh|zsh|dash)
+  case " $GATE_SHELLS " in
+    *" $_head "*)
       case "$_rest" in
         *" -c "*|*" -lc "*|*" -ec "*|*" -xc "*)
           _inner="${_rest#*c }"
@@ -942,16 +1033,24 @@ dedupe_decide() {
 # Fail direction: an unparsed shape yields no gateable head and ALLOWS, matching
 # every other unresolvable input in this hook.
 # ---------------------------------------------------------------------------
+# Characters the scanner treats specially; any other run is copied verbatim.
+_GATE_WORD_RE="^[^[:space:]\\\\'\";|&<]+"
 gate_head_tokens() {
+  # Byte indexing: under a UTF-8 locale `${_s:i:1}` walks from the start each time.
+  # Every character the scanner acts on is ASCII, so the tokens are unchanged.
+  local _lc_had=0 _lc_old=""
+  [ -n "${LC_ALL+x}" ] && { _lc_had=1; _lc_old="$LC_ALL"; }
+  LC_ALL=C
   local _s="$1" _n=${#1} _i=0 _ch _q="" _cur="" _want=1 _hd="" _inhd=0 _line="" _pend="" _lnch=""
   HEAD_TOKENS=""
+  GATE_TMO=""
   while [ "$_i" -lt "$_n" ]; do
     _ch="${_s:$_i:1}"
     _i=$((_i + 1))
     if [ "$_inhd" -eq 1 ]; then
       if [ "$_ch" = $'\n' ]; then
         _trim "$_line"
-        [ "$TRIMMED" = "$_hd" ] && { _inhd=0; _hd=""; _want=1; _lnch=""; }
+        [ "$TRIMMED" = "$_hd" ] && { _inhd=0; _hd=""; _want=1; _lnch=""; GATE_TMO=""; }
         _line=""
       else
         _line="$_line$_ch"
@@ -974,6 +1073,7 @@ gate_head_tokens() {
         _gate_emit_head
         _want=1
         _lnch=""
+        GATE_TMO=""
         if [ "$_ch" = $'\n' ] && [ -n "$_pend" ]; then
           _hd="$_pend"; _pend=""; _inhd=1; _line=""
         fi
@@ -995,10 +1095,20 @@ gate_head_tokens() {
         fi
         _gate_emit_head
         ;;
-      *) _cur="$_cur$_ch" ;;
+      *)
+        # Take the whole run of plain characters at once: one append per run,
+        # not per character, keeps a 20k-character token linear.
+        if [[ ${_s:$((_i - 1))} =~ $_GATE_WORD_RE ]]; then
+          _cur="$_cur${BASH_REMATCH[0]}"
+          _i=$((_i - 1 + ${#BASH_REMATCH[0]}))
+        else
+          _cur="$_cur$_ch"
+        fi
+        ;;
     esac
   done
   _gate_emit_head
+  if [ "$_lc_had" -eq 1 ]; then LC_ALL="$_lc_old"; else unset LC_ALL; fi
   return 0
 }
 
@@ -1006,26 +1116,36 @@ gate_head_tokens() {
 # because the scanner reaches it from five arms; it reads and writes the
 # scanner's locals by dynamic scope (_cur, _want, _lnch).
 #
-# The skip set must mirror classify_segment's launcher list, TWO-token entries
-# included: that function strips `uv run ` whole and heads on the real runner, so
-# a first-token-only skip here heads on `run`, finds nothing gateable, and lets
-# the fast path allow what the classifier would deny. `_lnch` remembers the
-# launcher just skipped so the wrapper's second word is skipped with it.
-#
-# `pnpm` and `yarn` are RUNNERS in their own right and end the search before
-# their second word is read, so they need no one-token entry. The two lists are
-# no longer eyeball-synced: test-execution-gate.bats asserts that every launcher
-# the classifier strips is either skipped here or is itself a gateable runner.
+# Skips exactly what _gate_strip_wrappers strips, from the same definitions:
+# GATE_SCAN_SKIP words, the second word of a two-word GATE_LAUNCHERS phrase
+# (`_lnch` remembers the first), timeout's options and duration, and a
+# subshell's parentheses. test-execution-gate.bats asserts the two agree.
 _gate_emit_head() {
   [ -n "$_cur" ] || return 0
   if [ "$_want" -eq 1 ]; then
-    case "$_lnch $_cur" in
-      "uv run"|"pnpm exec"|"yarn dlx") _lnch="" ;;
+    if [ -n "$GATE_TMO" ]; then
+      _gate_timeout_step "$_cur"
+      _cur=""
+      return 0
+    fi
+    _gate_strip_parens "$_cur"; _cur="$PARENLESS"
+    [ -n "$_cur" ] || return 0
+    case " $GATE_LAUNCHERS " in
+      *" ${_lnch}_${_cur} "*) _lnch="" ;;
       *)
-        case "$_cur" in
-          env|npx|uvx|bunx|uv|time|nohup|command|exec) _lnch="$_cur" ;;
-          [A-Za-z_]*=*) ;;
-          *) HEAD_TOKENS="$HEAD_TOKENS ${_cur// /_}"; _want=0; _lnch="" ;;
+        case " $GATE_TIMEOUT_WRAPPERS " in
+          *" ${_cur##*/} "*) GATE_TMO=opt; _lnch="" ;;
+          *)
+            case " $GATE_SCAN_SKIP " in
+              *" $_cur "*) _lnch="$_cur" ;;
+              *)
+                case "$_cur" in
+                  [A-Za-z_]*=*) ;;
+                  *) HEAD_TOKENS="$HEAD_TOKENS ${_cur// /_}"; _want=0; _lnch="" ;;
+                esac
+                ;;
+            esac
+            ;;
         esac
         ;;
     esac
@@ -1042,7 +1162,7 @@ gate_head_is_gateable() {
   case "$_t" in
     build-test|*:build-test|run-tests.sh|*:run-tests.sh) return 0 ;;
   esac
-  case " $RUNNERS bash sh zsh dash " in
+  case " $RUNNERS $GATE_SHELLS " in
     *" $_t "*) return 0 ;;
   esac
   return 1

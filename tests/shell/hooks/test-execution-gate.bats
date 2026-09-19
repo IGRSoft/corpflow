@@ -460,6 +460,63 @@ teardown() {
   done
 }
 
+@test "R4: timeout/gtimeout, subshell parentheses and ksh -c classify on the real runner (deny)" {
+  state_with DR
+  local cmd
+  for cmd in 'timeout 60 bats x' 'timeout -s KILL 5m pytest' 'timeout --signal=KILL 5 pytest' \
+    'timeout -k 5 60 pytest' 'gtimeout --preserve-status 60 pytest' '(pytest tests/)' \
+    '(cd r && bats t)' "ksh -c 'pytest'" '(CI=1 pytest tests/)' 'timeout 600 env CI=1 pytest'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+      || fail "expected deny for: $cmd (got: $output)"
+  done
+}
+
+@test "R4: a timeout-wrapped or subshelled non-runner stays allowed" {
+  state_with DR
+  local cmd
+  for cmd in 'timeout 5 ls' '(cd r && ls)' 'timeout' 'gtimeout -k 1 2 git status'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    [ -z "$output" ] || fail "expected allow for: $cmd (got: $output)"
+  done
+}
+
+@test "R4: 20k leading parens before pytest still deny, well inside the hook timeout" {
+  state_with DR
+  local parens start elapsed
+  parens="$(head -c 20000 /dev/zero | tr '\0' '(')"
+  start="$(date +%s)"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "${parens}pytest tests/")"
+  elapsed=$(($(date +%s) - start))
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null || fail "got: $output"
+  [ "$elapsed" -le 3 ] || fail "took ${elapsed}s"
+}
+
+@test "bare &: a backgrounded segment splits in the classifier too" {
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'true & pytest tests/')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null || fail "got: $output"
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'pytest tests/ 2>&1 | tee log')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null || fail "got: $output"
+}
+
+@test "bare &: redirect forms >&, <&, &> and |& are not split and stay allowed" {
+  state_with DR
+  local cmd
+  for cmd in 'ls 2>&1' 'ls >&2' 'ls &>/dev/null' 'ls &>>log' 'ls <&3' 'ls |& cat' 'true & ls'; do
+    run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
+    assert_success
+    [ -z "$output" ] || fail "expected allow for: $cmd (got: $output)"
+  done
+  run bash -c ". '$PLUGIN_ROOT/$SCRIPT' --lib-only; classify_cmd 'pytest tests/ 2>&1'"
+  assert_output "scoped_test_run"
+}
+
 @test "doc-honesty bypass fix: 'bash -lc' combined short option is now chased" {
   state_with DR
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash -lc 'pytest tests/'")"
@@ -1679,49 +1736,68 @@ promote() {
   echo "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -q "unset (resolves to scoped)"
 }
 
-# Launcher phrases classify_segment strips off the front of a segment, one per
-# line, quotes and the trailing space removed.
-_classifier_launchers() {
-  grep -m1 '^ *for _launcher in ' "$PLUGIN_ROOT/$SCRIPT" \
-    | grep -o '"[^"]*"' | tr -d '"' | sed 's/ *$//'
+# _gate_lib <gate-script> <snippet> [args...] — <snippet> with the gate sourced --lib-only.
+_gate_lib() {
+  local gate="$1" snippet="$2"
+  shift 2
+  run --separate-stderr bash -c ". '$gate' --lib-only; $snippet" _ "$@"
 }
 
-# Launcher phrases the fast-path head scanner skips: the two-token `case`
-# alternation plus the one-token one.
-_scanner_launchers() {
-  sed -n 's/^ *case "\$_lnch \$_cur" in//p;s/^ *\("uv run".*\)) *_lnch="" *;;/\1/p' \
-    "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n' | tr -d '"'
-  sed -n 's/^ *\(env|npx[^)]*\)) *_lnch="\$_cur" *;;/\1/p' "$PLUGIN_ROOT/$SCRIPT" | tr '|' '\n'
-}
+# The check both contract cases run: every wrapper phrase in the ONE shared
+# definition, put in front of a runner, must give the fast-path scanner a
+# gateable head AND classify as a test run; prints the phrases checked.
+# shellcheck disable=SC2016  # expanded by the inner shell
+_WRAPPER_CHECK='
+  bad="" n=0
+  _chk() {
+    local c="$1 pytest tests/" g=0 t
+    n=$((n + 1))
+    gate_head_tokens "$c"
+    for t in $HEAD_TOKENS; do gate_head_is_gateable "$t" && g=1; done
+    [ "$g" -eq 1 ] || bad="$bad scanner:[$1]"
+    case "$(classify_cmd "$c")" in *test_run) ;; *) bad="$bad classifier:[$1]" ;; esac
+  }
+  for l in $GATE_LAUNCHERS; do _chk "${l//_/ }"; _chk "${l//_/ } VAR=1"; done
+  for w in $GATE_TIMEOUT_WRAPPERS; do
+    _chk "$w 5"; _chk "$w -s KILL -k 5 60"; _chk "$w 5 VAR=1"; _chk "$w 600 env VAR=1"
+  done
+  _chk "(VAR=1"
+  for sh in $GATE_SHELLS; do
+    c="$sh -c '"'"'pytest tests/'"'"'"
+    n=$((n + 1))
+    gate_head_tokens "$c"; g=0
+    for t in $HEAD_TOKENS; do gate_head_is_gateable "$t" && g=1; done
+    [ "$g" -eq 1 ] || bad="$bad scanner:[$sh -c]"
+    case "$(classify_cmd "$c")" in *test_run) ;; *) bad="$bad classifier:[$sh -c]" ;; esac
+  done
+  printf "%s|%s" "$n" "$bad"'
 
-@test "contract: the fast-path scanner skips every launcher the classifier strips" {
-  # These two lists were kept in step by eye — the scanner's own comment said so.
-  # A launcher present in the classifier but missing here makes the fast path
+@test "contract: the scanner and the classifier see through every wrapper in the one shared definition" {
+  # A wrapper the classifier strips but the scanner does not makes the fast path
   # head on the wrapper, find nothing gateable, and ALLOW what the classifier
-  # would deny, so the containment direction is the security-relevant one.
-  local phrase scanner runners missing="" checked=0
-  scanner="$(_scanner_launchers)"
-  runners="$(sed -n 's/^RUNNERS="\(.*\)"$/\1/p' "$PLUGIN_ROOT/$SCRIPT")"
-  [ -n "$runners" ] || fail "RUNNERS list not found in $SCRIPT"
-  [ -n "$scanner" ] || fail "scanner launcher list not found in $SCRIPT"
-  while IFS= read -r phrase; do
-    [ -n "$phrase" ] || continue
-    checked=$((checked + 1))
-    printf '%s\n' "$scanner" | grep -qxF "$phrase" || missing="$missing $phrase"
-    # A two-token phrase needs its first word either in the one-token skip set,
-    # so the scanner can pair the second word with it, or in RUNNERS — `pnpm`
-    # and `yarn` are runners in their own right, so the scanner heads on them
-    # and the classifier gates the invocation anyway. Anything in neither set
-    # is a real hole: the scanner would head on a word that gates nothing.
-    case "$phrase" in
-      *" "*)
-        printf '%s\n' "$scanner" | grep -qxF "${phrase%% *}" \
-          || printf '%s\n' $runners | grep -qxF "${phrase%% *}" \
-          || missing="$missing ${phrase%% *}(head-of:$phrase)" ;;
-    esac
-  done < <(_classifier_launchers)
-  [ "$checked" -ge 8 ] || fail "non-vacuity: only $checked launcher phrases extracted"
-  [ -z "$missing" ] || fail "scanner does not skip:$missing"
+  # would deny — so both consumers are exercised against every listed phrase.
+  _gate_lib "$PLUGIN_ROOT/$SCRIPT" "$_WRAPPER_CHECK"
+  assert_success
+  [ "${output%%|*}" -ge 8 ] || fail "non-vacuity: only ${output%%|*} wrapper phrases checked"
+  [ -z "${output#*|}" ] || fail "not seen through:${output#*|}"
+  # No second, hand-kept copy of the lists survives anywhere in the gate.
+  run grep -nE -e 'for _launcher in ' -e 'env[|]npx[|]uvx[|]bunx' -e 'bash[|]sh[|]zsh[|]dash[)]' \
+    -e 'bash sh zsh dash ' "$PLUGIN_ROOT/$SCRIPT"
+  assert_failure 1
+}
+
+@test "contract: a wrapper added to GATE_LAUNCHERS alone reaches both the scanner and the classifier" {
+  sed 's/^GATE_LAUNCHERS="\(.*\)"$/GATE_LAUNCHERS="\1 zzwrap zzpair_go"/' "$PLUGIN_ROOT/$SCRIPT" > "$WD/gate-copy.sh"
+  grep -q '^GATE_LAUNCHERS=".* zzwrap zzpair_go"$' "$WD/gate-copy.sh" || fail "GATE_LAUNCHERS line not found"
+  # shellcheck disable=SC2016  # expanded by the inner shell
+  _gate_lib "$WD/gate-copy.sh" '
+    for c in "zzwrap pytest tests/" "zzpair go pytest tests/"; do
+      gate_head_tokens "$c"; printf "%s=%s|" "$c" "$HEAD_TOKENS"
+      printf "%s\n" "$(classify_cmd "$c")"
+    done'
+  assert_success
+  assert_line "zzwrap pytest tests/= pytest|scoped_test_run"
+  assert_line "zzpair go pytest tests/= pytest|scoped_test_run"
 }
 
 @test "unresolved root exits 0, no block, no .context under cwd" {
