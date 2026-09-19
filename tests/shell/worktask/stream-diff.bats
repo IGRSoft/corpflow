@@ -173,9 +173,17 @@ header_of() { # $1=task
 @test "audit: one stream_diff_resolved row carrying the caller and every block" {
   run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L" --caller DR0
   assert_success
-  run jq -r 'select(.action == "stream_diff_resolved") | [.result, .task_id, .actor, .metadata.blocks] | @tsv' \
+  run jq -r 'select(.action == "stream_diff_resolved") | [.result, .subject, .task_id, .actor, .metadata.blocks] | @tsv' \
     "$WD/ledger/.context/logs/audit.jsonl"
-  assert_output "$(printf 'ok\tDR0\tstream-diff\tDV0:empty,DV1:empty')"
+  assert_output "$(printf 'ok\tDR0\tDR0\tstream-diff\tDV0:empty,DV1:empty')"
+}
+
+@test "audit: without --caller the row still lands, keyed unknown on both subject and task_id" {
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" --state "$L"
+  assert_success
+  run jq -r 'select(.action == "stream_diff_resolved") | [.subject, .task_id] | @tsv' \
+    "$WD/ledger/.context/logs/audit.jsonl"
+  assert_output "$(printf 'unknown\tunknown')"
 }
 
 @test "usage errors exit 2 with empty stdout" {

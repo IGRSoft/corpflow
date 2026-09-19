@@ -385,6 +385,15 @@ EOF
   _op1=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"jq -cn --arg m \"ran bats; pytest tests/\" \"{note:$m}\""}}' "$_ctxn")
   [ -z "$_op1" ] || { echo "test-execution-gate: self-test FAIL (prose naming runners must allow)"; _fail=1; }
 
+  # Wrappers from the shared definition: timeout, a subshell and ksh -c classify on the runner.
+  for _ow in 'timeout -s KILL 60 bats t' '(cd r && pytest tests/)' "ksh -c 'pytest'"; do
+    _ow1=$(run_gate "$(jq -cn --arg c "$_ow" '{tool_name: "Bash", tool_input: {command: $c}}')" "$_ctxn")
+    printf '%s' "$_ow1" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (wrapped runner must deny: $_ow)"; _fail=1; }
+  done
+  _ow2=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"timeout 5 ls"}}' "$_ctxn")
+  [ -z "$_ow2" ] || { echo "test-execution-gate: self-test FAIL (timeout-wrapped ls must allow)"; _fail=1; }
+
   # A settled ledger whose verification stage recorded a no-go keeps authority.
   _ctxr="$_tmp/remediate/.context"; mkdir -p "$_ctxr"
   printf '{"tasks":{"DV0":{"status":"completed","verdict":"ok"},"QA0":{"status":"completed","verdict":"no-go"}}}' > "$_ctxr/state.json"

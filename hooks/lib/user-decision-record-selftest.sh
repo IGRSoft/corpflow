@@ -286,6 +286,37 @@ st_do_post_refusals() {
   unset WORKSPACE_ROOT
 }
 
+# _st_norm <label> <n> <text> <want-answers-json|untouched> — ud_normalize_answers over an MCP
+# text payload asking Q1..Qn; "untouched" means the file must keep its bytes (P3 refuses it).
+_st_norm() {
+  local f="$_st_td/norm.json" before after got
+  jq -cn --argjson n "$2" --arg t "$3" '{tool_input: {questions: [range(0; $n) | {question: "Q\(. + 1)"}]},
+    tool_response: [{type: "text", text: $t}]}' > "$f"
+  before="$(shasum -a 256 < "$f")"
+  ud_normalize_answers "$f" > /dev/null 2>&1
+  after="$(shasum -a 256 < "$f")"
+  if [ "$4" = untouched ]; then
+    _st_is "$1" "$after" "$before"
+  else
+    got="$(jq -c '.tool_response.answers? // null' "$f" 2> /dev/null)"
+    _st_is "$1" "$got" "$4"
+  fi
+}
+
+st_normalize() {
+  local nl='
+'
+  _st_norm "P3: a multi-line block joins its continuation with LF" 2 \
+    "User responses:${nl}1. line a${nl}line b${nl}2. c" '{"Q1":"line a\nline b","Q2":"c"}'
+  _st_norm "P3: a number above N is continuation text" 2 \
+    "User responses:${nl}1. a${nl}7. step${nl}2. b" '{"Q1":"a\n7. step","Q2":"b"}'
+  _st_norm "P3: a repeated block start is refused" 2 "User responses:${nl}1. a${nl}2. x${nl}2. b" untouched
+  _st_norm "P3: a missing block start is refused" 2 "User responses:${nl}1. a${nl}3. b" untouched
+  _st_norm "P3: a missing header is refused" 2 "1. a${nl}2. b" untouched
+  _st_norm "P3: too few blocks are refused" 2 "User responses:${nl}1. a" untouched
+  _st_norm "P3: an empty answer is refused" 2 "User responses:${nl}1. ${nl}2. b" untouched
+}
+
 st_guard() {
   local ctx out
   ctx="$(_st_ctx guard)"
@@ -306,6 +337,7 @@ st_row2_append
 st_append_refusals
 st_transcript_refusals
 st_do_post_refusals
+st_normalize
 st_guard
 
 if [ "$_st_fails" -eq 0 ]; then

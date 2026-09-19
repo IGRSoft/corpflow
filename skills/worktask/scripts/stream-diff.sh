@@ -361,6 +361,6 @@ if [[ -n "$AUDIT_FILE" && -r "$AUDIT_LIB" ]]; then
   result="ok"
   [[ "$DEGRADED" -eq 0 ]] || result="degraded"
   corpflow_audit_row --file "$AUDIT_FILE" --actor stream-diff --action stream_diff_resolved \
-    --result "$result" --task-id "${CALLER:-unknown}" --meta-kv "blocks=${BLOCKS}"
+    --result "$result" --subject "${CALLER:-unknown}" --task-id "${CALLER:-unknown}" --meta-kv "blocks=${BLOCKS}"
 fi
 exit 0
