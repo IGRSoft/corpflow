@@ -107,9 +107,13 @@ Execute the review by reading and following `commands/tech-code-review.md` (reso
 
 DV is one or more ledger tasks, each with its own artifact and tree. Take the artifacts from `refs.dev[]` in your dispatch, or from the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`, and run every check below once per DV task, naming its task id in `§ Findings`. "The DV artifact" below means each of them in turn; "the DV tree" is that row's `metadata.workspace_path`, or the orchestrator root when unset.
 
-#### Reading the DV diffs
+#### Reading the DV diffs — fetch and process
 
-Each DV task's diff is its block from `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller DR<N>` (`--task <DVk>` narrows to one task) — never a hand-written range. Header keys and what each asks of you: `commands/tech-code-review.md § Reading a stream-diff block`. Write one `Source:` line per block (that command's `§ Decision line`), so every stream's `source=` label reaches the artifact. A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only and is reviewable: list them with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` and `Read` each `?` path. A block with `source=empty` and `untracked=0`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is a `§ Findings` gap naming that task and token, never a clean pass; when no DV task yields a reviewable block, return `verdict: blocked` with those header lines as the first `blockers` entry.
+Each DV task's diff is from `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller DR<N>` (`--task <DVk>` for one task) — never hand-written. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Write one `Source:` line per block (the command's `§ Decision line`) so every stream's `source=` label reaches the artifact.
+
+A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only, is reviewable: list with `stream-diff.sh --task <DVk> --format names`, `Read` each `?` path.
+
+A block with `source=empty` and `untracked=0`, or `reason=` other than `-`/`no_changes`, for a DV task whose artifact lists changed files is a `§ Findings` gap. When no DV task yields a reviewable block, return `verdict: blocked` with those header lines as the first `blockers` entry.
 
 #### Scope-addition re-entry checklist
 
@@ -117,7 +121,19 @@ A rework round that ADDS scope (a `## rework-N` section appearing in a DV artifa
 
 ##### No untracked files outside the landed set
 
-Every `?` path from `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` must be in that DV tree's landed set (`skills/shared/state-ledger.md § The landed set`): `jq -r --arg root "<DV tree>" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' .context/state.json`. `<DV tree>` is the row's `metadata.workspace_path` as the ledger holds it, else the orchestrator's `git rev-parse --show-toplevel` (§ Reading the DV tasks); with no resolvable tree pass `--arg root ""`, the empty set, never the union. An empty set is normal. Subtract from untracked entries only: a landed path staged or modified is a consumer editing a read-only file and stays a gap. FN commits tracked modifications only, so an untracked guard or test file ships as a silent omission while the suite stays green.
+Every `?` path from `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` must be in that DV tree's landed set (`skills/shared/state-ledger.md § The landed set`):
+
+```bash
+jq -r --arg root "<DV tree>" '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' .context/state.json
+```
+
+###### Tree resolution
+
+`<DV tree>` is the row's `metadata.workspace_path` (as ledger holds it), else orchestrator's `git rev-parse --show-toplevel` (§ Reading the DV tasks). No resolvable tree: pass `--arg root ""` (empty set, never union). Empty set is normal.
+
+###### Edge cases
+
+Subtract from untracked only: landed paths staged/modified indicate consumer editing read-only files and stay gaps. FN commits tracked modifications only, so untracked guard or test files ship as silent omissions while the suite stays green.
 
 #### DR3.5 — Warning Escalation
 
@@ -202,7 +218,7 @@ With zero P0/P1 findings and all open findings P2, the orchestrator MAY defer DR
 
 ### Bash Scope (DR)
 
-Retained ONLY for: atomic `.context/state.json` writes (`mv -f`, `sync`, `cat`); read-only repo state (`git log`, `git diff`, `git show` — never `git checkout`/`reset`/`stash`); each DV task's review diff via `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh` (§ Reading the DV diffs); `cat`/`head`/`tail` reads where dedicated tools fall short; validating a saved consultant return with `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file` (§ Sibling Consultant Returns). Any other invocation — running tests, mutating the working tree, executing the product, spawning long-running processes — is a constraint violation (`## Constraints (DO NOT) § Test-Execution Prohibitions (DR)`).
+Retained ONLY for: atomic `.context/state.json` writes (`mv -f`, `sync`, `cat`); read-only repo state (`git log`, `git diff`, `git show` — never `git checkout`/`reset`/`stash`); each DV task's review diff via `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh` (§ Reading the DV diffs — fetch and process); `cat`/`head`/`tail` reads where dedicated tools fall short; validating a saved consultant return with `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file` (§ Sibling Consultant Returns). Any other invocation — running tests, mutating the working tree, executing the product, spawning long-running processes — is a constraint violation (`## Constraints (DO NOT) § Test-Execution Prohibitions (DR)`).
 
 ### Diff-Only Read Rule (DR)
 

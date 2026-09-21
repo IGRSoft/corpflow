@@ -857,17 +857,27 @@ prefix_lint() {
 # Extract the contents of the first ```yaml fenced block that appears
 # AFTER the `## Handoff Protocol` H2 and BEFORE the next H2 heading.
 # Returns the YAML body (without the fence markers). Empty if not found.
+# A block opening with a `# …continued:` marker is the tail of the one above it, split only
+# so the prose stays under the section-length cap; it rejoins here and is not counted twice.
+CONTINUATION_RE='^#[[:space:]]*(…|\.\.\.)continued[:[:space:]]'
+
 extract_handoff_yaml_block() {
   local f="$1"
-  awk '
-    BEGIN { in_section = 0; in_fence = 0; emit = 0 }
+  awk -v cont_re="$CONTINUATION_RE" '
+    BEGIN { in_section = 0; in_fence = 0; emit = 0; seen = 0 }
     /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
     in_section && /^## / { exit }
     in_section && /^```yaml[[:space:]]*$/ && !in_fence {
-      in_fence = 1; emit = 1; next
+      in_fence = 1; first = 1; next
     }
     in_section && /^```[[:space:]]*$/ && in_fence {
-      in_fence = 0; exit
+      in_fence = 0; emit = 0; next
+    }
+    in_fence && first {
+      first = 0
+      if ($0 ~ cont_re) { emit = seen; next }   # tail of the block already emitted
+      if (seen) { exit }                        # a second independent block ends the read
+      seen = 1; emit = 1
     }
     in_fence && emit { print }
   ' "$f"
@@ -876,14 +886,15 @@ extract_handoff_yaml_block() {
 # Count the number of ```yaml ... ``` fenced blocks inside Handoff Protocol.
 count_handoff_yaml_blocks() {
   local f="$1"
-  awk '
+  awk -v cont_re="$CONTINUATION_RE" '
     BEGIN { in_section = 0; in_fence = 0; n = 0 }
     /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
     in_section && /^## / { print n; exit_done = 1; exit }
     in_section && /^```yaml[[:space:]]*$/ && !in_fence {
-      in_fence = 1; n++; next
+      in_fence = 1; first = 1; n++; next
     }
     in_section && /^```[[:space:]]*$/ && in_fence { in_fence = 0; next }
+    in_fence && first { first = 0; if ($0 ~ cont_re) n-- }
     END { if (!exit_done) print n }
   ' "$f"
 }

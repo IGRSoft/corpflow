@@ -159,15 +159,15 @@ self_test() {
   rc=0
   out=$(_st_run batch) || rc=$?
   if [ "$rc" -eq 0 ] \
-    && printf '%s' "$out" | jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "DR0", "QA0"]
+    && printf '%s' "$out" | jq -e '.mode == "ask" and ([.needs[].task_id] | sort) == ["DC0", "QA0"]
       and (.needs[] | select(.task_id == "DC0") | .arm == "correction" and .resume_leg == "closed"
            and (has("fallback_from") | not))
       and all(.needs[] | select(.task_id != "DC0"); .resume_leg == "verified")
-      and (.payloads[0].questions | length) == 3
+      and (.payloads[0].questions | length) == 2
       and all(.payloads[0].questions[]; (.question | contains("! ") | not))' > /dev/null 2>&1; then
-    _st_pass "batch: every parked non-permission need is asked, and a fallback offers no ! line"
+    _st_pass "batch: every parked need is asked except permission and the open peer ask, and a fallback offers no ! line"
   else
-    _st_fail "batch: every parked non-permission need is asked, and a fallback offers no ! line"
+    _st_fail "batch: every parked need is asked except permission and the open peer ask, and a fallback offers no ! line"
   fi
 
   rc=0

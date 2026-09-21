@@ -95,6 +95,8 @@ Write it per `references/retrospective-template.md` — header block, What Worke
 <path>\t<target>\t<category>\t<confidence>\t<added>\t<removed>\t<summary>
 ```
 
+##### Append command
+
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh \
   --worktask-id=<id> --run-index=<n> --changes=<tsv> \
@@ -102,7 +104,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh \
   --count-out=.context/logs/self-improve-<ts>.appended
 ```
 
-Appends to the label dataset, idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)`: re-running a worktask never duplicates rows, but the same edit recurring in a later worktask appends a new label — recurrence is the frequency signal. `--count-out` receives the appended row count for the closing counts call. Aggregate per target and category with:
+Appends to the label dataset, idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)`. The same edit recurring in a later worktask appends a new label — recurrence is the frequency signal. `--count-out` receives the appended row count for the closing counts call.
+
+##### Aggregation and statistics
 
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA} [--min-count=<n>]
@@ -133,6 +137,8 @@ Rows carry counts and the one-line summary only, never diff bodies; redact the s
 
 Run this last on every path, including short-circuit runs, `SELF_IMPROVE_LABELS=0` runs and runs without `jq`:
 
+##### Counts recording command
+
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline-counts.sh \
   --worktask-id=<id> --run-index=<n> \
@@ -141,19 +147,28 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline-counts.sh \
   --plugin-data=${CLAUDE_PLUGIN_DATA}
 ```
 
-The script counts rows in the stage output files, so no count comes from prose. An absent input file counts 0, and the script reads `SELF_IMPROVE_LABELS` itself for `labels_enabled`. Under plugin data it appends one `self-improve-counts/v1` row (`ts`, `worktask_id`, `run_index`, `stage`, `context_paths`, `changed_paths`, `mapped_rows`, `appended_rows`, `labels_enabled`, `dataset_source`) to `pipeline-counts.jsonl`; on the fallback rung, or with `--dry-run`, it writes no row. Stderr always carries `self-improve-counts: context_paths=N changed_paths=N mapped_rows=N appended_rows=N`; the run log may copy that line, but the row is the record.
+##### Counts semantics and output
+
+The script counts rows in the stage output files, so no count comes from prose. An absent input file counts 0. Under plugin data it appends one `self-improve-counts/v1` row to `pipeline-counts.jsonl` with fields: `ts`, `worktask_id`, `run_index`, `stage`, `context_paths`, `changed_paths`, `mapped_rows`, `appended_rows`, `labels_enabled`, `dataset_source`. On the fallback rung or with `--dry-run`, no row is written. Stderr always carries progress information; the row is the authoritative record.
 
 ## Output Contract
+
+### Core output artifacts
 
 | Path | Required? | Purpose |
 |------|-----------|---------|
 | `.context/learnings.md` | Only if in-scope changes detected | User-approvable proposals |
-| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.log` | Always — including short-circuit runs, so the user can audit why no proposals appeared | Run log: context set, decisions, discards |
+| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.log` | Always — including short-circuit runs | Run log: context set, decisions, discards |
 | `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.diff` | Only if changes detected | Full unified diff for audit |
+
+### Label dataset outputs
+
+| Path | Required? | Purpose |
+|------|-----------|---------|
 | `<plugin-data>/self-improvement/failure-labels.jsonl` | Only if in-scope changes detected | Append-only label dataset, outside the repo (Step 5b) |
-| `<plugin-data>/self-improvement/pipeline-counts.jsonl` | Always, except on the fallback rung or under `--dry-run` | One four-counts row per run (Step 5b) |
-| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.appended` | Whenever `append-labels.sh` runs | Appended row count read by `pipeline-counts.sh` |
-| `${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl` | Fallback rung only — no usable plugin data dir | Repo label dataset; counts go to stderr only |
+| `<plugin-data>/self-improvement/pipeline-counts.jsonl` | Always, except on fallback rung or under `--dry-run` | Stage counts per run (Step 5b) |
+| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.appended` | Whenever `append-labels.sh` runs | Appended row count |
+| `${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl` | Fallback rung only | Repo label dataset; counts to stderr |
 
 Filename grammar follows `skills/logging-conventions/SKILL.md`.
 

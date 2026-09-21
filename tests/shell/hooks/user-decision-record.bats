@@ -147,6 +147,40 @@ _assert_allowed() {
   assert_output '["DV0","DV1"]'
 }
 
+@test "AC1: a need parked with no options pairs under the asker's synthetic labels, and covers its whole group" {
+  # blocked-on-dispatch.sh `batch` renders a free-text need under two labels it never stores, to
+  # clear AskUserQuestion's 2-option floor. Matching the stored [] against them would scope the
+  # answer to nothing and leave the need unresumable.
+  jq '.tasks.DV0.metadata.blocked_on.detail = {question: "Ship the ledger now?", options: []}
+    | .tasks.DV1 = .tasks.DV0' "$UD_FIX/state.rung1.json" > "$CTX/state.json"
+  _post post.valid.payload.json '(.tool_input.questions[0].options, .tool_response.questions[0].options)
+    = [{label: "the stage decides", description: "No preset choices here."},
+       {label: "raise this need again", description: "Raise the need again rather than settle it."}]
+    | .tool_response.answers = {"Ship the ledger now?": "Ship it once the audit lands"}'
+  _hook
+  assert_success
+  assert_output ""
+  [ "$(_ledger_rows)" = 1 ] || fail "expected one row, got $(_ledger_rows)"
+  run jq -e --arg q "$Q1" '.question == $q and .answer == "Ship it once the audit lands"
+    and .scope == {worktask_id: "wt-ud-fixture", task_ids: ["DV0", "DV1"], item: null}' "$LEDGER"
+  assert_success
+  # Payload-only: the synthetic labels are not an answer and never reach the ledger or the log.
+  ! grep -qF "the stage decides" "$LEDGER" || fail "a synthetic label reached the ledger"
+  ! grep -qF "the stage decides" "$AUDIT" || fail "a synthetic label reached the audit log"
+}
+
+@test "AC1: a need parked with real options still refuses a question asked under different ones" {
+  # ANTI-VACUITY: the empty-list tolerance above must not widen to any option mismatch.
+  jq '.tasks.DV0.metadata.blocked_on.detail.options = ["Yes, ship it", "Much later"]
+    | del(.tasks.DV0.metadata.blocked_on.detail.recommended)' \
+    "$UD_FIX/state.rung1.json" > "$CTX/state.json"
+  _post post.valid.payload.json
+  _hook
+  assert_success
+  run jq -ce '.scope.task_ids' "$LEDGER"
+  assert_output '[]'
+}
+
 @test "AC1: rung 2 scopes a sweep header to its one task and item, and joins an array answer with ', '" {
   cp "$UD_FIX/state.rung2.json" "$CTX/state.json"
   _post post.sweep.payload.json

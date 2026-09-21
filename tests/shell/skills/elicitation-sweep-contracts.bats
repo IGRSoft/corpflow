@@ -1480,7 +1480,8 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 
 @test "P2-13: the \$defs injector is stated as an obligation, not attributed to a section that lacks it" {
   local note
-  note="$(grep -n 'inline that .\$defs. block' "$PLUGIN_ROOT/$HANDOFF" || true)"
+  # Singular or plural: TestRunEntry made it more than one block to inline.
+  note="$(grep -nE 'inline th(at|ose) .\$defs. blocks?' "$PLUGIN_ROOT/$HANDOFF" || true)"
   [ -n "$note" ] || fail "non-vacuity: the \$defs obligation sentence is absent"
   # The previous text cited SKILL.md Step 6, which carries no such claim. Verify both:
   # the citation is gone, and the file it named still does not carry the claim.

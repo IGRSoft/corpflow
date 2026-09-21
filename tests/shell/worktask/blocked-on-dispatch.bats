@@ -125,6 +125,14 @@ _ud_payload() {
                  resume_with: "decision_ref"}}'
 }
 
+# _ud_payload_free — a user_decision return with no discrete choices, the shape mailbox.sh
+# routes an expired peer ask to.
+_ud_payload_free() {
+  jq -cn --arg q "$UD_Q" '{verdict: "blocked",
+    blocked_on: {kind: "user_decision", detail: {question: $q, options: []},
+                 resume_with: "decision_ref"}}'
+}
+
 # _ud_record <task_ids json> <answer> [no-audit] — appends one row to the ledger as the hook would:
 # ordinal id, canonical [question,answer] digest, prev = sha256 of the previous line's bytes, and
 # (unless no-audit) its user_decision_recorded audit row. Digests come from shasum, not the lib.
@@ -723,6 +731,35 @@ _tree() {
   jq -e '[.payloads[0].questions[] | select(.header == "DR0" or .header == "FN0") | .question | contains("`")] | any | not' <<< "$output" \
     || fail "a user_decision question was fenced"
   jq -e '.payloads[0].questions[] | select(.header == "DC0") | [.options[].label] == ["done", "stop here"]' <<< "$output"
+}
+
+@test "batch: a user_decision with no options of its own is asked under the synthetic pair, and its answer resumes it" {
+  _bo route --task-id DV1 --payload "$(_ud_payload_free)"
+  assert_success
+  _route DR0 user_decision
+  _bo batch
+  assert_success
+  # The floor is the whole payload's: one question under it takes the other three down with it.
+  jq -e 'all(.payloads[].questions[]; (.options | length) >= 2 and (.options | length) <= 4)' <<< "$output" \
+    || fail "a question broke the 2-4 option floor: $output"
+  jq -e --arg q "$UD_Q" '[.payloads[0].questions[] | select(.question == $q)]
+    | length == 1 and .[0].header == "DV1" and .[0].multiSelect == false
+    and (.[0].options | map(.label)) == ["the stage decides", "raise this need again"]
+    and all(.[0].options[]; (.description | length) > 0)' <<< "$output" || fail "free-text question: $output"
+  # Synthetic, so payload-only: the need and the ledger still carry the empty list the hook pairs on.
+  jq -e '[.needs[] | select(.task_id == "DV1")] | length == 1 and .[0].options == []' <<< "$output" \
+    || fail "the need carries the synthetic options: $output"
+  run jq -e '.tasks.DV1.metadata.blocked_on.detail.options == []' "$STATE"
+  assert_success
+
+  _ud_record '["DV1"]' "$UD_A"
+  _bo resume --task-id DV1 --leg resumed
+  assert_success
+  jq -e --arg id "$UD_ID" '.cleared == true and .resume_block.decision_ref == $id
+    and .resume_block.kind == "user_decision"' <<< "$output" || fail "resume: $output"
+  run jq -e '.tasks.DV1.status == "in_progress" and .tasks.DV1.metadata.blocked_on == null' "$STATE"
+  assert_success
+  _assert_audit_clean "$UD_Q" "$UD_A" "the stage decides"
 }
 
 @test "resume: a user_decision with no valid covering row exits 1 and writes nothing" {

@@ -6,7 +6,7 @@ color: cyan
 effort: medium
 version: 0.6.0
 maxTurns: 40
-tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), EnterWorktree, ExitWorktree
+tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh *), EnterWorktree, ExitWorktree
 hooks:
   Stop:
     - type: command
@@ -149,24 +149,26 @@ this section: the single-tree commit and push are unchanged.
 
 Start with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
 (every DV task shares one tree) → leave this section; the single-tree path applies. `arm=multi
-streams=<n>` is followed by one `<task><TAB><stream><TAB><tree>` line per stream: run § Per stream
+streams=<n>` is followed by one `<task><TAB><stream><TAB><tree>` line per stream: run § Per stream — scope and staging
 for each, in that order, then § Merge, battery, push.
 
-##### Per stream
+##### Per stream — scope and staging
 
 1. Run § Pre-commit scope check in `<tree>` (`git -C <tree> status --porcelain`) against that tree's
    landed set (§ Untracked files — on the multi-stream arm).
 2. Stage the stream's new files: `git -C <tree> add -- <path>...` for every `??` path its DV artifact
    lists as changed, never a path in that tree's landed set. `commit` stages tracked edits only
    (`add -u`), so a new file left unstaged never ships.
+
+##### Per stream — commit and facts
+
 3. `Write` the message per `skills/shared/git-conventions.md` to `.context/logs/fn-commit-<task>.txt`,
    then `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
 4. Pass the JSON after `facts=` on the second printed line to
    `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
    block with `stream_branch_missing`.
 
-`untracked=<n>` above 0 on the result line: stage any of those paths the DV artifact lists, then
-re-run `commit`.
+If `untracked=<n>` above 0 on the result line: stage any of those paths the DV artifact lists, then re-run `commit`.
 
 ##### Merge, battery, push
 

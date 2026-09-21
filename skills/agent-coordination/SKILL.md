@@ -181,7 +181,11 @@ Known limit: re-denying the same command in the same task after a grant writes n
 
 #### Writers — redacted permission rows
 
-`.context/logs/audit.jsonl` is committed, so the `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only the redacted head every committed row carries: `audit_command_head` from `hooks/lib/command-head-lib.sh` over the secret-masked command, at most 4 tokens (the program plus flag, task-id or status grammar, anything else `[redacted]`), path-scrubbed through `skills/shared/scripts/path-scrub.sh` and at most 120 characters, with `truncated: true` when the head shows less than the whole command. When that library or the scrub is unavailable, `command_head` is `[redacted]` and `redaction` is `scrub_unavailable`. No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
+`.context/logs/audit.jsonl` is committed, so `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only redacted heads: `audit_command_head` from `hooks/lib/command-head-lib.sh` over the secret-masked command (at most 4 tokens, path-scrubbed, ≤120 chars). When that library is unavailable, `command_head` is `[redacted]` and `redaction` is `scrub_unavailable`.
+
+##### Information redaction and deduplication
+
+No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
 
 #### Writers — where the full permission detail lives
 
@@ -207,14 +211,11 @@ Only the originating orchestrator writes these: a session answering from another
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator (`blocked-on-dispatch.sh route\|resume`) | `blocked_on`: `opened` at the route that re-opened the target (`result: "blocked"`), `closed` at the resume (`result: "ok"`). `metadata.{kind, arm, leg}` on both — `arm` is `correction`, never a fallback — plus `decision_ref` on `closed`. No command head: a correction asks nobody to run a command |
+| Orchestrator (`blocked-on-dispatch.sh route\|resume`) | `blocked_on`: `opened` at the route that re-opened the target, `closed` at the resume. Metadata includes `kind`, `arm` (always `correction`), and `leg`; plus `decision_ref` on `closed`. No command head — a correction asks nobody to run a command |
 
-A re-routed correction writes no second `opened` row: the router reads the still-open need's
-recorded leg and re-parks without calling the op, so one correction moves `fix_round` once. The row
-names no task but its own — the target id, the finding, its `evidence_ref` and the count of parked
-consumers all stay off it (§ Writers — blocked_on rows, redacted), and
-`tasks.<ID>.metadata.blocked_on` holds the detail. The finding reaches the re-opened stage only
-through that target's `metadata.gate_blockers` and the remediation injection.
+##### Correction routing and detail placement
+
+A re-routed correction writes no second `opened` row: the router reads the still-open need's recorded leg and re-parks without calling the op. The row names no task but its own — target id, finding, `evidence_ref` and consumer count all stay off it (§ Writers — blocked_on rows, redacted). The detail lives in `tasks.<ID>.metadata.blocked_on` and flows to the re-opened stage through `metadata.gate_blockers` and remediation injection.
 
 #### Writers — mailbox_ingest rows
 
@@ -237,13 +238,13 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 | Actor | Action Examples |
 |-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
-| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort`, a redacted `command_head` on Bash rows and scrubbed `targets` paths — never the command line or file content |
-| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`; one-shot `state_merge_noop` (`result: skipped`, `subject` and `task_id` `none`) when the stop carried no stage and no artifact |
-| `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
-| `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with `metadata.stage` |
-| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus one-shot `test_gate_disabled` / `test_dedupe_disabled` |
+| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` with `duration_ms` + `effort`, a redacted `command_head` on Bash, scrubbed paths — never the command line or file content |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` or one-shot `state_merge_noop` with metadata per artifact |
+| `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with state file, run index and artifacts |
+| `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with metadata.stage |
+| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus gate control one-shots |
 
-#### Plugin-hook row fields
+##### Plugin-hook authoritative rows and fields
 
 Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. `stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
 
@@ -363,13 +364,15 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 | Status check | Self |
 | Code implementation | developer |
 | Architecture question | software-architector |
-| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/routing-matrix.md § Functional-role aliases` |
+| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent |
 | Technical decision | technical-lead |
 | Test design | qa-engineer |
 
-Model: a worktask stage dispatch takes model and effort from its row in `skills/shared/stage-codes.md`; any other delegation sizes its model by `skills/shared/model-selection.md § Selection Criteria`.
+Model sizing: a worktask stage dispatch takes model and effort from `skills/shared/stage-codes.md`; other delegations use `skills/shared/model-selection.md § Selection Criteria`. Platform roster: `skills/shared/routing-matrix.md § Functional-role aliases`.
 
-> **Cross-plugin AR collaboration**: on platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (for Apple: pattern selection, DI, navigation, concurrency; equivalents elsewhere). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
+#### Cross-plugin AR collaboration
+
+On platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (e.g., Apple: pattern selection, DI, navigation, concurrency). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
 
 #### When not to delegate
 

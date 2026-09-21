@@ -125,7 +125,18 @@ mkdir -p "$SHIMDIR"
 REAL_GIT=$(command -v git)
 cat > "$SHIMDIR/git" <<EOF
 #!/usr/bin/env bash
-if [ "\$1" = "cat-file" ]; then
+# land-artifacts.sh calls git through git_run, which always prepends "-c
+# core.fsmonitor=false" — skip that pair (and any "-C <dir>") before
+# checking the subcommand, or a bare \$1 check never matches cat-file.
+_args=("\$@")
+_i=0
+while [ "\$_i" -lt "\$#" ]; do
+  case "\${_args[\$_i]}" in
+    -C | -c) _i=\$((_i + 2)) ;;
+    *) break ;;
+  esac
+done
+if [ "\${_args[\$_i]:-}" = "cat-file" ]; then
   "$REAL_GIT" "\$@" | sed 's/demo2/corrupted/'
   exit \${PIPESTATUS[0]}
 fi
@@ -164,14 +175,19 @@ jq -n --arg prod "$S3_ROOT/producer" --arg cons "$S3_ROOT/consumer" '{
   }
 }' > "$S3_LEDGER"
 
+# Baseline before land ever runs: the consumer worktree already carries
+# whatever MAIN's HEAD had checked out (seed.txt), so "nothing landed" means
+# unchanged, not empty.
+s3_before=$(find "$S3_ROOT/consumer" -mindepth 1 -not -path '*/.git*' | sort)
+
 set +e
 out=$(bash "$LAND" --state "$S3_LEDGER" --consumer DV1 2>&1)
 rc=$?
 set -e
 [ "$rc" -eq 1 ] || fail "S3 traversal refusal: expected exit 1, got $rc: $out"
 [ -e "$S3_ROOT/consumer/x.txt" ] && fail "S3 traversal refusal: nothing must be written outside consumes[]"
-find "$S3_ROOT/consumer" -mindepth 1 -not -path '*/.git*' | grep -q . \
-  && fail "S3 traversal refusal: consumer tree must stay empty"
+s3_after=$(find "$S3_ROOT/consumer" -mindepth 1 -not -path '*/.git*' | sort)
+[ "$s3_after" = "$s3_before" ] || fail "S3 traversal refusal: consumer tree must stay unchanged"
 reason=$(jq -r '.tasks.DV1.metadata.landing_error.reason // ""' "$S3_LEDGER")
 [ "$reason" = "dotdot" ] || fail "S3 traversal refusal: expected dotdot, got $reason"
 printf 'S3 traversal refusal: ok\n'

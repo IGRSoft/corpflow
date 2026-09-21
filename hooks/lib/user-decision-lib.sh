@@ -329,11 +329,15 @@ ud_scope_for() {
         and (((($ht.metadata // {}).blocked_on // {}).detail // {}).question // "") == $question ) as $rung1
     | if $rung1 then
         ((($ht.metadata // {}).blocked_on // {}).detail.item // null) as $item
+        # A need parked with no options of its own asked as a free-text question, which the
+        # asker renders under synthetic labels it never wrote to the ledger. So an empty list
+        # constrains nothing and the question and item alone decide the group.
         | ( [ $tasks | to_entries[]
               | select(.value.status == "blocked"
                   and (((.value.metadata // {}).blocked_on // {}).kind // "") == "user_decision"
                   and ((((.value.metadata // {}).blocked_on // {}).detail // {}).question // "") == $question
-                  and ((((.value.metadata // {}).blocked_on // {}).detail // {}).options // []) == $options
+                  and (((((.value.metadata // {}).blocked_on // {}).detail // {}).options // []) as $o
+                       | $o == $options or ($o | length) == 0)
                   and ((((.value.metadata // {}).blocked_on // {}).detail // {}).item // null) == $item)
               | .key ] | sort ) as $tids
         | {worktask_id: $wid, task_ids: $tids, item: $item}

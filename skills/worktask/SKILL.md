@@ -696,22 +696,23 @@ violated until it was injected at dispatch.
 
 ##### Step 4.6 — remediation injection & audit
 
+Correction re-opens a task of any stage; gate loop-back reaches DV. When `fix_round` > 0 or `retry_count` > 0, inject remediation brief:
+
+###### Remediation injection code
+
 ```typescript
-    // No stage test: a correction re-opens a task of any stage, and the gate loop-back reaches DV.
-    if ((full.metadata.fix_round ?? 0) > 0 || (full.metadata.retry_count ?? 0) > 0) {
-      // The stage code that raised it: "DR" | "QA" copied by the Step 7 loop-back from the gate
-      // row, or the correcting stage's own code written by --task-reopen. state-patch.sh writes both.
-      const fromStage = full.metadata.gate_from_stage;
-      const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[] | [finding]
-      if (fromStage && blockers.length > 0) {
-        full.description =
-          `REMEDIATION (from ${fromStage} gate — fix these specific findings before re-stop):\n` +
-          blockers.map((b, i) => `  ${i + 1}. ${b}`).join("\n") + "\n\n" + full.description;
-        appendAudit({ actor: "orchestrator", action: "gate_remediation_injected",
-                      subject: full.metadata.stage, result: "ok",
-                      metadata: { from_stage: fromStage, to_stage: full.metadata.stage,
-                                  count: blockers.length } });
-      }
+    // The stage code that raised it: "DR" | "QA" copied by the Step 7 loop-back from the gate
+    // row, or the correcting stage's own code written by --task-reopen. state-patch.sh writes both.
+    const fromStage = full.metadata.gate_from_stage;
+    const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[] | [finding]
+    if (fromStage && blockers.length > 0) {
+      full.description =
+        `REMEDIATION (from ${fromStage} gate — fix these specific findings before re-stop):\n` +
+        blockers.map((b, i) => `  ${i + 1}. ${b}`).join("\n") + "\n\n" + full.description;
+      appendAudit({ actor: "orchestrator", action: "gate_remediation_injected",
+                    subject: full.metadata.stage, result: "ok",
+                    metadata: { from_stage: fromStage, to_stage: full.metadata.stage,
+                                count: blockers.length } });
     }
 ```
 
@@ -1452,17 +1453,21 @@ it takes a new improvised route each time: one run met a screenshot need, a host
 denial and a cross-session ask, and routed all four by hand. So every kind goes through one table
 and one router, and each writes a fixed set of audit legs.
 
-##### Step 6.5a3 — the dispatch table
+##### Step 6.5a3 — the dispatch table — kinds and routing
+
+Route every `blocked` return by `kind`; each kind is landed so no row routes to a fallback for want of owner.
+
+###### Dispatch table
 
 | kind | Orchestrator action | Audit legs | Owner | Fallback |
 |---|---|---|---|---|
-| `user_decision` | ask `question` with its `options` at § Step 7a; resume with the hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
-| `user_action` | show `request` and its `!` line at § Step 7a | requested / verified | #394, landed | none |
+| `user_decision` | ask `question` with `options` at § Step 7a; resume with hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
+| `user_action` | show `request` and `!` line at § Step 7a | requested / verified | #394, landed | none |
 | `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
-| `peer_session` | write the request, send the pointer, relay the validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` when the mailbox is unavailable; `user_decision` at expiry |
-| `artifact` | resume once `path` is in the stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
-| `correction` | re-open `target_task`, park every consumer of its output `stale` | opened / closed | #404, landed | none |
-| `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while it fails |
+| `peer_session` | write request, send pointer, relay validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` (mailbox unavailable); `user_decision` (expiry) |
+| `artifact` | resume once `path` in stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
+| `correction` | re-open `target_task`, park consumers `stale` | opened / closed | #404, landed | none |
+| `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while failing |
 
 ###### Step 6.5a3 — landing an arm
 
@@ -1545,22 +1550,13 @@ A miss on either check below parks the need as a `user_action` with `fallback_fr
   admits it. A hit clears the need with the ok `landed` row and a `resume_block`; a miss, or a path
   no landing can produce such as a `.context/` artifact, writes no `landed` row.
 
-###### Step 6.5a3 — the correction arm, one router call and one ledger op
+###### Step 6.5a3 — the correction arm — invocation
 
-A `correction` names a defect in work another task owns, so its route re-opens the target **and**
-parks the source. The orchestrator picks nothing here: it makes the one `route` call above, and
-`route` makes one `state-patch.sh --task-reopen <target> --from <source>` call that carries every
-mutation, then parks the source and writes the `opened` leg
-(§ blocked-on-dispatch.sh — route, the correction arm).
+A `correction` names a defect in work another task owns. Route re-opens target **and** parks source. Orchestrator makes one `route` call; `route` makes one `state-patch.sh --task-reopen <target> --from <source>` call carrying every mutation, then parks source and writes `opened` leg (§ blocked-on-dispatch.sh — route, the correction arm — invocation).
 
-Both sides guard before either writes: the router checks that the target exists, is not the source
-and is `completed`, refusing otherwise with one `fail:` line and an untouched ledger, and the op
-re-checks the same under its own lock. A retried orchestrator turn is caught earlier still, by the
-`opened` leg already in the log, so `fix_round` moves once per correction. The target becomes
-`pending` with `metadata.fix_round` up one, `gate_from_stage` the source's stage code and
-`gate_blockers` the rework text; every `completed` task that consumed its output becomes `stale`,
-keeping its verdict, artifact and handoff. Op contract, guards and exits:
-`references/handoff-protocol.md § tasks — re-open and settle`.
+###### Step 6.5a3 — the correction arm — guards and mutations
+
+Router checks: target exists, not source, is `completed`; refuses with `fail:` line and untouched ledger. Op re-checks under its lock. Retried turn caught by `opened` leg in log, so `fix_round` moves once per correction. Target becomes `pending` with `fix_round` +1, `gate_from_stage` = source stage code, `gate_blockers` = rework text. Every `completed` consumer becomes `stale`, keeping verdict, artifact, handoff. Ops: `references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`.
 
 ###### Step 6.5a3 — what the target and its consumers do next
 
@@ -1670,7 +1666,7 @@ re-dispatched stage gets the instruction as prompt suffix [7], which is not a me
 
 ```typescript
 // Exit 1 resends only `send=ok` misses. Any other send result had its turn at send time in
-// resume.md § Reattach rows — the result table, so the boundary escalates it; `queued` included.
+// resume.md § Reattach rows — the result table — delivered and refusals, so the boundary escalates it; `queued` included.
 function resendOnceOrEscalate(state, task, subagentType, ack) {
   if (ack.status === 2) return escalate(task.id);   // a failed check is never clear
   const misses = [...ack.stdout.matchAll(/^msg (\S+) not-delivered send=(\S+)$/gm)];
@@ -1698,12 +1694,13 @@ function resendOnceOrEscalate(state, task, subagentType, ack) {
 
 ##### Step 6.5a4 — every stage message carries a msg_id
 
+One path for every orchestrator → stage SendMessage: 6.5a2 nudge, 7a permission, typed-need resumes, reattaches, amendments, resends. Resend/retry omitting `supersedes` leaves replaced message reading not-delivered.
+
+###### Message ID assignment code
+
 ```typescript
-// The one path for every orchestrator → stage SendMessage: the 6.5a2 nudge, the 7a permission and
-// typed-need resumes, resume-time reattaches, amendments and resends. A resend or retry that omits `supersedes`
-// leaves the message it replaces reading not-delivered at every later boundary.
+// k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
 function sendStageMessage(state, task, subagentType, body, supersedes = null) {
-  // k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
   const msg_id = `${task.id}-m${sendRows(task.id).length + 1}`;
   const sent = SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
     message: [`msg_id: ${msg_id}`, ...(supersedes ? [`supersedes: ${supersedes}`] : []),
@@ -1866,38 +1863,29 @@ that row untouched and exits 0 with one `warn` `contract_landed` row whose reaso
 
 ##### Step 6.5d — settle the consumers of a re-opened task
 
+At re-opened target's **own** completion boundary (after landing pass, before next ready-filter). The correcting stage resumed earlier when corrected artifact did not exist. Any stage, not just DV.
+
+###### Step 6.5d — settle invocation
+
 ```typescript
-    // …continued, after the landing pass and BEFORE the next ready-filter pass. This runs at the
-    // RE-OPENED TARGET's own completion boundary: the correcting stage resumed earlier, when the
-    // corrected artifact did not exist yet. Any stage, not only DV.
     const done = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks[task.id];
     if (done?.status === "completed" && (done.metadata?.fix_round ?? 0) > 0) {
       const st = spawnSync("bash", ["skills/worktask/scripts/state-patch.sh",
                                     "--task-settle-stale", task.id], { encoding: "utf8" });
-      if (st.status !== 0) escalate(task.id);   // § Error Handling; a refusal wrote nothing
+      if (st.status !== 0) escalate(task.id);
     }
 ```
 
-The script decides each `stale` dependent and writes the ledger: back to `pending` when the
-corrected change set intersects the refs that dependent cites, back to `completed` with its result
-standing when it does not, and `pending` when either set is unreadable or empty. It prints one
-`{"settled":[{"task","to","reason"}]}` line. The orchestrator runs it and applies nothing by hand —
-both sets, the normalisation and the fail-safe direction are
-`references/handoff-protocol.md § tasks — re-open and settle`. A target that is re-opened and never
-completes leaves its dependents `stale`, which keeps the loop open instead of settling it against
-uncorrected work.
+Script decides each `stale` dependent: back to `pending` when corrected change set intersects cited refs; back to `completed` when it doesn't; `pending` when either set unreadable/empty. Prints `{"settled":[{"task","to","reason"}]}`. Orchestrator runs it; both sets, normalisation, fail-safe direction: `references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`. Re-opened target never completing leaves dependents `stale`, keeping loop open.
 
 ###### Step 6.5d — resume the stage that raised the correction
 
 ```typescript
-    // …continued, after the settle. Mechanical match on the need's own target_task, as the
-    // artifact resume above matches on producer_task.
     if (done?.status === "completed" && (done.metadata?.fix_round ?? 0) > 0) {
       const parked = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks;
       for (const [id, t] of Object.entries(parked)) {
         const need = t.metadata?.blocked_on;
-        if (t.status !== "blocked" || need?.kind !== "correction"
-            || need.detail?.target_task !== task.id) continue;
+        if (t.status !== "blocked" || need?.kind !== "correction" || need.detail?.target_task !== task.id) continue;
         const r = spawnSync("bash", [ROUTER, "resume", "--task-id", id, "--leg", "closed"]);
         if (r.status === 0) { const rb = JSON.parse(r.stdout).resume_block; deliverResume(rb, rb.instruction); }
         else escalate(id);
@@ -1905,11 +1893,9 @@ uncorrected work.
     }
 ```
 
-The corrected artifact exists only now, which is why the source resumes here and not at the route
-that parked it — the `closed` leg itself checks nothing about the target, because this boundary is
-that check. A non-zero exit means the row is no longer parked on this need, or a ledger write was
-refused: both go to § Error Handling. A need this pass never reaches stays parked for § Step 7a,
-where the user's "done" closes it on `verified` with the same artifact path.
+###### Step 6.5d — notes
+
+Corrected artifact exists only now; source resumes here not at route that parked it. Non-zero exit: row not parked or ledger write refused → § Error Handling. Unreached stays parked for § Step 7a.
 
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
@@ -2176,6 +2162,13 @@ function deliverResume(rb, body) {
   the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
 - A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
   `cwd:` line as § Step 7a — where the `!` line runs says.
+
+###### Step 7a — a decision with no options
+
+A `user_decision` need with no options of its own is asked under two synthetic labels, "the stage
+decides" and "raise this need again". They only clear AskUserQuestion's 2-option minimum and never
+reach the ledger. Neither is a control word: `resume` does not read the answer, so a picked label
+is recorded like text typed under "Other".
 
 ##### Step 7a — an inbound reply, on any channel
 
@@ -2653,24 +2646,13 @@ Normalizes and validates `--payload` through the lib, then acts on the arm the l
   read, a refused path or a non-member leaves it parked as a `user_action`: a `requested` row with `fallback_from: artifact`
   and no `owner_issue`. `BLOCKED_ON_LAND` swaps the landing script, a test seam.
 
-#### blocked-on-dispatch.sh — route, the correction arm
+#### blocked-on-dispatch.sh — route, the correction arm — invocation
 
-- `correction`: read-only guards first — `detail.target_task` exists, is not the source, and is
-  `completed`; a miss is exit 1 with one `fail:` line and the ledger byte-identical, which
-  § Step 6.5a3 re-dispatches the source with. Then one
-  `state-patch.sh --task-reopen <detail.target_task> --from <source task> --finding-file -` call
-  carrying the rework text on **stdin**, then the source's park, then one `opened` row
-  (`result: blocked`). Re-opening before parking is deliberate: the op can still refuse under its
-  own lock, and a park written ahead of it would leave the source blocked on a correction no row
-  records. The op's own input-bounds refusal (exit 2 — an empty finding, over its byte cap, or
-  carrying a control byte) is likewise exit 1 with a `fail:` line, not an escalation.
+`correction` guards first: `detail.target_task` exists, not source, is `completed`; miss exits 1 with `fail:` line and unchanged ledger (§ Step 6.5a3 re-dispatches). Then `state-patch.sh --task-reopen <target> --from <source> --finding-file -` with rework text on stdin, source park, one `opened` row (`result: blocked`). Re-opening before parking deliberate: op can refuse under its lock; park ahead would leave source blocked with no row. Op input-bounds refusal (empty finding, byte cap, control byte) exits 1 with `fail:`, not escalation.
 
-A re-route of the same still-open need is detected by its recorded `opened` leg, not by the status
-guard — that guard now reads `pending`, because the first route already re-opened the target. The
-router re-parks the source, writes no second `opened` row and calls no op, so `fix_round` moves once
-per correction. The rework text on stdin is the finding byte-for-byte, then `evidence_ref:` and
-`source_task:` lines; it lands as `gate_blockers[0]` (`references/handoff-protocol.md § tasks —
-re-open and settle`).
+#### blocked-on-dispatch.sh — route, the correction arm — re-route idempotency
+
+Re-route of same still-open need detected by `opened` leg, not status guard (now reads `pending` after first route). Router re-parks source, writes no second `opened`, calls no op, so `fix_round` moves once per correction. Rework text on stdin: finding byte-for-byte, `evidence_ref:`, `source_task:` lines; lands as `gate_blockers[0]` (`references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`).
 
 #### blocked-on-dispatch.sh — route stdout
 
@@ -2709,27 +2691,17 @@ non-empty and not cut at 512 characters. Under a megatask per-issue run it asks 
 refusal, and one `escalation_parked` row with `metadata.kind: "user_action"` whose `escalated[]`
 entries are `{kind, command_head, truncated}`.
 
-### blocked-on-dispatch.sh — resume
+### blocked-on-dispatch.sh — resume — general flow
 
-`--claim`, then `blocked_on` set to `null`, then one closing-leg row carrying `decision_ref`
-(`references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`). Prints
-`{"resume_block":{"task_id","kind","arm","leg","decision_ref","resume_with","do_not_rerun":true,
-"instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the
-kind resumes with one. `instruction` restates the need, detail fenced, and forbids re-running any
-step that already completed.
+`--claim`, `blocked_on` → `null`, one closing-leg row with `decision_ref` (`references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`). Prints `{"resume_block":{"task_id","kind","arm","leg","decision_ref","resume_with","do_not_rerun":true,"instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the kind resumes with one. `instruction` restates need (detail fenced) and forbids re-running completed steps.
 
-`--leg landed` resumes an `artifact` need: it re-checks `path` safety and landed-set membership
-first, exits 1 when the path has not landed, and otherwise claims, clears and writes the ok
-`landed` row with its `decision_ref`, printing the same stdout. `--leg verified`, the user's "done",
-still resumes it through the fallback.
+#### blocked-on-dispatch.sh — resume — artifact leg
 
-`--leg closed` resumes a `correction` need: claim, clear, one ok `closed` row with its
-`decision_ref`, and `artifact_path` the target's `artifact`, else its `metadata.artifact`
-(recorded-else-planned). It checks the target's status **not at all** — the orchestrator calls it at
-that target's own completion boundary (§ Step 6.5d — resume the stage that raised the correction),
-and `--leg verified`, the user's "done", resumes the same need through the fallback with the same
-artifact path. Settling the `stale` dependents is not part of either resume; it keys on the target,
-not on a parked need, and runs as its own op at that boundary.
+`--leg landed` resumes `artifact` need: re-checks `path` safety and landed-set membership, exits 1 if not landed, otherwise claims, clears, writes ok `landed` row with `decision_ref`, prints same stdout. `--leg verified` (user's "done") still resumes through fallback.
+
+#### blocked-on-dispatch.sh — resume — correction leg
+
+`--leg closed` resumes `correction` need: claim, clear, ok `closed` row with `decision_ref`, `artifact_path` = target's `artifact` or `metadata.artifact` (recorded-else-planned). Checks target status **not at all** — orchestrator calls at target's completion boundary (§ Step 6.5d). `--leg verified` (user's "done") resumes through fallback with same path. Settling `stale` dependents not part of either resume; keys on target, not parked need; runs own op at boundary.
 
 #### blocked-on-dispatch.sh — resume, a user decision
 

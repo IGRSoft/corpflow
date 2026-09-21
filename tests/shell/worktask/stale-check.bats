@@ -48,6 +48,7 @@ agents_file() {
   run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
   assert_success
   assert_output --partial "[alive-busy]"
+  assert_output --partial "Agent busy. Leave it; poll/await. Do not double-dispatch or nudge"
   assert_output --partial "verdict: clear"
   refute_output --partial "gone"
 }
@@ -60,7 +61,8 @@ agents_file() {
   run_script_env --cwd "$w" "$SCRIPT" --agents-json "$w/agents.json"
   assert_failure 1
   assert_output --partial "[alive-parked]"
-  assert_output --partial "Reattach via SendMessage"
+  assert_output --partial "SendMessage reattach with awaited answer"
+  assert_output --partial "never auto-answer or re-dispatch"
   refute_output --partial "Re-delegate from the first incomplete stage"
 }
 

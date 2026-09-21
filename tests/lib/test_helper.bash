@@ -85,7 +85,7 @@ _TEST_HELPER_STUBDIR=""
 _STUB_FARM_REQUIRED=(bash sh env cat sed grep awk tr cut date mkdir rm mv cp ln \
                      ls find head tail wc sort uniq chmod mktemp dirname \
                      basename printf touch)
-_STUB_FARM_OPTIONAL=(git python3 jq realpath readlink stat od xargs diff tee \
+_STUB_FARM_OPTIONAL=(git python3 jq realpath readlink stat od cmp xargs diff tee \
                      sleep id uname)
 
 _stub_init() {

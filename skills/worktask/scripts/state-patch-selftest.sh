@@ -1164,8 +1164,10 @@ EOART
   # ST0 is downstream but never completed, PL0 is completed but not downstream at all.
   make_state
   for tr2_id in DV0 DR0 QA0 FN0 DC0 ST0; do
+    # Single-quoted around the splice, not \"-escaped: bash 3.2 misparses an escaped-quote
+    # '{"a":"x","b":"y"}' word as a brace-expansion list and runs _r9_meta twice on halves.
     bash "$SELF" --task-create "$tr2_id" \
-      --metadata "$(_r9_meta "{\"stage\":\"${tr2_id%%[0-9]*}\",\"agent\":\"corpflow:developer\"}")" > /dev/null
+      --metadata "$(_r9_meta '{"stage":"'"${tr2_id%%[0-9]*}"'","agent":"corpflow:developer"}')" > /dev/null
   done
   bash "$SELF" --task-block DR0 --on DV0 > /dev/null
   bash "$SELF" --task-block DC0 --on DV0 > /dev/null

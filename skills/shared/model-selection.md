@@ -165,12 +165,19 @@ Use the `model` parameter on `Task()` to override per delegation:
 Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 ```
 
+### Task delegation and inheritance
+
+#### Team and Explore agents
+
 - Team agents inherit the leader's model — and, for tmux/pane-backed teammates, the
   leader's `--effort`. Override only when complexity warrants it. The "Default teammate
   model" setting was removed, so inheritance is the only path: there is no config knob to
   check instead, and a lane's tier is pinned at `Agent(name: …, model: …)` or not at all.
 - The built-in `Explore` agent inherits the session model **capped at opus**, not haiku:
   fan-outs cost sonnet/opus-tier tokens, so budget for it or pass an explicit `model`.
+
+#### Persistence across resume and auto mode
+
 - An explicit per-call override **survives resume and follow-up `SendMessage`** — a pinned
   stage does not revert to the parent's model on reattach, so `model_requested`/
   `model_resolved` in `dispatched_agents[]` keep matching for the stage's whole lifecycle.
@@ -211,7 +218,7 @@ safety the paragraph above grants them: `Task({ model: "opus" })` still passes s
 the forced model with no refusal and no error.
 
 Two controls cover it. PL0 reads the variable before any spend and raises a plan-gate sweep item
-(`skills/worktask/references/pl0-procedure.md § Subagent model-force preflight`), and Step 6.5b
+(`skills/worktask/references/pl0-procedure.md § Subagent model-force preflight — detection`), and Step 6.5b
 backfills `dispatched_agents[].model_resolved` when the runtime surfaces the model that ran, so cost
 follows the forced tier rather than the pin. The force applies at spawn, so there is no mid-stage
 switch for `hooks/model-switch-gate.sh` to refuse.

@@ -179,9 +179,13 @@ _cf_gl_usage() {
 # Bash(...) token on a frontmatter grant line. One awk pass, resetting frontmatter
 # state on FNR==1 per file; frontmatter counts only when line 1 is a bare `---`.
 _cf_gl_scan_tokens() {
-  awk '
+  # LC_ALL=C so the BOM strip below sees the three bytes rather than one character;
+  # every pattern here is ASCII, so byte semantics change nothing else.
+  LC_ALL=C awk '
     function strip_cr(s) { sub(/\r$/, "", s); return s }
-    FNR == 1 { fm = (strip_cr($0) == "---") ? 1 : 0 }
+    # A BOM used to leave line 1 unequal to `---`, silently skipping the whole file —
+    # a broad grant in a BOM-prefixed file passed this lint clean.
+    FNR == 1 { s = strip_cr($0); sub(/^\357\273\277/, "", s); fm = (s == "---") ? 1 : 0 }
     {
       line = strip_cr($0)
       if (FNR > 1 && fm == 1 && line ~ /^---[[:space:]]*$/) { fm = 0; next }

@@ -61,7 +61,7 @@ rule_surfaces() {
 slash_tokens() {
   local f
   while IFS= read -r f; do
-    grep -hoE '(^|[^A-Za-z0-9/._*!-])/[a-z][a-z0-9-]{2,}' "$f" 2>/dev/null || true
+    grep -hoE '(^|[^A-Za-z0-9/._*!}-])/[a-z][a-z0-9-]{2,}' "$f" 2>/dev/null || true
   done < <(rule_surfaces) | grep -oE '/[a-z][a-z0-9-]{2,}' | sort -u
 }
 

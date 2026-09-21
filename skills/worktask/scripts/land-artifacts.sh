@@ -494,7 +494,8 @@ write_blob() {
   fi
   local perm=644
   [ "$idxmode" = "100755" ] && perm=755
-  chmod "$perm" -- "$tmp" || {
+  # No `--`: BSD chmod takes it as a filename. $tmp is always an mktemp path.
+  chmod "$perm" "$tmp" || {
     rm -f -- "$tmp"
     TMP_LIVE=""
     WB_RESULT='REASON:git_error'

@@ -137,8 +137,14 @@ def ud_shape:
   | (.detail.item) as $item
   | if ($q | type) != "string" or ($q | length) == 0 or ($q | length) > 512 then
       "blocked_on.detail.question for kind user_decision must be a 1-512 char string"
-    elif ($opts | type) != "array" or ($opts | length) < 2 or ($opts | length) > 4 then
-      "blocked_on.detail.options for kind user_decision must be 2-4 options"
+    # 0 is valid (a free-text-only decision, e.g. an expired peer_session fallback in
+    # mailbox.sh, which has no discrete choices to offer). The built-in AskUserQuestion takes
+    # 2-4 options per question and refuses fewer, so blocked-on-dispatch.sh `batch` renders the
+    # empty case under a synthetic pair it never stores here, and the user answers through the
+    # free-form choice that tool adds. The 4 cap below is this arm bounding its own detail.
+    # Exactly 1 is refused as neither a real choice nor free-form.
+    elif ($opts | type) != "array" or ($opts | length) == 1 or ($opts | length) > 4 then
+      "blocked_on.detail.options for kind user_decision must be 0 or 2-4 options"
     elif (($opts | map(select((type != "string") or length == 0 or length > 200))) | length) > 0 then
       "blocked_on.detail.options for kind user_decision must each be a 1-200 char string"
     elif ($opts | unique | length) != ($opts | length) then

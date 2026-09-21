@@ -707,6 +707,14 @@ cmd_batch() {
     # (question, options, item) so two tasks blocked on the identical choice ask it once. Two
     # groups sharing one question TEXT would collide in AskUserQuestion's own answers-by-text
     # keying, so a duplicate question text after grouping is dropped rather than sent twice.
+    #
+    # A need carrying no options of its own is a free-text decision, and the built-in
+    # AskUserQuestion still refuses a question under 2 options — with it the whole payload, up to
+    # three other needs. So the empty case renders a fixed synthetic pair, holding no stage text;
+    # the answer the user means arrives through the tool's own free-form choice. The pair is
+    # payload-only and never reaches the ledger, so the hook pairs the answer on question and item.
+    # Neither label is a control word: `resume` never reads the answer, so whichever the user
+    # picks is recorded and relayed to the stage exactly as typed text would be.
     payloads=$(printf '%s' "$full" | jq -c "$PD_JQ_DEFS$BO_JQ_DEFS"'
       . as $all
       | ($all | map(select(.kind != "user_decision"))
@@ -733,10 +741,17 @@ cmd_batch() {
                  header: $header,
                  question: $g[0].question,
                  multiSelect: false,
-                 options: ($g[0].options | map({
-                   label: .,
-                   description: (if . == $rec then "Recommended" else "Offered by \($header)" end)
-                 }))
+                 options: (if ($g[0].options | length) > 0 then
+                     $g[0].options | map({
+                       label: .,
+                       description: (if . == $rec then "Recommended" else "Offered by \($header)" end)
+                     })
+                   else
+                     [{label: "the stage decides",
+                       description: "No preset choices here: type the answer under Other. Picked, this label is the answer the stage gets, leaving it unconstrained."},
+                      {label: "raise this need again",
+                       description: "Picked, this label is the answer the stage gets: do not settle the question now, raise the need again."}]
+                   end)
                })
          | unique_by(.question)) as $udq
       | ($restq + $udq) as $allq

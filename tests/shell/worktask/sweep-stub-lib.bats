@@ -148,8 +148,9 @@ ROWS
   local re n
   re="$(sed -n "s/^SWEEP_ID_RE='\(.*\)'$/\1/p" "$PLUGIN_ROOT/$LIB")"
   [ -n "$re" ] || fail "non-vacuity: no id pattern extracted from the library"
+  # Three SweepStub id: definitions plus the settles-item reference that must accept them.
   n="$(grep -cF "pattern: '$re'" "$PLUGIN_ROOT/$PROTOCOL")"
-  [ "$n" -eq 3 ] || fail "id pattern documented at $n schema sites, expected 3"
+  [ "$n" -eq 4 ] || fail "id pattern documented at $n schema sites, expected 4"
 }
 
 @test "the class enum matches the documented SweepStub enum" {

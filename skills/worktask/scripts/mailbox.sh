@@ -334,7 +334,7 @@ cmd_comment() {
 _MB_INGEST_JQ='def mb_first_line: (. // "") | gsub("\r\n"; "\n") | split("\n")[0] | sub("[ \t]+$"; "");'
 
 mb_reply_answer() {
-  jq -Rs '
+  jq -Rsr '
     gsub("\r\n"; "\n") | split("\n") | .[1:] as $rest
     | (reduce range(0; ($rest | length)) as $i
         (null; if . == null and (($rest[$i] // "") | length) > 0 then $i else . end)) as $start

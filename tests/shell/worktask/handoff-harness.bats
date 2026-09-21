@@ -1831,7 +1831,9 @@ ANCHORS="$FIXTURES/worktask/anchors"
 @test "anchors: an unreachable cache-lint.sh fails the gate closed" {
   local copy="$WD/scripts" f
   mkdir -p "$copy"
-  for f in handoff-harness.sh sweep-stub-lib.sh frontmatter-lib.sh control-byte-lib.sh; do
+  # Every startup-sourced lib except cache-lint.sh must be present, or the fail-closed
+  # startup block (not the anchor gate) fires first with a different library's message.
+  for f in handoff-harness.sh sweep-stub-lib.sh frontmatter-lib.sh control-byte-lib.sh blocked-on-lib.sh; do
     cp "$PLUGIN_ROOT/skills/worktask/scripts/$f" "$copy/$f"
   done
   run bash "$copy/handoff-harness.sh" --validate-frontmatter "$ANCHORS/retrospective-0.md"

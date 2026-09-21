@@ -329,7 +329,12 @@ _setter_only_files() {
 # is carved out the same way _setter_only_files is; without it arm S's new dependency would
 # silently grow the exact-6 list below to 7.
 _pattern_only_files() {
-  printf '%s\n' 'skills/shared/scripts/grant-lint.sh'
+  # Spell the token without reading it: grant-lint matches against it, blocked-on-dispatch
+  # emits it inside instruction text, brief-compose names it in a comment to refuse it.
+  printf '%s\n' \
+    'skills/shared/scripts/grant-lint.sh' \
+    'skills/worktask/scripts/blocked-on-dispatch.sh' \
+    'skills/worktask/scripts/brief-compose.sh'
 }
 
 # Prints every tracked *.sh that mentions the env var, minus the carve-outs.

@@ -41,7 +41,10 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 - `reloadSkills: true` reloads plugin skills mid-session (e.g. after `/reload-skills`), re-announcing **only changed skills** — listeners must re-apply skill-specific initialization idempotently, never assuming every skill re-announces. `sessionTitle` (UI session title) rides alongside it.
 - Events stream in headless sessions, so a headless run cannot idle-reap remote workers mid-hook before the handler finishes.
-- Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch has a price`.
+
+#### SessionStart — resume hooks and rendering
+
+- Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch — cost estimation`.
 - `--continue`/`--resume` render the conversation without waiting for `SessionStart` hooks, so resume context a hook injects can arrive after the conversation is already on screen. Never assume a SessionStart hook has finished before a resumed session is shown.
 
 #### SessionStart — form & grant floor

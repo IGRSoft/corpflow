@@ -130,7 +130,9 @@ mb_dir() {
     [ ! -L "$d" ] || return 1
     [ -d "$d" ] || return 1
     [ -O "$d" ] || return 1
-    chmod 700 -- "$d" 2> /dev/null || return 1
+    # No `--`: BSD chmod takes it as a filename, so the guard would fail every call
+    # on macOS. Safe without one — every $d here is an absolute path.
+    chmod 700 "$d" 2> /dev/null || return 1
   done
   printf '%s' "$root"
   return 0

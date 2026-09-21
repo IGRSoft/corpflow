@@ -79,6 +79,8 @@ script path, and ends in space-star. A `.py` script takes `python3` in place of 
 Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)
 ```
 
+#### Token matching and substitution
+
 - **A quoted token never matches:** rules match the command text, and the invocation text
   is unquoted.
 - **A `$PLUGIN_ROOT` rule never matches:** the variable is not in the Bash tool environment,
@@ -86,6 +88,9 @@ Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)
 - **Agent `tools:` substitution is not explicitly documented** (skill content, agent content
   and skill `allowed-tools` are). A grant that does not match denies the call, and the stage
   takes the permission-denied park path (`skills/worktask/SKILL.md § Step 6.5a4`).
+
+#### Scoped grants with argument prefixes
+
 - **A fixed literal argument prefix may sit before the space-star** to scope the grant to one
   subcommand, e.g. `Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh
   --consumer *)`. The prefix is literal — letters, digits, `_ . , = / -` and single spaces,
@@ -102,12 +107,17 @@ byte, followed by the arguments:
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DR --prev DV
 ```
 
+#### Permitted and forbidden invocation patterns
+
 - **Forbidden**, because none can match the grant: a relative `bash skills/…` path; a bare
   `state-patch.sh --…`; `bash "$PLUGIN_ROOT/…"`; indirection through `$HELPER` or `$SCAN`; a
   quoted token; an env-prefixed command (`X=1 bash …`); an interpreter-less `skills/…/x.sh`.
 - **Legal:** a capture such as
   `out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DR --prev DV)`.
   Allow matching inside `$(…)` is not documented, so a capture may still prompt.
+
+#### Descriptive mentions and deferral
+
 - **Exempt:** a descriptive mention that is not an instruction to run
   ("`handoff-harness.sh check_sweep_ledger` fails when …") stays as written.
 - **Deferral:** a snippet keeps its control flow but drops the `-f` guard. `bash` exits 127
@@ -128,18 +138,23 @@ installed plugin.
 - **Markdown may contain the token in its exact bare dollar-brace form**, never in the shell
   default-value (colon-dash) form inside the braces: that form forfeits load-time
   substitution and risks mangled output from partial matchers.
+
+#### Composed paths and usage arms
+
 - **A composed path** — the token, a slash, then segments — breaks the moment the token is
   not substituted, so it is legal only where arm H or arm S holds. Each occurrence is judged
   on its own; every other composition, such as a `references/` doc path, is illegal.
-  - **Arm H — hook commands.** The path is `hooks/<name>.sh` in Claude Code-native config
-    parsed only by Claude Code: the `hooks` block of `.claude-plugin/plugin.json`, `hooks:`
-    entries in agent frontmatter, and verbatim documentation of those entries
-    (`skills/worktask/references/handoff-protocol.md`).
-  - **Arm S — granted scripts.** The path is `skills/<skill>/scripts/<name>.sh` or `.py`
-    with no `..`, and the token either follows `Bash(bash ` / `Bash(python3 ` with ` *)`
-    right after the path, or follows `bash ` / `python3 ` at line start or after a backtick,
-    a space, `(` or `$(` — never after `"`. The interpreter fits the extension: `bash` with
-    `.sh`, `python3` with `.py`.
+
+##### Arm H — hook commands
+
+The path is `hooks/<name>.sh` in Claude Code-native config parsed only by Claude Code: the `hooks` block of `.claude-plugin/plugin.json`, `hooks:` entries in agent frontmatter, and verbatim documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
+
+##### Arm S — granted scripts
+
+The path is `skills/<skill>/scripts/<name>.sh` or `.py` with no `..`, and the token either follows `Bash(bash ` / `Bash(python3 ` with ` *)` right after the path, or follows `bash ` / `python3 ` at line start or after a backtick, a space, `(` or `$(` — never after `"`. The interpreter fits the extension: `bash` with `.sh`, `python3` with `.py`.
+
+#### Enforcement
+
 - `tests/shell/skills/plugin-root-refs.bats` enforces both arms and sources
   `skills/shared/scripts/grant-lint.sh` for the arm S path rule, so that rule is defined
   once. `grant-lint.sh` is the checker for frontmatter grants and, with `--invocations`, for

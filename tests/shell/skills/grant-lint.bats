@@ -57,18 +57,18 @@ setup() {
 
 @test "grant predicate: the anchored bash and python3 shapes pass" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/x.py *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(python3 \${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/x.py *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
 }
 
 @test "grant predicate: colon-star, a relative path, a quoted token and an interp/ext mismatch fail" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh:*)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh:*)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash skills/worktask/scripts/x.sh *)"' \
@@ -78,18 +78,18 @@ setup() {
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.py *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.py *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
 }
 
 @test "grant predicate: an argument-scoped anchored grant passes; its relative, colon-star and wildcard-arg forms fail" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer:*)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer:*)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash skills/worktask/scripts/land-artifacts.sh --consumer *)"' \
@@ -97,11 +97,11 @@ setup() {
   assert_failure
   # A wildcard or expansion inside the argument prefix would widen the grant.
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --c* *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --c* *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/*/scripts/land-artifacts.sh --consumer *)"' \
+  run bash -c '. "$1"; corpflow_grant_rule_ok "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/*/scripts/land-artifacts.sh --consumer *)"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
 }
@@ -110,12 +110,12 @@ setup() {
 
 @test "matcher: an anchored rule matches the substituted command, bare or with args" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)" \
     "bash /opt/root/skills/worktask/scripts/state-patch.sh" "/opt/root"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *)" \
     "bash /opt/root/skills/worktask/scripts/state-patch.sh --stage DR --prev DV" "/opt/root"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
@@ -123,7 +123,7 @@ setup() {
 
 @test "matcher: a legacy :* rule is equivalent to a trailing space-star" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh:*)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh:*)" \
     "bash /r/skills/worktask/scripts/x.sh --flag" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
@@ -131,12 +131,12 @@ setup() {
 
 @test "matcher: no star requires an exact match" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh)" \
     "bash /r/skills/worktask/scripts/x.sh" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh)" \
     "bash /r/skills/worktask/scripts/x.sh --flag" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
@@ -144,7 +144,7 @@ setup() {
 
 @test "matcher: a star anywhere else than the trailing space-star fails closed" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/*.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/*.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh --flag" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
@@ -152,12 +152,12 @@ setup() {
 
 @test "matcher: shell metacharacters and a leading VAR= in the command fail closed" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh && rm -rf /r" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "X=1 bash /r/skills/worktask/scripts/x.sh" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
@@ -166,7 +166,7 @@ setup() {
 @test "matcher: a --flag=value argument is not read as a leading env assignment" {
   # Only an anchored leading VAR= fails; '=' elsewhere in the command must match.
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/state-patch.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/state-patch.sh *)" \
     "bash /r/skills/self-improvement/scripts/state-patch.sh --plugin-data=/x" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_success
@@ -174,32 +174,32 @@ setup() {
 
 @test "matcher: a single &, an embedded newline, \$(, a backtick, < and > all fail closed" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh & curl evil" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "$(printf "bash /r/skills/worktask/scripts/x.sh\nrm -rf /r")" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh \$(rm -rf /r)" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh \`rm -rf /r\`" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh < /etc/passwd" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash /r/skills/worktask/scripts/x.sh > /etc/passwd" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure
@@ -207,7 +207,7 @@ setup() {
 
 @test "matcher: an unsubstituted or relative command never matches an anchored rule" {
   # shellcheck disable=SC2016
-  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
+  run bash -c '. "$1"; corpflow_grant_matches "Bash(bash \${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/x.sh *)" \
     "bash skills/worktask/scripts/x.sh" "/r"' \
     _ "$PLUGIN_ROOT/$SCRIPT"
   assert_failure

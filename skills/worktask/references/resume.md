@@ -63,14 +63,19 @@ A revision leaves the refined `facts.branch` as-is and never re-refines: the onc
 | PL0 `completed`, all stages `completed` except FN | — | Near-done. Re-enter loop; the FN gate check (step 4.9) decides whether to STOP (`checkpoint`) or proceed (`bypass`) |
 | Stages `in_progress` with no `metadata.retry_count` | missing audit lines | Stale task state. Re-derive from most recent `.context/logs/` capture |
 
-### Live-agent rows — liveness branch
+### Live-agent rows — liveness branch — alive and responsive
 
 | Ledger Shape | Audit Tail | Action |
 |----------------|------------|--------|
-| Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` matching that stage | — | Subagent still alive. Branch on `{state, waitingFor}` (see Resume Procedure step 0) — never blind re-delegate a live agent |
-| Live `agent_id` matching that stage AND `waitingFor` = `approval`/`input` | — | Agent parked **on us**. Cheap `SendMessage` reattach with the awaited answer — do not re-delegate |
-| Live `agent_id` matching that stage AND its status reads **"Needs input"** (sandbox / MCP-input / managed-settings prompt, or an inbound message from another session awaiting the operator's approval — `claude agents` names the sender; its JSON field is unconfirmed, so it lands in this same bucket) | — | Parked **on us** but operator-owned. Reattach via `SendMessage` only to surface the prompt verbatim — never auto-answer or re-dispatch a duplicate for that stage |
-| Live `agent_id` matching that stage AND `waitingFor` = null/empty (mid-work) | — | Agent busy. **Leave it** — poll/await; do **not** double-dispatch or nudge. The busy read holds even while that session runs background agents: a headless or remote session with background agents still running never reports "waiting for your input" |
+| Any stage `in_progress` AND `claude agents --json --all` shows live `agent_id` | — | Still alive. Branch on `{state, waitingFor}` — never blind re-delegate |
+| Live `agent_id` AND `waitingFor` = `approval`/`input` | — | Parked on us. `SendMessage` reattach with awaited answer — do not re-delegate |
+
+### Live-agent rows — liveness branch — parked, awaiting input
+
+| Ledger Shape | Audit Tail | Action |
+|----------------|------------|--------|
+| Live `agent_id` AND status = **"Needs input"** (prompt or inbound message awaiting operator approval; `claude agents` names sender) | — | Parked on us, operator-owned. `SendMessage` only to surface prompt — never auto-answer or re-dispatch |
+| Live `agent_id` AND `waitingFor` = null/empty (mid-work) | — | Agent busy. Leave it; poll/await. Do not double-dispatch or nudge. Headless/remote sessions with background agents never report "waiting for your input" |
 
 ### Live-agent rows — broken hook configuration
 
@@ -157,16 +162,21 @@ field: `stale-check.sh` reads any *present* result other than `ok` as undelivere
 or null `result` counts as delivered — an omitted result hides a non-delivery instead of surfacing
 it.
 
-#### Reattach rows — the result table
+#### Reattach rows — the result table — delivered and refusals
 
 | Send result | Action |
 |---|---|
-| Delivered | Proceed exactly as the triggering row says — leave the stage `in_progress` and await its return |
-| `refused` — recipient sets `crossSessionInbound: "refuse"`, or holds an invalid value under managed settings | Stage stays parked. Recipient-config block, operator-owned: escalate, do **not** re-delegate and do **not** increment `retry_count` |
-| `dropped` — recipient's inbox is full or rate-limited | Stage stays parked. Back off and retry once; a second drop escalates |
-| `oversized` — refused up front for message size | Stage stays parked. The reattach prompt is too large — an authoring defect on our side, not a recipient problem. Shorten and retry |
+| Delivered | Proceed as the triggering row says — leave stage `in_progress` and await return |
+| `refused` — recipient config or invalid managed-settings value | Stage stays parked. Escalate; do **not** re-delegate or increment `retry_count` |
+| `dropped` — recipient inbox full or rate-limited | Stage stays parked. Back off and retry once; second drop escalates |
+
+#### Reattach rows — the result table — size, rate, and offline
+
+| Send result | Action |
+|---|---|
+| `oversized` — refused up front for message size | Reattach prompt is too large (authoring defect). Shorten and retry |
 | `burst_limited` — refused up front for send rate | Stage stays parked. Back off briefly, retry once |
-| `queued` — recipient is an offline Remote Control session on another machine; the send waits for that machine to reconnect | Stage stays parked. Do **not** re-send (the queued copy still lands on reconnect, so a second send duplicates the nudge), do **not** re-delegate, and do **not** increment `retry_count`. Await reconnection; escalate to the operator once the stage reads stale |
+| `queued` — offline Remote Control on another machine | Stage stays parked. Do **not** re-send (queued copy lands on reconnect; second send duplicates). Do **not** re-delegate or increment `retry_count`. Await reconnection; escalate if stale |
 
 #### Reattach rows — an unconfirmed absence
 
@@ -312,12 +322,12 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 
 ## Resume Procedure
 
-0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match rows against `.context/state.json.facts.dispatched_agents[]` (`--all` also surfaces completed and just-dispatched sessions) and branch directly:
-   - live + `waitingFor` = `approval`/`input` → it is parked **on us**; `SendMessage` the awaited answer (cheap nudge, no re-dispatch).
-   - live + status **"Needs input"** (sandbox / MCP-input / managed-settings prompt, or an inbound cross-session message awaiting approval) → parked on us but **operator-owned**; reattach only to surface the prompt verbatim — never auto-answer or re-delegate.
-   - live + `waitingFor` = null/empty (mid-work) → **leave it**; poll/await — do **not** `SendMessage` (avoids nudging a busy agent) and do **not** re-delegate.
-   - `state` = `blocked` → alive but parked; **reattach** via `SendMessage`, do not re-delegate.
-   - `state` = `done`, or the `agent_id` is genuinely absent even with `--all` → re-delegate from the first incomplete stage.
+0. `claude agents --json --all | jq '.[] | {agent_id, state, waitingFor}'` — match against `.context/state.json.facts.dispatched_agents[]` and branch:
+   - live + `waitingFor` = `approval`/`input` → parked on us; `SendMessage` the answer.
+   - live + **"Needs input"** (sandbox/MCP-input/managed-settings or inbound approval) → parked on us, operator-owned; surface prompt verbatim, never auto-answer.
+   - live + `waitingFor` = null/empty (mid-work) → leave it; poll/await. Do not `SendMessage` or re-delegate.
+   - `state` = `blocked` → alive but parked; reattach via `SendMessage`, do not re-delegate.
+   - `state` = `done` or `agent_id` absent → re-delegate from first incomplete stage.
 
 ### Step 0 notes — observed CLI field set
 
@@ -330,36 +340,21 @@ the mailbox alone, and must not read an absent decision row as a decision never 
    probes: `skills/agent-coordination/references/headless-dispatch.md § Schema Versioning Watch`. An unrecognised token is **unknown, not absent** — never re-delegate off one.
    `skills/worktask/scripts/stale-check.sh` implements exactly this tolerance.
 
-### Step 0 notes — own-name & teammate visibility
+### Step 0 notes — own-name & teammate visibility — agent discovery changes
 
-   `ListAgents`/`claude agents --json` now lists live **teammates** (previously invisible, so a
-   reachable teammate read as absent) and tells a session **its own name** — the address peers use,
-   and the one to avoid when constructing a `peer_session` ask so a stage does not address itself.
-   The pre-warmed idle worker no longer appears until a task claims it, removing a phantom row from
-   the best-effort `subagent_type` match in § Degrade rules — absent or terminal rows.
+   `ListAgents`/`claude agents --json` now lists live **teammates** (previously invisible) and tells session **its own name**. The pre-warmed idle worker no longer appears until claimed, removing a phantom row from `subagent_type` match. Both reduce false negatives (teammate read as gone) and false positives (phantom read as live). Degrade rules are unchanged.
 
-   Both change the pre-check's error profile, not its shape: fewer false negatives (a teammate
-   read as gone) and fewer false positives (a phantom read as live). The degrade rules are
-   unchanged and simply act on better input.
+### Step 0 notes — own-name & teammate visibility — name matching
 
-   The own name reuses the existing `name` key, confirmed live: the `ListAgents` self line and the
-   `--json` row carry the same value. A teammate row's `kind` is still unconfirmed. Names are not
-   unique, so when two rows share one, match on `sessionId`, never on `name`.
+   Own name reuses the `name` key (confirmed: `ListAgents` self line and `--json` row match). Avoid when constructing `peer_session` asks. Names are not unique — match on `sessionId`, never on `name`. A teammate row's `kind` is still unconfirmed.
 
-### Step 0 notes — reattach vs re-dispatch has a price
+### Step 0 notes — reattach vs re-dispatch — cost estimation
 
-   `SessionStart` resume hooks receive the session's **staleness and an estimated re-cache cost**.
-   Reattach is not unconditionally cheaper than re-dispatch: a long-idle session whose prompt cache
-   has aged out pays that re-cache on its first turn, which can exceed a fresh dispatch for a short
-   stage. Weigh the reported cost rather than assuming, and prefer re-dispatch only when the
-   estimate clearly exceeds the stage's own cost — reattach still wins whenever the agent holds
-   edited tree state, at any cache price (§ Mid-stage yield).
+   `SessionStart` resume hooks receive **staleness and estimated re-cache cost**. Reattach is not unconditionally cheaper: a long-idle session with aged prompt cache pays re-cache on first turn, exceeding fresh dispatch for short stages. Weigh reported cost; prefer re-dispatch only when estimate clearly exceeds stage cost. Reattach wins when agent holds edited tree state, at any cache price (§ Mid-stage yield).
 
-   Reattach also keeps what a re-dispatch throws away. A resumed subagent keeps its tool list,
-   system-prompt prefix, `SubagentStart` hook context and preloaded skills, so its cache prefix
-   survives, and nested background results are saved in the parent subagent's transcript, so they
-   survive too. A `--bg` session that receives a message just before its idle timeout is not
-   retired mid-turn.
+### Step 0 notes — reattach vs re-dispatch — what reattach preserves
+
+   Resumed subagents keep tool list, system-prompt prefix, `SubagentStart` hook context, preloaded skills (cache prefix survives), and nested background results in parent transcript. A `--bg` session receiving a message before idle timeout is not retired mid-turn.
 
 ### Step 0 notes — proactive detection
 

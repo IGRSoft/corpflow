@@ -286,7 +286,7 @@ Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage R
 
 #### Union this stage's facts in the same call
 
-Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. RE records the resolved version as a decision, plus any files the release touched:
+Pass `--facts` in the **same call** to union compressed facts into `state.json → facts.*`. The channel `stage-contracts.md` describes it; this is the only scripted writer. RE records the resolved version as a decision, plus files the release touched:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage RE --prev <PREV> --facts '{
@@ -295,7 +295,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage RE --p
   "open_questions": [{"id":"sw-RE0-1","class":"decision","ref":"release-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
-Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
+##### Facts-union semantics
+
+Union by `.id` (last writer wins, newest at tail): never clobbers upstream entries; a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
 
 <!-- output-sections:begin stage=RE -->
 ### Artifact anchors

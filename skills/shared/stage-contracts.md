@@ -69,19 +69,16 @@ An unacknowledged message reads as not delivered, and a missing or different `ac
 
 ### A need you cannot meet is returned as blocked_on
 
-When the stage cannot continue without something it cannot produce itself, stop at that step and
-return `verdict: blocked` with one `handoff.blocked_on` whose `kind` names the need
-(`handoff-protocol.md § Schema — blocked_on`, one arm per kind):
+When the stage cannot continue without something it cannot produce itself, stop at that step and return `verdict: blocked` with one `handoff.blocked_on` whose `kind` names the need (`handoff-protocol.md § Schema — blocked_on`, one arm per kind).
+
+#### Blocked_on kinds
 
 - a choice only the user can make: `user_decision`; something only the user can do: `user_action`
 - a denied tool call: `permission` (below); another session's answer: `peer_session`
 - another task's file: `artifact`; a defect in another task's completed work: `correction`
-  (§ The correction return (tpl-dc) — any stage returns it, DC is the worked example)
 - a failing autonomy-preflight check: `host_environment`
 
-List the steps that already completed in the artifact body. The orchestrator routes every kind
-(`skills/worktask/SKILL.md § Step 6.5a3`) and resumes the stage with what `resume_with` names.
-`cross_session_ask` is the legacy alias of `peer_session`; new returns write `blocked_on`.
+List the steps that already completed in the artifact body. The orchestrator routes every kind (`skills/worktask/SKILL.md § Step 6.5a3`) and resumes the stage with what `resume_with` names. `cross_session_ask` is the legacy alias of `peer_session`; new returns write `blocked_on`.
 
 #### A need you cannot meet — never routed by the stage
 
@@ -588,22 +585,11 @@ Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium 
 
 ### The tier is a request, not a guarantee
 
-`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory
-in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own
-frontmatter tier (`agent-coordination/references/headless-dispatch.md § Translation table — model &
-effort`). The bump is therefore computed and recorded on every path and *applied* on one. Every
-resolver audit row carries `effort_transport` saying which it was; `commands/worktask.md § Step C.0a
-— the tier only reaches some dispatch surfaces` holds the table.
+`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own frontmatter tier. The bump is therefore computed and recorded on every path and *applied* on one. Every resolver audit row carries `effort_transport` saying which it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
 
-Under `frontmatter-only` the `auto_decision_resolved` row records
-`effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier; under
-`dispatch-flag` `effort_resolved` is the tier the session ran at, and only there does comparing the
-two fields mean anything. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tracked outside this milestone.
+#### Recorded vs applied tiers
 
-Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item
-deserved, which is what a later `Task()` effort parameter would consume unchanged. What it is not is
-a licence to reach the number another way — substituting a higher-frontmatter agent trades the
-domain expertise answering the question for a field value, which is the wrong direction.
+Under `frontmatter-only` the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier; under `dispatch-flag` `effort_resolved` is the tier the session ran at. Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item deserved. What it is not is a licence to reach the number another way — substituting a higher-frontmatter agent trades the domain expertise answering the question for a field value.
 
 ### The tier the model can actually carry
 
@@ -1059,22 +1045,16 @@ rework brief quotes it. `evidence_ref` is `<file>:<line>`, and DC always sets `s
 
 #### The correction return — any stage, any resolver (tpl-dc)
 
-The example above is DC's because its option-existence gate fixed the key order, but the arm is not
-DC's: any stage or resolver that finds a defect in work **another task already completed** returns
-this same shape, and the router treats every one of them identically. Two rules bind whoever
-returns it:
+The example above is DC's because its option-existence gate fixed the key order, but the arm is not DC's: any stage or resolver that finds a defect in work **another task already completed** returns this same shape, and the router treats every one of them identically.
 
-- **The target is a `completed` task.** A correction re-opens finished work; the ledger op refuses a
-  target that is missing, is the returning task itself, or is in any other status
-  (`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`). A defect in work
-  still in flight is not a correction — it is that task's own round to finish.
-- **Return it, never route it.** The orchestrator re-opens the target, parks the tasks that consumed
-  its output, and hands the rework brief back. A stage that edits the other task's files, or asks in
-  prose for someone to fix them, has routed by hand and left no ledger row or audit leg.
+##### Rules for correction returns
 
-FN's finalization preflight is the second landed origin: when `control-byte-lint.sh --staged`
-reports a raw control byte in a staged text file, FN is the source and the target is the task whose
-handoff `files_touched` lists that file — the same arm-2 test DC applies above.
+- **The target is a `completed` task.** A correction re-opens finished work; the ledger op refuses a target that is missing, is the returning task itself, or is in any other status. A defect in work still in flight is not a correction — it is that task's own round to finish (`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`).
+- **Return it, never route it.** The orchestrator re-opens the target, parks the tasks that consumed its output, and hands the rework brief back. A stage that edits the other task's files, or asks in prose for someone to fix them, has routed by hand and left no ledger row or audit leg.
+
+##### Correction origins
+
+FN's finalization preflight is the second landed origin: when `control-byte-lint.sh --staged` reports a raw control byte in a staged text file, FN is the source and the target is the task whose handoff `files_touched` lists that file — the same test DC applies.
 
 ### #tpl-re — Release Engineering (release-engineer)
 

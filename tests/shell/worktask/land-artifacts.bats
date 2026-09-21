@@ -122,7 +122,13 @@ assert_refused() {
   run_land --producer DV0
   assert_equal "$status" 1
   assert_equal "$(reason_of)" "$reason"
-  [ ! -e "$C_REAL/$path" ]
+  # dest_tracked/dest_exists seed a real conflicting file at $path on purpose;
+  # "nothing landed" there means it survives untouched, not that it's absent.
+  if [ "$#" -ge 3 ]; then
+    assert_equal "$(cat "$C_REAL/$path")" "$3"
+  else
+    [ ! -e "$C_REAL/$path" ]
+  fi
   assert_audit_row contract_landed --file "$AUDIT" --subject DV1 --result fail \
     --meta reason="$reason" --count 1
 }
@@ -389,7 +395,12 @@ assert_refused() {
   mkdir -p "$WD/real_target"
   printf 'inner\n' > "$WD/real_target/inner.txt"
   ln -s "$WD/real_target" "$P_REAL/sdir"
-  git -C "$P_REAL" add sdir/inner.txt
+  # `git add` itself refuses to traverse a symlinked dir ("beyond a symbolic
+  # link") on every git version, so the index entry is staged directly —
+  # this fixture exercises the product's own on-disk symlink check, not git's.
+  local oid
+  oid=$(git -C "$P_REAL" hash-object -w "$WD/real_target/inner.txt")
+  git -C "$P_REAL" update-index --add --cacheinfo "100644,${oid},sdir/inner.txt"
   set_pair_path "sdir/inner.txt"
   assert_refused symlink_source "sdir/inner.txt"
 }
@@ -425,12 +436,12 @@ assert_refused() {
   printf 'different\n' > "$C_REAL/contract.yaml"
   git -C "$C_REAL" add contract.yaml
   git -C "$C_REAL" commit -q -m seed-tracked
-  assert_refused dest_tracked "contract.yaml"
+  assert_refused dest_tracked "contract.yaml" "different"
 }
 
 @test "contract: dest_exists is refused for an untracked file with different content" {
   printf 'different\n' > "$C_REAL/contract.yaml"
-  assert_refused dest_exists "contract.yaml"
+  assert_refused dest_exists "contract.yaml" "different"
 }
 
 @test "contract: not_dir is refused when a parent segment is a regular file" {
@@ -607,6 +618,9 @@ assert_refused() {
   jq --arg c2 "$C2_REAL" '.tasks.DV1.metadata.workspace_path = $c2' "$STATE" > "$STATE.tmp" \
     && mv "$STATE.tmp" "$STATE"
 
+  # The boundary pass above already wrote its own DV1/copied row; clear it so
+  # the count below reflects only what this dispatch-gate call adds.
+  : > "$AUDIT"
   run_land --consumer DV1
   assert_equal "$status" 0
   [ -f "$C2_REAL/contract.yaml" ]

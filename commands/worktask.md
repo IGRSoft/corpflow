@@ -4,7 +4,7 @@ description: Initialize a new worktask task with proper folder structure and sta
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -691,7 +691,7 @@ answers, then the bypass path resumes. Auto-decision never widens what runs unat
 **Escalate always stops at any boundary; bypass records decision-class items only.** A stop is the
 checkpoint-style render above, scoped to that boundary's escalate items: the user answers them,
 § Step C.5 records the answers, and the bypass path resumes. At the plan gate every lane keeps the
-checkpoint stop (`/megatask` parks; § Plan gate bypass path). At a stage's own boundary
+checkpoint stop (`/megatask` parks; § Plan gate bypass path — escalation exception). At a stage's own boundary
 (§ Step C.0) or the FN gate, the first matching lane wins:
 
 1. `/megatask` per-issue run (`PL0.metadata.megatask_group`): PARK, per § Escalation guard —
@@ -848,20 +848,15 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
-4. **On approval**, first stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`.
-   The stamp precedes the row by contract — a crash between them leaves state approving with no row,
-   and the resume path re-prompts a human; the reverse order resumes into the stage loop with the
-   carrier unset, which is the block this stamp exists to prevent. Then append one line to
-   `.context/logs/audit.jsonl` and proceed to Step A:
+4. **On approval**, stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'` (stamp before row: crash between them leaves state approving with no row, resume re-prompts; the reverse order — row before stamp — resumes into the stage loop with the carrier unset, the block this stamp exists to prevent). Append to `.context/logs/audit.jsonl` and proceed to Step A:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
    ```
-5. **On rejection / revision request**, append:
+5. **On rejection / revision**, append:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_rejected","subject":"PL<N>","result":"rejected"}
    ```
-   STOP — do NOT enter the stage loop. Surface the user's feedback. For revisions, re-dispatch PM per
-   § Plan-revision re-dispatch — a revision is NOT a new run.
+   STOP — do NOT enter stage loop. Surface user feedback. For revisions, re-dispatch PM per § Plan-revision re-dispatch (not a new run).
 
 ##### Plan-revision re-dispatch (gate rejection only)
 
@@ -893,13 +888,11 @@ one audit row before dispatching:
 On PM's return, re-enter the plan gate at Step A.5 — the revised plan needs its own approval, and
 Step A still runs exactly once per run (the issue is published after the *approved* plan).
 
-#### Plan gate bypass path
+#### Plan gate bypass path — auto approval
 
-**If `plan_gate == "bypass"` AND Step A.4 left no unresolved `escalate` items**: stamp
-`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No
-prompt, no approval line, no audit row — the requested bypass carrier IS the approval, and without
-the stamp every stage agent blocks. The guard is a precondition: stamping ahead of the stop lets a
-crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+**If `plan_gate == "bypass"` AND no unresolved `escalate` items remain**: stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No prompt, no approval row, no audit row — the bypass carrier IS the approval. The escalation guard is a precondition — never stamp ahead of the stop: stamping first lets a crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+
+#### Plan gate bypass path — escalation exception
 
 Exception: unresolved `escalate` items force a `checkpoint`-style stop first (§ Escalation guard).
 Once answered, stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the

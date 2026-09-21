@@ -304,24 +304,21 @@ Stamp the result in **two** places:
 
 Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.
 
-#### Subagent model-force preflight
+#### Subagent model-force preflight — detection
 
-Run once at PL0, before the plan gate: `printenv CLAUDE_CODE_SUBAGENT_MODEL_FORCE`. A non-empty value
-means every stage's `metadata.model` is ignored at spawn — each subagent runs on
-`CLAUDE_CODE_SUBAGENT_MODEL`, or on the session model when that is unset
-(`skills/shared/model-selection.md § Forced subagent model overrides every pin`). Read
-`printenv CLAUDE_CODE_SUBAGENT_MODEL` too, then emit **one** sweep stub — `class: decision`,
-`blocks_next_stage: false` — naming the forced model, restart recommended:
+Run once at PL0, before the plan gate: `printenv CLAUDE_CODE_SUBAGENT_MODEL_FORCE`. Non-empty means every stage's `metadata.model` is overridden at spawn — each subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL` or the session model (`skills/shared/model-selection.md § Forced subagent model overrides every pin`). Read `printenv CLAUDE_CODE_SUBAGENT_MODEL` too.
+
+#### Subagent model-force preflight — sweep item
+
+Emit **one** sweep stub — `class: decision`, `blocks_next_stage: false`:
 
 > Stage model pins will not hold: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, so every stage runs on
 > `<CLAUDE_CODE_SUBAGENT_MODEL, or "the session model">`, including stages this plan sizes
-> `opus`/`xhigh`. Proceed on the forced model, or stop, unset the variable, restart the session and
-> re-run. Recommended: unset and restart.
+> `opus`/`xhigh`. Proceed on the forced model, or stop, unset the variable, restart and re-run. Recommended: unset and restart.
 
-Unset or empty ⇒ **no item**. Under `--auto=[decision]` the default is to **proceed**: the decision
-delegate cannot change the session's environment, and Step 6.5b attributes each stage's cost to
-`model_resolved` when the runtime surfaces the model that ran. The variable's value is a fact PL0
-reads itself; only whether to run under it reaches the gate.
+#### Subagent model-force preflight — gate behavior
+
+Unset or empty ⇒ **no item**. Under `--auto=[decision]` the default is **proceed**: delegate cannot change session environment. PL0 reads the variable itself; only whether to run under it reaches the gate.
 
 #### `--no-gh-issue` opt-out
 

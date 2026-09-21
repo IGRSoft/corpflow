@@ -14,15 +14,10 @@ dependencies, routing metadata, and results. It lives in the worktask folder, so
 end, compaction, and resume with no configuration. Full schema:
 `skills/worktask/references/handoff-protocol.md#state-json-schema`.
 
-corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
-`TaskList`) — not even where those tools are available.
+### Why not Claude Code's Task System
 
-> **Why, so nobody re-adds them**: the Todo/task-tracking tools are offered only on Claude 3.x,
-> Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, so an orchestrator built on them cannot run on the
-> opus-, sonnet- or fable-tier models this plugin dispatches. A haiku-tier stage
-> (`corpflow:technical-writer`) does see them, and uses the ledger all the same.
-> `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` offers them on other models; the plugin deliberately does not
-> depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch.
+corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
+`TaskList`) — not even where those tools are available. The Todo/task-tracking tools are offered only on Claude 3.x, Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, so an orchestrator built on them cannot run on the opus-, sonnet- or fable-tier models this plugin dispatches. A haiku-tier stage (`corpflow:technical-writer`) does see them, and uses the ledger all the same. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` offers them on other models; the plugin deliberately does not depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch.
 
 ## Ledger Keys
 
@@ -55,10 +50,12 @@ tmp→fsync→rename, and the disk guard.
 | Re-open on a correction | `state-patch.sh --task-reopen <TARGET> --from <SOURCE> [--finding-file <path\|->]` |
 | Settle the parked consumers | `state-patch.sh --task-settle-stale <TARGET>` |
 
+### Correction pair operations
+
 The last two are the correction pair: the first re-opens one `completed` task and parks its
 consumers `stale`, the second decides each parked row at that target's next completion. Guards,
 exits, the consumer set and the cited-ref rule:
-`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`.
+`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`.
 
 ### Idempotency and key creation
 
@@ -78,7 +75,11 @@ only purpose and normative use.
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are not accepted |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset (`skills/shared/model-selection.md § Default Subagent Model`). A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides even the explicit alias, so `dispatched_agents[].model_resolved` diverges from the pin: Step 6.5b backfills it when the runtime surfaces the model that ran (`skills/worktask/SKILL.md § Step 6.5b — dispatch entry completed`), and PL0 raises a plan-gate sweep item (`skills/shared/model-selection.md § Forced subagent model overrides every pin`) |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
+
+#### Model field details
+
+The `model` field uses an alias rather than pinning a full model id. A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides even the explicit alias, so `dispatched_agents[].model_resolved` diverges from the pin: Step 6.5b backfills it when the runtime surfaces the model that ran (`skills/worktask/SKILL.md § Step 6.5b — dispatch entry completed`), and PL0 raises a plan-gate sweep item (`skills/shared/model-selection.md § Forced subagent model overrides every pin`). See `skills/shared/model-selection.md § Default Subagent Model` for alias behavior.
 
 ### Run & context fields
 
@@ -471,7 +472,11 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 | `blocked` | Waiting on an unsatisfied `blocked_by` entry, or held by a refused landing (`metadata.landing_error`); released by clearing that field, then `--task-status <ID> pending` |
 | `skipped` | Dropped by dynamic sizing during PL/AR (`state-patch.sh --task-status QA0 skipped`). The entry stays as an audit record of what was sized out; terminal, and never blocks a dependent |
 | `failed` | Terminally failed: retries and per-edge escalations are both exhausted, `last_error.class` is `exhausted`, and no further dispatch will be attempted. Terminal, and settles the completion loop (`skills/worktask/SKILL.md` `SETTLED`) |
-| `stale` | A `completed` task parked because the work it consumed was re-opened by a correction. Its verdict, artifact and handoff stand untouched — parked, never reset. Written only by `state-patch.sh --task-reopen`, left only by `--task-settle-stale`, which sends it back to `pending` or `completed` (`skills/worktask/references/handoff-protocol.md § tasks — re-open and settle`). Neither ready (the loop filter takes `pending`) nor settled, so tasks blocked by it stay unready and the loop stays open |
+| `stale` | A `completed` task parked because the work it consumed was re-opened by a correction. Written only by `state-patch.sh --task-reopen`, left only by `--task-settle-stale` |
+
+### Status lifecycle — stale and correction semantics
+
+`stale` status holds a `completed` task while the work it consumed is being redone. Its verdict, artifact and handoff stand untouched — parked, never reset. The status moves the task back to `pending` or `completed` by `--task-settle-stale`. Neither ready (the loop filter takes `pending`) nor settled, so tasks blocked by it stay unready and the loop stays open.
 
 ### `stale` names one thing only
 
@@ -498,5 +503,6 @@ ignored), and `SendMessage` remains the inter-teammate channel. Teammates coordi
 same `.context/state.json` ledger as every other stage and can self-claim available work. Live
 teammates are now visible to `ListAgents`/`claude agents --json`, so a lead resuming mid-batch uses
 the same pre-check as the stage loop (`../worktask/references/resume.md § Step 0 notes — own-name &
-teammate visibility`). Megatask patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
+teammate visibility —
+agent discovery changes`). Megatask patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
 in settings for worktask-specific auto-memory, separate from the default `~/.claude/`.

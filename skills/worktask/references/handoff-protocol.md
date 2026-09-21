@@ -272,7 +272,7 @@ need (`skills/agent-coordination/SKILL.md § Writers — redacted permission row
           required: [question, options]
           properties:
             question: { type: string, maxLength: 512 }
-            options: { type: array, minItems: 2, maxItems: 4, items: { type: string, maxLength: 200 } }
+            options: { type: array, minItems: 0, maxItems: 4, items: { type: string, maxLength: 200 } }   # 0 or 2-4; exactly 1 refused
             recommended: { type: string, maxLength: 200 }   # one of options
             item: { type: string, pattern: '^sw-[A-Z]{2}[0-9]+-[0-9]+$' }   # sweep item it settles
         resume_with: { const: decision_ref }
@@ -280,7 +280,7 @@ need (`skills/agent-coordination/SKILL.md § Writers — redacted permission row
 
 A choice only the user can make, with the options the stage weighed. It is not a closing-sweep
 item: a sweep item lets the stage finish, and this need stops it. The options are unique and
-non-empty.
+non-empty; empty `options` means free-text only (an expired `peer_session` ask falls back to it).
 
 ##### Schema — blocked_on, the user_decision legs and decision_ref
 
@@ -375,7 +375,7 @@ the `landed` leg closes the need at once: one ok `landed` row carrying the `deci
 once the path has landed. The landing that puts it there is the `contract_landed` ok row
 (§ Landing — the audit row).
 
-#### Schema — blocked_on, the correction arm
+#### Schema — blocked_on, the correction arm — structure
 
 ```yaml
 # …continued: handoff.properties.blocked_on, when kind is correction
@@ -385,16 +385,14 @@ once the path has landed. The landing that puts it there is the `contract_landed
           properties:
             target_task: { type: string, pattern: '^[A-Z]{2}[0-9]+$' }
             finding: { type: string, maxLength: 512 }
-            evidence_ref: { type: string, maxLength: 600 }   # <file>:<line>
-            severity: { type: string, maxLength: 32 }        # DC writes blocking
+            evidence_ref: { type: string, maxLength: 600 }
+            severity: { type: string, maxLength: 32 }
         resume_with: { const: artifact_path }
 ```
 
-A defect in work another task owns, which this stage does not fix itself. Any stage or resolver may
-return one; DC's option-existence gate is the worked example that fixed the key order
-(`skills/shared/stage-contracts.md § The correction return (tpl-dc)`). Its `artifact_path` is
-`target_task`'s own artifact, once corrected: `tasks[<target>].artifact` when its completion merge
-recorded one, else `metadata.artifact`, the path the plan seeded.
+#### Schema — blocked_on, the correction arm — semantics
+
+A defect in work another task owns. Any stage/resolver may return one; DC's option-existence gate is the worked example (`skills/shared/stage-contracts.md § The correction return (tpl-dc)`). `artifact_path` is `target_task`'s own artifact after correction: `tasks[<target>].artifact` if completion merge recorded one, else `metadata.artifact`.
 
 ##### Schema — blocked_on, the correction arm's two legs
 
@@ -1343,7 +1341,7 @@ A stage patch sets `status` from the artifact's `handoff.verdict`; `state-patch.
 | missing, or any other string | — | refused: exit 3, `state.json` byte-identical, on every caller path |
 
 No verdict maps to `stale`: a stage never reports itself stale. `--task-reopen` is its only writer
-and `--task-settle-stale` its only clearer (§ tasks — re-open and settle).
+and `--task-settle-stale` its only clearer (§ tasks — re-open and settle — guards and invocation).
 
 ##### tasks — loop-back, claim, create
 
@@ -1351,65 +1349,40 @@ The patch writes only its own row. Moving a failure back to DV is the orchestrat
 
 `--task-create` refuses a row whose metadata lacks `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (absent, `null` or `""`; `false` counts as present) with exit 2 and `state.json` untouched. `PL`/`IR` rows are exempt: PL0 is the stage that decides `base_ref` and `requires_screenshots`.
 
-##### tasks — re-open and settle
+##### tasks — re-open and settle — guards and invocation
 
-`--task-reopen <TARGET> --from <SOURCE> [--finding-file <path|->]` re-opens a task a correction
-names (`§ Schema — blocked_on, the correction arm`; router behaviour: `skills/worktask/SKILL.md
-§ blocked-on-dispatch.sh — route, the correction arm`). Every guard runs before any mutation — the
-target exists, is not the source, and is `completed`; the source exists — and a refusal is exit 4
-with `state.json` byte-identical, as `--claim` and `--task-replay` refuse (unknown id 1, malformed
-2). One atomic apply then writes:
+`--task-reopen <TARGET> --from <SOURCE> [--finding-file <path|->]` re-opens a correction-named task (`§ Schema — blocked_on, the correction arm — structure`; `skills/worktask/SKILL.md § blocked-on-dispatch.sh`). Guards run first: target exists, is not source, is `completed`; source exists. Refusal: exit 4, `state.json` unchanged. One atomic apply then writes mutations.
 
-- the target: `pending`, `metadata.fix_round` = `(fix_round // 0) + 1`, `metadata.gate_from_stage` =
-  the source's stage code, `metadata.gate_blockers` = one string — the stdin text with trailing
-  whitespace stripped, or `[]` when that text is empty. The router composes that text as the
-  `finding` byte-for-byte, a blank line, then `evidence_ref: <ref>` and `source_task: <source id>`,
-  because `gate_from_stage` carries the source's stage **code** only and those two refs have no
-  other channel into the brief. Its artifact, verdict and handoff survive, as they do across a
-  replay, and `fix_round` is what re-arms the remediation brief
-  (`skills/worktask/SKILL.md § Step 4.6`).
-- every consumer: `stale`. The set is transitive — each task reachable downstream of the target
-  through `blocked_by` — filtered to `status == "completed"`, minus the source, minus every stage
-  code in `REPLAY_SIDE_EFFECT_STAGES` (`FN`, `RE`), the one constant the cascading replay already
-  skips by. Nothing is reset: each keeps its verdict, artifact and handoff.
+##### tasks — re-open and settle — target mutation
 
-The finding arrives on **stdin** (`--finding-file -`), never argv, and is excluded from the
-state-patch log — the same channel an untrusted peer answer takes to the reply writer. Re-running
-the op is refused by the `completed` guard itself, which is what makes a retried route idempotent:
-no second `fix_round` bump.
+Target: `pending`, `metadata.fix_round` = `(fix_round // 0) + 1`, `metadata.gate_from_stage` = source stage code, `metadata.gate_blockers` = stdin text (trailing whitespace stripped) or `[]`. Router composes text as `finding` byte-for-byte, blank line, `evidence_ref: <ref>`, `source_task: <id>` (because `gate_from_stage` carries stage code only). Artifact, verdict, handoff survive (like replay). `fix_round` re-arms remediation brief (`skills/worktask/SKILL.md § Step 4.6`).
 
-##### tasks — settle, the cited set and the change set
+##### tasks — re-open and settle — consumer mutation and idempotency
 
-`--task-settle-stale <TARGET>` runs at the re-opened target's **own** completion boundary, after its
-completion patch and before the next ready-filter pass (`skills/worktask/SKILL.md § Step 6.5d —
-settle the consumers of a re-opened task`). For each `stale` task it decides one direction and
-prints `{"settled":[{"task","to","reason"}]}`:
+Every consumer: `stale`. Transitive set reachable downstream through `blocked_by`, filtered to `completed` status, minus source, minus `REPLAY_SIDE_EFFECT_STAGES` (`FN`, `RE`). Each keeps verdict, artifact, handoff. Finding via stdin (`--finding-file -`), excluded from state-patch log. Re-running refused by `completed` guard → retried route is idempotent.
 
-| Case, first match wins | `status` becomes | `reason` |
+##### tasks — settle, the cited set and the change set — invocation and table
+
+`--task-settle-stale <TARGET>` runs at target's **own** completion boundary, after completion patch, before next ready-filter pass (`skills/worktask/SKILL.md § Step 6.5d`). For each `stale` task, decides one direction and prints `{"settled":[{"task","to","reason"}]}`:
+
+| Case | `status` | `reason` |
 |---|---|---|
-| the change set could not be **read** at all: no artifact path, an unreadable artifact, no parser, or a `files_touched` that is absent or a declared-empty list | `pending` | `change-set-unknown` |
-| the cited set is empty after normalisation | `pending` | `cited-set-empty` |
-| the two sets intersect | `pending` | `cited-file-changed` |
-| a change set was read and nothing cited is in it — **including** a change set the `.context/` exclusion emptied | `completed` | `no-cited-file-changed` |
+| change set unreadable: no path, unreadable artifact, no parser, or absent `files_touched` | `pending` | `change-set-unknown` |
+| cited set empty after normalisation | `pending` | `cited-set-empty` |
+| cited and change sets intersect | `pending` | `cited-file-changed` |
+| cited is not in change set (or `.context/` emptied it) | `completed` | `no-cited-file-changed` |
 
-Read versus empty is the distinction that carries the fail-safe, and the two empties are not the
-same: a change set nothing could read is **unknown**, so every dependent re-verifies; a change set
-read and then emptied by the filters below is **known**, and a dependent citing nothing in it keeps
-its result. Collapsing them would turn "no evidence" into "no change".
+##### tasks — settle, the cited set and the change set — read vs empty distinction
 
-**Cited set** of a stale task `T`: `facts.files_read[] | select(.stage == <T's stage code>) | .path`
-unioned with `tasks[T].metadata.consumes[].paths[]`. **Change set**: `handoff.files_touched[]` of the
-target's artifact, resolved as `tasks[TARGET].artifact` else `tasks[TARGET].metadata.artifact`
-(recorded-else-planned, a relative path taken against the ledger's own directory), then filtered:
-the `+ N more` overflow marker drops as a count rather than a path, and **every `.context/` path
-drops** — the target always rewrites its own artifact, so counting it would return every dependent
-and defeat the intersection test. Both sides are normalised first: a leading `./`, a trailing
-`#anchor` and a trailing `:N` line suffix are stripped. `--changed <path[,path...]>` substitutes the
-change set, and makes the state `known` when it names at least one path; it is a test seam, not an
-orchestrator argument.
+Read vs empty carries fail-safe: unreadable change set is **unknown** (every dependent re-verifies); read then emptied by filters is **known** (dependent citing nothing keeps result). Collapsing them turns "no evidence" into "no change".
 
-`facts.files_read` keeps only its newest 30 entries (§ Field notes — files_read), so an old stage's
-citations can be gone by settle time; that is the empty-cited-set case above and it re-verifies.
+##### tasks — settle, the cited set and the change set — set definitions
+
+**Cited set** of stale task `T`: `facts.files_read[] | select(.stage == <T's stage code>) | .path` unioned with `tasks[T].metadata.consumes[].paths[]`.
+
+**Change set**: `handoff.files_touched[]` from target artifact (`tasks[TARGET].artifact` else `metadata.artifact`), filtered: `+ N more` drops as count not path; `.context/` paths drop entirely (target rewrites its artifact; counting it returns every dependent). Both normalised: strip `./` prefix, `#anchor` and `:N` suffix. `--changed <paths>` substitutes change set, state becomes `known` if ≥1 path (test seam).
+
+`facts.files_read` keeps newest 30 entries; old stage's citations can be gone by settle time (empty-cited-set case, re-verifies).
 
 #### tasks — tests_executed, rework_runs
 
@@ -1801,7 +1774,7 @@ One-sentence worktask intent, populated by PL0 from the task description (or the
 
 Source files read by prior stages. Populated by DV; consumed by DR/QA, which SHOULD use `git diff <base>..HEAD -- <path>` instead of `Read <path>` for any file listed. Full reads stay permitted when the diff is insufficient. Absent ⇒ normal reads (backward-compat).
 
-Second reader: the stale-settlement check reads it as half of a dependent's cited set (§ tasks — settle, the cited set and the change set).
+Second reader: the stale-settlement check reads it as half of a dependent's cited set (§ tasks — settle, the cited set and the change set — invocation and table).
 
 Scripted writer: `state-patch.sh --files-read <TASK_ID> <path>...` unions `{path, stage, lines: "all"}` — `stage` is the code of `<TASK_ID>`, a leading `./` is stripped, and the newest entry wins per path. A path that is empty, longer than 512 characters, or holds a TAB/CR/LF fails the whole call (exit 2). Past 30 entries the oldest are dropped without a spill file: this is a read hint, not a record.
 
@@ -2116,17 +2089,17 @@ Each refusal writes exactly one `reason` into `landing_error` and the fail row:
 `.claude`, `.github`, `.mcp.json`, `.envrc`, `.gitattributes` or `.gitmodules`. Both compare
 case-insensitively.
 
-##### Landing — exits and the audit row
+##### Landing — exits and the audit row — exit codes
 
 | Exit | Meaning |
 |---|---|
-| `0` | Landed, same tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
-| `1` | A consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
-| `2` | Usage, malformed id, bad ledger, `tree_invalid` (a root that is not its own git toplevel), missing tool, a failed ledger write, or an interrupting signal (INT, TERM, HUP) or unexpected command failure, after rolling back this run's writes. A ledger write for C that completed before the interruption stays: a `blocked` row fails closed, a `landed_paths` entry naming a rolled-back file is copied again on the next pass |
+| `0` | Landed, same tree, already present, gate no-op, nothing selected, or a consumer a boundary pass skips: `blocked` silently, any other non-`pending` status with one `warn` row |
+| `1` | Consumer failed: rolled back, `landing_error {reason, path, producer}` written, row `blocked`, one fail row |
+| `2` | Usage error, malformed id, bad ledger, `tree_invalid`, missing tool, failed ledger write, or signal (INT, TERM, HUP). Rolls back writes; ledger entry for completed C stays: `blocked` row fails closed, `landed_paths` entry re-copied next pass |
 
-No other exit exists: a signal or an unexpected command failure exits `2`, never a stray `1`, so
-exit 1 always means a `landing_error` recorded on a `blocked` row, or a refused `--check-path` or
-unsafe `--strict` entry (§ Landing — strict readers).
+##### Landing — exits and the audit row — exit 1 guarantee
+
+No other exits exist: signals/unexpected failures exit `2`, never stray `1`. Exit 1 always means `landing_error` on `blocked` row, or refused `--check-path`/unsafe `--strict` (§ Landing — strict readers).
 
 ###### Landing — the audit row
 
@@ -2404,16 +2377,16 @@ Allowed in that stage's artifact only, required in none; title-case entries are 
 
 ### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
 
-One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude-plugin/plugin.json`) checks anchors at the write under both events, before a stray H2 costs a rework round; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
+One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on) checks anchors at write before stray H2 costs rework; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-- **`PreToolUse` deny.** Path on the artifact regex below, basename exactly `<canonical>-<N>.md` (or a DV task's `development-<N>-<stream>.md`, judged against the DV set), `state.json` beside it: the Write `content` (or Edit `new_string`, `old_string` H2s as baseline) with an unexpected H2 gets `permissionDecision: "deny"` naming those H2s and the allowed set. A missing required H2 never denies; any hook error allows.
-- **`PostToolUse` advisory.** Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost).
-- **Stage boundary.** `handoff-harness.sh --validate-frontmatter` fails on a missing required or unexpected H2 for all 13 stages, and fails closed when `cache-lint.sh` cannot run.
+- **`PreToolUse` deny** — Path on artifact regex, basename exactly `<canonical>-<N>.md` (or DV's `development-<N>-<stream>.md`), `state.json` beside it. Unexpected H2 in Write `content` (or Edit `new_string`/`old_string`) gets `deny` with those H2s and allowed set. Missing required H2 never denies; hook error allows.
+- **`PostToolUse` advisory** — Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost — scan logic).
+- **Stage boundary** — `handoff-harness.sh --validate-frontmatter` fails on missing/unexpected H2 for all 13 stages; fails closed when `cache-lint.sh` cannot run.
 
 #### Managed hook entries (plugin.json)
 
 ```jsonc
-// hooks.PreToolUse, after test-execution-gate: a JSON deny needs no continueOnBlock
+// hooks.PreToolUse, after test-execution-gate: JSON deny needs no continueOnBlock
 { "matcher": "Write|Edit",
   "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "pre"] } ] }
 // hooks.PostToolUse, alongside audit-tooluse
@@ -2421,11 +2394,13 @@ One **managed plugin hook** (`hooks/anchor-preflight.sh`, default-on in `.claude
   "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh", "args": ["--event", "post"], "continueOnBlock": true } ] }
 ```
 
-#### Preflight behavior and cost
+#### Preflight behavior and cost — scan logic
 
-`anchor-preflight.sh` scans every allowlisted text write (`control-byte-lib.sh` `CB_TEXT_EXTS`) for raw control bytes before the artifact check. Anchor-lint then runs only on the canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); any other Write/Edit gets the control-byte scan alone. Any finding exits 2, the only PostToolUse exit that routes stderr to the model. On that exit the producing agent sees the diagnostic and amends the file, so no downstream stage pays. `continueOnBlock` follows the same managed-hook discipline as the other entries (diagnostic surfaced; an unrelated write never blocked). In non-hook environments the stage-boundary harness is the only check — there is no CI counterpart.
+`anchor-preflight.sh` scans allowlisted text writes for control bytes before artifact check. Anchor-lint runs only on canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); other Write/Edit gets control-byte scan alone. Finding exits 2 (only PostToolUse exit routing stderr to model). Producer sees diagnostic and amends, so downstream doesn't pay. `continueOnBlock` follows managed-hook discipline (diagnostic surfaced, unrelated write never blocked). Non-hook environments use stage-boundary harness only.
 
-**Cost**: O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit; net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
+#### Preflight behavior and cost — cost analysis
+
+O(seconds) per artifact (greps H2 headings), one-shot per Write/Edit. Net win once it prevents a single missed-anchor cascade (~2-3K tokens × N downstream stages).
 
 ---
 

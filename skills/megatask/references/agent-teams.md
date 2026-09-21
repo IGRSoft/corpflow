@@ -96,12 +96,14 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 >   asking what it concluded is a wasted round-trip per lane.
 > - Live teammates now appear in `ListAgents`/`claude agents --json`, so a lead resuming mid-batch
 >   can use the same pre-check the stage loop uses
->   (`../../worktask/references/resume.md § Step 0 notes — own-name & teammate visibility`)
+>   (`../../worktask/references/resume.md § Step 0 notes — own-name & teammate visibility — agent discovery changes`)
 >   instead of relying on `TeammateIdle` plus re-spawn-on-`failed` alone.
 > - The "Default teammate model" setting is gone: teammates run the leader's model unless the
 >   spawn names one. Pin a lane's tier at `Agent(name: …, model: …)`, never in config.
 
 ### Worktree and mailbox reliability
+
+#### Worktree access and locking
 
 > - Project-scoped plugins load inside worktrees of the same repository — lane teammates see the
 >   full skill set; the resume picker stays fast with many worktrees.
@@ -112,6 +114,9 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 > - A background session and its subagents can edit files inside a worktree the session created
 >   itself with `git worktree add` — previously blocked by the isolation check, which stalled the
 >   lane. Parent-checkout isolation below is unaffected.
+
+#### Session state and commit handling
+
 > - Concurrent sessions do not revert each other's `~/.claude.json`, so workspace trust and
 >   MCP/project state hold under fan-out — which keeps agent-frontmatter hooks firing in every lane
 >   (`../../agent-coordination/references/hook-monitoring.md § Workspace trust is a precondition for

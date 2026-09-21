@@ -308,7 +308,9 @@ _posted_leg() {
 
 @test "contract: ingestion reads every page, scopes the fetch, and polls GitHub only for a posted ask" {
   # jq -s, not gh --slurp: --slurp needs gh >= 2.42 and an older gh would quietly return page 1.
-  run grep -nE -- '--paginate' "$PLUGIN_ROOT/$SCRIPT"
+  # Anchored to the actual invocation (not a bare `--paginate` match), or the source comment
+  # above explaining the slurp/paginate choice — which names both flags — matches too.
+  run grep -nE -- '100" --paginate' "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   refute_output --partial "slurp"
   run grep -nE 'jq -s -c' "$PLUGIN_ROOT/$SCRIPT"
@@ -324,13 +326,16 @@ _posted_leg() {
   assert_success
   run grep -nE 'transport_result.* == .posted' "$PLUGIN_ROOT/$SCRIPT"
   assert_success
-  # A spin loop at MAILBOX_POLL_SECONDS=0 would burn a core until the deadline.
-  run grep -nE 'poll. -ge 1 .. poll=1' "$PLUGIN_ROOT/$SCRIPT"
+  # A spin loop at MAILBOX_POLL_SECONDS=0 would burn a core until the deadline. `.*`, not a
+  # fixed two-char gap: the real `] || ` between the test and the assignment is longer than that.
+  run grep -nE 'poll. -ge 1 .*poll=1' "$PLUGIN_ROOT/$SCRIPT"
   assert_success
 }
 
 @test "AC6/AC13: ingest refuses an ask its task opted out of, and one whose comment never posted" {
-  local id="ask-20260917t142000z-5556456789ab"
+  # Must match the id comments.mixed.json's OWNER reply names in its first line — that
+  # fixture is shared with the AC6 test above, and ingest matches a comment by that literal id.
+  local id="ask-20260917t140000z-2223456789ab"
   _ledger_jq ".tasks.DR0.metadata.ask_id = \"$id\""
   _mkreq "$id" "2026-09-18T00:00:00Z" "2026-09-17T14:00:00Z" "Pick A or B." "peer"
   local MAILBOX_NOW=1789657200

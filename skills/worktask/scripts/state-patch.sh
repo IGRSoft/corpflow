@@ -2320,8 +2320,10 @@ if [[ -n "$TASK_OP" ]]; then
       _SETTLE_STATE="unknown"
       _SETTLE_CHANGED_JSON='[]'
       if [[ -n "$SETTLE_CHANGED_GIVEN" ]]; then
+        # -Rs (slurp), not -R: a zero-byte SETTLE_CHANGED has no line for -R to read at all,
+        # so it would emit nothing instead of "[]" and --argjson below would see empty text.
         _SETTLE_CHANGED_JSON=$(printf '%s' "$SETTLE_CHANGED" \
-          | jq -Rc 'split(",") | map(select(length > 0))' 2> /dev/null) || _SETTLE_CHANGED_JSON='[]'
+          | jq -Rsc 'split(",") | map(select(length > 0))' 2> /dev/null) || _SETTLE_CHANGED_JSON='[]'
         [[ "$_SETTLE_CHANGED_JSON" == "[]" ]] || _SETTLE_STATE="known"
       else
         # Recorded, else planned — the same precedence the id resolver uses. metadata.artifact

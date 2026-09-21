@@ -13,10 +13,21 @@ The contract mapping `task.metadata` to `claude agents run` CLI flags, for exter
 
 ### Translation table — model & effort
 
+#### Model assignment
+
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` (benchmark-parity snapshots — § Alias note). Caveat: a managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` constrains the Default model — a requested id may silently down-resolve; audit, don't assume |
-| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low`. `ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` and delivered to the dispatched session — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max`. Caveat: a managed or user `maxEffortLevel` (top-level, or per model under `modelSettings`) caps effort on every provider — a tier pinned above the cap runs at the cap with no error; audit, don't assume |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` |
+
+A managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` constrains the Default model — a requested id may silently down-resolve. Benchmark-parity snapshots use pinned ids (§ Alias note); audit rather than assume.
+
+#### Effort tier assignment
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
+| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low` |
+
+`ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max`. A managed or user `maxEffortLevel` caps effort on every provider — a tier pinned above the cap runs at the cap with no error. Audit rather than assume.
 
 ### Translation table — permission, workspace & MCP
 
@@ -152,9 +163,13 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 #### Watch run — CC 2.1.270 (observed)
 
-> Live probe; `--json --all` returned interactive rows only. Those rows carry exactly `{cwd, kind, name, pid, sessionId, startedAt, status}` with `status: "busy"` — the 2026-07-07 key set plus `status`, and **no `id`** key. The resume identity chain `agent_id // id // sessionId` already tolerates the missing `id`. A session's own name reuses the existing `name` key: `ListAgents` reported "This session is tallahassee-a7" and the `--json` row carried `name: "tallahassee-a7"`. The teammate row's `kind` and the background-row key set remain **unobserved**. Baseline-shift rule not triggered — `status` is additive and `id` was optional.
->
-> Dispatch-surface drift: `claude agents run` is **not** a subcommand — `claude agents run --help` prints the plain `claude agents` usage, whose options are defaults for agent-view dispatch. Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but has **no `--cwd`**, so an external dispatcher must `cd` into the worktree first. § Per-Stage Recommended Flag Sets and the translation table still name `claude agents run` and `--cwd`; re-deriving the external one-liner is an **open follow-up**.
+##### Session and status fields
+
+Live probe; `--json --all` returned interactive rows only. Those rows carry exactly `{cwd, kind, name, pid, sessionId, startedAt, status}` with `status: "busy"` — the 2026-07-07 key set plus `status`, and **no `id`** key. The resume identity chain `agent_id // id // sessionId` already tolerates the missing `id`. A session's own name reuses the existing `name` key.
+
+##### Dispatch surface drift
+
+`claude agents run` is **not** a subcommand — `claude agents run --help` prints `claude agents` usage. Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but **no `--cwd`**, so an external dispatcher must `cd` into the worktree first. Re-deriving the external one-liner is an **open follow-up**.
 
 #### Defensive jq pattern
 
@@ -183,7 +198,13 @@ On a baseline shift (new required field, renamed field, type change), the next c
 
 `claude attach <id>` attaches a terminal to a **running** background session; `--resume` is for a **stopped** conversation. The two are not interchangeable, and the `--resume` message now prints the exact `attach` command when the target is still running. `logs`, `stop`, `respawn`, and `rm` complete the surface, all documented in `claude --help`.
 
-These are **operator** tools. The orchestrator's own reattach path stays `SendMessage` (`skills/worktask/references/resume.md`) — `attach` changes what a human debugging alongside a run can do, not what the loop does. Two lifecycle fixes worth relying on: `claude agents`/`claude rm` no longer refuse to delete a session whose worktree branch was merged locally but not pushed, and a weeks-old background session is no longer resurrected after the machine was off — it shows as stopped at its real end and asks before resuming. `claude --resume <session-id> --bg` continues that session under its own ID when nothing is running it, so a recorded `dispatched_agents[]` id stays valid; when a copy starts instead, the CLI announces it.
+### Operator tools vs orchestrator reattach
+
+These are **operator** tools for human debugging. The orchestrator's own reattach path stays `SendMessage` (`skills/worktask/references/resume.md`) — `attach` changes what a human can do, not what the loop does.
+
+### Lifecycle improvements
+
+`claude agents`/`claude rm` no longer refuse to delete a session whose worktree branch was merged locally but not pushed. A weeks-old background session is no longer resurrected after the machine was off — it shows as stopped at its real end and asks before resuming. `claude --resume <session-id> --bg` continues that session under its own ID when nothing is running it, so a recorded `dispatched_agents[]` id stays valid; when a copy starts instead, the CLI announces it.
 
 ## Permission-Mode Pinning (in-process)
 

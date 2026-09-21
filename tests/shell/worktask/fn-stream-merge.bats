@@ -274,14 +274,17 @@ refs_snapshot() {
   git -C "$WD/wt-web" add shared.yaml
   git -C "$WD/wt-web" commit -qm "chore: shared web"
 
+  stream_edits
+  commit_both
+
+  # Landed AFTER commit, like the real flow: cmd_commit runs this same landed-path check
+  # on HEAD, so recording it earlier would trip commit_both on web before merge is reached.
   local web_real
   web_real="$(cd -P "$WD/wt-web" && pwd -P)"
   jq --arg w "$web_real" \
     '.tasks.DV1.metadata.landed_paths = ["shared.yaml"] | .tasks.DV1.metadata.landed_roots = [$w]' \
     "$L" > "$L.tmp" && mv "$L.tmp" "$L"
 
-  stream_edits
-  commit_both
   record_branches
   run --separate-stderr bash -c "cd '$WD/repo' && bash '$PLUGIN_ROOT/$SCRIPT' --state '$L' merge"
   assert_failure 1
