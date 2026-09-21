@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "worktask_id": "wt-correction-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "systems",
+  "run_index": 0,
+  "facts": {
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [],
+    "verdicts": {},
+    "files_read": [
+      { "stage": "QA", "path": "./tests/shell/worktask/blocked-on-dispatch.bats:12" },
+      { "stage": "DC", "path": "skills/worktask/SKILL.md" }
+    ]
+  },
+  "handoffs": {},
+  "metadata": {
+    "workspace_path": "/tmp/wt",
+    "preflight": { "version": 1, "result": "pass", "ran_at": "unknown", "platforms": ["systems"], "checks": [], "tools_absent": [] }
+  },
+  "tasks": {
+    "PL0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "PL" } },
+    "DV0": { "status": "completed", "verdict": "ok", "blocked_by": ["PL0"], "metadata": { "stage": "DV", "artifact": "development-0.md", "workspace_path": "/tmp/wt" } },
+    "DV1": { "status": "in_progress", "blocked_by": ["DV0"], "metadata": { "stage": "DV", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "DR0": { "status": "completed", "verdict": "ok", "blocked_by": ["DV0"], "metadata": { "stage": "DR", "artifact": "review-0.md", "workspace_path": "/tmp/wt", "consumes": [{ "task": "DV0", "paths": ["skills/worktask/scripts/blocked-on-lib.sh#the-arm-table"] }] } },
+    "QA0": { "status": "completed", "verdict": "ok", "blocked_by": ["DR0"], "metadata": { "stage": "QA", "artifact": "qa-0.md", "workspace_path": "/tmp/wt" } },
+    "DC0": { "status": "in_progress", "blocked_by": ["DV0"], "metadata": { "stage": "DC", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "FN0": { "status": "completed", "verdict": "ok", "blocked_by": ["QA0"], "metadata": { "stage": "FN", "workspace_path": "/tmp/wt" } }
+  }
+}

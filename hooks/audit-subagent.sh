@@ -60,9 +60,6 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 PAYLOAD=$(read_stdin)
-CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
-LOG_DIR="$CTX/logs"
-mkdir -p "$LOG_DIR"
 
 # A pending window older than this flushes on the next invocation that reads it,
 # so a dispatch that is still running reports its suppressions instead of holding
@@ -146,6 +143,7 @@ flush_suppressed() {
     --actor "hook:audit-subagent" \
     --action "subagent_stops_suppressed" \
     --subject "$_session" \
+    --task-id "$(corpflow_audit_task_id "$CTX")" \
     --result "ok" \
     --meta "$(jq -cn --argjson n "$_n" --argjson t "$_trunc" --arg from "$_first" --arg to "$_last" \
       '{suppressed_count: $n, truncated: $t, window_start: $from, window_end: $to}' \
@@ -206,6 +204,21 @@ if [ "$SELF_TEST" -eq 1 ]; then
   echo "audit-subagent: self-test OK"
   exit 0
 fi
+
+if command -v corpflow_context_root > /dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing ledger — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CTX" ] || exit 0
+LOG_DIR="$CTX/logs"
+mkdir -p "$LOG_DIR"
 
 SESSION=$(printf '%s' "$PAYLOAD" | jq -r '.session_id // "nosession"' 2> /dev/null) || SESSION="nosession"
 [ -n "$SESSION" ] || SESSION="nosession"

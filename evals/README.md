@@ -5,10 +5,14 @@ which measures cost and process.
 
 ## `failure-labels.jsonl` (**7 rows**, first written 2026-09-05)
 
-Append-only, committed dataset of user edits made **after** an agent delivered.
-Written by `skills/self-improvement` Step 5b on every ST completion (and by
-`/improve-yourself`). A user correcting delivered work is a domain-expert failure
-label — the signal most eval systems pay annotators for.
+The **V1 seed** of the failure-label dataset: user edits made **after** an agent
+delivered. This committed file is left untouched and is reached only through the
+fallback rung, when no usable plugin data dir exists. New labels from
+`skills/self-improvement` Step 5b (every ST completion, and `/improve-yourself`) are
+recorded under plugin data, outside the repo, in
+`<plugin-data>/self-improvement/failure-labels.jsonl`; resolution order and fallback:
+`skills/self-improvement/SKILL.md § Step 5b`. A user correcting delivered work is a
+domain-expert failure label — the signal most eval systems pay annotators for.
 
 The gate below stands at **7 of 100**. The seven rows come from a driven run over
 this repo's own `054932c..worktree` range rather than an organic ST completion —
@@ -45,7 +49,9 @@ One row per kept, classified change:
 - **No diff bodies are ever stored** — counts and a redacted one-line summary only
 - Opt out with `SELF_IMPROVE_LABELS=0`
 
-Aggregate with `skills/self-improvement/scripts/label-stats.sh`. It reports
+Aggregate with
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}`,
+replacing both tokens with absolute paths when running it by hand. It reports
 per-target and per-category counts, flags targets and categories at or above
 `--min-count=<n>` (default 3), and prints progress toward the 100-row taxonomy
 gate below. It reports only — acting on a repeat still goes through the human
@@ -67,6 +73,23 @@ observing them, which is the failure this directory exists to avoid. Build it
 with the `evals:error-discovery` skill once the inputs are there, then
 reconcile it against the six existing self-improvement categories rather than
 forking a second vocabulary.
+
+**Input 1 was unsatisfiable by construction until 2026-09-10, and no run has ever
+supplied it.** `OracleResult.to_dict()` serialized the rate and the tier breakdown
+but not `failures`, so the list was computed per run and dropped at write time —
+every record under `benchmark/results/` carries zero of them, including the run
+that scored 32/35 and populated the list in memory. The field is now emitted when
+non-empty, so the next live run persists it. Two things had to be true and only one
+was known: the oracle also has to actually fail something, and it had saturated at
+35/35 on both arms. Both are addressed — see `benchmark/README.md § Two tiers, two
+questions` for the tier audit — but **the material still does not exist yet**; it
+arrives with the next live run, not with this change.
+
+The `100` in input 2 has no derivation on record, and at 7 rows the gate is years
+out at the observed rate. Open coding usually saturates well before 100 items, so
+if that threshold is a stand-in for "enough to stop inventing categories" rather
+than a measured number, it is worth restating as a saturation criterion. Left as
+written here: relaxing a deliberate gate is a call for whoever set it.
 
 **Do not build LLM judges before that taxonomy exists.** If it surfaces failure
 modes code cannot check, add judges then — with TPR/TNR measured on a held-out
@@ -310,6 +333,13 @@ predates it, so the `test` tranche in `splits/request-plan.json` is nominal rath
 than held out for those ids. Ids 122+ were written after the manifest and pinned to a
 tranche before any capture read them — those are the first genuinely held-out cases
 this corpus has had.
+
+Ids 122-270 have all since been spent: batches 4, 5 and 6 each had their `test` cases
+drawn whole by a labelling pass, which is why every rate quotable from the 0.4.0 pair is
+in-sample. **Batch 7 (ids 271-315, 45 cases, 18 in `test`) is the current unread tranche**,
+pinned on 2026-09-10 with `held_out_from: 271` before any capture read it. It cuts
+`adjacent` and keeps `buried` per `findings/request-plan-0.4.0.md` § Next item 4, and draws
+its buried surfaces from fixture corpora the capability registry does not enumerate.
 
 The two subsections below are the rules that produced the reset; they still govern.
 

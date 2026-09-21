@@ -1,0 +1,1 @@
+{"stage":"QA","verdict":"blocked","summary":"Waits on the DV artifact","blocked_on":{"kind":"artifact","detail":{"producer_task":"DV0","path":".context/development-0.md"},"resume_with":"artifact_path"}}

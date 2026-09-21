@@ -83,7 +83,9 @@ A commit or PR body carries **no** `Generated with …` line and **no** `Co-Auth
 trailer. Authorship is the human operator's; a footer claiming otherwise is wrong in the record that
 outlives the session, and it propagates into release notes and blame output. Setting
 `attribution.sessionUrl` additionally omits the session link, keeping the rule enforced at the
-tooling layer rather than by memory.
+tooling layer rather than by memory. The harness's attribution reminder yields to a CLAUDE.md or
+memory rule against attribution (lines set by managed settings still apply), so this rule and the
+`attribution.*` settings hold together.
 
 ## No issue anchor
 
@@ -167,6 +169,10 @@ Closes #<N>
   none does — § No issue anchor holds both arms, and `pr-body-lint.sh` P4 reports a missing
   closing keyword only on the first. `Visual evidence` appears only on runs that captured
   screenshots.
+- `Unresolved decisions` appears only when a run with no reachable human shipped escalate items
+  undecided. `fn-preflight.sh unresolved-decisions` writes it at byte 0 of the body; never write or
+  edit it by hand. Each item is `- **sw-SR0-1** (SR0): <question>`, or the id alone when the
+  question would not survive the sanitiser.
 - **Never paste a local path into a PR body** — `.context/`, `/Users/…`, `~/…` and `../…` are
   per-workspace and gitignored: meaningless to a reviewer, and they leak host layout. A code
   span is not an escape hatch; `pr-body-lint.sh` checks it.
@@ -269,12 +275,13 @@ prefix; they are not renamed, and `branch_is_conventional` accepts them.
 13 tokens, accepted by the already-conventional check: `feat`, `feature`, `bugfix`, `hotfix`,
 `refactor`, `perf`, `docs`, `chore`, `test`, `ci`, `build`, `style`, `revert`. **No `fix`** —
 removed cleanly, not kept as a compatibility token; a pre-existing `fix/<slug>` branch is
-non-conventional and is renamed onto the derived `bugfix/`/`hotfix/` target. Generation uses
-the long form `feature` (never `feat`); `feat` and `style` stay accepted so a pre-existing
-branch is never churned, but neither is ever generated. The single machine-readable copy is
-`BRANCH_TYPES` in `skills/worktask/scripts/branch-lib.sh` — both `derive_type` and
-`branch_is_conventional` derive from it, so the two cannot drift. Branch-only: do **not** add
-`feature` to the commit-type table above.
+non-conventional and is renamed onto the derived `bugfix/`/`hotfix/` target. Generation emits
+12 of the 13: the default for new work is the long form `feature`, and a title whose leading
+word is "Build" emits `feat`. `style` stays accepted but is never generated, and any `feat`
+branch is accepted so a pre-existing short-form branch is never churned. The single
+machine-readable copy is `BRANCH_TYPES` in `skills/worktask/scripts/branch-lib.sh` — both
+`derive_type` and `branch_is_conventional` derive from it, so the two cannot drift.
+Branch-only: do **not** add `feature` to the commit-type table above.
 
 #### Type derivation
 
@@ -283,10 +290,17 @@ a bug report, `prefix`/`fixture` are not — and also recognises the defect voca
 `flicker`, `glitch`, `broken`, `regression`, `incorrect`, `wrong`, `fails`, `failing` for
 reports that never use the word "fix". `hotfix` is tested first, since it contains `fix`.
 
+Arms are tried in order and the first match wins: `revert`, `hotfix`, the fix and defect words,
+`refactor`, `perf`, `docs`, `test`, `ci`, a title whose first word is "Build" (`feat`), then
+`build`/`packaging` and `chore`; an unmatched title defaults to `feature`. Earlier arms still win
+over a leading "Build" ("Build fix for the cache" → `bugfix`, "Build the docs site" → `docs`),
+and "build" in any other form or position (`build-time`, `builds`, `rebuild`) stays `build`.
+
 ### Conventionality is a predicate, never a judgement (BINDING)
 
 The **sole** authority is `branch_is_conventional()` in `skills/worktask/scripts/branch-lib.sh`
-(queryable as `branch-name.sh --check <name>`). No agent, orchestrator, or reviewer may decide
+(queryable as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check <name>`).
+No agent, orchestrator, or reviewer may decide
 by eye that a name "looks conventional" and skip the naming step — that judgement is exactly
 how a `fix/<slug>` branch survived after `fix` left the vocabulary. A plausible-looking name is
 not a checked name.

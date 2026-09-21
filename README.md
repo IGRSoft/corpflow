@@ -2,7 +2,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.31 · Requires Claude Code 2.1.251+**
+**Plugin 4.0.32 · Requires Claude Code 2.1.270+**
 
 ## Features
 
@@ -40,9 +40,9 @@ lock, the atomic write, and the disk guard.
 - **Metadata support**: routing, gates, and dispatch config per task
 
 > corpflow does **not** use Claude Code's `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools.
-> CC 2.1.233 removed them on Opus 4.8, Sonnet 5, Fable 5, Mythos 5 and newer — every model this
-> plugin dispatches — so the ledger is the only mechanism that works. See
-> `skills/shared/state-ledger.md`.
+> Current models are not offered them (only Claude 3.x, Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5
+> still are), so the ledger is the one mechanism that works on every stage — including a haiku-tier
+> stage that still sees the tools. See `skills/shared/state-ledger.md`.
 
 ## Installation
 
@@ -50,7 +50,7 @@ lock, the atomic write, and the disk guard.
 
 | Requirement | Needed for |
 |-------------|------------|
-| **Claude Code 2.1.251+** | Two things. The state ledger: 2.1.233 removed the `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools on every model this plugin dispatches, and the ledger is the replacement — see the note under [State Ledger](#state-ledger). And the resume loop: from 2.1.234–2.1.238 a `SendMessage` reports non-delivery (refused, dropped, oversized, rate-limited, or an incompletely-enumerated session list) instead of silently succeeding, which is what the reattach path now branches on — on an older build an undelivered nudge reads as a delivered one and a parked stage is silently abandoned |
+| **Claude Code 2.1.270+** | Two things. The state ledger: since 2.1.268 the task-tracking tools (`TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`, `TodoWrite`) are offered only on Claude 3.x, Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, and the ledger replaces them — the plugin never calls them, even on a haiku-tier stage that still sees them (see the note under [State Ledger](#state-ledger)). And the resume loop: reattach branches on `SendMessage` delivery results and trusts them — every non-delivery is reported, including `queued` for an offline peer on another machine (2.1.261); a delivered send reaches the addressed session, not a phantom `ListAgents` twin (2.1.260); a busy `claude agents` row stays busy while that session runs background agents (2.1.269). `/megatask` fan-out relies on it too: concurrent sessions no longer revert each other's `~/.claude.json`, which reset workspace trust and silently skipped agent-frontmatter gate hooks (2.1.259). 2.1.270 rather than 2.1.269, because 2.1.269 regressed read-only git commands into permission prompts that park headless stages |
 | **git** | Every worktask runs in a dedicated worktree |
 | **jq** | `state-patch.sh`, the only writer to the ledger. Hard requirement — without it no stage can complete |
 | **`gh`**, authenticated | Post-PL issue publishing, `/megatask` milestone and issue reads, FN pull requests |
@@ -321,7 +321,7 @@ All stage artifacts follow the `<basename>-N.md` pattern where N equals `task.me
 | `/megatask` | Orchestrate many worktasks across a milestone or issue array, ordered by a dependency/blocker DAG |
 | `/estimate` | Estimate task complexity and effort; `--detailed` runs the platform review inline, `--review` reviews an existing estimate, `--export csv` emits the CSV pack |
 | `/improve-yourself` | Retrospective: propose agent/skill/command updates from user edits |
-| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features |
+| `/cc-update` | Update plugin agents/commands/skills for new Claude Code features; watches cross-session/cross-plugin comms surfaces and reviews new flags for state-ledger fields |
 
 #### Design (`design-`)
 | Command | Description |
@@ -428,7 +428,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
-| `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion when the screenshot manifest is missing |
+| `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion on missing or invalid evidence in a task's `screenshots-<TASK_ID>.md`; no captures passes only on backend/systems or `requires_screenshots=false` |
 | `dv-comment-density-gate.sh` | SubagentStop | **Blocks** DV completion when a change's comment density breaches the standard |
 | `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |

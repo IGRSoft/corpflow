@@ -4,9 +4,10 @@
 #              per-category counts — the input error analysis reads to find which
 #              agents/skills the user corrects most, and in what way.
 #
-# @usage       label-stats.sh [--dataset=<file>] [--format=table|json] [--min-count=<n>] [--self-test]
+# @usage       label-stats.sh [--dataset=<file>] [--plugin-data=<dir>] [--format=table|json] [--min-count=<n>] [--self-test]
 #
-# @arg --dataset=<file>  JSONL label dataset (default: evals/failure-labels.jsonl)
+# @arg --dataset=<file>  JSONL label dataset (default: resolved by plugin-data-lib.sh)
+# @arg --plugin-data=<dir> Plugin data root (see plugin-data-lib.sh)
 # @arg --format=<fmt>    table (default) or json
 # @arg --min-count=<n>   Recurrence threshold: flag targets/categories with at
 #                        least n labels (default 3; 0 disables the section)
@@ -15,6 +16,7 @@
 # @exitcode 0  success (including an empty or absent dataset)
 # @exitcode 1  usage/environment error
 # @exitcode 2  self-test failure
+# @exitcode 3  plugin-data-lib.sh unreachable — plugin install broken
 #
 # @requires    bash >=3.2, jq
 # @min_shell   bash 3.2 (macOS system bash compatible)
@@ -24,26 +26,40 @@ IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
 
+# `[ -r ]` first: `.` on a missing file exits a `set -e` shell before any guard runs.
+LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/plugin-data-lib.sh"
+if [ -r "$LIB_PATH" ]; then
+  # shellcheck source=skills/self-improvement/scripts/plugin-data-lib.sh
+  # shellcheck disable=SC1090
+  . "$LIB_PATH"
+else
+  printf >&2 'label-stats: plugin-data-lib.sh unreachable at %s — plugin install broken\n' \
+    "$LIB_PATH"
+  exit 3
+fi
+
 # Row count at which evals/README.md unblocks writing failure-taxonomy.md.
 TAXONOMY_THRESHOLD=100
 
 DATASET=""
+PLUGIN_DATA=""
 FORMAT="table"
 MIN_COUNT=3
 SELF_TEST=0
 
 usage() {
-  printf >&2 'usage: %s [--dataset=<file>] [--format=table|json] [--min-count=<n>] [--self-test]\n' \
+  printf >&2 'usage: %s [--dataset=<file>] [--plugin-data=<dir>] [--format=table|json] [--min-count=<n>] [--self-test]\n' \
     "${0##*/}"
   exit 1
 }
 
 for arg in "$@"; do
   case "$arg" in
-    --dataset=*)   DATASET="${arg#*=}" ;;
-    --format=*)    FORMAT="${arg#*=}" ;;
-    --min-count=*) MIN_COUNT="${arg#*=}" ;;
-    --self-test)   SELF_TEST=1 ;;
+    --dataset=*)     DATASET="${arg#*=}" ;;
+    --plugin-data=*) PLUGIN_DATA="${arg#*=}" ;;
+    --format=*)      FORMAT="${arg#*=}" ;;
+    --min-count=*)   MIN_COUNT="${arg#*=}" ;;
+    --self-test)     SELF_TEST=1 ;;
     *) usage ;;
   esac
 done
@@ -115,7 +131,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # bypassing an `if ! . …` guard entirely.
   SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/label-stats-selftest.sh"
   if [ -r "$SELFTEST_LIB_PATH" ]; then
-    # shellcheck source=label-stats-selftest.sh
+    # shellcheck source=skills/self-improvement/scripts/label-stats-selftest.sh
     # shellcheck disable=SC1090
     . "$SELFTEST_LIB_PATH"
   else
@@ -127,6 +143,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
-[ -n "$DATASET" ] || DATASET="${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl"
+si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
+DATASET="$SI_DATASET_PATH"
 [ -f "$DATASET" ] || { printf 'no labels yet (%s)\n' "$DATASET"; exit 0; }
 render "$DATASET" "$FORMAT" "$MIN_COUNT"

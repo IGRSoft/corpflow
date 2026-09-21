@@ -223,7 +223,7 @@ audit_row() {
   command -v jq >/dev/null 2>&1 || return 1
   corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
     --action github_issue_created --subject PL0 --result "$1" \
-    --task-id "${PL0_TASK_ID:-1}" --meta "$2"
+    --task-id "${PL0_TASK_ID:-PL0}" --meta "$2"
   return "$CORPFLOW_AUDIT_LAST_RC"
 }
 
@@ -685,6 +685,21 @@ EOF
   return 0
 }
 
+# Prefixes $1 with $EXTERNAL_TICKET unless already prefixed (case-insensitive,
+# `-`/space/`:` accepted as separator). Shared by TITLE and TITLE_LEGACY so the
+# legacy dedup probe carries the same prefix the live title would have.
+_apply_ticket_prefix() {
+  local t="$1"
+  [ -n "$EXTERNAL_TICKET" ] || { printf '%s' "$t"; return 0; }
+  local t_lc tkt_lc
+  t_lc=$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')
+  tkt_lc=$(printf '%s' "$EXTERNAL_TICKET" | tr '[:upper:]' '[:lower:]')
+  case "$t_lc" in
+    "$tkt_lc" | "$tkt_lc "* | "$tkt_lc:"* | "$tkt_lc-"*) printf '%s' "$t" ;;
+    *) printf '%s %s' "$EXTERNAL_TICKET" "$t" ;;
+  esac
+}
+
 # Library mode: attach-visual-evidence.sh sources this file for the tier logic.
 [ "${PUBLISH_LIB_ONLY:-0}" = "1" ] && return 0 2>/dev/null
 
@@ -953,28 +968,26 @@ if [ -n "$ASSET_DEGRADED_REASON" ]; then
   audit_row "deferred" "$(jq -cn --arg v "publish-pl-issue.sh" --arg r "$ASSET_DEGRADED_REASON" --arg dk "${DEDUPE_KEY}:asset_hosting" '{via:$v, reason:$r, dedupe_key:$dk}')" || true
 fi
 
-# Title (sanitised — TITLE_RAW resolved by the chain above). The head/cut/sanitise
+# Title (sanitised — TITLE_RAW resolved by the chain above). The head/sanitise/cap
 # pipeline applies to every rank of that chain: a multi-line frontmatter value or a
-# long H1 is flattened and capped here, never at the source.
-TITLE=$(printf '%s' "$TITLE_RAW" | head -1 | cut -c1-100 | sanitise_body | tr -d '\n')
+# long H1 is flattened, sanitised, then capped at a word boundary. Sanitising runs
+# BEFORE the cap — it can shorten the line, and the cap is what must land at <=100.
+TITLE=$(printf '%s' "$TITLE_RAW" | head -1 | sanitise_body | tr -d '\n' | title_cap_word_boundary 100)
 [ -z "$TITLE" ] && TITLE="Plan approved: $WORKTASK_ID"
+
+# Legacy fixed-100 form of the same TITLE_RAW, kept only to widen the recovery
+# search below to an issue still titled under the pre-word-boundary scheme.
+TITLE_LEGACY=$(printf '%s' "$TITLE_RAW" | title_legacy_cut)
+[ -z "$TITLE_LEGACY" ] && TITLE_LEGACY="Plan approved: $WORKTASK_ID"
 
 # AC-2: ensure title starts with EXTERNAL_TICKET prefix. Skip if already prefixed
 # (avoid double-prefix like "OV-113 OV-113 …"). Compared case-INsensitively and with
 # `-` accepted as a separator: the slug-fallback rank yields "ov-164-catalog-…",
 # which an exact-case check treats as unprefixed and turns into the reported
-# "OV-164 ov-164-catalog-…".
-if [ -n "$EXTERNAL_TICKET" ]; then
-  _title_lc=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]')
-  _tkt_lc=$(printf '%s' "$EXTERNAL_TICKET" | tr '[:upper:]' '[:lower:]')
-  case "$_title_lc" in
-    "$_tkt_lc"|"$_tkt_lc "*|"$_tkt_lc:"*|"$_tkt_lc-"*)
-      ;;
-    *)
-      TITLE="$EXTERNAL_TICKET $TITLE"
-      ;;
-  esac
-fi
+# "OV-164 ov-164-catalog-…". Applied to TITLE_LEGACY too, so the recovery probe
+# below matches what a prefixed old-scheme issue title would actually look like.
+TITLE=$(_apply_ticket_prefix "$TITLE")
+TITLE_LEGACY=$(_apply_ticket_prefix "$TITLE_LEGACY")
 
 # Degradation is recorded, not silent: reaching the slug rank means every prose
 # source was empty and the published title is a kebab id. Distinct dedupe-key suffix

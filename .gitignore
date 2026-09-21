@@ -26,3 +26,6 @@ skills/*/evals/responses*/
 
 # Review page embeds the gitignored responses; regenerate with build-review-page.py
 evals/review/
+
+# Worktask run state, logs and the user-decision ledger (0600, verbatim answer text)
+/.context/

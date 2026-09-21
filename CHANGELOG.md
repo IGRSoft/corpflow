@@ -2,6 +2,115 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.32] — 2026-09-11
+
+A control that fails silently is indistinguishable from a control that passed, and an evidence
+token that asserts more than it observed is worse than no token — the theme 4.0.31 opened, applied
+here to the completion loop itself, two continuity mechanisms that existed but were never wired,
+and the ledger lock's ownership.
+
+Correctness pass across agent, command and skill surfaces: seven documented defects fixed
+(divergent per-stage dispatch table, unchecked parity assertion, duplicated routing glob, missing flag
+documentation, stale section citations, lint regressions, and stale version line), two parity test
+methods added, and five distinct stale citations across eleven occurrences repaired. Eleven follow-up items filed
+out-of-scope.
+
+### Breaking
+
+- **`test_summary_line` is now required of DV and QA artifacts whenever `tests_executed > 0`.**
+  `handoff-harness.sh --validate-frontmatter` fails an artifact reporting executed tests with no
+  verbatim runner summary line to corroborate the count. No migration: an artifact that already
+  carries the line is unaffected.
+- **A present but non-numeric `tests_executed` now blocks** at the same gate, closing the gap
+  where a claimed execution count was accepted without ever being checked.
+- **`oracle.cases_digest` moves to `sha256:80652591`** (benchmark eval harness). Records either
+  side of the retiering that fixed six mistiered cases and closed the era-stamp gaps refuse to
+  pair; `era.prompt_contract` is unchanged. Unreleased since it landed, folded in here rather than
+  shipped silently under a patch line that never mentioned it.
+
+### Added
+
+- **A terminal `failed` task status.** Escalation counts are tracked per full task id
+  (`escalation_counts`); at the cap the task is written `failed` with `last_error.class:
+  "exhausted"`. Joins `completed`/`skipped` in `SETTLED`, so the loop exits instead of spinning on
+  a stage it can neither settle nor dispatch. Additive — existing ledgers load unchanged.
+- **`PostCompact` and `SessionEnd` registered in `plugin.json`.** `PostCompact` drives
+  `post-compact-recovery.sh`, recurrence-guarded by a new inverse manifest-parity assertion, but
+  the live firing is **not yet observed** — a real compaction cannot be simulated in CI. `SessionEnd`
+  drives the new `hooks/session-end-finalize.sh`: reports any task still `in_progress` at teardown
+  to an audit row, never mutates status, always exits `0`.
+- **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
+  freeing a lock another writer still holds.
+
+### Changed
+
+- **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
+  cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next
+  `/cc-update`" obligations closed as confirmed/unconfirmed each run; min-CC rule stated) and a Ledger
+  Field Review (every new CLI flag, frontmatter key, tool param, or `claude agents --json` key decided as
+  New field / Existing field / Row key / None against `task.metadata` and the headless flag bridge).
+  Both run by default on every invocation. Version Source now names the real README carriers (badge
+  line + Requirements row) instead of a `claude-code min version:` token that never existed; the
+  `curl`/`jq` fetch fallback and `claude agents --json` are granted in `allowed-tools`.
+- **Requires Claude Code 2.1.270** (was 2.1.251). The resume loop now trusts signals older builds
+  got wrong: a reattach `ok` could land in a phantom `ListAgents` twin (2.1.260), a send to an
+  offline remote peer read as delivered (2.1.261), and a headless session running background agents
+  reported "waiting for your input" (2.1.269). `/megatask` fan-out also relies on concurrent sessions
+  no longer reverting `~/.claude.json`, which reset workspace trust (2.1.259). 2.1.270 rather than
+  2.1.269, which regressed read-only git commands into permission prompts.
+- **CC 2.1.252→2.1.270 band integrated.** The `SessionEnd` hook entry carries an explicit 5 s
+  `timeout`; the reattach result table handles `queued` (stay parked, never re-send); PL0 raises a
+  `decision` item when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` would override every stage model pin. Docs
+  cover Fable 5.1, `maxEffortLevel`, the 2.1.270 `claude agents --json` key set, permission-mode CLI
+  choices, `plugin validate`/`list --json`, and a security hardening table. `claude agents run` is not
+  a subcommand at 2.1.270; recorded as drift, the headless dispatch one-liner is a follow-up.
+
+### Fixed
+
+- The pre-compaction checkpoint hook no longer leaves an unconditional copy unguarded under
+  `set -eu`; a failed checkpoint now records the failure instead of leaving no trace.
+- The compaction recovery script's two output paths are rooted on the same project-directory
+  variable as its sibling script, and its header no longer claims a filtered selector it does not
+  run.
+- **`estimation-methodology`**: a synthetic asset no longer downgrades the complexity tier it is
+  scored against.
+- **benchmark eval harness**: oracle discrimination restored — six mistiered cases moved from
+  `implied` to `specified`, four new `implied` cases added, `failures[]` now persists into the
+  record instead of being dropped at write time, and `cli_version`/`plugin_version` are stamped as
+  a new era axis.
+- **request-plan**: four review findings closed on the leaderboard fix plan.
+
+- **headless-dispatch reference**: per-stage effort table now matches `stage-codes.md` canon on all rows
+  (DV/DR corrected from `xhigh` to `high`, QA from `high` to `medium`, RE from `medium` to `low`); module
+  citation corrected to `stage_table.py`; four missing rows (PL, AR, TL, DC) added; test-pinned advisory
+  cell preserved byte-for-byte.
+- **Parity test enforcement**: `test_stage_table_ssot.py` extended with two new methods (`test_efforts_match_stage_codes_md`
+  and `test_headless_dispatch_table_matches_stage_codes`) to catch effort column divergence on future edits;
+  existing model-family test retained unchanged.
+- **Single-source-of-truth routing glob**: restated verbatim in `agents/workflow-engineer.md` replaced
+  with a pointer to its canonical source in `skills/worktask/references/pl0-procedure.md`.
+- **Pipeline flag documentation**: `--with-design` now appears in both `commands/worktask.md` options table
+  and `skills/shared/state-ledger.md` schema, closing documentation gap where flag was live in README
+  and procedure but absent from owning command's table.
+- **Section-length lint regressions**: two branches-introduced sections split or trimmed under 1000-character
+  cap (`commands/prompt-audit.md` and `skills/worktask/references/handoff-protocol.md`).
+- **Stale cross-file section citations**: five distinct broken references repaired across nine files,
+  including resume-procedure path correction, ceiling-count update, auto-delegation file/anchor fix,
+  escalation-guard heading refinement, and four bare `references/` path qualifications.
+- **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
+  status corrected.
+
+### Also in this release
+
+Batch 7 of the request-plan calibration set was pinned and its two defects repaired
+(`request-plan`, 45 cases, 18 held out, cases 271–315) between the 4.0.31 tag and this one; it
+carries no user-facing behavior change and is recorded here only because it landed in the same
+unreleased window.
+
+Eleven follow-ups filed out-of-scope (F1–F11 in the architecture stage artifact): redundant-but-agreeing
+mirrored tables pinned by parity tests, compound section-path citation convention, `with_design` writer
+gap, per-stage table's missing-row note, and three cross-file reference style questions.
+
 ## [4.0.31] — 2026-09-09
 
 Closes phases A–E of `ttt-run-tictactoe-multiplatform-leaderboard-2026-09-09-fixplan.md` — 21 of

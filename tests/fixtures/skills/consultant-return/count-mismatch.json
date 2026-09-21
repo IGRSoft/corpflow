@@ -1,0 +1,8 @@
+{
+  "schema_version": "consultant-return.v1",
+  "verdict": "fail",
+  "severity_counts": {"critical": 0, "high": 2, "medium": 0, "low": 0},
+  "findings": [
+    {"id": "F1", "severity": "high", "summary": "SQL built by string concatenation", "location": "api/users.go:88"}
+  ]
+}

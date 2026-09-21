@@ -1,10 +1,10 @@
 ---
 name: worktask
 description: Initialize a new worktask task with proper folder structure and state-ledger integration
-argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]]'
+argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
 model: opus
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/worktask/scripts/preflight-issue-scan.sh:*), Bash(bash skills/worktask/scripts/branch-name.sh:*), Bash(bash skills/worktask/scripts/refine-branch-target.sh:*), Bash(bash skills/worktask/scripts/publish-pl-issue.sh:*), Bash(bash skills/worktask/scripts/handoff-harness.sh:*), Bash(bash skills/worktask/scripts/effort-ladder.sh:*), Task(corpflow:product-manager)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -14,7 +14,7 @@ related:
   - agents/workflow-engineer.md
 ---
 
-> **EXECUTION MODEL (BINDING)** — every worktask is worktree-isolated, so the PR is the review
+> **Execution model** — every worktask is worktree-isolated, so the PR is the review
 > surface. Three orthogonal carriers on `PL0.metadata` drive the two human checkpoints and the
 > optional decision delegate; `/megatask` stamps them directly on each per-issue PL0.
 >
@@ -75,6 +75,17 @@ carrier on PL0.
 | `decision` | `decision_gate: "auto"` | Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Also what enables the § Step C.0a resolver, so a blocking `decision` item from AR/TL/DV/DR/SR/QA/DC/RE/ET is answered a tier up instead of stopping the run. Escalation-class questions — irreversible, scope-expanding, security-posture, spend — always fall back to the user. |
 | `finalization` | `fn_gate: "bypass"` | Auto commit/push/PR. Plan gate still applies unless `plan` is also set. |
 
+#### Gate automation flag — `--accept-absent`
+
+`--accept-absent=<tool[,tool]>` names the evidence tools an unattended run may launch without. Only
+§ Step 2a-pre reads it, so it does nothing unless `--auto` contains `plan` or `finalization`, and it
+is the only way a missing tool stops counting as a preflight fail. Tools: `renderer` (backend,
+systems, ai, all; covers `silicon`, `magick` and `convert`, which may also be named one at a time),
+`playwright` and `playwright-browser` (web), `adb-device` (android), `simulator`
+and `xcodebuildmcp` (apple). Comma-separated; an unknown tool is a parse error that rejects the
+invocation, as for `--auto`. The orchestrator passes the list verbatim and never defaults, extends
+or infers it, so a tool nobody named stays a fail.
+
 ### Scope and pipeline flags
 
 | Option | Effect |
@@ -82,6 +93,7 @@ carrier on PL0.
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
+| `--with-design` | Invoke `corpflow:designer` during PL. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. Replaces the former `emergency:` prefix. |
@@ -102,6 +114,7 @@ carrier on PL0.
 /worktask "Fix flaky sync test" --priority High --platform apple
 /worktask "Ship the referral banner" --ethics-review --sequential
 /worktask "Bump the SDK" --no-gh-issue --auto=[plan,finalization]
+/worktask "Add the export endpoint" --platform backend --auto=[plan,finalization] --accept-absent=renderer
 /worktask --emergency "Production login failing"       # IR→DV→DR→QA→RE→FN
 /worktask --resume DV1 --cascade                       # replay DV1 and its dependents
 # Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
@@ -119,10 +132,10 @@ route and **no** readiness rule: the replayed task becomes `pending` with its de
 
 ### Phase 0 — what runs
 
-**MUST SKIP** — all of Phase 1 (Steps 2a, 3, 3a, 3c, 4, 5–6, 7–8) and every pre-loop Phase 2 step
+**Skip** — all of Phase 1 (Steps 2a, 3, 3a, 3c, 4, 5–6, 7–8) and every pre-loop Phase 2 step
 (A.4, A.4b, A.5, Step A publish). `run_index` is frozen; no `planning-N.md`, no rename, no issue.
 
-**MUST RUN** — Step 3b hook-install verification (idempotent; a resumed loop still needs
+**Run** — Step 3b hook-install verification (idempotent; a resumed loop still needs
 SubagentStop), the `fn-preflight.sh branch-divergence` check (`resume.md § Branch-rename
 detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
@@ -135,7 +148,7 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
    already-`completed` dependents, marked *these may now be stale* (warn only — never auto-reset);
    a plan-unapproved warning when no `approval_received` row exists for `PL<run_index>`; and under
    `--cascade` the member list plus the skipped FN/RE members. There is no bypass flag.
-3. Run `bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-replay <ID> [--cascade]`.
+3. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-replay <ID> [--cascade]`.
 
 ### Phase 0 — procedure, steps 4–6
 
@@ -157,9 +170,12 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
 > **BINDING 1 — Pre-work Prohibition**: create, edit, or modify NO project files during Phase 1
 > (localization, accessibility IDs, config, sources). Only
-> `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes, and
-> the Step 2a `.context/gh-issue.json` anchor (reuse path only) are permitted. ALL file
-> modifications belong to DV or later.
+> `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes,
+> the Step 3a `seed-state.sh` seed, the
+> Step 2a `.context/gh-issue.json` anchor (reuse path only), the Step 3a
+> `autonomy-preflight.sh --record` call, and the `mktemp` buffers under `$TMPDIR`
+> (`corpflow-preflight.*`, `corpflow-issue-scan.*`) that § Step 2a-pre and § Step 2a write outside
+> the project are permitted. ALL file modifications belong to DV or later.
 
 ### Phase 1 binding constraint 2 — Context-Interruption Recovery
 
@@ -174,29 +190,86 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
 ### Steps 1–2 — Parse flags and detect embedded commands
 
 1. **Parse** the task description and flags. Resolve the `--auto` array per § Gate automation flag:
-   strip optional brackets, split on commas, trim whitespace, reject unknown values.
+   strip optional brackets, split on commas, trim whitespace, reject unknown values. Parse
+   `--accept-absent=` beside it (§ Gate automation flag — `--accept-absent`): keep the value
+   verbatim for Step 2a-pre, and reject an unknown tool.
 2. **Detect embedded commands**: extract any `/plugin:command` or `/command` pattern into
    `metadata.embedded_commands` (comma-separated), strip the prefix from the description passed to
    PL0, preserve the arguments. See § Embedded Command Detection.
+
+### Step 2a-pre — Autonomy preflight (unattended runs)
+
+Runs when the resolved `--auto` contains `plan` or `finalization`, before Step 2a and Step 3, so
+every human dependency an unattended run would hit surfaces in one message before anything is
+seeded: the `git push`, `gh pr create` and `gh pr merge` grants, the evidence tools, and toolchain
+integrity. Without either value, skip this step. A megatask per-issue run (ledger pre-seeded,
+`workspace.json` present) skips it too and records nothing; the script also self-skips there with
+`result=skipped` and `reason=milestone_mode`. It writes nothing under the project and never writes
+a settings file: a missing grant prints the allow rule for the operator to add. It does not check
+capture pre-authorization.
+
+#### Step 2a-pre snippet — check mode, output buffered
+
+```bash
+ACCEPT_ABSENT="<the --accept-absent= value, verbatim; empty when not given>"
+PF_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-preflight.XXXXXX")
+set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,platform] or none>"
+[ -n "$ACCEPT_ABSENT" ] && set -- "$@" --accept-absent "$ACCEPT_ABSENT"
+pf_rc=0
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@" > "$PF_BUF" || pf_rc=$?
+echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
+if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
+else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
+```
+
+#### Step 2a-pre — the exit code decides
+
+- **0**: continue to Step 2a. `accepted_absent=<tools>` names the missing tools the operator
+  accepted. Keep the printed `PF_BUF` path for Step 3a, because shell variables do not survive
+  between tool calls. On `result=skipped`, delete the buffer instead; Step 3a records nothing.
+- **1 or 2**: STOP before Step 2a and Step 3, in one message: every entry the snippet printed, each
+  a failed grant, tool or toolchain check with its `fix:` line; for exit 2, the usage error on
+  stderr (an unknown `--accept-absent` tool, say). The snippet has already deleted the buffer, no
+  `.context/` exists, and nothing is recorded. The operator fixes the whole list, or relaunches
+  with `--accept-absent=<tool>` for a tool the run may go without.
+
+#### Step 2a-pre — inputs
+
+- `<platform[,platform] or none>`: `--platform` when given, else what the repo markers resolve to
+  per `skills/shared/platform-detection.md § Detection Rules (markers → platform)`. A mixed repo
+  passes every platform it resolves to.
+- No platform resolves: pass `none`, never empty (exit 2); `none` records a `platform-none` skip.
+- `--harness`, the `git reset --hard` grant check, is not passed: no step of this pipeline resets a
+  tree.
+- The `corpflow-preflight.` buffer prefix is required: `--record` deletes only buffers carrying it.
 
 ### Step 2a — Duplicate-issue pre-flight (advisory)
 
 Runs once the request is known and **strictly before** Step 3 creates `.context/`. The
 `skills/gh-issue-dedup` anchor guards *re-runs* only, so a first run of work already filed under
 different wording still opens a second issue — this step surfaces the candidates while the duplicate
-is still preventable. Append `--no-gh-issue` to the invocation when that flag was supplied.
+is still preventable. Append `--no-gh-issue` to the invocation when that flag was supplied. When
+`--auto` contains `plan`, nobody is there to answer the gate: run § Step 2a — unattended instead of
+the snippet and gate below.
 
-#### Snippet preamble (every snippet in this file)
+#### Snippet preamble (snippets that reference an ungranted plugin file)
 
-    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
-    [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+A script granted in `allowed-tools:` is never reached through this variable: it runs as the exact
+text its grant matches, such as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`
+(`skills/shared/plugin-root-resolution.md § Granted-script invocation shape`).
+
+```bash
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
+[ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
+```
 
 #### Step 2a snippet — invoke the scan, non-blocking
 
-    SCAN="$PLUGIN_ROOT/skills/worktask/scripts/preflight-issue-scan.sh"
-    scan_out=""
-    if [ -f "$SCAN" ]; then scan_out=$(bash "$SCAN" --goal "<task description>") || true; fi
-    scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+```bash
+# A missing script exits 127; `|| true` turns that into "no candidates", as for any scan failure.
+scan_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh --goal "<task description>") || true
+scan_result=$(printf '%s\n' "$scan_out" | sed -n 's/^result=//p' | tail -n 1)
+```
 
 #### Step 2a — the gate
 
@@ -211,64 +284,146 @@ present each `candidate=<json>` line (number, title, url — at most three, most
 
 #### Step 2a — reusing an existing issue
 
-    jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
-       --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
-       --arg ts "$(date -u +%FT%TZ)" \
-       '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
-         created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+```bash
+jq -cn --arg url "<chosen url>" --argjson num <chosen number> \
+   --arg wid "$(jq -r '.worktask_id // "unknown"' .context/state.json)" \
+   --arg ts "$(date -u +%FT%TZ)" \
+   '{version:1, url:$url, number:$num, created_run_index:-1, created_worktask_id:$wid,
+     created_at:$ts, last_commented_run_index:-1}' > .context/gh-issue.json
+```
 
 Planning still runs, bound to the existing issue. `created_run_index: -1` is the "predates this
 context" value `publish-pl-issue.sh` already uses for a recovered search hit, so Step A comments on
 that issue instead of opening a second one.
+
+#### Step 2a — unattended (`--auto` contains `plan`)
+
+```bash
+SCAN_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-issue-scan.XXXXXX")
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh --goal "<task description>" < /dev/null > "$SCAN_BUF" || true
+echo "SCAN_BUF=$SCAN_BUF"; grep -E '^(result|reason|candidates)=' "$SCAN_BUF"
+```
+
+The same scan with no prompt: stdin is `/dev/null`, there is no `AskUserQuestion`, and
+`result=shown` does not stop the run. Step 3 proceeds as a new worktask; the reuse path is not
+taken, and the exact-title auto-bind in `publish-pl-issue.sh` still applies. Keep the printed
+`SCAN_BUF` path: the Step 3a `--record --candidates` call turns it into one
+`preflight_issue_candidates` audit row, then deletes it.
+
+##### Step 2a — unattended, what differs
+
+- Leave `CORPFLOW_NONINTERACTIVE` unset. Set to `1`, it makes the scan skip itself, and the run
+  records no candidates.
+- Candidate titles and URLs arrive already path-scrubbed; when the scrub is unavailable the scan
+  prints none and reports `reason=scrub_unavailable`. `--record` scrubs them again before the row
+  reaches `audit.jsonl`.
+- Without `plan` in `--auto`, including under `--auto=[finalization]`, the snippet and gate above
+  apply unchanged.
 
 #### Step 2a invariants
 
 - The trailing `|| true` is mandatory — **non-blocking by contract**: no network/`gh`/auth/remote, an
   API error, a rate limit, a timeout, a malformed response, or zero hits each print
   `result=skipped`/`result=none` and Step 3 runs unchanged.
-- **Advisory only**: it never links, comments, closes, or writes (not even an audit row — the ledger
-  does not exist yet), and does NOT relax the exact-title auto-bind in `publish-pl-issue.sh`
-  (`skills/gh-issue-dedup § Resolution order`).
-- **Unattended runs never reach it**: self-skips under `CORPFLOW_NONINTERACTIVE=1`, `/megatask`
-  (`MILESTONE_MODE=1` or a `workspace.json`), and `--emergency` (`INCIDENT_MODE=1`);
-  `PREFLIGHT_ISSUE_SCAN=0` disables it outright. A `.context/` already carrying a `gh-issue.json`
-  anchor is a resume: `reason=already_anchored`, and the anchor answers authoritatively.
+- **Advisory only**: the scan never links, comments, closes, or writes (no audit row either: the
+  ledger does not exist yet, and the unattended row is Step 3a's write), and does NOT relax the
+  exact-title auto-bind in `publish-pl-issue.sh` (`skills/gh-issue-dedup § Resolution order`).
+- **Self-skips**: `CORPFLOW_NONINTERACTIVE=1`, `/megatask` (`MILESTONE_MODE=1` or a
+  `workspace.json`), and `--emergency` (`INCIDENT_MODE=1`); `PREFLIGHT_ISSUE_SCAN=0` disables it
+  outright. `--auto` with `plan` is not a skip: it runs unattended. A `.context/` already carrying
+  a `gh-issue.json` anchor is a resume: `reason=already_anchored`, and the anchor answers.
 
 ### Steps 3–3a — Context folders and state.json seed
 
 3. `mkdir -p .context/designs .context/images .context/errors .context/logs`
-3a. Atomic-write the `.context/state.json` seed (temp+fsync+rename per
-`skills/worktask/references/handoff-protocol.md#atomic-write`, schema per `#state-json-schema`),
-PL0 `in_progress`. **Re-run aware**: compute the next free planning index from any pre-existing
-`.context/planning-*.md` — hard-coding `planning-0.md` pins the old plan and lets PL0 overwrite it.
-If creation fails (e.g. read-only filesystem), STOP and report: there is no correct degraded mode.
+3a. Seed `.context/state.json` by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh`, the seed's only
+definition: next free planning index, `facts.goal` escaped and capped at 240 chars, the
+unconditional `metadata.workspace_path` (`initialization-patterns.md § Seeded workspace_path`), and
+the atomic write. It resolves `.context/` inside this worktree only, never from cwd. Resulting
+shape: `handoff-protocol.md#pl0-seed`; `--help` lists flags and exit codes.
 
-#### Step 3a — the seed payload
+#### Step 3a snippet — seed the ledger
 
-The re-run-aware next-free-index resolver (N=0 on a fresh `.context/`, nullglob-safe) and the atomic
-write are canonical in `skills/worktask/references/initialization-patterns.md`. Seed
-`{version:2, worktask_id, plan_file: .context/planning-${N}.md, platform, run_index:N,
-metadata.workspace_path, tasks.PL0.status:in_progress, facts.goal, plus the otherwise-empty facts
-incl. dispatched_agents:[], handoffs:{}}`. The seeded `plan_file` is the **path** shape, not a bare
-basename — task metadata carries the basename shape; both are legal (`handoff-protocol.md §
-state.json schema`).
+```bash
+set -- --worktask-id "<slug>" --goal "<task description; the issue title under /megatask>"
+PLATFORM="<the --platform value, verbatim; empty when not given>"
+[ -n "$PLATFORM" ] && set -- "$@" --platform "$PLATFORM"
+seed_rc=0
+seed_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh "$@") || seed_rc=$?
+printf '%s\nseed_rc=%s\n' "$seed_out" "$seed_rc"
+if [ "$seed_rc" -eq 3 ]; then
+  seed_state=$(printf '%s\n' "$seed_out" | sed -n 's/^state=//p')
+  bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --state "$seed_state" --task-status PL0 in_progress
+fi
+```
+
+#### Step 3a — the exit code decides
+
+- **0**: seeded; continue to § Step 3a — record the autonomy preflight, then Step 3b.
+- **3**: `state.json` already exists (a new run in an existing `.context/`); byte-unchanged, and the
+  script has no overwrite path. The snippet has reopened PL0 so an interruption before Step 5
+  cannot read the previous run's `completed` PL0 as this run's plan (BINDING 2). A non-zero from
+  that call is a ledger write failure: STOP and report. Otherwise continue as for 0;
+  `pl0-procedure.md § Step 4 — state.json reset` is the re-run writer.
+- **4**: no `.context/` resolves inside this worktree; nothing written. STOP and report.
+- **1 or 2**: write failure or usage error; nothing written. STOP and report, since there is no
+  correct degraded mode.
 
 #### Step 3a — `metadata.workspace_path` (UNCONDITIONAL) and `facts.goal`
 
-- **`workspace_path`**: `git rev-parse --show-toplevel`, else `pwd`. Not a megatask-only field:
+- **`workspace_path`**: `seed-state.sh` stamps it on every run. Not a megatask-only field:
   `dv-tree-preflight.sh`, the § Workspace-root cross-check, and `agents/developer.md`'s path-prefix
   check all read it and each degrades to a **silent pass** when it is absent — omitting it disables
   all three at once (`initialization-patterns.md § Seeded workspace_path`).
-- **`facts.goal`**: from the task description, JSON-escaped, truncated to 240 chars. It is the issue
+- **`facts.goal`**: the `--goal` value, which `seed-state.sh` escapes and caps. It is the issue
   title and `## Summary` source for `publish-pl-issue.sh`, and nothing on the PL state-patch path
   writes it. PM refines it later; the seed only guarantees it is never absent.
 
-#### Step 3a field notes
+#### Step 3a — record the autonomy preflight
 
-`facts.dispatched_agents: []` is seeded (additive) so the loop appends per-`task_id` dispatch entries
-in place. The other v1 additive fields (`tasks.<ID>.completed_via`/`last_error`/`worktree`,
-`facts.capabilities`) are written on demand — do NOT seed them; their absence is meaningful
-(`handoff-protocol.md#state-json-schema`).
+Right after the seed, and only when Step 2a-pre passed with a `result_json=` line. Otherwise record
+nothing and delete any Step 2a buffer. Fill both paths from what those steps printed; leave
+`SCAN_BUF` empty when Step 2a ran with its prompt or not at all.
+
+```bash
+PF_BUF="<path Step 2a-pre printed>"; SCAN_BUF="<path Step 2a printed, or empty>"
+set -- --record "$PF_BUF" --context .context
+[ -n "$SCAN_BUF" ] && set -- "$@" --candidates "$SCAN_BUF"
+rec_rc=0
+rec_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@") || rec_rc=$?
+printf '%s\nrec_rc=%s\n' "$rec_out" "$rec_rc"
+```
+
+#### Step 3a — what the record writes
+
+The call merges `metadata.preflight` into the ledger (`handoff-protocol.md § metadata.preflight`),
+appends one `autonomy_preflight` audit row and, given `--candidates`, one
+`preflight_issue_candidates` row (`{result, candidates:[{number,title,url,score}]}`, an empty list
+allowed). It prints one `recorded=<what>` line per write and deletes both buffers on success.
+`--record` takes no `--auto`, `--platform`, `--harness` or `--accept-absent` (exit 2): the buffer
+already carries the result.
+
+#### Step 3a — a failed record does not stop the run
+
+Exit 1 means the buffer was refused (nothing written) or a write failed; the ledger merge runs
+before either row, so the `recorded=` lines show what landed. Continue to Step 3b anyway: the
+preflight already passed, and stopping here would be exactly the forced stop it exists to remove.
+Run the continuation below in the same call, so the warn row and the buffer cleanup still happen.
+With no `metadata.preflight` on the ledger, the backend `tool_missing` evidence rule, which excuses
+a missing tool only when the preflight recorded it as accepted, reports that tool missing.
+
+#### Step 3a — the failed-record continuation
+
+```bash
+# …continued: same call as the record snippet
+if [ "$rec_rc" -ne 0 ]; then
+  w=$(printf '%s\n' "$rec_out" | sed -n 's/^recorded=//p' | paste -sd, -)
+  jq -cn --arg ts "$(date -u +%FT%TZ)" --arg rc "$rec_rc" --arg w "${w:-none}" \
+    '{ts:$ts, actor:"orchestrator", action:"autonomy_preflight_record_failed", subject:"PL0",
+      result:"warn", task_id:"PL0", metadata:{exit:$rc, recorded:$w}}' >> .context/logs/audit.jsonl
+  rm -f -- "$PF_BUF" ${SCAN_BUF:+"$SCAN_BUF"}
+fi
+```
 
 ### Step 3b — Verify SubagentStop hook installed
 
@@ -296,7 +451,7 @@ state.json when agents skip self-patching (`initialization-patterns.md#hook-inst
 
 3c. **UNCONDITIONAL**, on every worktask with no precondition (Conductor workspaces and manual
 `git checkout -b` branches included): after the seed and before Step 4, run
-`bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the ONLY
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the ONLY
 place a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch
 Naming`); the *planned* ledger name may be refined once more without git mutation (§ Step A.4b).
 Every outcome exits 0 — a naming problem must never stop planning — and the step self-disables
@@ -322,7 +477,8 @@ it is still free to change.
 #### Step 3c — who decides conventionality (BINDING)
 
 > Never judge conventionality by eye. The sole authority is `branch_is_conventional()` from
-> `skills/worktask/scripts/branch-lib.sh`, reachable as `branch-name.sh --check "<name>"`
+> `skills/worktask/scripts/branch-lib.sh`, reachable as
+> `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "<name>"`
 > (0 = conventional, 1 = not, 2 = internal fault). "This looks like a real branch name, skip" is how
 > `fix/catalog-image-blinking` reached `facts.branch` after `fix` left `BRANCH_TYPES`.
 
@@ -352,7 +508,7 @@ the predicate, so an empty stamp is the honest "no planned name" outcome (FN pus
    ```bash
    # A TITLE (≤60 chars), never the raw task description — the 48-char slug budget
    # drops the overflow silently.
-   out=$(bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
+   out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
    local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
    target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
    truncated=$(printf '%s\n' "$out" | sed -n 's/^slug_truncated=//p' | tail -n 1)
@@ -360,7 +516,7 @@ the predicate, so an empty stamp is the honest "no planned name" outcome (FN pus
    # target_branch wins whenever the local name is unusable as a PR head; falling back
    # to the local name here is what shipped a `<city>-v<n>` branch as a PR head.
    stamp="$local_branch"
-   if [ -z "$stamp" ] || ! bash skills/worktask/scripts/branch-name.sh --check "$stamp"; then
+   if [ -z "$stamp" ] || ! bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "$stamp"; then
      [ -n "$target" ] && stamp="$target"
    fi
    ```
@@ -373,7 +529,7 @@ re-invoke in **rename mode** (that writes a second audit row). `BRANCH_NAME_PRIN
 
    ```bash
    stamped=$(jq -r '.facts.branch // ""' .context/state.json)
-   if [ -n "$stamped" ] && ! bash skills/worktask/scripts/branch-name.sh --check "$stamped"; then
+   if [ -n "$stamped" ] && ! bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "$stamped"; then
      jq -cn --arg ts "$(date -u +%FT%TZ)" --arg a "$stamped" --arg d "$target" \
        '{ts:$ts, actor:"orchestrator", action:"branch_convention_check", subject:"PL0",
          result:"warn", metadata:{actual:$a, derived_target:$d}}' \
@@ -415,7 +571,7 @@ there is a **bug report**: a conventional target existed and something stamped p
 
 4. The Step 3a seed already created `tasks.PL0`, so this step MERGES metadata rather than creating
 the task — `--task-create` would hit the create op's idempotent early-exit and drop the payload
-silently. `state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
+silently. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
 — `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
 
 #### Step 4 — workspace_path stamping
@@ -445,7 +601,7 @@ Batching`) and Step A.4.
 
 ### Steps 5–8 — Dispatch PL, then present the plan
 
-5. **PL0 → in_progress**: `state-patch.sh --task-status PL0 in_progress`
+5. **PL0 → in_progress**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 in_progress`
 6. **Delegate**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
    — PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
    glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
@@ -453,7 +609,7 @@ Batching`) and Step A.4.
    `plan_file`/`run_index` are provisional — PM recomputes and is authoritative. Glob+increment
    applies to a **new run** only: a plan-gate revision reuses the frozen index (§ Plan-revision
    re-dispatch).
-7. **PL0 → completed**: `state-patch.sh --task-status PL0 completed`
+7. **PL0 → completed**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 completed`
 8. **Present the plan summary** (contents per § Plan gate checkpoint path), then continue to Phase 2.
 
 #### Step 6 — record dropped and added stages
@@ -530,6 +686,21 @@ any exist, Step A.5 runs as a **`checkpoint`** gate for those items even under `
 "bypass"` — the user answers only the escalated questions, the batch amendment pass applies their
 answers, then the bypass path resumes. Auto-decision never widens what runs unattended.
 
+##### Escalation guard — escalate stops at every boundary
+
+**Escalate always stops at any boundary; bypass records decision-class items only.** A stop is the
+checkpoint-style render above, scoped to that boundary's escalate items: the user answers them,
+§ Step C.5 records the answers, and the bypass path resumes. At the plan gate every lane keeps the
+checkpoint stop (`/megatask` parks; § Plan gate bypass path — escalation exception). At a stage's own boundary
+(§ Step C.0) or the FN gate, the first matching lane wins:
+
+1. `/megatask` per-issue run (`PL0.metadata.megatask_group`): PARK, per § Escalation guard —
+   unattended `/megatask` per-issue runs (PARK).
+2. No reachable human (`CORPFLOW_NONINTERACTIVE=1`, or § Headless Dispatch): record each item and
+   continue (§ Step C.5 — the unattended lanes). FN lists it atop the PR body, and the final
+   message repeats it (§ Output Format).
+3. Any other lane, including `--emergency`, `--auto=[finalization]` and a bypassed plan gate: stop.
+
 ##### Escalation guard — raise-only self-labels
 
 A closing-sweep item arrives carrying its emitting stage's own `class`. At § Step C.2, strictly
@@ -554,7 +725,9 @@ stop for, so instead of holding the checkpoint, **PARK the issue**: write
 without dispatching any stage. Parking rides the monitor's failure path
 (`hooks/megatask-monitor.sh` settles only `completed`/`failed`): the track is freed, dependents stay
 `blocked`, and the batch summary lists the issue with its unanswered questions for a follow-up
-interactive `/worktask`.
+interactive `/worktask`. A parked permission need takes this same path; its escalated list holds
+each need's redacted `{tool, command_head, truncated}`, never the command (§ Boundary permission
+prompt — only the user answers).
 
 #### Presentation in the gate summary
 
@@ -573,15 +746,14 @@ rule`). Placed here so the Step A.5 summary carries the final name before anythi
 
 #### Step A.4b snippet — invoke the helper, non-blocking
 
-    # $PLUGIN_ROOT per § Snippet preamble
-    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/refine-branch-target.sh"
-    ref_out=""; if [ -f "$HELPER" ]; then ref_out=$(bash "$HELPER") || true; fi
+    # A missing helper exits 127 with empty output, which reads as "no refinement".
+    ref_out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh) || true
     ledger_branch=$(printf '%s\n' "$ref_out" | sed -n 's/^ledger_branch=//p' | tail -n 1)
 
 #### Step A.4b invariants
 
 - The trailing `|| true` is mandatory — non-blocking by contract, like the Step A publish helper. A
-  helper failure MUST NEVER fail the worktask.
+  helper failure, a missing helper (exit 127) included, does not fail the worktask.
 - **Self-guarding**: it scans `audit.jsonl` for a prior successful `branch_target_refined` row at
   this run index, so a duplicate invocation after a resume is a `noop`, never a second refinement.
 - Exactly one audit row per invocation **whenever `jq` is available**; the `jq_unavailable` arm alone
@@ -676,20 +848,15 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
-4. **On approval**, first stamp the carrier: `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`.
-   The stamp precedes the row by contract — a crash between them leaves state approving with no row,
-   and the resume path re-prompts a human; the reverse order resumes into the stage loop with the
-   carrier unset, which is the block this stamp exists to prevent. Then append one line to
-   `.context/logs/audit.jsonl` and proceed to Step A:
+4. **On approval**, stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'` (stamp before row: crash between them leaves state approving with no row, resume re-prompts; the reverse order — row before stamp — resumes into the stage loop with the carrier unset, the block this stamp exists to prevent). Append to `.context/logs/audit.jsonl` and proceed to Step A:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
    ```
-5. **On rejection / revision request**, append:
+5. **On rejection / revision**, append:
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_rejected","subject":"PL<N>","result":"rejected"}
    ```
-   STOP — do NOT enter the stage loop. Surface the user's feedback. For revisions, re-dispatch PM per
-   § Plan-revision re-dispatch — a revision is NOT a new run.
+   STOP — do NOT enter stage loop. Surface user feedback. For revisions, re-dispatch PM per § Plan-revision re-dispatch (not a new run).
 
 ##### Plan-revision re-dispatch (gate rejection only)
 
@@ -721,42 +888,39 @@ one audit row before dispatching:
 On PM's return, re-enter the plan gate at Step A.5 — the revised plan needs its own approval, and
 Step A still runs exactly once per run (the issue is published after the *approved* plan).
 
-#### Plan gate bypass path
+#### Plan gate bypass path — auto approval
 
-**If `plan_gate == "bypass"` AND Step A.4 left no unresolved `escalate` items**: stamp
-`state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No
-prompt, no approval line, no audit row — the requested bypass carrier IS the approval, and without
-the stamp every stage agent blocks. The guard is a precondition: stamping ahead of the stop lets a
-crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+**If `plan_gate == "bypass"` AND no unresolved `escalate` items remain**: stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No prompt, no approval row, no audit row — the bypass carrier IS the approval. The escalation guard is a precondition — never stamp ahead of the stop: stamping first lets a crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+
+#### Plan gate bypass path — escalation exception
 
 Exception: unresolved `escalate` items force a `checkpoint`-style stop first (§ Escalation guard).
-Once answered, stamp `state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
+Once answered, stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
 standard `approval_received subject:"PL<N>"` row (required as the escalate resolution), then resume
 at Step A — NOT at the arm above, which this run can no longer reach: re-entering it would overwrite
 a real human approval with `auto`. Stamp before row, as in the approval arm.
 
 ### Step A — Publish plan to GitHub (run BEFORE the stage loop)
 
-    # $PLUGIN_ROOT per § Snippet preamble
-    HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
+    pub_rc=0
+    bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
 
-#### Step A snippet — continued: invoke helper, or audit a deferred row
+#### Step A snippet — continued: audit a deferred row when the helper is missing
 
-    if [ -f "$HELPER" ]; then
-      bash "$HELPER"; true
-    else
+    # Exit 127 means bash found no helper at that path; the helper audits every other outcome itself.
+    if [ "$pub_rc" -eq 127 ]; then
       LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
       mkdir -p "$LOG_DIR"
       STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
       jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
         '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
         >> "$LOG_DIR/audit.jsonl"; true
-    fi
+    fi; true
 
 #### Step A publish invariants
 
-- The trailing `; true` is mandatory — non-blocking by contract. A helper failure MUST NEVER fail the
-  worktask.
+- The `|| pub_rc=$?` capture and the trailing `; true` are mandatory — non-blocking by contract. A
+  helper failure does not fail the worktask.
 - The helper self-skips (`--no-gh-issue`; megatask per-issue mode, detected via `workspace.json` /
   `metadata.milestone`; already published; missing `gh`/auth/remote) — each exits 0 and audits a
   `deferred` row. Sanitiser rules: `skills/worktask/SKILL.md § PL Issue Publish`.
@@ -788,7 +952,7 @@ _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
 # so the check passes unconditionally and an unstamped ledger reads as clean — which also
 # leaves dv-tree-preflight.sh and developer.md's path-prefix check inert.
 if [ -z "$_task_root" ]; then
-  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Re-seed per Step 3a." >&2
+  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Set it via state-patch.sh --ledger-meta." >&2
   # Write audit row `workspace_path_unstamped` and STOP — do not call Task()
   exit 1
 fi
@@ -801,15 +965,25 @@ fi
 
 ##### Banner injection
 
-The orchestrator MUST also append `WORKSPACE_ROOT=$_orch_root` as the first line of every stage
-prompt banner (section [7] suffix per the cache-prefix spec) so the subagent knows which directory to
-target. Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
+The task's `WORKSPACE_ROOT=` line opens section [7] of every stage prompt (the suffix, per the
+cache-prefix spec) so the subagent knows which directory to target. It arrives through the composer,
+which emits `workspace-root-banner.sh`'s stdout as [7]'s first line; do not append it again. The
+value is `tasks.<ID>.metadata.workspace_path` when set, else the orchestrator root — never the
+ledger-level path, which names the orchestrator's tree and hides a DV stream's own:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh "<TASK_ID>" --orch-root "$_orch_root"
+# stdout is the whole brief, [7] opening with the banner line; exit 1 or 2 means do not call Task()
+```
+
+Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
 
 #### Post-delegation state.json enforcement (BINDING)
 
 After every `Task()` return (the *completed stage result* — under background-default subagents that
-is the completion notification, not the launch acknowledgement), before the `completed` patch:
-re-read `.context/state.json`; if `tasks.<ID>.status` is NOT `completed`, run
+is the completion notification, not the launch acknowledgement), before Step 7 settles the row:
+re-read `.context/state.json`; if `tasks.<ID>` does not already carry the artifact's
+`handoff.verdict` and the status it maps to (`handoff-protocol.md § tasks — verdict → status`), run
    ```bash
    CLAUDE_ARTIFACT_PATH=".context/<artifact>-N.md" \
    CLAUDE_TASK_METADATA_STAGE="<CODE>" \
@@ -820,23 +994,29 @@ re-read `.context/state.json`; if `tasks.<ID>.status` is NOT `completed`, run
 ##### Layer-3 stamp and F3 fallback
 
 `STATE_MERGE_VIA=step6_5` stamps `tasks.<ID>.completed_via=step6_5` so this synchronous Layer-3 path
-is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if STILL not
-`completed`, apply the F3 fallback (minimal patch derived from the agent return text; stamps
-`completed_via: "f3"`) — this covers environments where the SubagentStop hook never fired. Full
+is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if the row
+STILL does not match, apply the F3 fallback: it stamps the verdict-mapped status (plus
+`metadata.gate_from_stage` when that status is `pending`) with `completed_via: "f3"`, and writes
+nothing for an absent handoff or an unmapped verdict — this covers environments where the
+SubagentStop hook never fired. Full
 three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ### Step B — AR-reference check at DV completion
 
 The AR-reference arm fires only when `.context/state.json` has a `tasks.AR0` entry (AR is optional —
 `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria`). The invocation itself is the
-§ Step B.1 call every stage makes; at DV completion, before dispatching DR0, it is:
+§ Step B.1 call every stage makes. It runs once per DV row, on that row's own artifact, as the row
+completes; DR0 is dispatched only after every DV row has passed it:
 
 ```bash
 STRICT_FLAG=""
 [ "${CORPFLOW_AR_REF_STRICT:-0}" = "1" ] && STRICT_FLAG="--strict"
+# The completing row names its artifact; a stream suffix cannot be composed from N.
+DEV_ARTIFACT=$(jq -r --arg id "$TASK_ID" \
+  '.tasks[$id] | .artifact // .metadata.artifact // empty' .context/state.json)
 # shellcheck disable=SC2086
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter ".context/development-${N}.md" \
-  --state .context/state.json $STRICT_FLAG
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$DEV_ARTIFACT" \
+  --state .context/state.json $STRICT_FLAG $LEGACY_TE_FLAG
 ```
 
 #### Step B rollout and opt-in
@@ -846,7 +1026,7 @@ each as an audit row and carry it into the DR dispatch prompt so DR checks the l
 **not** a `missing_input` block and never stops the transition.
 
 ```json
-{"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<N>","result":"warn"}
+{"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<k>","result":"warn"}
 ```
 
 ##### Step B — what the sweep checks do to this rollout
@@ -863,6 +1043,19 @@ failure, and its `fail:` line names a `sw-` id.
 dangling references before the next minor flips `--strict` to the default. The inverse guard (an
 architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
 
+##### Step B — the legacy tests_executed opt-in
+
+```bash
+LEGACY_TE_FLAG=""
+[ "${CORPFLOW_LEGACY_TESTS_EXECUTED:-0}" = "1" ] && LEGACY_TE_FLAG="--legacy-tests-executed"
+```
+
+**`CORPFLOW_LEGACY_TESTS_EXECUTED=1`** makes the orchestrator pass `--legacy-tests-executed`, so an
+artifact written before per-runner entries (a legacy scalar count) validates under the old integer
+rules with one deprecation `warn:`. Use it only to land in-flight legacy artifacts: it never relaxes a
+list, and it is removed in the next minor release. Without it a scalar `tests_executed` fails and
+routes per § Step B.1 — on failure.
+
 ### Step B.1 — Sweep checks at every stage completion
 
 The harness is not a DV-only tool. After **any** stage `<CODE><N>` lands its `completed` patch (loop
@@ -870,12 +1063,16 @@ step 6.5) and before § Step C.0 renders its blocking items or the next stage is
 
 ```bash
 ART=$(jq -r --arg id "<CODE><N>" '.tasks[$id].artifact // empty' .context/state.json)
-skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json
+# shellcheck disable=SC2086
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate-frontmatter "$ART" --state .context/state.json \
+  $LEGACY_TE_FLAG
 ```
 
 `$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
-alone. For DV this **is** the § Step B invocation — run it once, not twice. An artifact whose
-`open_questions` is the empty array passes untouched; any item in it must be a full sweep stub.
+alone. `$LEGACY_TE_FLAG` (§ Step B — the legacy tests_executed opt-in) affects only the
+`tests_executed` arm of DV and QA. For DV this **is** the § Step B invocation — run it once, not
+twice. An artifact whose `open_questions` is the empty array passes untouched; any item in it must
+be a full sweep stub.
 
 #### Step B.1 — on failure
 
@@ -889,9 +1086,11 @@ writes what it owes. There is no advisory tier here — the unreadable-ledger ca
 
 ##### Step B.1 — the routing default, and why it is a default
 
-The default is the rule, not a fallback: a shape absent from this table routes like every row in
-it. An earlier version routed only the first three, so one run's boundary stalled four times on
+The default is the rule, not a fallback: a shape absent from the routing table routes like every row
+in it. An earlier version routed only the first three, so one run's boundary stalled four times on
 lines that each named a real defect and had no branch to take.
+
+###### Step B.1 — the routing table
 
 | `fail:` line names | What the stage owes |
 |---|---|
@@ -899,7 +1098,9 @@ lines that each named a real defect and had no branch to take.
 | `sweep ledger parity cannot be verified` | a readable ledger or spill, then re-run |
 | a decision id `disagrees across transports` | one reconciled statement — see the arm below |
 | `missing required field: <field>` | that field, per `stage-contracts.md#tpl-<CODE>` |
-| `tests_executed: 0 with no test_suite_compiles` | the compile answer — no test authority needed |
+| `is a scalar` / `is a map, not a list` | `tests_executed` rewritten as one `{runner, count, summary_line}` entry per runner |
+| `tests_executed[` | that entry, fixed as the line says — never folded into another |
+| `with no test_suite_compiles` | the compile answer — no test authority needed |
 | `N discretionary tokens > 200 budget` | a shorter `summary` / `next_stage_focus` |
 | anything else | what the line says — route it here regardless |
 
@@ -993,13 +1194,16 @@ must say which surface it got:
 | headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
 | in-process `Task()` | nothing — the sub-agent runs at its own frontmatter `effort:` | `frontmatter-only` |
 
-In-process the tier is **recorded, not applied**, and the resolver still runs.
+In-process the tier is **recorded, not applied**, and the resolver still runs: the row's
+`effort_resolved` is the literal `"requested, not applied"`, never a tier the session did not run
+at. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tracked outside this milestone.
 
 ###### Step C.0a — do not reach the tier another way
 
 Never substitute a different agent whose frontmatter sits a rung higher: that trades the domain
 expertise answering the question for a field value. `Task()` gains no `effort` parameter here and
-none is invented; if one lands later, the table above is the only place that changes.
+none is invented; if one lands later, the table above and the `frontmatter-only` literal in
+step 4 are the only places that change.
 
 ##### Step C.0a — what the prompt carries
 
@@ -1018,17 +1222,20 @@ write, exactly as at Step A.4.
 4. The ORCHESTRATOR merges each answer through the § Step C.5 write — the whole stub, resolution
    marked `(auto-decided)` — and appends one `auto_decision_resolved` row (`subject:"<CODE><N>"`,
    `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
-   effort_transport, decisions: [{question, answer, rationale}] }`).
+   effort_transport, decisions: [{question, answer, rationale}] }`). `effort_requested` is the
+   computed tier on both surfaces. `effort_resolved` is the tier the session ran at under
+   `dispatch-flag`, and `"requested, not applied"` under `frontmatter-only`.
 5. Fall through to § Step C.0 with whatever remains: every `escalate` item, everything the
    delegate declined, and everything C.0a's four conditions excluded.
 
 ###### Step C.0a — reading the two effort fields
 
+The comparison applies only under `effort_transport: "dispatch-flag"`. There,
 `effort_requested` != `effort_resolved` means the tier evaporated in transit — thinking disabled
 downgrades `xhigh`/`max` to `high` silently (`model-selection.md § xhigh routing`). Recorded, not
-enforced: the answer stands, it just was not reached at the tier asked for. Read it with
-`effort_transport` — under `frontmatter-only` the request never left the orchestrator, so a
-difference there says nothing about the session.
+enforced: the answer stands, it just was not reached at the tier asked for. Under
+`frontmatter-only` the request never left the orchestrator, so `effort_resolved` reads
+`"requested, not applied"` and the pair says nothing about the session.
 
 ##### Step C.0a stamps no approval carrier
 
@@ -1050,8 +1257,52 @@ otherwise build on a guess, which is the whole reason the flag exists.
 ##### Step C.0 — no new gate, and no deadlock
 
 This creates **no new gate**: it is the same render the FN gate performs, moved earlier for items
-whose answers the next stage needs. Under a bypassed lane it degrades exactly as C.5 specifies —
-record, never prompt — so no unattended run can deadlock on it.
+whose answers the next stage needs. Under a bypassed gate it follows § Step C.5 — the unattended
+lanes, and nothing deadlocks: a lane with nobody to answer parks or records, and every other lane
+has a user to stop for.
+
+#### Boundary permission prompt — after Step C.0, not a sweep item
+
+A task parked with `blocked_on.kind == "permission"` (`skills/worktask/SKILL.md § Step 6.5a4`) has
+no `class` and never enters `facts.open_questions[]`, so neither C.0a nor C.0 sees it. Once C.0 has
+run and every ready stage is dispatched, `permission-park.sh batch` renders every parked need — one
+AskUserQuestion call per `payloads[]` entry, so a single call for up to four needs — each offering
+"grant and continue" and "run it yourself". The `! <command>` line to enter sits in the question
+text inside a fenced block. A need with `truncated: true` gets no such line; its question points the
+user at Claude Code's denial notice or `/permissions` recent denials. It never merges into a C.0
+render. Answer handling, including the wait for the user's own run, and the step-only resume:
+`skills/worktask/SKILL.md § Step 7a`.
+
+##### Boundary permission prompt — only the user answers
+
+Granting is security posture, so no delegate answers a parked need under any `decision_gate`, and a
+bypassed `plan_gate` or `fn_gate` does not silence the prompt. A `/megatask` per-issue run has no
+user: `batch` asks nothing and PARKs the issue through § Escalation guard — unattended `/megatask`
+per-issue runs (PARK), with `execution.reason: "parked_escalation"` and one `escalation_parked` row
+whose `metadata.escalated[]` holds each need's redacted `{tool, command_head, truncated}`; the full
+command stays in `blocked_on`. Nothing is granted. When `park.workspace_written` is false,
+`park.workspace_reason` decides: on `missing` or `malformed` the orchestrator makes that guard's
+write itself before it stops; any other reason is reported per
+`skills/worktask/SKILL.md § Step 7a — the megatask arm`. The orchestrator
+never Writes or Edits a symlinked `workspace.json`: it refuses, audits and reports instead.
+
+##### Boundary permission prompt — where the `!` line runs
+
+A `!` line runs in the main session's working directory, not in the parked stage's tree. The
+question therefore shows that tree as a `cwd:` data line inside its fenced info block, and the user
+runs the `! <command>` line from that directory. No `cd <dir> && <command>` is ever composed: the
+`!` line holds the denied command only (`skills/worktask/SKILL.md § Step 7a — where the ! line runs`).
+
+##### Boundary permission prompt — typed needs in the same round
+
+A task parked on any other `blocked_on` kind (`skills/worktask/SKILL.md § Step 6.5a3`) is rendered
+at the same boundary by `blocked-on-dispatch.sh batch`, as a `user_action` need: a fixed lead line
+with the stage's detail fenced as data, a `!` line only on a native `user_action` whose command was
+not cut, and the options "done" and "stop here". A `user_decision` is the exception: it is asked
+with the stage's own question and options, and the stage is resumed with the hook row's `ud-` id.
+Its `payloads[]` are asked in the same round as the permission ones, only the user answers them
+under any gate setting, and a `/megatask` per-issue run parks them the same way. Answers and resume: `skills/worktask/SKILL.md § Step 7a — the typed-need
+answers`.
 
 #### Step C.1 — collect everything not already answered
 
@@ -1083,8 +1334,9 @@ the case it exists for. `handoff-harness.sh` checks parity against the same unio
 ###### Step C.1 — the decisions spill is a different reader
 
 `.context/decisions-<run_index>.jsonl` is **not** read here: this gate renders questions. It is no
-longer readerless, though — `state-patch.sh --read-decisions` returns `facts.decisions[] ∪ spill`
-under the same union rule, and that is the path for anything asking what this run decided. Reading
+longer readerless, though —
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --read-decisions` returns
+`facts.decisions[] ∪ spill` under the same union rule, and that is the path for anything asking what this run decided. Reading
 `facts.decisions[]` alone under-reports the moment one task records more than eight.
 
 ##### Step C.1 — the artifact fallback and its warning
@@ -1138,7 +1390,9 @@ than joining the resolver contract.
    `handoff-harness.sh check_sweep_ref_anchor` is what guarantees that anchor exists. Options are
    `options[]` with the `recommended: true` entry marked, and the `rationale` is shown with them. These calls **precede** the gate's approve/reject call and never
    merge into it: a merged call overflows at four-plus items and entangles sweep answers with the
-   gate's reject/resume path.
+   gate's reject/resume path. Each question's `header` is the item's `id` (`sw-<TASK_ID>-<n>`), so
+   the user-decision hook scopes the recorded answer to the emitting task
+   (`hooks/references/user-decision-ledger.md § Scope ladder`).
 
 #### Step C.5 — record, and the unattended lanes
 
@@ -1152,8 +1406,8 @@ than joining the resolver contract.
 
 ##### Step C.5 — the write-back is a whole stub
 
-The write goes through `state-patch.sh --facts` as the **complete** item — `id`, `class`, `ref` and
-`blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
+The write goes through `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts`
+as the **complete** item — `id`, `class`, `ref` and `blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
 union REPLACES the incumbent object for that id, so a partial item would drop the very anchor C.4
 resolves its question text from; `--facts` now rejects one by name rather than persisting it.
 
@@ -1164,10 +1418,13 @@ here, and the emitting stage's artifact frontmatter stub. The two copies have on
 
 ##### Step C.5 — the unattended lanes
 
-Recording never stops; only prompting does. Under `fn_gate: "bypass"` skip C.4 and record only —
-`sweep_recorded`, plus `sweep_escalation_unprompted` for every effective-`escalate` item. Under a
-`/megatask` per-issue run an effective-`escalate` item PARKS the issue exactly as § Escalation
-guard — unattended `/megatask` per-issue runs (PARK) specifies. Every one of those audit subjects is
+Recording never stops; only prompting does. Under `fn_gate: "bypass"` or any bypassed gate, skip C.4
+for effective-`decision` items and audit `sweep_recorded` for them. Effective-`escalate` items take
+the lane § Escalation guard — escalate stops at every boundary picks. A stop renders them at C.4 and
+records the answers here. A `/megatask` per-issue run PARKS the issue exactly as § Escalation
+guard — unattended `/megatask` per-issue runs (PARK) specifies. Only a lane with no reachable human
+records them unanswered: one `sweep_escalation_unprompted` audit row per item, with
+`metadata: {id, stage, ref}`, and the run continues. Every one of those audit subjects is
 the rendering boundary, `<CODE><N>` — `FN<N>` for a batched item, the emitting stage's own id for a
 blocking one. Full carrier table: `skills/shared/stage-contracts.md § Unattended fallbacks`.
 
@@ -1268,6 +1525,15 @@ One block per stage as it settles, then the run summary:
 
 A blocked or escalated stage replaces `## Result` with `## Blocker — what stopped, at which stage,
 and the decision the user owes`. The ledger stays resumable either way: `/worktask --resume <ID>`.
+
+### Output Format — unresolved decisions open the final message
+
+After FN, the final message opens with the stdout of
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
+non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN wrote at the top of
+the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
+nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the
+scrub is what keeps host paths out of it.
 
 ## See Also
 

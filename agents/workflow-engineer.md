@@ -71,7 +71,7 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 
 ### DV0 dual role — routed here by file kind
 
-**Dual role**: WE owns no stage of its own, but PL0 routes **DV0** here instead of `corpflow:developer` when the change touches **executed** worktask-infrastructure in the plugin tree — `**/*.sh`, `**/*.bats`, `hooks/**`, and the JSON those scripts read. The anchor is that tree, never the extension: a product repo's shell or CI script is platform code and keeps the default route, and markdown is never routed here by directory. Full rule including the markdown carve-out — single source of truth: `skills/worktask/references/pl0-procedure.md § DV0 routing override`. Dispatched that way you are the DV stage agent and owe the full DV contract, including § Handoff Protocol below. Invoked for troubleshooting, you own no ledger artifact and MUST NOT patch a stage.
+**Dual role**: WE owns no stage of its own, but PL0 routes **DV0** here instead of `corpflow:developer` when the change touches **executed** worktask-infrastructure in the plugin tree. Which paths qualify, the tree anchor that governs them and the markdown carve-out are single-sourced at `skills/worktask/references/pl0-procedure.md § DV0 routing override`, which forbids restating them here — read it there before acting on a routing question. Dispatched that way you are the DV stage agent and owe the full DV contract, including § Handoff Protocol below. Invoked for troubleshooting, you own no ledger artifact and MUST NOT patch a stage.
 
 **State ledger**: `skills/shared/state-ledger.md` · **Stage codes**: `skills/shared/stage-codes.md`
 
@@ -90,7 +90,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 | Phase | Must hold |
 |-------|-----------|
 | Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.0, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, `.worktrees/` writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
-| Per-issue (CRITICAL) | Branch cut from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
+| Per-issue | Branch cut from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
 | Completion | Work committed to the issue branch and pushed; PR created with `Closes #{issue}`; orchestrator.json status `"completed"` |
 
 ### Common Validation Failures
@@ -118,7 +118,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 | Symptom | Diagnose → fix |
 |---------|----------------|
 | Task in error state | `.context/errors/<agent>.md` (one file per failing task's `metadata.agent` basename). `retry_count` < 3 → fix, keep `in_progress`, increment; = 3 → escalate to the previous stage per chain; append the resolution to the same file |
-| Escalation (3 failures) | Previous agent reads that retry history, fixes root cause, resets `retry_count` to 0 on the retried task, transitions back |
+| Escalation (3 failures) | Previous agent reads that retry history, fixes root cause, resets **`retry_count` alone** to 0 on the retried task, transitions back. `metadata.escalation_counts` is NOT reset — it is the only bound on the escalation loop; at cap 2 on an edge the task goes `failed`/`exhausted` instead of escalating again |
 
 ### Megatask & Orchestrator Troubleshooting
 
@@ -134,7 +134,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 
 **Symptom**: `tasks.<ID>.status` still `in_progress` long after settling — artifact missing/partial, `handoffs` empty, no new audit rows. Any stage reaches this shape; PL0 is only the most-reported one. Two causes with opposite fixes — diagnose before touching anything:
 
-1. **Agent gone or parked** — ledger honest, work stopped. Classify (below), then apply the verdict `references/resume.md § Live-agent rows` assigns. Never auto-recover.
+1. **Agent gone or parked** — ledger honest, work stopped. Classify (below), then apply the verdict `skills/worktask/references/resume.md § Live-agent rows — parked or gone` assigns. Never auto-recover.
 2. **Agent finished, ledger never caught up** — all three enforcement layers failed: agent self-patch (L1), SubagentStop hook (L2), orchestrator Step 6.5 (L3). Repair via the runbook.
 
 #### Detect — stale-check.sh
@@ -171,7 +171,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 
 #### Runbook — Steps 4-5 and Prevention
 
-4. **F4 recovery** (corrupt state.json) is automatic: `state-merge.sh` backs up to `.context/state.json.corrupt.<iso-ts>`, rebuilds the skeleton, recovers **only the stage being patched** — re-run step 3 for the rest. If the backup cannot be written the repair aborts and `state.json` stays byte-identical, so an unchanged ledger is not evidence the hook failed to run. Contract: `references/handoff-protocol.md#f4-partial`.
+4. **F4 recovery** (corrupt state.json) is automatic: `state-merge.sh` backs up to `.context/state.json.corrupt.<iso-ts>`, rebuilds the skeleton, recovers **only the stage being patched** — re-run step 3 for the rest. If the backup cannot be written the repair aborts and `state.json` stays byte-identical, so an unchanged ledger is not evidence the hook failed to run. Contract: `skills/worktask/references/handoff-protocol.md#f4-partial`.
 5. **Filenames**: `bash "<plugin-root>/skills/worktask/scripts/cache-lint.sh" --filename-lint .context/` — non-canonical names (`arch-0.md` vs `architecture-0.md`) block hook artifact resolution.
 
 **Prevention**: `commands/worktask.md` Phase 1 step 3b must run at worktask start; the plugin.json hook registration gives Layer 2 coverage without a project-local install.
@@ -274,6 +274,8 @@ A literal-string match is not a legal block boundary: before inserting a heading
 **Applies only in DV-execution mode** (PL0 routed DV0 here per § Stage Code: WE — Dual role). A troubleshooting invocation writes no stage artifact and skips this section entirely.
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop `.context/development-N.md`): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
 

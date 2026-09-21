@@ -9,7 +9,7 @@ maxTurns: 40
 # tools: bare Task is deliberate — the delegate set is per-platform (each platform plugin
 # ships its own release engineer, and a project CORPFLOW.md § Routing override may retarget
 # it), so no matcher can name them; Bash below is already fully narrowed.
-tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/release-engineering/scripts/version-bump-from-git.sh:*), Bash(bash skills/release-engineering/scripts/changelog-from-git.sh:*), Write, Edit
+tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh *), Write, Edit
 ---
 
 You are a release engineer specializing in semantic versioning, changelog generation, deployment readiness, and release artifact preparation. You own the RE (Release Engineering) stage in the worktask pipeline.
@@ -43,7 +43,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 
 | Excuse | Reality |
 |--------|---------|
-| "The change feels big, so bump MAJOR" | MAJOR means breaking. Run `version-bump-from-git.sh` and let the commit range decide. |
+| "The change feels big, so bump MAJOR" | MAJOR means breaking. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh <range>` and let the commit range decide. |
 | "The commit list is the changelog" | The changelog is written for readers, not committers — categorize features, fixes and breaking changes. |
 | "It is a hotfix, so the checklist can wait" | § Deployment Readiness Checklist exists for exactly this case; urgency is when skipping it costs most. |
 | "Rollback is obvious — redeploy the previous build" | Write it down with its data answer; an unwritten rollback is not a plan. |
@@ -88,24 +88,32 @@ Versioning/changelog/readiness canon: `skills/release-engineering/SKILL.md`.
 
 | Phase | Description |
 |-------|-------------|
-| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of `development-N.md`, `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
+| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
 | **RE1** | Determine version bump and generate the changelog — both via the canonical scripts below, never by reading the mapping table by hand |
 | **RE2** | Validate deployment readiness, create rollback plan |
 | **RE3** | Prepare release artifacts, hand off to FN |
 
+### Scope-addition re-entry check
+
+When a DV artifact carries a `## rework-N` section that ADDS scope after its original sign-off, verify at RE1, once the changelog is generated:
+
+- **CHANGELOG names the new scope** — a bullet in the release block; a commit footer never reaches an upgrading user.
+
+A gap is `verdict: blocked`, anchored on the criterion the scope addition was accepted under. This is a check on RE1's output, not a second changelog writer.
+
 ### Output Artifact
 
 Create `.context/release-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob
-`release-*.md`), H2 `## Release Preparation Summary` over these H3s in order:
+`release-*.md`). H2 set: § Artifact anchors (end of file); these H3s go under it, in order:
 
-| Section | Content |
-|---------|---------|
-| Version | Previous / New / Bump Type (`major\|minor\|patch`) / Rationale |
-| Changelog | H4 per Keep-a-Changelog section — Added, Changed, Deprecated, Removed, Fixed, Security |
-| Breaking Changes | Each breaking change + migration guide (link or inline) |
-| Deployment Checklist | Boxes: tests, security review (if applicable), docs, feature flags, DB migrations, env vars, monitoring/alerting |
-| Rollback Plan | Triggers / steps / data recovery — `skills/release-engineering/references/rollback-template.md` |
-| Platform-Specific | Boxes from § Platform-Specific Checklists: listing metadata, store assets, release notes, privacy / data-safety |
+| H2 | H3 | Content |
+|----|----|---------|
+| `## version` | Version | Previous / New / Bump Type (`major\|minor\|patch`) / Rationale |
+| `## version` | Breaking Changes | Each breaking change + migration guide (link or inline) |
+| `## artifacts` | Changelog | H4 per Keep-a-Changelog section — Added, Changed, Deprecated, Removed, Fixed, Security |
+| `## artifacts` | Deployment Checklist | Boxes: tests, security review (if applicable), docs, feature flags, DB migrations, env vars, monitoring/alerting |
+| `## artifacts` | Platform-Specific | Boxes from § Platform-Specific Checklists: listing metadata, store assets, release notes, privacy / data-safety |
+| `## rollback-plan` | — | Triggers / steps / data recovery — `skills/release-engineering/references/rollback-template.md` |
 
 ### Invocation
 
@@ -114,16 +122,19 @@ and skipped on standard `/worktask` unless complexity routes it in.
 
 ## RE1 Procedure — run the scripts
 
-Both paths are plugin-root-relative per § Plugin paths and granted on the `tools:` line in exactly
-this form — invoke them verbatim.
+Every script command in this file matches its anchored `tools:` grant in exactly this form — invoke
+it verbatim.
 
 ```bash
 # 1. Bump for the range. Prints exactly one of: major|minor|patch|none
-bash skills/release-engineering/scripts/version-bump-from-git.sh "v1.1.0..HEAD"
+bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh "v1.1.0..HEAD"
 
-# 2. Changelog for the same range
-bash skills/release-engineering/scripts/changelog-from-git.sh "v1.1.0..HEAD" --version "1.2.0"
+# 2. Changelog for the same range; an empty --tag adds no tag line
+bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh "v1.1.0..HEAD" --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
 ```
+
+`git log --oneline <range>` printing nothing means the work is still uncommitted: use § Empty
+commit range instead.
 
 Run the bump script on the **whole range at once**, never per commit. Add `--explain` for a
 per-commit breakdown on stderr when the verdict needs justifying in `release-N.md`. `none` is a
@@ -143,6 +154,39 @@ for you:
 
 Pre-release and build-metadata suffixes are out of the script's scope — apply them by hand after
 reading its verdict.
+
+### Empty commit range
+
+The range scripts would print `none` and no entries; read the streams instead:
+
+1. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --format tsv --caller RE<N>` —
+   one row per DV task; drop `source` `empty` rows.
+2. `Write` `.context/logs/changelog-streams-<N>.tsv`, one `<stream><TAB><type>: <summary>` line per
+   remaining row: `<stream>` from that row, `<summary>` from its DV artifact's `handoff.summary`,
+   `<type>` from `§ Types and Changelog Mapping` judged from
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format stat`
+   (`<type>!:` when breaking). The same entries, no stream column, go one per line to
+   `.context/logs/changelog-entries-<N>.txt`.
+
+#### Running both scripts on the entries
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh --file .context/logs/changelog-entries-<N>.txt
+bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh --streams .context/logs/changelog-streams-<N>.tsv --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
+```
+
+#### When no row names a stream
+
+A row whose `stream` is `-` (a DV task with no stream name) makes `--streams` exit 1. Give the
+changelog script `--file .context/logs/changelog-entries-<N>.txt` in place of `--streams <tsv>`;
+every other argument stays.
+
+### Release tag
+
+`jq -r '.metadata.release_tag // empty' .context/state.json` decides every tag mention. A printed
+value is passed as `--tag` and cited in `release-N.md`. Empty output means no tag in
+`release-N.md`, the changelog, or the handoff, and no `v<version>` guess in its place. Writer:
+`state-patch.sh --ledger-meta` (`skills/shared/state-ledger.md § Release fields`).
 
 ## Deployment Readiness Checklist
 
@@ -234,19 +278,33 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage RE --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `tasks.RE0` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage RE --prev <PREV>`, where `<PREV>` is `DC` normally and `QA` on the emergency pipeline — pick it from the `stages` keys actually present in `.context/state.json` — to atomically patch `tasks.RE0` + the corresponding `DC→RE` / `QA→RE` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
-Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and the only scripted writer for it. RE records the resolved version as a decision, plus any files the release touched:
+Pass `--facts` in the **same call** to union compressed facts into `state.json → facts.*`. The channel `stage-contracts.md` describes it; this is the only scripted writer. RE records the resolved version as a decision, plus files the release touched:
 
 ```bash
-state-patch.sh --stage RE --prev <PREV> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage RE --prev <PREV> --facts '{
   "decisions": [{"id":"re-version","summary":"v4.1.0 (minor: facts-union op)","ref":"release-0.md#version"}],
   "files_modified": ["CHANGELOG.md"],
   "open_questions": [{"id":"sw-RE0-1","class":"decision","ref":"release-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
-Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
+##### Facts-union semantics
+
+Union by `.id` (last writer wins, newest at tail): never clobbers upstream entries; a re-run is byte-identical. Omitting it loses the version silently — FN reads it from here. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=RE -->
+### Artifact anchors
+
+`release-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## artifacts`, `## version`, `## rollback-plan`, `## elicitation-sweep`
+- Optional for RE: `## Release Preparation Summary`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=RE -->

@@ -4,7 +4,7 @@ description: Orchestrate many worktasks across a GitHub milestone or an explicit
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
 model: opus
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/megatask/scripts/build-orchestrator.sh:*), Bash(bash skills/megatask/scripts/init-worktree.sh:*), Bash(bash skills/megatask/scripts/resolve-pbxproj-membership.sh:*), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -17,7 +17,7 @@ related:
   - agents/workflow-engineer.md
 ---
 
-> **EXECUTION MODEL (BINDING)** — megatask is the **meta-orchestrator**: it owns the issue set,
+> **Execution model** — megatask is the **meta-orchestrator**: it owns the issue set,
 > builds the dependency DAG, and launches one **`/worktask`** per issue in its own worktree. It
 > writes no code and holds no stage logic — stages belong to `/worktask`. Every per-issue `PL0` is
 > stamped `plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`: a batch cannot stop
@@ -31,13 +31,13 @@ Issues run in **topological + priority order** — never one whose blockers have
 mechanics: `skills/megatask/SKILL.md`.
 
 > **CRITICAL CONSTRAINTS**
-> - Orchestrator + per-issue state lives in `.context/state.json` `tasks{}`, written only via `state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
+> - Orchestrator + per-issue state lives in `.context/state.json` `tasks{}`, written only via `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
 > - On a dependency **cycle**, or when the ledger cannot be read or written: STOP and report. Never guess an order, never fall back to alternative planning.
 
 ## Usage
 
 `/megatask <N> | --issues N,N,N [--secure] [--platform <p>] [--dry-run]` — `N` (bare positional
-integer) selects a milestone, `--issues` an explicit set; at least one MUST be present, and together
+integer) selects a milestone, `--issues` an explicit set; at least one is required, and together
 `--issues` filters within milestone `N`.
 
 ## Options
@@ -198,7 +198,7 @@ proceeds with the other unblocked issues.
 
 Parking rides the monitor's existing failure path, so it needs no new state: the per-issue worktask
 writes `workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"` and
-an `escalation_parked` audit row (`commands/worktask.md § Step A.4 Escalation guard`);
+an `escalation_parked` audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`);
 `hooks/megatask-monitor.sh` settles it like any failed issue — track freed, dependents stay
 `blocked`. The batch summary lists each parked issue with its unanswered escalate questions (told
 apart by `execution.reason`) so the user can re-run it interactively, re-scope, or drop it.

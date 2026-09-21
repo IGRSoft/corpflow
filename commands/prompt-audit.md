@@ -67,9 +67,19 @@ Report skeleton — sections in this order:
 ## Command Analysis
 | Metric | Commands | Percentage |   (has Usage / Options / 3+ Examples / Output Format / Related / platform param)
 
+## Model-Conditioned Findings
+| Asset | Model | Rule | Finding | Fix |   (body rules 5-7, plus rule 7's per-asset count)
+
 ## Consistency Checks
 | Check | Status | Issues |   + Terminology Inconsistencies (| Term A | Term B | Occurrences |)
 
+~~~
+
+### Report skeleton — closing sections
+
+Continuing the same order, after Consistency Checks:
+
+~~~markdown
 ## Recommendations         (Priority 1 Fix Now / 2 Fix Soon / 3 Consider)
 ## Auto-Fixable Issues     (| Issue | Files | Action | — only with `--fix`)
 ## Audit Metadata          (Audit Date, Files Scanned, Rules Applied, Duration)
@@ -82,6 +92,7 @@ Report skeleton — sections in this order:
 - `--severity` filters which findings appear; the Summary counts stay unfiltered.
 - Group identical findings across files into a single numbered entry listing the files.
 - Skill-manifest findings share the same numbered Critical/Warnings lists and the same `<file>:<line>` locators; the Summary carries a Skills row.
+- Model-Conditioned Findings are a *view*, not a second list: every row there is also a numbered entry under Critical or Warnings. The section exists because these findings are only legible next to the asset's `model:`, which the numbered lists do not carry.
 
 ## Audit Rules
 
@@ -94,7 +105,7 @@ Report skeleton — sections in this order:
 5. Worktask stage integration documented, and every stage code referenced still exists in `skills/shared/stage-codes.md` (removed/renamed stages are a critical finding)
 6. Example interactions provided
 7. `description` follows the trigger-first grammar (G1-G7) and the guidance form matches the failure class — both normative in `agents/prompt-engineer.md § Description grammar` and `§ Form to failure`
-8. Body passes § Body Rules (disclosure, completion criteria, negation form, no-op pruning)
+8. Body passes § Body Rules (disclosure, completion criteria, negation form, no-op pruning, model-conditioned anti-patterns, scope explicitness, emphasis inflation)
 
 ### Command Rules
 
@@ -104,11 +115,11 @@ Report skeleton — sections in this order:
 4. Output format specification
 5. Related section with links
 6. Consistent option format
-7. Body passes § Body Rules — the same four checks agents get
+7. Body passes § Body Rules — the same seven checks agents get
 
 ### Body Rules (agents, commands, skills)
 
-Normative source: `agents/prompt-engineer.md § Prompt-body doctrine`. These four run on every asset
+Normative source: `agents/prompt-engineer.md § Prompt-body doctrine`. These seven run on every asset
 class — a `SKILL.md` is a prompt body with frontmatter on top, so its body is audited here even
 though its frontmatter is audited under § Frontmatter Parsing Convention.
 
@@ -146,6 +157,72 @@ The Fix line names the artifact the criterion is checked against; it never adds 
 4. **No-op instructions.** Flag an instruction the asset's own `model:` already obeys by default —
    the test is model-relative, so the same sentence can be load-bearing in one asset and waste in
    another. The Fix line is deletion of the whole sentence; a reworded no-op is still a no-op.
+
+#### Body rule 5 — model-conditioned anti-patterns
+
+Read the asset's `model:`, then check its body against that alias's row in
+`skills/shared/model-prompting.md`. An instruction that collides with a documented behaviour of
+that model is a finding whose Fix line is deletion, and whose evidence is the vendor page the canon
+file cites — not the auditor's judgement.
+
+##### Body rule 5 — the reliable greps
+
+Run against the asset body. They are kept out of a table so the `|` alternations survive a
+verbatim copy:
+
+- `opus` — over-verification; Opus 5 already does this, and the instruction compounds it:
+
+  ```
+  grep -niE 'double.?check|re-?verify|verify (your|the) (answer|work|reasoning)|final verification step' <asset>
+  ```
+
+- `opus` — the same, in its most expensive form:
+
+  ```
+  grep -niE 'use a subagent to (verify|double)|delegate.*verif' <asset>
+  ```
+
+- any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 2`:
+
+  ```
+  grep -niE 'only report (high|critical)|be conservative|do ?n.?t nitpick|only.*if you are (sure|certain)' <asset>
+  ```
+
+##### Body rule 5 — the two guards
+
+Skip either and the rule manufactures findings:
+
+- **A completion criterion is not a verification instruction.** "The screenshot manifest exists on
+  disk", "the audit row is present", "`git status` is clean" name an artifact and are graded under
+  body rule 2. Only a re-read of the model's own reasoning is a rule-5 finding.
+- **A filtering step is allowed to filter.** The anti-pattern is a confidence bar on a *detection*
+  step. A ranking, verification, or triage phase that says "drop what you can disprove" is correct
+  and is not a finding.
+
+#### Body rule 6 — scope explicitness
+
+On an asset whose `model:` is `sonnet`, flag an instruction that names one item where the asset's
+own scope covers a set, with no statement of which. Sonnet 5 follows instructions literally and does
+not generalise from one item to the next, so "add a verdict line to the finding" leaves the other
+findings unverdicted where "add a verdict line to every finding" does not.
+
+The Fix line states the scope, never the emphasis: `every`, `each`, `all N`, or the named set. It is
+not a finding on `opus` or `fable` assets, where the behaviour is not documented.
+
+#### Body rule 7 — emphasis inflation
+
+Count `CRITICAL`, `MUST`, `MANDATORY`, `BINDING`, `NEVER`, `ALWAYS` per asset:
+`grep -coE '\b(CRITICAL|MUST|MANDATORY|BINDING|NEVER|ALWAYS)\b' <asset>`.
+
+The finding is per-rule, not per-count: for each emphasised rule, name the failure class it targets
+against `agents/prompt-engineer.md § Form to failure`. Emphasis is earned by row 1 — knows the rule,
+skips it under pressure — and by nothing else. A rule with no recorded failure behind it is an
+inflation finding whose Fix line downgrades the framing to the plain imperative.
+
+Report the per-asset count alongside the findings, because the count is what makes the trend
+visible across a sweep; do not raise a finding on the count alone. **`--fix` must not touch this
+rule** — the same guard `## Constraints (DO NOT)` blocks carry, and for the same reason: a
+mechanical downgrade cannot tell an earned emphasis from an inflated one.
 
 ### Consistency Rules
 

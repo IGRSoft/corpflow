@@ -45,7 +45,7 @@ Canonical stage→basename map: `skills/worktask/references/handoff-protocol.md#
 | planning-N.md | PL | product-manager | standard |
 | architecture-N.md | AR | software-architector | standard |
 | coordination-N.md | TL | team-lead | standard |
-| development-N.md | DV | developer | all |
+| development-<N>[-<stream>].md | DV | developer | all |
 | developer-review-N.md | DR | technical-lead | all |
 | security-review-N.md | SR | security-reviewer | `--secure` |
 | testing-N.md | QA | qa-engineer | all |
@@ -60,9 +60,7 @@ Canonical stage→basename map: `skills/worktask/references/handoff-protocol.md#
 
 Standard = 9-stage `PL→AR→TL→DV→DR→QA→DC→FN→ST` (dynamic sizing may omit stages); `--secure` = 11-stage, adding SR and RE; emergency = `IR→DV→DR→QA→RE→FN`.
 
-#### Per-stream DV artifacts
-
-Under TL fan-out each DV sub-agent also writes **development-N-`<stream>`.md** (kebab slug assigned by `coordination-N.md § fan-out`); the DV entry agent merges them into the canonical `development-N.md`, which stays the DR/QA input.
+DV fans out as ledger tasks — one artifact per `DV<k>` row, `development-N-<stream>.md`: `skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`.
 
 #### Artifact content
 
@@ -74,7 +72,7 @@ Each artifact opens with a header (task id, date, author agent), then purpose, s
 
 - **Writer**: `product-manager` (PL) persists PNGs in-turn via `Bash(curl:*)` and writes `figma-registry.md` — `skills/worktask/references/pl0-procedure.md § Figma Design Capture`.
 - **Reader**: `qa-engineer` (QA) reads `figma-registry.md` and compares it against each persisted frame — `agents/qa-engineer.md § Design Comparison (Visual QA)`.
-- **Never write Figma assets to `.context/images/`** — that directory holds user-attached screenshots/diagrams and DV implementation screenshots (`screenshots.md` manifest).
+- **Never write Figma assets to `.context/images/`** — that directory holds user-attached screenshots/diagrams and DV implementation screenshots (per-task `screenshots-<TASK_ID>.md` manifests).
 
 #### Figma Filename Grammar
 

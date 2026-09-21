@@ -22,7 +22,8 @@ _ledger() {
 
 # --- corpflow_context_root ----------------------------------------------------
 
-@test "context_root: WORKSPACE_ROOT wins when it holds a .context" {
+@test "context_root: WORKSPACE_ROOT wins when it holds a ledger" {
+  _ledger
   run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
     --source "$LIB" corpflow_context_root
   assert_success
@@ -30,43 +31,106 @@ _ledger() {
 }
 
 @test "context_root: CLAUDE_PROJECT_DIR is used when WORKSPACE_ROOT is unset" {
+  _ledger
   run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$WD" \
     --source "$LIB" corpflow_context_root
   assert_success
   assert_output "$WD/.context"
 }
 
-@test "context_root: an env var pointing at a dir with no .context is skipped for git" {
-  # The worktree case: cwd is a linked checkout with no .context of its own, so
-  # resolution must fall through to the main checkout that owns it.
+@test "context_root: a declared dir with no .context and no git above it is unresolved, not invented" {
+  # No rank 3/4 hit (declared dir has no .context/), no rank 5/6 hit (no git repo
+  # above cwd at all): the ladder answers empty rather than inventing
+  # "$sub/.context" from a bare pwd/CLAUDE_PROJECT_DIR guess.
   local main sub
   main="$(mk_tmpworkdir)"
   mkdir -p "$main/.context"
   sub="$main/sub"
   mkdir -p "$sub"
   run_script_env --cwd "$sub" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$sub" \
+    --env "GIT_CEILING_DIRECTORIES=$sub" \
     --source "$LIB" corpflow_context_root
   assert_success
-  # No .context under $sub and no git repo above it, so it degrades to the
-  # declared dir rather than inventing one.
-  assert_output "$sub/.context"
+  assert_output ""
 }
 
-@test "context_root: git common dir recovers the linked-worktree case" {
-  local repo wt
+@test "context_root: rank 6 lends the main ledger to a linked worktree only when it owns that tree" {
+  local repo wt want
   repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
   mkdir -p "$repo/.context"
+  printf '{"tasks":{"DV0":{"status":"completed","metadata":{}}}}' > "$repo/.context/state.json"
+  wt="$repo/wt"
+  git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
+    || skip "git worktree unavailable"
+  # resolve-root.sh resolves through `cd && pwd -P`, so compare physical paths: on
+  # macOS $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
+  want="$(cd "$repo" && pwd -P)/.context"
+
+  # An unrelated worktree of the repo: the main checkout's ledger is not its ledger.
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
+
+  # The session is the main checkout itself (rank 4 answers it as given, so compare physically).
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$repo" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  [ "$(cd "$output" && pwd -P)" = "$want" ]
+
+  # The worktree is a registered stage worktree (logical path recorded, physical compared).
+  jq --arg w "$wt" '.tasks.DV0.metadata.workspace_path = $w' "$repo/.context/state.json" > "$repo/st.new"
+  mv "$repo/st.new" "$repo/.context/state.json"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$wt" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  [ "$output" = "$want" ]
+}
+
+@test "context_root: rank 6 (resolve-root.sh) with no .context at the resolved root is unresolved" {
+  # AD-6 rank 6 requires an existing ledger; a bare git root with no .context/
+  # must not be handed back as if it were one.
+  local repo wt
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
   wt="$repo/wt"
   git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
     || skip "git worktree unavailable"
   run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
     --source "$LIB" corpflow_context_root
   assert_success
-  # The git arm resolves through `cd && pwd`, so compare physical paths: on macOS
-  # $TMPDIR is itself a symlink and a literal comparison would fail on that alone.
+  assert_output ""
+}
+
+@test "workspace_root: rank 5 (toplevel/.context/state.json file) outranks rank 6" {
+  local repo
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  mkdir -p "$repo/.context"
+  printf '{}' > "$repo/.context/state.json"
+  run_script_env --cwd "$repo" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
   local want
-  want="$(cd "$repo" && pwd -P)/.context"
+  want="$(cd "$repo" && pwd -P)"
   [ "$output" = "$want" ]
+}
+
+@test "workspace_root: no declared root and no git repo above cwd is unresolved" {
+  local outside
+  outside="$(mk_tmpworkdir)"
+  run_script_env --cwd "$outside" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+  run_script_env --cwd "$outside" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_context_root
+  assert_success
+  assert_output ""
 }
 
 # --- corpflow_active_stage ----------------------------------------------------
@@ -222,44 +286,59 @@ _ledger() {
   assert_output --partial "source it, do not execute it directly"
 }
 
-# --- corpflow_workspace_root: the read/write tail split -----------------------
+# --- corpflow_workspace_root: every rank demands a ledger ---------------------
 
-@test "workspace_root: read and write agree while .context/ exists" {
-  local m
-  for m in read write; do
-    run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
-      --source "$LIB" corpflow_workspace_root "$m"
+@test "workspace_root: a declared root holding state.json resolves" {
+  _ledger
+  run_script_env --cwd "$WD" --env "WORKSPACE_ROOT=$WD" --env "CLAUDE_PROJECT_DIR=/nonexistent" \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output "$WD"
+}
+
+@test "workspace_root: ANTI-VACUITY — a bare .context folder resolves at no rank" {
+  # A folder alone is what a stray mkdir leaves behind; answering it kept hooks
+  # writing into checkouts nobody seeded. Declared ranks and the git ranks all miss.
+  local bare repo
+  bare="$(mk_tmpworkdir)"
+  mkdir -p "$bare/.context"
+  run_script_env --cwd "$bare" --env "WORKSPACE_ROOT=$bare" --env "CLAUDE_PROJECT_DIR=$bare" \
+    --env "GIT_CEILING_DIRECTORIES=$bare" --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  mkdir -p "$repo/.context"
+  run_script_env --cwd "$repo" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output ""
+}
+
+@test "workspace_root: no argument revives a write tail for an unseeded declared root" {
+  local bare elsewhere m
+  bare="$(mk_tmpworkdir)"
+  elsewhere="$(mk_tmpworkdir)"
+  for m in write read nonsense; do
+    run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
+      --env "GIT_CEILING_DIRECTORIES=$elsewhere" --source "$LIB" corpflow_workspace_root "$m"
     assert_success
-    assert_output "$WD"
+    assert_output ""
   done
 }
 
-@test "workspace_root: ANTI-VACUITY — the tails diverge when .context/ is absent" {
-  # This is the whole reason the flag exists. A WRITER must land its first write
-  # in the declared workspace; a READER must not, because a path with no .context/
-  # is indistinguishable from "no worktask running" — the gate's silent-pass case.
-  local bare elsewhere
-  bare="$(mk_tmpworkdir)"        # declared workspace, no .context/ yet
-  elsewhere="$(mk_tmpworkdir)"   # where the hook happens to be running
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root write
+@test "workspace_root: a linked worktree's own ledger wins over a main checkout without one" {
+  local repo wt
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  wt="$repo/wt"
+  git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q -b wt-branch "$wt" 2>/dev/null \
+    || skip "git worktree unavailable"
+  mkdir -p "$wt/.context"
+  printf '{}' > "$wt/.context/state.json"
+  run_script_env --cwd "$wt" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --source "$LIB" corpflow_workspace_root
   assert_success
-  assert_output "$bare"
-
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root read
-  assert_success
-  refute_output "$bare"
-}
-
-@test "workspace_root: an unknown mode reads, it does not write" {
-  local bare elsewhere
-  bare="$(mk_tmpworkdir)"
-  elsewhere="$(mk_tmpworkdir)"
-  run_script_env --cwd "$elsewhere" --env "WORKSPACE_ROOT=$bare" --unset CLAUDE_PROJECT_DIR \
-    --source "$LIB" corpflow_workspace_root nonsense
-  assert_success
-  refute_output "$bare"
+  [ "$output" = "$(cd "$wt" && pwd -P)" ]
 }
 
 # --- corpflow_switch_fields ---------------------------------------------------
@@ -347,30 +426,58 @@ _ledger() {
 
 _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
-@test "audit_row: the subject-bearing and subject-less shapes keep their key order" {
-  # Pinned with keys_unsorted: three byte-compatible shapes come out of one
-  # writer, and jq's default sort would silently renumber every existing row.
+@test "audit_row: key order is ts, actor, action, subject, result, task_id, metadata" {
+  # Pinned with keys_unsorted: jq's default sort would silently reorder every row.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
-    --result block --subject DV0 --meta '{"k":1}'
+    --result block --subject DV0 --task-id DV0 --meta '{"k":1}'
   assert_success
-  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,subject,result,metadata" ]
-
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:test-execution-gate --action test_execution_blocked \
-    --result ok --meta '{"k":2}'
-  assert_success
-  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,result,metadata" ]
+  [ "$(_row_of | jq -r 'keys_unsorted | join(",")')" = "ts,actor,action,subject,result,task_id,metadata" ]
 }
 
-@test "audit_row: an empty subject is ABSENT, never a blank key" {
-  # A contract, not an optimisation: it forecloses subject:\"\" ever meaning
-  # \"blank\" to a future consumer that meant \"absent\".
+@test "audit_row: a missing or empty subject or task_id writes nothing, once, survivably" {
+  local c want args
+  for c in "subject|--task-id DV0" "task_id|--subject DV0" "subject|--subject '' --task-id DV0" \
+    "task_id|--subject DV0 --task-id ''"; do
+    want="${c%%|*}"
+    args="${c#*|}"
+    rm -rf "$WD/.context/logs"
+    run bash -c "set -euo pipefail; . '$PLUGIN_ROOT/$LIB'
+      corpflow_hook_audit_row --ctx '$WD/.context' --actor hook:state-merge --action state_merge_noop \
+        --result skipped --meta '{}' $args 2> '$WD/err'
+      echo survived"
+    assert_success
+    assert_output survived
+    [ ! -f "$WD/.context/logs/audit.jsonl" ] || fail "a row was written for: $args"
+    [ "$(wc -l < "$WD/err" | tr -d ' ')" = "1" ] || fail "expected one stderr line for: $args"
+    grep -q "$want" "$WD/err" || fail "stderr does not name $want for: $args"
+  done
+}
+
+@test "audit_row: skipped is in the closed result set" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:model-switch-audit --action model_switched \
-    --result ok --subject "" --meta '{}'
+    --ctx "$WD/.context" --actor hook:state-merge --action state_merge_noop \
+    --result skipped --subject none --task-id none --meta '{}'
   assert_success
-  _row_of | jq -e 'has("subject") | not'
+  _row_of | jq -e '.result == "skipped" and .subject == "none" and .task_id == "none"'
+}
+
+@test "audit_task_id: the one in-progress key, else none, else unknown" {
+  rm -f "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output none
+  printf '%s' '{"tasks":{"PL0":{"status":"completed"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output none
+  printf '%s' '{"tasks":{"PL0":{"status":"completed"},"DV1":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output DV1
+  printf '%s' '{"tasks":{"DV0":{"status":"in_progress"},"DV1":{"status":"in_progress"}}}' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output unknown
+  printf 'NOT JSON' > "$WD/.context/state.json"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_audit_task_id "$WD/.context"
+  assert_output unknown
 }
 
 @test "audit_row: a transposed action/result drops the row instead of recording a lie" {
@@ -378,14 +485,14 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   # turn a transposition into a missing row, which is loud, not plausible.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action ok \
-    --result model_switch_blocked --meta '{}'
+    --result model_switch_blocked --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
 }
 
 @test "audit_row: a non-hook actor is refused" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor "attacker" --action x --result ok --meta '{}'
+    --ctx "$WD/.context" --actor "attacker" --action x --result ok --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -f "$WD/.context/logs/audit.jsonl" ]
 }
@@ -394,7 +501,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   # Losing metadata beats losing a result:"block" row.
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
     --ctx "$WD/.context" --actor hook:model-switch-gate --action model_switch_blocked \
-    --result block --meta 'not json' --subject DV0
+    --result block --meta 'not json' --subject DV0 --task-id DV0
   assert_success
   _row_of | jq -e '.result == "block" and .metadata._meta_invalid == true'
 }
@@ -412,7 +519,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   : > "$WD/elsewhere/target"
   ln -s "$WD/elsewhere/target" "$WD/.context/logs/audit.jsonl"
   run_script_env --cwd "$WD" --source "$LIB" corpflow_hook_audit_row \
-    --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok --meta '{}'
+    --ctx "$WD/.context" --actor hook:model-switch-gate --action a --result ok \
+    --subject DV0 --task-id DV0 --meta '{}'
   assert_success
   [ ! -s "$WD/elsewhere/target" ]
 }
@@ -426,7 +534,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   local opts fn
   local fns="corpflow_workspace_root corpflow_context_root corpflow_active_stage
     corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family
-    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_hook_audit_row"
+    corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_audit_task_id
+    corpflow_hook_audit_row"
   for opts in 'set -eu' 'set -u; set -f' 'set -euo pipefail'; do
     for fn in $fns; do
       run bash -c "cd '$WD'; $opts; . '$PLUGIN_ROOT/$LIB'; $fn" 
@@ -449,7 +558,8 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
 
 @test "authoring: the library survives its dependencies being hidden" {
   local fn
-  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_hook_audit_row; do
+  for fn in corpflow_active_stage corpflow_stage_and_pin corpflow_switch_fields corpflow_audit_task_id \
+    corpflow_hook_audit_row; do
     run_script_env --cwd "$WD" --hide jq --hide git --hide date \
       --source "$LIB" "$fn" "$WD/.context" ""
     assert_success

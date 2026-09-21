@@ -79,3 +79,14 @@ _run_audit() {
   assert_success
   [ "$(printf '%s\n' "$output" | grep -c '"model_switched"')" -eq 2 ]
 }
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" \
+    --stdin-string '{"session_id":"s1","agent_id":"agt_dv","from_model":"opus","to_model":"sonnet"}' \
+    "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$cwd/.context" ]
+}

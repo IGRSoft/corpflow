@@ -179,6 +179,13 @@ Optimise startup perf|perf
 Document the public API|docs
 Improve test coverage|test
 Bump the dependency|chore
+Build multiplatform leaderboard|feat
+build|feat
+Update build scripts|build
+Fix the build|bugfix
+Build the docs site|docs
+Build fix for the cache|bugfix
+Build-time cache warmup|build
 TABLE
     exit \$rc
   "
@@ -786,6 +793,33 @@ _mk_ranks_1_4_empty() {
   assert_output "[develop][workspace]"
 }
 
+@test "actor: audit_fn keeps project-manager on FN rows and takes the ladder otherwise" {
+  cd "$WD"
+  mkdir -p .context/logs
+  printf '{"worktask_id":"wt","run_index":0,"tasks":{}}' > .context/state.json
+  run env -u CORPFLOW_AUDIT_ACTOR -u AUDIT_ACTOR CLAUDE_TASK_METADATA_STAGE=DV \
+    bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'
+      audit_fn staging ok '{}'
+      AUDIT_STAGE=PL AUDIT_SUBJECT=PL0 audit_fn branch_renamed ok '{}'
+      CORPFLOW_AUDIT_ACTOR=orchestrator AUDIT_STAGE=PL audit_fn branch_renamed ok '{}'
+      CORPFLOW_AUDIT_ACTOR=not-a-stage-agent AUDIT_STAGE=PL audit_fn branch_renamed ok '{}'
+      CORPFLOW_AUDIT_ACTOR='developer technical-lead' AUDIT_STAGE=PL audit_fn branch_renamed ok '{}'
+      CORPFLOW_AUDIT_ACTOR=technical-lead AUDIT_STAGE=PL audit_fn branch_renamed ok '{}'"
+  assert_success
+  run jq -rs 'map(.actor) | join(",")' .context/logs/audit.jsonl
+  assert_output "project-manager,developer,orchestrator,developer,developer,developer"
+}
+
+@test "actor: with no stage running an exact in-set override is honoured, a multi-word one is not" {
+  cd "$WD"
+  run env -u CLAUDE_TASK_METADATA_STAGE bash -c ". '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh'
+    CORPFLOW_AUDIT_ACTOR=technical-lead branch_audit_actor; printf '|'
+    CORPFLOW_AUDIT_ACTOR='developer technical-lead' branch_audit_actor; printf '|'
+    CORPFLOW_AUDIT_ACTOR=' developer' branch_audit_actor"
+  assert_success
+  assert_output "technical-lead|orchestrator|orchestrator"
+}
+
 # Companion to the attach-visual-evidence and attachments-preseed arms of the same name:
 # audit_fn was the last worktask emitter with no symlink refusal.
 @test "SR: audit_fn refuses a symlinked audit.jsonl, never writes through" {
@@ -798,3 +832,18 @@ _mk_ranks_1_4_empty() {
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
+
+@test "resolve_git_ref lives in branch-lib.sh only, and prefers the remote-tracking ref" {
+  run bash -c "grep -l '^resolve_git_ref() {' '$PLUGIN_ROOT'/skills/worktask/scripts/*.sh"
+  assert_output "$PLUGIN_ROOT/$LIB"
+  cd "$WD"
+  git init -q -b develop .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m base
+  git update-ref refs/remotes/origin/develop HEAD
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; resolve_git_ref develop"
+  assert_success
+  assert_output "origin/develop"
+  run bash -c ". '$PLUGIN_ROOT/$LIB'; resolve_git_ref no-such-base"
+  assert_failure
+}
+

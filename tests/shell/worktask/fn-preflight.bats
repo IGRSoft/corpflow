@@ -1316,6 +1316,64 @@ seed_repo() {
   assert_output --partial "staged then modified again"
 }
 
+@test "staging: a staged control byte blocks, naming the file and offset" {
+  cd "$WD"
+  seed_repo
+  printf 'a\033b\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "control bytes in staged files"
+  assert_output --partial "c.txt:1:0x1B"
+}
+
+@test "staging: a clean staged file keeps the existing line" {
+  cd "$WD"
+  seed_repo
+  printf 'clean\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output "staging: no file is both staged and modified again"
+}
+
+@test "staging: an empty index reports no control-byte hit and writes no blocked row" {
+  cd "$WD"
+  seed_repo
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_success
+  assert_output "staging: no file is both staged and modified again"
+  refute_output --partial "control bytes"
+  [ ! -s .context/logs/audit.jsonl ] || ! grep -q '"action":"staging"' .context/logs/audit.jsonl
+}
+
+@test "staging: a control-byte check that cannot run blocks and writes an audit row" {
+  cd "$WD"
+  seed_repo
+  printf 'clean\n' > c.txt
+  git add c.txt
+  local sha
+  sha="$(git rev-parse :c.txt)"
+  rm -f ".git/objects/${sha:0:2}/${sha:2}"
+  run bash "$PLUGIN_ROOT/$SCRIPT" staging
+  assert_failure 1
+  assert_output --partial "staged control-byte check could not run"
+  run jq -r 'select(.action=="staging") | .result + " " + .metadata.reason' .context/logs/audit.jsonl
+  assert_output "blocked control_byte_check_failed"
+}
+
+@test "staging: the composite command fails on a staged NUL" {
+  cd "$WD"
+  seed_repo
+  mk_attachments
+  mk_body
+  printf 'x\000\n' > c.txt
+  git add c.txt
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body "$WD/body.md"
+  assert_failure
+  assert_output --partial "control bytes in staged files"
+}
+
 # ---------------------------------------------------------------------------
 # resolve_git_ref divergence (AC-4a). The resolver used to try the bare name
 # first, so a base branch name resolved to a STALE LOCAL branch whenever one
@@ -1348,7 +1406,7 @@ _rgr_diverged_repo() { # $1=remote-ahead $2=local-ahead
 # Sourcing the library directly: resolve_git_ref is a pure function of the cwd
 # repository, and every subcommand that reaches it needs a full FN fixture around it.
 _rgr() { # $1=repo $2=name
-  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/fn-preflight-cmds.sh' > '$1/rgr.sh'
+  bash -c "sed -n '/^resolve_git_ref() {/,/^}/p' '$PLUGIN_ROOT/skills/worktask/scripts/branch-lib.sh' > '$1/rgr.sh'
            cd '$1' && . ./rgr.sh && resolve_git_ref '$2'"
 }
 
@@ -1444,4 +1502,432 @@ _rgr_fork_repo() {
   assert_success
   [[ "$stderr" == *"cherry-pick"* ]]
   [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+# ---------- strict PR-body lint gate ----------
+# Under strict, the lint's verdict is the gate's verdict; with strict off the lint
+# stays advisory and every row matches the pre-strict gate.
+
+# A body complete in every structural rule whose only lint finding is P1: a checkout
+# outside the mount list survives every line rule and rebases to `.context/` in the
+# final scrub, which the lint then reads back.
+mk_p1_body() {
+  cat > "$WD/body.md" <<'EOF'
+## Motivation
+
+Why.
+
+## Changes
+
+- Scratch notes live at /nonexistent-cf/wt/.context/notes.txt now.
+
+## Test plan
+
+- bats tests/shell/worktask/fn-preflight.bats
+
+Closes #221
+EOF
+}
+
+# Copies the scripts tree so a test can remove or replace one sibling.
+mk_tree() {
+  mkdir -p "$WD/tree/skills/worktask"
+  cp -R "$PLUGIN_ROOT/skills/worktask/scripts" "$WD/tree/skills/worktask/scripts"
+  cp -R "$PLUGIN_ROOT/skills/shared" "$WD/tree/skills/shared"
+}
+
+gate_rows() {
+  jq -r 'select(.action | test("^pr_body")) | "\(.action):\(.result)"' .context/logs/audit.jsonl
+}
+
+@test "F-strict-1: CORPFLOW_PR_BODY_STRICT=1 blocks a P1 finding with a pr_body_lint_findings row" {
+  cd "$WD"
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt CORPFLOW_PR_BODY_STRICT=1 \
+    bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_failure 1
+  assert_output --partial "BLOCKED: pr-body-lint did not pass under --strict"
+  run grep -F '.context/notes.txt' body.md
+  assert_success
+  run jq -r 'select(.action=="pr_body_gate") | "\(.result):\(.metadata.reason)"' .context/logs/audit.jsonl
+  assert_output "blocked:pr_body_lint_findings"
+}
+
+@test "F-strict-1b: --strict is equivalent to the environment variable" {
+  cd "$WD"
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt bash "$PLUGIN_ROOT/$SCRIPT" --strict pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | "\(.result):\(.metadata.reason)"' .context/logs/audit.jsonl
+  assert_output "blocked:pr_body_lint_findings"
+}
+
+@test "F-strict-1c: --strict aborts all before validate-pr" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_p1_body
+  run env WORKSPACE_ROOT=/nonexistent-cf/wt bash "$PLUGIN_ROOT/$SCRIPT" --strict all --body body.md
+  assert_failure 1
+  refute_output --partial "closes #221"
+}
+
+@test "F-strict-2: strict off, a lint finding stays advisory and the rows are unchanged" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  run bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  assert_output --partial "composition gate passed"
+  run gate_rows
+  assert_output "$(printf 'pr_body_sanitised:unchanged\npr_body_lint:warned\npr_body_gate:ok')"
+}
+
+@test "F-strict-3: MILESTONE_MODE=1 with strict on never blocks" {
+  cd "$WD"
+  mk_p1_body
+  run env MILESTONE_MODE=1 WORKSPACE_ROOT=/nonexistent-cf/wt CORPFLOW_PR_BODY_STRICT=1 \
+    bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  run jq -r 'select(.action=="pr_body_gate") | .result' .context/logs/audit.jsonl
+  assert_output "skipped"
+}
+
+@test "F-strict-4: a punctuation-glued host path is scrubbed from the final body" {
+  cd "$WD"
+  no_screenshots
+  cat > body.md <<'EOF'
+Logs (/Users/korich/secret/run.log) kept.
+
+## Test plan
+
+- bats tests/shell/worktask/fn-preflight.bats
+
+Closes #221
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" pr-body --body body.md
+  assert_success
+  run cat body.md
+  assert_output --partial "Logs ([local-path]) kept."
+  refute_output --partial "/Users/"
+}
+
+@test "F-strict-5: strict blocks a lint that errors or cannot run" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  mk_tree
+  local lint="$WD/tree/skills/worktask/scripts/pr-body-lint.sh"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$lint"
+  chmod +x "$lint"
+  run env CORPFLOW_PR_BODY_STRICT=1 bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "pr_body_lint_error"
+
+  rm -f .context/logs/audit.jsonl
+  chmod -x "$lint"
+  run env CORPFLOW_PR_BODY_STRICT=1 bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "pr_body_lint_unavailable"
+}
+
+@test "F12b: a missing path-scrub.sh blocks the PR path as an unavailable sanitiser" {
+  cd "$WD"
+  no_screenshots
+  mk_body
+  mk_tree
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" pr-body --body body.md
+  assert_failure 1
+  assert_output --partial "sanitiser unavailable"
+  run jq -r 'select(.action=="pr_body_gate") | .metadata.reason' .context/logs/audit.jsonl
+  assert_output "sanitiser_unavailable"
+}
+
+# ---------- unresolved-decisions ----------
+# One escalate item shipped unprompted under a bypassed FN gate. The row is logged twice so
+# the dedupe is exercised, and the question names a host path so the scrub is.
+mk_ud_fixture() {
+  jq '.tasks.PL0 = {status:"completed", metadata:{fn_gate:"bypass"}}' "$WD/.context/state.json" > "$WD/s" \
+    && mv "$WD/s" "$WD/.context/state.json"
+  local i
+  for i in 1 2; do
+    ud_row sw-SR0-1 security-review-0.md#elicitation-sweep '{}'
+  done
+  cat > "$WD/.context/security-review-0.md" <<'EOF'
+# Security review
+
+## elicitation-sweep
+
+- id: sw-SR0-1
+  class: escalate
+  summary: "Ship with the debug token written to /Users/korich/secret/token.json?"
+EOF
+}
+
+ud_row() {  # <id> <ref> <extra-metadata-json>
+  jq -cn --arg id "$1" --arg ref "$2" --argjson x "$3" \
+    '{ts:"2026-01-01T00:00:00Z", actor:"orchestrator", action:"sweep_escalation_unprompted",
+      subject:"FN0", result:"recorded", metadata:({id:$id, stage:"SR", ref:$ref} + $x)}' \
+    >> "$WD/.context/logs/audit.jsonl"
+}
+
+ud_expected() {
+  printf '%s\n' '## Unresolved decisions' '' \
+    'These escalation-class questions shipped without a decision in an unattended run.' '' \
+    '- **sw-SR0-1** (SR0): Ship with the debug token written to [local-path]?'
+}
+
+ud_result() {
+  jq -r 'select(.action=="unresolved_decisions_emitted")
+         | "\(.result):\(if .result == "blocked" then .metadata.reason else .metadata.count end)"' \
+    .context/logs/audit.jsonl
+}
+
+@test "UD1: unresolved-decisions writes the scrubbed block at byte 0 and lists the item once" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  { ud_expected; printf '\n'; cat orig.md; } > want.md
+  cmp -s body.md want.md || fail "body differs from block + original:
+$(diff want.md body.md)"
+  run grep -c 'Users/' body.md
+  assert_output "0"
+  run ud_result
+  assert_output "ok:1"
+}
+
+@test "UD2: a second run over its own output is byte-identical" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  cp body.md once.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  cmp -s body.md once.md || fail "second run changed the body:
+$(diff once.md body.md)"
+}
+
+@test "UD3: --print emits the same scrubbed block and leaves the body alone" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md --print
+  assert_success
+  [ "$output" = "$(ud_expected)" ] || fail "print output: $output"
+  cmp -s body.md orig.md || fail "--print modified the body"
+  bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  [ "$(head -5 body.md)" = "$output" ] || fail "--print and --body rendered different blocks"
+}
+
+@test "UD4: rows marked for another run are not listed; unmarked rows are" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  ud_row sw-SR0-8 security-review-0.md#elicitation-sweep '{"run_index":1}'
+  ud_row sw-SR0-9 security-review-0.md#elicitation-sweep '{"dedupe_key":"wt-demo:1:sweep_escalation_unprompted"}'
+  ud_row sw-QA0-2 '#elicitation-sweep' '{"dedupe_key":"wt-demo:2:sweep_escalation_unprompted"}'
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --body body.md
+  assert_success
+  run cat body.md
+  refute_output --partial "sw-SR0-8"
+  refute_output --partial "sw-SR0-9"
+  # An anchor-only ref names no file to read, so the bullet falls back to the id alone.
+  assert_line "- **sw-QA0-2** (QA0)"
+  run ud_result
+  assert_output "ok:2"
+}
+
+@test "UD5: all runs unresolved-decisions before every other check" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  run jq -rs 'map(.action) | map(select(. == "unresolved_decisions_emitted" or . == "pr_body_sanitised")) | join(",")' \
+    .context/logs/audit.jsonl
+  assert_output "unresolved_decisions_emitted,pr_body_sanitised"
+}
+
+@test "UD6: an unreadable path-scrub.sh publishes nothing: exit 1, body byte-identical" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  mk_tree
+  cp body.md orig.md
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+  assert_failure 1
+  assert_output --partial "nothing published"
+  cmp -s body.md orig.md || fail "body changed on a blocked run"
+  run ud_result
+  assert_output "blocked:scrub_unavailable"
+}
+
+@test "UD7: a scrub missing its function or an ERE, or exiting non-zero, publishes nothing on either route" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  mk_tree
+  cp body.md orig.md
+  local lib="$WD/tree/skills/shared/scripts/path-scrub.sh" variant
+  for variant in \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=y' \
+    'CORPFLOW_HOST_PATH_ERE=; CORPFLOW_DRIVE_PATH_ERE=y; corpflow_path_scrub() { cat; }' \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=; corpflow_path_scrub() { cat; }' \
+    'CORPFLOW_HOST_PATH_ERE=x; CORPFLOW_DRIVE_PATH_ERE=y; corpflow_path_scrub() { cat > /dev/null; return 1; }'; do
+    printf '%s\n' "$variant" > "$lib"
+    run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+    [ "$status" -eq 1 ] || fail "--body exit $status for: $variant"
+    cmp -s body.md orig.md || fail "body changed for: $variant"
+    run --separate-stderr bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --print
+    [ "$status" -eq 1 ] || fail "--print exit $status for: $variant"
+    [ -z "$output" ] || fail "--print published for: $variant: $output"
+  done
+}
+
+@test "UD8: zero rows leave the body untouched, exit 0, and never source the scrub" {
+  cd "$WD"
+  mk_body
+  mk_tree
+  cp body.md orig.md
+  # A scrub that would fail if sourced: the zero-row path must not reach it.
+  rm -f "$WD/tree/skills/shared/scripts/path-scrub.sh"
+  run bash "$WD/tree/skills/worktask/scripts/fn-preflight.sh" unresolved-decisions --body body.md
+  assert_success
+  cmp -s body.md orig.md || fail "zero-row run changed the body"
+  run ud_result
+  assert_output "none:0"
+}
+
+@test "UD9: unresolved-decisions without --body or --print is a usage error" {
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions
+  assert_failure 2
+  assert_output --partial "requires --body"
+}
+
+@test "UD10: a question naming a context path or stage artifact survives pr-body as an id-only bullet" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  # pr-body's sanitiser drops whole lines naming `.context/` or `<stage>-N.md`.
+  cat > "$WD/.context/security-review-0.md" <<'EOF'
+# Security review
+
+## elicitation-sweep
+
+- id: sw-SR0-1
+  class: escalate
+  summary: "Ship with the token logged in .context/logs/x.json, per security-review-0.md?"
+EOF
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md
+  assert_success
+  run head -1 body.md
+  assert_output "## Unresolved decisions"
+  run grep -cFx -- '- **sw-SR0-1** (SR0)' body.md
+  assert_output "1"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --print
+  assert_success
+  [ "$output" = "$(head -5 body.md)" ] || fail "--print differs from the published block:
+$output
+---
+$(head -5 body.md)"
+}
+
+@test "UD11: --print with any other command is a usage error and runs nothing" {
+  cd "$WD"
+  mk_attachments
+  no_screenshots
+  mk_body
+  mk_ud_fixture
+  cp body.md orig.md
+  run bash "$PLUGIN_ROOT/$SCRIPT" all --body body.md --print
+  assert_failure 2
+  assert_output --partial "--print applies only to unresolved-decisions"
+  cmp -s body.md orig.md || fail "a rejected --print still changed the body"
+  run bash -c "grep -c unresolved_decisions_emitted .context/logs/audit.jsonl || true"
+  assert_output "0"
+}
+
+@test "UD12: the question cap counts characters, so a multibyte character is never split" {
+  cd "$WD"
+  mk_body
+  mk_ud_fixture
+  local head299
+  head299="$(printf 'a%.0s' $(seq 1 299))"
+  printf '# Security review\n\n## elicitation-sweep\n\n- id: sw-SR0-1\n  class: escalate\n  summary: "%s\xe2\x80\x94bbb?"\n' \
+    "$head299" > "$WD/.context/security-review-0.md"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" unresolved-decisions --print
+  assert_success
+  assert_line "- **sw-SR0-1** (SR0): ${head299}"$'\xe2\x80\x94'
+}
+
+# ---------------------------------------------------------------------------
+# continuity per-stream mode: entered only with >=2 facts.stream_branches keys.
+# Full merge fixtures live in fn-stream-merge.bats; these pin the mode switch.
+# ---------------------------------------------------------------------------
+
+@test "continuity: one stream_branches key keeps the legacy path and its diverged row" {
+  cd "$WD"
+  git init -q .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q integration
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "worktask work"
+  jq '.metadata.base_ref="integration" | .facts.stream_branches={"only":"integration"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "diverged_cherry_pick"
+}
+
+@test "continuity: two merged stream branches pass with stream_merged rows only" {
+  cd "$WD"
+  git init -q -b main .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git branch -q s-a
+  git branch -q s-b
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "combined work"
+  jq '.metadata.base_ref="main" | .facts.stream_branches={"a":"s-a","b":"s-b"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_success
+  assert_output --partial "every stream branch is merged into HEAD"
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "$(printf 'stream_merged\nstream_merged')"
+}
+
+@test "continuity: an unmerged or unknown stream branch blocks all, after checking every stream" {
+  cd "$WD"
+  git init -q -b main .
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "base"
+  git checkout -q -b s-a
+  git -c user.email=a@b.c -c user.name=t commit -q --allow-empty -m "stream a only"
+  git checkout -q main
+  jq '.metadata.base_ref="main" | .facts.stream_branches={"a":"s-a","b":"no-such-branch"}' \
+    .context/state.json > s && mv s .context/state.json
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" continuity
+  assert_failure 1
+  [[ "$stderr" == *"stream a branch s-a"* ]]
+  [[ "$stderr" == *"stream b branch no-such-branch"* ]]
+  run jq -r 'select(.action=="branch_continuity") | .result' .context/logs/audit.jsonl
+  assert_output "$(printf 'stream_unmerged\nstream_unmerged')"
 }

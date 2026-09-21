@@ -1,0 +1,7 @@
+{
+  "verdict": "pass",
+  "severity_counts": {"critical": 0, "high": 0, "medium": 0, "low": 1},
+  "findings": [
+    {"id": "F1", "severity": "low", "summary": "Temp file created without a cleanup trap"}
+  ]
+}

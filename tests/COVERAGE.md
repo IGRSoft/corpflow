@@ -152,6 +152,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` | — | — | — |
 | `hooks/megatask-monitor.sh` | `tests/shell/hooks/megatask-monitor.bats` | — | — | — |
 | `hooks/precompact-checkpoint.sh` | `tests/shell/hooks/precompact-checkpoint.bats` | — | — | — |
+| `hooks/session-end-finalize.sh` | `tests/shell/hooks/session-end-finalize.bats` | — | — | — |
 | `hooks/comment-standard-context.sh` | `tests/shell/hooks/comment-standard-context.bats` | — | — | — |
 | `hooks/dv-comment-density-gate.sh` | `tests/shell/hooks/comment-density-gate.bats` (aliased) | — | — | — |
 | `hooks/test-execution-gate.sh` | `tests/shell/hooks/test-execution-gate.bats` | — | — | — |
@@ -183,11 +184,15 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/cache-lint.sh` | `tests/shell/worktask/cache-lint.bats` | — | — | — |
 | `skills/worktask/scripts/desc-lint.sh` | `tests/shell/worktask/desc-lint.bats` | — | — | — |
 | `skills/worktask/scripts/section-lint.sh` | `tests/shell/worktask/section-lint.bats` | — | — | — |
+| `skills/worktask/scripts/snippet-shell-lint.sh` | `tests/shell/worktask/snippet-shell-lint.bats` | — | — | — |
+| `skills/worktask/scripts/snippet-shell-lint-selftest.sh` | `tests/shell/worktask/snippet-shell-lint.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/detect-ui-change.sh` | `tests/shell/worktask/detect-ui-change.bats` | — | — | — |
 | `skills/worktask/scripts/handoff-harness.sh` | `tests/shell/worktask/handoff-harness.bats` | — | — | — |
 | `skills/worktask/scripts/hook-install.sh` | `tests/shell/worktask/hook-install.bats` | — | — | — |
 | `skills/worktask/scripts/attachments-preseed.sh` | `tests/shell/worktask/attachments-preseed.bats` | — | — | — |
 | `skills/worktask/scripts/state-patch.sh` | `tests/shell/worktask/state-patch.bats` | — | — | — |
+| `skills/worktask/scripts/seed-state.sh` | `tests/shell/worktask/seed-state.bats` | — | — | — |
+| `skills/worktask/scripts/seed-state-selftest.sh` | `tests/shell/worktask/seed-state.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 | `skills/worktask/scripts/effort-ladder.sh` | `tests/shell/worktask/effort-ladder.bats` | — | — | — |
 | `skills/worktask/scripts/pr-body-lint.sh` | `tests/shell/worktask/pr-body-lint.bats` | — | — | — |
 | `skills/worktask/scripts/branch-name.sh` | `tests/shell/worktask/branch-name.sh.bats` | — | — | — |
@@ -197,6 +202,13 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/worktask/scripts/fn-preflight.sh` | `tests/shell/worktask/fn-preflight.bats` (incl. `branch-divergence`, `issue-close-required`, `base-sanity`) | — | — | — |
 | `skills/worktask/scripts/fn-preflight-cmds.sh` | `tests/shell/worktask/fn-preflight.bats` (alias; the CLI is a black box to its suite) | — | — | — |
 | `skills/worktask/scripts/dv-tree-preflight.sh` | `tests/shell/worktask/dv-tree-preflight.bats` | — | — | — |
+| `skills/worktask/scripts/workspace-root-banner.sh` | `tests/shell/worktask/workspace-root-banner.bats` | — | — | — |
+| `skills/worktask/scripts/brief-compose.sh` | `tests/shell/worktask/brief-compose.bats` | — | — | — |
+| `skills/worktask/scripts/brief-compose-selftest.sh` | `tests/shell/worktask/brief-compose.bats` (alias; the `--self-test` harness it drives) | — | — | — |
+| `skills/worktask/scripts/land-artifacts.sh` | `tests/shell/worktask/land-artifacts.bats` | — | — | — |
+| `skills/worktask/scripts/land-artifacts-selftest.sh` | `tests/shell/worktask/land-artifacts.bats` (alias; the `--self-test` harness it drives) | — | — | — |
+| `skills/worktask/scripts/doc-option-check.sh` | `tests/shell/worktask/doc-option-check.bats` (also `dc-secure-model.bats` for the secure-tier grant/prose parity) | — | — | — |
+| `skills/worktask/scripts/doc-option-check-selftest.sh` | `tests/shell/worktask/doc-option-check.bats` (alias; the `--self-test` harness it drives) | — | — | — |
 
 ### Shell scripts — other-skill (DV0b, kcov)
 

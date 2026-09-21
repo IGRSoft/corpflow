@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # @description branch-lib.sh — sourceable library shared by branch-name.sh (PL-stage
-#   rename entry point) and fn-preflight.sh (surviving FN validator commands).
+#   rename entry point), fn-preflight.sh (surviving FN validator commands),
+#   stream-diff.sh and fn-stream-merge.sh.
 #
 #   Dependency-free by construction: sources nothing, sets no shell options, does no
 #   jq/git probing at load time, and has no side effects at load beyond idempotent
@@ -10,7 +11,8 @@
 #   Symbols: BRANCH_TYPES, branch_type_regex, branch_is_conventional, resolve_goal,
 #   derive_type, derive_ticket, slug_body, slug_budget, slug_is_truncated, derive_slug,
 #   target_branch_name, meta_json, audit_fn, fn_batch_scope, fork_base, _fork_base_uncached,
-#   _base_ref_ranked, resolve_base_ref, base_ref_source.
+#   _base_ref_ranked, resolve_base_ref, base_ref_source, resolve_git_ref, BRANCH_AUDIT_ACTORS,
+#   branch_audit_actor.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -29,9 +31,10 @@ fi
 # Newline-delimited, NOT an array and NOT `readonly`: a second `readonly` assignment
 # is rc 1 and kills a `set -e` caller (this file's own bats source it twice), and a
 # space-delimited list yields one token under a caller's `IFS=$'\n\t'`. Accept list
-# (13) is deliberately wider than what derive_type ever emits (11): `feat` and `style`
-# are accepted so an existing short-form/style branch is never churned, but neither is
-# ever generated. `fix` is intentionally absent — removed cleanly, not kept as a
+# (13) is deliberately wider than what derive_type ever emits (12): `style` is
+# accepted but never generated; `feat` is emitted only for a leading "build" verb
+# and otherwise accepted so an existing short-form branch is never churned.
+# `fix` is intentionally absent — removed cleanly, not kept as a
 # compatibility token — so a pre-existing `fix/<slug>` branch reads as non-conventional
 # and gets renamed onto the derived `bugfix/`/`hotfix/` target. Canonical prose:
 # skills/shared/git-conventions.md § Branch Naming.
@@ -109,8 +112,8 @@ resolve_goal() {
 
 # ---------- Pure derivation (no state, no git) ----------
 # Conventional-commit type from a free-text goal. Unmatched goals fall back to
-# `feature` — the long form is now the canonical generated default (Q3); `feat` is
-# never emitted, only accepted for pre-existing short-form branches.
+# `feature` — the long form is the canonical generated default. A title whose
+# first word is "build" emits the short form `feat` instead.
 derive_type() {
   local g t="feature"
   g=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
@@ -132,6 +135,9 @@ derive_type() {
     *docs* | *document*) t="docs" ;;
     *test* | *coverage*) t="test" ;;
     *ci\ * | *pipeline*) t="ci" ;;
+    # Leading verb "build" names new work; "build" anywhere else (build-time,
+    # build:, builds, rebuild) still names the build system, below.
+    build | build[[:space:]]*) t="feat" ;;
     *build* | *packaging*) t="build" ;;
     *chore* | *bump* | *dependency*) t="chore" ;;
     *) t="feature" ;;
@@ -265,6 +271,48 @@ meta_json() {
   jq -cn "${args[@]}" "$prog"
 }
 
+# branch_audit_actor -> the actor a branch audit row names: CORPFLOW_AUDIT_ACTOR when it is
+# exactly one name from BRANCH_AUDIT_ACTORS and, while a stage runs, that stage's own agent or
+# orchestrator; else the agent owning CLAUDE_TASK_METADATA_STAGE (stage-codes.md § Primary
+# Stages); else orchestrator, which runs the rename when no stage does. branch-name.sh keeps a
+# copy for the one path that cannot source this file.
+BRANCH_AUDIT_ACTORS="orchestrator product-manager software-architector team-lead developer
+technical-lead security-reviewer qa-engineer technical-writer release-engineer project-manager
+stakeholder incident-responder"
+
+branch_audit_actor() {
+  local o="${CORPFLOW_AUDIT_ACTOR:-}" owner=""
+  case "${CLAUDE_TASK_METADATA_STAGE:-}" in
+    PL) owner=product-manager ;;
+    AR) owner=software-architector ;;
+    TL) owner=team-lead ;;
+    DV) owner=developer ;;
+    DR) owner=technical-lead ;;
+    SR) owner=security-reviewer ;;
+    QA) owner=qa-engineer ;;
+    DC) owner=technical-writer ;;
+    RE) owner=release-engineer ;;
+    FN) owner=project-manager ;;
+    ST) owner=stakeholder ;;
+    IR) owner=incident-responder ;;
+  esac
+  # One exact word from a closed set: the row is the committed record of who acted. While a
+  # stage runs, an override may name only that stage's own agent or the orchestrator, so a
+  # stage cannot attribute its rename to an agent that did not act.
+  case "$o" in '' | *[[:space:]]*) o="" ;; esac
+  if [ -n "$o" ]; then
+    case " ${BRANCH_AUDIT_ACTORS//$'\n'/ } " in
+      *" $o "*)
+        if [ -z "$owner" ] || [ "$o" = "$owner" ] || [ "$o" = "orchestrator" ]; then
+          printf '%s' "$o"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+  printf '%s' "${owner:-orchestrator}"
+}
+
 # One audit row per outcome. Identity is read from the environment AT CALL TIME
 # rather than set through a setter: an order-dependent global would silently write
 # the wrong actor on a missed call, and a jq path built from a variable is dynamic
@@ -280,13 +328,16 @@ meta_json() {
 audit_fn() {
   local action="$1" result="$2" meta="${3:-}"
   [ "${AUDIT_DRY_RUN:-0}" = "1" ] && return 0
-  local actor="${AUDIT_ACTOR:-project-manager}"
   local subj="${AUDIT_SUBJECT:-FN0}"
   local stage="${AUDIT_STAGE:-FN}"
   case "$stage" in
     [A-Z][A-Z]) ;;
     *) stage="FN" ;;
   esac
+  local actor="${AUDIT_ACTOR:-}"
+  if [ -z "$actor" ]; then
+    if [ "$stage" = "FN" ]; then actor="project-manager"; else actor=$(branch_audit_actor); fi
+  fi
   [ -n "$meta" ] || meta='{}'
   local ts wid ri tid dk
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -554,4 +605,61 @@ base_ref_source() {
   local r
   r=$(_base_ref_ranked "${1:-}")
   printf '%s' "${r%% *}"
+}
+
+# A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
+# — the form workspace-modes.md documents). Map either onto something git resolves,
+# which is what lets both stored shapes work without normalising the stored value.
+#
+# The REMOTE-TRACKING ref is preferred over a same-named local branch. Trying the bare
+# name first resolved a stale local copy whenever one existed, and a stale base makes
+# the diff measured against it wrong in the blocking direction: base-sanity reported a
+# 70-file diff against a ledger claiming 18 and refused a finalization that was in fact
+# correct, while the only escape it signposts is the override that would also mask a
+# REAL wrong-base finding. Third patch to this resolution logic, so reordering alone
+# was rejected: it trades one silent wrong answer for another. Divergence is announced
+# on stderr with both names and both ahead-counts, and callers must not swallow it.
+resolve_git_ref() {
+  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead upstream
+
+  # The branch's own configured upstream is tried first, because `origin` is not always the
+  # canonical remote. In a fork workflow — origin = fork, upstream = canonical — hardcoding
+  # origin/ picks the stale fork ref, and base-sanity then measures the diff against it and
+  # blocks a correctly-based PR. Falls through to origin/ when no upstream is set, so the
+  # single-remote case resolves exactly as before.
+  # Short branch name, not refs/heads/: `@{upstream}` rejects a full refname outright
+  # ("fatal: no such branch"), which silently yielded no upstream and fell through to origin/.
+  upstream=$(git rev-parse --verify --quiet --abbrev-ref "${bare}@{upstream}" 2> /dev/null || printf '')
+  for c in ${upstream:+"$upstream"} "origin/$bare" "refs/remotes/origin/$bare"; do
+    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
+  done
+  git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"
+
+  if [[ -n "$remote" ]]; then
+    if [[ -n "$local_ref" ]] &&
+       [[ "$(git rev-parse "$remote" 2> /dev/null)" != "$(git rev-parse "$local_ref" 2> /dev/null)" ]]; then
+      # --left-right --count on a symmetric range: left = remote-only, right = local-only.
+      counts=$(git rev-list --left-right --count "${remote}...${local_ref}" 2> /dev/null || printf '')
+      behind=${counts%%[!0-9]*}; ahead=${counts##*[!0-9-]}
+      printf >&2 'WARNING: base ref %s is ambiguous — %s and %s have diverged.\n' \
+        "$name" "$remote" "$local_ref"
+      printf >&2 '  %s is ahead by %s commit(s); %s is ahead by %s commit(s).\n' \
+        "$remote" "${behind:-?}" "$local_ref" "${ahead:-?}"
+      printf >&2 '  Resolving to %s. Pass FN_BASE_REF=%s to force the local branch.\n' \
+        "$remote" "$local_ref"
+    fi
+    printf '%s' "$remote"
+    return 0
+  fi
+
+  # No remote-tracking ref: fall back exactly as before, so a purely local base,
+  # a tag or a raw revision still resolves.
+  for c in "$name" "$local_ref"; do
+    [[ -n "$c" ]] || continue
+    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  return 1
 }

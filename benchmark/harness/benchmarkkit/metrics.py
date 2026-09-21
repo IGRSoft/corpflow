@@ -401,7 +401,7 @@ def skip_placeholder_without() -> PathMetrics:
     """
     return PathMetrics(
         tokens=Tokens(input=None, output=None, total=None),
-        cost_usd=None, wall_clock_s=0.0, loc_produced=0, test_count=0, coverage_pct=0.0,
+        cost_usd=None, wall_clock_s=0.0, loc_produced=0, test_count=0, coverage_pct=None,
         estimate_complexity_score=0, stage_count=1, pass_fail="pass", app_path=None)
 
 

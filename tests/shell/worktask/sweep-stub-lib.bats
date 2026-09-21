@@ -20,7 +20,9 @@ setup() {
     > "$WD/state.json"
   # The ref-anchor check resolves a stub's ref beside the artifact, so a passing row needs
   # its target to exist; a failing row never reaches that check.
-  printf '# Planning\n\n## elicitation-sweep\n\nbody\n' > "$WD/planning-0.md"
+  # The item under it carries two options, so the harness's item-body check never decides a row.
+  printf '# Planning\n\n## elicitation-sweep\n\n- id: sw-PL0-1\n  summary: "Which way?"\n  options:\n    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n' \
+    > "$WD/planning-0.md"
 }
 
 # --- library authoring rules -------------------------------------------------
@@ -66,7 +68,7 @@ handoff:
   stage: DV
   verdict: ok
   summary: "parity fixture"
-  tests_executed: 12
+  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]
   files_touched: 1
   next_stage_focus: "review"
   open_questions:
@@ -82,7 +84,7 @@ x
 
 ## tests-added
 
-x
+12 tests, 0 failures
 
 ## deviations
 
@@ -94,7 +96,11 @@ none
 
 ## elicitation-sweep
 
-body
+- id: sw-PL0-1
+  summary: "Which way?"
+  options:
+    - { label: "A", detail: "first" }
+    - { label: "B", detail: "second" }
 EOF
   if bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$art" > /dev/null 2>&1; then
     printf 'pass'
@@ -142,8 +148,9 @@ ROWS
   local re n
   re="$(sed -n "s/^SWEEP_ID_RE='\(.*\)'$/\1/p" "$PLUGIN_ROOT/$LIB")"
   [ -n "$re" ] || fail "non-vacuity: no id pattern extracted from the library"
+  # Three SweepStub id: definitions plus the settles-item reference that must accept them.
   n="$(grep -cF "pattern: '$re'" "$PLUGIN_ROOT/$PROTOCOL")"
-  [ "$n" -eq 3 ] || fail "id pattern documented at $n schema sites, expected 3"
+  [ "$n" -eq 4 ] || fail "id pattern documented at $n schema sites, expected 4"
 }
 
 @test "the class enum matches the documented SweepStub enum" {

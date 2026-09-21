@@ -199,7 +199,7 @@ agent_frontmatter() { # <agent> <key>
 }
 
 @test "the non-opus ceiling is the tier model-selection.md says Sonnet downgrades from" {
-  run grep -q 'xhigh` requires \*\*Opus 5 or Fable 5\*\*' "$PLUGIN_ROOT/$MODEL_SELECTION"
+  run grep -qE 'xhigh` requires \*\*Opus 5 or Fable 5(\.x)?\*\*' "$PLUGIN_ROOT/$MODEL_SELECTION"
   assert_success
 }
 

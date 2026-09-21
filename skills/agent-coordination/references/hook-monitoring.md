@@ -8,7 +8,7 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 |------------|------------|---------|----------------|
 | `SubagentStart` | Stage agent spawned | Agent type name (e.g., `corpflow:developer`) | `agent_id`, `agent_type` |
 | `SubagentStop` | Stage agent completes | Agent type name | `agent_id`, `agent_type` |
-| `PermissionDenied` | Auto-mode classifier denies a tool call | — | Tool name, denial reason |
+| `PermissionDenied` | Auto-mode classifier denies a tool call | — | `tool_name`, `tool_input`, `tool_use_id`, `reason` |
 | `StopFailure` | API error causes turn end | — | Error details |
 | `CwdChanged` | Working directory changes | — | New cwd path |
 | `FileChanged` | Monitored file modified | — | File path |
@@ -41,7 +41,11 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 - `reloadSkills: true` reloads plugin skills mid-session (e.g. after `/reload-skills`), re-announcing **only changed skills** — listeners must re-apply skill-specific initialization idempotently, never assuming every skill re-announces. `sessionTitle` (UI session title) rides alongside it.
 - Events stream in headless sessions, so a headless run cannot idle-reap remote workers mid-hook before the handler finishes.
-- Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch has a price`.
+
+#### SessionStart — resume hooks and rendering
+
+- Resume hooks additionally receive the session's **staleness and an estimated re-cache cost** (field names unconfirmed), which is what lets the resume loop weigh reattach against re-dispatch instead of assuming reattach is cheaper — policy: `skills/worktask/references/resume.md § Step 0 notes — reattach vs re-dispatch — cost estimation`.
+- `--continue`/`--resume` render the conversation without waiting for `SessionStart` hooks, so resume context a hook injects can arrive after the conversation is already on screen. Never assume a SessionStart hook has finished before a resumed session is shown.
 
 #### SessionStart — form & grant floor
 
@@ -50,8 +54,15 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 ### Compaction recovery & hook-output guards
 
-- `PreCompact` fires **before** automatic compaction and blocks it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization (`context-compression` skill has the paired `PostCompact` recovery pattern). The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and **never blocks** (exit 0 always).
-- Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state.
+- `PreCompact` fires **before** automatic compaction and blocks it by returning exit code 2 — useful for guarding critical stage handoffs from premature summarization. The managed hook `hooks/precompact-checkpoint.sh` (registered in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and **never blocks** (exit 0 always).
+- Parent agents reliably recover subagent results after compaction; background agents that are killed or interrupted preserve partial results in context. `PostCompact` can re-inject critical state; the managed handler `skills/context-compression/scripts/post-compact-recovery.sh` is registered in `plugin.json` and writes `.context/logs/post-compact-<ts>.json`. **Status: registered and recurrence-guarded** (`manifest-parity.bats` inverse assertion), but never observed firing — a real compaction cannot be simulated in CI. Registered-not-verified, not confirmed-working.
+
+#### SessionEnd finalization
+
+`SessionEnd` fires on session teardown. The managed handler `hooks/session-end-finalize.sh` (registered in `plugin.json`) appends one `session_end_finalize` row to `.context/logs/audit.jsonl` naming any tasks still `in_progress` at teardown — a resume can then tell "still running" apart from "died with the session". It only reports: it never mutates task status, because a teardown hook races the very writer it would need the ledger lock from, and a wrong terminal status is worse than an honest unsettled one. Exit is always `0` so a lost row never delays teardown.
+
+Its `plugin.json` entry carries `"timeout": 5`, and that is what bounds the run. A SessionEnd hook without a per-hook `timeout` gets a 1.5 s budget unless the operator exports `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`; the row is the resume loop's only "died with the session" signal, so its budget must not hang on operator env.
+
 #### Payload, monitor & stall notes
 
 - Hook output over 50K characters is saved to disk with a file path + preview injected instead of the full output, protecting the context budget. A hook or background agent emitting **megabytes** of error output can no longer overflow the conversation and wedge the session on "Prompt is too long".
@@ -67,13 +78,15 @@ Claude Code hook events enable automated monitoring of agent lifecycle within wo
 
 Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to feed remediation text back to the model **without** being labeled an error. Unlike a bare `{"decision":"block"}`, the `additionalContext` rides into the re-run's context as actionable guidance, turning a dead-end block into a fix instruction.
 
+`dv-screenshot-gate.sh` reads the stopping task's `screenshots-<TASK_ID>.md` and blocks missing or invalid evidence; no captures passes only on `backend`/`systems` or `requires_screenshots=false`:
+
 ```json
 {
   "decision": "block",
-  "reason": "missing screenshots.md …",
+  "reason": "no_captures — task <TASK_ID> on platform web has no capture rows",
   "hookSpecificOutput": {
     "hookEventName": "SubagentStop",
-    "additionalContext": "run dv-screenshot-capture (apple-canvas/cli-fallback); headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots.md"
+    "additionalContext": "run the dv-screenshot-capture skill with this task_id; … headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots-<TASK_ID>.md"
   }
 }
 ```
@@ -119,6 +132,7 @@ Dedupe unchanged: these are metadata-only, `dedupe_key` shape preserved. With ne
 - `tool_decision` events carry `tool_parameters` — the decision span records *which* tool args were classified, so dashboards can tell a `Bash git push` decision from a `Bash ls`.
 - `OTEL_RESOURCE_ATTRIBUTES` values surface as **metric-datapoint labels**, not only span attributes: tag `worktask_id` / `stage` there to slice collector dashboards per-stage without parsing spans.
 - `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution pairs with the tier split in `skills/shared/stage-codes.md`.
+- `OTEL_METRICS_INCLUDE_REPOSITORY` tags metrics and events with `vcs.*` repository attributes, so a collector shared across repositories slices per repo without a hand-set resource attribute.
 #### Log correlation, limits & trace nesting
 
 - Log events carry `message.uuid`, `client_request_id`, and `tool_source` for message-level correlation and tool provenance across spans and audit rows.
@@ -129,6 +143,8 @@ Dedupe unchanged: these are metadata-only, `dedupe_key` shape preserved. With ne
 #### BG-Task ID Schema Watch
 
 The ID extraction uses a defensive coalesce `(.id // .task_id // "unknown")` / `(.id // .cron_id // "unknown")` because the canonical key name is not yet confirmed in CC docs. Any `"unknown"` value appearing in `background_task_ids` or `session_cron_ids` is a signal that CC has begun populating the arrays with payloads whose ID field name is neither `id` nor `task_id`/`cron_id`. When that happens, the next `/cc-update` should pin the canonical key (remove the coalesce) and update both hook scripts. Until then the coalesce keeps the capture working across whichever name CC chooses.
+
+Evidence so far: six `subagent_stopped` audit rows (2026-09-07) resolved real ids and none read `"unknown"`. The coalesce masks which spelling matched, so the canonical key is still **unconfirmed**.
 
 ### Managed (plugin) vs ad-hoc (user) hooks
 
@@ -186,7 +202,10 @@ Hyphenated matchers **exact-match** rather than substring-match, so the Stop mat
 - Returning `"defer"` pauses a headless (`-p`) session at the tool call for later `-p --resume` re-evaluation — the CI/CD approval-gate mechanism.
 - JSON on stdout with exit code 2 blocks the call, and the block holds even when that JSON fails schema validation: a malformed payload cannot silently downgrade an intended block to a pass.
 - `permissions.deny` rules override a hook's `permissionDecision: "ask"`; in the other direction auto mode cannot override an `ask` — a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
-- The `PermissionDenied` hook fires after auto-mode classifier denials; return `{retry: true}` to tell the model it may retry the call.
+### PermissionDenied decision
+
+- The `PermissionDenied` hook fires after an auto-mode classifier denial. Its one decision output is `hookSpecificOutput.retry`, and corpflow never returns `retry: true`: `hooks/permission-denied.sh` leaves the denial standing, appends one redacted `permission_denied` audit row (`tool`, `dedupe_key` and a masked, path-scrubbed `command_head`; never the command, reason or allow rule) and prints nothing.
+- The stage returns `verdict: blocked` with a permission `blocked_on`, which holds the full detail; the orchestrator parks the task, asks the user, and resumes only the denied step (`skills/worktask/SKILL.md § Step 6.5a4`). The user grants in Claude Code's own permission UI or runs `! <command>` from the `cwd:` directory the question shows; corpflow writes no allow rule.
 
 ### PostToolUse behaviors
 
@@ -236,6 +255,8 @@ The payload shape is **unconfirmed**: these events postdate every doc in this re
 #### Why this gate fails open
 
 The gate's pin is **not** guessed: it reads `.facts.dispatched_agents[].model_requested` (`skills/worktask/references/handoff-protocol.md § facts — dispatched_agents`). That asymmetry is what makes it fail open — a block is reachable only once the destination coalesce matches a real field, so a wholly wrong guess degrades to annotate-or-silent rather than to a spurious block. A model-switch gate that failed closed on a malformed payload would wedge every session that switches models, which is why it does not follow the fail-closed posture used for the completion sweeps.
+
+One closed path sits outside the gate: a plugin hook that fails to load refuses the model switch with the cause named, and each later switch re-checks. A broken `model-switch-gate.sh` load therefore refuses switches until the fault is fixed, and the next switch after the fix goes through — the refusal never outlives the fault.
 
 ## Agent Teams Lifecycle Hooks
 

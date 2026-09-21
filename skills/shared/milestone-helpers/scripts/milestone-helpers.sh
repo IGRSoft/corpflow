@@ -526,6 +526,10 @@ cmd_self_test() {
     "refactor/44-refactor-the-reconnect-backoff" \
     "$(cmd_branch_name 44 "Refactor the reconnect backoff")"
 
+  _st_check "branch derived type: leading build verb -> feat" \
+    "feat/7-build-multiplatform-leaderboard" \
+    "$(cmd_branch_name 7 "Build multiplatform leaderboard")"
+
   _st_check "branch leading hyphen stripped" \
     "feature/5-hello-world" \
     "$(cmd_branch_name 5 "---hello world---")"

@@ -17,17 +17,21 @@
 #
 # @arg --worktask-id=<id>  Worktask identifier the labels belong to (required)
 # @arg --changes=<file>    Input TSV (default: stdin)
-# @arg --dataset=<file>    Output JSONL (default: evals/failure-labels.jsonl)
+# @arg --dataset=<file>    Output JSONL — see plugin-data-lib.sh (default: resolved)
+# @arg --plugin-data=<dir> Plugin data root — see plugin-data-lib.sh
+# @arg --count-out=<file>  Appended row count, written on every exit (EXIT trap)
 # @arg --run-index=<n>     Worktask run index (default: 0)
 # @arg --stage=<code>      Stage that produced the edited artifact (default: ST)
 # @arg --self-test         Run internal test suite; exit 0/non-zero
 #
 # @env SELF_IMPROVE_LABELS  Set to 0 to opt out — the step becomes a no-op.
-# @env CLAUDE_PROJECT_DIR   Repo root used to resolve the default dataset path.
+# @env CLAUDE_PROJECT_DIR   Passed through to plugin-data-lib.sh's fallback rung.
+# @env CLAUDE_PLUGIN_DATA   Passed through to plugin-data-lib.sh's env rung.
 #
 # @exitcode 0  success (including opt-out and zero-row input)
 # @exitcode 1  usage/environment error
 # @exitcode 2  self-test failure
+# @exitcode 3  plugin-data-lib.sh unreachable — plugin install broken
 #
 # @requires    bash >=3.2, jq, shasum or sha256sum
 # @min_shell   bash 3.2 (macOS system bash compatible)
@@ -39,8 +43,20 @@ IFS=$'\n\t'
 
 trap 'printf >&2 "error: %s:%d: exit %d\n" "${BASH_SOURCE[0]}" "$LINENO" "$?"' ERR
 
+# `[ -r ]` first: `.` on a missing file exits a `set -e` shell before any guard runs.
+LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/plugin-data-lib.sh"
+if [ -r "$LIB_PATH" ]; then
+  # shellcheck source=skills/self-improvement/scripts/plugin-data-lib.sh
+  # shellcheck disable=SC1090
+  . "$LIB_PATH"
+else
+  printf >&2 'append-labels: plugin-data-lib.sh unreachable at %s — plugin install broken\n' \
+    "$LIB_PATH"
+  exit 3
+fi
+
 usage() {
-  printf >&2 'usage: %s --worktask-id=<id> [--changes=<file>] [--dataset=<file>] [--run-index=<n>] [--stage=<code>] [--self-test]\n' \
+  printf >&2 'usage: %s --worktask-id=<id> [--changes=<file>] [--dataset=<file>] [--plugin-data=<dir>] [--count-out=<file>] [--run-index=<n>] [--stage=<code>] [--self-test]\n' \
     "${0##*/}"
   exit 1
 }
@@ -48,6 +64,8 @@ usage() {
 WORKTASK_ID=""
 CHANGES=""
 DATASET=""
+PLUGIN_DATA=""
+COUNT_OUT=""
 RUN_INDEX="0"
 STAGE="ST"
 SELF_TEST=0
@@ -57,12 +75,26 @@ for arg in "$@"; do
     --worktask-id=*) WORKTASK_ID="${arg#*=}" ;;
     --changes=*)     CHANGES="${arg#*=}" ;;
     --dataset=*)     DATASET="${arg#*=}" ;;
+    --plugin-data=*) PLUGIN_DATA="${arg#*=}" ;;
+    --count-out=*)   COUNT_OUT="${arg#*=}" ;;
     --run-index=*)   RUN_INDEX="${arg#*=}" ;;
     --stage=*)       STAGE="${arg#*=}" ;;
     --self-test)     SELF_TEST=1 ;;
     *)               usage ;;
   esac
 done
+
+# Installed before the early exits so opt-out and missing-jq runs still write 0.
+APPENDED=0
+_write_count_out() {
+  local rc=$?
+  if [ -n "$COUNT_OUT" ]; then
+    mkdir -p -- "$(dirname "$COUNT_OUT")" 2>/dev/null || true
+    printf '%s\n' "$APPENDED" >"$COUNT_OUT" 2>/dev/null || true
+  fi
+  return "$rc"
+}
+trap _write_count_out EXIT
 
 if [ "${SELF_IMPROVE_LABELS:-1}" = "0" ]; then
   printf >&2 'append-labels: SELF_IMPROVE_LABELS=0, skipping label capture\n'
@@ -94,9 +126,17 @@ label_id() {
 append_rows() {
   local dataset="$1" worktask_id="$2" run_index="$3" stage="$4"
   local ts path target category confidence added removed summary lid written=0
+  local old_umask
 
   mkdir -p "$(dirname "$dataset")"
-  [ -f "$dataset" ] || : > "$dataset"
+  # `: >>`, not `[ -f ] || : >`: append-mode touch creates a missing file without
+  # ever truncating one that a concurrent megatask worktree is also appending to.
+  # umask 077 around the touch only: a newly created dataset must be 0600
+  # regardless of the parent dir's own umask/ACL; an existing file is untouched.
+  old_umask=$(umask)
+  umask 077
+  : >> "$dataset"
+  umask "$old_umask"
   ts=$(date -u +%FT%TZ)
 
   while IFS=$'\t' read -r path target category confidence added removed summary; do
@@ -119,6 +159,8 @@ append_rows() {
     written=$((written + 1))
   done
 
+  # Global: the EXIT trap reads it.
+  APPENDED=$((APPENDED + written))
   printf >&2 'append-labels: %d new label(s) -> %s\n' "$written" "$dataset"
 }
 
@@ -129,7 +171,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   # bypassing an `if ! . …` guard entirely.
   SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/append-labels-selftest.sh"
   if [ -r "$SELFTEST_LIB_PATH" ]; then
-    # shellcheck source=append-labels-selftest.sh
+    # shellcheck source=skills/self-improvement/scripts/append-labels-selftest.sh
     # shellcheck disable=SC1090
     . "$SELFTEST_LIB_PATH"
   else
@@ -143,9 +185,8 @@ fi
 
 [ -n "$WORKTASK_ID" ] || usage
 
-if [ -z "$DATASET" ]; then
-  DATASET="${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl"
-fi
+si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
+DATASET="$SI_DATASET_PATH"
 
 if [ -n "$CHANGES" ]; then
   append_rows "$DATASET" "$WORKTASK_ID" "$RUN_INDEX" "$STAGE" < "$CHANGES"

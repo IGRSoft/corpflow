@@ -14,6 +14,8 @@ PATCH="skills/worktask/scripts/state-patch.sh"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # state-patch.sh resolves its ledger from a declared root, never cwd.
+  export WORKSPACE_ROOT="$WD"
   mkdir -p "$WD/.context/logs"
   printf '%s\n' '{"version":2,"worktask_id":"wt-fm","run_index":0,"tasks":{"DV0":{"status":"in_progress"}},"facts":{}}' \
     > "$WD/.context/state.json"
@@ -29,13 +31,13 @@ _artifact() {  # <path> <nested|flat>
     printf '%sstage: DV\n' "$pad"
     printf '%sverdict: ok\n' "$pad"
     printf '%ssummary: "shape fixture"\n' "$pad"
-    printf '%stests_executed: 12\n' "$pad"
+    printf '%stests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]\n' "$pad"
     printf '%sfiles_touched: [a.md]\n' "$pad"
     printf '%snext_stage_focus: "DR reviews"\n' "$pad"
     printf '%sopen_questions: []\n' "$pad"
     printf '%srefs:\n' "$pad"
     printf '%s  dev: development-0.md#files-changed\n' "$pad"
-    printf -- '---\n\n# Development\n\n## elicitation-sweep\n\nnothing to ask\n'
+    printf -- '---\n\n# Development\n\n12 tests, 0 failures\n\n## files-changed\n\nx\n\n## tests-added\n\nx\n\n## deviations\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to ask\n'
   } > "$1"
 }
 
@@ -131,19 +133,24 @@ _artifact() {  # <path> <nested|flat>
   assert_output "in_progress"
 }
 
-@test "parity: an artifact with NO frontmatter keeps state-patch's F3 fallback" {
-  # A missing block and a malformed block are different failures. Only the second is a
-  # shape defect; F3 exists for the first and is deliberately unchanged.
+@test "parity: an artifact with NO frontmatter is refused by both tools and leaves the ledger untouched" {
+  # A missing block leaves handoff.verdict empty; artifact preflight refuses on an
+  # empty verdict rather than falling back to a default.
   cd "$WD"
   printf '# Development\n\nno frontmatter here\n' > "$WD/.context/development-0.md"
 
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter .context/development-0.md
   assert_failure
 
+  local before
+  before="$(shasum .context/state.json)"
+
   run bash "$PLUGIN_ROOT/$PATCH" --stage DV --artifact .context/development-0.md
-  assert_success
+  assert_failure 3
   run jq -r '.tasks.DV0.status' .context/state.json
-  assert_output "completed"
+  assert_output "in_progress"
+  [ "$(shasum .context/state.json)" = "$before" ] \
+    || fail "a refused artifact-preflight call must leave state.json byte-identical"
 }
 
 @test "parity: both consumers actually bind to the library, not to a private copy" {

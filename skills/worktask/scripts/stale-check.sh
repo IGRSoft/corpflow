@@ -118,14 +118,18 @@ RESUME = "skills/worktask/references/resume.md"
 CLASSES = {
     "alive-busy": (
         False,
-        "Agent busy. Leave it — poll/await; do not double-dispatch or nudge",
-        f"{RESUME} § Live-agent rows — liveness branch",
+        "Agent busy. Leave it; poll/await. Do not double-dispatch or nudge",
+        f"{RESUME} § Live-agent rows — liveness branch — parked, awaiting input",
     ),
+    # The class is the union of two rows: the responsive park keyed on `waitingFor`, cited
+    # here, and the operator-owned "Needs input" park under the sibling heading. Both remedies
+    # ship, because the CLI field that separates them is not always present.
     "alive-parked": (
         True,
-        "Alive but parked. Reattach via SendMessage with the awaited answer — "
-        "do not re-delegate. An operator-owned prompt is surfaced verbatim, never auto-answered",
-        f"{RESUME} § Live-agent rows — liveness branch",
+        "Parked on us. SendMessage reattach with awaited answer — do not re-delegate. "
+        "Operator-owned (\"Needs input\"): SendMessage only to surface prompt — "
+        "never auto-answer or re-dispatch",
+        f"{RESUME} § Live-agent rows — liveness branch — alive and responsive",
     ),
     "gone": (
         True,
@@ -157,7 +161,7 @@ CLASSES = {
     ),
     "reattach-undeliverable": (
         True,
-        "A reattach SendMessage did not deliver (refused / dropped / oversized / burst_limited / "
+        "A reattach SendMessage did not deliver (refused / dropped / oversized / burst_limited / queued / "
         "session_list_truncated). The stage is still parked, not nudged. Do NOT re-delegate and do "
         "NOT increment metadata.retry_count — resolve the delivery failure first",
         f"{RESUME} § Reattach rows — the SendMessage has a result too",

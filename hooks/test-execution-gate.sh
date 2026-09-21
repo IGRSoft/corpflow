@@ -52,6 +52,44 @@ set +e
 [ -f "$_DEDUPE_LIB" ] && . "$_DEDUPE_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
+# The assignment strip the Bash classifier runs lives beside the audit redaction it
+# shares a threat with. The include guard is cleared first: inherited from the environment
+# it would stop the real library loading.
+_CMDHEAD_LIB="${_DEDUPE_LIB%/dedupe-lib.sh}/command-head-lib.sh"
+unset _CORPFLOW_CMDHEAD_LIB
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/lib/command-head-lib.sh
+[ -f "$_CMDHEAD_LIB" ] && . "$_CMDHEAD_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+# Fallback, not a second source of truth: with the library absent the gate keeps classifying
+# rather than failing open, so deleting one file is no off-switch outside the documented
+# CORPFLOW_TEST_GATE hatch. Its pattern must stay identical to the library's _ASSIGN_RE: a
+# looser one leaves a quoted value's fragment in head position, hiding the runner behind it
+# and turning a deny into an allow (test-execution-gate.bats pins the parity). The
+# degradation is announced once the context root is known, below.
+CMDHEAD_FALLBACK=0
+if ! command -v strip_assignments > /dev/null 2>&1; then
+  CMDHEAD_FALLBACK=1
+  strip_assignments() {
+    local _s _next
+    local _re='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:blank:]]+'
+    _s="$1"
+    while :; do
+      case "$_s" in
+        env\ *) _s="${_s#env }" ;;
+        *)
+          [[ $_s =~ $_re ]] || break
+          _next="${_s#"${BASH_REMATCH[0]}"}"
+          [ "$_next" != "$_s" ] || break
+          _s="$_next"
+          ;;
+      esac
+    done
+    printf '%s' "$_s"
+  }
+fi
+
 # Remediation prose for the three denial classes lives in references/, not inline: it is
 # operator guidance rather than logic, and every constraint on its wording is recorded beside
 # it. Read on a deny path only, so the allow path stays fork-free. Sections are delimited by
@@ -94,10 +132,98 @@ MULTI_PURPOSE_RUNNERS="swift cargo go npm pnpm yarn dotnet xcodebuild gradle gra
 # Known bypasses, all allow-direction: $(...)/backticks/here-docs are not
 # segment-split; `find -exec`, `xargs`, and a renamed or written-then-executed
 # runner never reach head position; `env -i`, `\pytest`, and `bash -c'x'` (no
-# space) are not unwrapped; nesting past MAX_RECURSE_DEPTH classifies not_test
-# rather than recursing unboundedly; `npm test --dry-run` classifies build_only
-# while npm still runs the script. This hook is a backstop — tool-grant
-# narrowing and the orchestrator's ban banner are the controls without gaps.
+# space) are not unwrapped; `nice`, `stdbuf`, `caffeinate` and `sudo` are not
+# stripped as wrappers, nor is a `{ ...; }` group; a `timeout` option outside
+# the grammar in _gate_timeout_step is read as the duration; nesting past
+# MAX_RECURSE_DEPTH classifies not_test rather than recursing unboundedly;
+# `npm test --dry-run` classifies build_only while npm still runs the script.
+# This hook is a backstop — tool-grant narrowing and the orchestrator's ban
+# banner are the controls without gaps.
+
+# ---------------------------------------------------------------------------
+# The one wrapper definition read by both classify_segment and the fast-path
+# scanner: if the two drift, the scanner heads on a wrapper, finds nothing
+# gateable and allows what the classifier would deny.
+#
+# GATE_LAUNCHERS — prefixes stripped so the real runner reaches head position;
+# `_` joins a two-word phrase. GATE_TIMEOUT_WRAPPERS take options and a duration
+# before the command (_gate_timeout_step). GATE_SHELLS are chased through `-c`.
+# ---------------------------------------------------------------------------
+GATE_LAUNCHERS="env npx uvx uv_run pnpm_exec yarn_dlx bunx time nohup command exec"
+GATE_TIMEOUT_WRAPPERS="timeout gtimeout"
+GATE_SHELLS="sh bash zsh dash ksh"
+
+# Scanner skip set: every one-word launcher, plus the first word of a two-word
+# one unless it is a runner itself (`pnpm test` must head on pnpm).
+GATE_SCAN_SKIP=""
+for _gate_l in $GATE_LAUNCHERS; do
+  case "$_gate_l" in
+    *_*) case " $RUNNERS " in *" ${_gate_l%%_*} "*) continue ;; esac ;;
+  esac
+  GATE_SCAN_SKIP="$GATE_SCAN_SKIP ${_gate_l%%_*}"
+done
+unset _gate_l
+
+# _gate_timeout_step <token> — advances GATE_TMO over timeout's arguments:
+# "opt" reading options, "arg" the next token is an option's value, "" once the
+# duration is consumed and the wrapped command starts.
+_gate_timeout_step() {
+  if [ "$GATE_TMO" = arg ]; then GATE_TMO=opt; return 0; fi
+  case "$1" in
+    -s|-k|--signal|--kill-after) GATE_TMO=arg ;;
+    -s?*|-k?*|--signal=*|--kill-after=*|--preserve-status|--foreground|-v|--verbose|--) GATE_TMO=opt ;;
+    *) GATE_TMO="" ;;
+  esac
+  return 0
+}
+
+# _gate_strip_parens <string> -> sets PARENLESS to <string> without its leading
+# `(` run and trailing `)` run. One regex match per side: stripping a character
+# per iteration, or a `${x%%[!(]*}` glob, is quadratic on bash 3.2.
+_GATE_LPAREN_RE='^[(]+'
+_GATE_RPAREN_RE='[)]+$'
+_gate_strip_parens() {
+  PARENLESS="$1"
+  if [[ $PARENLESS =~ $_GATE_LPAREN_RE ]]; then PARENLESS="${PARENLESS:${#BASH_REMATCH[0]}}"; fi
+  if [[ $PARENLESS =~ $_GATE_RPAREN_RE ]]; then
+    PARENLESS="${PARENLESS:0:$((${#PARENLESS} - ${#BASH_REMATCH[0]}))}"
+  fi
+}
+
+# _gate_strip_wrappers <segment> -> sets STRIPPED to the segment with every
+# leading subshell `(`, trailing `)`, VAR=value, launcher and timeout wrapper
+# removed, repeated until none remains.
+_gate_strip_wrappers() {
+  local _s="$1" _prev _l _p _tok
+  while :; do
+    _prev="$_s"
+    _gate_strip_parens "$_s"
+    _trim "$PARENLESS"; _s="$TRIMMED"
+    # Every pass: a wrapper or `(` can expose an assignment the scanner already skips.
+    _s="$(strip_assignments "$_s")"
+    for _l in $GATE_LAUNCHERS; do
+      _p="${_l//_/ } "
+      case "$_s" in "$_p"*) _s="${_s#"$_p"}"; _trim "$_s"; _s="$TRIMMED" ;; esac
+    done
+    _tok="${_s%% *}"
+    case " $GATE_TIMEOUT_WRAPPERS " in
+      *" ${_tok##*/} "*)
+        GATE_TMO=opt
+        while [ -n "$GATE_TMO" ] && [ -n "$_s" ]; do
+          if [ "$_s" = "$_tok" ]; then _s=""; else _s="${_s#"$_tok"}"; _trim "$_s"; _s="$TRIMMED"; fi
+          _tok="${_s%% *}"
+          [ -n "$_s" ] && _gate_timeout_step "$_tok"
+        done
+        if [ -n "$_s" ]; then
+          if [ "$_s" = "$_tok" ]; then _s=""; else _s="${_s#"$_tok"}"; _trim "$_s"; _s="$TRIMMED"; fi
+        fi
+        GATE_TMO=""
+        ;;
+    esac
+    [ "$_s" != "$_prev" ] || break
+  done
+  STRIPPED="$_s"
+}
 
 # ---------------------------------------------------------------------------
 # _trim <string> -> sets TRIMMED to the string without surrounding whitespace.
@@ -108,43 +234,6 @@ _trim() {
   local _t="$1"
   _t="${_t#"${_t%%[![:space:]]*}"}"
   TRIMMED="${_t%"${_t##*[![:space:]]}"}"
-}
-
-# ---------------------------------------------------------------------------
-# strip_assignments <segment> -> echoes the segment with leading VAR=value /
-# `env [VAR=value...]` wrappers removed. Shared by classify_segment
-# (classification) and run_gate (command_head derivation) so a secret in a
-# leading env assignment (e.g. `API_KEY=sk-... pytest x`) can never reach
-# either the classifier's runner-name check or the audit log.
-#
-# A quoted value containing a space (`FOO="a b" pytest x`) is not one
-# space-delimited word, so a naive strip-to-next-space leaves a fragment in head
-# position — which either drops the invocation out of RUNNERS (the gate never
-# fires) or collides with a real runner name and denies something that was never
-# a test. The pattern consumes a quoted or bare value as one unit; `[[ =~ ]]`
-# keeps it fork-free.
-#
-# The separator is [[:blank:]], never [[:space:]]: this runs against a whole
-# multi-line command, and matching a newline would consume an assignment on the
-# FIRST line and promote the second line's runner into head position — changing
-# which invocations get a redacted command_head.
-# ---------------------------------------------------------------------------
-_ASSIGN_RE='^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]*)[[:blank:]]+'
-strip_assignments() {
-  local _s _next
-  _s="$1"
-  while :; do
-    case "$_s" in
-      env\ *) _s="${_s#env }" ;;
-      *)
-        [[ $_s =~ $_ASSIGN_RE ]] || break
-        _next="${_s#"${BASH_REMATCH[0]}"}"
-        [ "$_next" != "$_s" ] || break
-        _s="$_next"
-        ;;
-    esac
-  done
-  printf '%s' "$_s"
 }
 
 # ---------------------------------------------------------------------------
@@ -382,16 +471,25 @@ classify_cmd() {
 
   _old_ifs="$IFS"
   _result="not_test"
-  # Segment split on && || ; | and newline. Command substitution, backticks,
+  # Segment split on && || ; | & and newline. Command substitution, backticks,
   # and here-docs are NOT split — a documented, accepted hole (see the
   # bypass note above RUNNERS).
   # Fork-free: bash substitution patterns are globs, where & ; | are all literal,
-  # so four literal passes replace one alternation regex. Order matters — && and
-  # || are consumed before the single-pipe pass can split them.
+  # so literal passes replace one alternation regex. Order matters — && and ||
+  # are consumed before the single-character passes can split them. A bare `&`
+  # (background) splits too, as in the scanner; the redirect forms `>&`, `<&`
+  # and `&>` are parked on control bytes first so `2>&1` stays one segment.
   _norm="${_cmd//&&/$'\n'}"
   _norm="${_norm//||/$'\n'}"
   _norm="${_norm//;/$'\n'}"
   _norm="${_norm//|/$'\n'}"
+  _norm="${_norm//>&/$'\001'}"
+  _norm="${_norm//<&/$'\002'}"
+  _norm="${_norm//&>/$'\003'}"
+  _norm="${_norm//&/$'\n'}"
+  _norm="${_norm//$'\001'/>&}"
+  _norm="${_norm//$'\002'/<&}"
+  _norm="${_norm//$'\003'/&>}"
   while IFS= read -r _seg; do
     [ -n "$_seg" ] || continue
     _class=$(classify_segment "$_seg")
@@ -418,7 +516,7 @@ EOF
 # real latency on a single tool call, not a crash, but not "depth 1" either.
 MAX_RECURSE_DEPTH=2
 classify_segment() {
-  local _seg _depth _head_full _head _rest _launcher _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second
+  local _seg _depth _head_full _head _rest _inner _mod _padded _subcmd _rest_for_selection _rest_effective _second
 
   _seg="$1"
   _depth="${2:-0}"
@@ -433,15 +531,9 @@ classify_segment() {
   _seg="$(strip_assignments "$_seg")"
   [ -n "$_seg" ] || { printf 'not_test'; return; }
 
-  # Strip a package-runner launcher prefix, or a no-op timing/backgrounding
-  # wrapper, so the real runner name reaches the head-token check below
-  # (`npx jest` must classify on `jest`, not `npx`; `time pytest x` on
-  # `pytest`, not `time`).
-  for _launcher in "npx " "uvx " "uv run " "pnpm exec " "yarn dlx " "bunx " "time " "nohup " "command " "exec "; do
-    case "$_seg" in
-      "$_launcher"*) _seg="${_seg#"$_launcher"}" ;;
-    esac
-  done
+  # `npx jest` must classify on `jest`, `timeout 60 pytest` on `pytest`.
+  _gate_strip_wrappers "$_seg"; _seg="$STRIPPED"
+  [ -n "$_seg" ] || { printf 'not_test'; return; }
 
   _head_full="${_seg%% *}"
   _head="${_head_full##*/}"
@@ -450,8 +542,8 @@ classify_segment() {
   # bash -c '...' / sh -c '...' (and the -lc/-ec/-xc combined-short-option
   # spellings, e.g. `bash -lc '...'`) wraps a real command in a string;
   # recurse into it up to MAX_RECURSE_DEPTH.
-  case "$_head" in
-    bash|sh|zsh|dash)
+  case " $GATE_SHELLS " in
+    *" $_head "*)
       case "$_rest" in
         *" -c "*|*" -lc "*|*" -ec "*|*" -xc "*)
           _inner="${_rest#*c }"
@@ -648,10 +740,10 @@ classify_segment() {
 # allow unconditionally: there is no reliable "who is acting" answer, and
 # guessing wrong in the deny direction would deadlock an unrelated session.
 #
-# CTX stays CLAUDE_PROJECT_DIR-only (see the live-invocation block): the shared
-# WORKSPACE ROOT resolver is deliberately NOT used here, because its extra arms
-# would widen the resolution surface of an anti-evasion invariant. Only the pure,
-# ctx-parameterised stage lookup is shared.
+# CTX resolution goes through the shared corpflow_context_root ladder: it is
+# the anti-evasion invariant against cwd/CLAUDE_PROJECT_DIR guesses, so this
+# consumer must not narrow back to CLAUDE_PROJECT_DIR-only. Degraded (library
+# untrustworthy), it falls back to declared roots only.
 # ---------------------------------------------------------------------------
 
 # emit_deny <reason> — the PreToolUse deny document, written once. rc 1 when jq
@@ -883,15 +975,21 @@ dedupe_decide() {
   # which is how a platform reached a merge decision with zero tests executed and
   # every stage downstream reading a verdict that said only "denied".
   #
-  # Recognise evidence of EXECUTION, not merely of a record existing: `bundle:`,
-  # `output:` and `errtext:` each mean the runner returned something, and a
-  # non-zero `tests:` is a count off its own summary line. Everything else —
+  # Recognise evidence of EXECUTION, not merely of a record existing: `bundle:`
+  # and `errtext:` each mean a runner produced a result or printed its failures,
+  # and a non-zero `tests:` is a count off its own summary line. Everything else —
   # `tests:0`, the `discovered:` token promote writes for a bare enumeration,
   # the legacy `unrecorded` marker, and any shape this grammar does not cover —
   # is no result at all. Unparseable takes the same arm as zero deliberately: a
   # token nobody can read cannot be cited either.
+  #
+  # `output:` is NOT on the list. It is minted for any non-empty response with no
+  # parseable count, so `error: no such module Foo` earns `output:38B` — a run
+  # that executed nothing, which then denies every retry that could still execute
+  # something. A byte count is evidence that a tool SPOKE, never that a suite RAN,
+  # and suppression must cite a result the denied run could only reproduce.
   case "$_p_ev" in
-    bundle:?* | output:?* | errtext:?* | tests:[1-9]*) : ;;
+    bundle:?* | errtext:?* | tests:[1-9]*) : ;;
     *)
       write_audit_row "$_ctx" "test_dedupe_skipped_zero_prior" \
         "$(jq -cn --arg st "$_stage" --arg tool "$_tool" --arg head "$_head" \
@@ -935,16 +1033,24 @@ dedupe_decide() {
 # Fail direction: an unparsed shape yields no gateable head and ALLOWS, matching
 # every other unresolvable input in this hook.
 # ---------------------------------------------------------------------------
+# Characters the scanner treats specially; any other run is copied verbatim.
+_GATE_WORD_RE="^[^[:space:]\\\\'\";|&<]+"
 gate_head_tokens() {
+  # Byte indexing: under a UTF-8 locale `${_s:i:1}` walks from the start each time.
+  # Every character the scanner acts on is ASCII, so the tokens are unchanged.
+  local _lc_had=0 _lc_old=""
+  [ -n "${LC_ALL+x}" ] && { _lc_had=1; _lc_old="$LC_ALL"; }
+  LC_ALL=C
   local _s="$1" _n=${#1} _i=0 _ch _q="" _cur="" _want=1 _hd="" _inhd=0 _line="" _pend="" _lnch=""
   HEAD_TOKENS=""
+  GATE_TMO=""
   while [ "$_i" -lt "$_n" ]; do
     _ch="${_s:$_i:1}"
     _i=$((_i + 1))
     if [ "$_inhd" -eq 1 ]; then
       if [ "$_ch" = $'\n' ]; then
         _trim "$_line"
-        [ "$TRIMMED" = "$_hd" ] && { _inhd=0; _hd=""; _want=1; _lnch=""; }
+        [ "$TRIMMED" = "$_hd" ] && { _inhd=0; _hd=""; _want=1; _lnch=""; GATE_TMO=""; }
         _line=""
       else
         _line="$_line$_ch"
@@ -967,6 +1073,7 @@ gate_head_tokens() {
         _gate_emit_head
         _want=1
         _lnch=""
+        GATE_TMO=""
         if [ "$_ch" = $'\n' ] && [ -n "$_pend" ]; then
           _hd="$_pend"; _pend=""; _inhd=1; _line=""
         fi
@@ -988,10 +1095,20 @@ gate_head_tokens() {
         fi
         _gate_emit_head
         ;;
-      *) _cur="$_cur$_ch" ;;
+      *)
+        # Take the whole run of plain characters at once: one append per run,
+        # not per character, keeps a 20k-character token linear.
+        if [[ ${_s:$((_i - 1))} =~ $_GATE_WORD_RE ]]; then
+          _cur="$_cur${BASH_REMATCH[0]}"
+          _i=$((_i - 1 + ${#BASH_REMATCH[0]}))
+        else
+          _cur="$_cur$_ch"
+        fi
+        ;;
     esac
   done
   _gate_emit_head
+  if [ "$_lc_had" -eq 1 ]; then LC_ALL="$_lc_old"; else unset LC_ALL; fi
   return 0
 }
 
@@ -999,26 +1116,36 @@ gate_head_tokens() {
 # because the scanner reaches it from five arms; it reads and writes the
 # scanner's locals by dynamic scope (_cur, _want, _lnch).
 #
-# The skip set must mirror classify_segment's launcher list, TWO-token entries
-# included: that function strips `uv run ` whole and heads on the real runner, so
-# a first-token-only skip here heads on `run`, finds nothing gateable, and lets
-# the fast path allow what the classifier would deny. `_lnch` remembers the
-# launcher just skipped so the wrapper's second word is skipped with it.
-#
-# `pnpm` and `yarn` are RUNNERS in their own right and end the search before
-# their second word is read, so they need no one-token entry. The two lists are
-# no longer eyeball-synced: test-execution-gate.bats asserts that every launcher
-# the classifier strips is either skipped here or is itself a gateable runner.
+# Skips exactly what _gate_strip_wrappers strips, from the same definitions:
+# GATE_SCAN_SKIP words, the second word of a two-word GATE_LAUNCHERS phrase
+# (`_lnch` remembers the first), timeout's options and duration, and a
+# subshell's parentheses. test-execution-gate.bats asserts the two agree.
 _gate_emit_head() {
   [ -n "$_cur" ] || return 0
   if [ "$_want" -eq 1 ]; then
-    case "$_lnch $_cur" in
-      "uv run"|"pnpm exec"|"yarn dlx") _lnch="" ;;
+    if [ -n "$GATE_TMO" ]; then
+      _gate_timeout_step "$_cur"
+      _cur=""
+      return 0
+    fi
+    _gate_strip_parens "$_cur"; _cur="$PARENLESS"
+    [ -n "$_cur" ] || return 0
+    case " $GATE_LAUNCHERS " in
+      *" ${_lnch}_${_cur} "*) _lnch="" ;;
       *)
-        case "$_cur" in
-          env|npx|uvx|bunx|uv|time|nohup|command|exec) _lnch="$_cur" ;;
-          [A-Za-z_]*=*) ;;
-          *) HEAD_TOKENS="$HEAD_TOKENS ${_cur// /_}"; _want=0; _lnch="" ;;
+        case " $GATE_TIMEOUT_WRAPPERS " in
+          *" ${_cur##*/} "*) GATE_TMO=opt; _lnch="" ;;
+          *)
+            case " $GATE_SCAN_SKIP " in
+              *" $_cur "*) _lnch="$_cur" ;;
+              *)
+                case "$_cur" in
+                  [A-Za-z_]*=*) ;;
+                  *) HEAD_TOKENS="$HEAD_TOKENS ${_cur// /_}"; _want=0; _lnch="" ;;
+                esac
+                ;;
+            esac
+            ;;
         esac
         ;;
     esac
@@ -1035,7 +1162,7 @@ gate_head_is_gateable() {
   case "$_t" in
     build-test|*:build-test|run-tests.sh|*:run-tests.sh) return 0 ;;
   esac
-  case " $RUNNERS bash sh zsh dash " in
+  case " $RUNNERS $GATE_SHELLS " in
     *" $_t "*) return 0 ;;
   esac
   return 1
@@ -1140,8 +1267,25 @@ gate_classify_payload() {
   return 0
 }
 
+# gate_ctx <ctx dir or empty> -> the given dir, else the resolved context root;
+# rc 1 when unresolved ("no worktask here"). Resolution forks git and the
+# resolver, so run_gate asks only once a payload is known to need a ledger.
+gate_ctx() {
+  local _c="${1:-}"
+  if [ -z "$_c" ]; then
+    _c=$(corpflow_context_root)
+    [ -n "$_c" ] || return 1
+    # A degraded strip still enforces, so it is announced rather than blocked on.
+    if [ "${CMDHEAD_FALLBACK:-0}" -eq 1 ] && [ -f "$_c/state.json" ]; then
+      echo "test-execution-gate: $_CMDHEAD_LIB unusable — assignment strip degraded to the inline fallback" >&2
+      mkdir -p "$_c/logs" 2>/dev/null && : > "$_c/logs/.corpflow-lib-missing" 2>/dev/null
+    fi
+  fi
+  printf '%s' "$_c"
+}
+
 # ---------------------------------------------------------------------------
-# run_gate <payload json> <ctx dir> -> echoes decision JSON (deny) or nothing
+# run_gate <payload json> <ctx dir or empty> -> echoes decision JSON (deny) or nothing
 # (allow/observe). Appends an audit row for a deny or a Task observation.
 # Parameterized over .context/ so every branch is fixture-reachable, per the
 # dv-screenshot-gate.sh idiom (run_gate <payload> <ctx>).
@@ -1156,7 +1300,9 @@ run_gate() {
   # only the rare hatch path pays for an audit row. Gated on state.json existing
   # at all — otherwise a shell-profile-wide CORPFLOW_TEST_GATE=off would
   # materialize .context/logs/ in every unrelated directory the user opens.
-  if [ "${CORPFLOW_TEST_GATE:-}" = "off" ] && [ -f "$_ctx/state.json" ]; then
+  if [ "${CORPFLOW_TEST_GATE:-}" = "off" ]; then
+    _ctx=$(gate_ctx "$_ctx") || return 0
+    [ -f "$_ctx/state.json" ] || return 0
     _sentinel="$_ctx/logs/.gate-off-noted"
     if [ ! -f "$_sentinel" ]; then
       mkdir -p "$_ctx/logs" 2>/dev/null && : > "$_sentinel" 2>/dev/null
@@ -1181,6 +1327,7 @@ run_gate() {
       # means no worktask is in flight — the common case in a repo where the
       # plugin is merely installed — and such a session must see zero side
       # effects: no directory creation, no log growth.
+      _ctx=$(gate_ctx "$_ctx") || return 0
       _stage=$(corpflow_active_stage "$_ctx")
       if [ -n "$_stage" ]; then
         _subagent=$(printf '%s' "$_payload" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
@@ -1217,6 +1364,7 @@ run_gate() {
   case "$_class" in
     not_test|build_only) return 0 ;;
   esac
+  _ctx=$(gate_ctx "$_ctx") || return 0
 
   # Stage resolution runs only once the command is known to be a test run.
   # Classification never reads the stage, and the overwhelming majority of tool
@@ -1323,11 +1471,13 @@ first_runner_token() {
 # a logging failure (unwritable dir, no `date`, disk full) can never swallow a
 # legitimate deny. Never logs the full command — command_head only, since the
 # full command can carry a secret token or a path that shouldn't land in a
-# committed log file. These rows carry no `subject`, and the appender omits the
-# key entirely rather than emitting an empty one, so the shape is unchanged.
+# committed log file. Subject and task_id are both the in-progress ledger key, or
+# the none/unknown sentinel when there is no single one.
 write_audit_row() {
+  local _tid
+  _tid=$(corpflow_audit_task_id "${1:-}")
   corpflow_hook_audit_row --ctx "${1:-}" --actor hook:test-execution-gate \
-    --action "${2:-}" --result ok --meta "${3:-}"
+    --action "${2:-}" --result ok --subject "$_tid" --task-id "$_tid" --meta "${3:-}"
 }
 
 # ---------------------------------------------------------------------------
@@ -1373,8 +1523,6 @@ fi
 IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0  # empty/unreadable stdin — nothing to gate
 
-CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
-
 # Degraded: the gate cannot resolve who is acting, so it enforces nothing and
 # allows. That is announced, not inferred — this is the only consumer with a
 # channel back to the model, so the notice rides in-band on the first allow.
@@ -1390,6 +1538,14 @@ CTX="${CLAUDE_PROJECT_DIR:-.}/.context"
 # is still written, for the consumers that read it.
 if [ "$LIB_DEGRADED" -eq 1 ]; then
   echo "test-execution-gate: shared library unusable at $_LIB — test authority not enforced" >&2
+  # Declared roots only; the ladder's git/resolver ranks live in this library.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+  [ -n "$CTX" ] || exit 0
   _NOTICE_MARK="$CTX/logs/.corpflow-lib-missing.test-execution-gate"
   if [ -f "$CTX/state.json" ] && [ ! -f "$_NOTICE_MARK" ]; then
     mkdir -p "$CTX/logs" 2>/dev/null && : > "$CTX/logs/.corpflow-lib-missing" 2>/dev/null
@@ -1403,5 +1559,7 @@ if [ "$LIB_DEGRADED" -eq 1 ]; then
   exit 0
 fi
 
-run_gate "$PAYLOAD" "$CTX"
+# The context root resolves inside run_gate, after classification: nearly every call is not a
+# test run, and an unresolved root is "no worktask here" — allow, enforce nothing, create nothing.
+run_gate "$PAYLOAD" ""
 exit 0

@@ -46,9 +46,9 @@ Execute the five steps in order. If any step fails, write the failure to `.conte
 
 **"Agent commit"** = authored by an agent, or a conventional worktask prefix (`feat`, `fix`, `refactor`, …) **and** `Stage:` / `Agent:` trailers; **fallback** — the newest commit predating any uncommitted user edits.
 
-**Run** `scripts/detect-user-changes.sh`: returns a newline-delimited `path\tlines_added\tlines_removed` table plus a full unified diff piped to `.context/logs/self-improve-<ts>.diff`.
+**Run** `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/detect-user-changes.sh`: returns a newline-delimited `path\tlines_added\tlines_removed` table plus a full unified diff piped to `.context/logs/self-improve-<ts>.diff`.
 
-**Short-circuit:** empty table → write the log with `Result: no-changes`, skip the remaining steps, return.
+**Short-circuit:** empty table → write the log with `Result: no-changes`, skip to the closing counts call (§ Step 5b — record the four counts), return.
 
 ### Step 3 — Classify Each Change
 
@@ -61,7 +61,7 @@ Assign every hunk exactly one of six categories — `tone` (reworded, same meani
 #### Canonical Script
 
 ```
-LOG_OUT=<log_path> bash scripts/map-and-filter.sh \
+LOG_OUT=<log_path> bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/map-and-filter.sh \
   --changes=<step2-tsv> \
   --context-set=<step1-out> \
   [--dv-agent=<resolved-dv-agent-path>]
@@ -81,9 +81,9 @@ Write it per `references/retrospective-template.md` — header block, What Worke
 
 **Versioning:** a proposal that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
 
-### Step 5b — Append to the committed label dataset
+### Step 5b — Append to the label dataset
 
-**Goal:** retain each classified edit as a durable failure label. `learnings.md` lives under the gitignored `.context/`, so labels are otherwise discarded when the run ends — and a user correcting delivered output is domain-expert ground truth, what `evals/failure-taxonomy.md` and any future evaluator get built from.
+**Goal:** retain each classified edit as a durable failure label, recorded under plugin data outside the repo and never committed. `learnings.md` lives under the gitignored `.context/`, so labels are otherwise discarded when the run ends — and a user correcting delivered output is domain-expert ground truth, what `evals/failure-taxonomy.md` and any future evaluator get built from.
 
 **Runs regardless of approval:** only the *proposal* is gated on approval; a rejected proposal is still evidence the output needed changing.
 
@@ -95,28 +95,80 @@ Write it per `references/retrospective-template.md` — header block, What Worke
 <path>\t<target>\t<category>\t<confidence>\t<added>\t<removed>\t<summary>
 ```
 
+##### Append command
+
 ```
-scripts/append-labels.sh --worktask-id=<id> --run-index=<n> --changes=<tsv>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh \
+  --worktask-id=<id> --run-index=<n> --changes=<tsv> \
+  --plugin-data=${CLAUDE_PLUGIN_DATA} \
+  --count-out=.context/logs/self-improve-<ts>.appended
 ```
 
-Appends to `evals/failure-labels.jsonl` (repo root, **committed**), idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)`: re-running a worktask never duplicates rows, but the same edit recurring in a later worktask appends a new label — recurrence is the frequency signal. `scripts/label-stats.sh` aggregates per target and category, flags those at or above `--min-count=<n>` (default 3), and reports progress toward the 100-row `failure-taxonomy.md` gate in `evals/README.md`.
+Appends to the label dataset, idempotent on a content hash of `(worktask_id, run_index, path, added, removed, summary)`. The same edit recurring in a later worktask appends a new label — recurrence is the frequency signal. `--count-out` receives the appended row count for the closing counts call.
+
+##### Aggregation and statistics
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA} [--min-count=<n>]
+```
+
+It flags targets and categories at or above `--min-count` (default 3) and reports progress toward the 100-row `failure-taxonomy.md` gate in `evals/README.md`.
+
+##### Where the dataset lives
+
+`append-labels.sh`, `label-stats.sh` and `pipeline-counts.sh` resolve it in this order:
+
+1. `--dataset=<file>`, as given.
+2. `--plugin-data=<dir>`, used only when the value is non-empty, free of `$`, and absolute.
+3. The `CLAUDE_PLUGIN_DATA` environment variable, under the same checks. It is set for hooks and tests but absent from the Bash tool environment, which is why the body passes the flag.
+4. Fallback: `${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl`, with a stderr notice.
+
+An empty value or the unsubstituted literal token counts as unset. Under plugin data the labels go to `<dir>/self-improvement/failure-labels.jsonl` and the counts to `<dir>/self-improvement/pipeline-counts.jsonl`.
 
 ##### An empty join is a silent no-op
 
-**A non-empty context set is necessary, not sufficient.** The pipeline is four stages — `build-context-set.sh` → `detect-user-changes.sh` → `map-and-filter.sh` → `append-labels.sh` — and any of three conditions empties the run: zero context paths, zero changed paths, or a join that matches nothing because no mapping rule emits the targets the set actually holds. All three look identical to "the user made no edits". Report the surviving count at each of the four stages rather than reading a zero-row result as a clean run.
+**A non-empty context set is necessary, not sufficient.** The pipeline is four stages — `build-context-set.sh` → `detect-user-changes.sh` → `map-and-filter.sh` → `append-labels.sh` — and any of three conditions empties the run: zero context paths, zero changed paths, or a join that matches nothing because no mapping rule emits the targets the set actually holds. All three look identical to "the user made no edits". `pipeline-counts.sh` records the surviving count at each of the four stages, so a zero-row result is never read as a clean run.
 
 #### Step 5b — privacy and opt-out
 
-Rows carry counts and the one-line summary only, never diff bodies; redact the summary as you would `learnings.md`. `SELF_IMPROVE_LABELS=0` makes the step a no-op. Because the dataset is committed, tell the user it is being recorded the first time this runs in a repo.
+Rows carry counts and the one-line summary only, never diff bodies; redact the summary as you would `learnings.md`. `SELF_IMPROVE_LABELS=0` makes the label append a no-op; the counts call still runs. Labels are recorded under plugin data, outside the repo: tell the user they are being recorded the first time this runs. When the scripts print the fallback notice, the labels land in the repo's `evals/failure-labels.jsonl` instead — relay that notice to the user.
+
+#### Step 5b — record the four counts
+
+Run this last on every path, including short-circuit runs, `SELF_IMPROVE_LABELS=0` runs and runs without `jq`:
+
+##### Counts recording command
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline-counts.sh \
+  --worktask-id=<id> --run-index=<n> \
+  --context-set=<step1-out> --changes=<step2-tsv> --mapped=<step4-tsv> \
+  --appended=.context/logs/self-improve-<ts>.appended \
+  --plugin-data=${CLAUDE_PLUGIN_DATA}
+```
+
+##### Counts semantics and output
+
+The script counts rows in the stage output files, so no count comes from prose. An absent input file counts 0. Under plugin data it appends one `self-improve-counts/v1` row to `pipeline-counts.jsonl` with fields: `ts`, `worktask_id`, `run_index`, `stage`, `context_paths`, `changed_paths`, `mapped_rows`, `appended_rows`, `labels_enabled`, `dataset_source`. On the fallback rung or with `--dry-run`, no row is written. Stderr always carries progress information; the row is the authoritative record.
 
 ## Output Contract
+
+### Core output artifacts
 
 | Path | Required? | Purpose |
 |------|-----------|---------|
 | `.context/learnings.md` | Only if in-scope changes detected | User-approvable proposals |
-| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.log` | Always — including short-circuit runs, so the user can audit why no proposals appeared | Run log: context set, decisions, discards |
+| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.log` | Always — including short-circuit runs | Run log: context set, decisions, discards |
 | `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.diff` | Only if changes detected | Full unified diff for audit |
-| `evals/failure-labels.jsonl` | Only if in-scope changes detected | Committed, append-only label dataset (Step 5b) |
+
+### Label dataset outputs
+
+| Path | Required? | Purpose |
+|------|-----------|---------|
+| `<plugin-data>/self-improvement/failure-labels.jsonl` | Only if in-scope changes detected | Append-only label dataset, outside the repo (Step 5b) |
+| `<plugin-data>/self-improvement/pipeline-counts.jsonl` | Always, except on fallback rung or under `--dry-run` | Stage counts per run (Step 5b) |
+| `.context/logs/self-improve-<YYYYMMDD-HHMMSS>.appended` | Whenever `append-labels.sh` runs | Appended row count |
+| `${CLAUDE_PROJECT_DIR:-.}/evals/failure-labels.jsonl` | Fallback rung only | Repo label dataset; counts to stderr |
 
 Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
@@ -131,7 +183,7 @@ After user approval (orchestrated per `commands/worktask.md`), each checked item
 - DO NOT react to low-confidence items — park them in Deferred.
 - DO NOT edit the target file directly; this skill only proposes.
 - DO NOT commit `.context/learnings.md` (lives under the already-gitignored `.context/`).
-- DO NOT put secrets, tokens, or diff bodies in `learnings.md` or `evals/failure-labels.jsonl` — counts and a redacted one-line summary only.
+- DO NOT put secrets, tokens, or diff bodies in `learnings.md` or the label dataset — counts and a redacted one-line summary only.
 - DO NOT skip Step 5b because the user rejected the proposals; the observation stands on its own.
 
 ## Cross References
@@ -145,4 +197,4 @@ After user approval (orchestrated per `commands/worktask.md`), each checked item
 - `agents/stakeholder.md` — invokes this skill (automatic path at ST)
 - `agents/prompt-engineer.md` — applies approved proposals
 - `commands/worktask.md` — orchestrator wires the approval loop after ST
-- `tests/shell/skills/{detect-user-changes,build-context-set,map-and-filter,append-labels,label-stats}.bats` — executable behavior fixtures for the pipeline scripts
+- `tests/shell/skills/{detect-user-changes,build-context-set,map-and-filter,append-labels,label-stats,pipeline-counts}.bats` — executable behavior fixtures for the pipeline scripts

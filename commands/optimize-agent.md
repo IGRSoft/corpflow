@@ -1,7 +1,7 @@
 ---
 name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
-version: 0.2.0
+version: 0.3.0
 argument-hint: <agent name or path>
 model: opus
 allowed-tools: Read, Glob, Grep, Write
@@ -109,7 +109,17 @@ Runs on every agent regardless of `--focus`; findings land in Findings by Area. 
 | **Negation form** | A `DO NOT` aimed at any `§ Form to failure` row but "knows the rule, skips it under pressure" | The correct form — positive recipe, REQUIRED template slot, or observable-predicate conditional |
 | **No-op pruning** | An instruction this agent's own `model:` already obeys by default | Deletion of the whole sentence, never a rewording |
 
-#### Body doctrine — two guards
+#### Body doctrine — the model-conditioned rows
+
+These three read the agent's own `model:` before they can fire at all.
+
+| Check | Finding when | Fix line states |
+|---|---|---|
+| **Model-conditioned** | An instruction collides with a documented behaviour of this `model:` — per-alias list in `skills/shared/model-prompting.md` | Deletion, citing the vendor page that canon file names |
+| **Scope explicitness** | On a `sonnet` agent, an instruction names one item where the agent's scope covers a set | The scope — `every`, `each`, the named set — never added emphasis |
+| **Emphasis inflation** | An emphasised rule with no recorded failure behind it | Downgrade to the plain imperative; the rule itself stays |
+
+#### Body doctrine — three guards
 
 An existing `## Constraints (DO NOT)` block is **reported, never rewritten in place** — recasting
 constraint blocks under the negation rule is its own worktask, so the finding is advisory and
@@ -118,6 +128,12 @@ constraint blocks under the negation rule is its own worktask, so the finding is
 A disclosure finding against a section every run executes end to end is a **false positive**: length
 is the symptom that makes you look, branching is what decides, and inline is the correct tier for
 work every branch reaches.
+
+A model-conditioned finding against a **completion criterion** is a false positive. "Confirm the
+manifest exists on disk" names an artifact and is graded under the completion-criteria row; only a
+re-read of the agent's own reasoning is a verification instruction in the sense
+`model-prompting.md` means. Deleting the artifact gates lowers demand on exactly the axis this
+rubric raises.
 
 ### Model Selection
 
@@ -169,14 +185,15 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 With `--focus failure-modes`, classify observed failures: instruction misunderstanding (role/task confusion), output format errors, context loss (long-conversation drift), tool misuse, constraint violations, edge-case handling.
 
-Where a class recurs, add a constitutional self-check to the agent:
+Where a class recurs, fix it in the form that class takes — `agents/prompt-engineer.md
+§ Form to failure`. A wrong output shape takes a positive recipe; a missing element takes a
+REQUIRED slot in the template being filled in.
 
-```markdown
-Before responding, verify:
-1. Output matches required format
-2. All constraints satisfied
-3. No conflicting information
-```
+Do **not** answer a recurring class with a generic self-check block ("Before responding, verify:
+output matches format, constraints satisfied, no conflicting information"). It reads as diligence
+and is the instruction `skills/shared/model-prompting.md § opus` names as compounding into
+over-verification, and 8 of this plugin's 16 agents are `model: opus`. A criterion that names an
+artifact is a different thing and stays — that is the completion-criteria row, not this one.
 
 ## Integration
 

@@ -31,8 +31,16 @@ case "$_cf_opts" in *e*) set -e ;; esac
 
 if ! command -v corpflow_hook_audit_row > /dev/null 2>&1; then
   echo "model-switch-audit: shared library unusable at $_LIB — switch not recorded" >&2
-  _cf_ctx="${CLAUDE_PROJECT_DIR:-.}/.context"
-  if [ -f "$_cf_ctx/state.json" ]; then
+  # The full ladder lives in the library this branch cannot trust, so the
+  # sentinel is only ever planted under an explicitly DECLARED root, never one
+  # this hook would have to go looking for itself.
+  _cf_ctx=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
+    _cf_ctx="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
+    _cf_ctx="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+  if [ -n "$_cf_ctx" ] && [ -f "$_cf_ctx/state.json" ]; then
     { mkdir -p "$_cf_ctx/logs" && : > "$_cf_ctx/logs/.corpflow-lib-missing"; } 2> /dev/null || :
   fi
   exit 0
@@ -124,8 +132,12 @@ run_audit() {
   [ -n "$_subject" ] || _subject="$_stage"
   [ -n "$_subject" ] || _subject="unknown"
 
+  _tid="$_task_id"
+  [ -n "$_tid" ] || _tid=$(corpflow_audit_task_id "$_ctx")
+
   corpflow_hook_audit_row --ctx "$_ctx" --actor hook:model-switch-audit \
-    --action "model_switched" --result ok --subject "$_subject" --meta "$_meta"
+    --action "model_switched" --result ok --subject "$_subject" --task-id "$_tid" \
+    --meta "$_meta"
 }
 
 if [ "$SELF_TEST" -eq 1 ]; then

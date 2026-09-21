@@ -2,7 +2,7 @@
 name: cost-optimization
 description: Apply for budget management, model selection, and efficiency analysis. Cost tracking and optimization strategies for AI agent worktasks.
 effort: medium
-version: 0.2.0
+version: 0.3.0
 related:
   - skills/worktask/SKILL.md
   - skills/agent-coordination/SKILL.md
@@ -11,11 +11,11 @@ related:
 
 # Cost Optimization
 
-Model right-sizing, token discipline, per-stage tracking, budget gates. Per-stage baselines, CC context-efficiency knobs and caps, and ethics cost budgeting: `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
+Model right-sizing, token discipline, per-stage tracking, budget gates. Per-stage budgets and typical token ranges: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md § Stage Budget Table`. CC context-efficiency knobs and caps, and ethics cost budgeting: `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
 
 ## Model Cost Tiers & Selection Matrix
 
-Canonical tables: `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Matrix by Task Type). Two settings pay for themselves: explicit `effort: medium` on cost-sensitive stages (QA, DC, RE) — non-Pro plans default to `high` — and `ENABLE_PROMPT_CACHING_1H=1` when stages outlast the 5-minute default cache TTL.
+Canonical tables: `${CLAUDE_SKILL_DIR}/../shared/model-selection.md` (§ Cost Tiers, § Selection Criteria); a worktask stage's model and effort are its row in `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`. Two settings pay for themselves: explicit `effort: medium` on cost-sensitive stages (QA, DC, RE) — non-Pro plans default to `high` — and `ENABLE_PROMPT_CACHING_1H=1` when stages outlast the 5-minute default cache TTL.
 
 ## Per-Effort Thinking-Budget Ceilings
 
@@ -37,7 +37,7 @@ Effort (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) maps to a t
 
 ### 1. Model Right-Sizing
 
-Cheapest model that can do the task (mapping: `../shared/model-selection.md § Selection Matrix by Task Type`). Moving procedural work — status checks, formatting, simple validation — off sonnet saves ~30% on those stages; reserve opus for architecture-grade reasoning.
+Cheapest model that can do the task (mapping: `../shared/model-selection.md § Selection Criteria`; worktask stages take theirs from `../shared/stage-codes.md`). Moving procedural work — status checks, formatting, simple validation — off sonnet saves ~30% on those stages; reserve opus for architecture-grade reasoning.
 
 ### 2. Context Compression
 
@@ -53,6 +53,8 @@ Worked before/after examples and per-content-type techniques: `skills/context-co
 ### 3. Context Window Efficiency
 
 Automatic in CC; the knobs, caps, and visibility surfaces still worth acting on are in `${CLAUDE_SKILL_DIR}/references/token-baselines.md`.
+
+`/skill-doctor` lists loaded skills that go unused and what each costs in context — use it to prune.
 
 ### 4. Batch Operations
 
@@ -120,9 +122,9 @@ Two upstream cache-miss bugs are fixed and no longer need working around: tool d
 
 0% at PL (cold) → ≈20% cross-stage → ≈80% on retries within a stage → ≈60% cross-stage average, meeting AC-14 (`handoff-protocol.md#cache-prefix`).
 
-**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
+**Verify rather than assume**: `/cost` carries a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) and exposes a matching `prompt_cache` object for status-line scripts. Both name a likely cause for each miss (e.g. tool definitions or system prompt changed, idle past the TTL), which separates preamble drift from an idle gap. That is the measurement for the ≈60% target above — before it, the figure could only be inferred.
 
-Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2]+[4] across consecutive stages of one `worktask_id`. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
+Preamble drift collapses that rate: `skills/worktask/scripts/cache-lint.sh` asserts byte-stability of sections [1]+[2] across consecutive stages of one `worktask_id`, and of [4]+[4b] within a stage type. Manual-only — no CI runs it, and nothing emits the `prompt-log.jsonl` it consumes.
 
 ### Sibling fan-out staggering
 
@@ -137,7 +139,7 @@ Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity M
 ```
 
 - **Base Tokens**: per-stage baselines (`${CLAUDE_SKILL_DIR}/references/token-baselines.md`)
-- **Model Cost**: haiku $0.25/1M · sonnet $3/1M (Sonnet 5 promo $2/$10 per Mtok through 2026-08-31) · opus $15/1M
+- **Model Cost**: haiku $0.25/1M · sonnet $3/1M (Sonnet 5 promo $2/$10 per Mtok through 2026-08-31) · opus $15/1M · fable (Fable 5.1) $10/$50 per Mtok, $0.25/Mtok cache reads
 - **Retry Factor**: 0.1 low · 0.2 medium · 0.5 high complexity
 - **Complexity Multiplier**: 1.0 standard · 1.5 large codebase · 2.0 novel domain
 

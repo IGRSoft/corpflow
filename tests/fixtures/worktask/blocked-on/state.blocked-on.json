@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "worktask_id": "wt-blocked-on-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "systems",
+  "run_index": 0,
+  "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
+  "handoffs": {},
+  "metadata": {
+    "preflight": { "version": 1, "result": "pass", "ran_at": "unknown", "platforms": ["systems"], "checks": [], "tools_absent": [] }
+  },
+  "tasks": {
+    "PL0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "PL" } },
+    "DV0": { "status": "completed", "verdict": "ok", "metadata": { "stage": "DV", "artifact": "development-0.md", "workspace_path": "/tmp/wt" } },
+    "DV1": { "status": "in_progress", "metadata": { "stage": "DV", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "DR0": { "status": "in_progress", "metadata": { "stage": "DR", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "DC0": { "status": "in_progress", "metadata": { "stage": "DC", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "QA0": { "status": "in_progress", "metadata": { "stage": "QA", "workspace_path": "/tmp/wt", "retry_count": 0 } },
+    "FN0": { "status": "in_progress", "claimed_at": "2026-09-14T00:00:00Z", "metadata": { "stage": "FN", "workspace_path": "/tmp/wt", "retry_count": 1, "escalation_counts": { "FN": 0 }, "last_error": "none" } }
+  }
+}

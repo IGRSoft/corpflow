@@ -2,7 +2,7 @@
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Complete staged worktask system with dynamic sizing, task initialization, and stage management.
 effort: high
-version: 0.5.0
+version: 0.6.0
 ---
 
 > **INVOCATION GATE**: reaching this file by a direct Read/Task/Grep instead of
@@ -45,7 +45,7 @@ stateDiagram-v2
     ErrorRetry --> StageActive: retry_count < 3, fix applied
     ErrorRetry --> Escalated: retry_count == 3 OR hard_constraint
     Escalated --> StageActive: previous-stage fix applied
-    Escalated --> [*]: abort / hard_constraint / user stop
+    Escalated --> [*]: abort / hard_constraint / user stop / escalation cap (status failed)
     StageActive --> Completed: all tasks completed
     Completed --> [*]
 ```
@@ -139,10 +139,10 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base by mod
 ### DC + QA Parallel (Default)
 
 ```bash
-state-patch.sh --task-block DR0 --on DV0   # DR ← DV
-state-patch.sh --task-block QA0 --on DR0   # QA ← DR
-state-patch.sh --task-block DC0 --on DR0   # DC ← DR
-state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DR0 --on DV0   # DR ← DV
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block QA0 --on DR0   # QA ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block DC0 --on DR0   # DC ← DR
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-block FN0 --on QA0,DC0   # FN ← QA AND DC
 ```
 
 Use `--sequential` when DC requires test results.
@@ -261,7 +261,7 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
 
 ### Validation check 10 — pass a title, preview freely
 
@@ -320,6 +320,16 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 > download step — it collides with the Phase-1 Bash prohibition in `commands/worktask.md` and races
 > the expiring URL. See `skills/shared/figma-capture.md § Capture Workflow`.
 
+### Before this loop — autonomy preflight (Phase 1)
+
+An unattended launch (`--auto` containing `plan` or `finalization`) runs
+`scripts/autonomy-preflight.sh` before Step 3 creates `.context/`, with its output buffered under
+`$TMPDIR`. Any failed permission grant, evidence tool or toolchain check stops the run there, in a
+single message, before anything is seeded; a pass is recorded after the Step 3a seed as
+`metadata.preflight` (`references/handoff-protocol.md § metadata.preflight`). Megatask per-issue
+runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a scan:
+`commands/worktask.md § Step 2a-pre` and `§ Step 3a — record the autonomy preflight`.
+
 ### Delegation-only (BINDING)
 
 > **The orchestrator never writes code, tests or docs during a worktask.** Every change is made by
@@ -347,9 +357,10 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 > free, so "an agent is working" is never a reason to stop, and that misconception is what makes an
 > idle turn feel justified from the inside. Ending a turn with "next: DC → RE → FN" when those stages
 > are dispatchable is idle time, not a handoff: the pipeline sits until a human asks whether anything
-> is happening. Exactly three things justify stopping mid-pipeline — the plan gate
-> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, and the FN gate (§ FN Gate).
-> Nothing else does.
+> is happening. Exactly four things justify stopping mid-pipeline — the plan gate
+> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the prompt for a parked
+> permission denial or typed need (§ Step 7a, asked only after every ready stage is dispatched), and the FN gate
+> (§ FN Gate). Nothing else does.
 
 #### Readiness is mechanical, not a judgement call
 
@@ -362,6 +373,10 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 >   | .key' .context/state.json
 > ```
 >
+> A `stale` row answers neither filter: it is not `pending`, so it is never returned, and it is not
+> `completed`, so a row blocked by it is not returned either. It leaves that query only when
+> § Step 6.5d settles it (`skills/shared/state-ledger.md § Status Values`).
+>
 > A name returned with nothing live means there is work to do — dispatch it. The trap bites hardest
 > after a **headline milestone**: a big green result makes the summary feel like a completion, and it
 > is not. The boundary is a handoff, and the handoff is the deliverable.
@@ -370,27 +385,38 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 
 Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
+Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
+
+#### Composing the brief (binding)
+
+Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
+
 #### Preamble layout (binding)
 
 ```
-[1] Plugin/agent contract reminder         ← stable across ALL stages (cacheable)
+[1] Contract reminder (references/contract-reminder.md) ← stable across ALL stages (cacheable)
 [2] Worktask header (id, plan, exploration)← stable across ALL stages (cacheable)
-[3] state.json blob (inlined JSON)         ← evolves per stage
+[3] Ledger pointer + readiness digest (from ledger-digest.sh) ← evolves per stage
 [4] Stage contract excerpt                 ← stable WITHIN stage type (cacheable)
+[4b] Model discipline block                ← stable WITHIN stage type (cacheable)
 ─────── (cache prefix boundary) ───────
-[5] task.description                       ← dynamic per delegation
-[6] retry hints + gate remediation (if retry_count > 0) ← dynamic per delegation
+[5] Task identifiers + ref: lines          ← dynamic per delegation
+[6] retry hints + gate remediation (if retry_count > 0 or fix_round > 0) ← dynamic per delegation
 [7] Stage-specific banners (DR Skill, FN Conductor, MCP fallback) ← SUFFIX, dynamic
 ```
 
-#### Step 0 (NEW) — Read state.json before each delegation
+[5]'s lines and ref shapes: `references/handoff-protocol.md § Section [5] — task identifiers and refs`.
+
+#### Step 0 — section [3] comes from ledger-digest.sh
 
 ```typescript
-const stateRaw = fs.existsSync(".context/state.json")
-  ? fs.readFileSync(".context/state.json", "utf8")
-  : null;
-// stateRaw goes inline into preamble section [3] as a fenced JSON code block.
-// The ledger is mandatory: a null here is a hard failure, not a degraded mode.
+// Section [3] body: the ledger pointer plus readiness digest, grammar in
+// references/handoff-protocol.md#cache-prefix. brief-compose.sh (Step 6) makes this call for
+// every delegation and is its only caller, so [3] cannot drift from the lint that checks it.
+const digest = execFileSync("bash", ["skills/worktask/scripts/ledger-digest.sh",
+                                     "--state", ".context/state.json"], { encoding: "utf8" });
+// Exit 3 means the ledger is missing or unparseable: the composer exits 2 and nothing is
+// dispatched — a hard failure, not a degraded mode.
 ```
 
 #### Artifact path helper
@@ -411,7 +437,10 @@ const ARTIFACT_BASE: Record<string, string> = {
 
 ```typescript
 // …continued: uses ARTIFACT_BASE above
-function stageArtifactPath(code: string, runIndex: number): string {
+function stageArtifactPath(code: string, runIndex: number, row?: TaskRow): string {
+  // A row naming its artifact wins: a DV stream's suffix cannot be composed from `code`.
+  const named = row?.artifact ?? row?.metadata?.artifact;
+  if (named) return named;
   const base = ARTIFACT_BASE[code];
   const numbered = `.context/${base}-${runIndex}.md`;
   if (fs.existsSync(numbered)) return numbered;
@@ -429,7 +458,7 @@ function stageArtifactPath(code: string, runIndex: number): string {
 
 #### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
 
-After every `Task()` return and BEFORE the `completed` patch, first read any
+After every `Task()` return and BEFORE Step 7 settles the row, first read any
 `requests_stage_escalation` in the artifact frontmatter (§ Mid-run escalation — the orchestrator
 is the consumer), then run the three-layer check: Layer 1 (agent self-patch) → Layer 2
 (`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and semantics: loop § Step 6.5
@@ -437,9 +466,9 @@ below.
 
 ##### Completion signal (subagents run in the background by default)
 
-> "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the `completed` patch that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp `completed` over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
+> "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
 
-###### Dispatch-tracking helpers (steps 6a/6.5 — write only cache section [3])
+###### Dispatch-tracking helpers (steps 6a/6.5 — ledger writes; [3] only points at the ledger)
 
 ```typescript
 // markDispatchStatus — dispatched_agents[] with the task_id entry flipped to `status`,
@@ -461,7 +490,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 **Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), never prepended, so prefixes [1][2][3][4] stay byte-identical across stages and the cache prefix boundary stretches as far as possible.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4]: timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`); asserting a real captured prompt-log is still a manual run.
+The preamble assembler MUST exclude forbidden tokens from sections [1][2][4][4b]: timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`); asserting a real captured prompt-log is still a manual run.
 
 ### CRITICAL: Delegation-Only Rule
 
@@ -506,30 +535,27 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 ##### Step 3 — publish snippet
 
      ```bash
-     PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # CC substitutes on load; if empty resolve per skills/shared/plugin-root-resolution.md
-     [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
-     HELPER="$PLUGIN_ROOT/skills/worktask/scripts/publish-pl-issue.sh"
-     if [ -f "$HELPER" ]; then
-       bash "$HELPER"; true
+     pub_rc=0
+     bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
      ```
 
 ##### Step 3 — publish fallback (helper_not_found)
 
      ```bash
-     # …continued: helper missing → audit one deferred github_issue_created row
-     else
+     # …continued: exit 127 means bash found no helper → audit one deferred github_issue_created row
+     if [ "$pub_rc" -eq 127 ]; then
        LOG_DIR="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/logs"
        mkdir -p "$LOG_DIR"
        STATE_FILE="${WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.context/state.json"
        jq -cn --arg ts "$(date -u +%FT%TZ)" --arg dk "$(jq -r '.worktask_id // "unknown"' "$STATE_FILE" 2>/dev/null || echo unknown):$(jq -r '.run_index // 0' "$STATE_FILE" 2>/dev/null || echo 0):gh_issue" \
          '{ts:$ts, actor:"orchestrator", action:"github_issue_created", subject:"PL0", result:"deferred", task_id:"1", metadata:{via:"publish-pl-issue.sh", reason:"helper_not_found", dedupe_key:$dk}}' \
          >> "$LOG_DIR/audit.jsonl"; true
-     fi
+     fi; true
      ```
 
 ##### Step 3 — non-blocking & skip rules
 
-     The trailing `; true` masks the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
+     The `|| pub_rc=$?` capture and the trailing `; true` mask the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
 
 #### Steps 1–3
 
@@ -553,8 +579,12 @@ let tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 ##### Steps 2–3 — completion loop & ready filter
 
 ```typescript
-// 2. Loop until every task has settled ("skipped" is terminal, like "completed")
-const SETTLED = new Set(["completed", "skipped"]);
+// 2. Loop until every task has settled. "skipped" and "failed" are terminal like "completed":
+//    a task nothing will dispatch again must settle, or the loop spins with an empty ready set.
+//    "stale" is deliberately absent: a parked consumer of a re-opened task is neither settled nor
+//    ready, so its own dependents stay unready and the loop stays open until § Step 6.5d settles
+//    it back to pending or completed (skills/shared/state-ledger.md § Status Values).
+const SETTLED = new Set(["completed", "skipped", "failed"]);
 while (tasks.some(t => !SETTLED.has(t.status))) {
   // 3. Find unblocked pending tasks
   const ready = tasks.filter(t =>
@@ -577,6 +607,10 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
     const full = state.tasks[task.id];
     const agentType = full.metadata.agent;
     const model = full.metadata.model;
+    // [5] is the composer's, so the ledger text is never dispatched. full.description becomes the
+    // injection buffer: text prepended before the sentinel is [6], text appended after it is [7].
+    const INJECTION_SPLIT = "@@injection-split@@";  // no injection text contains it
+    full.description = INJECTION_SPLIT;
 ```
 
 ##### Agent-type resolution
@@ -638,7 +672,7 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
 #### Prompt-injection steps 4.6–4.8b — shared rules
 
 These steps mutate ONLY `full.description`: remediation/resume blocks are PREPENDED (dynamic
-section [6]), enforcement banners APPENDED (suffix [7]) — cache prefix [1][2][4] is never touched.
+section [6]), enforcement banners APPENDED (suffix [7]) — cache prefix [1][2][4][4b] is never touched.
 Each fires one `appendAudit` row, and that row is what makes the injection observable: its absence
 for a dispatch proves the loop was bypassed. Readers (DR, TL) surface a missing row as an
 **advisory** finding, never a hard fail — the orchestrator writes it, so a stale version-keyed
@@ -649,53 +683,69 @@ violated until it was injected at dispatch.
 #### Step 4.6
 
 ```typescript
-    // 4.6. Gate-feedback injection — DR→DV / QA→DV loop-back. A prior DR `verdict:fail` /
-    //      QA `verdict:no-go` re-dispatches DV (run_index bumped, retry_count++) carrying the
+    // 4.6. Gate-feedback injection — the one remediation brief builder, for a target of ANY stage.
+    //      Two sources write the row it reads. A gate loop-back: a prior DR `verdict:fail` /
+    //      QA `verdict:no-go` re-dispatches DV (run_index unchanged, retry_count up by 1) carrying the
     //      upstream remediation VERBATIM. Source for N = the failing upstream run_index:
     //      `.context/developer-review-N.md` (DRHandoff.blockers[]) and/or `.context/testing-N.md`
-    //      (QAHandoff.blocking_defects[]). Hook surface: hookSpecificOutput.additionalContext —
+    //      (QAHandoff.blocking_defects[]). Or a typed correction: `--task-reopen` wrote the same two
+    //      keys on the re-opened target and raised `fix_round` (§ Step 6.5a3 — the correction arm).
+    //      Hook surface: hookSpecificOutput.additionalContext —
     //      skills/agent-coordination/references/hook-monitoring.md §"Gate-feedback contract".
 ```
 
 ##### Step 4.6 — remediation injection & audit
 
+Correction re-opens a task of any stage; gate loop-back reaches DV. When `fix_round` > 0 or `retry_count` > 0, inject remediation brief:
+
+###### Remediation injection code
+
 ```typescript
-    if (full.metadata.stage === "DV" && (full.metadata.retry_count ?? 0) > 0) {
-      const fromStage = full.metadata.gate_from_stage;    // "DR" | "QA" (set by the loop-back)
-      const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[]
-      if (fromStage && blockers.length > 0) {
-        full.description =
-          `REMEDIATION (from ${fromStage} gate — fix these specific findings before re-stop):\n` +
-          blockers.map((b, i) => `  ${i + 1}. ${b}`).join("\n") + "\n\n" + full.description;
-        appendAudit({ actor: "orchestrator", action: "gate_remediation_injected",
-                      subject: full.metadata.stage, result: "ok",
-                      metadata: { from_stage: fromStage, to_stage: "DV", count: blockers.length } });
-      }
+    // The stage code that raised it: "DR" | "QA" copied by the Step 7 loop-back from the gate
+    // row, or the correcting stage's own code written by --task-reopen. state-patch.sh writes both.
+    const fromStage = full.metadata.gate_from_stage;
+    const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[] | [finding]
+    if (fromStage && blockers.length > 0) {
+      full.description =
+        `REMEDIATION (from ${fromStage} gate — fix these specific findings before re-stop):\n` +
+        blockers.map((b, i) => `  ${i + 1}. ${b}`).join("\n") + "\n\n" + full.description;
+      appendAudit({ actor: "orchestrator", action: "gate_remediation_injected",
+                    subject: full.metadata.stage, result: "ok",
+                    metadata: { from_stage: fromStage, to_stage: full.metadata.stage,
+                                count: blockers.length } });
     }
 ```
 
 #### Step 4.7
 
 ```typescript
-    // 4.7. DV checkpoint resume — a budget-exhausted DV run left a partial development-N.md
-    //      (+ `## Blockers`) and completed sub-batches at tasks.DV0.progress
-    //      (agents/developer.md § Budget-Aware Checkpointing). Carry it forward so the re-run
-    //      resumes from next_batch instead of redoing applied work.
+    // 4.7. DV checkpoint resume, per DV row — a budget-exhausted run left a partial artifact
+    //      at that row's artifact path (+ `## Blockers`) and completed sub-batches at
+    //      tasks.<ID>.progress (agents/developer.md § Budget-Aware Checkpointing). Carry it
+    //      forward so the re-run resumes from next_batch instead of redoing applied work.
 ```
 
-##### Step 4.7 — resume injection & audit
+##### Step 4.7 — resume injection
 
 ```typescript
     if (full.metadata.stage === "DV") {
-      const dvProgress = state.tasks?.[task.id]?.progress;  // {completed_batches, next_batch, updated_at}
+      const dvRow = state.tasks?.[task.id];
+      const dvProgress = dvRow?.progress;  // {completed_batches, next_batch, updated_at}
       if (dvProgress && (dvProgress.completed_batches?.length ?? 0) > 0) {
+        const partial = stageArtifactPath("DV", full.metadata.run_index ?? 0, dvRow);
         full.description =
           `RESUME (DV checkpoint — prior run completed batches ` +
           `[${dvProgress.completed_batches.join(", ")}]; resume from ` +
           `${dvProgress.next_batch ?? "the next pending batch"}). Do NOT redo applied ` +
-          `batches — read the partial development-N.md and continue forward.` +
+          `batches — read the partial ${partial} and continue forward.` +
           "\n\n" + full.description;
-        appendAudit({ actor: "orchestrator", action: "dv_checkpoint_resume", subject: "DV",
+```
+
+##### Step 4.7 — resume audit
+
+```typescript
+        // …continued: step 4.7 body — keyed by the row, so sibling DV rows resume independently
+        appendAudit({ actor: "orchestrator", action: "dv_checkpoint_resume", subject: task.id,
                       result: "ok",
                       metadata: { completed: dvProgress.completed_batches,
                                   next_batch: dvProgress.next_batch ?? null } });
@@ -720,16 +770,26 @@ across three runs, always cleared by the same manual step — this codifies that
     //       actor holding git that is not itself inside the tree under repair.
 ```
 
-##### Step 4.7a — landing and audit
+##### Step 4.7a — the stray set
 
 ```typescript
     if (full.metadata.stage === "DV" && state.tasks?.AR0?.status === "completed") {
       // .context/ is the ledger's own tree and never lands here: it is not what DV reads
       // through an architecture reference, and committing it would put run bookkeeping in
-      // the payload's history.
-      const stray = gitPorcelain()                       // `git status --porcelain`
+      // the payload's history. Landed files are a DV producer's to ship, not AR's: subtract
+      // them from untracked entries only, listed per file, since the default porcelain
+      // folds a new directory into one `?? dir/` line.
+      // `land-artifacts.sh --list-landed --tree "$(git rev-parse --show-toplevel)"`; failure = empty set
+      const landed = new Set(listLanded(gitToplevel()));
+      const stray = gitPorcelain()           // `git status --porcelain --untracked-files=all`
         .filter(f => !f.path.startsWith(".context/"))
-        .filter(f => f.worktreeDirty || f.untracked);
+        .filter(f => f.worktreeDirty || (f.untracked && !landed.has(f.path)));
+```
+
+##### Step 4.7a — landing and audit
+
+```typescript
+      // …continued: step 4.7a body
       if (stray.length > 0) {
         gitCommit(stray.map(f => f.path),
                   `AR contract landing for ${task.id} (run ${state.run_index})`);
@@ -752,7 +812,8 @@ takes a full budget to discover it.
 
 Two banners, because isolation and assignment are two claims: a stale worktree of a *different*
 clone is perfectly isolated, satisfies D0.0, and still cannot receive a single edit.
-`dv-tree-preflight.sh` exists for exactly that case.
+`dv-tree-preflight.sh` exists for exactly that case. Neither banner is the `WORKSPACE_ROOT=` line:
+Step 6's composer emits that as [7]'s first line from the same script, after the re-stamp below.
 
 ```typescript
     // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected: every DV stage
@@ -775,21 +836,88 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
       full.description = full.description + "\n\n" + enforce;
 ```
 
+##### Step 4.8 — pin the tree
+
+The row's tree is fixed here, before `Task()`, so this banner and the Step 6 dispatch read one path.
+The code implements `references/handoff-protocol.md § Pinning a row's tree`.
+
+```typescript
+      // …continued: step 4.8 body. Concurrent = no transitive blocked_by path either way.
+      const reaches = (from, to) => {
+        const seen = new Set(), stack = [...(state.tasks[from]?.blocked_by ?? [])];
+        while (stack.length) {
+          const id = stack.pop();
+          if (id === to) return true;
+          if (!seen.has(id)) { seen.add(id); stack.push(...(state.tasks[id]?.blocked_by ?? [])); }
+        }
+        return false;
+      };
+      const sharedWithConcurrent = Object.entries(state.tasks ?? {}).some(([id, t]) =>
+        id !== task.id && t.metadata?.stage === "DV" &&
+        t.metadata?.workspace_path === full.metadata.workspace_path &&
+        !reaches(task.id, id) && !reaches(id, task.id));
+```
+
+##### Step 4.8 — re-stamp, then read the banner path
+
+```typescript
+      // …continued: step 4.8 body. Argv form, never a shell string: a path may contain `'`.
+      if (full.metadata.stream && sharedWithConcurrent) {
+        const tree = ensureStreamWorktree(task);  // this stream's own worktree, off metadata.base_ref
+        execFileSync("bash", ["skills/worktask/scripts/state-patch.sh", "--task-meta", task.id,
+                              "--set", JSON.stringify({ workspace_path: tree })]);
+      }
+      // After the re-stamp: the script reads the row's path, falling back to the orchestrator
+      // root, never the ledger-level path, which would hand a stream row the orchestrator's tree.
+      const assigned = execFileSync("bash", ["skills/worktask/scripts/workspace-root-banner.sh",
+                                             "--task", task.id], { encoding: "utf8" })
+                         .trim().replace(/^WORKSPACE_ROOT=/, "");
+```
+
+##### Step 4.8 — land consumed artifacts
+
+After any re-pin and before Step 5 stamps `in_progress`, a row that declares `consumes` has every
+consumed pair landed again into the tree it will run in. A re-pinned stream holds a fresh tree the
+boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that writes nothing.
+
+```typescript
+      // …continued: step 4.8 body
+      const consumes = full.metadata.consumes ?? [];
+      if (consumes.length > 0) {
+        const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                        "--consumer", task.id]);
+        if (land.status !== 0 && land.status !== 1) blockOnToolError(task.id);  // 1: already blocked
+        if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Task()
+        full.description += "\n\nLANDED (read-only, never edit or stage): " +
+          consumes.flatMap(c => c.paths).join(", ");
+      }
+```
+
+##### Step 4.8 — a refused landing, and its release
+
+`blockOnToolError` exists because every status other than 0 or 1 records nothing — exit 2, or a
+signal or crash that bypassed the script's own mapping to 2 — and a row left `pending` is
+re-dispatched every pass. It runs `state-patch.sh --task-meta <ID> --set '{"landing_error":{"reason":"tool_error"}}'`,
+then `--task-status <ID> blocked`; if either write fails, stop per § Error Handling. Exit 1 needs
+neither, since the script already blocked the row. `queueLandingBlock` reports it as § Step 6.5d does.
+
+**Release**, once the cause is fixed: `state-patch.sh --task-meta <ID> --set '{"landing_error":null}'`,
+then `--task-status <ID> pending`. The next ready pass reaches this gate, which re-lands every pair.
+
 ##### Step 4.8 — assigned-tree banner & audit
 
 ```typescript
       // …continued: step 4.8 body
-      const assigned = state.metadata?.workspace_path ?? full.metadata.workspace_path;
       const assertTree =
         `ASSIGNED TREE REQUIRED: before your first Edit/Write run ` +
         `\`bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"\` ` +
-        `(WORKSPACE_ROOT = ${assigned ?? "the banner value below"}). ` +
+        `(WORKSPACE_ROOT = ${assigned}). ` +
         `Exit 1 is BLOCKING: do not edit, log workspace_path_mismatch, return verdict:blocked ` +
         `quoting both paths it printed. Warnings are advisory. Isolation (above) is a different ` +
         `claim — a stale worktree passes it and is still the wrong tree.`;
       full.description = full.description + "\n\n" + assertTree;
-      appendAudit({ actor: "orchestrator", action: "dv_worktree_enforced", subject: "DV",
-                    result: "ok", metadata: { isolation: "worktree" } });
+      appendAudit({ actor: "orchestrator", action: "dv_worktree_enforced", subject: task.id,
+                    result: "ok", metadata: { isolation: "worktree", workspace_path: assigned } });
     }
 ```
 
@@ -799,14 +927,25 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
     // 4.8a. DV test-scope enforcement — DV-only, never QA (QA's full-suite run IS the sanctioned
     //       regression gate, agents/qa-engineer.md § Q1 Three-Mode Dispatcher).
     if (full.metadata.stage === "DV") {
-      const mode = full.metadata.test_mode ?? state.metadata?.test_mode ?? "scoped";
+      let mode = full.metadata.test_mode ?? state.metadata?.test_mode;
+      if (mode == null) {  // PL0 stamps test_mode; a silent default would hide the missing stamp
+        appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: task.id,
+                      result: "warn", metadata: { test_mode: "scoped", reason: "test_mode_unstamped" } });
+        mode = "scoped";
+      }
+```
+
+##### Step 4.8a — scope banner
+
+```typescript
+      // …continued: step 4.8a body
       const scope =
         `TEST SCOPE (mode: ${mode}): run ONLY \`Executed Tests (DV)\` per ` +
         `agents/developer.md D2. DO NOT re-run the full suite to reverify a fix between ` +
         `iterations — full-suite regression is QA's gate, not DV's. Apple test identifiers ` +
         `are suite-terminal (\`-only-testing:<Target>/<Suite>\`); per-function identifiers ` +
         `are forbidden — they select nothing and degrade to a full run. Record the resolved ` +
-        `mode in \`development-N.md § Decisions\`.`;
+        `mode in your artifact's \`§ Decisions\` (your row's \`metadata.artifact\`).`;
 ```
 
 ##### Step 4.8a — inject & audit
@@ -814,7 +953,7 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 ```typescript
       // …continued: step 4.8a body
       full.description = full.description + "\n\n" + scope;
-      appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: "DV",
+      appendAudit({ actor: "orchestrator", action: "dv_test_scope_enforced", subject: task.id,
                     result: "ok", metadata: { test_mode: mode } });
     }
 ```
@@ -928,9 +1067,12 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
 ```typescript
       // …continued: step 4.9 else-arm
       } else {  // "bypass" — --auto=[finalization] / --emergency, or per-issue by /megatask
-        // (e0) Record-only sweep: audit `sweep_recorded` for the collected items and, for any
-        //      effective-escalate item, `sweep_escalation_unprompted`. NEVER prompt here —
-        //      recording never stops, only prompting does.
+        // (e0) Bypass records decision-class items only: audit `sweep_recorded` for them.
+        //      Effective-escalate items take the lane order in commands/worktask.md
+        //      § Escalation guard — escalate stops at every boundary: /megatask per-issue
+        //      PARKS and STOPs (no FN); a no-human lane (CORPFLOW_NONINTERACTIVE=1, headless)
+        //      audits `sweep_escalation_unprompted` {id, stage, ref} per item; any other lane
+        //      renders them as (c+) does and records the answers before (e).
         // (e) fn_gate_bypass, then delegate FN unattended (commit/push/PR).
         appendAudit({ actor: "orchestrator", action: "fn_gate_bypass",
                       subject: `FN${N}`, result: "ok", reason: "unattended" });
@@ -945,11 +1087,11 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
     //    write (never agent_type or an env var, so nested delegates inherit it).
     sh(`state-patch.sh --task-status ${task.id} in_progress`);
 
-    // 5a. Embedded commands (DV) — PREPEND the Skill invocation when the worktask carries
+    // 5a. Embedded commands (DV) — APPENDED as suffix [7] when the worktask carries
     //     embedded_commands metadata.
     if (full.metadata.stage === "DV" && worktask_embedded_commands) {
       const skillInvocation = `IMPORTANT: Before implementing, invoke the embedded command via Skill tool: Skill("${embedded_cmd}", args="${embedded_args}")`;
-      full.description = skillInvocation + "\n\n" + full.description;
+      full.description = full.description + "\n\n" + skillInvocation;
     }
 ```
 
@@ -961,8 +1103,7 @@ clone is perfectly isolated, satisfies D0.0, and still cannot receive a single e
     //     COMMAND, not a skill: there is no skills/tech-code-review/ to invoke, so name
     //     the file and let the stage read it.
     if (full.metadata.stage === "DR") {
-      const runIndex = full.metadata.run_index ?? 0;
-      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save findings summary to .context/developer-review-${runIndex}.md`;
+      const reviewInvocation = `IMPORTANT: Execute developer code review per commands/tech-code-review.md (plugin-root-relative). Save the findings summary to the path on this brief's \`artifact:\` line.`;
       full.description = full.description + "\n\n" + reviewInvocation;
     }
 ```
@@ -984,7 +1125,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
         "  • `.context/attachments/PR instructions.md`",
         "  • `.context/attachments/Review request.md`",
         "Run `mkdir -p .context/attachments` first.",
-        "Also write `.context/complete-summary-N.md` (worktask summary + Stage Timings; N = task.metadata.run_index).",
+        "Also write the worktask summary + Stage Timings to the path on this brief's `artifact:` line.",
         "Then read `PR instructions.md` and follow it as the PR-creation script.",
       ].join("\n");
       full.description = full.description + "\n\n" + fnInjection;
@@ -1027,9 +1168,9 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     //     written either way (durability/compression + F4 source); the typed return never
     //     replaces them. Structured-output dispatch is reliable: no indefinite StructuredOutput
     //     re-call after success, and schema-validation failures abort after 5 attempts.
-    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, NOT preamble text
-    //     — never in [1][2][4] nor in `full.description` — so byte-identity of the cacheable
-    //     prefix is untouched and no per-call varying token enters it.
+    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, not preamble
+    //     text — never in [1][2][4][4b] nor `full.description` — so byte-identity of the
+    //     cacheable prefix is untouched and no per-call varying token enters it.
 ```
 
 ##### Step 5f — model resolution
@@ -1049,14 +1190,46 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     }
 ```
 
+##### Step 6 — compose the brief
+
+```typescript
+    // …continued: step 6 body. Runs after Step 4.8's re-stamp, so [7]'s WORKSPACE_ROOT= line and
+    // Step 4.8's banner read one row. _orch_root is set in commands/worktask.md
+    // § Workspace-root cross-check. Contract: § Composing the brief.
+    const composed = spawnSync("bash", ["skills/worktask/scripts/brief-compose.sh", task.id,
+                                        "--orch-root", _orch_root], { encoding: "utf8" });
+    if (composed.status !== 0) {  // 1 = guard failure, 2 = usage/ledger/canon; stdout is empty
+      sh(`state-patch.sh --task-status ${task.id} blocked`);
+      appendAudit({ actor: "orchestrator", action: "brief_compose_failed", subject: task.id,
+                    result: "blocked", metadata: { exit: composed.status, stderr: composed.stderr.trim() } });
+      continue;  // no Task(): surface the stderr per § Escalation Chains
+    }
+```
+
+##### Step 6 — splice the injections
+
+```typescript
+    // …continued: step 6 body. Each injection keeps its section; [1]–[5] stay as composed.
+    const [hints, banners] = full.description.split(INJECTION_SPLIT).map(s => s.trim());
+    const HINTS = "<<<retry-hints>>>\n";
+    const cut = composed.stdout.lastIndexOf(HINTS) + HINTS.length;
+    const prompt = composed.stdout.slice(0, cut) + (hints ? `${hints}\n` : "") +
+                   composed.stdout.slice(cut) + (banners ? `\n${banners}\n` : "");
+```
+
 ##### Step 6 — Task() dispatch
 
 ```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
+    // A DV row's tree is fixed at dispatch by the dispatcher: Step 4.8 settled
+    // tasks.<ID>.metadata.workspace_path (re-pinned if a concurrent row shared it) before this
+    // call, and the composed [7] banner carries it. No
+    // `isolation: "worktree"` argument — the Agent tool's fork is a tree the ledger never
+    // recorded, and dv-tree-preflight.sh --assigned blocks every edit inside it.
     const launchAck = Task({
       subagent_type: subagentType,
       model: effectiveModel,
-      prompt: full.description,
+      prompt,  // the composer's stdout with [6]/[7] spliced in, never full.description
       ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
     });
 
@@ -1065,36 +1238,47 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 #### Step 6a
 
 ```typescript
-    // 6a. dispatched_agents[] — record/replace the entry keyed by task_id; writer = orchestrator
-    //     ONLY. status:"launched" now, flipped to completed/failed by Step 6.5. No dispatch
-    //     timestamp (no consumer). agent_id/name populated when the runtime surfaces them
-    //     (bg-default launch-ack; named spawns via metadata.spawn_name). Read by resume.md
-    //     step 0. Cache section [3].
+    // 6a. dispatched_agents[] — one entry per task_id; writer = orchestrator ONLY, through
+    //     `state-patch.sh --dispatch <TASK_ID> <agent_id> <status>` (upserts by task_id, clamps
+    //     the array). status:"launched" now, flipped to completed/failed by Step 6.5. Read by
+    //     resume.md step 0. Ledger only; [3] digests it. The dispatched agent claims its own row with
+    //     `state-patch.sh --claim <TASK_ID>` (agents/developer.md § D0.0b), never the orchestrator.
     if (fs.existsSync(".context/state.json")) {
-      const entry = {
-        stage: full.metadata.stage,
-        task_id: task.id,
-        subagent_type: subagentType,
-        ...(launchAck?.agent_id ? { agent_id: launchAck.agent_id } : {}),
-        ...(full.metadata.spawn_name ? { name: full.metadata.spawn_name } : {}),
-        model_requested: modelRequested,
-        ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
-        status: "launched",
-      };
+      if (launchAck?.agent_id) {
+        execFileSync("bash", ["skills/worktask/scripts/state-patch.sh", "--dispatch",
+                              task.id, launchAck.agent_id, "launched"]);
 ```
 
-##### Step 6a — replace-array merge
+##### Step 6a — id-less entry
 
 ```typescript
-      // Replace any prior entry for this task_id (re-dispatch); history stays in audit.jsonl.
-      // dispatched_agents is a REPLACE-array: jq `. * $patch` overwrites arrays (deep-merges
-      // only objects), so this swaps in the filtered+appended list. See handoff-protocol.md#atomic-write.
-      atomicMergeStateJson({
-        facts: {
-          dispatched_agents:
-            [...(state.facts?.dispatched_agents ?? []).filter(a => a.task_id !== task.id), entry],
-        },
-      });
+      // …continued: step 6a body. No agent_id surfaced → --dispatch cannot run (exit 2), so the
+      // entry is merged without one: resume.md step 0 adopts an id-less row by subagent_type,
+      // and a missing row would re-delegate a stage that may still be live.
+      } else {
+        const cur = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).facts?.dispatched_agents ?? [];
+        atomicMergeStateJson({ facts: { dispatched_agents: [...cur.filter(a => a.task_id !== task.id),
+          { stage: full.metadata.stage, task_id: task.id, subagent_type: subagentType,
+            model_requested: modelRequested, status: "launched" }] } });
+      }
+```
+
+##### Step 6a — keys --dispatch does not write
+
+```typescript
+      // --dispatch writes stage, task_id, subagent_type, agent_id, status, model_requested.
+      // `name` and `model_resolved` are merged onto that entry only when they apply;
+      // dispatched_agents is a REPLACE-array (jq `. * $patch` overwrites arrays), so the whole
+      // mapped list is swapped in. See handoff-protocol.md#atomic-write.
+      const extra = {
+        ...(full.metadata.spawn_name ? { name: full.metadata.spawn_name } : {}),
+        ...(effectiveModel !== modelRequested ? { model_resolved: effectiveModel } : {}),
+      };
+      if (Object.keys(extra).length > 0) {
+        const agents = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).facts.dispatched_agents;
+        atomicMergeStateJson({ facts: { dispatched_agents:
+          agents.map(a => (a.task_id === task.id ? { ...a, ...extra } : a)) } });
+      }
     }
 
 ```
@@ -1103,7 +1287,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     // 6.5-pre. Read handoff.requests_stage_escalation from the artifact frontmatter BEFORE any
-    //          completed stamp lands (Layer 2/3 below patch unconditionally) — validate, then
+    //          status stamp lands (Layer 2/3 below stamp the verdict-mapped status) — validate, then
     //          accept (--task-create/--task-block + metadata.added_stages) or reject naming the
     //          failed condition. Semantics: § Mid-run escalation — the orchestrator is the consumer.
     // 6.5. Patch state.json from artifact frontmatter if the agent didn't — layer #3 after the
@@ -1131,41 +1315,95 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
         // …continued: step 6.5a body
+        const esc = escalationBookkeeping(stateForFailed, task, cls);  // see 6.5a1
         atomicMergeStateJson({
           tasks: {
             [task.id]: {
+              ...(esc.terminal ? { status: "failed" } : {}),
               last_error: {
-                class: cls,                              // transient|logic|missing_input|…|exhausted
+                class: esc.terminal ? "exhausted" : cls,
                 partial: Boolean(launchAck?.partial),    // partial work preserved
                 at: new Date().toISOString(),
                 ref: `.context/errors/${errorBasename(subagentType)}.md#retry-${runIndex}`,
               },
+              metadata: esc.metadata,                    // escalation_counts, never reset here
             },
           },
           facts: {
             dispatched_agents: markDispatchStatus(stateForFailed, task.id, "failed"),
           },
         });
-        routeToRetryMatrix(code, cls);  // never falls through to completion
+```
+
+##### Step 6.5a — why the arm ends in continue
+
+```typescript
+        // …continued: step 6.5a body
+        // Routing is the next iteration's ready filter reading the patch just written; this
+        // continue is what guarantees an errored return never falls through to the completion
+        // patch, which would record a failure as a success.
         continue;
       }
 
 ```
 
+##### Step 6.5a1 — the escalation target
+
+```typescript
+// The Escalate-to column of agent-coordination § Retry / Escalate Matrix, as data. That
+// table stays the SSOT — status-enum-parity.bats diffs this map against it, so the two
+// cannot drift. `transient` and `logic` are absent: they retry the same agent, so there is
+// no edge. `hard_constraint` is absent too — it aborts for a human rather than re-entering
+// the loop, and capping an abort would be meaningless.
+const ESCALATE_TO = {
+  missing_input: "PREV", exhausted: "PREV",
+  ambiguous_requirements: "PL", design_flaw: "AR",
+};
+```
+
+##### Step 6.5a1 — the per-edge escalation cap
+
+```typescript
+function escalationBookkeeping(state, task, cls) {
+  const meta = { ...(state.tasks[task.id].metadata ?? {}) };
+  const code = ESCALATE_TO[cls];  // one patch; routing stays the next iteration's ready filter
+  if (!code) return { terminal: false, metadata: meta };   // same-agent retry, or abort
+  // Full task id, never a bare code: DV0→AR0 must not share a counter with DV3→AR0.
+  const target = code === "PREV"
+    ? (task.blocked_by ?? []).slice(-1)[0]    // previous stage per chain
+    : Object.keys(state.tasks).find(id => id.startsWith(code));
+  if (!target) return { terminal: false, metadata: meta };
+```
+
+##### Step 6.5a1 — the cap, and the reset that must not reach it
+
+```typescript
+// …continued: escalationBookkeeping body
+  const counts = { ...(meta.escalation_counts ?? {}) };
+  counts[target] = (counts[target] ?? 0) + 1;
+  meta.escalation_counts = counts;            // survives the reset below
+  if (counts[target] > 2) return { terminal: true, metadata: meta };  // cap 2
+  meta.retry_count = 0;                       // reset at handoff — retry_count ALONE
+  meta.error_escalated_to = target.replace(/[0-9]+$/, "");
+  return { terminal: false, metadata: meta };
+}
+```
+
 ##### Step 6.5a2 — why a mid-stage yield needs its own arm
 
 An agent that yields mid-sentence with budget remaining has **not** errored, so 6.5a does not fire
-and control falls through to Layer 3, whose fallback hard-codes `status:"completed", verdict:"ok"`
-over a stage that never finished — corrupting the ledger in the one direction nothing downstream
-re-checks. This arm keys on *evidence* (artifact absent, or present with no `handoff.verdict`),
-never on the shape of the return message, so a normally-completed stage still takes Layer 2.
+and control falls through to Layer 3 and Step 7, which settle the row from a verdict written before
+the stage finished — corrupting the ledger in the one direction nothing downstream re-checks — or
+escalate a stage that only needed resuming. This arm keys on *evidence* (artifact absent, or
+present with no `handoff.verdict`), never on the shape of the return message, so a
+normally-completed stage still takes Layer 2.
 
 ##### Step 6.5a2 — incomplete return (mid-stage yield)
 
 ```typescript
       // 6.5a2. The stage yielded without finishing its handoff. Precondition — the agent is NOT
       //        live (Step 6.5's liveness rule forbids this block while agent_id is live).
-      const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0);
+      const incArtifact = stageArtifactPath(code, full.metadata.run_index ?? 0, post.tasks?.[task.id]);
       const incHandoff = fs.existsSync(incArtifact) ? parseFrontmatter(incArtifact) : null;
       const selfPatched = post.tasks?.[task.id]?.status === "completed"
                           && Boolean(post.tasks[task.id].verdict);
@@ -1199,67 +1437,319 @@ The agent holds the half-done work; a fresh dispatch would redo it against a tre
 edited. Same branch as a parked agent in `references/resume.md § State → Action Table`.
 
 ```typescript
-        // …continued: step 6.5a2 body
-        SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
-                      message: `Stage ${code} returned without a completed handoff. Finish the work, write ${incArtifact} with a handoff verdict, and return. Do not restart from scratch.` });
+        // …continued: step 6.5a2 body. A stage message, so it carries a msg_id (Step 6.5a4).
+        sendStageMessage(state, task, subagentType,
+          `Stage ${code} returned without a completed handoff. Finish the work, write ${incArtifact} with a handoff verdict, and return. Do not restart from scratch.`);
         continue;   // never falls through to the completion patch
       }
 ```
 
-##### Step 6.5a3 — why a cross-session ask needs its own arm
+##### Step 6.5a3 — why a typed blocked return needs its own arm
 
-A stage that needs another **session's** answer cannot get it: a subagent's `SendMessage` to a
-session delivers the reply into the *parent* conversation, so a stage agent that sent its own ask
-would wait for something that structurally never arrives. The stage therefore returns
-`verdict:"blocked"` naming who to ask and what, and the orchestrator — which *is* the session that
-receives the reply — sends on its behalf. Without this arm the return reads as an ordinary blocked
-verdict and burns a retry on a stage that never failed.
+A stage that cannot continue without something it cannot produce returns `verdict: "blocked"` with
+one `handoff.blocked_on` (`references/handoff-protocol.md § Schema — blocked_on`). Read as an
+ordinary blocked verdict, that return burns a retry on a stage that never failed. Left to judgement,
+it takes a new improvised route each time: one run met a screenshot need, a host file, a merge
+denial and a cross-session ask, and routed all four by hand. So every kind goes through one table
+and one router, and each writes a fixed set of audit legs.
 
-##### Step 6.5a3 — cross-session ask (blocked-on-peer return)
+##### Step 6.5a3 — the dispatch table — kinds and routing
+
+Route every `blocked` return by `kind`; each kind is landed so no row routes to a fallback for want of owner.
+
+###### Dispatch table
+
+| kind | Orchestrator action | Audit legs | Owner | Fallback |
+|---|---|---|---|---|
+| `user_decision` | ask `question` with `options` at § Step 7a; resume with hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
+| `user_action` | show `request` and `!` line at § Step 7a | requested / verified | #394, landed | none |
+| `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
+| `peer_session` | write request, send pointer, relay validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` (mailbox unavailable); `user_decision` (expiry) |
+| `artifact` | resume once `path` in stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
+| `correction` | re-open `target_task`, park consumers `stale` | opened / closed | #404, landed | none |
+| `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while failing |
+
+###### Step 6.5a3 — landing an arm
+
+Every kind above is landed, so no row routes to a fallback for want of its owner. A kind added later
+starts pending: it routes to its fallback until its owner lands, its own legs start at that landing,
+and landing it changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the same
+PR.
+
+##### Step 6.5a3 — route every typed blocked return
 
 ```typescript
-      // …continued: after the 6.5a2 block
-      const ask = incHandoff?.cross_session_ask;
-      if (!incomplete && incHandoff?.verdict === "blocked" && ask) {
+      // …continued: after the 6.5a2 block; ROUTER = scripts/blocked-on-dispatch.sh. No branch
+      // picks an arm by hand: the router reads the table above from blocked-on-lib.sh.
+      const typedNeed = !incomplete && incHandoff?.verdict === "blocked"
+        && Boolean(incHandoff?.blocked_on ?? incHandoff?.cross_session_ask);   // legacy alias
+      const routed = !typedNeed ? null : spawnSync("bash", [ROUTER, "route", "--task-id", task.id,
+        "--payload", JSON.stringify(incHandoff)], { encoding: "utf8" });
+```
+
+##### Step 6.5a3 — what the route result decides
+
+```typescript
+      // …continued. Exit 1 is a malformed need: re-dispatch with its fail: line, as § Step 6.5c.
+      if (routed?.status === 1) { redispatch(task.id, { suffix: routed.stderr }); continue; }
+      if (routed && routed.status !== 0) { escalate(task.id); continue; }   // 2: § Error Handling
+      const out = routed ? JSON.parse(routed.stdout) : null;
+      const rb = out?.resume_block;   // a host_environment re-probe that passed, or an artifact already landed
+      if (rb) { deliverResume(rb, rb.instruction); continue; }
+      if (out?.arm === "peer_session") { deliverAsk(out); continue; }   // next section
+      if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
+      // A permission need, or a blocked return with no typed need, goes on to § Step 6.5a4.
+```
+
+###### Step 6.5a3 — deliverAsk, one transport per ask
+
+```typescript
+// MB = scripts/mailbox.sh. `route` wrote the request and parked the task; this sends the pointer.
+function deliverAsk(out) {
+  const led = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));   // route just parked it
+  const to = led.tasks[out.task_id].metadata.blocked_on.detail.to;
+  const one = ListAgents().filter(a => a.name === to);   // exactly one row ⇒ the message transport
+  if (one.length !== 1) return spawnSync("bash", [MB, "comment", "--task-id", out.task_id]);
+  const leg = (...a) => spawnSync("bash", [MB, "leg", "--task-id", out.task_id, "--ask-id",
+    out.ask_id, "--transport", "message", ...a], { encoding: "utf8" });
+  if (!JSON.parse(leg("--leg", "sent").stdout).written) return;   // sent already: never re-send
+  const r = SendMessage({ to, message: out.message, notify_when_idle: true });
+  leg("--leg", "delivered", "--result", r.result);
+}
+```
+
+###### Step 6.5a3 — why the transport is chosen once
+
+`comment` writes its own `sent` and `delivered` legs, so the two transports never both run for one
+ask. `leg` dedupes on `(task, ask_id, leg)`: `written: false` means a prior turn already sent this
+ask, and `SendMessage` is not idempotent — a second send asks the peer the same question twice. A
+`queued` or `refused` result is recorded and left to the deadline, never retried on another channel.
+
+##### Step 6.5a3 — the fallback arm
+
+`route` parks a need as a `user_action` when the need's own arm cannot clear it: a landed arm whose
+check misses (below), a mailbox that is unavailable, or a kind still waiting on its owner — none
+today. The ledger keeps the stage's original `blocked_on`, and the `requested` row adds
+`fallback_from`, plus `owner_issue` only for that last case, so no fallback carries one while every
+kind is landed. At § Step 7a, `batch` shows a fixed lead line for the kind with the detail keys
+fenced as data. Only a native `user_action` offers a `!` line.
+
+- `peer_session` falls back only when the mailbox is unavailable: `fallback_from`, no `owner_issue`,
+  `ask_id: null`, and the user relays that peer's reply. An ask that reaches its deadline instead
+  takes one `expired` leg and re-routes as a `user_decision` carrying its question and options.
+- `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
+
+###### Step 6.5a3 — a landed arm that checks before it parks
+
+A miss on either check below parks the need as a `user_action` with `fallback_from` and no
+`owner_issue`.
+
+- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
+  need clears only when `check` reads `pass`.
+- `artifact`: `route` checks `path` against the landed set of the stage's tree, once the path ladder
+  admits it. A hit clears the need with the ok `landed` row and a `resume_block`; a miss, or a path
+  no landing can produce such as a `.context/` artifact, writes no `landed` row.
+
+###### Step 6.5a3 — the correction arm — invocation
+
+A `correction` names a defect in work another task owns. Route re-opens target **and** parks source. Orchestrator makes one `route` call; `route` makes one `state-patch.sh --task-reopen <target> --from <source>` call carrying every mutation, then parks source and writes `opened` leg (§ blocked-on-dispatch.sh — route, the correction arm — invocation).
+
+###### Step 6.5a3 — the correction arm — guards and mutations
+
+Router checks: target exists, not source, is `completed`; refuses with `fail:` line and untouched ledger. Op re-checks under its lock. Retried turn caught by `opened` leg in log, so `fix_round` moves once per correction. Target becomes `pending` with `fix_round` +1, `gate_from_stage` = source stage code, `gate_blockers` = rework text. Every `completed` consumer becomes `stale`, keeping verdict, artifact, handoff. Ops: `references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`.
+
+###### Step 6.5a3 — what the target and its consumers do next
+
+The target's next dispatch carries the finding through the § Step 4.6 remediation injection, which
+`fix_round` alone triggers, whatever stage the target is — there is no second brief builder. It
+renders as the one `gate_blockers[]` string: the finding byte-for-byte, then its `evidence_ref:` and
+`source_task:` lines. Its `stale` consumers wait for the target's own completion boundary, where § Step 6.5d
+settles each of them; settling at the correcting stage's resume instead would judge them against an
+artifact not yet corrected.
+
+##### Step 6.5a4 — why delivered is not acknowledged
+
+A `reattach_send_result` of `ok` proves the harness accepted a message, not that the stage read it:
+a message waiting on the stage's next tool round misses a stage that returns first. So every
+orchestrator message to a stage carries a `msg_id`. The stage runs the `--ack` line it carries as
+its first tool call and names the message it followed in `handoff.acted_on_msg_id`
+(`skills/shared/stage-contracts.md § Orchestrator messages — ack first`). `ack-check.sh` joins the
+send rows, the `message_ack` rows and that field.
+
+**Never assume the latest amendment won.** The instruction a stage followed is the one its ack rows
+and `acted_on_msg_id` prove; message order proves nothing. Send rows without a `msg_id` predate the
+check and are exempt. Exit → action: `references/resume.md § Reattach rows — one resend, then
+escalate`.
+
+##### Step 6.5a4 — message ack check
+
+```typescript
+      // …continued: after the 6.5a3 block. Reached by a completed return, or a blocked one 6.5a3
+      // did not park; 6.5a2, 6.5a3 and 7a sends are checked at the return they provoke. A fix
+      // round reuses the task key, so --run-index keeps an earlier dispatch's messages out.
+      const ack = spawnSync("bash", ["skills/worktask/scripts/ack-check.sh", "--task", task.id,
+        "--run-index", String(full.metadata.run_index ?? 0),
+        ...(fs.existsSync(incArtifact) ? ["--artifact", incArtifact] : [])], { encoding: "utf8" });
+      if (ack.status !== 0) {   // 1 not delivered, 3 acted_on mismatch, 2 the check itself failed
         atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
-        // notify_when_idle: one-shot wake instead of polling `claude agents --json`.
-        // Same-machine peers only; a remote peer simply never wakes us and the row stays deferred.
-        SendMessage({ to: ask.to, notify_when_idle: true, message: ask.question });
-        appendAudit({
-          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
-          result: "deferred",
-          metadata: { to: ask.to, question: ask.question, leg: "ask" },
-        });
-        continue;   // siblings keep moving; this stage is parked, not failed
+        resendOnceOrEscalate(state, task, subagentType, ack);
+        continue;   // judged again at the next boundary; never falls through to Layer 2
       }
 ```
 
-##### Step 6.5a3 — relaying the answer
+##### Step 6.5a4 — why a permission denial needs its own arm
 
-The reply arrives in the orchestrator's own conversation on a later turn. Relay it and log the
-second leg; the `deferred`/`ok` pair is what `references/resume.md § Reply routing` branches on.
+An auto-mode classifier denial is not a stage failure: the stage stopped where it should, and the
+session's permission posture said no. Read as an ordinary blocked or errored return it spends a
+retry or escalates a stage that never failed; left to the orchestrator it becomes an ad-hoc stop
+and a hand-landed command that no stage, review or audit row records. One observed run met three
+denials that way and logged none of them. This arm parks the task, § Step 7a asks the user once
+per boundary, and only the denied step resumes.
+
+##### Step 6.5a4 — detect and park (permission denial)
 
 ```typescript
-        SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType, message: reply });
-        appendAudit({
-          actor: "orchestrator", action: "cross_session_ask", subject: task.id,
-          result: "ok", metadata: { to: ask.to, leg: "relay" },
-        });
+      // …continued: after the 6.5a4 ack check; PARK = scripts/permission-park.sh.
+      // A completing or failing verdict never reaches classify (next section).
+      const parkable = !incomplete && ["blocked","escalate"].includes(incHandoff?.verdict);
+      const typed = parkable && Boolean(incHandoff?.blocked_on);
+      const pd = !parkable ? null : spawnSync("bash",
+        [PARK, "classify", ...(typed ? ["--payload", JSON.stringify(incHandoff)] : [])],
+        { input: typed ? "" : stageReturnText });
+      if (pd?.status === 0) {
+        // Ledger via state-patch.sh plus one deduped, redacted permission_denied row; retry_count,
+        // escalation_counts and last_error stay untouched.
+        spawnSync("bash", [PARK, "park", "--task-id", task.id, "--detail", pd.stdout.trim()]);
+        continue;   // siblings keep moving; § Step 7a asks
+      }
 ```
 
-Check the send result on both legs (`references/resume.md § Reattach rows — the SendMessage has a
-result too`): anything but delivered leaves the stage parked rather than awaiting an answer that
-was never asked for.
+###### Step 6.5a4 — which returns reach classify
+
+Only a `blocked` or `escalate` verdict reaches the arm, and a handoff that carries `blocked_on`
+passes it as `--payload`. A completing verdict (`ok`, `pass`, `go`, `approve`) or a failing one
+(`fail`, `reject`, `no-go`) never reaches classify, even when its text quotes classifier wording:
+that return settles through § Step 6.5 as usual. The returned text is the fallback, since
+PermissionDenied firing inside a subagent is unverified. `--tool` and `--command` are optional on
+that path, because classify recovers both from the last Tool(...) line at or before the classifier
+wording, so a completed call quoted above the denied one never names the command. If it cannot
+recover a tool it exits 1, and the return stays an ordinary blocked return for § Step 7.
+
+###### Step 6.5a4 — a resumed stage meets the ack check first
+
+§ Step 7a resumes a live stage through `sendStageMessage`, so the resume carries a `msg_id` like
+every other stage message. The stage's next return passes the ack check above before it reaches
+this arm: denied again after acknowledging, it parks again here; a resume it never acknowledged
+reads not delivered and takes one resend, then escalation, without reaching classify. A
+re-dispatched stage gets the instruction as prompt suffix [7], which is not a message.
+
+##### Step 6.5a4 — what the orchestrator never does with a denial
+
+- Never land the denied command yourself, nor anything with the same effect. § Delegation-only
+  already forbids it, and a hand-landed command carries no grant: it is the workaround the stage
+  was told not to take, moved up one level.
+- Never spend a retry on it: no `retry_count` increment, no `last_error`, no `classifyError`, no
+  Escalate-to edge (`agent-coordination § Retry / Escalate Matrix`, row `permission_denied`).
+- Never grant. "Grant and continue" means the user grants in Claude Code's own permission UI;
+  corpflow writes no allow rule or setting, and if the resumed call is denied again the stage
+  simply parks again.
+
+##### Step 6.5a4 — rationalizations
+
+| Excuse | Reality |
+|---|---|
+| "One merge; landing it myself beats asking" | The classifier refused it for this session. Landed by hand it is the same action with no grant, no reviewer and no stage record. |
+| "Re-dispatch and let it try again" | The denial stands until the user acts, and a retry walks a stage that never failed toward `exhausted`. |
+| "Ask first, dispatch the ready stages after" | The question waits on a human. Dispatch first (§ Dispatch on the same turn), then ask. |
+
+##### Step 6.5a4 — one resend, then escalate
+
+```typescript
+// Exit 1 resends only `send=ok` misses. Any other send result had its turn at send time in
+// resume.md § Reattach rows — the result table — delivered and refusals, so the boundary escalates it; `queued` included.
+function resendOnceOrEscalate(state, task, subagentType, ack) {
+  if (ack.status === 2) return escalate(task.id);   // a failed check is never clear
+  const misses = [...ack.stdout.matchAll(/^msg (\S+) not-delivered send=(\S+)$/gm)];
+  const ids = ack.status === 1
+    ? misses.filter(m => m[2] === "ok").map(m => m[1])
+    : [ack.stdout.match(/^acted_on \S+ expected=(\S+) mismatch$/m)[1]];
+  if (ack.status === 1 && ids.length === 0) return escalate(task.id);
+```
+
+##### Step 6.5a4 — every id judged before any resend
+
+```typescript
+  // …continued. Nothing is sent until every id is judged, so no resend precedes an escalation.
+  // A non-ok miss beside an ok one escalates; so does a second miss, a message that already
+  // supersedes another: no third send.
+  const secondMiss = id => id === "none"
+    || Boolean(sendRows(task.id).find(r => r.metadata.msg_id === id)?.metadata.supersedes);
+  if (ids.length < misses.length || ids.some(secondMiss)) return escalate(task.id);
+  // When the original message text is not in context, escalate rather than paraphrase.
+  const texts = ids.map(restate);   // the text first sent as each id; null once out of context
+  if (texts.includes(null)) return escalate(task.id);
+  ids.forEach((id, i) => sendStageMessage(state, task, subagentType, texts[i], id));
+}
+```
+
+##### Step 6.5a4 — every stage message carries a msg_id
+
+One path for every orchestrator → stage SendMessage: 6.5a2 nudge, 7a permission, typed-need resumes, reattaches, amendments, resends. Resend/retry omitting `supersedes` leaves replaced message reading not-delivered.
+
+###### Message ID assignment code
+
+```typescript
+// k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
+function sendStageMessage(state, task, subagentType, body, supersedes = null) {
+  const msg_id = `${task.id}-m${sendRows(task.id).length + 1}`;
+  const sent = SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
+    message: [`msg_id: ${msg_id}`, ...(supersedes ? [`supersedes: ${supersedes}`] : []),
+      `First tool call: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
+      "Set handoff.acted_on_msg_id to the newest msg_id you acted on.", "", body].join("\n") });
+```
+
+##### Step 6.5a4 — the send row
+
+```typescript
+  // …continued: sendStageMessage body. One row per attempt, result never omitted
+  // (references/resume.md § Reattach rows — the SendMessage has a result too). run_index is the
+  // dispatch scope ack-check.sh --run-index filters on; an integer, so the check can read it.
+  appendAudit({
+    actor: "orchestrator", action: "reattach_send_result", subject: task.id, task_id: task.id,
+    result: sent.delivered ? "ok" : "blocked",
+    metadata: { msg_id, run_index: state.tasks[task.id].metadata.run_index ?? 0,
+                ...(supersedes ? { supersedes } : {}),
+                ...(sent.delivered ? {} : { reason: sent.reason }) },   // refused | dropped | … | queued
+  });
+}
+
+// Matched on task_id, falling back to subject: the same join ack-check.sh uses.
+const sendRows = id => auditRows(id, "reattach_send_result").filter(r => r.metadata?.msg_id);
+```
+
+##### Step 6.5 — verdict → status
+
+```typescript
+// Mirror of state-patch.sh verdict_status, which stays the SSOT — status-enum-parity.bats diffs
+// the two. A verdict absent here is refused by the writer (exit 3); never default one.
+const VERDICT_STATUS = {
+  ok: "completed", pass: "completed", go: "completed", approve: "completed",
+  blocked: "blocked", escalate: "blocked",
+  fail: "pending", reject: "pending", "no-go": "pending",
+};
+const rowMatchesHandoff = (row, h) =>
+  Boolean(h?.verdict) && row?.verdict === h.verdict && row?.status === VERDICT_STATUS[h.verdict];
+```
 
 ##### Step 6.5 — Layer 2 (synchronous patch)
 
 ```typescript
-      if (post.tasks?.[task.id]?.status !== "completed") {
+      if (!rowMatchesHandoff(post.tasks?.[task.id], incHandoff)) {
         const runIndex = full.metadata.run_index ?? 0;
-        const artifactPath = stageArtifactPath(code, runIndex);  // e.g. ".context/development-0.md"
+        const artifactPath = stageArtifactPath(code, runIndex, post.tasks?.[task.id]);  // the row's artifact when it names one
         // Layer 2 (synchronous): state-patch.sh is the single implementation (hooks/state-merge.sh
         // is a thin wrapper); `--via step6_5` stamps completed_via=step6_5 vs the hook default:
-        //   bash skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
+        //   bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage <code> --task-id ${task.id} --artifact <path> --via step6_5
         // (equivalently: STATE_MERGE_VIA=step6_5 bash hooks/state-merge.sh)
         runStateMergeHook(artifactPath, code, /* via */ "step6_5");
 ```
@@ -1268,13 +1758,16 @@ was never asked for.
 
 ```typescript
         const post2 = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
-        if (post2.tasks?.[task.id]?.status !== "completed") {
-          // Layer 3 (F3): derive a minimal patch and stamp completed_via:"f3".
-          const handoff = parseFrontmatter(artifactPath);  // null → F3 fallback
-          const patch = handoff
-            ? buildPatchFromHandoff(code, handoff)
-            : { tasks: { [task.id]: { status: "completed", artifact: artifactPath, verdict: "ok", completed_via: "f3" } } };
-          if (handoff && !patch.tasks[task.id].completed_via) patch.tasks[task.id].completed_via = "f3";
+        const handoff = parseFrontmatter(artifactPath);
+        const status = VERDICT_STATUS[handoff?.verdict];
+        // Layer 3 (F3): only a mapped verdict is stamped. No handoff, or a verdict the writer
+        // refused, writes nothing — 6.5a2 resumes the first, Step 7 escalates the second.
+        if (status && !rowMatchesHandoff(post2.tasks?.[task.id], handoff)) {
+          const patch = buildPatchFromHandoff(code, handoff);
+          const entry = patch.tasks[task.id];
+          entry.status = status;
+          entry.completed_via ??= "f3";
+          if (status === "pending") entry.metadata = { ...entry.metadata, gate_from_stage: code };
           atomicMergeStateJson(patch);
         }
       }
@@ -1312,6 +1805,98 @@ was never asked for.
     //       the same call as § Step B (the AR-reference arm rides on it); run it once.
 ```
 
+##### Step 6.5d — land the producer's artifacts
+
+```typescript
+    // 6.5d. After 6.5c and BEFORE the next ready-filter pass: copy this DV row's staged
+    //       `produces` into each consumer's tree (handoff-protocol.md § Landing consumed
+    //       artifacts). Landing at the producer's boundary is what keeps a consumer whose
+    //       landing failed out of the ready set; the ready filter itself is unchanged.
+    const producer = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks[task.id];
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
+                                      "--producer", task.id]);
+      // exit 1: consumers already blocked; any other non-zero is reported, never blocked here
+      if (land.status !== 0) queueLandingBlock(land);
+    }
+```
+
+##### Step 6.5d — resume a stage parked on this producer's artifact
+
+```typescript
+    // …continued, whatever the landing exited. ROUTER as in § Step 6.5a3.
+    if (producer?.status === "completed" && producer.metadata?.stage === "DV" && sweepCheckPassed) {
+      const tasks = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks;
+      for (const [id, t] of Object.entries(tasks)) {
+        const need = t.metadata?.blocked_on;
+        if (t.status !== "blocked" || need?.kind !== "artifact"
+            || need.detail?.producer_task !== task.id) continue;
+        const r = spawnSync("bash", [ROUTER, "resume", "--task-id", id, "--leg", "landed"]);
+        if (r.status === 0) { const rb = JSON.parse(r.stdout).resume_block; deliverResume(rb, rb.instruction); }
+        else if (r.status !== 1) escalate(id);
+      }
+    }
+```
+
+Exit 0 delivers the resume, exit 1 leaves the stage parked for § Step 7a, and any other exit goes to
+§ Error Handling.
+
+###### Step 6.5d — a parked stage is never landed into
+
+The boundary pass skips a `blocked` consumer, so `resume --leg landed` succeeds here only when
+`path` is already in the parked stage's tree's landed set; otherwise the user answers at § Step 7a.
+
+##### Step 6.5d — reporting a refused landing
+
+`queueLandingBlock` reports each blocked consumer's `metadata.landing_error` (`reason`, `path`,
+`producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
+Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
+
+On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
+signal) the script recorded nothing about any consumer, so the report carries its stderr instead.
+Nothing is blocked here; the consumer's own § Step 4.8 — land consumed artifacts gate refuses its
+dispatch later.
+
+A producer re-run (a DR rework) can reach a consumer that is no longer `pending`. The pass leaves
+that row untouched and exits 0 with one `warn` `contract_landed` row whose reason is
+`consumer_not_pending`, so a rework never flips a running or finished stream to `blocked`.
+
+##### Step 6.5d — settle the consumers of a re-opened task
+
+At re-opened target's **own** completion boundary (after landing pass, before next ready-filter). The correcting stage resumed earlier when corrected artifact did not exist. Any stage, not just DV.
+
+###### Step 6.5d — settle invocation
+
+```typescript
+    const done = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks[task.id];
+    if (done?.status === "completed" && (done.metadata?.fix_round ?? 0) > 0) {
+      const st = spawnSync("bash", ["skills/worktask/scripts/state-patch.sh",
+                                    "--task-settle-stale", task.id], { encoding: "utf8" });
+      if (st.status !== 0) escalate(task.id);
+    }
+```
+
+Script decides each `stale` dependent: back to `pending` when corrected change set intersects cited refs; back to `completed` when it doesn't; `pending` when either set unreadable/empty. Prints `{"settled":[{"task","to","reason"}]}`. Orchestrator runs it; both sets, normalisation, fail-safe direction: `references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`. Re-opened target never completing leaves dependents `stale`, keeping loop open.
+
+###### Step 6.5d — resume the stage that raised the correction
+
+```typescript
+    if (done?.status === "completed" && (done.metadata?.fix_round ?? 0) > 0) {
+      const parked = JSON.parse(fs.readFileSync(".context/state.json", "utf8")).tasks;
+      for (const [id, t] of Object.entries(parked)) {
+        const need = t.metadata?.blocked_on;
+        if (t.status !== "blocked" || need?.kind !== "correction" || need.detail?.target_task !== task.id) continue;
+        const r = spawnSync("bash", [ROUTER, "resume", "--task-id", id, "--leg", "closed"]);
+        if (r.status === 0) { const rb = JSON.parse(r.stdout).resume_block; deliverResume(rb, rb.instruction); }
+        else escalate(id);
+      }
+    }
+```
+
+###### Step 6.5d — notes
+
+Corrected artifact exists only now; source resumes here not at route that parked it. Non-zero exit: row not parked or ledger write refused → § Error Handling. Unreached stays parked for § Step 7a.
+
 #### Step 6.6 — blocking sweep items, before the next dispatch
 
 ```typescript
@@ -1330,7 +1915,8 @@ was never asked for.
     //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
     //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
-    //      either way, and never swap in a higher-frontmatter agent to make the tier real.
+    //      either way. In-process the row records effort_resolved "requested, not applied"
+    //      until upstream U7 lands. Never swap in a higher-frontmatter agent to make it real.
 ```
 
 ##### Step 6.6b — render the remainder
@@ -1340,25 +1926,309 @@ was never asked for.
     //      everything the resolver declined, and every item on the four exception stages. It
     //      reuses C.2-C.5 verbatim, audit subject `<CODE><N>` rather than `FN<N>`.
     //      Not a gate: the same render, moved earlier for items whose answers the next
-    //      stage needs. Bypassed lanes record and never prompt, so nothing can deadlock.
+    //      stage needs. Bypass records decision items only; escalate items stop, park, or —
+    //      in a no-human lane only — are recorded (commands/worktask.md § Escalation guard —
+    //      escalate stops at every boundary), so nothing deadlocks.
 ```
 
 #### Step 7
 
 ```typescript
-    // 7. Mark completed
-    sh(`state-patch.sh --task-status ${task.id} completed`);
+    // 7. Settle by the status Step 6.5 derived from the verdict. Stamping over it would undo
+    //    the writer's map; re-read, since Layers 2/3 wrote after the step-4.0 snapshot.
+    const ledger = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
+    const row = ledger.tasks[task.id];
+    if (row.status === "blocked") {
+      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp. A
+      // typed or permission park never reaches here: 6.5a3 or 6.5a4 continued, § Step 7a asks.
+    } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
+      loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
+    } else if (row.status !== "completed") {
+      // No mapped verdict landed (the writer refused it): escalate per § Error Handling.
+    }
+  }
+```
+
+##### Step 7a — the mailbox round, before both batches
+
+```typescript
+  // …continued: after the for-loop, inside the while. A reply relayed here never reaches the
+  // boundary prompt, and an expiry routed here does, as the user_decision it became.
+  const scan = JSON.parse(spawnSync("bash", [MB, "scan"]).stdout);   // writes the answered leg
+  for (const r of scan.replied) {
+    const rr = spawnSync("bash", [ROUTER, "resume", "--task-id", r.task_id, "--leg", "relayed"],
+      { encoding: "utf8" });
+    if (rr.status !== 0) { reportRefusedResume(r, "relayed", rr.stderr); continue; }
+    const { resume_block: rb } = JSON.parse(rr.stdout);
+    deliverResume(rb, rb.instruction);   // the answer is already fenced as data inside it
+  }
+  spawnSync("bash", [MB, "sweep"]);   // one expired leg, then the user_decision the batch shows
+```
+
+##### Step 7a — permission batch, at the boundary
+
+```typescript
+  // …continued: after the mailbox round, inside the while
+  // 7a. Once per boundary, after every ready stage is dispatched: ≤4 parked needs per
+  //     AskUserQuestion call, answered only by the user (commands/worktask.md § Boundary
+  //     permission prompt). ROUTER's batch holds every other parked need: a user_decision as
+  //     its own question, any other kind as a user_action.
+  const batch = JSON.parse(spawnSync("bash", [PARK, "batch"]).stdout);
+  const typed = JSON.parse(spawnSync("bash", [ROUTER, "batch"]).stdout);
+  for (const b of [batch, typed])   // both ran first, so a megatask park records every need
+    if (b.mode === "megatask_park" && b.park) return stopParked(b.park);
+```
+
+##### Step 7a — one prompt, then each resume
+
+```typescript
+  // …continued: permission needs and typed needs are asked in the same round.
+  const answers = [...batch.payloads, ...typed.payloads].flatMap(p => AskUserQuestion(p));
+  for (const need of batch.needs) {
+    const answer = answerFor(answers, need.task_id);
+    if (answer === "manual") waitForUserRun(need);   // until the user reports having run it
+    resumeDeniedStep(need, answer);
+  }
+  for (const need of typed.needs) resumeTypedNeed(need, answerFor(answers, need.task_id));
+```
+
+##### Step 7a — wake on the earliest deadline
+
+```typescript
+  // …continued: nothing dispatched, nothing asked, and an ask still open. Both paths only wake
+  // the loop — the next boundary's scan relays, and its sweep expires whatever timed out.
+  if (!ready.length && !batch.needs.length && !typed.needs.length && scan.open.length) {
+    const due = Math.min(...scan.open.map(o => Date.parse(o.deadline))) + 5000;
+    if (hasScheduleWakeup)   // optional tool: absent in most sessions, never a dependency
+      ScheduleWakeup({ seconds: Math.max(1, Math.ceil((due - Date.now()) / 1000)) });
+    else Monitor(Bash({ run_in_background: true,   // agent-coordination § Monitor Tool
+      command: `bash ${MB} wait | tee -a .context/logs/mailbox-wait.log` }));
   }
 
-  // Refresh from the ledger — TL/DV may have added tasks since the last read.
+  // Refresh — TL/DV may have added tasks since the last read.
   state = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
   tasks = Object.entries(state.tasks).map(([id, t]) => ({ id, ...t }));
 }
 ```
 
+##### Step 7a — the megatask arm
+
+Under a `/megatask` per-issue run `batch` asks nothing. It writes `execution.status: "failed"` and
+`execution.reason: "parked_escalation"` to `workspace.json` plus one `escalation_parked` row, and
+leaves `blocked_on` set — the existing PARK path (§ Escalation class), so nothing more dispatches.
+The router's `batch` parks its typed needs the same way; each `escalated[]` entry is `{kind,
+command_head, truncated}`, and the head and flag appear only on a need with a command.
+
+###### Step 7a — stopParked checks the path batch resolved
+
+`stopParked` checks the file `batch` itself tried, `$(dirname <state dir>)/workspace.json`, where
+`<state dir>` is the `.context/` the helper resolved. A bare `workspace.json` names the session's
+working directory, which can be another tree.
+
+```typescript
+// The monitor settles a track only on "failed" or "completed", so a bare STOP would hang this one.
+function stopParked(park) {
+  if (park.workspace_written) return;   // STOP: nothing more dispatches
+  const ws = path.join(path.dirname(contextDir()), "workspace.json");
+  // The PARK guard's own write (commands/worktask.md § Escalation guard — unattended
+  // `/megatask` per-issue runs (PARK)), only for an absent or unparseable file.
+  const reason = isSymlink(ws) ? "symlink" : park.workspace_reason;
+  if (reason === "missing" || reason === "malformed") return writeWorkspaceParked(ws);
+  return refuseParkWrite(park.boundary, ws, reason);   // next section
+}
+```
+
+###### Step 7a — the megatask arm never writes through a link
+
+The orchestrator never Writes or Edits a symlinked `workspace.json`, and it checks that same
+resolved path again right before a hand-write, because a link can appear after `batch` looked. For `symlink`,
+`not_regular_file`, `unreadable` or `write_failed`, `refuseParkWrite` makes no write: it appends
+one `escalation` row (`result: "blocked"`, `metadata.{kind, workspace_reason}`, `kind` being
+`permission` or, for the router's park, `user_action`),
+reports the issue, the path and the reason per § Error Handling, and stops. It never removes,
+replaces or re-points the link. The track then does not settle by itself; that is the price of not
+writing through a link another process planted.
+
+##### Step 7a — resume only the denied step
+
+```typescript
+// resume re-claims the row, sets blocked_on to null and appends the permission_resumed row that
+// rb.decision_ref names. Its answer is the user's own; no delegate or resolver supplies one.
+function resumeDeniedStep(need, answer) {
+  const r = spawnSync("bash", [PARK, "resume", "--task-id", need.task_id, "--answer", answer]);
+  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  // rb.instruction names only the denied command and forbids re-running completed steps.
+  // Liveness: references/resume.md § Live-agent rows. A re-dispatch carries it as suffix [7].
+  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
+  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
+    sendStageMessage(state, task, task.metadata.agent, rb.instruction);
+  else redispatch(rb.task_id, { suffix: rb.instruction });
+}
+```
+
+###### Step 7a — a refused resume is reported
+
+`resume` exits non-zero when the task is no longer parked, its ledger has no usable detail, or the
+claim was refused. Nothing resumes then, and `reportRefusedResume` tells the user so per
+§ Error Handling: the task, their answer, and the helper's one-line reason. It neither re-runs
+`resume` nor dispatches the stage. Any Bash-holding agent can claim a parked row, so a task that stopped being
+parked between the ask and the resume is the visible trace of a raced or forged resume; returning
+silently would hide it.
+
+###### Step 7a — the two answers, and the record they leave
+
+- "grant and continue" → `grant`, resumed at once. The user grants in Claude Code's own permission
+  UI when the resumed call prompts; corpflow grants nothing.
+- "run it yourself" → `manual`. The `! <command>` line is in the question text. The answer is not
+  the run: resume only after the user reports having run it, with their `! <command>` output in
+  this conversation.
+- `truncated: true` on a need marks a command cut at 512 characters. Its question offers no `!`
+  line and points at the denial notice or `/permissions` recent denials; `rb.instruction` treats
+  the recorded text as context only.
+- `rb.decision_ref`, `permission_resumed:<task_id>:<dedupe_key>:<n>`, names the `permission_resumed`
+  audit row `resume` appended: the record `blocked_on.resume_with: decision_ref` points at.
+
+###### Step 7a — where the `!` line runs
+
+A `!` line runs in the main session's working directory, not in the stage's tree. So the question
+carries the stage's directory as a `cwd:` data line inside its fenced info block, and the user runs
+the `! <command>` line from that directory. Nothing composes `cd <dir> && <command>`: the `!` line
+holds the denied command only, and the directory stays data. `cwd` comes from the ledger's
+`workspace_path`, never from `blocked_on`; a need without one gets no `cwd:` line.
+
+##### Step 7a — resume a typed need
+
+```typescript
+// resume re-claims the row, sets blocked_on to null and appends the closing blocked_on row that
+// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action).
+// Only the user's own answer reaches this function, and a user_decision never forwards it.
+function resumeTypedNeed(need, answer) {
+  if (need.arm === "user_decision") return resumeUserDecision(need);   // next section
+  if (answer === "stop here") return stopForUser(need);   // stays parked; the run stops
+  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
+  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  deliverResume(rb, answer === "done" ? rb.instruction : `${rb.instruction}\n\n${fence(answer)}`);
+}
+```
+
+###### Step 7a — a user decision resumes by reference
+
+```typescript
+// The hook recorded the answer in .context/decisions.jsonl. With no --decision-ref, resume picks the
+// newest verified ud- row covering the task that no earlier resume consumed, and names it in
+// rb.decision_ref. rb.instruction names the verify command and carries no answer text.
+function resumeUserDecision(need) {
+  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
+  if (r.status !== 0) return stopForUser(need);   // no verified row: declined, or refused
+  const { resume_block: rb } = JSON.parse(r.stdout);
+  deliverResume(rb, rb.instruction);   // unmodified: decision_ref: ud-…, never the answer
+}
+```
+
+###### Step 7a — why the answer is never forwarded
+
+The answer is already in this conversation. Forwarding it, whole or paraphrased, is the prose relay
+a stage must refuse (`skills/shared/stage-contracts.md § A user decision is accepted only from the
+ledger`). So `rb.instruction` goes out as is: through `SendMessage` to a live stage, or as a
+re-dispatch suffix. The stage reads the answer only through the verifier.
+
+A non-zero `resume` exit means no verified row covers the task: the user declined the dialog, the
+hook refused to write a row, or the verifier refused the row. Nothing is written, the task stays
+parked, and `stopForUser` stops the run; a later `/worktask --resume` asks again.
+
+###### Step 7a — deliverResume, live or re-dispatched
+
+```typescript
+// Liveness: references/resume.md § Live-agent rows. A re-dispatch carries body as suffix [7].
+function deliverResume(rb, body) {
+  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
+  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
+    sendStageMessage(state, task, task.metadata.agent, body);
+  else redispatch(rb.task_id, { suffix: body });
+}
+```
+
+###### Step 7a — the typed-need answers
+
+- "done" → resumed at once. The user did what the request asked, and the resumed stage checks
+  `verify`, when the need has one, before it continues.
+- "stop here" → nothing is written. The task stays parked, and the run stops per § Escalation
+  Chains; a later `/worktask --resume` asks again (`references/resume.md § Reply routing`).
+- Free text → the answer itself, such as the reply the user got from a peer. It resumes like "done"
+  and reaches the stage as a fenced block; no audit row holds it. It is never consent.
+- A `user_decision` need offers the stage's own options instead of "done" and "stop here". Whatever
+  the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
+- A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
+  `cwd:` line as § Step 7a — where the `!` line runs says.
+
+###### Step 7a — a decision with no options
+
+A `user_decision` need with no options of its own is asked under two synthetic labels, "the stage
+decides" and "raise this need again". They only clear AskUserQuestion's 2-option minimum and never
+reach the ledger. Neither is a control word: `resume` does not read the answer, so a picked label
+is recorded like text typed under "Other".
+
+##### Step 7a — an inbound reply, on any channel
+
+A peer message, or a user answer, whose first line is exactly `reply <ask_id>` answers that ask; the
+rest of the text is the answer. `mailbox-reply.sh` is the only writer of a reply: it checks the
+answer against the request's `reply_schema` and refuses one that arrives past the deadline. Nothing
+reaches the parked stage here — the next boundary's `scan` relays whatever verified.
+
+###### Step 7a — ingestReply
+
+```typescript
+// REPLY = scripts/mailbox-reply.sh. Untrusted answer text never reaches an argv or a heredoc
+// delimiter — it goes in on stdin, and `--answer-file -` reads it there. No second copy of the
+// answer is written: a temp file under .context/ would inherit the process umask in a directory
+// with no mode contract, and would outlive a crash between the write and the unlink.
+function ingestReply(askId, answer, kind, session) {   // kind: "peer" (message) | "user"
+  spawnSync("bash", [REPLY, "--ask-id", askId, "--answer-file", "-",
+    "--kind", kind, "--session", kind === "user" ? "user" : session],
+    { input: answer });   // exit 1 = refused, the ask stays open
+}
+```
+
+##### Step 7 — loop-back arm
+
+```typescript
+// Re-dispatching the gate row against unchanged code only burns retries, so the DV rows it
+// depends on go back first; Step 4.6 then injects the gate's findings into their prompt.
+function loopBackToDV(ledger, gateId, gateRow) {
+  const h = parseFrontmatter(gateRow.artifact);
+  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR shape | QA shape
+  const deps = new Set(), stack = [...(gateRow.blocked_by ?? [])];
+  while (stack.length) {
+    const id = stack.pop();
+    if (!deps.has(id)) { deps.add(id); stack.push(...(ledger.tasks[id]?.blocked_by ?? [])); }
+  }
+  const dvRows = [...deps].filter(id => /^DV\d+$/.test(id));
+```
+
+##### Step 7 — loop-back, replay then stamp
+
+```typescript
+  // …continued: loopBackToDV body. Counts are read before any replay: --cascade clears
+  // retry_count on every dependent, and one DV row can depend on another.
+  const retries = Object.fromEntries(dvRows.map(dv => [dv, ledger.tasks[dv].metadata?.retry_count ?? 0]));
+  for (const dv of dvRows) {
+    if (spawnSync("state-patch.sh", ["--task-replay", dv, "--cascade"]).status !== 0) {
+      return escalate(gateId);  // § Error Handling — a refused replay is never hand-edited
+    }
+  }
+  for (const dv of dvRows) {  // argv, never sh(): gate_blockers is artifact text
+    spawnSync("state-patch.sh", ["--task-meta", dv, "--set", JSON.stringify({
+      gate_from_stage: gateRow.metadata.gate_from_stage, gate_blockers: blockers,
+      retry_count: retries[dv] + 1 })]);
+  }
+}
+```
+
 #### Key rules
 
-- NEVER skip a status patch (both in_progress and completed)
+- NEVER skip a status patch (in_progress at claim, the verdict-mapped status at completion)
 - NEVER execute a stage before its `blocked_by` dependencies have settled
 - ALWAYS pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); omitting or mismatching is a violation — never rely on frontmatter inheritance
 - ALWAYS stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
@@ -1415,7 +2285,7 @@ was never asked for.
 
 ##### Title and Summary resolution — invariants
 
-`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. The `head -1 | cut -c1-100 | sanitise_body` pipeline applies at every rank, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, so changing title generation orphans issues published under an older title scheme.
+`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. At every rank the title is reduced to its first line, sanitised, then capped at 100 characters on the last word boundary with `…` counted inside the budget, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, and also probes the legacy fixed-100 title when it differs, so an issue published under the older scheme is still recovered rather than duplicated.
 
 #### External-ticket extraction
 
@@ -1473,7 +2343,7 @@ to the project's own build command with a `plugin_unavailable` audit row.
 
 When one DV agent executes multiple non-separable batches in a single run (a multi-batch
 coordination plan with no separable file ownership — e.g. a 6-batch / 49-file refactor), it MUST
-append a one-line checkpoint to `development-N.md` (or a scratch `.context/dv-checkpoint-N.log`)
+append a one-line checkpoint to its row's artifact (`metadata.artifact`; or a scratch `.context/dv-checkpoint-N.log`)
 immediately after EACH completed batch and BEFORE starting the next: batch id, files-touched count,
 and the gate result if one ran (e.g. a residual-grep). Append-only, one entry per batch boundary.
 
@@ -1534,7 +2404,11 @@ spend-authorizing) are NEVER auto-decided — they return as `escalate` items an
 even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row. An
 unattended `/megatask` per-issue run has no user, so the issue PARKS instead: settled
 `execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
-audit row (`commands/worktask.md § Step A.4 Escalation guard`).
+audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
+A parked permission need is escalation-class by construction — granting is security posture — so
+no delegate answers it: § Step 7a asks the user, and a megatask per-issue run PARKs by this path.
+A typed need § Step 6.5a3 parks as a `user_action` takes the same path, because only the user can
+meet it.
 
 ## FN Gate
 
@@ -1635,10 +2509,308 @@ Executable helpers (never read into context — invoke via `bash`):
 | Script | One-line invocation | Purpose |
 |--------|---------------------|---------|
 | `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
+| `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
+| `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed --tree <path>` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
 
-Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent;
-otherwise exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
+### state-patch.sh — exit codes
+
+Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
+and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
+exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
 `references/handoff-protocol.md#layer-1-fallback`.
+
+### permission-park.sh — CLI
+
+```
+permission-park.sh classify [--payload <json|text>] [--tool <t>] [--command <c>]   # stdin when --payload absent
+permission-park.sh park     --task-id <ID> --detail <json> [--state <state.json>]
+permission-park.sh batch    [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
+permission-park.sh resume   --task-id <ID> --answer grant|manual [--state <state.json>]
+permission-park.sh --self-test
+```
+
+Exit `0` success (for classify, the payload is a permission denial); `1` classify found no denial
+or no recoverable tool, or park/resume had a ledger write refused or a task not parked; `2` usage
+error, missing or unparseable ledger, or broken install. On the text path `--tool`/`--command` are
+optional: classify recovers both from the last `Tool(...)` line at or before the classifier-denial
+line. It grants nothing, writes no Claude Code configuration, and emits no retry decision.
+
+### permission-park.sh — stdout
+
+| Subcommand | stdout (one JSON line) |
+|---|---|
+| `classify` | `{"tool","command","classifier_reason","allow_rule"}` |
+| `park` | `{"blocked_on":{"kind":"permission","detail":{…4 keys},"resume_with":"decision_ref"},"dedupe_key":"<16 hex>","truncated":true\|false,"audit_row_written":true\|false}` |
+| `batch` | `{"mode":"ask","needs":[{"task_id","tool","command","classifier_reason","allow_rule","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`; megatask per-issue run: `{"mode":"megatask_park","needs":[…],"payloads":[],"park":{"boundary","execution","escalated":[{"tool","command_head","truncated"}],"workspace_written","workspace_reason","audit_row_written"}}`, `"park":null` when nothing is parked |
+| `resume` | `{"resume_block":{"task_id","tool","command","answer","truncated","do_not_rerun":true,"decision_ref","instruction"},"cleared":true,"audit_row_written":true\|false}` |
+
+### permission-park.sh — the resume audit row
+
+`resume` appends one `permission_resumed` row per successful resume and none on a refusal:
+`actor: "orchestrator"`, `subject: <task_id>`, `result: "ok"`,
+`metadata.{tool, dedupe_key, command_head, truncated, answer, decision_ref}`. `decision_ref` is
+`permission_resumed:<task_id>:<dedupe_key>:<n>`, where `n` is 1 plus the earlier rows with that
+subject and key. It is the record `blocked_on.resume_with: decision_ref` points at, and it comes
+back as `resume_block.decision_ref` (§ Step 7a). The row never holds the command:
+`command_head` is the redacted head every committed row carries (at most 4 tokens, masked,
+path-scrubbed, at most 120 characters), `truncated` marks a head showing less than the whole
+command, and an unavailable scrub gives `[redacted]` with `redaction: "scrub_unavailable"`. `resume_block.truncated` is a different flag:
+the stored command was cut at 512 characters.
+
+### land-artifacts.sh — CLI
+
+```
+land-artifacts.sh --producer <ID> [--consumer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --consumer <ID> [--state <p>] [--orch-root <p>] [--dry-run]
+land-artifacts.sh --list-landed --tree <path> [--strict] [--state <p>]
+land-artifacts.sh --check-path <path>
+land-artifacts.sh --self-test | -h | --help
+```
+
+Any call with `--producer` is the boundary pass (§ Step 6.5d); `--consumer` alone is the dispatch
+gate (§ Step 4.8 — land consumed artifacts). `--dry-run` checks every path and writes nothing.
+`--list-landed --tree <path>` prints the landed set scoped to that tree
+(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0, and
+no `--tree` is exit 2.
+
+#### land-artifacts.sh — the fail-closed modes
+
+`--strict` prints the same set, but exits 1 with empty stdout and one stderr line that never echoes
+the entry when any raw `landed_paths` entry scoped to that tree fails the path ladder or the
+alphabet. This script never writes such an entry, so one means a hand-edited ledger.
+`--check-path <path>` runs the path ladder alone, with no ledger: silent exit 0 when safe, exit 1
+printing `reason=<token>` when refused. The orchestrator's grant admits a call only when its first
+argument is `--producer`, `--consumer` or `--list-landed`, so every call leads with that argument.
+Scripts make the other calls: `fn-stream-merge.sh` and `blocked-on-dispatch.sh` pass `--strict`, and
+only the router calls `--check-path`.
+
+### land-artifacts.sh — exits
+
+Exits are 0, 1 or 2 only: an interrupting signal (INT, TERM, HUP) or an unexpected command failure
+rolls back what the run wrote and exits 2, so 1 is never a stray status. Exit `0`: landed, same
+tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a
+`blocked` one silently, any other non-`pending` one with one `warn` `contract_landed` row
+(`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
+`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
+refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). Exit 1 is
+also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage, a
+malformed id, a bad ledger, an invalid tree, a missing tool, a failed ledger write, or that signal
+or failure. Refusal reasons and the audit rows:
+`references/handoff-protocol.md § Landing consumed artifacts`.
+
+### blocked-on-dispatch.sh and blocked-on-lib.sh
+
+| Script | One-line invocation | Purpose |
+|--------|---------------------|---------|
+| `scripts/blocked-on-dispatch.sh` | `route\|batch\|resume` | Routes a typed `blocked_on` return to its arm or its `user_action` fallback, batches those needs and builds the resume (§ Step 6.5a3, § Step 7a). Self-test: `--self-test`. |
+| `scripts/blocked-on-lib.sh` | sourced, never run | The one definition of the `blocked_on` enums, the arm table, the alias normalize step and `validate`. `handoff-harness.sh` and the router both source it. |
+
+### blocked-on-dispatch.sh — CLI
+
+```
+blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
+blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
+blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
+blocked-on-dispatch.sh --self-test
+```
+
+Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
+unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
+written; for `resume`, a task not parked on a non-permission `blocked_on`, a `--leg` that is not
+its arm's closing leg, a `user_decision` with no verified ledger row to resume with, or `--leg landed`
+on an artifact `path` that the path ladder refuses or that has not landed. `2`: usage error, missing
+or unparseable ledger, broken install, or a ledger write refused. Requires jq; bash 3.2+.
+
+### blocked-on-dispatch.sh — route
+
+Normalizes and validates `--payload` through the lib, then acts on the arm the lib's table names:
+
+- `permission`: writes nothing; § Step 6.5a4 parks it.
+- `user_action`, or a kind whose owner has not landed — none today: `state-patch.sh --task-meta`
+  with the stage's original `blocked_on` (under `--log /dev/null`), then `--task-status blocked`,
+  then one `requested` row.
+- `user_decision`: the same park, then one `asked` row with no fallback fields. It is queued for
+  the next boundary's question, as `requested` is.
+- `host_environment`: `autonomy-preflight.sh --auto plan --platform <metadata.preflight.platforms>`
+  in check mode, `--harness` added when `check` is `git-reset-hard`, then one `probed` row. Only a
+  `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
+  and `decision_ref` on the row. A fail, a skip or an absent id parks it as a `user_action`.
+
+#### blocked-on-dispatch.sh — route, the artifact arm
+
+- `artifact`: parks first. When `detail.producer_task` is a task id, `detail.path` passes
+  `land-artifacts.sh --check-path`, and the landed set of the task's `metadata.workspace_path` tree
+  (`--list-landed --tree <workspace_path> --strict`) holds `detail.path` exactly, it claims, clears
+  `blocked_on`, writes one ok `landed` row with `decision_ref` `blocked_on:<ID>:artifact:<n>`, and
+  prints `resume_block` with `artifact_path` set to `detail.path`. No `workspace_path`, a failed
+  read, a refused path or a non-member leaves it parked as a `user_action`: a `requested` row with `fallback_from: artifact`
+  and no `owner_issue`. `BLOCKED_ON_LAND` swaps the landing script, a test seam.
+
+#### blocked-on-dispatch.sh — route, the correction arm — invocation
+
+`correction` guards first: `detail.target_task` exists, not source, is `completed`; miss exits 1 with `fail:` line and unchanged ledger (§ Step 6.5a3 re-dispatches). Then `state-patch.sh --task-reopen <target> --from <source> --finding-file -` with rework text on stdin, source park, one `opened` row (`result: blocked`). Re-opening before parking deliberate: op can refuse under its lock; park ahead would leave source blocked with no row. Op input-bounds refusal (empty finding, byte cap, control byte) exits 1 with `fail:`, not escalation.
+
+#### blocked-on-dispatch.sh — route, the correction arm — re-route idempotency
+
+Re-route of same still-open need detected by `opened` leg, not status guard (now reads `pending` after first route). Router re-parks source, writes no second `opened`, calls no op, so `fix_round` moves once per correction. Rework text on stdin: finding byte-for-byte, `evidence_ref:`, `source_task:` lines; lands as `gate_blockers[0]` (`references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`).
+
+#### blocked-on-dispatch.sh — route stdout
+
+One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
+`fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
+re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from:
+`blocked_on`, or `cross_session_ask` for the legacy alias.
+
+### blocked-on-dispatch.sh — batch
+
+Selects every `blocked` task whose `metadata.blocked_on.kind` is not `permission`. Interactive:
+`{"mode":"ask","needs":[{"task_id","kind","arm":"user_action","resume_leg","request","command",
+"verify","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`, a fallback need adding
+`fallback_from` and `owner_issue`. A fallback's `request` is its kind's lead line and its `command`
+is `""`. Each question has the task id as `header`, the lead line, then every `detail` key as
+`key: value` data and `cwd:` from the ledger's `workspace_path`, inside a fence one backtick longer
+than its longest run. Options: "done" and "stop here".
+
+#### blocked-on-dispatch.sh — batch, a user decision
+
+`user_decision` needs sharing one `(question, options, item)` become one question:
+
+- `header` is the lowest task id, and `multiSelect` is false.
+- `question` is `detail.question` verbatim and unfenced, because the hook matches its exact bytes.
+- Each option is `{label: <option>, description: "Recommended" | "Offered by <header>"}`.
+- Two questions with the same text never share a call, since the answers are keyed by that text.
+
+Each need is `{task_id, kind, arm: "user_decision", resume_leg: "resumed", header}`. The megatask
+park adds `{kind: "user_decision"}` to `escalated[]`.
+
+#### blocked-on-dispatch.sh — batch, the `!` line and the megatask park
+
+A `! <command>` line, in its own fence, appears only on a native `user_action` whose `command` is
+non-empty and not cut at 512 characters. Under a megatask per-issue run it asks nothing and prints
+`permission-park.sh batch`'s `megatask_park` shape: the same `workspace.json` write and symlink
+refusal, and one `escalation_parked` row with `metadata.kind: "user_action"` whose `escalated[]`
+entries are `{kind, command_head, truncated}`.
+
+### blocked-on-dispatch.sh — resume — general flow
+
+`--claim`, `blocked_on` → `null`, one closing-leg row with `decision_ref` (`references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`). Prints `{"resume_block":{"task_id","kind","arm","leg","decision_ref","resume_with","do_not_rerun":true,"instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the kind resumes with one. `instruction` restates need (detail fenced) and forbids re-running completed steps.
+
+#### blocked-on-dispatch.sh — resume — artifact leg
+
+`--leg landed` resumes `artifact` need: re-checks `path` safety and landed-set membership, exits 1 if not landed, otherwise claims, clears, writes ok `landed` row with `decision_ref`, prints same stdout. `--leg verified` (user's "done") still resumes through fallback.
+
+#### blocked-on-dispatch.sh — resume — correction leg
+
+`--leg closed` resumes `correction` need: claim, clear, ok `closed` row with `decision_ref`, `artifact_path` = target's `artifact` or `metadata.artifact` (recorded-else-planned). Checks target status **not at all** — orchestrator calls at target's completion boundary (§ Step 6.5d). `--leg verified` (user's "done") resumes through fallback with same path. Settling `stale` dependents not part of either resume; keys on target, not parked need; runs own op at boundary.
+
+#### blocked-on-dispatch.sh — resume, a user decision
+
+`resume` first finds the ledger row: `--decision-ref <ud-id>` names it, and without the flag it is
+the newest valid row covering the task that no earlier `blocked_on` row for the task carries. A
+refused or missing row exits 1 with nothing written. Otherwise the `resumed` row and
+`resume_block.decision_ref` carry that `ud-` id. `instruction` names the verify command,
+`state-patch.sh --verify-decision`, and carries no answer text
+(`hooks/references/user-decision-ledger.md`).
+
+#### blocked-on-dispatch.sh — the lead lines
+
+Fixed strings, with `<ID>` the only substitution:
+
+- `user_decision`: "<ID> needs your decision. Answer with one of the options below, or your own."
+- `user_action`: "<ID> needs you to do the request below, then answer done."
+- `peer_session`: "<ID> needs an answer from the session below. Ask it, then answer with its reply."
+- `artifact`: "<ID> waits on the file below from another task. Answer done once it exists."
+- `correction`: "<ID> found the defect below in another task's work. Answer done once it is fixed."
+- `host_environment`: "<ID> is blocked by the host check below, which still fails. Answer done
+  once it passes."
+
+#### blocked-on-dispatch.sh — the blocked_on row
+
+`actor: "orchestrator"`, `action: "blocked_on"`, `subject` and `task_id` both the task id. `result`
+is `blocked` on a leg that leaves the task parked and `ok` on the closing leg. `metadata` is
+`{kind, arm, leg}` plus `fallback_from` and `owner_issue` on a fallback, `command_head` and
+`truncated` on a need with a command, and `decision_ref` on the closing leg. The redaction rule and
+the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on rows`.
+
+### blocked-on-lib.sh — the sourced interface
+
+- `BLOCKED_ON_KINDS`, `BLOCKED_ON_RESUME_WITH`: both enums, in registry order.
+- `blocked_on_arm <kind>`: prints the kind's row as `required|optional|resume_with|legs|closing_leg|owner_issue|landed`,
+  comma-separated within a field. Exit 1 on an unknown kind.
+- `blocked_on_normalize <handoff json>`: prints `{"blocked_on":{…},"source":…}`. `blocked_on` wins;
+  otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
+- `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
+  non-empty object; exit 1 with one `fail:` line. The harness stops here.
+- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`,
+  and on `user_decision` the question, option, `recommended` and `item` bounds.
+
+#### blocked-on-lib.sh — the arm table
+
+| kind | legs | closing_leg | owner_issue | landed |
+|---|---|---|---|---|
+| user_decision | asked, answered, resumed | resumed | 395 | yes |
+| user_action | requested, verified | verified | 394 | yes |
+| permission | denied, granted, resumed | resumed | 393 | yes |
+| peer_session | sent, delivered, answered, relayed, expired | relayed | 405 | yes |
+| artifact | landed | landed | 399 | yes |
+| correction | opened, closed | closed | 404 | yes |
+| host_environment | probed | probed | 390 | yes |
+
+Every fallback closes on `verified`; an `artifact` need also closes on `landed`. Required and optional keys and `resume_with` are
+`references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
+
+### mailbox.sh, mailbox-reply.sh and mailbox-lib.sh
+
+| Script | One-line invocation | Purpose |
+|--------|---------------------|---------|
+| `scripts/mailbox.sh` | `show\|leg\|comment\|ingest-comments\|scan\|sweep\|wait` | The orchestrator side of the durable ask: the message transport's legs, the comment transport, reply ingestion, and the run's own scan and deadline sweep (§ Step 6.5a3, § Step 7a). |
+| `scripts/mailbox-reply.sh` | `--ask-id … --answer-file …` | The only writer of `mailbox/replies/<ask_id>.json`. Self-test: `--self-test`. |
+| `scripts/mailbox-lib.sh` | sourced, never run | The ask_id grammar, the mailbox root and its mode checks, the no-clobber write, the sha256 input, reply verification and the leg metadata. The router and both CLIs source it. |
+
+#### mailbox.sh — CLI
+
+```
+mailbox.sh show    --ask-id <id>
+mailbox.sh leg     --task-id <ID> --ask-id <id> --leg sent|delivered --transport message
+                   [--result ok|queued|refused|dropped|oversized|burst_limited]
+mailbox.sh comment --task-id <ID> [--render-only]
+mailbox.sh ingest-comments | scan | sweep | wait [--max-seconds N]      # all take [--state <state.json>]
+```
+
+Exit `0` ok; `1` refused — not an open ask, an invalid leg, or a bad `ask_id`; `2` usage error,
+missing or unparseable ledger, or a broken install. Requires jq; bash 3.2+.
+
+#### mailbox.sh — stdout
+
+| Subcommand | stdout (one JSON line) |
+|---|---|
+| `show` | the request JSON verbatim, for a same-repo peer reading `mailbox ask <ask_id>` |
+| `leg` | `{"written"}` — `false` when that `(task, ask_id, leg)` was already recorded |
+| `comment` | `{"posted","result"}`, result `posted\|post_failed\|opted_out\|unavailable\|scrub_failed`; `{"body"}` under `--render-only`, which posts nothing and writes no leg |
+| `ingest-comments` | `{"ingested","ignored"}` |
+| `scan` | `{"replied":[{task_id,ask_id}],"open":[{task_id,ask_id,deadline}]}` |
+| `sweep` | `{"expired":[{task_id,ask_id,routed}]}` |
+| `wait` | `{"reason":"reply\|deadline\|timeout\|none"}` |
+
+#### mailbox.sh — what scan, sweep and wait cover
+
+`scan`, `sweep` and `wait` iterate **this run's ledger**, never the mailbox directory: the box is
+shared across worktrees, and no run relays or expires another run's ask. `wait` polls every
+`MAILBOX_POLL_SECONDS` (15), runs `ingest-comments` at most once a minute while a posted ask is
+open, and stops at the first verified reply, at `min(deadline)+5`, or at `--max-seconds` (3600).
+
+#### mailbox-reply.sh — CLI
+
+```
+mailbox-reply.sh --ask-id <id> --answer-file <path|-> --kind peer|user --session <s> [--mailbox-dir <dir>]
+mailbox-reply.sh --self-test
+```
+
+Prints `{"ask_id","reply_ref","sha256"}`. Exit `0` written; `1` refused, with one
+`fail: <reason>: <detail>` line on stderr and nothing written, reason one of `invalid_ask_id`,
+`bad_session`, `too_long`, `unknown_ask`, `bad_request`, `late`, `schema_invalid`, `duplicate`;
+`2` usage error, mailbox unavailable, or no sha256 tool. The answer arrives only through
+`--answer-file` (`-` for stdin), so untrusted text never reaches an argv (§ Step 7a — ingestReply).
 
 ## Related
 

@@ -4,12 +4,14 @@ Spec for `platform = "all"` and for the final fallback of the `apple`, `web`, an
 
 Tool chain, in priority order: `silicon` (annotated diff PNG) → `magick`/ImageMagick (plain text-card PNG) → loud failure with no file written (see § Floor).
 
+In the commands below, `CTX` is the context dir `corpflow_context_dir` resolves (`../SKILL.md § Root resolution`), never cwd, and `NN` counts only this task's files (`../SKILL.md § Numbering`).
+
 ## silicon
 
 ```bash
 BASE_REF="${base_ref:-origin/master}"
 SLUG="${slug}"
-OUT=".context/images/${WORKTASK_ID}/dv-${NN}-${SLUG}.png"
+OUT="${CTX}/images/${WORKTASK_ID}/dv-${TASK_ID}-${NN}-${SLUG}.png"
 
 git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" \
   | silicon \
@@ -32,7 +34,7 @@ git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" \
 ```bash
 BASE_REF="${base_ref:-origin/master}"
 DIFF_CONTENT=$(git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" | head -60)
-OUT=".context/images/${WORKTASK_ID}/dv-${NN}-${SLUG}.png"
+OUT="${CTX}/images/${WORKTASK_ID}/dv-${TASK_ID}-${NN}-${SLUG}.png"
 
 magick \
   -background white \
@@ -65,6 +67,15 @@ The audit row is `screenshot_capture_failed` (result `fail`) carrying `reason` a
 An earlier revision wrote a `.txt` diff dump here. It was removed because it satisfies an existence
 check without being visual evidence: `attach-visual-evidence.sh` classified it as a `placeholder`
 capture and DV completion counted it as evidence-of-attempt.
+
+### tool_missing row and exit 2
+
+Exit 2 also means a broken plugin install, so consumers key on stdout `error=tool_missing`, never
+the bare exit code. When `silicon`, `magick` and `convert` are all absent, the script upserts a
+tool_missing row by slug into `<ctx>/images/<worktask_id>/screenshots-<TASK_ID>.md` (a temp file in
+the same directory, then rename) and still exits 2. A tool on PATH outside a git repository also
+exits 2 but writes no row, and a failed row write warns on stderr and keeps exit 2. Row shape and
+gate rule: `../SKILL.md § tool_missing row`.
 
 ## Redaction before capture
 

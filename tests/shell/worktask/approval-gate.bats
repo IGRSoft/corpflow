@@ -38,6 +38,8 @@ SENTINEL="__never_approved__"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # state-patch.sh resolves its ledger from a declared root, never cwd.
+  export WORKSPACE_ROOT="$WD"
   mk_state_fixture "$WD/.context/state.json" \
     '.version = 2' \
     '.tasks.PL0 = {"status":"in_progress","metadata":{"stage":"PL","agent":"corpflow:product-manager"}}' \

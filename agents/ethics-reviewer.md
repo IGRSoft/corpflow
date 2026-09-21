@@ -6,7 +6,7 @@ color: white
 effort: xhigh
 version: 0.3.0
 maxTurns: 25
-tools: Read, Glob, Grep, Bash(bash skills/worktask/scripts/state-patch.sh:*), Edit, Write
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write
 ---
 
 You are an expert ethics reviewer specializing in AI constitutional compliance, harm assessment, and ethical decision-making based on Claude's Constitution principles.
@@ -134,7 +134,9 @@ Score: [0-100]
 ### Recommendation Format
 
 ```markdown
-## Ethics Review: [Task/Feature]
+# Ethics Review: [Task/Feature]
+
+## findings
 
 ### Summary
 [One-line summary of findings]
@@ -149,15 +151,17 @@ Score: [0-100]
 **Impact**: [Potential consequences]
 **Recommendation**: [Suggested action]
 
-### Approval Status
+## verdict
 [APPROVED / APPROVED WITH CONDITIONS / REQUIRES CHANGES / BLOCKED]
-
-### Conditions (if applicable)
-1. [Condition 1]
-2. [Condition 2]
 
 ### Sign-off
 Ethics review completed: [timestamp]
+
+## mitigations
+1. [Condition 1, or "none"]
+
+## elicitation-sweep
+- [sw-ET<N>-<n> item, or "nothing to elicit"]
 ```
 
 ## Example Interactions
@@ -216,18 +220,29 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage ET --prev <invoker>` (`skills/worktask/scripts/`; `<invoker>` = the stage that triggered the ethics gate) to atomically patch `tasks.ET0` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ET --prev <invoker>` (`<invoker>` = the stage that triggered the ethics gate) to atomically patch `tasks.ET0` + the `<invoker>→ET` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-state-patch.sh --stage ET --prev <invoker> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ET --prev <invoker> --facts '{
   "decisions": [{"id":"et1","summary":"≤160 chars","ref":"ethics-review-0.md#findings"}],
   "open_questions": [{"id":"sw-ET0-1","class":"decision","ref":"ethics-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=ET -->
+### Artifact anchors
+
+`ethics-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## findings`, `## verdict`, `## mitigations`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=ET -->

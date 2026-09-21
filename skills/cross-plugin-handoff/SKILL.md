@@ -21,6 +21,7 @@ corpflow's playbook for delegating worktask stages to external plugin agents.
 - **Normative contract**: `${CLAUDE_SKILL_DIR}/references/plugin-contract.md` — what an integrating plugin must satisfy and what corpflow guarantees back. Where it and this file disagree, the contract wins.
 - **Per-plugin stage→agent tables, error handling, model configuration**: `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`.
 - **Plugin-side template**: `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`, copied to an integrating plugin's root.
+- **Consultant return**: `consultant-return.v1` in `references/consultant-return-v1.md`, checked by `scripts/validate-consultant-return.sh`.
 - **Alias routing + project override**: `skills/shared/routing-matrix.md` — which plugin serves each platform/role, and how a user-project-root `CORPFLOW.md § Routing` overrides it. When a user asks to set up an override, scaffold from `${CLAUDE_SKILL_DIR}/templates/PROJECT-CORPFLOW.md`.
 
 ## Dispatch Injection (BINDING)
@@ -32,6 +33,12 @@ Read CORPFLOW.md at the root of your plugin and follow it. It is the contract fo
 ```
 
 Omit it and the target cannot learn the stage contract — it carries no corpflow instructions of its own.
+
+Section `[4b]`, the per-model discipline block, is injected here too and on the same rule: it is
+selected by `task.metadata.model` and copied verbatim from `skills/shared/model-prompting.md`
+(`handoff-protocol.md#cache-prefix`). A sibling plugin's agent runs on the model corpflow dispatched
+it with, so the behaviours the block counters are the delegating stage's to manage — the sibling has
+no way to know which model it was given.
 
 ## Frontmatter Schema (BINDING for cross-plugin agents)
 
@@ -171,13 +178,13 @@ Implement the following for the corpflow worktask DV stage:
 
 ## Expected Output
 1. Implementation code
-2. Write summary to .context/development-N.md
+2. Write summary to the DV row's artifact (tasks.<ID>.metadata.artifact)
 3. Return compressed handoff for QA stage (max 500 tokens)
 ```
 
 ### 4. Return Protocol
 
-The external agent updates task status to completed, writes `.context/development-N.md`, and returns a compressed summary for the next stage.
+The external agent updates task status to completed, writes the artifact its own DV row names (`metadata.artifact`; `skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`), and returns a compressed summary for the next stage.
 
 ## Direct Orchestrator Dispatch
 
@@ -259,7 +266,7 @@ state-patch.sh --task-create QA0 --metadata '{
 
 ## Context Compression Guidelines
 
-Inter-stage budgets and the corpflow-side handoff shape: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` (§ Context Budget by Handoff, § Handoff Template). Plugin-side return shape: `templates/CORPFLOW.md § Return summary`. Cross-plugin summaries specifically:
+Inter-stage budgets and the corpflow-side handoff shape: `${CLAUDE_SKILL_DIR}/../context-compression/SKILL.md` (§ Stage Budget Table, § Handoff Template). Plugin-side return shape: `templates/CORPFLOW.md § Return summary`. Cross-plugin summaries specifically:
 
 | Context Type | Max Tokens |
 |--------------|------------|

@@ -16,7 +16,7 @@
 #   Symbols: corpflow_workspace_root, corpflow_context_root, corpflow_active_stage,
 #   corpflow_resolve_pin, corpflow_stage_and_pin, corpflow_model_family,
 #   corpflow_switch_dest, corpflow_switch_origin, corpflow_switch_fields,
-#   corpflow_hook_audit_row.
+#   corpflow_audit_task_id, corpflow_hook_audit_row.
 #
 # Minimum shell: bash 3.2+ (macOS default). Correct under the union of its
 # consumers' option sets, `set -euf -o pipefail`, while setting none of them.
@@ -33,62 +33,107 @@ fi
 [ -n "${_CORPFLOW_HOOK_LIB:-}" ] && return 0
 _CORPFLOW_HOOK_LIB=1
 
-# corpflow_workspace_root <mode> — echoes the absolute workspace root and also
+# _cf_rank6_owns <main-checkout> <git-toplevel> — rc 0 when the session is
+# the main checkout (physical CLAUDE_PROJECT_DIR equals it) or the toplevel is a
+# stage worktree the main ledger registered as some task's metadata.workspace_path.
+# Both sides are compared physically; a missing jq or unreadable ledger is rc 1,
+# which callers read as "no worktask here".
+_cf_rank6_owns() {
+  local _o_main="${1:-}" _o_top="${2:-}" _o_pd _o_wp _o_wpp
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    _o_pd="$(CDPATH='' cd -- "$CLAUDE_PROJECT_DIR" 2> /dev/null && pwd -P)"
+    [ -n "$_o_pd" ] && [ "$_o_pd" = "$_o_main" ] && return 0
+  fi
+  [ -n "$_o_top" ] || return 1
+  _o_top="$(CDPATH='' cd -- "$_o_top" 2> /dev/null && pwd -P)"
+  [ -n "$_o_top" ] || return 1
+  command -v jq > /dev/null 2>&1 || return 1
+  while IFS= read -r _o_wp; do
+    [ -n "$_o_wp" ] || continue
+    _o_wpp="$(CDPATH='' cd -- "$_o_wp" 2> /dev/null && pwd -P)"
+    [ -n "$_o_wpp" ] && [ "$_o_wpp" = "$_o_top" ] && return 0
+  done <<< "$(jq -r '(.tasks // {}) | to_entries[]
+      | (.value.metadata.workspace_path? // empty) | select(type == "string")' \
+    "$_o_main/.context/state.json" 2> /dev/null)"
+  return 1
+}
+
+# corpflow_workspace_root — echoes the absolute workspace root and also
 # assigns it to _CORPFLOW_WS_ROOT, so a caller on a hot path can read the value
-# without paying for a command substitution. <mode> is `read` (default) or `write`.
+# without paying for a command substitution. Arguments are ignored.
+# Always returns 0; an empty echo IS the unresolved answer, never a cwd guess.
+# Resolves independently of cwd: a worktree checkout gitignores .context/, so
+# these hooks cannot rely on finding it under cwd.
 #
-# Resolves independently of cwd: these hooks fire from isolation:worktree
-# subagents whose cwd is a linked worktree where .context/ does not exist (it is
-# gitignored, never carried into a worktree checkout). The git arm recovers that
-# case — --git-common-dir points at the main checkout's .git, whose parent owns
-# .context/.
-#
-# The probe arms are identical in both modes; only the tail differs, and that
-# difference is the whole reason the flag exists. A WRITER must land its first
-# write in the declared workspace even before .context/ exists, so `write` keeps
-# WORKSPACE_ROOT in the tail. A READER must not: a path with no .context/ is
-# indistinguishable from "no worktask running", which is the gate's silent-pass
-# case. The `read` tail still honours CLAUDE_PROJECT_DIR while dropping
-# WORKSPACE_ROOT — a pre-existing asymmetry, preserved deliberately.
+# Ranks 3-6 of the shared root-resolution ladder; ranks 1-2 are scripts-tree
+# only (see skills/shared/lib/state-read-lib.sh). Every rank demands
+# .context/state.json: a bare folder is what a stray mkdir leaves, and no hook
+# may create the first .context/ — only the seed does.
 corpflow_workspace_root() {
-  local _cf_mode _cf_common _cf_parent
-  _cf_mode="${1:-read}"
+  local _cf_libdir _cf_resolver _cf_top _cf_root
   _CORPFLOW_WS_ROOT=""
-  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
     _CORPFLOW_WS_ROOT="${CLAUDE_PROJECT_DIR}"
     printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
   fi
-  _cf_common=""
-  _cf_common=$(git rev-parse --git-common-dir 2> /dev/null) || _cf_common=""
-  if [ -n "$_cf_common" ]; then
-    _cf_parent=$(cd "$(dirname "$_cf_common")" 2> /dev/null && pwd) || _cf_parent=""
-    if [ -n "$_cf_parent" ] && [ -d "$_cf_parent/.context" ]; then
-      _CORPFLOW_WS_ROOT="$_cf_parent"
+
+  # Ranks 5-6 share one resolver lookup and are skipped together when it is not
+  # a readable file: rank 6 cannot run without it, and running rank 5's git probe
+  # alone on an install too broken to locate its own resolver would answer a
+  # plain git question with a plugin-config-shaped confidence it has not earned.
+  # Located from this file, not the plugin-root env var, so the resolver always
+  # comes from the same plugin tree as the library that loaded it.
+  _cf_resolver=""
+  _cf_libdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)"
+  if [ -n "$_cf_libdir" ] \
+    && [ -r "$_cf_libdir/../skills/shared/scripts/resolve-root.sh" ]; then
+    _cf_resolver="$_cf_libdir/../skills/shared/scripts/resolve-root.sh"
+  fi
+
+  if [ -n "$_cf_resolver" ]; then
+    _cf_top=""
+    _cf_top=$(git rev-parse --show-toplevel 2> /dev/null || true)
+    if [ -n "$_cf_top" ] && [ -f "$_cf_top/.context/state.json" ]; then
+      _CORPFLOW_WS_ROOT="$_cf_top"
+      printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
+    fi
+
+    _cf_root=""
+    _cf_root=$(bash "$_cf_resolver" --root 2> /dev/null || true)
+    # Rank 6 requires an existing ledger, not just a git root; --root doesn't
+    # check this itself (existence-unchecked per its own docstring). It also
+    # requires the main checkout's ledger to own THIS tree: any linked worktree
+    # of the repo reaches the same main checkout, and borrowing its ledger from
+    # an unrelated worktree turns that ledger's gates on work it never ran.
+    if [ -n "$_cf_root" ] && [ -f "$_cf_root/.context/state.json" ] \
+      && _cf_rank6_owns "$_cf_root" "$_cf_top"; then
+      _CORPFLOW_WS_ROOT="$_cf_root"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
     fi
   fi
-  if [ "$_cf_mode" = "write" ] && [ -n "${WORKSPACE_ROOT:-}" ]; then
-    _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
-    printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
-  fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    _CORPFLOW_WS_ROOT="${CLAUDE_PROJECT_DIR}"
-    printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
-  fi
-  _CORPFLOW_WS_ROOT=$(pwd) || _CORPFLOW_WS_ROOT="."
-  printf '%s' "$_CORPFLOW_WS_ROOT"
+
+  printf ''
   return 0
 }
 
-# Echoes an absolute path to .context/. Read view of the resolver above; called
-# as a plain function, not through $( ), so the hot path pays no extra fork.
+# Echoes an absolute path to .context/, or the empty string when
+# corpflow_workspace_root cannot resolve one — never `/.context` or `./.context`,
+# which a caller's mkdir would otherwise plant under whatever cwd it happened to
+# run from. Read view of the resolver above; called as a plain function, not
+# through $( ), so the hot path pays no extra fork.
 corpflow_context_root() {
-  corpflow_workspace_root read > /dev/null
-  printf '%s' "${_CORPFLOW_WS_ROOT:-.}/.context"
+  corpflow_workspace_root > /dev/null
+  if [ -n "${_CORPFLOW_WS_ROOT:-}" ]; then
+    printf '%s' "${_CORPFLOW_WS_ROOT}/.context"
+  else
+    printf ''
+  fi
   return 0
 }
 
@@ -275,7 +320,29 @@ corpflow_stage_and_pin() {
   return 0
 }
 
-# corpflow_hook_audit_row --ctx C --actor A --action ACT --result R --meta JSON [--subject S]
+# corpflow_audit_task_id <ctx> — the task_id for a row whose caller holds no ledger key
+# of its own: the one in_progress key; "none" with no ledger or nothing in progress;
+# "unknown" when the ledger cannot say which. Never empty, unlike every other symbol
+# here, because an empty task_id is exactly what the appender below refuses.
+corpflow_audit_task_id() {
+  local _cf_state="${1:-}/state.json" _cf_keys
+  [ -f "$_cf_state" ] || { printf 'none'; return 0; }
+  command -v jq > /dev/null 2>&1 || { printf 'unknown'; return 0; }
+  _cf_keys=$(jq -r '
+    if (.tasks|type=="object") then
+      [.tasks | to_entries[] | select(.value.status=="in_progress") | .key
+        | select(test("^[A-Z]{2}[0-9]+$"))] | join(",")
+    else "" end
+  ' "$_cf_state" 2> /dev/null) || { printf 'unknown'; return 0; }
+  case "$_cf_keys" in
+    "") printf 'none' ;;
+    *,*) printf 'unknown' ;;
+    *) printf '%s' "$_cf_keys" ;;
+  esac
+  return 0
+}
+
+# corpflow_hook_audit_row --ctx C --actor A --action ACT --result R --subject S --task-id T --meta JSON
 #
 # Named apart from the row appender in skills/shared/lib/audit-lib.sh on purpose: the two
 # shared one name until 4.0.29. They take incompatible flags (--ctx here, a file path there)
@@ -287,23 +354,21 @@ corpflow_stage_and_pin() {
 # Appends one row to <ctx>/logs/audit.jsonl. Returns 0 always, including on every
 # refusal — an audit failure must never become a hook's exit code.
 #
-# Flag-parsed rather than positional on purpose: the three call-site shapes differ
-# only in whether `subject` is present, and two adjacent free-form strings
+# Flag-parsed rather than positional on purpose: two adjacent free-form strings
 # (`action`, `result`) in a positional signature make a transposition produce a
 # VALID ROW THAT LIES, which is the worst failure an audit log has. `result` and
 # `actor` are held to closed sets for the same reason: a transposition then drops
 # the row loudly instead of recording a plausible falsehood.
 #
-# `subject` is emitted only when given and non-empty. That is a contract, not an
-# optimisation: it forecloses `subject: ""` ever meaning "blank" rather than
-# "absent", and it is what lets one writer serve test-execution-gate's
-# subject-less rows and the model-switch hooks' subject-bearing ones.
+# `subject` and `task_id` are required and non-empty: a row no reader can attribute
+# to a task is a gap that looks like a record. A call missing either writes nothing
+# and names the key on one stderr line. `skipped` records a no-op that still happened.
 #
 # Malformed `--meta` degrades to {"_meta_invalid":true} rather than dropping the
 # row: losing metadata beats losing a result:"block" row.
 corpflow_hook_audit_row() {
   local _cf_ctx="" _cf_actor="" _cf_action="" _cf_result="" _cf_meta="" _cf_subject=""
-  local _cf_dir _cf_file _cf_ts _cf_row
+  local _cf_task_id="" _cf_missing="" _cf_dir _cf_file _cf_ts _cf_row
   while [ "$#" -gt 0 ]; do
     case "${1:-}" in
       --ctx)     _cf_ctx="${2:-}" ;;
@@ -312,6 +377,7 @@ corpflow_hook_audit_row() {
       --result)  _cf_result="${2:-}" ;;
       --meta)    _cf_meta="${2:-}" ;;
       --subject) _cf_subject="${2:-}" ;;
+      --task-id) _cf_task_id="${2:-}" ;;
       *) shift; continue ;;
     esac
     # Never `shift 2` blind: a flag given with no value would shift past $# and
@@ -321,10 +387,17 @@ corpflow_hook_audit_row() {
 
   [ -n "$_cf_ctx" ] || return 0
   [ -n "$_cf_action" ] || return 0
-  command -v jq > /dev/null 2>&1 || return 0
-
   case "$_cf_actor" in hook:?*) : ;; *) return 0 ;; esac
-  case "$_cf_result" in ok | block | degraded) : ;; *) return 0 ;; esac
+  case "$_cf_result" in ok | block | degraded | skipped) : ;; *) return 0 ;; esac
+
+  [ -n "$_cf_subject" ] || _cf_missing="subject"
+  [ -n "$_cf_task_id" ] || _cf_missing="${_cf_missing:+$_cf_missing and }task_id"
+  if [ -n "$_cf_missing" ]; then
+    printf >&2 'corpflow_hook_audit_row: %s row not written, missing %s\n' \
+      "${_cf_action//[^A-Za-z0-9_.:-]/_}" "$_cf_missing" || :
+    return 0
+  fi
+  command -v jq > /dev/null 2>&1 || return 0
 
   [ -n "$_cf_meta" ] || _cf_meta="{}"
   printf '%s' "$_cf_meta" | jq -e . > /dev/null 2>&1 || _cf_meta='{"_meta_invalid":true}'
@@ -341,10 +414,10 @@ corpflow_hook_audit_row() {
   # Key order is pinned by construction, not by jq's sort: assert with
   # keys_unsorted, never keys.
   _cf_row=$(jq -cn --arg ts "$_cf_ts" --arg actor "$_cf_actor" --arg action "$_cf_action" \
-    --arg subject "$_cf_subject" --arg result "$_cf_result" --argjson meta "$_cf_meta" '
-    {ts: $ts, actor: $actor, action: $action}
-    + (if ($subject | length) > 0 then {subject: $subject} else {} end)
-    + {result: $result, metadata: $meta}
+    --arg subject "$_cf_subject" --arg result "$_cf_result" --arg task_id "$_cf_task_id" \
+    --argjson meta "$_cf_meta" '
+    {ts: $ts, actor: $actor, action: $action, subject: $subject, result: $result,
+     task_id: $task_id, metadata: $meta}
   ' 2> /dev/null) || return 0
   { printf '%s\n' "$_cf_row" >> "$_cf_file"; } 2> /dev/null || return 0
   return 0
@@ -356,4 +429,4 @@ corpflow_hook_audit_row() {
 readonly -f corpflow_workspace_root corpflow_context_root corpflow_active_stage \
   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-  corpflow_hook_audit_row
+  corpflow_audit_task_id corpflow_hook_audit_row _cf_rank6_owns

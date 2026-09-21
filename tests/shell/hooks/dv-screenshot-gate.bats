@@ -1,155 +1,401 @@
 #!/usr/bin/env bats
-# Tests for hooks/dv-screenshot-gate.sh (DV0c) — SubagentStop gate that blocks
-# the developer agent when the screenshots.md manifest is missing.
+# Tests for hooks/dv-screenshot-gate.sh: ledger scope, the --check classifier and the live policy.
+# Row grammar is owned by skills/worktask/scripts/attach-visual-evidence.sh, so its changes re-run this.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 SCRIPT="hooks/dv-screenshot-gate.sh"
 DEV_PAYLOAD="${FIXTURES}/hooks/dv-screenshot-gate-developer.payload.json"
 NONDEV_PAYLOAD="${FIXTURES}/hooks/dv-screenshot-gate-nondeveloper.payload.json"
+BASH_PAYLOAD="${FIXTURES}/hooks/dv-screenshot-gate-bash-developer.payload.json"
+BASH_DEV="system-developer:bash-developer"
+FULL_TOOLS='["silicon","magick","convert"]'
+HDR='| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
+|---|------|------|-------|----------|---------|---------|----------|------------|'
+TOOLS_ROW='| 01 | diff | — | 0 | backend | cli_fallback | tool_missing: silicon(absent), magick(absent), convert(absent) | 2026-01-01T00:00:00Z | — |'
 
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context"
+  IMG="$WD/.context/images/wt"
+  AUDIT="$WD/.context/logs/audit.jsonl"
 }
 
-@test "failure: developer + manifest absent -> block decision + block audit row" {
-  printf '%s' '{"version":1,"worktask_id":"wt-block","metadata":{}}' > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success   # block is communicated via stdout JSON, exit stays 0
-  echo "$output" | jq -e '
-    .decision == "block"
-    and (.reason | test("missing screenshots.md"))
+task() { # <agent> <platform> [status]
+  jq -cn --arg a "$1" --arg p "$2" --arg s "${3:-in_progress}" \
+    '{status: $s, metadata: {stage: "DV", agent: $a, platform: $p}}'
+}
+
+ledger() { # <tasks-json> [dispatched-json] [metadata-json] [platform]
+  local rows="${2:-}" meta="${3:-}"
+  [ -n "$rows" ] || rows='[]'
+  [ -n "$meta" ] || meta='{"requires_screenshots":true}'
+  jq -n --argjson t "$1" --argjson r "$rows" --argjson m "$meta" --arg p "${4:-web}" \
+    '{version: 2, worktask_id: "wt", platform: $p, metadata: $m, tasks: $t, facts: {dispatched_agents: $r}}' \
+    > "$WD/.context/state.json"
+}
+
+one_dv() { # <platform> [agent] [metadata-json]
+  ledger "{\"DV0\": $(task "${2:-$BASH_DEV}" "$1")}" "" "${3:-}" "$1"
+}
+
+preflight_meta() { # <entry-platform> <tools-json> [accepted-json] [version-json]
+  jq -cn --arg p "$1" --argjson t "$2" --argjson ok "${3:-true}" --argjson v "${4:-1}" \
+    '{requires_screenshots: true, preflight: {version: $v, result: "pass", ran_at: "2026-01-01T00:00:00Z",
+      platforms: [$p], checks: [], tools_absent: [$t[] | {tool: ., platform: $p, accepted: $ok}]}}'
+}
+
+png() {
+  mkdir -p "$IMG"
+  printf '\211PNG\r\n\032\nfixture' > "$IMG/$1"
+}
+
+manifest() { # <task> <row>...
+  local t="$1"
+  shift
+  mkdir -p "$IMG"
+  { printf '# Screenshots — wt / %s\n\n%s\n' "$t" "$HDR"; printf '%s\n' "$@"; } > "$IMG/screenshots-$t.md"
+}
+
+img_row() { # <task> <nn> <slug>
+  printf '| %s | %s | dv-%s-%s-%s.png | 15 | web | web/playwright | %s | 2026-01-01T00:00:00Z | — |' \
+    "$2" "$3" "$1" "$2" "$3" "$3"
+}
+
+gate() { run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-string "$1" "$SCRIPT"; }
+gate_file() { run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$1" "$SCRIPT"; }
+check() { run bash "$PLUGIN_ROOT/$SCRIPT" --check "$1" --state "$WD/.context/state.json"; }
+
+assert_block() { # <block_kind>
+  assert_success
+  echo "$output" | jq -e --arg k "$1" '.decision == "block" and (.reason | startswith($k))
     and .hookSpecificOutput.hookEventName == "SubagentStop"
-    and (.hookSpecificOutput.additionalContext | test("dv-screenshot-capture"))
-  '
-  run jq -e '.action == "screenshot_gate_block" and .result == "block"
-             and .metadata.worktask_id == "wt-block"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+    and (.hookSpecificOutput.additionalContext | length > 0)'
+  assert_audit_row screenshot_gate_block --file "$AUDIT" --result block --meta "block_kind=$1"
 }
 
-@test "happy: manifest present on disk -> pass row, no block on stdout" {
-  printf '%s' '{"version":1,"worktask_id":"wt-pass","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-pass"
-  printf '# screenshots\n' > "$WD/.context/images/wt-pass/screenshots.md"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+assert_pass() { # <class>
   assert_success
-  [ -z "$output" ]
-  run jq -e '.action == "screenshot_gate_pass" and .metadata.reason == "manifest present"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+  assert_output ''
+  assert_audit_row screenshot_gate_pass --file "$AUDIT" --result ok --meta "class=$1"
 }
 
-@test "edge: requires_screenshots=false passes even with no manifest" {
-  printf '%s' '{"version":1,"worktask_id":"wt-noui","metadata":{"requires_screenshots":false}}' \
+assert_noop() {
+  assert_success
+  assert_output ''
+  [ ! -e "$AUDIT" ]
+}
+
+# --- evidence classes on the live path ----------------------------------------
+
+@test "prose-only manifest on a web stream blocks no_captures, scoped without a dispatched row" {
+  one_dv web
+  mkdir -p "$IMG"
+  printf '# Screenshots\n\nHeadless CI, nothing captured.\n' > "$IMG/screenshots-DV0.md"
+  gate_file "$BASH_PAYLOAD"
+  assert_block no_captures
+  assert_audit_row screenshot_gate_block --file "$AUDIT" \
+    --meta task_id=DV0 --meta class=no_captures --meta platform=web \
+    --meta dedupe_key=sess_fix:agt_bash:screenshot-gate
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("dv-screenshot-capture")'
+}
+
+@test "a prose-only manifest beside a dv-DV0 capture blocks invalid_evidence" {
+  one_dv web
+  mkdir -p "$IMG"
+  printf '# Screenshots\n\nnone\n' > "$IMG/screenshots-DV0.md"
+  png dv-DV0-01-x.png
+  gate_file "$BASH_PAYLOAD"
+  assert_block invalid_evidence
+  echo "$output" | jq -e '.reason | test("images_unreferenced")'
+}
+
+@test "a valid capture row passes as captured" {
+  one_dv web
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  gate_file "$BASH_PAYLOAD"
+  assert_pass captured
+  assert_audit_row screenshot_gate_pass --file "$AUDIT" --meta task_id=DV0 --meta platform=web
+}
+
+@test "a text file renamed .png blocks with a mime reason" {
+  one_dv web
+  mkdir -p "$IMG"
+  printf 'plain text\n' > "$IMG/dv-DV0-01-home.png"
+  manifest DV0 "$(img_row DV0 01 home)"
+  gate_file "$BASH_PAYLOAD"
+  assert_block invalid_evidence
+  echo "$output" | jq -e '.reason | test("mime:dv-DV0-01-home.png")'
+}
+
+@test "JPEG bytes behind a .png name block with a mime reason" {
+  one_dv web
+  mkdir -p "$IMG"
+  printf '\377\330\377\340JFIF' > "$IMG/dv-DV0-01-home.png"
+  manifest DV0 "$(img_row DV0 01 home)"
+  gate_file "$BASH_PAYLOAD"
+  assert_block invalid_evidence
+  echo "$output" | jq -e '.reason | test("mime:")'
+}
+
+@test "a symlinked or empty image row is invalid" {
+  one_dv web
+  mkdir -p "$IMG"
+  printf '\211PNG\r\n\032\nx' > "$WD/outside.png"
+  ln -s "$WD/outside.png" "$IMG/dv-DV0-01-link.png"
+  manifest DV0 "$(img_row DV0 01 link)"
+  check DV0
+  assert_failure 1
+  assert_output --partial 'symlink:dv-DV0-01-link.png'
+  rm "$IMG/dv-DV0-01-link.png"
+  : > "$IMG/dv-DV0-01-link.png"
+  check DV0
+  assert_failure 1
+  assert_output --partial 'empty:dv-DV0-01-link.png'
+}
+
+# --- per-stream isolation ------------------------------------------------------
+
+@test "two streams: DV1 blocks on DV0's captures while DV0 passes" {
+  ledger "{\"DV0\": $(task corpflow:developer web), \"DV1\": $(task corpflow:developer web)}" \
+    '[{"task_id":"DV0","stage":"DV","agent_id":"agt_dv0"},{"task_id":"DV1","stage":"DV","agent_id":"agt_dv1"}]'
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  gate '{"agent_type":"corpflow:developer","agent_id":"agt_dv1","session_id":"s"}'
+  assert_block no_captures
+  assert_audit_row screenshot_gate_block --file "$AUDIT" --meta task_id=DV1
+  gate '{"agent_type":"corpflow:developer","agent_id":"agt_dv0","session_id":"s"}'
+  assert_pass captured
+}
+
+@test "a DV1 row citing DV0's capture is invalid" {
+  ledger "{\"DV0\": $(task corpflow:developer web), \"DV1\": $(task corpflow:developer web)}"
+  png dv-DV0-01-home.png
+  manifest DV1 "$(img_row DV0 01 home)"
+  check DV1
+  assert_failure 1
+  assert_output --partial 'class=invalid task=DV1'
+  assert_output --partial 'name:dv-DV0-01-home.png'
+}
+
+# --- tool_missing -----------------------------------------------------------------
+
+@test "backend and systems tool_missing pass with no metadata.preflight at all" {
+  local p
+  for p in backend systems; do
+    rm -rf "$WD/.context/logs"
+    ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "" "$p"
+    manifest DV0 "$TOOLS_ROW"
+    gate_file "$BASH_PAYLOAD"
+    assert_pass tool_missing_only
+  done
+}
+
+@test "tool_missing blocks on a UI platform whatever the preflight record says" {
+  local p meta
+  for p in web android apple; do
+    for meta in none accepted; do
+      rm -rf "$WD/.context/logs"
+      if [ "$meta" = none ]; then
+        ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "" "$p"
+      else
+        ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "$(preflight_meta "$p" "$FULL_TOOLS")" "$p"
+      fi
+      manifest DV0 "$TOOLS_ROW"
+      gate_file "$BASH_PAYLOAD"
+      assert_success
+      echo "$output" | jq -e '.decision == "block" and (.reason | startswith("tool_missing_ui"))
+        and (.hookSpecificOutput.additionalContext | test("passes only on backend/systems"))' > /dev/null \
+        || fail "$p/$meta did not block: $output"
+    done
+  done
+}
+
+@test "platform table: only backend and systems pass no_captures or tool_missing" {
+  local p shape
+  for p in web android apple ai unknown backend systems; do
+    for shape in none tools; do
+      rm -rf "$WD/.context/logs" "$IMG"
+      ledger "{\"DV0\": $(task "$BASH_DEV" "$p")}" "" "$(preflight_meta "$p" "$FULL_TOOLS")" "$p"
+      [ "$shape" = none ] || manifest DV0 "$TOOLS_ROW"
+      gate_file "$BASH_PAYLOAD"
+      assert_success
+      case "$p" in
+        backend | systems) [ -z "$output" ] || fail "$p/$shape should pass: $output" ;;
+        *) echo "$output" | jq -e '.decision == "block"' > /dev/null || fail "$p/$shape should block" ;;
+      esac
+    done
+  done
+}
+
+@test "a task with no platform anywhere is unknown and blocks no_captures" {
+  jq -n --arg a "$BASH_DEV" '{version: 2, worktask_id: "wt", tasks: {DV0: {status: "in_progress", metadata: {agent: $a}}}}' \
     > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success
-  [ -z "$output" ]
-  run jq -e '.action == "screenshot_gate_pass" and .metadata.reason == "requires_screenshots=false"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+  gate_file "$BASH_PAYLOAD"
+  assert_block no_captures
+  assert_audit_row screenshot_gate_block --file "$AUDIT" --meta platform=unknown
 }
 
-@test "edge: non-developer agent is a no-op (no block, no audit row)" {
-  printf '%s' '{"version":1,"worktask_id":"wt-x","metadata":{}}' > "$WD/.context/state.json"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$NONDEV_PAYLOAD"
+# --- the --check classifier ------------------------------------------------------
+
+@test "--check exits 0 captured, 1 invalid, 3 no_captures, 4 tool_missing_only" {
+  one_dv web
+  check DV0
+  assert_failure 3
+  assert_output --partial 'class=no_captures task=DV0 manifest=- reason='
+  manifest DV0 "$TOOLS_ROW"
+  check DV0
+  assert_failure 4
+  assert_output --partial 'class=tool_missing_only'
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  check DV0
   assert_success
-  [ -z "$output" ]
-  [ ! -f "$WD/.context/logs/audit.jsonl" ]
+  assert_output --partial "class=captured task=DV0 manifest=$IMG/screenshots-DV0.md"
+  printf 'text' > "$IMG/dv-DV0-01-home.png"
+  check DV0
+  assert_failure 1
+  assert_output --partial 'class=invalid'
 }
 
-# --- manifest schema (REQ-8) --------------------------------------------------
-# Presence alone used to pass the gate, so a manifest whose rows did not match the
-# canonical 9-column table reached the consuming stage, which silently dropped the
-# evidence. The schema verdict is delegated to attach-visual-evidence.sh so the
-# grammar keeps exactly one parser.
-
-_canonical_row() {
-  printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
-  printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
-  printf '| 01 | home | dv-01-home.png | 1234 | apple | sim | Home screen | 2026-01-01T00:00:00Z | - |\n'
+@test "--check exits 2 for a bad task id, an unresolved ledger or root, or no jq" {
+  one_dv web
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check dv0 --state "$WD/.context/state.json"
+  assert_failure 2
+  assert_output --partial 'class=usage'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check DV0 --state "$WD/nope.json"
+  assert_failure 2
+  printf '{"tasks":{}}' > "$WD/nowid.json"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --check DV0 --state "$WD/nowid.json"
+  assert_failure 2
+  run_script_env --hide jq "$SCRIPT" --check DV0 --state "$WD/.context/state.json"
+  assert_failure 2
+  assert_output --partial 'jq not found'
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" "$SCRIPT" --check DV0
+  assert_failure 2
+  [ ! -e "$cwd/.context" ]
 }
 
-@test "schema: a manifest whose rows miss the canonical schema blocks with a schema reason" {
-  printf '%s' '{"version":1,"worktask_id":"wt-bad","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-bad"
-  {
-    printf '# screenshots\n\n'
-    printf '| # | Path | Caption |\n|---|------|---------|\n'
-    printf '| 1 | shot.png | too few columns |\n'
-  } > "$WD/.context/images/wt-bad/screenshots.md"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success   # blocks via stdout JSON, exit stays 0
-  echo "$output" | jq -e '
-    .decision == "block"
-    and (.reason | test("screenshot_manifest_schema"))
-    and (.hookSpecificOutput.additionalContext | test("canonical 9-column"))
-  '
-  run jq -e '.action == "screenshot_gate_block"
-             and .metadata.block_kind == "screenshot_manifest_schema"' \
-    "$WD/.context/logs/audit.jsonl"
-  assert_success
+@test "--check writes no audit row and creates no directory" {
+  one_dv web
+  check DV0
+  assert_failure 3
+  [ ! -e "$WD/.context/logs" ]
+  [ ! -e "$WD/.context/images" ]
 }
 
-@test "schema: a canonical manifest passes the gate" {
-  printf '%s' '{"version":1,"worktask_id":"wt-good","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-good"
-  _canonical_row > "$WD/.context/images/wt-good/screenshots.md"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+@test "the legacy ## DV0 section counts for DV0 only; a sectionless legacy file is absent" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web), \"DV1\": $(task "$BASH_DEV" web)}"
+  png dv-DV0-01-home.png
+  printf '# Screenshots — wt\n\n## DV0\n\n%s\n%s\n' "$HDR" "$(img_row DV0 01 home)" > "$IMG/screenshots.md"
+  check DV0
   assert_success
-  [ -z "$output" ]
-  run jq -e '.action == "screenshot_gate_pass"' "$WD/.context/logs/audit.jsonl"
-  assert_success
+  check DV1
+  assert_failure 3
+  rm "$IMG/dv-DV0-01-home.png"
+  printf '# Screenshots — wt\n\n%s\n%s\n' "$HDR" "$(img_row DV0 01 home)" > "$IMG/screenshots.md"
+  check DV0
+  assert_failure 3
 }
 
-@test "schema: a table-free manifest with NO captures beside it passes (genuine skip rationale)" {
-  printf '%s' '{"version":1,"worktask_id":"wt-skip","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-skip"
-  printf '# screenshots\n\nNo captures: headless CI, rationale recorded in development-0.md.\n' \
-    > "$WD/.context/images/wt-skip/screenshots.md"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+@test "the per-task manifest wins over the legacy file" {
+  one_dv web
+  png dv-DV0-01-home.png
+  printf '# legacy\n\n## DV0\n\n%s\n| 01 | broken |\n' "$HDR" > "$IMG/screenshots.md"
+  manifest DV0 "$(img_row DV0 01 home)"
+  check DV0
   assert_success
-  [ -z "$output" ]
-  run jq -e '.action == "screenshot_gate_pass"' "$WD/.context/logs/audit.jsonl"
-  assert_success
+  assert_output --partial "manifest=$IMG/screenshots-DV0.md"
 }
 
-@test "schema: AC-4 — a table-free manifest sitting beside real captures BLOCKS" {
-  # The silent evidence drop REQ-8 exists to remove: the PNGs were captured, the manifest
-  # references none of them, and every downstream stage sees "a manifest is present".
-  printf '%s' '{"version":1,"worktask_id":"wt-drop","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-drop"
-  printf '# screenshots\n\nHeadless CI, no captures.\n' \
-    > "$WD/.context/images/wt-drop/screenshots.md"
-  printf '\x89PNG\r\n\x1a\n' > "$WD/.context/images/wt-drop/dv-01-home.png"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success   # blocks via stdout JSON, exit stays 0
-  echo "$output" | jq -e '.decision == "block" and (.reason | test("screenshot_manifest_schema"))'
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("image file")'
-  run jq -e '.metadata.block_kind == "screenshot_manifest_schema"' "$WD/.context/logs/audit.jsonl"
-  assert_success
+# --- scope resolution ------------------------------------------------------------
+
+@test "an agent_type no DV task names is a no-op" {
+  one_dv web
+  gate '{"agent_type":"system-developer:python-developer","agent_id":"agt_py","session_id":"s"}'
+  assert_noop
+  gate_file "$NONDEV_PAYLOAD"
+  assert_noop
 }
 
-@test "schema: requires_screenshots=false never blocks even with captures and no rows" {
-  printf '%s' '{"version":1,"worktask_id":"wt-noui3","metadata":{"requires_screenshots":false}}' \
-    > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-noui3"
-  printf '# screenshots\n\nnone\n' > "$WD/.context/images/wt-noui3/screenshots.md"
-  printf '\x89PNG\r\n\x1a\n' > "$WD/.context/images/wt-noui3/dv-01-home.png"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success
-  [ -z "$output" ]
+@test "a dispatched row for a non-DV task is a no-op" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web), \"QA0\": {\"status\": \"in_progress\"}}" \
+    '[{"task_id":"QA0","stage":"QA","agent_id":"agt_bash"}]'
+  gate_file "$BASH_PAYLOAD"
+  assert_noop
 }
 
-@test "schema: requires_screenshots=false skips the schema check entirely" {
-  printf '%s' '{"version":1,"worktask_id":"wt-noui2","metadata":{"requires_screenshots":false}}' \
-    > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-noui2"
-  printf '| 1 | broken |\n' > "$WD/.context/images/wt-noui2/screenshots.md"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
-  assert_success
-  [ -z "$output" ]
+@test "no in_progress DV task is a no-op" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web completed)}"
+  gate_file "$BASH_PAYLOAD"
+  assert_noop
+}
+
+@test "two in_progress DV tasks for one agent and no dispatched row block task_unresolved" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web), \"DV1\": $(task "$BASH_DEV" web)}"
+  gate_file "$BASH_PAYLOAD"
+  assert_block task_unresolved
+}
+
+@test "an unresolved task passes when the ledger flag is false" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web), \"DV1\": $(task "$BASH_DEV" web)}" "" '{"requires_screenshots":false}'
+  gate_file "$BASH_PAYLOAD"
+  assert_pass unresolved
+}
+
+@test "an agent whose DV task finished blocks task_unresolved while another DV task runs" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web completed), \"DV1\": $(task corpflow:prompt-engineer web)}"
+  gate_file "$BASH_PAYLOAD"
+  assert_block task_unresolved
+}
+
+@test "one agent_id recorded against two tasks blocks task_unresolved" {
+  ledger "{\"DV0\": $(task "$BASH_DEV" web), \"DV1\": $(task "$BASH_DEV" web)}" \
+    '[{"task_id":"DV0","stage":"DV","agent_id":"agt_bash"},{"task_id":"DV1","stage":"DV","agent_id":"agt_bash"}]'
+  gate_file "$BASH_PAYLOAD"
+  assert_block task_unresolved
+}
+
+@test "corpflow:developer resolves to the sole in_progress DV task whatever its metadata.agent" {
+  one_dv web corpflow:prompt-engineer
+  gate_file "$DEV_PAYLOAD"
+  assert_block no_captures
+  assert_audit_row screenshot_gate_block --file "$AUDIT" --meta task_id=DV0
+}
+
+@test "the task flag beats the ledger flag in both directions" {
+  ledger "{\"DV0\": {\"status\":\"in_progress\",\"metadata\":{\"agent\":\"$BASH_DEV\",\"platform\":\"web\",\"requires_screenshots\":false}}}" \
+    "" '{"requires_screenshots":true}'
+  gate_file "$BASH_PAYLOAD"
+  assert_pass unclassified
+  rm -rf "$WD/.context/logs"
+  ledger "{\"DV0\": {\"status\":\"in_progress\",\"metadata\":{\"agent\":\"$BASH_DEV\",\"platform\":\"web\",\"requires_screenshots\":true}}}" \
+    "" '{"requires_screenshots":false}'
+  gate_file "$BASH_PAYLOAD"
+  assert_block no_captures
+}
+
+# --- fail-closed edges --------------------------------------------------------------
+
+@test "an unreadable ledger blocks corpflow:developer and no-ops other agents" {
+  printf '{not json' > "$WD/.context/state.json"
+  gate_file "$BASH_PAYLOAD"
+  assert_noop
+  gate_file "$DEV_PAYLOAD"
+  assert_block gate_unresolved
+}
+
+@test "a missing manifest validator blocks gate_unresolved instead of passing" {
+  mkdir -p "$WD/plug/hooks"
+  cp "$PLUGIN_ROOT/$SCRIPT" "$WD/plug/hooks/"
+  one_dv web
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$WD/plug/hooks/dv-screenshot-gate.sh"
+  assert_block gate_unresolved
 }
 
 @test "contract: --self-test passes (smoke, NON-counting)" {
@@ -159,22 +405,42 @@ _canonical_row() {
 }
 
 @test "SR: a symlinked audit.jsonl is refused on the block path" {
-  printf '%s' '{"version":1,"worktask_id":"wt-sym","metadata":{}}' > "$WD/.context/state.json"
+  one_dv web
   mkdir -p "$WD/.context/logs" "$WD/target-dir"
   ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  gate_file "$BASH_PAYLOAD"
   assert_success
-  # The block itself must still travel: refusing the row never weakens the gate.
   echo "$output" | jq -e '.decision == "block"'
   [ ! -e "$WD/target-dir/escaped.txt" ]
 }
 
 @test "SR: a symlinked audit.jsonl is refused on the pass path" {
-  printf '%s' '{"version":1,"worktask_id":"wt-sym2","metadata":{}}' > "$WD/.context/state.json"
-  mkdir -p "$WD/.context/images/wt-sym2" "$WD/.context/logs" "$WD/target-dir"
-  printf '# screenshots\n' > "$WD/.context/images/wt-sym2/screenshots.md"
+  one_dv web
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  mkdir -p "$WD/.context/logs" "$WD/target-dir"
   ln -s "$WD/target-dir/escaped.txt" "$WD/.context/logs/audit.jsonl"
-  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$DEV_PAYLOAD"
+  gate_file "$BASH_PAYLOAD"
   assert_success
+  assert_output ''
   [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+# A non-zero exit after the JSON is a non-blocking hook error, so the stop would slip through.
+@test "an unwritable logs/ still exits 0 with the block JSON on stdout" {
+  one_dv web
+  printf 'not a directory' > "$WD/.context/logs"
+  run_script_env --separate-stderr --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$SCRIPT"
+  assert_success
+  echo "$output" | jq -e '.decision == "block" and (.reason | startswith("no_captures"))'
+}
+
+@test "unresolved root exits 0, no block, no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" --stdin-file "$DEV_PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -z "$output" ]
+  [ ! -e "$cwd/.context" ]
 }

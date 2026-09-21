@@ -67,3 +67,89 @@ setup() {
   run bash -c "grep -c '^+++\\|^@@\\|^--- ' '$DS' || true"
   [ "$output" = "0" ]
 }
+
+@test "a newly created labels file is 0600" {
+  printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS"
+  run bash -c "ls -l -- '$DS' | awk '{print \$1}'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "-rw-------" ]
+}
+
+# --- dataset resolution (plugin-data-lib.sh) --------------------------
+# Every case below runs against a throwaway git repo / $BATS_TEST_TMPDIR data
+# dir, never the real plugin root, so a resolver bug cannot touch the tracked
+# evals/failure-labels.jsonl. The final test in this file asserts that directly.
+
+@test "--plugin-data lands the dataset under <dir>/self-improvement/, untracked repo stays clean" {
+  local data="$BATS_TEST_TMPDIR/data"
+  local repo; repo="$(mk_git_fixture)"
+  run_script_env --cwd "$repo" --env "CLAUDE_PROJECT_DIR=$repo" --unset CLAUDE_PLUGIN_DATA \
+    --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1 --plugin-data="$data"
+  [ "$status" -eq 0 ]
+  [ -f "$data/self-improvement/failure-labels.jsonl" ]
+  run bash -c "git -C '$repo' status --porcelain --untracked-files=all"
+  [ -z "$output" ]
+  [ ! -d "$repo/evals" ]
+}
+
+@test "flag beats env: --plugin-data wins over CLAUDE_PLUGIN_DATA" {
+  local flag_dir="$BATS_TEST_TMPDIR/flag-data"
+  local env_dir="$BATS_TEST_TMPDIR/env-data"
+  run_script_env --env "CLAUDE_PLUGIN_DATA=$env_dir" \
+    --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1 --plugin-data="$flag_dir"
+  [ "$status" -eq 0 ]
+  [ -f "$flag_dir/self-improvement/failure-labels.jsonl" ]
+  [ ! -e "$env_dir" ]
+}
+
+@test "relative --plugin-data exits 1" {
+  run_script_env --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1 --plugin-data="relative/dir"
+  [ "$status" -eq 1 ]
+}
+
+@test "unset CLAUDE_PLUGIN_DATA falls back to the fixture repo's evals/ with a stderr notice" {
+  local repo; repo="$(mk_git_fixture)"
+  run_script_env --cwd "$repo" --env "CLAUDE_PROJECT_DIR=$repo" --unset CLAUDE_PLUGIN_DATA \
+    --separate-stderr --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"plugin data dir unavailable"* ]]
+  [ -f "$repo/evals/failure-labels.jsonl" ]
+}
+
+@test "empty CLAUDE_PLUGIN_DATA falls back the same way" {
+  local repo; repo="$(mk_git_fixture)"
+  run_script_env --cwd "$repo" --env "CLAUDE_PROJECT_DIR=$repo" --env "CLAUDE_PLUGIN_DATA=" \
+    --separate-stderr --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"plugin data dir unavailable"* ]]
+}
+
+@test "the unsubstituted literal token falls back the same way" {
+  local repo; repo="$(mk_git_fixture)"
+  run_script_env --cwd "$repo" --env "CLAUDE_PROJECT_DIR=$repo" \
+    --env 'CLAUDE_PLUGIN_DATA=${CLAUDE_PLUGIN_DATA}' \
+    --separate-stderr --stdin-string "$ROW" "$SCRIPT" --worktask-id=wt-1
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"plugin data dir unavailable"* ]]
+}
+
+# --- --count-out ---------------------------------------------------------
+
+@test "--count-out receives the appended row count" {
+  local cnt="$WD/count.txt"
+  printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS" --count-out="$cnt"
+  [ "$(cat "$cnt")" = "1" ]
+}
+
+@test "--count-out is written as 0 under SELF_IMPROVE_LABELS=0" {
+  local cnt="$WD/count.txt"
+  printf '%s\n' "$ROW" | SELF_IMPROVE_LABELS=0 bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS" --count-out="$cnt"
+  [ "$(cat "$cnt")" = "0" ]
+}
+
+# --- repo hygiene --------------------------------------------------------------
+
+@test "the real repo's evals/failure-labels.jsonl is unchanged by this suite" {
+  run bash -c "git -C '$PLUGIN_ROOT' diff --quiet -- evals/failure-labels.jsonl"
+  [ "$status" -eq 0 ]
+}

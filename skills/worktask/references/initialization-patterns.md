@@ -7,9 +7,7 @@
 
 ## PL0 state.json Initialization (Phase 1)
 
-PL0 (or `commands/worktask.md` Phase 1) creates `.context/state.json` right after `mkdir -p .context/`, seeding the ledger every subsequent stage reads and patches. The seed is **re-run aware**: `run_index` (and the matching `plan_file`) is the next free planning index `N` from any pre-existing `.context/planning-*.md` (`0` on a fresh `.context/`). `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`) — never omit it.
-
-**The canonical executable snippet — `N` computation plus the atomic temp+fsync+rename write — lives in `commands/worktask.md` Phase 1 step 3a. Use it verbatim; do not re-derive it here.** It computes `N` with a nullglob-guarded loop over `.context/planning-*.md`, resolves `WORKSPACE_PATH` as `git rev-parse --show-toplevel` (else `pwd`), and writes the seed shape given in `handoff-protocol.md#pl0-seed` — plus `metadata.workspace_path` and `facts.goal`, both covered below.
+`commands/worktask.md` Phase 1 Step 3a creates `.context/state.json` right after `mkdir -p .context/` by running `skills/worktask/scripts/seed-state.sh`, the seed's only executable definition: the re-run-aware next free planning index `N` (`0` on a fresh `.context/`), `metadata.workspace_path`, `facts.goal`, and the atomic temp+fsync+rename write. `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`). The script refuses (exit 3) when `state.json` already exists; `pl0-procedure.md § Step 4 — state.json reset` owns re-runs. Resulting JSON shape: `handoff-protocol.md#pl0-seed`.
 
 ### plan_file shape boundary
 
@@ -223,13 +221,14 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
 
 `priority:"medium"`, `plan_file`, `worktask_id` and `error_file: ".context/errors/<agent>.md"` are
 the same on every row. Drop `--argjson shots` / `requires_screenshots` on rows that do not list it.
+`model` and `effort` come from the stage's row in `skills/shared/stage-codes.md`, not from this table.
 
-| Task | stage / agent / model | `context_refs` | `requires_screenshots` |
+| Task | stage / agent | `context_refs` | `requires_screenshots` |
 |---|---|---|---|
-| AR0 | `AR` / `corpflow:software-architector` / `opus` | `exploration.md#findings`, `<plan>#requirements` | — |
-| DV0 | `DV` / `corpflow:developer` / `opus` | `<plan>#requirements`, `architecture-0.md#decisions`, `coordination-0.md#fan-out` | yes |
-| DR0 | `DR` / `corpflow:technical-lead` / `sonnet` | `<plan>#requirements`, `architecture-0.md#decisions`, `development-0.md#deviations` | — |
-| QA0 | `QA` / `corpflow:qa-engineer` / `sonnet` | `<plan>#acceptance-criteria`, `developer-review-0.md#verdict` | yes (QA's Q1.5 manifest ingestion / advisory-skip reads it) |
+| AR0 | `AR` / `corpflow:software-architector` | `exploration.md#findings`, `<plan>#requirements` | — |
+| DV0 | `DV` / `corpflow:developer` | `<plan>#requirements`, `architecture-0.md#decisions`, `coordination-0.md#fan-out` | yes |
+| DR0 | `DR` / `corpflow:technical-lead` | `<plan>#requirements`, `architecture-0.md#decisions`, one `#deviations` ref per DV row's `metadata.artifact` | — |
+| QA0 | `QA` / `corpflow:qa-engineer` | `<plan>#acceptance-criteria`, `developer-review-0.md#verdict` | yes (QA's Q1.5 manifest ingestion / advisory-skip reads it) |
 
 ### AR0 task
 
@@ -309,25 +308,24 @@ PL0 → AR0 → TL0 ─┤→ DV1 ─├→ DR0 → QA0
 #### Narrow scope & seed the streams
 
 TL first narrows DV0 to the primary stream, then seeds DV1…DVN with the § Canonical seed call —
-same `stage`/`agent`/`model`/`context_refs` as the DV0 row, only `description` differs (each names
-the paths that stream owns). All DVN share `error_file: ".context/errors/developer.md"` with
-distinct section headers per sub-task (`## DV1 Retry N`, `## DV2 Retry N`).
+same `stage`/`agent`/`model`/`context_refs` as the DV0 row; `description`, `stream` and `artifact`
+differ per row (`handoff-protocol.md § DV fan-out — ledger tasks`). All DVN share
+`error_file: ".context/errors/developer.md"` with distinct section headers per sub-task
+(`## DV1 Retry N`, `## DV2 Retry N`).
 
 ##### Stream seed calls
 
 ```bash
 state-patch.sh --task-meta DV0 --set \
-  '{"description":"Implement theme color tokens (owns: Source/Theme/Colors/)"}'
+  '{"description":"Implement theme color tokens (owns: Source/Theme/Colors/)",
+    "stream":"tokens","artifact":".context/development-0-tokens.md"}'
 
 # DV1: "Add toggle and persistence (owns: Source/Settings/Theme/)"
 # DV2: "Create dark variants for all image assets (owns: Assets/Dark/)"
 state-patch.sh --task-create DV1 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
-    description:"Add toggle and persistence (owns: Source/Settings/Theme/)",
-    error_file:".context/errors/developer.md",
-    context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
+  --argjson m "$(jq -c '.tasks.DV0.metadata' .context/state.json)" \
+  '$m + {description:"Add toggle and persistence (owns: Source/Settings/Theme/)",
+         stream:"toggle", artifact:".context/development-0-toggle.md"}')"
 ```
 
 #### Dependency wiring
@@ -347,20 +345,37 @@ DV agent splits during its own execution. Sub-tasks are children of DV0 — sequ
 
 #### DV1/DV2 sub-tasks & sequencing
 
-Same § Canonical seed call, sharing `developer.md`; `context_refs` drops `coordination-0.md#fan-out`
-(no TL fan-out here) and only `description` differs — e.g. DV1 "Create semantic color tokens for
+The splitting DV agent is the rows' creator, so it assigns every slug (`handoff-protocol.md §
+Artifact naming (S1)`). The split takes the run to ≥ 2 DV rows, so DV0 gets `stream` + `artifact`
+first. DV1 and DV2 then clone DV0's metadata with the § Canonical seed call's shape, and the clone
+drops every `coordination-*.md` ref from `context_refs` (a JSON-encoded list; no TL split here).
+`description`, `stream` and `artifact` differ per row — e.g. DV1 "Create semantic color tokens for
 light/dark themes", DV2 "Add toggle and persistence for theme preference".
 
-```bash
-state-patch.sh --task-create DV1 --metadata "$(jq -n \
-  --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
-    description:"Create semantic color tokens for light/dark themes",
-    error_file:".context/errors/developer.md",
-    context_refs:(["\($plan)#requirements","architecture-0.md#decisions"]|tojson),
-    plan_file:$plan, worktask_id:$wid, priority:"medium"}')"
+##### Stamp DV0, then clone it
 
-# Sequential, not parallel: both blocked by DV0 (contrast the TL split above).
+```bash
+N=$(jq -r '.tasks.DV0.metadata.run_index' .context/state.json)
+state-patch.sh --task-meta DV0 --set "$(jq -cn --arg n "$N" \
+  '{stream:"core", artifact:".context/development-\($n)-core.md"}')"
+
+m=$(jq -c '.tasks.DV0.metadata
+  | .context_refs |= (fromjson | map(select(startswith("coordination-") | not)) | tojson)' \
+  .context/state.json)
+state-patch.sh --task-create DV1 --metadata "$(jq -n --argjson m "$m" \
+  '$m + {description:"Create semantic color tokens for light/dark themes",
+         stream:"tokens", artifact:".context/development-\($m.run_index)-tokens.md"}')"
+state-patch.sh --task-create DV2 --metadata "$(jq -n --argjson m "$m" \
+  '$m + {description:"Add toggle and persistence for theme preference",
+         stream:"toggle", artifact:".context/development-\($m.run_index)-toggle.md"}')"
+```
+
+##### Chain the rows
+
+Sequential, not parallel: a chain, so the rows share DV0's tree and are never re-pinned
+(`handoff-protocol.md § Pinning a row's tree`). Contrast the TL split above.
+
+```bash
 state-patch.sh --task-block DV1 --on DV0
-state-patch.sh --task-block DV2 --on DV0
+state-patch.sh --task-block DV2 --on DV1
 ```

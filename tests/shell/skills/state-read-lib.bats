@@ -104,3 +104,96 @@ withlib() {
   assert_success
   assert_output 'unknown'
 }
+
+# --- corpflow_context_dir: ranks 2-6 of the root-resolution ladder --------
+# Every case below sets GIT_CEILING_DIRECTORIES to a fixture-owned directory and unsets
+# every declared root not under test — rank 5 walks real git plumbing, and an
+# uncontained cwd/env would resolve to THIS worktree's own live .context/state.json.
+
+@test "context_dir: rank 2 — CONTEXT_DIR wins when it is a directory" {
+  local ctxdir
+  ctxdir="$(mk_tmpworkdir)"
+  run_script_env --cwd "$WD" --env "CONTEXT_DIR=$ctxdir" --unset WORKSPACE_ROOT \
+    --unset CLAUDE_PROJECT_DIR --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir
+  assert_success
+  assert_output "$ctxdir"
+}
+
+@test "context_dir: rank 3 — WORKSPACE_ROOT/.context outranks CLAUDE_PROJECT_DIR" {
+  local ws cp
+  ws="$(mk_tmpworkdir)"; mkdir -p "$ws/.context"
+  cp="$(mk_tmpworkdir)"; mkdir -p "$cp/.context"
+  run_script_env --cwd "$WD" --unset CONTEXT_DIR --env "WORKSPACE_ROOT=$ws" \
+    --env "CLAUDE_PROJECT_DIR=$cp" --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir
+  assert_success
+  assert_output "$ws/.context"
+}
+
+@test "context_dir: rank 4 — CLAUDE_PROJECT_DIR/.context is used when WORKSPACE_ROOT misses" {
+  local cp
+  cp="$(mk_tmpworkdir)"; mkdir -p "$cp/.context"
+  run_script_env --cwd "$WD" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --env "CLAUDE_PROJECT_DIR=$cp" --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir
+  assert_success
+  assert_output "$cp/.context"
+}
+
+@test "context_dir: rank 5 — toplevel/.context/state.json FILE outranks the resolver" {
+  local repo
+  repo="$(mk_git_fixture --dir "$WD/repo" --file 'a.txt:hi' --commit init)"
+  mkdir -p "$repo/.context"
+  printf '{}' > "$repo/.context/state.json"
+  run_script_env --cwd "$repo" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --unset CLAUDE_PROJECT_DIR --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir
+  assert_success
+  # git rev-parse --show-toplevel resolves physically; /tmp is itself a symlink on macOS.
+  local want
+  want="$(cd "$repo" && pwd -P)/.context"
+  [ "$output" = "$want" ]
+}
+
+@test "context_dir: rank 6 — resolve-root.sh recovers the linked-worktree case" {
+  local repo wt
+  repo="$(mk_git_fixture --dir "$WD/repo" --file 'a.txt:hi' --commit init)"
+  mkdir -p "$repo/.context"
+  wt="$WD/wt"
+  git -C "$repo" -c user.name=t -c user.email=t@t worktree add -q "$wt" -b wtb 2>/dev/null \
+    || skip "git worktree unavailable"
+  run_script_env --cwd "$wt" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --unset CLAUDE_PROJECT_DIR --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir
+  assert_success
+  local want
+  want="$(cd "$repo" && pwd -P)/.context"
+  [ "$output" = "$want" ]
+}
+
+@test "context_dir: unresolved — no declared root and no git repo above cwd is rc 1, empty" {
+  local outside
+  outside="$(mk_tmpworkdir)"
+  run_script_env --cwd "$outside" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --unset CLAUDE_PROJECT_DIR --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_context_dir
+  [ "$status" -eq 1 ]
+  assert_output ""
+}
+
+@test "context_dir: resolver unreachable is rc 2, distinct from an unresolved ladder" {
+  # A lib copy with no ../scripts/resolve-root.sh sibling — the install-is-broken case,
+  # never reachable from the real tree but exercised here in isolation.
+  # run_script_env's --source resolves relative to PLUGIN_ROOT, which the isolated copy
+  # deliberately is not under, so this sources it directly.
+  local isolib
+  isolib="$WD/isolated/lib/state-read-lib.sh"
+  mkdir -p "$(dirname "$isolib")"
+  cp "$LIB_PATH" "$isolib"
+  run env -u CONTEXT_DIR -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR \
+    GIT_CEILING_DIRECTORIES="$WD" \
+    bash -c "cd '$WD' && set -euo pipefail; . '$isolib'; corpflow_context_dir"
+  [ "$status" -eq 2 ]
+  assert_output ""
+}

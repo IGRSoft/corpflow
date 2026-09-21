@@ -61,21 +61,27 @@ The skill owns the pipeline; this command wires flags around it:
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
 4. **Step 5b — append labels** (see below).
-5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended.
+5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended, and the `self-improve-counts:` line.
 6. **Apply phase** — see below.
 
 ### Step 4 — Label Append
 
-Runs `skills/self-improvement/scripts/append-labels.sh` per `skills/self-improvement/SKILL.md § Step 5b`, appending one row per kept change to the committed `evals/failure-labels.jsonl`. It is the run's only durable output — `learnings.md` lives under the gitignored `.context/` — so skipping it discards every label the pipeline just produced.
+Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`. Appends one row per kept change to the label dataset under plugin data. Falls back to `evals/failure-labels.jsonl` with stderr notice if no plugin data dir exists. Skipping this discards all labels the pipeline produced.
 
-- `--worktask-id` resolves from `.context/state.json` `worktask_id`; outside a worktask workspace, pass `--since` and the command uses `manual-<YYYYMMDD-HHMMSS>`.
-- Runs whether or not the user approves any proposal — a rejected proposal is still evidence the output needed changing.
-- **`--dry-run` does not append** (the dataset is committed and `--dry-run` is read-only); it reports the row count it *would* have written. Re-run without `--dry-run` to record them.
-- `SELF_IMPROVE_LABELS=0` makes the step a no-op.
+#### Invocation options
+
+- `--worktask-id` from `.context/state.json`; outside worktask, pass `--since`, uses `manual-<YYYYMMDD-HHMMSS>`.
+- Runs whether or not the user approves proposals — rejected proposals are still evidence of needed changes.
+- `--dry-run` is read-only; reports row count that *would* append. Re-run without `--dry-run` to record.
+- `SELF_IMPROVE_LABELS=0` makes this step a no-op.
+
+#### Pipeline closure
+
+The closing `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline-counts.sh` runs last (`skills/self-improvement/SKILL.md § Step 5b — record the four counts`). Under `--dry-run`, pass `--dry-run` to it. Report its stderr line: `self-improve-counts: context_paths=N changed_paths=N mapped_rows=N appended_rows=N`.
 
 #### Aggregating the dataset
 
-Aggregate the accumulated dataset with `skills/self-improvement/scripts/label-stats.sh` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
+Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories). It resolves the dataset the same way, fallback included.
 
 ### Step 6 — Apply Phase
 
@@ -97,7 +103,8 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 - In-scope proposals: <N> (high: N, medium: N)
 - Deferred (low confidence): <N>
 - Out-of-context discards: <N>
-- Labels appended to `evals/failure-labels.jsonl`: <N> (dry-run: would append <N>)
+- Labels appended to the label dataset (<plugin data | repo fallback>): <N> (dry-run: would append <N>)
+- Pipeline counts: `self-improve-counts: context_paths=<N> changed_paths=<N> mapped_rows=<N> appended_rows=<N>`
 
 ## Next steps
 - Review `.context/learnings.md` (written at <timestamp>)

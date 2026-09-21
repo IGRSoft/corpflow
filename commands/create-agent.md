@@ -86,7 +86,7 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 | read-only | Read, Glob, Grep |
 | standard | Read, Glob, Grep, Write, Edit, Bash |
 | full | Read, Glob, Grep, Write, Edit, Bash |
-| orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash skills/worktask/scripts/state-patch.sh:*) |
+| orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *) |
 | design | Read, Glob, Grep, Write, ToolSearch |
 
 ### Cross-Plugin Delegation
@@ -122,6 +122,8 @@ Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` betw
 | Purpose | Role, domain and boundaries, integration context. |
 | Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
+| Model fit | Write the body for the `model:` in the frontmatter — `skills/shared/model-prompting.md` lists what each alias needs countered. A body `commands/prompt-audit.md § Body rules 5-7` would flag is a generation bug, not a follow-up. |
+| Emphasis | Generate the plain imperative. `CRITICAL`/`MUST` is earned by a recorded failure, later. |
 
 #### Slots that carry their own shape
 

@@ -8,7 +8,7 @@ If `.context/designs/figma-registry.md` exists it is authoritative — parse its
 
 ### Join Key (Design Ref)
 
-Join `screenshots.md.Design Ref → figma-registry.md.ID` by explicit ID equality, over the optional **`Design Ref`** column on DV's `.context/images/<worktask_id>/screenshots.md` manifest. Missing column or value = `—` (no candidate → fallback). The two blocks below are ONE loop.
+Join `screenshots-*.md.Design Ref → figma-registry.md.ID` by explicit ID equality, over the optional **`Design Ref`** column on DV's per-task `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` manifests (every task's, plus a legacy `screenshots.md`). Missing column or value = `—` (no candidate → fallback). The two blocks below are ONE loop.
 
 ### Per-Row Algorithm — Skip, Overview, Join
 
@@ -18,7 +18,7 @@ for each registry row R:
       log missing_input → .context/errors/qa-engineer.md; continue
   if R.State == "overview":                        # container layout only — vision, NO RMSE
       emit_row(R, multimodal_layout_check(R), rmse=None); continue
-  candidates = screenshots.md rows where (Design Ref == R.ID)   # absent col / all "—" → ∅
+  candidates = screenshots-*.md rows where (Design Ref == R.ID) # absent col / all "—" → ∅
   if candidates == ∅:                              # (d) live-capture fallback, byte-equivalent to R1
       impl = build_run_sim → navigate(R.Target File(s)) → screenshot   # § fallback-only below
       emit_row(R, reconcile(None, multimodal_compare(R.Screenshot, impl)),
@@ -51,7 +51,7 @@ Emit one Design Comparison row per registry row, so an N-frame container yields 
 
 ## Fallback: Glob Discovery (no registry)
 
-If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing.md § Design Comparison` as a process gap:
+If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing-N.md § Design Comparison` as a process gap:
 
 > No `figma-registry.md` found; using glob fallback. Screen/state/target mapping inferred from filenames only.
 
@@ -68,7 +68,7 @@ Runs **only** when no DV result image maps to a registry row (absent `Design Ref
 | Apple | `mcp__XcodeBuildMCP__build_run_sim` (or `build_run_macos`) → navigate to target screen → `mcp__XcodeBuildMCP__screenshot` |
 | Web | Load chrome tools via `ToolSearch({ query: "select:mcp__claude-in-chrome__computer" })` → screenshot |
 | Android | `adb devices` to confirm an attached emulator/device → launch the app → navigate to target screen → `adb exec-out screencap -p > <path>` |
-| Other (systems / backend / ai) | No live UI surface to drive. Reuse the DV capture recorded in `screenshots.md`; if none maps, render the change via `skills/dv-screenshot-capture/scripts/cli-fallback.sh` and compare behaviour, not pixels |
+| Other (systems / backend / ai) | No live UI surface to drive. Reuse the DV capture recorded in a `screenshots-<TASK_ID>.md`; if none maps, render the change via `skills/dv-screenshot-capture/scripts/cli-fallback.sh --task-id <QA task id>` and compare behaviour, not pixels |
 
 ## Visual Comparison
 
@@ -82,7 +82,7 @@ Runs **only** when no DV result image maps to a registry row (absent `Design Ref
 
 ## Evidence integrity (direct-read before accepting)
 
-Caption and manifest metadata are self-reported: a stale, placeholder, or unrelated image can carry a plausible caption. Whenever a prior stage offers a screenshot as acceptance-criteria proof, QA MUST open the image with `Read` and confirm it shows the claimed state BEFORE marking the AC accepted — never accept on caption, filename, or `screenshots.md` row alone.
+Caption and manifest metadata are self-reported: a stale, placeholder, or unrelated image can carry a plausible caption. Whenever a prior stage offers a screenshot as acceptance-criteria proof, QA MUST open the image with `Read` and confirm it shows the claimed state BEFORE marking the AC accepted — never accept on caption, filename, or manifest row alone.
 
 ### High-risk artifacts
 
@@ -108,7 +108,7 @@ Reconcile a row's RMSE pre-pass and multimodal vision results with the matrix be
 
 ## Reporting
 
-Document results in `testing.md § Design Comparison` using the canonical table:
+Document results in `testing-N.md § Design Comparison` using the canonical table:
 
 | ID | Screen | State | RMSE | Verdict | Severity | Notes |
 |----|--------|-------|------|---------|----------|-------|

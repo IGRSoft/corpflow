@@ -31,6 +31,16 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 command -v gate_classify_payload > /dev/null 2>&1 || exit 0
 command -v dedupe_pending_key > /dev/null 2>&1 || exit 0
 
+# Sourced explicitly rather than relied on as a side effect of --lib-only
+# above, which exists only to share the classifier.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+command -v corpflow_context_root > /dev/null 2>&1 || exit 0
+
 # EVIDENCE_BASENAME_MAX — the bundle rung's own bound, far below the token's
 # outer 120. A genuine results artifact is named like `Run-2026-09-08.xcresult`
 # or `junit.xml`; a sentence needs room. See tool_evidence_token's security note.
@@ -64,8 +74,12 @@ evidence_bundle_basename() {
   # mimic the token's own grammar.
   case "$_base" in *[!A-Za-z0-9._-]*) return 1 ;; esac
   [ "${#_base}" -le "$EVIDENCE_BASENAME_MAX" ] || return 1
+  # `*.log` is deliberately absent: DV writes `.context/logs/build-*.log` for BUILD
+  # verification (skills/shared/stage-contracts.md § DV), and admitting it here cited
+  # a build as a test result at the one rung nothing downstream re-checks. A results
+  # shape is a format a runner emits for RESULTS; a log is a transcript of anything.
   case "$_base" in
-    *.xcresult | *.xcodebuild | *.trx | *.junit | *.xml | *.jsonl | *.log) ;;
+    *.xcresult | *.xcodebuild | *.trx | *.junit | *.xml | *.jsonl) ;;
     *) return 1 ;;
   esac
   printf '%s' "$_base"
@@ -150,10 +164,8 @@ tool_evidence_token() {
          elif ($r | type) == "string" then $r
          else ($r | tojson) end) as $rtext
       | ($rtext + " " + $errtext) as $all
-      | [$all | match("[A-Za-z0-9._/-]+[.](xcresult|xcodebuild|trx|junit|xml|jsonl|log)\\b"; "g")
+      | [$all | match("[A-Za-z0-9._/-]+[.](xcresult|xcodebuild|trx|junit|xml|jsonl)\\b"; "g")
          | .string] as $bundles
-      | ([$all | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"; "g")
-          | .captures[0].string] | first) as $count
       # A count alone does not say the cases RAN. `Executing 49 tests` is a
       # discovery banner, and a scheme with an empty test plan prints it and
       # exits having executed nothing — which is how one run recorded `tests:49`
@@ -162,14 +174,38 @@ tool_evidence_token() {
       # result says one of these words somewhere. `executed` is in the list and
       # `executing` deliberately is not.
       #
-      # Tested against string LEAVES, never the serialised object: an object
+      # Both halves are read off ONE LINE — the line carrying the count. Over the
+      # whole text the discriminator is defeated by its own reproducer: the empty
+      # test plan that prints `Executing 49 tests` is run by `xcodebuild`, which
+      # then prints `** TEST SUCCEEDED **` for the green BUILD, and a vocabulary
+      # test spanning both lines reads the verdict of the BUILD as the verdict of
+      # the enumeration. A summary line carries its own outcome; a verdict one
+      # line away belongs to something else.
+      #
+      # Lines come from string LEAVES, never the serialised object: an object
       # response carrying an `error` or `errors` key — a shape $rflag above
       # already anticipates — would otherwise satisfy `errors?` by its key name
       # alone and hand a bare enumeration back its `tests:` token.
-      | (if ($r | type) == "object" then ([$r | .. | strings] | join(" "))
-         else $rtext end) as $leaftext
-      | (($leaftext + " " + $errtext)
-         | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))
+      | (if ($r | type) == "object" or ($r | type) == "array"
+         then [$r | .. | strings] else [$rtext] end) as $leaves
+      | (($leaves + [$errtext]) | map(split("\n")) | add) as $lines
+      | [$lines[]
+          | select(test("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b"))] as $clines
+      # The summary is the count line carrying its own outcome word, wherever it
+      # sits: a runner that prints an enumeration banner ABOVE its tally would
+      # otherwise bind the count to the banner and demote a real run to
+      # `discovered:`. With no such line the first count line stands, so a
+      # banner alone still reads as enumeration.
+      | (([$clines[]
+          | select(test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i"))]
+         | first) // ($clines | first)) as $cline
+      | (if $cline == null then null
+         else ($cline
+               | match("([0-9]+)[ \t]+(tests?|examples?|assertions?|passed)\\b")
+               | .captures[0].string) end) as $count
+      | ($cline != null
+         and ($cline
+              | test("\\b(executed|passed|failed|failures?|succeeded|errors?|completed?)\\b"; "i")))
         as $ran
       | (if $count != null and $ran then "tests:" + $count
          elif $count != null then "discovered:" + $count
@@ -228,6 +264,9 @@ run_promote() {
     full_test_run|scoped_test_run) ;;
     *) return 0 ;;
   esac
+  # Resolved only now: the root ladder forks git, and nearly every call exits above.
+  [ -n "$_ctx" ] || _ctx=$(corpflow_context_root)
+  [ -n "$_ctx" ] || return 0
 
   # The tree is deliberately NOT consulted here: the run itself may have written
   # un-ignored artifacts, so a fingerprint taken now names a marker the gate
@@ -258,5 +297,6 @@ esac
 IFS= read -r -d '' PAYLOAD || true
 [ -n "${PAYLOAD:-}" ] || exit 0
 
-run_promote "$PAYLOAD" "${CLAUDE_PROJECT_DIR:-.}/.context"
+# An unresolved root (inside run_promote) means nothing was gated there: no marker to promote.
+run_promote "$PAYLOAD" ""
 exit 0

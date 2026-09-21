@@ -45,13 +45,13 @@ never an invented order.
 #### Invocation — build-orchestrator
 
 ```bash
-bash scripts/build-orchestrator.sh \
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh \
   --file issues.json \
   --out  .worktrees/milestone-1/orchestrator.json \
   --group milestone-1 --milestone-num 1 --milestone-title "Sprint 1" \
   --base-branch develop
 
-bash scripts/build-orchestrator.sh --self-test
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh --self-test
 ```
 
 Input schema: `[{ "issue": <int>, "title": "<str>", "labels": ["P0",...], "body": "<str>" }]`
@@ -67,13 +67,13 @@ makes `.context/`, stamps `workspace.json v2.0` — the executable implementatio
 #### Invocation — init-worktree
 
 ```bash
-bash scripts/init-worktree.sh \
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh \
   --issue 42 --title "Add login flow" --group milestone-1 \
   --track 1 --blocked-by 41 --blocks 60 --labels "P1,feature" \
   [--file issue-42.json]   # pre-fetched `gh issue view … --json body,labels`
 
-bash scripts/init-worktree.sh --issue 42 --title "..." --group milestone-1 --dry-run
-bash scripts/init-worktree.sh --self-test
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh --issue 42 --title "..." --group milestone-1 --dry-run
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh --self-test
 ```
 
 #### Behavior — init-worktree
@@ -99,9 +99,9 @@ one side unregisters test files: the build stays green and those tests silently 
 #### Invocation — resolve-pbxproj-membership
 
 ```bash
-bash scripts/resolve-pbxproj-membership.sh --file App.xcodeproj/project.pbxproj
-bash scripts/resolve-pbxproj-membership.sh --file <path> --dry-run   # prints result, writes nothing
-bash scripts/resolve-pbxproj-membership.sh --self-test
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh --file App.xcodeproj/project.pbxproj
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh --file <path> --dry-run   # prints result, writes nothing
+bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh --self-test
 ```
 
 #### Behavior — resolve-pbxproj-membership
@@ -295,10 +295,13 @@ break every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` r
 
 ### Seeding a track's PL
 
+`/worktask` Step 3a seeds the per-issue ledger with `seed-state.sh`
+(`commands/worktask.md § Steps 3–3a`); it already holds `tasks.PL0`, so this row is a metadata merge.
+
 ```bash
 # megatask bypasses both default-checkpoint gates; decision_gate=auto means open
 # questions go to a Fable decision pass and an escalation parks the issue.
-state-patch.sh --task-create "PL0" --metadata "$(jq -n \
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta "PL0" --set "$(jq -n \
   --argjson issue "$ISSUE_NUMBER" --argjson track "$TRACK" \
   --arg group "$GROUP" --arg ms "$MILESTONE_OR_EMPTY" \
   '{stage:"PL", agent:"corpflow:product-manager",

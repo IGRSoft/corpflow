@@ -18,7 +18,7 @@ Security review checklist for the SR (Security Review) stage.
 
 **Invocation contract** (one line):
 ```
-bash scripts/scan-secrets.sh --path <repo-root>
+bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>
 ```
 
 Output: `file:line:severity:pattern` — one finding per line, no surrounding code excerpt.
@@ -153,6 +153,36 @@ Hardening for the agent's own execution surface — review when a worktask runs 
 |----------|--------|
 | Project settings cannot widen tracing | Project settings can no longer enable detailed beta tracing or raw API body logging, nor bypass an OTLP collector pinned by managed settings. Project `.claude/settings.json` `env` no longer sets `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_TMPDIR`, or `TMPDIR`/`TMP`/`TEMP` — a hostile repo can no longer redirect config or scratch state by shipping a settings file |
 | Bash arithmetic auto-approve | Permission checks no longer auto-approve a command assigning an arithmetic expression to an integer shell variable (`OPTIND=1/0`, `RANDOM=2+2`); these now prompt |
+
+#### Path & config hardening — 2.1.252→2.1.270
+
+##### Plugin and marketplace containment
+
+| Behavior | Effect |
+|----------|--------|
+| Plugin component path containment | A declared command, agent, skill, hooks or other component path that is a symlink or contains a backslash is refused, so a plugin cannot read files outside its own directory |
+| Marketplace entry backslash | A fetched marketplace entry path containing a backslash goes through the same containment check as any other path on macOS and Linux |
+
+##### Settings scope and permission rules
+
+| Behavior | Effect |
+|----------|--------|
+| Project `defaultMode: "bypassPermissions"` | Ignored in project `.claude/settings.json` and `.claude/settings.local.json`, so only user or managed settings or `--permission-mode` can start a session in bypass |
+| `!`-prefixed deny/ask rules | A deny or ask rule starting with `!` applies only within the settings source that wrote it, and a bare `!` negation is ignored |
+
+##### File operations and access controls
+
+| Behavior | Effect |
+|----------|--------|
+| Bash `tee` destinations | The file a Bash `tee` writes is checked against `Edit()` deny rules and the write-path check, and a `Bash(tee:*)` allow rule does not cover destinations outside the working directories |
+| `permissions.blockReadsOutsideWorkingDirectories` | Blocks file reads outside the working directories — auto mode asks once before the first such read — while sandboxed git still sees the user's git config and a worktree-isolated subagent still sees its own checkout |
+| Symlinked-directory rules | Deny and ask rules on symlinked directories (`/etc`, `/tmp`, `/var` on macOS; `/bin` on Linux) apply by real path, and Bash honors deny rules written on the symlinked spelling |
+
+##### Auto mode containment
+
+| Behavior | Effect |
+|----------|--------|
+| Auto mode Containment Escape | Auto mode does not auto-approve cloud metadata-credential fetches, egress evasion, cross-tenant reach, or a link that packs content into a public diagram renderer's URL (counted as an upload) unless the environment marks them expected or you asked for it |
 
 ## Integration Points
 

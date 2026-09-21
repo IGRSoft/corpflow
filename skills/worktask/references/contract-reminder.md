@@ -1,0 +1,26 @@
+# Contract Reminder — preamble section [1]
+
+The canonical text of section [1] (`<<<contract-reminder>>>`), copied verbatim into every stage
+prompt of every worktask (`handoff-protocol.md#cache-prefix`). It opens the cache prefix, so it
+carries no dates, ids or run-specific values: one changed byte re-caches every stage. The text is
+the fenced block below and nothing else; `cache-lint.sh` compares [1] against it on a log line that
+sets `"contract_canon": true`.
+
+## Text
+
+```text
+You are a stage agent in a corpflow worktask. Binding contract:
+1. Read .context/state.json first, then only the anchors your task names.
+2. Write artifact at .context/ path with YAML frontmatter (--- then handoff:)
+   and every mandatory H2 anchor for your stage.
+3. Close with ## elicitation-sweep: typed open_questions[] items, or
+   open_questions: [] plus a one-line nothing-to-elicit statement.
+4. Before returning, self-patch the ledger with state-patch.sh, passing your
+   open_questions[] stubs in --facts. If it cannot run, never skip: edit
+   state.json per handoff-protocol.md#layer-1-fallback.
+5. On unrecoverable failure, append a classified entry to
+   .context/errors/<agent>.md and return verdict blocked or escalate.
+6. Edit only your stage's files. Never print or commit secrets.
+7. Return concise summary: verdict, key decisions, next_stage_focus.
+   Never fabricate results.
+```

@@ -117,6 +117,38 @@ EOF
     echo "self-test: anchor-lint reject: ok"
   fi
 
+  # --allow-list and --anchor-diff: the shared core the hook and the harness read.
+  local al_out="" diff_out="" diff_rc=0
+  al_out=$("$0" --allow-list --stage DV 2>&1) || true
+  if printf '%s\n' "$al_out" | grep -qx "DV	developer	development	optional	verification-command" \
+    && printf '%s\n' "$al_out" | grep -qx "\*			any-optional	rework-<N>"; then
+    echo "self-test: allow-list rows: ok"
+  else
+    echo "self-test: allow-list rows: FAIL" >&2; exit 1
+  fi
+  printf '## Stage Timings\n' > "$td/baseline.md"
+  diff_out=$(printf '## Stage Timings\n## decisions\n## Notes\n' \
+    | "$0" --anchor-diff --for-path "/p/.context/development-3.md" --baseline "$td/baseline.md" - 2>&1) || diff_rc=$?
+  if [[ "$diff_rc" -eq 1 ]] && [[ "$(printf '%s\n' "$diff_out" | grep '^unexpected')" == "unexpected	Notes" ]]; then
+    echo "self-test: anchor-diff baseline + optional: ok"
+  else
+    echo "self-test: anchor-diff baseline + optional: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+  diff_rc=0
+  diff_out=$(printf '## x\n' | "$0" --anchor-diff --for-path "/p/.context/development-3-stream.md" - 2>&1) || diff_rc=$?
+  if [[ "$diff_rc" -eq 1 ]] && printf '%s\n' "$diff_out" | grep -qx 'missing	files-changed'; then
+    echo "self-test: anchor-diff DV stream path resolves to DV: ok"
+  else
+    echo "self-test: anchor-diff DV stream path resolves to DV: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+  diff_rc=0
+  printf '## x\n' | "$0" --anchor-diff --for-path "/p/.context/testing-3-ui.md" - >/dev/null 2>&1 || diff_rc=$?
+  if [[ "$diff_rc" -eq 2 ]]; then
+    echo "self-test: anchor-diff non-DV suffixed path unresolved: ok"
+  else
+    echo "self-test: anchor-diff non-DV suffixed path unresolved: FAIL (rc=$diff_rc)" >&2; exit 1
+  fi
+
   # Prefix lint fixture: two prompts, identical sections [1][2]
   local log="$td/log.jsonl"
   : > "$log"
@@ -154,6 +186,119 @@ desc" '{worktask_id:"wf-self", stage:"TL", prompt:$prompt}' >> "$log"
     echo "self-test: prefix-lint drift detect: FAIL (should have caught drift)" >&2; exit 1
   else
     echo "self-test: prefix-lint drift detect: ok"
+  fi
+
+  # ---------- Section [3] ledger-digest grammar ----------
+
+  # Happy: a composed [3] following the grammar passes.
+  local ledger_ok="$td/ledger-ok.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+contract
+<<<worktask-header>>>
+worktask_id=wf-ledger-ok
+plan_file=planning-0.md
+<<<state-json>>>
+ledger: .context/state.json
+run_index: 0
+ready: none
+in_progress: none
+blocked: none
+open_blocking_questions: 0
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ledger-ok", stage:"PL", prompt:$prompt}' > "$ledger_ok"
+  if "$0" "$ledger_ok" >/dev/null 2>&1; then
+    echo "self-test: prefix-lint [3] composed digest: ok"
+  else
+    echo "self-test: prefix-lint [3] composed digest: FAIL" >&2; exit 1
+  fi
+
+  # Negative: an inlined ledger (embedded JSON) instead of the digest.
+  local ledger_json="$td/ledger-json.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+contract
+<<<worktask-header>>>
+worktask_id=wf-ledger-json
+plan_file=planning-0.md
+<<<state-json>>>
+{\"tasks\": {\"PL0\": {\"status\": \"completed\"}}}
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ledger-json", stage:"PL", prompt:$prompt}' > "$ledger_json"
+  if "$0" "$ledger_json" >/dev/null 2>&1; then
+    echo "self-test: prefix-lint [3] inlined-JSON reject: FAIL (should have caught the embedded ledger)" >&2; exit 1
+  else
+    echo "self-test: prefix-lint [3] inlined-JSON reject: ok"
+  fi
+
+  # Negative: [3] present but missing the `ledger:` pointer as its first line.
+  local ledger_nopointer="$td/ledger-nopointer.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+contract
+<<<worktask-header>>>
+worktask_id=wf-ledger-nopointer
+plan_file=planning-0.md
+<<<state-json>>>
+run_index: 0
+ready: none
+in_progress: none
+blocked: none
+open_blocking_questions: 0
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ledger-nopointer", stage:"PL", prompt:$prompt}' > "$ledger_nopointer"
+  if "$0" "$ledger_nopointer" >/dev/null 2>&1; then
+    echo "self-test: prefix-lint [3] missing-pointer reject: FAIL (should have caught the missing pointer)" >&2; exit 1
+  else
+    echo "self-test: prefix-lint [3] missing-pointer reject: ok"
+  fi
+
+  # ---------- Section [1] contract-canon opt-in ----------
+
+  # Happy: [1] equals the fenced block contract-reminder.md ships, with
+  # `contract_canon: true` opting the line into the check.
+  local ccanon_block
+  ccanon_block=$(canonical_contract_block "$SELF_REPO_ROOT") \
+    || { echo "self-test: prefix-lint [1] contract-canon: FAIL (canon unreadable)" >&2; exit 1; }
+  local ccanon_ok="$td/ccanon-ok.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+$ccanon_block
+<<<worktask-header>>>
+worktask_id=wf-ccanon-ok
+plan_file=planning-0.md
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ccanon-ok", stage:"PL", contract_canon:true, prompt:$prompt}' > "$ccanon_ok"
+  if "$0" "$ccanon_ok" >/dev/null 2>&1; then
+    echo "self-test: prefix-lint [1] contract-canon match: ok"
+  else
+    echo "self-test: prefix-lint [1] contract-canon match: FAIL" >&2; exit 1
+  fi
+
+  # Negative: same opt-in, [1] does not match the canon file.
+  local ccanon_bad="$td/ccanon-bad.jsonl"
+  jq -cn --arg prompt \
+"<<<contract-reminder>>>
+a hand-written reminder that does not match contract-reminder.md
+<<<worktask-header>>>
+worktask_id=wf-ccanon-bad
+plan_file=planning-0.md
+<<<stage-contract>>>
+stage=PL
+<<<task>>>
+desc" '{worktask_id:"wf-ccanon-bad", stage:"PL", contract_canon:true, prompt:$prompt}' > "$ccanon_bad"
+  if "$0" "$ccanon_bad" >/dev/null 2>&1; then
+    echo "self-test: prefix-lint [1] contract-canon mismatch reject: FAIL (should have caught the mismatch)" >&2; exit 1
+  else
+    echo "self-test: prefix-lint [1] contract-canon mismatch reject: ok"
   fi
 
   # L1 forbidden-token scanner (REQ-3/AC-4): happy path first (fresh log, no

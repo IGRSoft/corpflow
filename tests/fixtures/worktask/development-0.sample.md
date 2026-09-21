@@ -1,7 +1,7 @@
 ---
 handoff:
   stage: DV
-  tests_executed: 12
+  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]
   verdict: ok
   summary: "DV0a fixture development artifact"
   files_touched: [tests/shell/worktask/state-patch.bats]
@@ -19,6 +19,8 @@ Fixture body for state-patch.bats, handoff-harness.bats, and cache-lint.bats.
 - tests/shell/worktask/state-patch.bats (created)
 
 ## tests-added
+
+12 tests, 0 failures
 
 - state-patch.bats: 7 scenarios covering atomic merge, idempotency, disk-guard
 

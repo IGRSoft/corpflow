@@ -1,0 +1,3 @@
+Check /Users/alice/projects/secret/config.yaml for the setting.
+Also see .context/architecture-0.md for the referenced pattern.
+Which option should we pick, A or B?

@@ -8,6 +8,9 @@ PAYLOAD="${FIXTURES}/hooks/audit-subagent.payload.json"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # The root ladder answers only a context holding a ledger.
+  mkdir -p "$WD/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$WD/.context/state.json"
 }
 
 @test "happy: writes subagent_stopped row with duration + dedupe keys" {
@@ -380,4 +383,23 @@ rows_of() { jq -r --arg a "$1" 'select(.action == $a) | .action' "$WD/.context/l
     | .metadata.suppressed_count == 1000 and .metadata.truncated == true' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
+}
+
+@test "AC-2: a stray bare .context in a clean checkout is not a ledger — no logs, no row" {
+  local repo
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  mkdir -p "$repo/.context"
+  run_script_env --cwd "$repo" --env "WORKSPACE_ROOT=$repo" --env "CLAUDE_PROJECT_DIR=$repo" \
+    --unset CONTEXT_DIR --stdin-file "$PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ -z "$(ls -A "$repo/.context")" ] || fail "the hook wrote into a bare context: $(ls -A "$repo/.context")"
+}
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local cwd
+  cwd="$(mk_tmpworkdir)"
+  run_script_env --cwd "$cwd" --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$cwd" --stdin-file "$PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  [ ! -e "$cwd/.context" ]
 }

@@ -1,7 +1,7 @@
 ---
 name: estimation-methodology
 description: Use when estimating task complexity, effort, or determining worktask tier. Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation.
-version: 0.3.0
+version: 0.4.0
 effort: low
 related:
   - ../cost-optimization/SKILL.md
@@ -21,7 +21,7 @@ factor scores); the script does the arithmetic.
 ### Invocation
 
 ```
-python3 skills/estimation-methodology/scripts/estimate-calc.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py \
   --size <XS|S|M|L|XL> [--level <junior|mid|senior|expert>] [--multiplier <h>] \
   [--rate <hourly>] \
   [--factors <f1> <f2> <f3> <f4> <f5>] \
@@ -155,6 +155,21 @@ that cannot be derived from the request is not a rule, it is a coin toss with a 
 
 Name what you found in the plan body — a discovered credential path is worth stating and may
 well change the work. It does not change the flag.
+
+#### A synthetic asset is not evidence about the asset the request names
+
+**The request naming a protected asset IS the surface.** Learning that the credential is a test
+fixture, the key a planted specimen, or the values already fake describes what the repo holds,
+not what was asked for. A secret scanner, a rotation runbook and a key-handling path all look
+synthetic from inside their own test data, and routing them standard on that basis puts the
+work that handles secrets on the pipeline that does not review them.
+
+None of those observations downgrade a request naming credentials, tokens, secrets, PII,
+payments, authn/authz or untrusted input. Mirror of the rule above, failing the same way: a
+tier depending on what the fix turns out to touch is not derivable when the plan is written.
+
+Name the finding in the plan body — that a specimen is planted is worth stating. It does not
+lower the flag.
 
 #### A quiet local tree is not evidence about the failure being reported
 

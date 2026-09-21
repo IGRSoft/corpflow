@@ -783,7 +783,14 @@ sweep_fixture_items() {  # sweep_fixture_items <dir> <items-yaml> [with-anchor|n
     printf '  refs: { dev: development-0.md#files-changed }\n'
     printf -- '---\n\n# Documentation\n'
     # The anchor the stub points at: present by default so each test isolates one contract.
-    if [ "${3:-with-anchor}" = "with-anchor" ]; then printf '\n## elicitation-sweep\n\nq\n'; fi
+    # Each item carries two options, so the harness's item-body check never decides a verdict here.
+    if [ "${3:-with-anchor}" = "with-anchor" ]; then
+      printf '\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\n'
+      for id in sw-DC0-1 sw-DC0-2; do
+        printf -- '- id: %s\n  summary: "Which way?"\n  options:\n' "$id"
+        printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+      done
+    fi
   } > "$d/documentation-0.md"
 }
 
@@ -1058,7 +1065,7 @@ CACHE_LINT="skills/worktask/scripts/cache-lint.sh"
     printf '  summary: "fixture"\n  files_touched: [a.md]\n'
     printf '  open_questions: "none"\n'
     printf '  refs: { dev: development-0.md#files-changed }\n'
-    printf -- '---\n\n# Documentation\n\n## elicitation-sweep\n\nnothing to elicit\n'
+    printf -- '---\n\n# Documentation\n\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nnothing to elicit\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md"
   assert_failure
@@ -1473,7 +1480,8 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
 
 @test "P2-13: the \$defs injector is stated as an obligation, not attributed to a section that lacks it" {
   local note
-  note="$(grep -n 'inline that .\$defs. block' "$PLUGIN_ROOT/$HANDOFF" || true)"
+  # Singular or plural: TestRunEntry made it more than one block to inline.
+  note="$(grep -nE 'inline th(at|ose) .\$defs. blocks?' "$PLUGIN_ROOT/$HANDOFF" || true)"
   [ -n "$note" ] || fail "non-vacuity: the \$defs obligation sentence is absent"
   # The previous text cited SKILL.md Step 6, which carries no such claim. Verify both:
   # the citation is gone, and the file it named still does not carry the claim.
@@ -1557,7 +1565,7 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     # The prose half of an empty sweep: the array says nothing was asked, the heading says a
     # sweep ran. Both are required — this fixture is exercising the LEDGER-parity arm, which
     # must stay silent when there are no stubs, and it needs a compliant artifact to do so.
-    printf '\n## elicitation-sweep\n\nNothing to elicit.\n'
+    printf '\n## files-changed\n\nx\n\n## cross-references\n\nx\n\n## follow-ups\n\nx\n\n## elicitation-sweep\n\nNothing to elicit.\n'
   } > "$d/documentation-0.md"
   run bash "$PLUGIN_ROOT/$HARNESS" --validate-frontmatter "$d/documentation-0.md" --state "$d/nope.json"
   assert_success
@@ -1809,4 +1817,20 @@ resolver_body() {
 
 @test "the deep_reads resolver exemption is stated where deep_reads is defined" {
   grep -q 'deep_reads — the resolver exemption' "$PLUGIN_ROOT/$HANDOFF"
+}
+
+AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
+
+@test "the resolver-effort fixture pairs with the C.0a effort_resolved prose" {
+  local fm_resolved dispatch_resolved c0a
+  fm_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter-only") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  dispatch_resolved=$(jq -r 'select(.metadata.effort_transport == "dispatch-flag") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  [ "$fm_resolved" = "requested, not applied" ]
+  [[ "$dispatch_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
+
+  # The frontmatter-only literal must be the same one C.0a documents, not a fixture-only string.
+  c0a=$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")
+  grep -qF "$fm_resolved" <<< "$c0a"
 }

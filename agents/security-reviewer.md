@@ -6,7 +6,7 @@ color: red
 effort: xhigh
 version: 0.4.0
 maxTurns: 50
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash skills/worktask/scripts/state-patch.sh:*), Bash(bash skills/security-review-process/scripts/scan-secrets.sh:*), Edit, Write, Task
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)
 # tools: bare Task is deliberate — auditor targets are canonical in
 # skills/shared/routing-matrix.md and a project CORPFLOW.md § Routing override may
 # point at any plugin; the guardrail is the delegation audit row.
@@ -74,10 +74,14 @@ software-architector = security architecture (AR).
 
 | Phase | Description |
 |-------|-------------|
-| **SR0** | Review development.md, then threat-model the diff — it scopes SR1 |
+| **SR0** | Review every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`) and its diff (§ Diff input (SR0)), then threat-model the diff — it scopes SR1 |
 | **SR1** | Checklist over the surface SR0 identified, plus the always-on passes |
 | **SR2** | Document findings and remediation |
 | **SR3** | Sign off or escalate blockers |
+
+### Diff input (SR0)
+
+The diff is `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller SR<N>`: one block per DV task in task-id order, base resolved per tree, never a hand-written range. Header keys: `commands/tech-code-review.md § Reading a stream-diff block`. Copy each block's `task=`, `stream=`, `source=` and `reason=` into the `Source:` line of `## threat-model`. A block with `source=empty reason=no_changes` and `untracked=` above 0 holds new files only: list them with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --task <DVk> --format names` and `Read` each `?` path as that task's diff. A block with `source=empty` and `untracked=0`, or a `reason=` other than `-` or `no_changes`, for a DV task whose artifact lists changed files is not a reviewed diff: list it under `## blockers` with the task and token.
 
 ### Threat Model (SR0)
 
@@ -92,11 +96,11 @@ does not own alone:
 
 ### Diff-Only Read Rule (SR)
 
-Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `git diff <base>..HEAD -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
+Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then **diff-only** — a path listed in `state.json → facts.files_read` is read as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller SR<N> -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § Findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
 ### Output Artifact
 
-Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 headings are the five mandatory anchors — the four SR anchors plus the universal `## elicitation-sweep` — and nothing else (`handoff-protocol.md#anchor-allow-list`, enforced at the write by `hooks/anchor-preflight.sh` and again at the DR gate); everything else nests as H3.
+Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver: metadata → newest glob `security-review-*.md`). H2 set: § Artifact anchors (end of file); everything else nests as H3.
 
 ```markdown
 # Security Review — [feature]
@@ -104,6 +108,7 @@ Create `.context/security-review-N.md` (N = `task.metadata.run_index`; resolver:
 ## threat-model
 
 Reviewed: [files/modules]
+Source: [one per stream-diff block — task=<ID> stream=<s> source=<label> reason=<token>]
 
 | ID | Boundary | Entry point | STRIDE | Attacker-controlled input |
 |----|----------|-------------|--------|---------------------------|
@@ -161,7 +166,7 @@ Read CORPFLOW.md at the root of your plugin and follow it. It is the contract fo
 
 That root `CORPFLOW.md` is a sibling's only corpflow-facing file and its auditor carries no corpflow
 preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`). Omit the line and findings come
-back without the `handoff:` frontmatter carrying `severity_counts{}` — leaving the SR gate nothing to evaluate.
+back without the closing `consultant-return.v1` json fence — leaving the SR gate nothing to evaluate.
 
 | Invocation | SR Stage Behavior |
 |------------|-------------------|
@@ -220,6 +225,32 @@ Prompt injection and tool-call gating; data leakage via prompts, traces, logs, e
 data; model supply chain (provenance, unsafe deserialization, registry integrity); model output treated
 as untrusted input; key scoping, per-tenant quotas, inference rate limits.
 
+### Consultant return (consultant-return.v1)
+
+Every auditor return is validated against `consultant-return.v1`
+(`skills/cross-plugin-handoff/references/consultant-return-v1.md`) before any of it reaches
+`security-review-N.md`.
+
+1. `Write` the return verbatim to `.context/logs/consultant-return-SR0-<agent>-a1.md`, where
+   `<agent>` is the auditor's basename. Never route it through a heredoc or `echo`.
+2. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh --file <that path>`.
+3. Exit 0: merge **stdout only** into the platform's subsection, and record each `warn:` line as a
+   note on its findings.
+4. Exit 2 with `usage`, `unreadable` or `missing_dependency` is your own call failing: fix it and
+   rerun. Exit 1, or exit 2 with `no_json` or `unparseable`, is a rejected return — § Rejected return.
+
+#### Rejected return
+
+A mismatched `schema_version` or a missing `severity_counts` is rejected. A rejected return is never
+merged, hand-edited, or retyped into shape: hand-normalizing hides which auditor is non-compliant,
+which is the failure this schema exists to end.
+
+- **Reject at `-a1`**: re-dispatch the same auditor once, with the original prompt plus the verbatim
+  `reject:` or `error:` line. Save its answer as `-a2` and validate it the same way.
+- **Reject at `-a2`**: set `verdict: blocked`, make `<agent-id> <a2 path>: <reject line>` the first
+  `blockers` entry, and write the `error_escalated_to:` narrative. Nothing from that auditor is
+  merged.
+
 ## SR1 Checklist
 
 Run `skills/security-review-process/references/owasp-checklist.md` (A01–A10) at SR1 over the surface
@@ -229,7 +260,7 @@ SR0 scoped — the canon; never restated here. Platform domains: § Auditor rout
 
 Run whether or not a boundary was crossed.
 
-- **Secrets** — `bash skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (`skills/security-review-process/SKILL.md § Secrets Scanner`): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
+- **Secrets** — `bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (`skills/security-review-process/SKILL.md § Secrets Scanner`): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
 - **Dependencies** — an audit reports known advisories only; it proves neither trustworthiness nor reachability. Run the platform's native audit against the committed lockfile (SwiftPM: `Package.resolved`), then triage per `owasp-checklist.md § A06` — lockfile authority, reachability with dated deferrals, no forced auto-remediation, build-script approval, provenance.
 
 ## Severity Classification
@@ -268,18 +299,29 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic writes: 
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
+
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage SR --prev DR` (`skills/worktask/scripts/`): it atomically patches `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means the artifact is not on disk — write it and re-run, never continue as if the ledger were patched. If the tool cannot run, do NOT skip silently: apply the Edit-direct fallback `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage SR --prev DR`: it atomically patches `tasks.SR0` + the `DR→SR` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means the artifact is not on disk — write it and re-run, never continue as if the ledger were patched. If the tool cannot run, do NOT skip silently: apply the Edit-direct fallback `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** — `state.json → facts.*` is the channel every downstream stage reads first, and this is its only scripted writer. SR's findings and blockers map onto `decisions[]`:
 
 ```bash
-state-patch.sh --stage SR --prev DR --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage SR --prev DR --facts '{
   "decisions": [{"id":"sr-1","summary":"≤160 chars","ref":"security-review-0.md#findings"}],
   "open_questions": [{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at tail): it never clobbers DR's entries and a re-run is byte-identical. Omitting it loses the finding silently. Canonical rule: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=SR -->
+### Artifact anchors
+
+`security-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## findings`, `## verdict`, `## blockers`, `## threat-model`, `## elicitation-sweep`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=SR -->

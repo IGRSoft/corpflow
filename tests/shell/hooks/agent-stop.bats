@@ -8,6 +8,9 @@ PAYLOAD="${FIXTURES}/hooks/agent-stop.payload.json"
 
 setup() {
   WD="$(mk_tmpworkdir)"
+  # The root ladder answers only a context holding a ledger.
+  mkdir -p "$WD/.context"
+  printf '%s' '{"version":2,"tasks":{}}' > "$WD/.context/state.json"
 }
 
 @test "happy: appends a stage_completion_hook row with stage + dedupe keys" {
@@ -60,4 +63,15 @@ setup() {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" --stage DV < "$PAYLOAD"
   assert_success
   [ ! -e "$WD/target-dir/escaped.txt" ]
+}
+
+@test "unresolved root exits 0 and creates no .context under cwd" {
+  local outside
+  outside="$(mk_tmpworkdir)"
+  run_script_env --cwd "$outside" \
+    --unset WORKSPACE_ROOT --unset CLAUDE_PROJECT_DIR --unset CONTEXT_DIR \
+    --env "GIT_CEILING_DIRECTORIES=$outside" --stdin-file "$PAYLOAD" \
+    "$PLUGIN_ROOT/$SCRIPT" --stage DV
+  assert_success
+  [ ! -e "$outside/.context" ]
 }

@@ -83,6 +83,9 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 >   teammate to retry immediately), re-spawn only if the nudge does not wake it.
 > - `SendMessage` asks the caller to retarget when a re-spawned teammate reuses a dead one's name;
 >   a stopping teammate sends no duplicate idle notifications.
+> - A re-spawned in-process teammate never takes tools or a system prompt from a same-named agent
+>   file in a folder you have not trusted, so re-spawn-on-`failed` cannot pick up an untrusted
+>   checkout's definition.
 > - tmux/pane teammates inherit the leader's `--effort` (`teammateMode: "iterm2"` available), and
 >   completion notifications carry `worktreePath`/`worktreeBranch` to locate each lane's worktree.
 
@@ -93,12 +96,14 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 >   asking what it concluded is a wasted round-trip per lane.
 > - Live teammates now appear in `ListAgents`/`claude agents --json`, so a lead resuming mid-batch
 >   can use the same pre-check the stage loop uses
->   (`../../worktask/references/resume.md § Step 0 notes — own-name & teammate visibility`)
+>   (`../../worktask/references/resume.md § Step 0 notes — own-name & teammate visibility — agent discovery changes`)
 >   instead of relying on `TeammateIdle` plus re-spawn-on-`failed` alone.
 > - The "Default teammate model" setting is gone: teammates run the leader's model unless the
 >   spawn names one. Pin a lane's tier at `Agent(name: …, model: …)`, never in config.
 
 ### Worktree and mailbox reliability
+
+#### Worktree access and locking
 
 > - Project-scoped plugins load inside worktrees of the same repository — lane teammates see the
 >   full skill set; the resume picker stays fast with many worktrees.
@@ -109,6 +114,16 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 > - A background session and its subagents can edit files inside a worktree the session created
 >   itself with `git worktree add` — previously blocked by the isolation check, which stalled the
 >   lane. Parent-checkout isolation below is unaffected.
+
+#### Session state and commit handling
+
+> - Concurrent sessions do not revert each other's `~/.claude.json`, so workspace trust and
+>   MCP/project state hold under fan-out — which keeps agent-frontmatter hooks firing in every lane
+>   (`../../agent-coordination/references/hook-monitoring.md § Workspace trust is a precondition for
+>   agent-frontmatter hooks`).
+> - Deleting a `claude agents` session whose worktree has unpushed commits names the branch and
+>   commit count, and deleting again discards the worktree — lane cleanup pushes or salvages those
+>   commits before the second delete.
 
 #### Worktree isolation guarantees
 

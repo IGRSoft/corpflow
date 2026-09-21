@@ -13,16 +13,27 @@ The contract mapping `task.metadata` to `claude agents run` CLI flags, for exter
 
 ### Translation table — model & effort
 
+#### Model assignment
+
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` (benchmark-parity snapshots — § Alias note). Caveat: a managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` constrains the Default model — a requested id may silently down-resolve; audit, don't assume |
-| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN/RE→`medium`. `ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` and delivered to the dispatched session — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max` |
+| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` |
+
+A managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` constrains the Default model — a requested id may silently down-resolve. Benchmark-parity snapshots use pinned ids (§ Alias note); audit rather than assume.
+
+#### Effort tier assignment
+
+| `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
+|---|---|---|---|---|
+| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low` |
+
+`ultracode` is an additional dispatch-surface value accepted by `claude agents --effort` — it is NOT a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max`. A managed or user `maxEffortLevel` caps effort on every provider — a tier pinned above the cap runs at the cap with no error. Audit rather than assume.
 
 ### Translation table — permission, workspace & MCP
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` (`manual` = accepted alias for `default`) | **Yes — audited** (§ Permission-Mode Pinning) | SR/FN→`default`; DV under `--auto=[plan]`→`bypassPermissions` |
+| `permission_mode` | `--permission-mode <mode>` | `default\|acceptEdits\|plan\|bypassPermissions` | **Yes — audited** (§ Permission-Mode Pinning) | SR/FN→`default`; DV under `--auto=[plan]`→`bypassPermissions`. The CLI's choices are `acceptEdits\|auto\|bypassPermissions\|manual\|dontAsk\|plan`, with no `default`: pass plugin `default` as `manual`. `auto` and `dontAsk` are CLI-only values, NOT plugin `metadata.permission_mode` tiers; the plugin enum is unchanged |
 | `workspace_path` | `--cwd <path>` | string | N/A (in-process inherits parent cwd) | megatask tracks → per-issue worktree |
 | `add_dirs` (array) | repeated `--add-dir <path>` | string[] | N/A | cross-repo work, monorepo siblings |
 | `mcp_config_path` | `--mcp-config <path>` | string | N/A | scoped MCP set per dispatch |
@@ -31,7 +42,7 @@ The contract mapping `task.metadata` to `claude agents run` CLI flags, for exter
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `plugin_dir_overrides` (array) | repeated `--plugin-dir <path>` | string[] | N/A | local plugin development |
+| `plugin_dir_overrides` (array) | repeated `--plugin-dir <path>` | string[] | N/A | local plugin development; a path may name a folder of plugins, and each child folder with a manifest loads |
 | `dangerously_skip_permissions` | `--dangerously-skip-permissions` | bool | Advisory; orchestrator MAY refuse | CI batch only, with a deny-list in `settings.json` |
 | `settings_path` | `--settings <path>` | string | N/A | provider / org config swap |
 
@@ -48,23 +59,25 @@ claude agents run --cwd "$WORKTREE" --model "$MODEL" --effort "$EFFORT" \
   --permission-mode "$MODE" -- "$AGENT" < "$PROMPT"
 ```
 
-| Stage | `$AGENT` | `$MODEL` | `$EFFORT` | `$MODE` |
-|---|---|---|---|---|
-| **DV** | `corpflow:developer` | `claude-opus-5` | `xhigh` | `bypassPermissions` |
-| **DR** | `corpflow:technical-lead` | `claude-opus-5` | `xhigh` | `acceptEdits` |
-| **SR** | `corpflow:security-reviewer` | `claude-opus-5` | `xhigh` | `default` |
-| **QA** | `corpflow:qa-engineer` | `claude-sonnet-5` | `high` | `acceptEdits` |
-| **FN** | `corpflow:project-manager` | `claude-sonnet-5` | `medium` | `default` |
-| **RE** | `corpflow:release-engineer` | `claude-sonnet-5` | `medium` | `default` |
-| **ST** | `corpflow:stakeholder` | `claude-sonnet-5` | `low` | `acceptEdits` |
+Neither `claude agents run` nor top-level `--cwd` exists on the probed CLI (§ Watch run — CC 2.1.270 (observed)): read the one-liner as the flag mapping, not a runnable command, until it is re-derived.
+
+| Stage | `$AGENT` | `$MODE` |
+|---|---|---|
+| **DV** | `corpflow:developer` | `bypassPermissions` |
+| **DR** | `corpflow:technical-lead` | `acceptEdits` |
+| **SR** | `corpflow:security-reviewer` | `default` |
+| **QA** | `corpflow:qa-engineer` | `acceptEdits` |
+| **FN** | `corpflow:project-manager` | `default` |
+| **RE** | `corpflow:release-engineer` | `default` |
+| **ST** | `corpflow:stakeholder` | `acceptEdits` |
 
 ### Model & effort defaults
 
-Defaults track `skills/shared/model-selection.md`; override per task when `metadata.model` / `metadata.effort` are set. DR runs technical-lead at **opus/xhigh**, matching `skills/shared/stage-codes.md` and the stage table in `benchmark/harness/benchmarklive/dispatch.py` (the machine-checked SSOT); the agent's `model: opus` frontmatter default applies to both the DR stage dispatch and direct TC consults.
+`$MODEL` and `$EFFORT` come from the stage's row in `skills/shared/stage-codes.md` (§ Primary Stages; § Secure overrides under `--secure`), the one stage → model assignment. Pass the model as the pinned id its alias maps to in § Alias note. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
 
 ### Alias note
 
-> The pinned ids exist for **SSOT parity** — they match `STAGE_TABLE` in the live-dispatch table so a benchmark run is byte-reproducible. They coincide with what the aliases resolve to today (`opus` → Claude Opus 5, `sonnet` → Claude Sonnet 5), but that is timing, not a guarantee: prefer **aliases** in ad-hoc runner scripts (deprecation-proof, `skills/shared/model-selection.md`) and keep pinned ids only where byte-reproducibility matters. Re-pinning the SSOT is a **benchmark change, not a docs refresh** — measurements before and after are not comparable, so record the cut-over in `benchmark/README.md`.
+> Pinned ids: `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. They exist for **SSOT parity** — they match `STAGE_TABLE` in the live-dispatch table so a benchmark run is byte-reproducible. They coincide with what the aliases resolve to today, but that is timing, not a guarantee: prefer **aliases** in ad-hoc runner scripts (deprecation-proof, `skills/shared/model-selection.md`) and keep pinned ids only where byte-reproducibility matters. Re-pinning the SSOT is a **benchmark change, not a docs refresh** — measurements before and after are not comparable, so record the cut-over in `benchmark/README.md`.
 
 ### Runner-side reliability
 
@@ -84,6 +97,10 @@ Defaults track `skills/shared/model-selection.md`; override per task when `metad
 
 > `--json-schema` structured output is reliable for dispatch pipelines (no indefinite `StructuredOutput` re-call; schema-validation failures abort after 5 attempts). Authenticate MCP servers up front with `claude mcp login <name>` / `claude mcp logout <name>` (`--no-browser` completes over SSH). `claude agents --dangerously-skip-permissions` shows the bypass disclaimer and applies bypass mode to spawned agents instead of silently falling back to auto mode.
 
+#### Print-mode (`claude -p`) runners
+
+> `--permission-prompts none` makes an unattended runner deny anything that would prompt instead of hanging, while the active permission mode keeps deciding the rest. It is a print-mode flag, not a `claude agents` flag and not a ledger field. `claude -p` waits for a Monitor the model armed to fire or time out before exiting. Background commands a subagent starts have no time cap and run until they exit or are stopped, so a runner stops them explicitly. A `cd` persists across turns in non-interactive sessions.
+
 ## Live Session Discovery
 
 `claude agents --json` returns a JSON array of currently-live Claude sessions — poll it to discover *what is already running*, complementing the dispatch table above which covers *how to start* something. Canonical orchestrator shell-out, scoped to one worktask track:
@@ -95,7 +112,7 @@ claude agents --json | jq -r --arg track "$TRACK_ID" '
 
 ### Usage patterns
 
-- **Resume pre-check** — before respawning a subagent during resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, reattach via `SendMessage` instead of re-delegating (`skills/worktask/SKILL.md § Resume Procedure` step 0). Kills the "blind respawn of an already-working subagent" waste class.
+- **Resume pre-check** — before respawning a subagent during resume, query live sessions; if any `agent_id` from `.context/state.json.facts.dispatched_agents[]` still appears, reattach via `SendMessage` instead of re-delegating (`skills/worktask/references/resume.md § Resume Procedure` step 0). Kills the "blind respawn of an already-working subagent" waste class.
 - **Parallel track health** — `claude agents --json | jq '[.[] | select(.tag=="corpflow-track")] | length'` should equal the orchestrator-derived `parallel_tracks`. Less = stalled track.
 - **Status-line integration** — drives tmux / status-bar widgets showing the active stage without polluting `.context/`.
 
@@ -114,7 +131,7 @@ Rows additionally render a `done/total` progress count in the human-readable (no
 
 #### `--all` semantics
 
-> `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out); **blocked** and **just-dispatched** sessions are always listed. Combined with `state`, a resume scan can distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class (`skills/worktask/SKILL.md § Resume Procedure` step 0).
+> `claude agents [--json] --all` includes **completed** sessions (otherwise filtered out); **blocked** and **just-dispatched** sessions are always listed. Combined with `state`, a resume scan can distinguish a `blocked` agent (reattach via `SendMessage`) from a genuinely absent one (re-delegate) — closing the "blind re-dispatch of an invisible blocked agent" waste class (`skills/worktask/references/resume.md § Resume Procedure` step 0).
 
 #### "Needs input" status axis
 
@@ -144,6 +161,16 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 > Behaviour confirmed, JSON shape **not**: live **teammates** now appear in `ListAgents`/`claude agents --json` (previously absent, so a reachable teammate read as gone), a session can identify **its own row** by name, and the pre-warmed idle worker no longer appears until a task claims it — removing a phantom row from the resume pre-check. Next live watch run must confirm the teammate row's `kind` discriminator and whether own-name reuses the existing `name` key (2026-07-07 baseline) or arrives as a new one. Baseline-shift rule not triggered on the strength of release notes alone.
 
+#### Watch run — CC 2.1.270 (observed)
+
+##### Session and status fields
+
+Live probe; `--json --all` returned interactive rows only. Those rows carry exactly `{cwd, kind, name, pid, sessionId, startedAt, status}` with `status: "busy"` — the 2026-07-07 key set plus `status`, and **no `id`** key. The resume identity chain `agent_id // id // sessionId` already tolerates the missing `id`. A session's own name reuses the existing `name` key.
+
+##### Dispatch surface drift
+
+`claude agents run` is **not** a subcommand — `claude agents run --help` prints `claude agents` usage. Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but **no `--cwd`**, so an external dispatcher must `cd` into the worktree first. Re-deriving the external one-liner is an **open follow-up**.
+
 #### Defensive jq pattern
 
 Canonical for any plugin code reading this output:
@@ -171,7 +198,13 @@ On a baseline shift (new required field, renamed field, type change), the next c
 
 `claude attach <id>` attaches a terminal to a **running** background session; `--resume` is for a **stopped** conversation. The two are not interchangeable, and the `--resume` message now prints the exact `attach` command when the target is still running. `logs`, `stop`, `respawn`, and `rm` complete the surface, all documented in `claude --help`.
 
-These are **operator** tools. The orchestrator's own reattach path stays `SendMessage` (`skills/worktask/references/resume.md`) — `attach` changes what a human debugging alongside a run can do, not what the loop does. Two lifecycle fixes worth relying on: `claude agents`/`claude rm` no longer refuse to delete a session whose worktree branch was merged locally but not pushed, and a weeks-old background session is no longer resurrected after the machine was off — it shows as stopped at its real end and asks before resuming.
+### Operator tools vs orchestrator reattach
+
+These are **operator** tools for human debugging. The orchestrator's own reattach path stays `SendMessage` (`skills/worktask/references/resume.md`) — `attach` changes what a human can do, not what the loop does.
+
+### Lifecycle improvements
+
+`claude agents`/`claude rm` no longer refuse to delete a session whose worktree branch was merged locally but not pushed. A weeks-old background session is no longer resurrected after the machine was off — it shows as stopped at its real end and asks before resuming. `claude --resume <session-id> --bg` continues that session under its own ID when nothing is running it, so a recorded `dispatched_agents[]` id stays valid; when a copy starts instead, the CLI announces it.
 
 ## Permission-Mode Pinning (in-process)
 

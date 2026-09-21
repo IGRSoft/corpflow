@@ -180,10 +180,33 @@ run_gate() {
   _root=$(git -C "$_repo" rev-parse --show-toplevel 2>/dev/null) || return 0
 
   # Changed + untracked source files, NUL-safe against paths with spaces.
+  _tracked=$(git -C "$_root" diff --name-only --diff-filter=ACMR -M HEAD 2>/dev/null || true)
+  _untracked=$(git -C "$_root" ls-files --others --exclude-standard 2>/dev/null || true)
+
+  # A landed file is the producer's to ship — the consumer never authored it, so
+  # it cannot count as this agent's comment bloat. Subtracted from the untracked
+  # half only; a staged/tracked path stays visible regardless. Scoped to this
+  # tree by its physical root (state-ledger.md § The landed set) so a
+  # same-named untracked file in a different tree is never hidden here. A
+  # missing state file, an unresolvable root or a jq failure leaves nothing
+  # subtracted.
+  if [ -n "$_untracked" ]; then
+    _phys_root=$(CDPATH="" cd -P -- "$_root" 2>/dev/null && pwd -P) || _phys_root=""
+    _landed=""
+    if [ -n "$_phys_root" ]; then
+      _landed=$(jq -r --arg root "$_phys_root" \
+        '[(.tasks // {})[] | .metadata | select(any(.landed_roots // [] | arrays | .[]; . == $root)) | .landed_paths // [] | arrays | .[] | strings | select(test("\\A[A-Za-z0-9._@+/-]+\\z"))] | unique | .[]' \
+        "$_ctx/state.json" 2>/dev/null || true)
+    fi
+    if [ -n "$_landed" ]; then
+      _untracked=$(printf '%s\n' "$_untracked" | grep -F -x -v -f <(printf '%s\n' "$_landed") || true)
+    fi
+  fi
+
   _files=$(
     {
-      git -C "$_root" diff --name-only --diff-filter=ACMR -M HEAD 2>/dev/null || true
-      git -C "$_root" ls-files --others --exclude-standard 2>/dev/null || true
+      printf '%s\n' "$_tracked"
+      printf '%s\n' "$_untracked"
     } | sort -u
   )
   [ -n "$_files" ] || return 0
@@ -288,6 +311,33 @@ if [ "$SELF_TEST" -eq 1 ]; then
 fi
 
 PAYLOAD=$(read_stdin)
-CTX="${CLAUDE_PROJECT_DIR:-$PWD}/.context"
-run_gate "$PAYLOAD" "$CTX" "${CLAUDE_PROJECT_DIR:-$PWD}"
+
+# Guarded source of the shared root ladder.
+_LIB="$(dirname "$0")/model-switch-lib.sh"
+_CF_OPTS=$-
+set +e
+# shellcheck source=hooks/model-switch-lib.sh
+[ -f "$_LIB" ] && . "$_LIB"
+case "$_CF_OPTS" in *e*) set -e ;; esac
+
+REPO="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$REPO" ]; then
+  REPO=$(git rev-parse --show-toplevel 2>/dev/null) || REPO=""
+fi
+[ -n "$REPO" ] || exit 0
+
+if command -v corpflow_context_root >/dev/null 2>&1; then
+  CTX=$(corpflow_context_root)
+else
+  # Degraded: declared roots only, requiring an existing ledger — never cwd.
+  CTX=""
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
+    CTX="${WORKSPACE_ROOT}/.context"
+  elif [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/.context/state.json" ]; then
+    CTX="${CLAUDE_PROJECT_DIR}/.context"
+  fi
+fi
+[ -n "$CTX" ] || exit 0
+
+run_gate "$PAYLOAD" "$CTX" "$REPO"
 exit 0

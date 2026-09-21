@@ -1,0 +1,13 @@
+{
+  "session_id": "sess-ud-fixture",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/tmp/ud-fixture",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "jq -c .id .context/decisions.jsonl",
+    "description": "List decision ids"
+  },
+  "tool_use_id": "toolu_01UdPre0001"
+}

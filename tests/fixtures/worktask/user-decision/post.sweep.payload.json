@@ -1,0 +1,53 @@
+{
+  "session_id": "sess-ud-fixture",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "/tmp/ud-fixture",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Should rung-3 answers be recorded?",
+        "header": "sw-AR0-1",
+        "multiSelect": true,
+        "options": [
+          {
+            "label": "Record with empty task_ids",
+            "description": "Keep gate answers too"
+          },
+          {
+            "label": "Write nothing",
+            "description": "Rung 3 stays unrecorded"
+          }
+        ]
+      }
+    ]
+  },
+  "tool_response": {
+    "questions": [
+      {
+        "question": "Should rung-3 answers be recorded?",
+        "header": "sw-AR0-1",
+        "multiSelect": true,
+        "options": [
+          {
+            "label": "Record with empty task_ids",
+            "description": "Keep gate answers too"
+          },
+          {
+            "label": "Write nothing",
+            "description": "Rung 3 stays unrecorded"
+          }
+        ]
+      }
+    ],
+    "answers": {
+      "Should rung-3 answers be recorded?": [
+        "Record with empty task_ids",
+        "Write nothing"
+      ]
+    }
+  },
+  "tool_use_id": "toolu_01UdFixture0002"
+}

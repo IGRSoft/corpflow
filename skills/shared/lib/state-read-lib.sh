@@ -10,7 +10,8 @@
 #   reader can see it. Collapsing the three into one would have silently changed the two
 #   probes into readers that always look present.
 #
-#   Symbols: corpflow_state_str, corpflow_worktask_id, corpflow_run_index.
+#   Symbols: corpflow_state_str, corpflow_worktask_id, corpflow_run_index,
+#   corpflow_context_dir.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -59,4 +60,55 @@ corpflow_worktask_id() {
 # ledger has not recorded one. Pass "" to tell absent from zero.
 corpflow_run_index() {
   corpflow_state_str "${1:-}" '.run_index' "${2-0}"
+}
+
+# corpflow_context_dir — ranks 2-6 of the root-resolution ladder (rank 1, --state, is a
+# caller-side concern this library never sees). Prints the absolute .context directory
+# and returns 0 on the first rank that matches; nothing is printed otherwise.
+#
+#   2  $CONTEXT_DIR, if it names a directory
+#   3  $WORKSPACE_ROOT/.context, if it exists
+#   4  $CLAUDE_PROJECT_DIR/.context, if it exists
+#   5  $(git rev-parse --show-toplevel)/.context/state.json, if that FILE exists —
+#      subdirectory-invariant and never creates a ledger, which is what makes it safe to
+#      try before falling back to the resolver
+#   6  `resolve-root.sh`'s stdout, if that directory exists
+#
+# Returns 1 when every rank misses (the caller decides what "unresolved" means — for a
+# writer that is usually "skip the write", never "fall back to cwd"). Returns 2 only when
+# resolve-root.sh itself cannot be reached — a broken install, not an unresolved ladder —
+# so a caller can tell "no root here" apart from "the plugin install is broken".
+corpflow_context_dir() {
+  if [ -n "${CONTEXT_DIR:-}" ] && [ -d "${CONTEXT_DIR}" ]; then
+    printf '%s' "$CONTEXT_DIR"
+    return 0
+  fi
+  if [ -n "${WORKSPACE_ROOT:-}" ] && [ -d "${WORKSPACE_ROOT}/.context" ]; then
+    printf '%s' "${WORKSPACE_ROOT}/.context"
+    return 0
+  fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -d "${CLAUDE_PROJECT_DIR}/.context" ]; then
+    printf '%s' "${CLAUDE_PROJECT_DIR}/.context"
+    return 0
+  fi
+
+  local top=""
+  top=$(git rev-parse --show-toplevel 2> /dev/null || true)
+  if [ -n "$top" ] && [ -f "$top/.context/state.json" ]; then
+    printf '%s' "$top/.context"
+    return 0
+  fi
+
+  local libdir resolver out
+  libdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)"
+  [ -n "$libdir" ] || return 2
+  resolver="$libdir/../scripts/resolve-root.sh"
+  [ -r "$resolver" ] || return 2
+
+  out=$(bash "$resolver" 2> /dev/null || true)
+  if [ -n "$out" ] && [ -d "$out" ]; then
+    printf '%s' "$out"
+    return 0
+  fi
+  return 1
 }

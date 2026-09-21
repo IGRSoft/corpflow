@@ -11,15 +11,41 @@
 # under PUBLISH_LIB_ONLY=1, which loads this file on the way. Changing a rule here
 # changes what those callers may publish.
 
-# ---------- two-pass sanitiser ---------------------------------------------
-# Pass 1: drop whole lines containing forbidden tokens (L1..L9).
-# Pass 2: drop filename-shaped tokens unless allow-list rules A1..A5 fire.
+# ---------- shared host-path pattern and scrub ------------------------------
+# A missing path-scrub.sh stops the caller: nothing else removes a glued host path.
+_PLI_PATH_SCRUB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../shared/scripts" 2> /dev/null && pwd -P)/path-scrub.sh"
+if [ -r "$_PLI_PATH_SCRUB" ]; then
+  # shellcheck disable=SC1090
+  . "$_PLI_PATH_SCRUB"
+else
+  printf >&2 'publish-pl-issue: path-scrub.sh unreachable at %s — plugin install broken\n' \
+    "$_PLI_PATH_SCRUB"
+  exit 1
+fi
+
+# ---------- three-pass sanitiser -------------------------------------------
+# Pass 1: drop whole lines containing forbidden tokens (L1..L10).
+# Pass 2: drop filename-shaped tokens unless allow-list rules A1..A6 fire.
+# Pass 3: corpflow_path_scrub. It never drops a line, so the strip-ratio guard in
+#         publish-pl-issue.sh is unaffected.
 sanitise_body() {
   # Reads body from stdin, writes sanitised body to stdout.
+  # An empty ERE would make L2/L3b match every line.
+  if [ -z "${CORPFLOW_HOST_PATH_ERE:-}" ] || [ -z "${CORPFLOW_DRIVE_PATH_ERE:-}" ] \
+    || ! command -v corpflow_path_scrub > /dev/null 2>&1; then
+    printf >&2 'sanitise_body: path-scrub.sh is not loaded — refusing to sanitise\n'
+    return 1
+  fi
   # Force C locale so awk byte-handles UTF-8 (em-dashes, smart quotes) without
   # tripping the "towc: multibyte conversion failure" warning + line drop.
-  LC_ALL=C awk '
-    BEGIN { in_fence = 0 }
+  CORPFLOW_HOST_PATH_ERE="$CORPFLOW_HOST_PATH_ERE" \
+    CORPFLOW_DRIVE_PATH_ERE="$CORPFLOW_DRIVE_PATH_ERE" \
+    LC_ALL=C awk '
+    BEGIN {
+      in_fence = 0
+      host_re = "(^|[[:space:]])" ENVIRON["CORPFLOW_HOST_PATH_ERE"]
+      drive_re = "(^|[[:space:]])" ENVIRON["CORPFLOW_DRIVE_PATH_ERE"]
+    }
     {
       line = $0
       # Pass-1 predicates match on a backtick-neutralised COPY. The rules below
@@ -32,17 +58,14 @@ sanitise_body() {
       probe = line; gsub(/`/, " ", probe)
       # ---- Pass 1 line-strip --------------------------------------------
       if (probe ~ /(^|[[:space:]])\.context\//) next                 # L1
-      # Covers every mount convention a checkout can sit under, not just the
-      # home-directory ones; WSL needs no arm (/mnt/c/... is already /mnt/).
-      # MUST stay byte-identical to the copy in pr-body-lint.sh — pinned by
-      # tests/shell/worktask/local-path-regex-parity.bats.
-      if (probe ~ /(^|[[:space:]])\/(Users|home|tmp|var|opt|etc|root|Volumes|mnt|media|private|srv)\//) next  # L2,L3
+      # Same ERE as pr-body-lint.sh P1, so the sanitiser and its read-back agree.
+      if (probe ~ host_re) next                                      # L2,L3
       # Windows drive-letter paths carry no leading slash, so L2/L3 cannot see them.
-      if (probe ~ /(^|[[:space:]])[A-Za-z]:\\/) next                 # L3b
+      if (probe ~ drive_re) next                                     # L3b
       if (probe ~ /(^|[[:space:]])~\//) next                         # L4
       if (line ~ /conductor\/workspaces\/[A-Za-z0-9_-]+/) next      # L5
       if (line ~ /(^|[[:space:]])(workspace_path|plan_file|run_index|artifact_path)[[:space:]]*[:=]/) next  # L6
-      if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+\.md/) next  # L7,L8
+      if (line ~ /(planning|architecture|coordinating|coordination|developing|development|reviewing|review|qa|testing|documenting|documentation|releasing|release|finalizing|finalization|stakeholding|retrospective|incident|ethics-review)-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\.md/) next  # L7,L8; the optional -<stream> tail catches per-stream DV names
       if (probe ~ /(^|[[:space:]])(\.\/|\.\.\/)[A-Za-z0-9_.\/-]+/) next   # L9
       # L10: drop whole line when a plugin-qualified identifier is the leading
       # non-bullet token (e.g. "* Routed to corpflow:developer ...",
@@ -108,7 +131,31 @@ sanitise_body() {
       }
       print out
     }
+  ' | corpflow_path_scrub
+}
+
+# ---------- title-cap helpers ------------------------------------------------
+# Caps each line at $1 codepoints including the `…`, cut on the last whitespace
+# boundary with trailing `,;:-` trimmed; no boundary hard-cuts to $1-1. jq, not
+# `cut -c`, because it counts codepoints; `+` quantifiers only for jq 1.6.
+title_cap_word_boundary() {
+  local limit="$1"
+  jq -Rr --argjson n "$limit" '
+    def wb_cap($n):
+      if length <= $n then .
+      else
+        (.[0:$n] | sub("[^[:space:]]+$"; "") | sub("[[:space:],;:-]+$"; "")) as $w
+        | if ($w | length) > 0 then $w + "…" else .[0:$n-1] + "…" end
+      end;
+    wb_cap($n)
   '
+}
+
+# Reproduces the pre-word-boundary title cut byte-for-byte (`cut -c1-100`), so
+# resolve_context_issue_search can still probe for an issue published under the
+# old scheme. The mid-word cut is the point here, not a bug to fix.
+title_legacy_cut() {
+  head -1 | cut -c1-100 | sanitise_body | tr -d '\n'
 }
 
 # ---------- plan extraction -------------------------------------------------
@@ -313,8 +360,17 @@ resolve_context_issue_local() {
 # (case-insensitive, trimmed). Accepts a single hit only — an ambiguous / multi-hit
 # result is ignored so an unrelated same-worded issue never captures a fresh context.
 # Needs $TITLE, so it runs AFTER the title is built. Sets RESOLVED_ISSUE_* on hit.
+# Falls back to $TITLE_LEGACY (the pre-word-boundary cut, same ticket-prefix applied)
+# when it differs, so an issue published under the old fixed-100 title is still found.
 resolve_context_issue_search() {
-  resolve_context_issue_search_for "$TITLE"
+  resolve_context_issue_search_for "$TITLE" && return 0
+  local legacy="${TITLE_LEGACY:-}"
+  [ -n "$legacy" ] || return 1
+  local t_lc l_lc
+  t_lc=$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]')
+  l_lc=$(printf '%s' "$legacy" | tr '[:upper:]' '[:lower:]')
+  [ "$t_lc" != "$l_lc" ] || return 1
+  resolve_context_issue_search_for "$legacy"
 }
 
 resolve_context_issue_search_for() {

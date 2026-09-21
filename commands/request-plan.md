@@ -3,7 +3,7 @@ name: request-plan
 description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it
 argument-hint: '<request> [--save]'
 model: sonnet
-allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash skills/request-plan/scripts/capability-registry.sh:*)
+allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh *)
 related:
   - skills/request-plan/SKILL.md
   - skills/estimation-methodology/SKILL.md
@@ -42,7 +42,7 @@ Thin entry point to the **`request-plan` skill**, which holds the full workflow 
 - Line 1 — a bug with no known cause: context gathering reads the failing area before scoping.
 - Line 2 — `--save` writes `.context/request-plan-0.md` as well as printing the plan.
 - Line 3 — a refactor: no new behaviour, so Scope carries the seams and Risks the regression surface.
-- Line 4 — XL work: the plan names 2-3 sub-tasks per `references/handoff.md` and still emits one
+- Line 4 — XL work: the plan names 2-3 sub-tasks per `skills/request-plan/references/handoff.md` and still emits one
   ready-to-paste `/worktask` line, for the first of them.
 
 ## Workflow
@@ -54,7 +54,7 @@ Thin entry point to the **`request-plan` skill**, which holds the full workflow 
    this file go stale twice; a looser restatement of that rule licensed the punts § 4 forbids.
 3. End with a single ready-to-paste `/worktask` command line (PL0 dynamic sizing handles small tasks
    by dropping stages) — exactly one, with the single narrow exception `SKILL.md § 4` states and no
-   other. XL-sized work still gets its trigger: name the 2–3 sub-tasks per `references/handoff.md`
+   other. XL-sized work still gets its trigger: name the 2–3 sub-tasks per `skills/request-plan/references/handoff.md`
    and emit the line for the first of them. "For XL, emit no command" leaves the user nothing to
    paste — the `no-handoff-trigger` failure wearing a size label.
 

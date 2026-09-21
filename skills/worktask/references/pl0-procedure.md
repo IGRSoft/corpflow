@@ -63,7 +63,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 #### `requires_screenshots` — DV screenshot capture gate (REQUIRED)
 
-Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ DV MUST produce `.context/images/<worktask_id>/screenshots.md`, whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
+Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ each DV task MUST leave valid evidence in `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (on `backend`/`systems` the gate also passes no captures, or a `tool_missing` row), whose captures are embedded in BOTH the PR body and the GitHub issue (binding user directive). `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
 
 **PL0 is the sole WRITER of this flag.** The downstream `?? true` defaults are defense-in-depth for ad-hoc runs only — stamp it deterministically per the steps below.
 
@@ -140,7 +140,7 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages` | Passed to `Task()`; never inherited from frontmatter. |
+| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages`, or from its § Secure overrides when the row's condition matches | Passed to `Task()`; never inherited from frontmatter. |
 | `metadata.effort` | that table's tier, or the override actually dispatched | **Mandatory, not optional** since Step C.0a began reading it. The resolver bumps it one rung, and frontmatter is the wrong fallback — DV sub-tasks dispatched at `xhigh` run at a tier `developer.md`'s `effort: high` never mentions. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`) and its blocking items go back to asking a human. |
 
 ##### Propagation fields — gates
@@ -156,7 +156,38 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 |---|---|---|
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
-| `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; consumed by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on DV + QA tasks. |
+| `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; consumed by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on every downstream task. |
+
+##### Propagation fields — DV rows
+
+Every DV row is a fan-out unit with its own artifact; these two keys are what make it one
+(`skills/worktask/references/handoff-protocol.md § DV fan-out — ledger tasks`).
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.stream` | kebab slug, unique among the run's DV rows | Names the row's artifact. MANDATORY on every DV row once the run seeds ≥2; MAY be omitted when there is exactly one. |
+| `metadata.artifact` | `".context/development-${N}-<stream>.md"`, or `".context/development-${N}.md"` for a lone DV row | The file that row writes and patches. DV never invents it; downstream stages resolve their inputs from these values, never from a composed name. |
+
+##### Propagation fields — DV landing declarations
+
+Conditional: stamp `produces` and `consumes` only when one DV row consumes a file another DV row produces, and
+pass them inside `--metadata` on `state-patch.sh --task-create`, the call that seeds the row. PL0
+writes them, or TL when TL runs; DV never does. Contract: `handoff-protocol.md § Landing consumed
+artifacts`.
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.produces` | `[path, ...]`, repo-relative post-merge, alphabet `[A-Za-z0-9._@+/-]` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
+| `metadata.consumes` | `[{"from": "DV<n>", "paths": [path, ...]}]`, each path listed in that producer's `produces` | Consumer row. Block it on every `from` too (`--task-block C --on P`), or landing refuses it with `not_blocked_on_producer`. |
+
+##### Propagation fields — base branch & test scope
+
+`--task-create` refuses a non-PL/IR row missing `effort`, `isolation`, `base_ref`, `requires_screenshots` or `workspace_path` (§ Workspace Mode): exit 2, `state.json` untouched.
+
+| Key | Value | Purpose |
+|---|---|---|
+| `metadata.base_ref` | the detected integration branch, `master` included | DV's per-task base override (§ Where to stamp the detected branch). |
+| `metadata.test_mode` | the plan's `test_mode`: `build-only`, `scoped` or `full` | Step 4.8a's DV test-scope banner. An unstamped row gets a `warn` audit row, then `scoped`. |
 
 #### Reader resolution order
 
@@ -177,9 +208,11 @@ Apply on trigger match; leave unset otherwise so downstream falls back to agent 
 | `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full` | `"default"` |
 | `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
 | `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
+| `model` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"sonnet"` |
+| `effort` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"medium"` |
 | `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
 
-Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth.
+Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth. The two `DC` rows mirror `stage-codes.md § Secure overrides`.
 
 ##### Notation
 
@@ -266,10 +299,26 @@ would be exactly the silent retarget this reconcile exists to prevent.
 
 Stamp the result in **two** places:
 
-- `task.metadata.base_ref` on PL0 and every downstream task — **only when `$BASE` is not `master`**. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
+- `task.metadata.base_ref` on PL0 and every downstream task — **unconditionally**, `master` included: `--task-create` refuses a downstream row without it. DV reads it as the authoritative per-task base override (`agents/developer.md § Worktree Mode`).
 - `state.json .metadata.base_ref` — **unconditionally**, in the step-4 reset. Shell scripts cannot read Task-System metadata, so this mirror is the only way `branch-lib.sh resolve_base_ref` (rank 2) sees the value; stamping it even for `master` keeps the field present for every reader. On a turn that skips the step-4 reset (`plan_revision`), write it with `state-patch.sh --ledger-meta --set '{"base_ref":"<branch>"}'` rather than editing `state.json` by hand — a hand edit bypasses the lock and the bounds filter the single writer applies.
 
 Reader resolution order is canonical in `handoff-protocol.md § metadata.base_ref`.
+
+#### Subagent model-force preflight — detection
+
+Run once at PL0, before the plan gate: `printenv CLAUDE_CODE_SUBAGENT_MODEL_FORCE`. Non-empty means every stage's `metadata.model` is overridden at spawn — each subagent runs on `CLAUDE_CODE_SUBAGENT_MODEL` or the session model (`skills/shared/model-selection.md § Forced subagent model overrides every pin`). Read `printenv CLAUDE_CODE_SUBAGENT_MODEL` too.
+
+#### Subagent model-force preflight — sweep item
+
+Emit **one** sweep stub — `class: decision`, `blocks_next_stage: false`:
+
+> Stage model pins will not hold: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, so every stage runs on
+> `<CLAUDE_CODE_SUBAGENT_MODEL, or "the session model">`, including stages this plan sizes
+> `opus`/`xhigh`. Proceed on the forced model, or stop, unset the variable, restart and re-run. Recommended: unset and restart.
+
+#### Subagent model-force preflight — gate behavior
+
+Unset or empty ⇒ **no item**. Under `--auto=[decision]` the default is **proceed**: delegate cannot change session environment. PL0 reads the variable itself; only whether to run under it reaches the gate.
 
 #### `--no-gh-issue` opt-out
 
@@ -362,7 +411,7 @@ Required anchors (kebab-case, no underscores, no spaces):
 
 #### Anchor-lint enforcement
 
-PostToolUse anchor-lint (`handoff-protocol.md § Anchor Pre-Flight`) fires after the write and signals the agent to amend a missing anchor. Without the hook, validation falls to DR-stage `cache-lint.sh --anchor-lint` — same cost, discovered late; prefer the proactive check.
+At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list and flags a missing anchor after the write (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
 
 #### Workspace Mode
 
@@ -442,7 +491,7 @@ condition 3 has nothing to quote without one. Conditions, caps, and validity are
 4. **Set dependency chain** between seeded tasks using `state-patch.sh --task-block <ID> --on <ID[,ID…]>`
 5. **Mark PL0 completed** after creating all stage tasks
 
-Every seeded downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`, `development-${N}.md`).
+Every seeded downstream stage MUST include `metadata.run_index = N` and `metadata.plan_file = "planning-${N}.md"`. Stage artifact paths embedded in the task description use `<basename>-${N}.md` (e.g., `architecture-${N}.md`). DV is the exception: each DV row writes the path its own `metadata.artifact` carries (§ Propagation fields — DV rows).
 
 #### Agent mapping for `metadata.agent`
 
@@ -514,7 +563,7 @@ Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` reques
 
 ##### Placement guard (non-negotiable)
 
-> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots.md`.
+> **Placement guard (non-negotiable):** persist Figma frames ONLY to `.context/designs/` with a `figma-registry.md` — the artifact QA's design-comparison gate consumes. NEVER write them to `.context/images/` (DV screenshots + user attachments only): a Figma PNG there disables the QA design gate (no `.context/designs/`) and masks an absent DV `screenshots-<TASK_ID>.md`.
 
 ### Figma Design Capture
 
@@ -565,6 +614,7 @@ When threshold met, PL0: (1) seed an `ET0` ethics-review task *before* AR0 with 
 ### Output Budget (PL)
 
 The plan is WRITTEN to `planning-N.md` (≤350 lines, tiered detail), never emitted in the final chat text. Final return ≤250 tok.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, PL row.
 
 ## Scope-Term Disambiguation
 
@@ -659,7 +709,7 @@ so the plan amendments are your only writes.
 description, security-posture-weakening changes, or spend authorization — return those as
 `escalate` items. The orchestrator stops for the user on exactly those, even under
 `plan_gate: "bypass"`; an unattended `/megatask` per-issue run parks the issue instead
-(`commands/worktask.md § Step A.4 Escalation guard`).
+(`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`).
 
 ## Version Bump Planning
 

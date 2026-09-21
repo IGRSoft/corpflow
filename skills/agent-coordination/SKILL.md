@@ -2,7 +2,7 @@
 name: agent-coordination
 description: Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows. Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation.
 effort: medium
-version: 0.3.0
+version: 0.4.0
 related:
   - ../worktask/SKILL.md
   - ../claude-constitution/SKILL.md
@@ -75,14 +75,25 @@ Every stage reads `exploration.md`; source-file access differs.
 | Classification | Trigger | Retry | Escalate to |
 |---|---|---|---|
 | `transient` | 5xx / rate-limit / network | 3, backoff 2^n s | — (same agent) |
-| `logic` | bug / wrong approach | 2, corrective context on retry 2 | — (same agent) |
+| `logic` | bug / wrong approach | 3, corrective context from retry 2 | — (same agent) |
 | `missing_input` | required artifact absent | No | previous stage per chain |
 | `ambiguous_requirements` | requirements unclear | No | PL |
 | `design_flaw` | architecture blocks implementation | No | AR |
 | `hard_constraint` | ethics / security / legal block | No | abort + block for human (`"ST"`) |
 | `exhausted` | `retry_count == 3` | No | previous stage per chain |
+| `permission_denied` | auto-mode classifier denies a tool call | No | — (same agent) |
 
-Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset `retry_count` at handoff.
+Metadata: `retry_count++` on each retry; on escalation set `error_escalated_to` to the target and reset **`retry_count` alone** at handoff.
+
+#### Retry / Escalate Matrix — one ceiling, reachable from every retrying class
+
+Every retrying class carries the same ceiling of **3**, so `exhausted` is reachable from each of them; the non-retrying classes never pass through it because they escalate on their first failure, or — `permission_denied` — park for the user. No class parks below its own trigger. The ceiling is single-sourced in the table above — `skills/worktask/SKILL.md § Retry Logic` and its `retry_count == 3` escalation trigger restate it and must not diverge.
+
+#### Retry / Escalate Matrix — the per-edge escalation cap
+
+`metadata.escalation_counts` on the escalating task counts escalations per target, keyed by the target's **full task id** (`{"AR0": 2}`) so a split stage's writers do not share a counter. Increment it on each escalation handoff; **it is explicitly NOT reset** by that handoff, unlike `retry_count`. Resetting it would erase the only bound on the loop it exists to bound, and DV→AR→DV→AR would ping-pong forever.
+
+At **cap 2** on an edge the escalating task is written `status: "failed"` with `last_error.class: "exhausted"` instead of escalating again; `failed` is settled, so the completion loop terminates. Schema: `skills/shared/state-ledger.md § Schema — error & retry properties`.
 
 #### Retry / Escalate Matrix — environmental contention
 
@@ -94,6 +105,10 @@ failing-set **membership** differs between two consecutive runs; no source chang
 **Voiding branch (mandatory exit).** Membership "shifts" means the *set* differs — a member added
 or dropped — not ordering, not duration. If the re-baseline run fails with the same members as the
 previous run, the classification is **void**: reclassify as `logic` and escalate to DV.
+
+#### Retry / Escalate Matrix — permission denials
+
+`permission_denied` never retries and never escalates. The task parks `blocked` with `metadata.blocked_on` until the user answers, then the same stage agent resumes only the denied step — which is why its Escalate-to cell reads `— (same agent)` and why `ESCALATE_TO` has no entry for it. Parking touches none of `retry_count`, `escalation_counts` or `last_error`, so a denial never walks a stage toward `exhausted`. Mechanism: `skills/worktask/SKILL.md § Step 6.5a4`.
 
 ### Escalation Chains
 
@@ -139,10 +154,80 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `cross_session_ask` (`deferred` ask leg + `ok` relay leg, Step 6.5a3) |
-| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest`, and legacy `cross_session_ask` alias rows read, never written |
+| Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
-| `PermissionDenied` hook | `permission_denied` (auto-mode classifier blocks a tool) |
+
+#### Writers — permission denials (two writers, one row)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| `PermissionDenied` hook (`hook:permission-denied`, plugin) | `permission_denied` (auto-mode classifier blocks a tool) — `result: "block"`, `metadata.{tool, dedupe_key, command_head, truncated}` |
+| Orchestrator fallback (`permission-park.sh park`, worktask Step 6.5a4) | `permission_denied`, same redacted shape, actor `orchestrator`, from the stage's returned `blocked_on` or tool result |
+
+The fallback exists because hook firing inside a subagent is unverified. Both writers skip the append when the log already holds the same `dedupe_key` — the first 16 hex of `sha256("task_id:tool:command")` of the command after secret masking, never the unmasked text — or its twin under the other writer's subject (§ Writers — redacted permission rows), so each denial yields one row whichever lands first.
+
+#### Writers — permission denials, a repeat after a grant
+
+Known limit: re-denying the same command in the same task after a grant writes no second row, because the masked command and so the key are unchanged; the task still parks.
+
+#### Writers — permission resumes (the decision_ref row)
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`permission-park.sh resume`, worktask Step 7a) | `permission_resumed`: one row per successful resume and none on a refusal. `result: "ok"`, `metadata.{tool, dedupe_key, command_head, truncated, answer: grant\|manual, decision_ref}` |
+
+`metadata.decision_ref` is `permission_resumed:<task_id>:<dedupe_key>:<n>`. It is what a permission `blocked_on.resume_with: decision_ref` points at, and `resume` returns it as `resume_block.decision_ref`. The `dedupe_key` pairs the row with the task's `permission_denied` row. `n` is 1 plus the earlier `permission_resumed` rows with the same subject and key, so a call that is denied and parked again gets a distinct ref. The row records the user's own answer to the boundary prompt, so the orchestrator calls `resume` only with that answer. No delegate or resolver answers for the user.
+
+#### Writers — redacted permission rows
+
+`.context/logs/audit.jsonl` is committed, so `permission_denied`, `permission_resumed` and `escalation_parked` rows hold only redacted heads: `audit_command_head` from `hooks/lib/command-head-lib.sh` over the secret-masked command (at most 4 tokens, path-scrubbed, ≤120 chars). When that library is unavailable, `command_head` is `[redacted]` and `redaction` is `scrub_unavailable`.
+
+##### Information redaction and deduplication
+
+No row carries the full command, `classifier_reason`, `allow_rule` or raw `tool_input` (§ Writers — where the full permission detail lives). Each `escalation_parked.metadata.escalated[]` entry is `{tool, command_head, truncated}`. Since no row holds the command, a twin is found by key alone: the fallback also re-derives it for `subject: "unknown"`, and a hook that cannot name the task re-derives it for every ledger task id.
+
+#### Writers — where the full permission detail lives
+
+The full command, `classifier_reason` and `allow_rule` stay out of the audit log, not out of `.context/`. They live in the stage artifact's `handoff.blocked_on`, when the stage wrote one, which nothing clears, so it stays after resume; in the ledger's `tasks.<ID>.metadata.blocked_on`, which `resume` sets to `null`; in the resume message or re-dispatch suffix built from `resume_block.instruction`; and in the `batch` output and boundary prompt shown to the user. A project that commits `.context/` commits the artifact copy, and a ledger copy committed while the task was parked stays in that history.
+
+#### Writers — blocked_on rows
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`blocked-on-dispatch.sh route\|resume`, worktask Steps 6.5a3 and 7a) | `blocked_on`: one row per leg of a non-permission arm. `subject` and `task_id` are the task id; `result: "blocked"` on a leg that leaves the task parked, `"ok"` on the closing leg. `metadata.{kind, arm, leg}`, plus `fallback_from` and `owner_issue` on a fallback, `command_head` and `truncated` on a need with a command, and `decision_ref` on the closing leg |
+
+The permission arm writes no `blocked_on` row: its `denied` leg is the `permission_denied` row, and its `granted` and `resumed` legs are the `permission_resumed` row. A closing row's `decision_ref` is `blocked_on:<task_id>:<kind>:<n>` (`worktask/references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`).
+
+#### Writers — blocked_on rows, the peer_session legs
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`mailbox.sh leg\|comment\|scan\|sweep`, `blocked-on-dispatch.sh resume`) | `blocked_on`: one row per leg per ask, deduped on `(subject, metadata.ask_id, metadata.leg)`. `metadata.{kind, arm, leg, ask_id}`, plus `transport` (`message\|comment`) on `sent` and `delivered`, `transport_result` on `delivered`, `answered_by_kind` on `answered` and `relayed`, and `reply_ref` with `decision_ref` on `relayed` |
+
+Only the originating orchestrator writes these: a session answering from another worktree has no ledger task to cite, and `mailbox-reply.sh` writes no audit row at all. Every key above is a neutral name — the question, its options, the answer and the comment body live only in the mailbox files and `tasks.<ID>.metadata.blocked_on`, never in a row.
+
+#### Writers — blocked_on rows, the correction legs
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`blocked-on-dispatch.sh route\|resume`) | `blocked_on`: `opened` at the route that re-opened the target, `closed` at the resume. Metadata includes `kind`, `arm` (always `correction`), and `leg`; plus `decision_ref` on `closed`. No command head — a correction asks nobody to run a command |
+
+##### Correction routing and detail placement
+
+A re-routed correction writes no second `opened` row: the router reads the still-open need's recorded leg and re-parks without calling the op. The row names no task but its own — target id, finding, `evidence_ref` and consumer count all stay off it (§ Writers — blocked_on rows, redacted). The detail lives in `tasks.<ID>.metadata.blocked_on` and flows to the re-opened stage through `metadata.gate_blockers` and remediation injection.
+
+#### Writers — mailbox_ingest rows
+
+| Actor | Action Examples |
+|-------|-----------------|
+| Orchestrator (`mailbox.sh ingest-comments`) | `mailbox_ingest`: `result: "ok"`, written only when a reply comment was ignored (`ignored > 0`). `metadata.{ask_id, ignored, reasons}`, `reasons` drawn from `author`, `bot`, `grammar`, `stale`, `schema`, `late`, `duplicate` |
+
+The row records that input was refused and why, never who sent it or what it said: no login and no comment body. An accepted reply writes no row of its own — it becomes the `answered` leg above.
+
+#### Writers — blocked_on rows, redacted
+
+`.context/logs/audit.jsonl` is committed, so a `blocked_on` row never carries a full `command`, `request`, `question`, `finding` or `observed` text, nor a user answer; that detail stays in the artifact's `handoff.blocked_on` and the ledger's `tasks.<ID>.metadata.blocked_on`. `command_head` is at most 4 tokens of the secret-masked, path-scrubbed command: from `audit_command_head` (`hooks/lib/command-head-lib.sh`) when that file is readable, else the first 4 tokens of `pd_command_head` (`hooks/lib/permission-denied-lib.sh`), else the literal `"[redacted]"`. `truncated: true` marks a cut head or that placeholder.
 
 #### Test-run counter rows
 
@@ -153,13 +238,13 @@ One row per test **invocation**, keyed on the invocation's shape rather than the
 | Actor | Action Examples |
 |-------|-----------------|
 | `hook:audit-subagent` (SubagentStop, plugin) | `subagent_stopped` |
-| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` (ledger patches recognised by command) with `duration_ms` + `effort` |
-| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` with `task_id` + `metadata.{verdict, via, dedupe_key}`; one-shot `state_merge_noop` when the stop carried no stage and no artifact |
-| `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with `state_file` + `run_index` + `artifacts[]` |
-| `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with `metadata.stage` |
-| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus one-shot `test_gate_disabled` / `test_dedupe_disabled` |
+| `hook:audit-tooluse` (PostToolUse, plugin) | `tool_invoked` for `Bash\|Write\|Edit` with `duration_ms` + `effort`, a redacted `command_head` on Bash, scrubbed paths — never the command line or file content |
+| `hook:state-merge` (SubagentStop, via `state-patch.sh --via hook`) | `stage_transition` or one-shot `state_merge_noop` with metadata per artifact |
+| `hook:precompact` (PreCompact, plugin) | `precompact_checkpoint` with state file, run index and artifacts |
+| `hook:agent-stop` (Stop, PL/FN/ST agents) | `stage_completion_hook` with metadata.stage |
+| `hook:test-execution-gate` (PreToolUse, plugin) | `test_execution_blocked`, `test_execution_deduped`, `test_dedupe_skipped_zero_prior`, `test_delegation_observed`, plus gate control one-shots |
 
-#### Plugin-hook row fields
+##### Plugin-hook authoritative rows and fields
 
 Every row above is **authoritative**. `audit-subagent` and `agent-stop` rows also carry `parent_agent_id`, `background_tasks_count`/`_ids`, `session_crons_count`/`_ids`. `stage_transition` is emitted ONLY on the hook path — a hook completion runs no Bash tool call, so `hook:audit-tooluse` never sees it; other layers stay scraped to avoid double counting.
 
@@ -205,20 +290,22 @@ A hook row's actor is `hook:<name>` **or** `<plugin>:hook:<name>` — every inst
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|cross_session_ask|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",
+  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|permission_resumed|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|blocked_on|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",   // legacy cross_session_ask alias rows are read, never written
 ```
 
 #### Schema — remaining fields
 
 ```jsonc
 // …continued: the same object
-  "subject": "task ID or artifact path",
-  "result": "ok|error|deferred|blocked",
-  "task_id": "optional — ledger key, e.g. DV0",
+  "subject": "required — task ID or artifact path",
+  "result": "ok|error|deferred|blocked|block|skipped",   // block: hook-tree appender rows, e.g. permission_denied
+  "task_id": "required — ledger key, e.g. DV0; \"none\" when no stage is active, \"unknown\" when one is but cannot be resolved",
   "artifact": "optional — .context/ path",
   "metadata": { "...": "action-specific extras" }
 }
 ```
+
+Both shared appenders, `corpflow_audit_row` (skills) and `corpflow_hook_audit_row` (hooks), refuse a row without a non-empty `subject` and `task_id`: nothing is written and one stderr line names the missing key.
 
 #### Hook-written metadata fields
 
@@ -238,7 +325,7 @@ Optional `metadata` fields on hook-written `subagent_stopped` / `stage_completio
 ```bash
 mkdir -p .context/logs
 jq -c --arg ts "$(date -u +%FT%TZ)" \
-  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"4"}' \
+  '. + {ts: $ts}' <<< '{"actor":"orchestrator","action":"stage_transition","subject":"DV0→DR0","result":"ok","task_id":"DV0"}' \
   >> .context/logs/audit.jsonl
 ```
 
@@ -272,16 +359,35 @@ Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub
 
 ### Sub-Task Delegation
 
-| Sub-Task | Delegate To | Model |
-|----------|-------------|-------|
-| Status check | Self | haiku |
-| Code implementation | developer | opus |
-| Architecture question | software-architector | opus |
-| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent — roster in `skills/shared/routing-matrix.md § Functional-role aliases` | opus |
-| Technical decision | technical-lead | opus |
-| Test design | qa-engineer | sonnet |
+| Sub-Task | Delegate To |
+|----------|-------------|
+| Status check | Self |
+| Code implementation | developer |
+| Architecture question | software-architector |
+| Platform architecture (apple/systems/android/web/backend/ai) | the platform's architect agent |
+| Technical decision | technical-lead |
+| Test design | qa-engineer |
 
-> **Cross-plugin AR collaboration**: on platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (for Apple: pattern selection, DI, navigation, concurrency; equivalents elsewhere). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
+Model sizing: a worktask stage dispatch takes model and effort from `skills/shared/stage-codes.md`; other delegations use `skills/shared/model-selection.md § Selection Criteria`. Platform roster: `skills/shared/routing-matrix.md § Functional-role aliases`.
+
+#### Cross-plugin AR collaboration
+
+On platform projects `software-architector` consults that platform's architect during AR for platform-specific architecture (e.g., Apple: pattern selection, DI, navigation, concurrency). Per-platform table: `agents/software-architector.md § Platform Architecture Collaboration`; protocol: `cross-plugin-handoff` skill.
+
+#### When not to delegate
+
+The table says who takes a sub-task, not that every sub-task needs one. The ceilings below are
+*caps*, and there is deliberately **no per-session total-spawn cap**, so nothing here stops a stage
+spending its budget on spawns a direct tool call would have answered.
+
+Delegate for work that is genuinely independent and parallelizable, or needs expertise this stage
+lacks: a wide multi-file investigation, a platform specialist, a per-stream DV split. Do not
+delegate what a grep and two reads would settle, and never spawn a subagent to double-check your
+own output. Where one delegate suffices, use one.
+
+This bites hardest on the `opus` stages, which reach for delegation more readily. Section `[4b]`
+carries the same rule at dispatch; it is here too because a stage agent reads this skill directly
+when deciding whom to call. Source: `skills/shared/model-prompting.md § opus`.
 
 #### Nested delegation
 
@@ -369,7 +475,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 ##### Delivery is reported, so check it
 
-> A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, or `burst_limited`, and `SendMessage`/`ListAgents` say when the account's session list was too long to enumerate fully — which makes any "peer is gone" conclusion drawn under that condition unconfirmed rather than established. Branch on the result; the resume loop's table is `references/resume.md § Reattach rows — the SendMessage has a result too`.
+> A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, `burst_limited`, or `queued`, and `SendMessage`/`ListAgents` say when the account's session list was too long to enumerate fully — which makes any "peer is gone" conclusion drawn under that condition unconfirmed rather than established. `queued` means the target is an offline Remote Control session on another machine and delivery waits for it to reconnect: never re-send, or the message arrives twice. Branch on the result; the resume loop's table is `references/resume.md § Reattach rows — the SendMessage has a result too`.
 
 ##### notify_when_idle, availability & preview collapse
 
@@ -381,9 +487,9 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Replies from a subagent land in the parent conversation
 
-> A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly.
+> A `SendMessage` from a **subagent** to another **session** delivers the reply into the *parent* session's conversation, never back to the sending subagent. Only a sibling-or-parent **subagent** target (same session) round-trips correctly — including resume: a subagent that resumes another agent via `SendMessage` is woken by that agent's completion.
 
-> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.cross_session_ask` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — open_questions, refs, constraints`); the orchestrator sends, receives the reply natively, and relays it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`).
+> Consequence, binding on every stage agent: **never `SendMessage` another session and then wait inline for the answer** — it will not arrive. Return `verdict: "blocked"` with `handoff.blocked_on` of kind `peer_session` naming who to ask and what (`skills/worktask/references/handoff-protocol.md § Schema — blocked_on, the peer_session arm`); the orchestrator routes it (`skills/worktask/SKILL.md § Step 6.5a3`, `references/resume.md § Reply routing`), and the durable mailbox (`scripts/mailbox.sh`) carries the ask and relays the verified reply.
 
 #### Skill discovery & subagent_type resolution
 
@@ -583,7 +689,7 @@ Combinations: API endpoint, data model → Security + Performance + Architecture
 
 TL can split DV0 into parallel streams (DV0, DV1, DV2…) during coordination; each runs in its own worktree after TL completes, and the orchestrator picks up the new tasks on its next ledger re-read — no loop changes needed.
 
-**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split in `.context/coordination-N.md § Parallel Streams` — per-stream scope, file ownership, interface contracts.
+**Split criteria**: 2+ independent file groups with cleanly separable ownership and a small interface surface. **Artifact**: TL records the split as a `### Parallel Streams` H3 under `## fan-out` in `.context/coordination-N.md` — per-stream scope, file ownership, interface contracts.
 
 **Anti-patterns**: splitting tightly coupled files across streams (merge conflicts); splitting small scope (coordination overhead exceeds time saved); missing DR0 rewiring (DR0 must depend on ALL DVN tasks, not just DV0).
 
@@ -593,7 +699,7 @@ For a bug with multiple candidate causes: generate N hypotheses spanning differe
 
 ## Native Dynamic Workflows vs corpflow Staged Worktask
 
-Claude Code's native `/workflows` command and Workflow tool cover **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. Complementary to the staged worktask, not a replacement.
+Claude Code's native `/workflows` command and Workflow tool cover **dynamic workflows** — ad-hoc background fan-out to tens-to-hundreds of concurrent agents with lightweight coordination. `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` (1–256) raises the Workflow tool's per-run concurrent agent limit for inference-bound fan-outs. Complementary to the staged worktask, not a replacement.
 
 ### Comparison
 
@@ -614,7 +720,7 @@ They compose: a DV agent inside a worktask may spin up a native dynamic workflow
 
 ### Gate prompts (AskUserQuestion)
 
-> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with one bounded exception: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess. That is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and it is opt-in per item, so the ordinary transition is unchanged.
+> `AskUserQuestion` prompts are reserved for genuine decisions needing user input. Two **gates** exist and only two — the PL plan-approval gate and the FN finalization gate — and the FN gate additionally renders the batched closing elicitation sweep (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`) immediately before its approve/reject call. Intra-loop stage transitions still proceed without confirmation, with two bounded exceptions: a sweep item marked `blocks_next_stage` is rendered at its own stage boundary, because the next stage would otherwise build on a guess; and every permission-parked task is batched into one boundary prompt (`skills/worktask/SKILL.md § Step 7a`), because only the user can grant. Each is a render, not a gate — it creates no new approval carrier and changes no gate's firing condition — and the first is opt-in per item, so the ordinary transition is unchanged.
 
 #### Gate prompts — idle behaviour
 

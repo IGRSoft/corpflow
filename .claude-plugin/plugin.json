@@ -1,7 +1,7 @@
 {
   "name": "corpflow",
   "description": "Staged worktask pipeline (PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST) with a durable state ledger, cross-plugin delegation, and /megatask dependency-DAG orchestration of many worktasks across a GitHub milestone.",
-  "version": "4.0.31",
+  "version": "4.0.32",
   "author": {
     "name": "IGRSoft",
     "email": "support@igrsoft.com"
@@ -33,6 +33,29 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/test-execution-gate.sh"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh",
+            "args": [
+              "--event",
+              "pre"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-decision-record.sh",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -56,6 +79,10 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/anchor-preflight.sh",
+            "args": [
+              "--event",
+              "post"
+            ],
             "continueOnBlock": true
           }
         ]
@@ -77,6 +104,16 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/test-execution-promote.sh",
             "continueOnBlock": true
+          }
+        ]
+      },
+      {
+        "matcher": "^(AskUserQuestion|mcp__[A-Za-z0-9_-]+__AskUserQuestion)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-decision-record.sh",
+            "timeout": 15
           }
         ]
       }
@@ -148,6 +185,41 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/precompact-checkpoint.sh"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/skills/context-compression/scripts/post-compact-recovery.sh",
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-finalize.sh",
+            "timeout": 5,
+            "continueOnBlock": true
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-denied.sh",
+            "timeout": 5,
+            "continueOnBlock": true
           }
         ]
       }

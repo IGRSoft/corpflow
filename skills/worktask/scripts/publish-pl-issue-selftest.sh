@@ -45,6 +45,17 @@ run_self_tests() {
     pass=$((pass + 1))
   fi
 
+  # Inline: a per-stream DV artifact name is dropped like its bare sibling.
+  local streamy
+  streamy=$(printf 'keep this line\nsee development-0-web.md\nand `development-12-swift-app.md`\n' | sanitise_body)
+  if [ "$streamy" = "keep this line" ]; then
+    echo "publish-pl-issue: self-test stream-artifact-name PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test stream-artifact-name FAIL (got: $streamy)"
+    fail=$((fail + 1))
+  fi
+
   # Fixture 03: mostly-paths — strip ratio should be > 50%.
   local pathy pathy_orig pathy_san ratio_num ratio_den
   pathy=$(sanitise_body < "$fixtures_dir/03-mostly-paths.md")
@@ -332,6 +343,100 @@ MOCK
   fi
   rm -rf "$t13_dir"
 
+  # ---- title word boundary: title_cap_word_boundary ----
+  # 10-char tokens ("abcdefghi " incl. trailing space) x11 = 110 chars; the
+  # 100-char window lands exactly on the 10th token's own trailing space, so
+  # the boundary trim removes that space and keeps all 10 tokens.
+  local wb_input wb_expected wb_got i
+  wb_input=""
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do wb_input="${wb_input}abcdefghi "; done
+  wb_expected=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if [ "$i" = "1" ]; then wb_expected="abcdefghi"; else wb_expected="$wb_expected abcdefghi"; fi
+  done
+  wb_expected="${wb_expected}…"
+  wb_got=$(printf '%s' "$wb_input" | title_cap_word_boundary 100)
+  if [ "$wb_got" = "$wb_expected" ]; then
+    echo "publish-pl-issue: self-test title word boundary: spaced title over 100 ends on a whole word plus ellipsis PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test title word boundary: spaced title over 100 ends on a whole word plus ellipsis FAIL (got='$wb_got' want='$wb_expected')"
+    fail=$((fail + 1))
+  fi
+
+  local wb2_input wb2_expected wb2_got
+  wb2_input=$(head -c 120 /dev/zero | tr '\0' 'x')
+  wb2_expected="$(head -c 99 /dev/zero | tr '\0' 'x')…"
+  wb2_got=$(printf '%s' "$wb2_input" | title_cap_word_boundary 100)
+  if [ "$wb2_got" = "$wb2_expected" ]; then
+    echo "publish-pl-issue: self-test title word boundary: no-whitespace title over 100 hard-cuts to 99 plus ellipsis PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test title word boundary: no-whitespace title over 100 hard-cuts to 99 plus ellipsis FAIL (got='$wb2_got')"
+    fail=$((fail + 1))
+  fi
+
+  local wb3_input wb3_got
+  wb3_input="Short title well under the one hundred character cap"
+  wb3_got=$(printf '%s' "$wb3_input" | title_cap_word_boundary 100)
+  if [ "$wb3_got" = "$wb3_input" ]; then
+    echo "publish-pl-issue: self-test title word boundary: title of 100 or fewer is unchanged PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test title word boundary: title of 100 or fewer is unchanged FAIL (got='$wb3_got')"
+    fail=$((fail + 1))
+  fi
+
+  local wb4_got
+  wb4_got=$(printf '%s' "hello, world again" | title_cap_word_boundary 12)
+  if [ "$wb4_got" = "hello…" ]; then
+    echo "publish-pl-issue: self-test title word boundary: trailing punctuation trimmed before ellipsis PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test title word boundary: trailing punctuation trimmed before ellipsis FAIL (got='$wb4_got' want='hello…')"
+    fail=$((fail + 1))
+  fi
+
+  # ---- legacy fixed-100 title is matched by recovery search ----
+  # TITLE_LEGACY reproduces the pre-word-boundary cut; an issue still titled
+  # under that scheme must still be found once the live TITLE search misses.
+  local t14_dir t14_raw t14_title t14_legacy t14_result
+  t14_dir=$(mktemp -d 2>/dev/null || echo "/tmp/publish-pl-self-test-14.$$")
+  mkdir -p "$t14_dir/bin"
+  t14_raw=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do t14_raw="${t14_raw}abcdefghij "; done
+  t14_title=$(printf '%s' "$t14_raw" | head -1 | sanitise_body | tr -d '\n' | title_cap_word_boundary 100)
+  t14_legacy=$(printf '%s' "$t14_raw" | title_legacy_cut)
+  cat > "$t14_dir/bin/gh" <<MOCK
+#!/usr/bin/env bash
+if [ "\$1" = "issue" ] && [ "\$2" = "list" ]; then
+  printf '%s\n' '[{"number":777,"title":"$t14_legacy","url":"https://github.com/o/r/issues/777"}]'
+  exit 0
+fi
+exit 1
+MOCK
+  chmod +x "$t14_dir/bin/gh"
+  t14_result=$(
+    TITLE="$t14_title" TITLE_LEGACY="$t14_legacy" GH_ISSUE_SEARCH=1 DRY_RUN=0 GH_BIN="$t14_dir/bin/gh" \
+    bash -c '
+      '"$(declare -f resolve_context_issue_search)"'
+      '"$(declare -f resolve_context_issue_search_for)"'
+      if resolve_context_issue_search; then
+        printf "ok:%s" "$RESOLVED_ISSUE_NUMBER"
+      else
+        printf "fail"
+      fi
+    '
+  )
+  if [ "$t14_title" != "$t14_legacy" ] && [ "$t14_result" = "ok:777" ]; then
+    echo "publish-pl-issue: self-test legacy fixed-100 title is matched by recovery search PASS"
+    pass=$((pass + 1))
+  else
+    echo "publish-pl-issue: self-test legacy fixed-100 title is matched by recovery search FAIL (title='$t14_title' legacy='$t14_legacy' result='$t14_result')"
+    fail=$((fail + 1))
+  fi
+  rm -rf "$t14_dir"
+
   # ---- Fixture classify_gh_failure: canned stderr blobs ----
   local cl
   cl=$(classify_gh_failure "could not add label: 'worktask' not found in repository")
@@ -562,6 +667,31 @@ MOCK
       pass=$((pass + 1))
     else
       echo "publish-pl-issue: self-test 09d-abs-path-prefixes FAIL"
+      fail=$((fail + 1))
+    fi
+
+    # Fixture 09e: two leaks every line rule misses. A path glued to punctuation has
+    # no whitespace anchor, and a home directory outside the mount list is not in the
+    # pattern at all. The final scrub pass must rewrite both and keep the line.
+    local f9e_ok=1 f9e_out
+    f9e_out=$(printf 'Notes (/Users/me/x.md) kept\n' | sanitise_body)
+    if [ "$f9e_out" != 'Notes ([local-path]) kept' ]; then
+      echo "publish-pl-issue: self-test 09e glued path not scrubbed: $f9e_out" >&2
+      f9e_ok=0
+    fi
+    f9e_out=$(
+      export HOME=/data/cf-home
+      printf 'Home at /data/cf-home/proj/x.md kept\n' | sanitise_body
+    )
+    if [ "$f9e_out" != 'Home at [local-path] kept' ]; then
+      echo "publish-pl-issue: self-test 09e custom HOME not scrubbed: $f9e_out" >&2
+      f9e_ok=0
+    fi
+    if [ "$f9e_ok" = "1" ]; then
+      echo "publish-pl-issue: self-test 09e-token-scrub PASS"
+      pass=$((pass + 1))
+    else
+      echo "publish-pl-issue: self-test 09e-token-scrub FAIL"
       fail=$((fail + 1))
     fi
 

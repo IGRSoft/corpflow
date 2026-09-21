@@ -9,14 +9,16 @@
 #   fn-preflight.sh, and every behaviour here is specified there.
 #
 #   Reads these globals from the caller, none of which it defines: STATE_PATH,
-#   CONTEXT_DIR, BODY_FILE, SCRIPT_DIR, LIB_PATH. Also calls branch-lib.sh's
-#   audit_fn, meta_json, fn_batch_scope and resolve_base_ref, so the caller must
+#   CONTEXT_DIR, BODY_FILE, SCRIPT_DIR, LIB_PATH, UD_PRINT. Also calls branch-lib.sh's
+#   audit_fn, meta_json, fn_batch_scope, resolve_base_ref and resolve_git_ref, so the caller must
 #   source that library FIRST — fn-preflight.sh's exit-3 guard is what enforces it.
 #
-#   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result, resolve_git_ref,
+#   Symbols: resolve_issue, sanitise_stream, VE_ACTION, ve_row_result,
 #   cmd_attachments, cmd_staging, cmd_pr_body, cmd_validate_pr, cmd_continuity,
+#   _continuity_stream_mode, _continuity_streams,
 #   cmd_branch_divergence, cmd_issue_close_required, _bs_override_on,
-#   _bs_fork_candidate, cmd_base_sanity.
+#   _bs_fork_candidate, cmd_base_sanity, UD_HEADING, UD_LEAD, UD_ACTION, UD_SEP, _ud_rows,
+#   _ud_question, _ud_render, _ud_scrub, _ud_splice, cmd_unresolved_decisions.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -66,10 +68,13 @@ resolve_issue() {
 # preflight. The dummy positional is required — the library iterates `"$@"`, which
 # is an unbound-variable error on bash 3.2 when empty under `set -u`.
 #
-# Exit 97 = library unreachable or refused to source; 98 = symbol missing. Both are
-# blocking: a working-folder path in a published body must be structurally
-# impossible, and a fail-open degrade would turn that into "usually".
-# Batch and incident runs do reach here, but treat both statuses as non-blocking,
+# path-scrub.sh is sourced by name so the PR path does not depend on the library's
+# own sibling lookup; the second scrub pass is idempotent.
+#
+# Exit 97 = library unreachable or refused to source; 98 = sanitise_body or
+# corpflow_path_scrub missing; other non-zero = the library stopped itself. All are
+# blocking: a fail-open degrade would make a leaked path "usually" impossible.
+# Batch and incident runs do reach here, but treat every status as non-blocking,
 # so a broken plugin cache still cannot wedge /megatask.
 sanitise_stream() {
   (
@@ -77,7 +82,14 @@ sanitise_stream() {
     # shellcheck disable=SC1090
     PUBLISH_LIB_ONLY=1 . "$LIB_PATH" --fn-preflight > /dev/null 2>&1 || exit 97
     command -v sanitise_body > /dev/null 2>&1 || exit 98
-    sanitise_body
+    scrub="${SCRIPT_DIR}/../../shared/scripts/path-scrub.sh"
+    [ -r "$scrub" ] || exit 98
+    # shellcheck disable=SC1090
+    . "$scrub" > /dev/null 2>&1
+    command -v corpflow_path_scrub > /dev/null 2>&1 || exit 98
+    # Set after the library prologue so an awk failure in sanitise_body fails the stream.
+    set -o pipefail
+    sanitise_body | corpflow_path_scrub
   )
 }
 
@@ -107,63 +119,6 @@ ve_row_result() {
   printf '%s' "$r"
 }
 
-# A base ref may be stored bare (`master`) or remote-qualified (`origin/release/v2`
-# — the form workspace-modes.md documents). Map either onto something git resolves,
-# which is what lets both stored shapes work without normalising the stored value.
-#
-# The REMOTE-TRACKING ref is preferred over a same-named local branch. Trying the bare
-# name first resolved a stale local copy whenever one existed, and a stale base makes
-# the diff measured against it wrong in the blocking direction: base-sanity reported a
-# 70-file diff against a ledger claiming 18 and refused a finalization that was in fact
-# correct, while the only escape it signposts is the override that would also mask a
-# REAL wrong-base finding. Third patch to this resolution logic, so reordering alone
-# was rejected: it trades one silent wrong answer for another. Divergence is announced
-# on stderr with both names and both ahead-counts, and callers must not swallow it.
-resolve_git_ref() {
-  local name="$1" bare="${1#origin/}" c remote="" local_ref="" counts behind ahead upstream
-
-  # The branch's own configured upstream is tried first, because `origin` is not always the
-  # canonical remote. In a fork workflow — origin = fork, upstream = canonical — hardcoding
-  # origin/ picks the stale fork ref, and base-sanity then measures the diff against it and
-  # blocks a correctly-based PR. Falls through to origin/ when no upstream is set, so the
-  # single-remote case resolves exactly as before.
-  # Short branch name, not refs/heads/: `@{upstream}` rejects a full refname outright
-  # ("fatal: no such branch"), which silently yielded no upstream and fell through to origin/.
-  upstream=$(git rev-parse --verify --quiet --abbrev-ref "${bare}@{upstream}" 2> /dev/null || printf '')
-  for c in ${upstream:+"$upstream"} "origin/$bare" "refs/remotes/origin/$bare"; do
-    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then remote="$c"; break; fi
-  done
-  git rev-parse --verify --quiet "refs/heads/$bare" > /dev/null 2>&1 && local_ref="refs/heads/$bare"
-
-  if [[ -n "$remote" ]]; then
-    if [[ -n "$local_ref" ]] &&
-       [[ "$(git rev-parse "$remote" 2> /dev/null)" != "$(git rev-parse "$local_ref" 2> /dev/null)" ]]; then
-      # --left-right --count on a symmetric range: left = remote-only, right = local-only.
-      counts=$(git rev-list --left-right --count "${remote}...${local_ref}" 2> /dev/null || printf '')
-      behind=${counts%%[!0-9]*}; ahead=${counts##*[!0-9-]}
-      printf >&2 'WARNING: base ref %s is ambiguous — %s and %s have diverged.\n' \
-        "$name" "$remote" "$local_ref"
-      printf >&2 '  %s is ahead by %s commit(s); %s is ahead by %s commit(s).\n' \
-        "$remote" "${behind:-?}" "$local_ref" "${ahead:-?}"
-      printf >&2 '  Resolving to %s. Pass FN_BASE_REF=%s to force the local branch.\n' \
-        "$remote" "$local_ref"
-    fi
-    printf '%s' "$remote"
-    return 0
-  fi
-
-  # No remote-tracking ref: fall back exactly as before, so a purely local base,
-  # a tag or a raw revision still resolves.
-  for c in "$name" "$local_ref"; do
-    [[ -n "$c" ]] || continue
-    if git rev-parse --verify --quiet "$c" > /dev/null 2>&1; then
-      printf '%s' "$c"
-      return 0
-    fi
-  done
-  return 1
-}
-
 # ---------- Commands ----------
 # A file staged by an earlier stage and then edited again by a later one ships the STAGED
 # bytes while every report describes the worktree: QA and DC routinely edit files FN already
@@ -185,17 +140,40 @@ cmd_staging() {
   local staged unstaged both
   staged=$(git diff --cached --name-only 2> /dev/null || printf '')
   unstaged=$(git diff --name-only 2> /dev/null || printf '')
-  if [[ -z "$staged" || -z "$unstaged" ]]; then
-    printf 'staging: no file is both staged and modified again\n'
-    return 0
+  if [[ -n "$staged" && -n "$unstaged" ]]; then
+    both=$(printf '%s\n' "$staged" | grep -Fxf <(printf '%s\n' "$unstaged") 2> /dev/null || true)
+    if [[ -n "$both" ]]; then
+      printf >&2 'BLOCKED: staged then modified again — the PR would ship the staged bytes, not these:\n'
+      printf >&2 '  %s\n' $both
+      audit_fn staging blocked "$(meta_json files "$(printf '%s' "$both" | tr '\n' ' ')")"
+      return 1
+    fi
   fi
-  both=$(printf '%s\n' "$staged" | grep -Fxf <(printf '%s\n' "$unstaged") 2> /dev/null || true)
-  if [[ -n "$both" ]]; then
-    printf >&2 'BLOCKED: staged then modified again — the PR would ship the staged bytes, not these:\n'
-    printf >&2 '  %s\n' $both
-    audit_fn staging blocked "$(meta_json files "$(printf '%s' "$both" | tr '\n' ' ')")"
-    return 1
+
+  # The index bytes are what the PR ships, so the lint reads staged blobs, not the worktree.
+  local lint="${SCRIPT_DIR}/control-byte-lint.sh" out lrc=0 first
+  if [[ ! -r "$lint" ]]; then
+    printf >&2 'BLOCKED: control-byte-lint.sh unreachable at %s — plugin install broken\n' "$lint"
+    audit_fn staging blocked "$(meta_json reason control_byte_lint_unavailable lib "$lint")"
+    return 3
   fi
+  out=$(bash "$lint" --staged 2>&1) || lrc=$?
+  case "$lrc" in
+    0) ;;
+    1)
+      printf >&2 'BLOCKED: control bytes in staged files — the PR would ship them:\n'
+      printf '%s\n' "$out" | grep -v '^control-byte-lint: ' | sed 's/^/  /' >&2
+      audit_fn staging blocked "$(meta_json files "$(printf '%s\n' "$out" | grep -v '^control-byte-lint: ' \
+        | sed 's/:[0-9]*:0x[0-9A-F][0-9A-F]$//' | LC_ALL=C sort -u | tr '\n' ' ')")"
+      return 1
+      ;;
+    *)
+      first=$(printf '%s\n' "$out" | grep -m1 '^control-byte-lint: ' || printf '%s' "${out%%$'\n'*}")
+      printf >&2 'BLOCKED: staged control-byte check could not run: %s\n' "$first"
+      audit_fn staging blocked "$(meta_json reason control_byte_check_failed detail "$first")"
+      return 1
+      ;;
+  esac
   printf 'staging: no file is both staged and modified again\n'
   return 0
 }
@@ -263,11 +241,26 @@ cmd_pr_body() {
   # Read back what the sanitiser actually produced. Sanitising without inspecting
   # the result is how a body that lost every image and kept a dead local path was
   # audited "ok". Runs here, after the rewrite, so it lints the byte-identical
-  # body that reaches `gh pr create`. Warn-only by contract: it never changes this
-  # gate's verdict, so it can land mid-flight — promote it with --strict.
+  # body that reaches `gh pr create`. Warn-only by default. Under strict, a lint that
+  # fails, errors or cannot run blocks, so a missing checker cannot pass the gate.
+  # Batch and incident routes never block.
+  local lint_rc=0 lint_reason=""
   if [ -x "${SCRIPT_DIR}/pr-body-lint.sh" ]; then
     bash "${SCRIPT_DIR}/pr-body-lint.sh" --body "$BODY_FILE" --state "$STATE_PATH" \
-      --context "$CONTEXT_DIR" || true
+      --context "$CONTEXT_DIR" || lint_rc=$?
+    case "$lint_rc" in
+      0) ;;
+      1) lint_reason="pr_body_lint_findings" ;;
+      *) lint_reason="pr_body_lint_error" ;;
+    esac
+  else
+    lint_reason="pr_body_lint_unavailable"
+  fi
+  if [[ "${CORPFLOW_PR_BODY_STRICT:-0}" == "1" && "$batch" != 1 && -n "$lint_reason" ]]; then
+    printf >&2 'BLOCKED: pr-body-lint did not pass under --strict (%s, rc=%s): %s\n' \
+      "$lint_reason" "$lint_rc" "${SCRIPT_DIR}/pr-body-lint.sh"
+    audit_fn pr_body_gate blocked "$(meta_json reason "$lint_reason" lint_rc "$lint_rc")"
+    return 1
   fi
 
   # Composition requirements below are worktask-FN contracts; batch and incident
@@ -344,8 +337,47 @@ cmd_validate_pr() {
   return 0
 }
 
+# Multi-stream finalization records >=2 stream branches; a single-stream ledger never
+# does, so the legacy path below stays byte-for-byte what it was for every other run.
+_continuity_stream_mode() {
+  command -v jq > /dev/null 2>&1 || return 1
+  jq -e '(.facts.stream_branches | type) == "object"
+         and (.facts.stream_branches | length) >= 2' "$STATE_PATH" > /dev/null 2>&1
+}
+
+# Every stream branch must be an ancestor of HEAD (the combined branch). A missing stream
+# is silent loss in the PR, so any unmerged stream exits 1 — after all are checked, so one
+# run names every gap.
+_continuity_streams() {
+  local head rows s b unmerged=0
+  head=$(git rev-parse --verify --quiet HEAD 2> /dev/null || printf '')
+  rows=$(jq -r '.facts.stream_branches | to_entries[] | [.key, (.value | tostring)] | @tsv' \
+    "$STATE_PATH" 2> /dev/null || printf '')
+  while IFS=$'\t' read -r s b; do
+    [[ -n "$s" ]] || continue
+    if [[ -n "$head" && -n "$b" ]] &&
+       git rev-parse --verify --quiet "refs/heads/${b}^{commit}" > /dev/null 2>&1 &&
+       git merge-base --is-ancestor "refs/heads/${b}" "$head" 2> /dev/null; then
+      printf 'continuity: stream %s branch %s is merged into HEAD\n' "$s" "$b"
+      audit_fn branch_continuity stream_merged "$(meta_json stream "$s" branch "$b" head "$head")"
+    else
+      printf >&2 'BLOCKED: stream %s branch %s is not an ancestor of HEAD — its work would be missing from the PR\n' \
+        "$s" "$b"
+      audit_fn branch_continuity stream_unmerged "$(meta_json stream "$s" branch "$b" head "$head")"
+      unmerged=1
+    fi
+  done <<< "$rows"
+  [[ "$unmerged" -eq 0 ]] || return 1
+  printf 'continuity: every stream branch is merged into HEAD\n'
+  return 0
+}
+
 cmd_continuity() {
   local wt_head int_branch ref
+  if _continuity_stream_mode; then
+    _continuity_streams || return $?
+    return 0
+  fi
   wt_head=$(git rev-parse HEAD 2> /dev/null || printf '')
   int_branch=$(resolve_base_ref)
   if [[ -z "$int_branch" ]]; then
@@ -612,9 +644,34 @@ cmd_base_sanity() {
   # denominator is demonstrably incomplete, and a block computed from it is a false block on a
   # correct base. Warn instead, like every other rung that cannot trust its inputs. A wrong
   # base does not dirty the working tree, so this cannot mask the topology being checked.
-  local tree_files
-  tree_files=$(git status --porcelain 2> /dev/null | grep -c . || printf '0')
+  local tree_files land_script land_out untracked_landed tree_top
+  # Enumerated file-level, not the porcelain default's collapsed `?? dir/` — a
+  # landed file can sit one level inside a new directory, and the collapsed
+  # form would hide it from the subtraction below.
+  tree_files=$(git status --porcelain --untracked-files=all 2> /dev/null | awk 'END{print NR + 0}')
   case "$tree_files" in '' | *[!0-9]*) tree_files=0 ;; esac
+  # A landed file is the producer's to ship, not evidence the consumer
+  # introduced drift, so it is dropped from the denominator — but only from
+  # the untracked half; a staged landed path stays visible. A missing or
+  # failing land-artifacts.sh, or an unresolvable toplevel, leaves the count
+  # unchanged: the set is scoped to this tree, never the global union.
+  land_script="${SCRIPT_DIR}/land-artifacts.sh"
+  land_out=""
+  tree_top=$(git rev-parse --show-toplevel 2> /dev/null || printf '')
+  if [ -r "$land_script" ] && [ -n "$tree_top" ]; then
+    land_out=$(bash "$land_script" --list-landed --tree "$tree_top" --state "$STATE_PATH" 2> /dev/null || printf '')
+  fi
+  if [[ -n "$land_out" ]]; then
+    # grep -f exits 1 on no match; under errexit that would abort this whole
+    # preflight run rather than degrade to "nothing subtracted".
+    untracked_landed=$(git status --porcelain --untracked-files=all 2> /dev/null \
+      | awk '/^\?\? /{print substr($0, 4)}' \
+      | { grep -F -x -f <(printf '%s\n' "$land_out") || true; } \
+      | awk 'END{print NR + 0}')
+    case "$untracked_landed" in '' | *[!0-9]*) untracked_landed=0 ;; esac
+    tree_files=$((tree_files - untracked_landed))
+    [[ "$tree_files" -lt 0 ]] && tree_files=0
+  fi
   if [[ "$tree_files" -gt $((ledger_files * 3)) ]] && [[ $((tree_files - ledger_files)) -gt 20 ]]; then
     printf 'base-sanity: the ledger records %s modified files but the working tree shows %s — the denominator is incomplete, so the magnitude comparison is unreliable; skipped\n' \
       "$ledger_files" "$tree_files"
@@ -717,5 +774,283 @@ cmd_base_sanity() {
   printf 'base-sanity: pass — a PR against %s would carry %s files; this run'"'"'s ledger records %s\n' \
     "$base" "$pr_files" "$ledger_files"
   audit_fn base_sanity ok "$meta"
+  return 0
+}
+
+# ---------- unresolved-decisions ---------------------------------------------
+UD_HEADING="## Unresolved decisions"
+UD_LEAD="These escalation-class questions shipped without a decision in an unattended run."
+UD_ACTION="sweep_escalation_unprompted"
+# The unit separator, not a tab: `read` collapses runs of a whitespace IFS character, so an
+# empty middle field would shift the ref into the stage slot.
+UD_SEP=$'\037'
+
+# The current run's rows, first occurrence per metadata.id, in log order: "id SEP stage SEP ref".
+# A row carrying a run marker (metadata.run_index, or the `<worktask_id>:<run_index>:`
+# dedupe_key prefix audit_fn stamps) must name this run. A row carrying none still counts:
+# the orchestrator's row shape is only {id, stage, ref}, and dropping an unmarked row would
+# hide exactly the item this block exists to show. Unparseable lines are skipped by fromjson?.
+_ud_rows() {
+  local audit="${CONTEXT_DIR}/logs/audit.jsonl" wid ri
+  [[ -f "$audit" ]] || return 0
+  wid=$(jq -r '.worktask_id // ""' "$STATE_PATH" 2> /dev/null) || wid=""
+  ri=$(jq -r '.run_index // 0 | tostring' "$STATE_PATH" 2> /dev/null) || ri="0"
+  jq -rR --arg wid "$wid" --arg ri "$ri" --arg act "$UD_ACTION" --arg sep "$UD_SEP" '
+    fromjson? | select(type == "object" and .action == $act)
+    | (.metadata // {}) as $m | select(($m | type) == "object")
+    | select(($m.run_index // null) == null or ($m.run_index | tostring) == $ri)
+    | (($m.dedupe_key // "") | tostring) as $dk
+    | select(($dk | contains(":") | not) or ($dk | startswith($wid + ":" + $ri + ":")))
+    | [($m.id // ""), ($m.stage // ""), ($m.ref // "")]
+    | map(tostring | explode | map(if . < 32 then 32 else . end) | implode)
+    | join($sep)
+  ' "$audit" | awk -F "$UD_SEP" '!seen[$1]++'
+}
+
+# <ref> <id> -> the item's summary text, or nothing. Reads only a regular file under
+# CONTEXT_DIR: the ref arrives through the audit log, so an absolute, `..` or symlinked
+# target is refused rather than followed. The item block is found the way the handoff
+# harness finds it: from the first line in the anchor section naming the id to the next
+# line that starts another item (opens on a different sw- id) or the next `## ` heading.
+# The cap counts characters, not bytes: a byte cap can split a UTF-8 sequence and
+# publish an invalid byte. Continuation bytes (0x80-0xBF) ride with their lead byte.
+_ud_question() {
+  local ref="$1" id="$2" file anchor target
+  anchor="${ref##*#}"
+  file="${ref%%#*}"
+  [[ -n "$file" && -n "$anchor" && "$anchor" != "$ref" ]] || return 0
+  case "$file" in
+    /* | *..*) return 0 ;;
+  esac
+  [[ "$file" =~ ^[A-Za-z0-9._/-]+$ ]] || return 0
+  target="${CONTEXT_DIR}/${file}"
+  [[ -f "$target" ]] || target="${CONTEXT_DIR}/${file#"$(basename "$CONTEXT_DIR")"/}"
+  [[ -f "$target" && ! -L "$target" ]] || return 0
+  _UD_ID="$id" _UD_ANCHOR="$anchor" awk '
+    function names_id(s,    i, nc) {
+      while ((i = index(s, ID)) > 0) {
+        nc = substr(s, i + length(ID), 1)
+        if (nc !~ /[0-9]/) return 1
+        s = substr(s, i + length(ID))
+      }
+      return 0
+    }
+    function starts_other(s,    t) {
+      if (!match(s, /^[[:space:]]*(-[[:space:]]*)?([{][[:space:]]*)?(id:[[:space:]]*)?sw-[A-Z][A-Z][0-9]+-[0-9]+/)) return 0
+      t = substr(s, RSTART, RLENGTH)
+      sub(/.*sw-/, "sw-", t)
+      return t != ID
+    }
+    BEGIN { ID = ENVIRON["_UD_ID"]; ANCHOR = ENVIRON["_UD_ANCHOR"] }
+    /^## / {
+      if (insec) exit
+      h = $0
+      sub(/^## +/, "", h)
+      sub(/[[:space:]]+$/, "", h)
+      if (h == ANCHOR) insec = 1
+      next
+    }
+    !insec { next }
+    inblk && starts_other($0) { exit }
+    !inblk && names_id($0) { inblk = 1 }
+    inblk && match($0, /summary:[[:space:]]*/) {
+      v = substr($0, RSTART + RLENGTH)
+      c = substr(v, 1, 1)
+      if (c == "\"" || c == "\047") {
+        v = substr(v, 2)
+        e = index(v, c)
+        if (e) v = substr(v, 1, e - 1)
+      } else {
+        sub(/[[:space:]]*[,}][[:space:]]*$/, "", v)
+        sub(/[[:space:]]+$/, "", v)
+      }
+      print v
+      exit
+    }
+  ' "$target" 2> /dev/null | LC_ALL=C tr -d '\000-\037\177' | LC_ALL=C awk '
+    {
+      out = ""
+      n = 0
+      len = length($0)
+      for (i = 1; i <= len; i++) {
+        c = substr($0, i, 1)
+        if (!(c >= "\200" && c < "\300") && ++n > 300) break
+        out = out c
+      }
+      print out
+      exit
+    }
+  '
+}
+
+# rows on stdin -> the unscrubbed block on stdout, and the rendered count on fd 3.
+_ud_render() {
+  local id ref task q n=0
+  printf '%s\n\n%s\n\n' "$UD_HEADING" "$UD_LEAD"
+  while IFS="$UD_SEP" read -r id _ ref; do
+    # The id lands inside markdown emphasis in a published body, so only the sweep-id shape
+    # is rendered; anything else could close the emphasis and inject markup.
+    if [[ ! "$id" =~ ^sw-[A-Z][A-Z][0-9]+-[0-9]+$ ]]; then
+      printf >&2 'warn: unresolved-decisions: skipped a %s row with a malformed id\n' "$UD_ACTION"
+      continue
+    fi
+    task="${id#sw-}"
+    task="${task%-*}"
+    q=$(_ud_question "$ref" "$id")
+    if [[ -n "$q" ]]; then
+      printf -- '- **%s** (%s): %s\n' "$id" "$task" "$q"
+    else
+      printf -- '- **%s** (%s)\n' "$id" "$task"
+    fi
+    n=$((n + 1))
+  done
+  printf '%s' "$n" >&3
+}
+
+# <in> <out>. The shared seam's consumer contract: source only after `[ -r ]`, because `.` on
+# a missing file exits a set -e shell before any guard runs; require the function and both
+# EREs, because a partial load can scrub nothing and still exit 0; run under pipefail. Any miss
+# is a non-zero exit and the caller publishes nothing. The subshell keeps the library's globals
+# out of this script.
+_ud_scrub() (
+  set -o pipefail
+  scrub="${SCRIPT_DIR}/../../shared/scripts/path-scrub.sh"
+  [ -r "$scrub" ] || exit 97
+  # shellcheck disable=SC1090
+  . "$scrub" > /dev/null 2>&1 || exit 97
+  command -v corpflow_path_scrub > /dev/null 2>&1 || exit 98
+  [ -n "${CORPFLOW_HOST_PATH_ERE:-}" ] && [ -n "${CORPFLOW_DRIVE_PATH_ERE:-}" ] || exit 98
+  corpflow_path_scrub < "$1" > "$2" || exit 99
+  [ -s "$2" ] || exit 99
+)
+
+# <body> <block> <out>. Drops a leading block this command wrote (its heading on line 1, then
+# only blank lines, the lead sentence and sw- bullets) and the blank lines after it, then
+# writes block, one blank line, rest. Leading blanks are stripped on every run, not only when
+# a block was present, which is what makes the second run byte-identical to the first.
+_ud_splice() {
+  local rest="$3.rest"
+  _UD_H="$UD_HEADING" _UD_L="$UD_LEAD" awk '
+    BEGIN { H = ENVIRON["_UD_H"]; L = ENVIRON["_UD_L"] }
+    NR == 1 && $0 == H { inb = 1; next }
+    inb && ($0 == "" || $0 == L || $0 ~ /^- \*\*sw-/) { next }
+    { inb = 0 }
+    !started && /^[[:space:]]*$/ { next }
+    { started = 1; print }
+  ' "$1" > "$rest" || return 1
+  {
+    cat "$2"
+    if [[ -s "$rest" ]]; then
+      printf '\n'
+      cat "$rest"
+    fi
+  } > "$3" || return 1
+  rm -f "$rest"
+}
+
+# <in> <out>. pr-body later passes the whole body through sanitise_stream, which drops any
+# line naming a context path or a stage artifact, and path-scrub rewrites neither. Each
+# bullet is therefore sanitised here, with the same function, so the item still ships: a
+# line the sanitiser drops or mangles past its `- **<id>** (<TASK>)` prefix, or a sanitiser
+# that fails, falls back to that prefix alone, which no strip rule matches. Running before
+# the --print/--body split keeps the final message identical to the published block.
+_ud_publishable() {
+  local line prefix clean src
+  local re='^- \*\*(sw-[A-Z][A-Z][0-9]+-[0-9]+)\*\* \(([A-Z][A-Z][0-9]+)\)'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $re ]]; then
+      prefix="- **${BASH_REMATCH[1]}** (${BASH_REMATCH[2]})"
+      src=0
+      clean=$(printf '%s\n' "$line" | sanitise_stream 2> /dev/null) || src=$?
+      if [[ "$src" -eq 0 && "$clean" == "$prefix"* && "$clean" != *$'\n'* ]]; then
+        line="$clean"
+      else
+        line="$prefix"
+      fi
+    fi
+    printf '%s\n' "$line"
+  done < "$1" > "$2"
+}
+
+cmd_unresolved_decisions() {
+  local audit="${CONTEXT_DIR}/logs/audit.jsonl" rows count tmpd rc=0 mode=body
+  [[ "$UD_PRINT" == 1 ]] && mode=print
+  if [[ "$mode" == body && ( -z "$BODY_FILE" || ! -f "$BODY_FILE" ) ]]; then
+    printf >&2 'unresolved-decisions requires --body <path> to an existing file, or --print\n'
+    exit 2
+  fi
+
+  # A log naming the action that cannot be read is not a log with nothing to list.
+  if ! command -v jq > /dev/null 2>&1 || ! rows=$(_ud_rows); then
+    if grep -qF "\"$UD_ACTION\"" "$audit" 2> /dev/null; then
+      printf >&2 'BLOCKED: unresolved-decisions: %s rows present but unreadable\n' "$UD_ACTION"
+      audit_fn unresolved_decisions_emitted blocked "$(meta_json reason rows_unreadable)"
+      return 1
+    fi
+    rows=""
+  fi
+  if [[ -z "$rows" ]]; then
+    audit_fn unresolved_decisions_emitted none "$(meta_json count 0 mode "$mode")"
+    return 0
+  fi
+
+  tmpd=$(mktemp -d "${TMPDIR:-/tmp}/fn-ud.XXXXXX") || {
+    printf >&2 'BLOCKED: unresolved-decisions: no scratch directory\n'
+    return 1
+  }
+  printf '%s\n' "$rows" | _ud_render > "$tmpd/block.raw" 3> "$tmpd/count" || rc=$?
+  count=$(cat "$tmpd/count" 2> /dev/null) || count=""
+  if [[ "$rc" -ne 0 || -z "$count" ]]; then
+    rm -rf "$tmpd"
+    printf >&2 'BLOCKED: unresolved-decisions: the block could not be rendered\n'
+    audit_fn unresolved_decisions_emitted blocked "$(meta_json reason render_failed)"
+    return 1
+  fi
+  if [[ "$count" == 0 ]]; then
+    rm -rf "$tmpd"
+    audit_fn unresolved_decisions_emitted none "$(meta_json count 0 mode "$mode")"
+    return 0
+  fi
+
+  _ud_scrub "$tmpd/block.raw" "$tmpd/block.md" || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    rm -rf "$tmpd"
+    printf >&2 'BLOCKED: unresolved-decisions: path scrub unavailable or failed (rc=%s); nothing published\n' "$rc"
+    audit_fn unresolved_decisions_emitted blocked \
+      "$(meta_json reason scrub_unavailable scrub_rc "$rc" count "$count" mode "$mode")"
+    return 1
+  fi
+
+  if ! _ud_publishable "$tmpd/block.md" "$tmpd/block.pub" || ! mv -f "$tmpd/block.pub" "$tmpd/block.md"; then
+    rm -rf "$tmpd"
+    printf >&2 'BLOCKED: unresolved-decisions: the block could not be rendered\n'
+    audit_fn unresolved_decisions_emitted blocked "$(meta_json reason render_failed)"
+    return 1
+  fi
+
+  if [[ "$mode" == print ]]; then
+    cat "$tmpd/block.md"
+    rm -rf "$tmpd"
+    audit_fn unresolved_decisions_emitted ok "$(meta_json count "$count" mode print)"
+    return 0
+  fi
+
+  # Written beside the body so the final mv is a same-filesystem rename.
+  local out="${BODY_FILE}.unresolved.$$"
+  if ! _ud_splice "$BODY_FILE" "$tmpd/block.md" "$out"; then
+    rm -rf "$tmpd"
+    rm -f "$out" "$out.rest"
+    printf >&2 'BLOCKED: unresolved-decisions: the body could not be rewritten\n'
+    audit_fn unresolved_decisions_emitted blocked "$(meta_json reason splice_failed count "$count")"
+    return 1
+  fi
+  rm -rf "$tmpd"
+  if cmp -s "$out" "$BODY_FILE"; then
+    rm -f "$out"
+  else
+    mv -f "$out" "$BODY_FILE"
+  fi
+  printf 'unresolved-decisions: %s item(s) listed at the top of the PR body\n' "$count"
+  audit_fn unresolved_decisions_emitted ok "$(meta_json count "$count" mode body)"
   return 0
 }

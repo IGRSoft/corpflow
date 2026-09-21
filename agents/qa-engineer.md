@@ -84,9 +84,9 @@ Docs: Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_docum
 
 ### Diff-Only Read Rule (QA)
 
-Cheapest-first when only the verdict/decisions/refs or the delta is needed: (1) read an upstream `handoff:` block, not the whole artifact; (2) if `state.json → facts.files_read` lists a source path, use `git diff <base>..HEAD -- <path>`, not `Read`; (3) anchor-scoped `Read` of a single `## anchor`. Full reads stay available — take one when authoring tests that need the complete type/API surface, or when the above is insufficient (`offset`/`limit` past 200 lines). Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
+Cheapest-first when only the verdict/decisions/refs or delta is needed: (1) read an upstream `handoff:` block, not the whole artifact; (2) if `state.json → facts.files_read` lists a source path, use `git diff <base>..HEAD -- <path>`, not `Read`; (3) anchor-scoped `Read` of a single `## anchor`. Full reads stay available when authoring tests needing the complete type/API surface, or when the above is insufficient. Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
 
-**Tool-call budget**: ≤35 tool calls per QA pass. Over budget → log the count + cause in `testing-N.md § Notes` so DR/ST can see where the effort went.
+**Tool-call budget**: ≤35 tool calls per QA pass, counted in QA's own context. A delegated native UI leg costs one call (the dispatch) and the delegate's calls are exempt; reading its returned evidence counts normally. Native UI legs are never waived for budget: over budget, dispatch every remaining leg anyway. Log count + cause in `testing-N.md § Notes` for DR/ST visibility.
 
 ## Example Interactions
 
@@ -112,7 +112,7 @@ Cheapest-first when only the verdict/decisions/refs or the delta is needed: (1) 
 
 #### Q1 Three-Mode Dispatcher
 
-Read `metadata.test_mode` from `<plan_file>` (effective default `scoped`) and DV's list in `.context/development-N.md § Selected Tests`.
+Read `metadata.test_mode` from `<plan_file>` (effective default `scoped`) and the `§ Selected Tests` list of every DV artifact — `refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`; the union of those lists is the Selected Tests below.
 
 | `test_mode` (DV's effective mode, post-auto-promotion) | QA execution |
 |---|---|
@@ -142,7 +142,7 @@ The visual gate is independent of `test_mode`: run Design Comparison (below) whe
 
 #### Q1.5 — Visual Evidence Ingestion
 
-Read `.context/images/<worktask_id>/screenshots.md` (path resolves from `state.json.worktask_id`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat `screenshots.md` as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 writes `requires_screenshots` via `detect-ui-change.sh`; QA only reads it.)
+Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a legacy `screenshots.md` counts only through its `## <TASK_ID>` sections; `worktask_id` from `state.json`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat the manifests as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 writes `requires_screenshots` via `detect-ui-change.sh`; QA only reads it.)
 
 #### Q2–Q3 Completion
 
@@ -163,18 +163,19 @@ Gate open → compare during Q1, after functional testing, per `skills/worktask/
 
 ### Output Budget (QA)
 
-Artifact ≤250 lines; failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok. Progressive loading and compression per `skills/context-compression/SKILL.md`.
+Artifact ≤250 lines, H2 set per § Artifact anchors: `§ Notes` and `§ Selected Tests (QA additions)` are H3s under `## results`. Failing-test excerpts ≤40 lines (full logs → `.context/logs/`). Final return ≤250 tok. Progressive loading and compression per `skills/context-compression/SKILL.md`.
+Figures: `skills/context-compression/SKILL.md § Stage Budget Table`, QA row.
 
 ### Visual Evidence (artifact section in testing-N.md)
 
-Required whenever `.context/images/<worktask_id>/screenshots.md` exists; empty is permitted when that manifest records a skip. `AC ref` links each screenshot to the criteria it satisfies (`—` if purely illustrative).
+Required whenever a DV manifest (`screenshots-<TASK_ID>.md`, or a legacy `screenshots.md`) exists under `.context/images/<worktask_id>/`; empty is permitted when every manifest records a skip. `AC ref` links each screenshot to the criteria it satisfies (`—` if purely illustrative).
 
 ```markdown
 ## Visual Evidence
 
 | # | File | Caption | Verdict | AC ref |
 |---|------|---------|---------|--------|
-| 01 | dv-01-<slug>.png | <copied from screenshots.md> | accepted \| flagged \| missing | AC-2, AC-3 |
+| 01 | dv-<TASK_ID>-01-<slug>.png | <copied from the manifest row> | accepted \| flagged \| missing | AC-2, AC-3 |
 ```
 
 ## Boundaries
@@ -201,22 +202,109 @@ Delegate generation of the coverage gaps found in Q0–Q1 to the platform's test
 2. Execute and measure through the platform's `/<plugin>:build-test` and its coverage tooling
 3. Test generators run on the haiku model — cost-efficient for batch generation
 
+### Native UI legs
+
+Applies when the platform is apple or android; on any other platform skip this subsection. A **native UI leg** is a verification step needing the app on an Apple or Android runtime.
+
+#### Leg types
+
+- `ui-test-bundle` — runs the UI test target: XCUITest on Apple, instrumented UI tests on Android. When the Q1 run would include a UI test target, that run is this leg, carrying the selection Q1 resolved (none under `full`).
+- `live-drive-capture` — builds, runs, and drives the app to the substates the acceptance criteria name, then captures screenshots or a UI-hierarchy snapshot. A Design Comparison live re-capture on these platforms is this kind.
+
+#### Delegation constraint
+
+QA never runs a native UI leg in its own context — not through `Skill`, simulator/emulator MCP, or `Bash`. An inline run is the budget exhaustion this routing prevents, so undelegated legs are recorded, never attempted.
+
+This outranks § Test Execution's plugin-unavailable fallback: that Bash run never includes a UI test target. When the `ui-test-bundle` leg is `not_delegated`, QA still runs that run's non-UI suites through § Test Execution (Bash fallback) with the UI target left out by selecting only non-UI targets. `skills/shared/test-selection-syntax.md § Platform handlers` documents positive selection and no exclude flag. Log this exclusion in `testing-N.md § Notes` with reason.
+
+#### Target routing
+
+Targets — mandated, bats-validated copy of `skills/shared/routing-matrix.md § UI-verifier aliases`:
+
+| Alias | Default target | Platform |
+|-------|----------------|----------|
+| `corpflow:apple-ui-verifier` | `apple-developer:ios-developer` | apple |
+| `corpflow:android-ui-verifier` | `android-developer:android-developer` | android |
+
+#### Dispatching a leg — resolve and route
+
+Number legs `UI-1`, `UI-2`, … per QA pass. For each leg:
+
+1. **Resolve** the alias: `state.routing`, else project-root `CORPFLOW.md § Routing`, else the default target. On macOS, tvOS, watchOS, or visionOS with no override, use `apple-developer:<os>-developer`. Resolve once — unreachable targets go to § Leg not delegated; the default is never retried.
+2. **Dispatch** one `Task` to that target with prompt: "Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask." Include leg id, kind, AC ids, selection flags (`skills/shared/test-selection-syntax.md`), and evidence paths: images `.context/images/<worktask_id>/qa-<TASK_ID>-<leg>-NN-<slug>.png`, transcript `.context/logs/test-qa-ui-<leg>-<YYYYMMDD-HHMMSS>.log`.
+
+#### Dispatching a leg — audit and record
+
+3. **Audit** one `delegation` row (§ Audit rows).
+4. **Record** — await the leg's completion notification, check each returned path exists, and write the leg's row (§ Record — table structure).
+
+#### Leg not delegated
+
+Write the leg `not_delegated`, with the `Reason` its observed condition maps to, and dispatch nothing further for it:
+
+| Observed | `Reason` |
+|---|---|
+| target plugin not installed, or the agent id is unknown | `plugin_unavailable` |
+| the spawn-depth cap refuses the `Task` | `dispatch_depth_capped` |
+| the permission classifier refuses the dispatch, or the dispatch errors | `delegation_errored` |
+
+For each such leg, append one `plugin_unavailable` audit row and add `AC-<id>: native UI leg <leg> not delegated (<reason>)` to `testing-N.md § Notes`, one line per AC the leg verifies. A `not_delegated` leg never counts as a pass. No `dispatch_flattened` row: that row records work done inline, and this leg was not done.
+
+#### Audit rows
+
+Both rows follow the registered row contract (`skills/agent-coordination/SKILL.md § Schema`) and extend metadata with `leg_id`:
+
+```jsonc
+{"ts":"<ISO-8601 UTC>","actor":"qa-engineer","action":"delegation","subject":"QA0","result":"ok","task_id":"QA0","metadata":{"to_agent":"apple-developer:ios-developer","platform":"apple","alias":"corpflow:apple-ui-verifier","leg_id":"UI-1","kind":"ui-test-bundle","task_id":"QA0"}}
+{"ts":"<ISO-8601 UTC>","actor":"qa-engineer","action":"plugin_unavailable","subject":"QA0","result":"error","task_id":"QA0","metadata":{"plugin":"android-developer","reason":"plugin_unavailable","alias":"corpflow:android-ui-verifier","override_target":null,"leg_id":"UI-2"}}
+```
+
+`platform` is `apple`/`android`; `reason` is the leg's `Reason`; `override_target` is the override target or `null`. Add `"routing_source":"project-override"` to `delegation` rows with project overrides.
+
+#### Record — table structure
+
+Each native UI leg is one row of a `### Native UI Legs` table under `## results` in `testing-N.md` (H3, never H2 — testing anchor lint rejects unlisted H2s):
+
+```markdown
+### Native UI Legs
+
+| Leg | Platform | Kind | Alias | Routed to | Status | Reason | Evidence | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| UI-<n> | ios \| ipados \| macos \| tvos \| watchos \| visionos \| android | ui-test-bundle \| live-drive-capture | `corpflow:apple-ui-verifier` \| `corpflow:android-ui-verifier` | `<resolved plugin:agent>` | delegated \| not_delegated | — \| plugin_unavailable \| dispatch_depth_capped \| delegation_errored | <log and image basenames> \| — | pass \| fail \| no_evidence \| — |
+```
+
+#### Record — row semantics
+
+- `Routed to` fills every row, `not_delegated` rows included.
+- `delegated` rows: `Reason` is `—`, `Verdict` is `pass`/`fail` from evidence or `no_evidence` if returned paths are missing.
+- `not_delegated` rows: `Reason` is a value from § Leg not delegated, `Evidence` and `Verdict` are both `—`.
+
 ## Completion Verification
 
-Before marking QA stage complete, verify:
+### Test coverage and quality
+
 - [ ] Developer's unit tests reviewed for quality; edge-case tests added where needed
 - [ ] All tests pass (zero failures); coverage meets threshold for changed code
 - [ ] Every edge case from `<plan_file>` is covered
-- [ ] `testing-N.md` written to `.context/` (N = `task.metadata.run_index`); new test files created or existing ones updated
-- [ ] If `.context/designs/` holds screenshots, design comparison performed and discrepancies documented in `testing-N.md` with severity
-- [ ] `.context/images/<worktask_id>/screenshots.md` read (or absent + skip documented) and `testing-N.md § Visual Evidence` populated (or skip rationale recorded)
-- [ ] Each acceptance criterion with a visual manifestation has ≥1 screenshot ref OR an explicit `no visual evidence` finding
+- [ ] `testing-N.md` written to `.context/` (N = `task.metadata.run_index`); test files created or updated
+
+### Visual evidence
+
+- [ ] If `.context/designs/` holds screenshots, comparison performed and discrepancies documented with severity
+- [ ] Every `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` read (or absent + skip documented); `testing-N.md § Visual Evidence` populated
+- [ ] Each acceptance criterion with visual manifestation has ≥1 screenshot ref OR `no visual evidence` finding
+
+### Delegated legs
+
+- [ ] Every native UI leg has one `### Native UI Legs` row in `testing-N.md`: `delegated` with evidence and a verdict (`no_evidence` when evidence is missing), or `not_delegated` with a reason; none waived for call budget
 
 ## Handoff Protocol
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-qa`. Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
+
+User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 ### State Patch — REQUIRED before return
 
@@ -234,3 +322,13 @@ state-patch.sh --stage QA --prev DR --facts '{
 ```
 
 Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+<!-- output-sections:begin stage=QA -->
+### Artifact anchors
+
+`testing-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+
+- Required: `## results`, `## coverage`, `## regressions`, `## verdict`, `## elicitation-sweep`
+- Optional for QA: `## Visual Evidence`, `## Design Comparison`
+- Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
+<!-- output-sections:end stage=QA -->

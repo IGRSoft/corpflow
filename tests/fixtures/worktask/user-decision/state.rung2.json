@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "worktask_id": "wt-ud-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "systems",
+  "run_index": 0,
+  "facts": {
+    "files_modified": [],
+    "tests_added": [],
+    "decisions": [],
+    "open_questions": [
+      {
+        "id": "sw-AR0-1",
+        "summary": "Record rung-3 answers?",
+        "class": "scope"
+      }
+    ],
+    "verdicts": {}
+  },
+  "handoffs": {},
+  "metadata": {},
+  "tasks": {
+    "PL0": {
+      "status": "completed",
+      "verdict": "ok",
+      "metadata": {
+        "stage": "PL"
+      }
+    },
+    "AR0": {
+      "status": "completed",
+      "verdict": "ok",
+      "metadata": {
+        "stage": "AR"
+      }
+    },
+    "DV0": {
+      "status": "in_progress",
+      "metadata": {
+        "stage": "DV",
+        "retry_count": 0
+      }
+    }
+  }
+}

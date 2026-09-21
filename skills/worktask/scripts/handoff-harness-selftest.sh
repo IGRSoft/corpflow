@@ -11,7 +11,7 @@
 # measurement mode, calls it too, and moving it would make a non-self-test mode
 # depend on this file.
 #
-# Contract: defines `self_test` and `self_test_ar_gate`; `self_test` owns the
+# Contract: defines `self_test` and its `self_test_*` cases; `self_test` owns the
 # exit for this invocation.
 
 # ---------- Self-test ----------
@@ -33,9 +33,216 @@ self_test() {
   fi
 
   self_test_ar_gate "$td"
+  self_test_tests_executed "$td"
+  self_test_anchors "$td"
   self_test_collect_all "$td"
+  self_test_control_bytes "$td"
+  self_test_blocked_on "$td"
 
   echo "self-test: ALL PASS"
+}
+
+# One case per blocked_on kind, plus each refusal and the legacy alias. Every case asserts the
+# gate's exit code on the host's reader AND on the no-yq awk reader, because CI hosts lack yq and
+# a verdict that differs between the two is the drift this gate exists to prevent.
+self_test_blocked_on() {
+  local ctx="$1/.context" kind detail rw out rc awk_rc
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "self-test: blocked_on: SKIP (jq unavailable)"
+    return 0
+  fi
+
+  # <path> <blocked_on block lines, indented under handoff:>
+  _bo_artifact() {
+    {
+      echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: blocked'
+      echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
+      echo '  summary: "Blocked on a typed need."'; echo '  files_touched: [a.md]'
+      echo '  next_stage_focus: "DR reviews"'; echo '  open_questions: []'
+      printf '%s\n' "$2"
+      echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+      echo '# Development'; echo; echo '12 tests, 0 failures'
+      printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups
+      echo; echo '## elicitation-sweep'; echo; echo 'nothing to elicit'
+    } > "$1"
+  }
+
+  # The verdict the no-yq reader reaches on the same artifact: 0 valid or absent, 1 refused.
+  _bo_awk_verdict() {
+    local fm raw norm vrc=0
+    fm=$(mktemp -t handoff-bo-st-XXXXXX)
+    corpflow_fm_block "$1" > "$fm" 2> /dev/null || true
+    raw=$(awk "$_FM_BO_AWK" "$fm" 2> /dev/null) || { rm -f "$fm"; return 1; }
+    rm -f "$fm"
+    norm=$(blocked_on_normalize "$raw") || return 0
+    blocked_on_validate "$(printf '%s' "$norm" | jq -c '.blocked_on')" 2> /dev/null || vrc=$?
+    return "$vrc"
+  }
+
+  # <label> <want-rc> <want-pattern|-> <artifact>
+  _bo_case() {
+    rc=0; awk_rc=0
+    out=$(validate_frontmatter "$4" 2>&1) || rc=$?
+    _bo_awk_verdict "$4" || awk_rc=$?
+    if [[ "$rc" -ne "$2" || "$awk_rc" -ne "$2" ]]; then
+      echo "self-test: blocked_on $1: FAIL (rc=$rc awk_rc=$awk_rc want=$2)" >&2; exit 1
+    fi
+    if [[ "$3" != "-" ]] && ! printf '%s\n' "$out" | grep -qF "$3"; then
+      echo "self-test: blocked_on $1: FAIL (pattern not found: $3)" >&2; exit 1
+    fi
+    echo "self-test: blocked_on $1: ok"
+  }
+
+  while IFS='|' read -r kind detail rw; do
+    [[ -n "$kind" ]] || continue
+    _bo_artifact "$ctx/dv-bo-$kind.md" "  blocked_on:
+    kind: $kind
+    detail: $detail
+    resume_with: $rw"
+    _bo_case "valid/$kind" 0 - "$ctx/dv-bo-$kind.md"
+  done <<'KINDS'
+user_decision|{ question: "Ship behind a flag?", options: [flag, no-flag], recommended: flag }|decision_ref
+user_action|{ request: "Boot the simulator", command: "xcrun simctl boot 'iPhone 16'", verify: "xcrun simctl list devices booted" }|decision_ref
+permission|{ tool: Bash, command: "gh pr merge 412 --squash", classifier_reason: "Blocked by classifier", allow_rule: "" }|decision_ref
+peer_session|{ to: backend-session, question: "Which base branch?", deadline: "2026-09-20T00:00:00Z" }|reply_ref
+artifact|{ producer_task: DV0, path: development-0.md }|artifact_path
+correction|{ target_task: DV0, finding: "wrong exit code", evidence_ref: "a.sh:12", severity: blocking }|artifact_path
+host_environment|{ check: gh-pr-create, observed: "gh auth status: not logged in" }|decision_ref
+KINDS
+
+  _bo_artifact "$ctx/dv-bo-bad-kind.md" '  blocked_on:
+    kind: coffee_break
+    detail: { request: "x", command: "" }
+    resume_with: decision_ref'
+  _bo_case "unknown-kind" 1 'fail: blocked_on.kind "coffee_break" is not one of' "$ctx/dv-bo-bad-kind.md"
+
+  _bo_artifact "$ctx/dv-bo-bad-rw.md" '  blocked_on:
+    kind: user_action
+    detail: { request: "x", command: "" }
+    resume_with: carrier_pigeon'
+  _bo_case "unknown-resume_with" 1 'fail: blocked_on.resume_with "carrier_pigeon" is not one of' "$ctx/dv-bo-bad-rw.md"
+
+  _bo_artifact "$ctx/dv-bo-no-detail.md" '  blocked_on:
+    kind: user_action
+    resume_with: decision_ref'
+  _bo_case "missing-detail" 1 'fail: blocked_on.detail is missing or empty' "$ctx/dv-bo-no-detail.md"
+
+  _bo_artifact "$ctx/dv-bo-empty-detail.md" '  blocked_on:
+    kind: user_action
+    detail: {}
+    resume_with: decision_ref'
+  _bo_case "empty-detail" 1 'fail: blocked_on.detail is missing or empty' "$ctx/dv-bo-empty-detail.md"
+
+  _bo_artifact "$ctx/dv-bo-alias.md" '  cross_session_ask:
+    to: backend-session
+    question: "Which base branch?"'
+  _bo_case "legacy-alias/validates" 0 - "$ctx/dv-bo-alias.md"
+  rc=0
+  out=$(read_blocked_on "$ctx/dv-bo-alias.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]] \
+     || ! printf '%s\n' "$out" | head -n 1 | jq -e '. == {kind: "peer_session", detail: {to: "backend-session", question: "Which base branch?"}, resume_with: "reply_ref"}' > /dev/null 2>&1 \
+     || [[ "$(printf '%s\n' "$out" | sed -n 2p)" != "source: cross_session_ask" ]]; then  # legacy alias
+    echo "self-test: blocked_on legacy-alias/reads-as-peer_session: FAIL (rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: blocked_on legacy-alias/reads-as-peer_session: ok"
+}
+
+# tests_executed is a per-runner list: a list passes, a scalar fails, an entry without a
+# runner fails, and the legacy opt-in accepts a scalar with exactly one deprecation warn.
+self_test_tests_executed() {
+  local ctx="$1/.context" out rc
+
+  if ! command -v yq > /dev/null 2>&1; then
+    echo "self-test: tests-executed: SKIP (yq unavailable)"
+    return 0
+  fi
+
+  # <path> <tests_executed block lines> [extra handoff lines]
+  _te_artifact() {
+    {
+      echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'
+      echo '  summary: "Implemented."'
+      printf '%s\n' "$2"
+      [[ -z "${3:-}" ]] || printf '%s\n' "$3"
+      echo '  files_touched: [a.md]'
+      echo '  next_stage_focus: "DR reviews"'
+      echo '  open_questions: []'
+      echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+      echo '# Development'; echo; echo '1..12'; echo '3 passed in 0.4s'
+      printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups
+      echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
+    } > "$1"
+  }
+
+  _te_artifact "$ctx/dv-te-list.md" '  tests_executed:
+    - { runner: bats, count: 12, summary_line: "1..12" }
+    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-list.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "self-test: tests-executed list: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed list: ok"
+
+  _te_artifact "$ctx/dv-te-scalar.md" '  tests_executed: 12' '  test_summary_line: "1..12"  # legacy shape'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF 'tests_executed is a scalar ("12")'; then
+    echo "self-test: tests-executed scalar: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed scalar: ok"
+
+  _te_artifact "$ctx/dv-te-norunner.md" '  tests_executed:
+    - { count: 12, summary_line: "1..12" }'
+  rc=0; out=$(validate_frontmatter "$ctx/dv-te-norunner.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF 'tests_executed[0] has no runner'; then
+    echo "self-test: tests-executed no-runner: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed no-runner: ok"
+
+  rc=0; out=$(LEGACY_TE=1 validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 0 ]] || [[ "$(printf '%s\n' "$out" | grep -c 'is a legacy scalar')" -ne 1 ]]; then
+    echo "self-test: tests-executed legacy opt-in: FAIL (rc=$rc) $out" >&2; exit 1
+  fi
+  echo "self-test: tests-executed legacy opt-in: ok"
+}
+
+# Every stage's H2 set is enforced: a drifted retrospective names each defect on its own line.
+self_test_anchors() {
+  local ctx="$1/.context" out rc=0
+  {
+    printf -- '---\nhandoff:\n  stage: ST\n  verdict: ok\n  summary: "s"\n  key_decisions: []\n'
+    printf '  open_questions: []\n  refs: { plan: planning-0.md#requirements }\n---\n\n'
+    printf '## %s\n\nx\n\n' decision learnings elicitation-sweep Notes
+  } > "$ctx/retrospective-9.md"
+  out=$(validate_frontmatter "$ctx/retrospective-9.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] \
+    || ! printf '%s\n' "$out" | grep -qF "fail: anchor-lint stage=ST missing required H2 '## followups' in retrospective-9.md" \
+    || ! printf '%s\n' "$out" | grep -qF "fail: anchor-lint stage=ST unexpected H2 '## Notes' in retrospective-9.md"; then
+    echo "self-test: anchors: FAIL (rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: anchors: ok"
+}
+
+# A raw NUL is a gate failure naming the path; the same text spelling the escape passes.
+self_test_control_bytes() {
+  local ctx="$1/.context" out rc=0
+
+  # shellcheck disable=SC2016  # the backticks are fixture text, not a command substitution
+  { cat "$ctx/planning-0.md"; printf 'escape spellings `\\0` then \000 raw\n'; } > "$ctx/planning-nul.md"
+  out=$(validate_frontmatter "$ctx/planning-nul.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || ! printf '%s\n' "$out" | grep -qF "control byte 0x00 at byte offset" \
+     || ! printf '%s\n' "$out" | grep -qF "$ctx/planning-nul.md"; then
+    echo "self-test: control-bytes: FAIL (raw NUL: rc=$rc)" >&2; exit 1
+  fi
+
+  # shellcheck disable=SC2016  # the backticks are fixture text, not a command substitution
+  { cat "$ctx/planning-0.md"; printf '%s\n' 'escape spellings `\0` then \0 literal'; } > "$ctx/planning-literal.md"
+  rc=0
+  validate_frontmatter "$ctx/planning-literal.md" > /dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "self-test: control-bytes: FAIL (literal escape text: rc=$rc)" >&2; exit 1
+  fi
+  echo "self-test: control-bytes: ok"
 }
 
 # The frontmatter body reports every failure per invocation, and the divergence check no
@@ -49,14 +256,14 @@ self_test_collect_all() {
   fi
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Two independent violations in one artifact."'
     echo '  files_touched: [a1.sh, a2.sh, a3.sh, a4.sh, a5.sh, a6.sh, a7.sh, a8.sh, a9.sh, a10.sh, a11.sh]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'
     echo '    - "q1: not a stub"'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'
+    echo '# Development'; echo; echo '12 tests, 0 failures'
   } > "$ctx/dv-two-faults.md"
 
   local out rc=0
@@ -71,7 +278,7 @@ self_test_collect_all() {
   echo "self-test: collect-all: ok"
 
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Filename digits must not be harvested."'
     echo '  files_touched: [a.md]'
     echo '  key_decisions:'
@@ -79,8 +286,10 @@ self_test_collect_all() {
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions: []'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
+    printf '## %s\n\nx\n\n' files-changed tests-added deviations follow-ups
     echo '## decisions'; echo
     echo '- **dv-1 — The retry budget for a failing stage is three attempts, per planning-0.md.**'
+    echo; echo '12 tests, 0 failures'
     echo; echo '## elicitation-sweep'; echo; echo 'nothing to ask'
   } > "$ctx/dv-filename-digit.md"
 
@@ -102,15 +311,23 @@ self_test_ar_gate() {
 
   jq 'del(.tasks.AR0)' "$ctx/state.json" > "$ctx/state-no-ar.json"
 
+  _dv_required_h2s() { printf '\n## %s\n\nx\n' files-changed tests-added deviations follow-ups; }
+
+  # The item the harness requires under a stub's anchor: at least two options[].
+  _two_option_item() {  # <id>
+    printf -- '- id: %s\n  summary: "Which way?"\n  options:\n    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n' "$1"
+  }
+
   # The shared preamble every gate fixture needs; only refs differ per case.
   # $3 replaces the default empty sweep array, so a case can plant a rejected item shape.
+  # $4 replaces the body under `## elicitation-sweep`.
   _dv_artifact() {
-    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}"
+    local path="$1" refs_block="$2" oq="${3:-  open_questions: []}" sweep_body="${4:-nothing to elicit}"
     {
       echo '---'
       echo 'handoff:'
       echo '  stage: DV'
-      echo '  tests_executed: 12'
+      echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
       echo '  verdict: ok'
       echo '  summary: "Implemented."'
       echo '  files_touched: [a.md]'
@@ -120,11 +337,12 @@ self_test_ar_gate() {
       printf '%s\n' "$refs_block"
       echo '---'
       echo
-      echo '# Development'
+      echo '# Development'; echo; echo '12 tests, 0 failures'
+      _dv_required_h2s
       echo
       echo '## elicitation-sweep'
       echo
-      echo 'nothing to elicit'
+      printf '%s\n' "$sweep_body"
     } > "$path"
   }
 
@@ -181,13 +399,13 @@ self_test_ar_gate() {
   # Sweep ledger parity rides on the same invocation: every stub must be in the
   # ledger, and an unreadable ledger fails (never skips) when there is a stub to compare.
   {
-    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: 12'
+    echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
     echo '  summary: "Implemented."'; echo '  files_touched: [a.md]'
     echo '  next_stage_focus: "DR reviews"'
     echo '  open_questions:'
     echo '    - { id: sw-DV0-1, class: decision, ref: "dv-stub.md#elicitation-sweep", blocks_next_stage: false }'
     echo '  refs:'; echo '    dev: development.md#files-changed'; echo '---'; echo
-    echo '# Development'; echo; echo '## elicitation-sweep'; echo; echo 'q'
+    echo '# Development'; echo; echo '12 tests, 0 failures'; _dv_required_h2s; echo; echo '## elicitation-sweep'; echo; _two_option_item sw-DV0-1
   } > "$ctx/dv-stub.md"
   jq '.facts.open_questions += [{"id":"sw-DV0-1","class":"decision","ref":"dv-stub.md#elicitation-sweep","blocks_next_stage":false}]' \
      "$ctx/state-no-ar.json" > "$ctx/state-stub.json"
@@ -249,6 +467,31 @@ self_test_ar_gate() {
   # same file: it resolves rather than failing as missing.
   _dv_artifact "$ctx/dv-ctx-ref.md" '    dev: development.md#files-changed' \
     "  open_questions:
-    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }"
+    - { id: sw-DV0-1, class: decision, ref: \"$(basename "$ctx")/dv-ctx-ref.md#elicitation-sweep\", blocks_next_stage: false }" \
+    "$(_two_option_item sw-DV0-1)"
   _ar_case "sweep/dir-prefixed-ref" - 0 0 - "$ctx/dv-ctx-ref.md"
+
+  # The anchor resolving is not enough: the item under it must be something the FN gate can
+  # put to a human. Each fixture differs only in class and in the body under the anchor.
+  local dstub='  open_questions:
+    - { id: sw-DV0-1, class: decision, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  local estub='  open_questions:
+    - { id: sw-DV0-1, class: escalate, ref: "#elicitation-sweep", blocks_next_stage: false }'
+  local dev='    dev: development.md#files-changed'
+  _dv_artifact "$ctx/dv-item-note.md" "$dev" "$dstub" '- sw-DV0-1 — reviewed, nothing to decide'
+  _dv_artifact "$ctx/dv-item-options.md" "$dev" "$dstub" "$(_two_option_item sw-DV0-1)"
+  _dv_artifact "$ctx/dv-item-escalate-q.md" "$dev" "$estub" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"'
+  _dv_artifact "$ctx/dv-item-escalate-note.md" "$dev" "$estub" '- sw-DV0-1 — token still in the log'
+  _dv_artifact "$ctx/dv-item-decision-q.md" "$dev" "$dstub" '- id: sw-DV0-1
+  summary: "Ship with the token still in the log?"
+  options:
+    - { label: "Ship", detail: "only one option" }'
+  _dv_artifact "$ctx/dv-item-missing.md" "$dev" "$dstub" "$(_two_option_item sw-DV0-12)"
+  _ar_case "sweep-item/status-note"         - 0 1 "fail: sweep stub sw-DV0-1 is a status note, not a question" "$ctx/dv-item-note.md"
+  _ar_case "sweep-item/decision+2-options"  - 0 0 - "$ctx/dv-item-options.md"
+  _ar_case "sweep-item/escalate+question"   - 0 0 - "$ctx/dv-item-escalate-q.md"
+  _ar_case "sweep-item/escalate+no-question" - 0 1 "fail: sweep stub sw-DV0-1 is a status note, not a question" "$ctx/dv-item-escalate-note.md"
+  _ar_case "sweep-item/decision+question+1-option" - 0 1 "only an escalate item may stand on a bare question" "$ctx/dv-item-decision-q.md"
+  _ar_case "sweep-item/id-missing"          - 0 1 "fail: sweep stub sw-DV0-1 has no item under" "$ctx/dv-item-missing.md"
 }

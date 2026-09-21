@@ -14,6 +14,10 @@ SCRIPT="hooks/state-merge.sh"
 setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/.context/logs"
+  # The root ladder (hooks/model-switch-lib.sh) never falls back to cwd and every
+  # rank demands .context/state.json; declare the fixture as the workspace root so
+  # `corpflow_workspace_root` (rank 3) resolves it once a test seeds the ledger.
+  export WORKSPACE_ROOT="$WD"
 }
 
 # -- helpers --
@@ -195,7 +199,8 @@ _backup_paths() {
   # changes is that a sweep over audit.jsonl can now see it happened.
   run bash -c "cd '$WD' && bash '$PLUGIN_ROOT/$SCRIPT'"
   assert_success
-  run jq -e 'select(.action == "state_merge_noop") | .actor == "hook:state-merge"' \
+  run jq -e 'select(.action == "state_merge_noop") | .actor == "hook:state-merge"
+    and .result == "skipped" and .task_id == "none" and .subject == "none"' \
     "$WD/.context/logs/audit.jsonl"
   assert_success
 
@@ -273,6 +278,58 @@ _install_project_local() {
   [ "$dv_status" = "completed" ]
 }
 
+# --- root resolution ---------------------------------------------------
+
+@test "unresolved root -> rc 0, no .context materialized under cwd" {
+  local fresh
+  fresh="$(mk_tmpworkdir)"
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CEILING_DIRECTORIES="$fresh" \
+    bash -c "cd '$fresh' && CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  [ ! -d "$fresh/.context" ]
+}
+
+@test "registered stage worktree cwd, no declared root -> merge lands in main's ledger" {
+  local base main wt
+  base="$(mk_tmpworkdir)"
+  main="$base/main"
+  wt="$base/wt"
+  mkdir -p "$main"
+  local G=(git -c user.name=t -c user.email=t@t -c commit.gpgsign=false)
+  ( cd "$main" && "${G[@]}" init -q \
+    && "${G[@]}" commit -q --allow-empty -m init \
+    && "${G[@]}" worktree add -q "$wt" -b t ) >/dev/null
+  # Physical path: mktemp -d can hand back a symlinked path (macOS /var), while
+  # the resolver always answers physically — compare physical to physical.
+  main="$(cd "$main" && pwd -P)"
+  mkdir -p "$main/.context"
+  # The main ledger lends itself to a linked worktree only when a task registered it.
+  jq -cn --arg w "$wt" '{run_index: 0, worktask_id: "wt-fix", tasks: {PL0: {status: "completed", verdict: "ok"},
+    DV0: {status: "in_progress", metadata: {workspace_path: $w}}}}' > "$main/.context/state.json"
+  cat > "$main/.context/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "widget done"
+---
+
+# Development
+
+Done.
+EOF
+
+  run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    bash -c "cd '$wt' && CLAUDE_ARTIFACT_PATH='$main/.context/development-0.md' CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local dv_status
+  dv_status=$(jq -r '.tasks.DV0.status' "$main/.context/state.json")
+  [ "$dv_status" = "completed" ]
+  [ ! -d "$wt/.context" ]
+}
+
 @test "absent state-patch.sh: exit 0 (never blocks) and the stage is left untouched" {
   _seed_state
   _seed_artifact
@@ -283,4 +340,74 @@ _install_project_local() {
   local dv_status
   dv_status=$(jq -r '.tasks.DV0.status' "$WD/.context/state.json")
   [ "$dv_status" = "in_progress" ]
+}
+
+# --- verdict-refusal is swallowed (meets the "exit 0 ALWAYS" hook contract) -----
+
+@test "SubagentStop: artifact with no verdict is swallowed — exit 0, ledger unchanged, rc logged" {
+  _seed_state
+  cat > "$WD/.context/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  summary: "no verdict fixture"
+---
+
+# Development
+EOF
+  local before; before="$(shasum "$WD/.context/state.json")"
+  run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  local after; after="$(shasum "$WD/.context/state.json")"
+  [ "$before" = "$after" ]
+  # state-patch.sh's own exit 3 (verdict refused) must not propagate — the hook's
+  # log line is the only surviving evidence that the write was swallowed, not lost.
+  run grep -c 'rc=3' "$WD/.context/logs/state-merge.log"
+  assert_output "1"
+}
+
+# --- no ledger, no write -------------------------------------------------------
+
+@test "AC-2: one subagent cycle through every registered hook leaves a clean checkout clean" {
+  local repo h hit
+  repo="$(mk_git_fixture --file 'a.txt:hi' --commit 'init')"
+  repo="$(cd "$repo" && pwd -P)"
+  local tool='{"tool_name":"Bash","tool_input":{"command":"bash skills/worktask/scripts/state-patch.sh --task-status DV0 in_progress"},"tool_use_id":"t1","duration_ms":5,"session_id":"s1"}'
+  local stop='{"hook_event_name":"SubagentStop","agent_type":"corpflow:developer","agent_id":"agt1","session_id":"s1","duration_ms":5}'
+  local sw='{"session_id":"s1","agent_id":"agt1","from_model":"opus","to_model":"sonnet"}'
+
+  # <script> <payload> [args...] — both declared roots point at the unseeded checkout,
+  # and the off-hatches are set because they are the arms that write sentinels.
+  _fire() {
+    local s="$1" p="$2"
+    shift 2
+    run env -u CONTEXT_DIR WORKSPACE_ROOT="$repo" CLAUDE_PROJECT_DIR="$repo" \
+      CLAUDE_TASK_METADATA_STAGE=DV CORPFLOW_TEST_GATE=off CORPFLOW_MODEL_SWITCH_GATE=off \
+      bash -c 'cd "$1" && shift && bash "$@"' _ "$repo" "$PLUGIN_ROOT/$s" "$@" <<< "$p"
+    [ "$status" -eq 0 ] || fail "$s exited $status: $output"
+  }
+
+  for h in test-execution-gate audit-tooluse test-execution-promote anchor-preflight comment-standard-context; do
+    _fire "hooks/$h.sh" "$tool"
+  done
+  _fire hooks/model-switch-gate.sh "$sw"
+  _fire hooks/model-switch-audit.sh "$sw"
+  for h in audit-subagent dv-screenshot-gate dv-comment-density-gate state-merge megatask-monitor; do
+    _fire "hooks/$h.sh" "$stop"
+  done
+  _fire hooks/agent-stop.sh "$stop" --stage DV
+  _fire hooks/precompact-checkpoint.sh '{}'
+  _fire skills/context-compression/scripts/post-compact-recovery.sh '{}'
+  _fire hooks/session-end-finalize.sh '{"hook_event_name":"SessionEnd","reason":"clear"}'
+
+  hit="$(find "$repo" -name .context -print | head -n 1)"
+  [ -z "$hit" ] || fail "a hook created $hit"
+}
+
+@test "no ledger: a bare .context/ with no state.json is not a merge target — no log, no ledger" {
+  _seed_artifact
+  run bash -c "cd '$WD' && CLAUDE_ARTIFACT_PATH=.context/development-0.md CLAUDE_TASK_METADATA_STAGE=DV GIT_CEILING_DIRECTORIES='$WD' bash '$PLUGIN_ROOT/$SCRIPT'"
+  assert_success
+  [ ! -e "$WD/.context/logs/state-merge.log" ]
+  [ ! -e "$WD/.context/state.json" ]
 }

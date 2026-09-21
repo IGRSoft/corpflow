@@ -1,0 +1,360 @@
+{
+  "run_id": "live-20260910T160618Z-954783e",
+  "timestamp_utc": "2026-09-10T16:06:33Z",
+  "mode": "live",
+  "git_sha": "954783e",
+  "budget_usd": 50.0,
+  "paths": {
+    "with": {
+      "tokens": {
+        "in": 246,
+        "out": 166265,
+        "total": 166511,
+        "cache_read": 15968639,
+        "cache_creation": 462934
+      },
+      "cost_usd": 16.311060400000002,
+      "wall_clock_s": 2173.1602,
+      "loc_produced": 2174,
+      "test_count": 90,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 4,
+      "pass_fail": "fail",
+      "app_path": "benchmark/workdirs/live-20260910T160618Z-954783e/with",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 42,
+        "pass_rate": 1.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 9,
+            "pass_rate": 1.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 33,
+            "pass_rate": 1.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    },
+    "without": {
+      "tokens": {
+        "in": 265,
+        "out": 156879,
+        "total": 157144,
+        "cache_read": 10663221,
+        "cache_creation": 1049546
+      },
+      "cost_usd": 16.168671500000002,
+      "wall_clock_s": 2089.11,
+      "loc_produced": 2310,
+      "test_count": 71,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 10,
+      "pass_fail": "pass",
+      "app_path": "benchmark/workdirs/live-20260910T160618Z-954783e/without",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 42,
+        "pass_rate": 1.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 9,
+            "pass_rate": 1.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 33,
+            "pass_rate": 1.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    }
+  },
+  "comparison": {
+    "loc_produced": {
+      "with": 2174,
+      "without": 2310,
+      "delta": -136
+    },
+    "test_count": {
+      "with": 90,
+      "without": 71,
+      "delta": 19
+    },
+    "coverage_pct": {
+      "with": null,
+      "without": null,
+      "delta": null
+    },
+    "wall_clock_s": {
+      "with": 2173.1602,
+      "without": 2089.11,
+      "delta": 84.05019999999968
+    },
+    "estimate_complexity_score": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "stage_count": {
+      "with": 4,
+      "without": 10,
+      "delta": -6
+    },
+    "tokens_total": {
+      "with": 166511,
+      "without": 157144,
+      "delta": 9367
+    },
+    "cost_usd": {
+      "with": 16.311060400000002,
+      "without": 16.168671500000002,
+      "delta": 0.14238890000000026
+    }
+  },
+  "live_partial": true,
+  "stages": [
+    {
+      "stage": "PL",
+      "fresh_in": 62,
+      "cache_creation": 81872,
+      "cache_read": 1590876,
+      "out": 27340,
+      "cost_usd": 2.297968,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 30
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 18,
+      "cache_creation": 75681,
+      "cache_read": 481618,
+      "out": 14351,
+      "cost_usd": 1.356484,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 8
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 28,
+      "cache_creation": 41418,
+      "cache_read": 425207,
+      "out": 5620,
+      "cost_usd": 0.3069694,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 13
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 138,
+      "cache_creation": 263963,
+      "cache_read": 13470938,
+      "out": 118954,
+      "cost_usd": 12.349639000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [
+          "corpflow:dv-screenshot-capture"
+        ],
+        "commands": [],
+        "tool_calls": 68
+      },
+      "arm": "with"
+    },
+    {
+      "stage": "PL",
+      "fresh_in": 10,
+      "cache_creation": 73179,
+      "cache_read": 319893,
+      "out": 7624,
+      "cost_usd": 1.0823865,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 12,
+      "cache_creation": 95421,
+      "cache_read": 455276,
+      "out": 24402,
+      "cost_usd": 1.7919580000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 5
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 12,
+      "cache_creation": 88753,
+      "cache_read": 522371,
+      "out": 3927,
+      "cost_usd": 0.4987802,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 5
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 78,
+      "cache_creation": 174307,
+      "cache_read": 5012951,
+      "out": 69654,
+      "cost_usd": 5.9912855,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 38
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DR",
+      "fresh_in": 24,
+      "cache_creation": 138005,
+      "cache_read": 1218253,
+      "out": 26405,
+      "cost_usd": 2.6494215000000003,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 17
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "SR",
+      "fresh_in": 22,
+      "cache_creation": 188363,
+      "cache_read": 923377,
+      "out": 10305,
+      "cost_usd": 2.6030535,
+      "coverage": {
+        "agents": [],
+        "skills": [
+          "corpflow:security-review-process"
+        ],
+        "commands": [],
+        "tool_calls": 14
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "QA",
+      "fresh_in": 24,
+      "cache_creation": 77838,
+      "cache_read": 1065052,
+      "out": 3622,
+      "cost_usd": 0.5606303999999999,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 11
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "DC",
+      "fresh_in": 65,
+      "cache_creation": 64356,
+      "cache_read": 458327,
+      "out": 5546,
+      "cost_usd": 0.20233969999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 13
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "FN",
+      "fresh_in": 10,
+      "cache_creation": 75301,
+      "cache_read": 399392,
+      "out": 3761,
+      "cost_usd": 0.4187124,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without"
+    },
+    {
+      "stage": "ST",
+      "fresh_in": 8,
+      "cache_creation": 74023,
+      "cache_read": 288329,
+      "out": 1633,
+      "cost_usd": 0.3701038,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 3
+      },
+      "arm": "without"
+    }
+  ],
+  "era": {
+    "harness": "python-1",
+    "prompt_contract": "scripted-cli-v3",
+    "model_pins": {
+      "PL": "claude-opus-5",
+      "AR": "claude-opus-5",
+      "TL": "claude-sonnet-5",
+      "DV": "claude-opus-5",
+      "DR": "claude-opus-5",
+      "SR": "claude-opus-5",
+      "QA": "claude-sonnet-5",
+      "DC": "claude-haiku-4-5",
+      "FN": "claude-sonnet-5",
+      "ST": "claude-sonnet-5"
+    },
+    "cli_version": "2.1.265 (Claude Code)",
+    "plugin_version": null
+  }
+}

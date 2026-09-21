@@ -137,7 +137,9 @@ class PairedDispatch(unittest.TestCase):
             "wall_clock_s": 0.0,
             "loc_produced": 0,
             "test_count": 0,
-            "coverage_pct": 0.0,
+            # Unmeasured, not measured-zero: the arm never ran, so 0.0 would claim
+            # a coverage run happened.
+            "coverage_pct": None,
             "estimate_complexity_score": 0,
             "stage_count": 1,
             "pass_fail": "pass",

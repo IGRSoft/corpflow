@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "worktask_id": "wt-mailbox-fixture",
+  "plan_file": ".context/planning-0.md",
+  "platform": "systems",
+  "run_index": 0,
+  "facts": { "files_modified": [], "tests_added": [], "decisions": [], "open_questions": [], "verdicts": {} },
+  "handoffs": {},
+  "metadata": {
+    "github_issue_url": "https://github.com/IGRSoft/corpflow/issues/999",
+    "no_gh_issue": true
+  },
+  "tasks": {
+    "DR0": {
+      "status": "blocked",
+      "metadata": {
+        "stage": "DR",
+        "workspace_path": "/tmp/wt",
+        "blocked_on": {
+          "kind": "peer_session",
+          "detail": { "to": "backend-session", "question": "Which base branch does the API change target?" },
+          "resume_with": "reply_ref"
+        },
+        "ask_id": "ask-20260917t090000z-aaaaaaaaaaaa"
+      }
+    }
+  }
+}

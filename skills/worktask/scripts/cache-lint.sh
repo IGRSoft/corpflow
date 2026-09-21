@@ -7,12 +7,32 @@
 #        cache-lint.sh <prompt-log.jsonl>
 #      Reads a prompt-log.jsonl (one prompt per line, schema:
 #        {"worktask_id": "...", "stage": "...", "prompt": "..."}
-#      where `prompt` contains marker tags <<<contract-reminder>>>,
-#      <<<worktask-header>>>, <<<stage-contract>>> as section delimiters).
+#      where `prompt` contains the marker tags named in
+#      handoff-protocol.md#cache-prefix as section delimiters:
+#      <<<contract-reminder>>>, <<<worktask-header>>>, <<<state-json>>>,
+#      <<<stage-contract>>>, <<<model-discipline>>>, <<<task-description>>>,
+#      <<<retry-hints>>>, <<<stage-banners>>>.
 #      Asserts byte-identity of sections [1] contract-reminder + [2]
 #      worktask-header across ALL stages of the same worktask_id, and
-#      byte-identity of section [4] stage-contract across all calls of
-#      the same (worktask_id, stage) pair. Exits 1 on drift.
+#      byte-identity of sections [4] stage-contract + [4b] model-discipline
+#      across all calls of the same (worktask_id, stage) pair. Exits 1 on drift.
+#
+#      An optional `model` field on a log line turns on the canon check:
+#      section [4b] must equal, byte for byte, the block
+#      skills/shared/model-prompting.md carries for that alias. Byte-identity
+#      alone cannot see a stage that consistently carries the WRONG model's
+#      block, which is the routing miss this check exists for.
+#
+#      An optional `contract_canon: true` field turns on the same kind of
+#      check for section [1]: it must equal, byte for byte, the fenced block
+#      skills/worktask/references/contract-reminder.md ships.
+#
+#      Every log line whose prompt carries the <<<state-json>>> marker gets
+#      section [3] checked unconditionally (no opt-in field): the first
+#      non-empty line must be `ledger: .context/state.json`, all six digest
+#      keys must appear in handoff-protocol.md#cache-prefix order, and an
+#      embedded ledger (a line opening with `{`, or a `"tasks"`/`"facts"`
+#      token) is rejected. A line with no [3] section at all is skipped.
 #
 #      N (number of lines compared) is computed from the FIRST stage's
 #      sections [1]+[2]+[4] line count — derived dynamically, NOT a magic
@@ -52,12 +72,27 @@
 #      For every stage, resolves that stage's agent file and asserts each `## X`
 #      section its prose instructs it to write into the stage artifact is already
 #      accepted by this lint (stage allow-list row, UNIVERSAL_ANCHORS, or
-#      OPTIONAL_ANCHOR_RE). Catches contradiction shape (iv): an agent mandating a
+#      _STAGE_OPTIONAL for that stage or `*`). Catches contradiction shape (iv): an agent mandating a
 #      heading anchor_lint rejects, which no artifact can satisfy. Names both files.
 #      Extraction under-matches by design — see agent_mandated_sections.
 #      Exits 1 on any unaccepted mandate.
 #
-#   6. Self-test:
+#   6. Allow-list print (read-only; the generator and the preflight hook read the
+#      allow-list only through this mode):
+#        cache-lint.sh --allow-list [--stage <CODE>]
+#      TSV <stage> <agent> <basename> <kind> <heading>, kind one of required|universal|
+#      optional|any-optional; any-optional rows carry stage `*` and empty agent/basename
+#      and close every listing. Placeholders stay literal. Exit 2 on an unknown stage.
+#
+#   7. Anchor diff (the one H2 comparison behind --anchor-lint, the hook and the harness):
+#        cache-lint.sh --anchor-diff (--stage <CODE> | --for-path <path>) [--baseline <file>] <file|->
+#      TSV `missing\t<h>` rows (allow-list order), then `unexpected\t<h>` rows (document
+#      order). --for-path resolves an exact <canonical>-<N>.md basename, plus DV's
+#      development-<N>-<stream>.md (S1 slug, <= 40 chars); nothing else. A heading
+#      present in --baseline is never unexpected. Exit 0 clean, 1 diff, 2 usage, unknown
+#      stage or unreadable input.
+#
+#   8. Self-test:
 #        cache-lint.sh --self-test   (alias: --selftest)
 #      Runs all modes against built-in fixtures (tempdir). Exits 0 on pass.
 #
@@ -158,25 +193,83 @@ agent_basename_to_stage() {
 #                      explicit empty statement. Mandatory for all 13 stages, no grace.
 UNIVERSAL_ANCHORS='elicitation-sweep'
 
-# Anchors ALLOWED in any stage artifact but required in none, so neither retroactively
-# fails an older artifact nor is reported as unexpected in a newer one:
-#   rework-<N>         the scope-addition re-entry section agents/technical-lead.md reads
-#                      at the DR gate — a shipped convention this lint used to reject.
-#   re-review          the DR second-pass section, same class as rework-<N>: a review that
-#                      re-runs after rework records it here rather than rewriting its verdict.
-#   design-preview     PL's Figma capture block, written only when a Figma URL is present.
-#   test-strategy      PL's test-strategy section; pl0-procedure.md never mandates it.
-#   <Platform> App Architecture, Test Architecture
-#                      the two H2s agents/software-architector.md mandates in every AR artifact,
-#                      the first named for the detected platform. Title-case by that agent's own
-#                      template, so they are matched literally rather than as kebab anchors.
-#   Blockers, DV Completion Checklist, Incident Report, Release Preparation Summary,
-#   Self-Improvement    the same class as the two above: an H2 its stage agent's prose MANDATES
-#                      into the stage artifact while anchors_for_stage never listed it. Each is
-#                      ACCEPTED, never required, so no existing artifact retroactively fails —
-#                      agent_section_lint below is what stops the next one from being added
-#                      silently.
-OPTIONAL_ANCHOR_RE='^(rework-[0-9]+|re-review|design-preview|test-strategy|[A-Za-z][A-Za-z0-9+ -]* App Architecture|Test Architecture|Blockers|DV Completion Checklist|Incident Report|Release Preparation Summary|Self-Improvement)$'
+# Anchors ALLOWED but required in none, so neither retroactively fails an older artifact nor
+# is reported as unexpected in a newer one. One `|`-delimited row per stage (title-case
+# headings carry spaces); the `*` row applies to every stage. Placeholders: `<N>` is a run
+# number, `<Platform>` a platform name; every other character is literal.
+#   *   rework-<N>, re-review   rework and second-pass review sections the DR gate reads.
+#       design-preview, test-strategy   PL-written, but any stage may carry them.
+#   AR  the two H2s agents/software-architector.md mandates.
+#   TL  agents/team-lead.md logs a rejected TC under coordination-N.md § Blockers.
+#   DV  verification-command and decisions are contract-mandated; the title-case two are
+#       agent-mandated.
+#   QA  the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
+#   RE, IR, ST   legacy wrappers and the retrospective's self-improvement note.
+# Title-case entries sit on their owning stage's row, so another stage writing one is
+# unexpected there.
+_STAGE_OPTIONAL='*|rework-<N>|re-review|design-preview|test-strategy
+AR|<Platform> App Architecture|Test Architecture
+TL|Blockers
+DV|verification-command|decisions|Blockers|DV Completion Checklist
+QA|Visual Evidence|Design Comparison
+RE|Release Preparation Summary
+IR|Incident Report
+ST|Self-Improvement'
+
+# _optional_headings <stage|*> — the row's headings, one per line; empty for no row.
+_optional_headings() {
+  local row
+  while IFS= read -r row; do
+    case "$row" in
+      "$1|"*) printf '%s\n' "${row#*|}" | tr '|' '\n'; return 0 ;;
+    esac
+  done <<< "$_STAGE_OPTIONAL"
+}
+
+# _heading_ere <heading> — sets _ERE to the heading as an unanchored ERE. Pure bash: it
+# runs at load time on every invocation, including every hooked artifact write.
+_heading_ere() {
+  local s="$1" c
+  _ERE=""
+  while [ -n "$s" ]; do
+    case "$s" in
+      '<N>'*) _ERE="${_ERE}[0-9]+"; s="${s#<N>}"; continue ;;
+      '<Platform>'*) _ERE="${_ERE}[A-Za-z][A-Za-z0-9+ -]*"; s="${s#<Platform>}"; continue ;;
+    esac
+    c="${s:0:1}"
+    s="${s:1}"
+    case "$c" in
+      '.' | '*' | '+' | '?' | '(' | ')' | '{' | '|' | '$' | '[') _ERE="${_ERE}[$c]" ;;
+      "\\" | '^') _ERE="${_ERE}\\$c" ;;
+      *) _ERE="$_ERE$c" ;;
+    esac
+  done
+}
+
+# _optional_alt <stage|*> — sets _ALT to the row's headings as one ERE alternation.
+_optional_alt() {
+  local h
+  _ALT=""
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    _heading_ere "$h"
+    _ALT="${_ALT:+$_ALT|}$_ERE"
+  done <<< "$(_optional_headings "$1")"
+}
+
+_optional_alt '*'
+# The `^(` prefix of this line is a contract: elicitation-sweep-contracts.bats plants into it.
+OPTIONAL_ANCHOR_RE='^('"$_ALT"')$'
+
+# optional_re_for_stage <stage> — sets _OPT_RE to OPTIONAL_ANCHOR_RE widened by the stage's
+# own row. Built from OPTIONAL_ANCHOR_RE rather than the `*` row so a planted edit to that
+# variable reaches every caller.
+optional_re_for_stage() {
+  _optional_alt "$1"
+  _OPT_RE="$OPTIONAL_ANCHOR_RE"
+  [ -n "$_ALT" ] && _OPT_RE="${OPTIONAL_ANCHOR_RE%)\$}|$_ALT)\$"
+  return 0
+}
 
 # ---------- Frontmatter stage extractor ----------
 # The frontmatter block alone (between the first two `---` lines), empty if absent.
@@ -222,6 +315,117 @@ extract_stage() {
   printf '%s\n' "$fm" | _stage_via_awk
 }
 
+# ---------- Anchor diff core ----------
+# H2 headings of <file|-> in document order, fenced blocks skipped.
+h2_headings() {
+  awk '
+    BEGIN { in_fence = 0 }
+    /^```/ { in_fence = !in_fence; next }
+    !in_fence && /^## / {
+      sub(/^## +/, "")
+      sub(/[[:space:]]+$/, "")
+      print
+    }
+  ' "$1"
+}
+
+# The stage whose canonical artifact is exactly <basename>-<N>.md; empty otherwise, so an
+# aliased name never resolves. The one suffixed form is DV's development-<N>-<stream>.md:
+# each DV ledger task's stream file IS that row's handoff (handoff-protocol.md § DV fan-out —
+# ledger tasks), so it carries the DV set exactly as the harness and the Post lint apply it.
+stage_for_path() {
+  local base row code
+  base="${1##*/}"
+  if [[ "$base" =~ ^development-[0-9]+-([a-z0-9]+(-[a-z0-9]+)*)\.md$ ]]; then
+    [[ "${#BASH_REMATCH[1]}" -le 40 ]] && printf 'DV\n'
+    return 0
+  fi
+  case "$base" in *-[0-9]*.md) ;; *) return 0 ;; esac
+  local stem="${base%.md}"
+  local num="${stem##*-}"
+  case "$num" in '' | *[!0-9]*) return 0 ;; esac
+  stem="${stem%-*}"
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+    set -- $row
+    code="$1"
+    if [ "$3" = "$stem" ]; then printf '%s\n' "$code"; return 0; fi
+  done <<< "$_STAGE_TABLE"
+}
+
+# anchor_diff <stage> <file|-> [baseline-file] — TSV `missing\t<h>` rows in allow-list order,
+# then `unexpected\t<h>` rows in document order, deduplicated. A heading also present in the
+# baseline is never unexpected. rc 0 clean, 1 on any row, 2 unknown stage or unreadable input.
+anchor_diff() {
+  local stage="$1" src="$2" baseline="${3:-}"
+  local expected
+  expected=$(anchors_for_stage "$stage")
+  [[ -n "$expected" ]] || return 2
+  # Appended AFTER the unknown-stage check so an unrecognised stage still reports as such
+  # rather than as a missing sweep heading. Both the missing loop and the unexpected loop read
+  # $expected, so one append makes the anchor required and accepted in a single stroke.
+  expected="$expected $UNIVERSAL_ANCHORS"
+
+  local found base_found=""
+  if [[ "$src" == "-" ]]; then
+    found=$(h2_headings -) || return 2
+  else
+    [[ -r "$src" ]] || return 2
+    found=$(h2_headings "$src") || return 2
+  fi
+  if [[ -n "$baseline" ]]; then
+    [[ -r "$baseline" ]] || return 2
+    base_found=$(h2_headings "$baseline") || return 2
+  fi
+
+  optional_re_for_stage "$stage"
+  local rc=0 exp h seen=$'\n'
+  local nl=$'\n'
+  for exp in $expected; do
+    case "$nl$found$nl" in
+      *"$nl$exp$nl"*) ;;
+      *) printf 'missing\t%s\n' "$exp"; rc=1 ;;
+    esac
+  done
+  while IFS= read -r h; do
+    [[ -n "$h" ]] || continue
+    case "$seen" in *"$nl$h$nl"*) continue ;; esac
+    seen="$seen$h$nl"
+    case "$nl${expected// /$nl}$nl" in *"$nl$h$nl"*) continue ;; esac
+    [[ "$h" =~ $_OPT_RE ]] && continue
+    case "$nl$base_found$nl" in *"$nl$h$nl"*) continue ;; esac
+    printf 'unexpected\t%s\n' "$h"
+    rc=1
+  done <<< "$found"
+  return $rc
+}
+
+# ---------- Allow-list print ----------
+# allow_list [stage] — TSV `<stage>\t<agent>\t<basename>\t<kind>\t<heading>`, stages in
+# _STAGE_TABLE order, then the `*` rows with empty agent and basename. rc 2 unknown stage.
+allow_list() {
+  local want="${1:-}" row code agent base h
+  if [[ -n "$want" ]]; then
+    _stage_row "$want" || return 2
+  fi
+  while IFS= read -r row; do
+    # shellcheck disable=SC2086  # deliberate word split: the row is space-separated
+    set -- $row
+    code="$1" agent="$2" base="$3"
+    shift 3
+    [[ -z "$want" || "$want" == "$code" ]] || continue
+    for h in "$@"; do printf '%s\t%s\t%s\trequired\t%s\n' "$code" "$agent" "$base" "$h"; done
+    for h in $UNIVERSAL_ANCHORS; do printf '%s\t%s\t%s\tuniversal\t%s\n' "$code" "$agent" "$base" "$h"; done
+    while IFS= read -r h; do
+      [[ -n "$h" ]] && printf '%s\t%s\t%s\toptional\t%s\n' "$code" "$agent" "$base" "$h"
+    done <<< "$(_optional_headings "$code")"
+  done <<< "$_STAGE_TABLE"
+  while IFS= read -r h; do
+    [[ -n "$h" ]] && printf '*\t\t\tany-optional\t%s\n' "$h"
+  done <<< "$(_optional_headings '*')"
+  return 0
+}
+
 # ---------- Anchor lint ----------
 anchor_lint() {
   local artifact="$1"
@@ -233,50 +437,55 @@ anchor_lint() {
     echo "anchor-lint: $artifact: no stage in handoff frontmatter (possibly path F3 — frontmatter missing)" >&2
     exit 1
   fi
-
-  local expected
-  expected=$(anchors_for_stage "$stage")
-  if [[ -z "$expected" ]]; then
+  if [[ -z "$(anchors_for_stage "$stage")" ]]; then
     echo "anchor-lint: $artifact: unknown stage '$stage' (no anchor allow-list)" >&2
     exit 1
   fi
-  # Appended AFTER the unknown-stage check so an unrecognised stage still reports as such
-  # rather than as a missing sweep heading. Both the missing loop and the `comm` below read
-  # $expected, so one append makes the anchor required and accepted in a single stroke.
-  expected="$expected $UNIVERSAL_ANCHORS"
 
-  # Extract H2 headings (skip H2 inside fenced code blocks).
-  local found
-  found=$(awk '
-    BEGIN { in_fence = 0 }
-    /^```/ { in_fence = !in_fence; next }
-    !in_fence && /^## / {
-      sub(/^## +/, "")
-      sub(/[[:space:]]+$/, "")
-      print
-    }
-  ' "$artifact" | sort -u)
+  local rows drc=0
+  rows=$(anchor_diff "$stage" "$artifact") || drc=$?
+  [[ "$drc" -le 1 ]] || { echo "anchor-lint: $artifact: unreadable" >&2; exit 2; }
 
-  local missing=()
-  local exp
-  for exp in $expected; do
-    if ! grep -qx -- "$exp" <<< "$found"; then
-      missing+=("$exp")
-    fi
-  done
-
-  local extras
-  extras=$(comm -23 <(echo "$found" | grep -Ev "$OPTIONAL_ANCHOR_RE" || true) \
-                    <(printf '%s\n' $expected | sort -u))
-
-  if [[ ${#missing[@]} -gt 0 || -n "$extras" ]]; then
+  if [[ "$drc" -eq 1 ]]; then
+    local missing extras
+    missing=$(awk -F'\t' '$1 == "missing" { printf "%s%s", (n++ ? " " : ""), $2 }' <<< "$rows")
+    # Sorted, space-terminated: the report shape predates the diff core and callers grep it.
+    extras=$(awk -F'\t' '$1 == "unexpected" { print $2 }' <<< "$rows" | sort -u | tr '\n' ' ')
     echo "anchor-lint: $artifact (stage=$stage) FAIL" >&2
-    [[ ${#missing[@]} -gt 0 ]] && echo "  missing: ${missing[*]}" >&2
-    [[ -n "$extras" ]] && echo "  unexpected: $(echo "$extras" | tr '\n' ' ')" >&2
+    [[ -n "$missing" ]] && echo "  missing: $missing" >&2
+    [[ -n "$extras" ]] && echo "  unexpected: $extras" >&2
     exit 1
   fi
 
   echo "anchor-lint: $artifact (stage=$stage) ok"
+}
+
+# --anchor-diff CLI: argument parsing and exit mapping around anchor_diff.
+anchor_diff_cli() {
+  local stage="" for_path="" baseline="" src=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --stage) stage="${2:-}"; shift 2 || return 2 ;;
+      --for-path) for_path="${2:-}"; shift 2 || return 2 ;;
+      --baseline) baseline="${2:-}"; shift 2 || return 2 ;;
+      --) shift; src="${1:-}"; break ;;
+      -) src="-"; shift ;;
+      -*) echo "anchor-diff: unknown flag: $1" >&2; return 2 ;;
+      *) src="$1"; shift ;;
+    esac
+  done
+  if [[ -n "$stage" && -n "$for_path" ]] || [[ -z "$stage" && -z "$for_path" ]] || [[ -z "$src" ]]; then
+    echo "anchor-diff: usage: --anchor-diff (--stage <CODE> | --for-path <path>) [--baseline <file>] <file|->" >&2
+    return 2
+  fi
+  if [[ -n "$for_path" ]]; then
+    stage=$(stage_for_path "$for_path")
+    [[ -n "$stage" ]] || { echo "anchor-diff: not a canonical stage artifact path: $for_path" >&2; return 2; }
+  fi
+  local rc=0
+  anchor_diff "$stage" "$src" "$baseline" || rc=$?
+  [[ "$rc" -ne 2 ]] || echo "anchor-diff: unknown stage '$stage' or unreadable input" >&2
+  return $rc
 }
 
 # ---------- Agent-section cross-check (#16 letter b) ----------
@@ -325,14 +534,15 @@ agent_section_lint() {
     [[ -f "$agent" ]] || continue
     checked=$((checked + 1))
     expected="$(anchors_for_stage "$stage") $UNIVERSAL_ANCHORS"
+    optional_re_for_stage "$stage"
     while IFS= read -r sect; do
       [[ -n "$sect" ]] || continue
-      if grep -qE "$OPTIONAL_ANCHOR_RE" <<< "$sect"; then continue; fi
+      if [[ "$sect" =~ $_OPT_RE ]]; then continue; fi
       if grep -qx -- "$sect" <<< "$(printf '%s\n' $expected)"; then continue; fi
       echo "agent-section-lint: FAIL stage=$stage" >&2
       echo "  agents/$agent_base.md mandates '## $sect' into its artifact" >&2
       echo "  skills/worktask/scripts/cache-lint.sh accepts neither anchors_for_stage $stage" \
-        "nor UNIVERSAL_ANCHORS nor OPTIONAL_ANCHOR_RE" >&2
+        "nor UNIVERSAL_ANCHORS nor _STAGE_OPTIONAL ($stage or *)" >&2
       rc=1
     done <<< "$(agent_mandated_sections "$agent")"
   done
@@ -355,6 +565,82 @@ extract_section() {
     /^<<<.*>>>$/ && capture { exit }
     capture { print }
   ' <<< "$body"
+}
+
+# Resolves the plugin root: $CLAUDE_PLUGIN_ROOT when set, else three levels up
+# from this script (skills/worktask/scripts/ -> root). Full ladder:
+# skills/shared/plugin-root-resolution.md.
+plugin_root() {
+  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" ]]; then
+    printf '%s' "$CLAUDE_PLUGIN_ROOT"
+    return 0
+  fi
+  local d
+  d=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+  printf '%s' "$d"
+}
+
+# canonical_model_block <alias> <root> -> the fenced `text` block under that
+# alias's H2 in model-prompting.md, or empty when the alias has none (haiku).
+# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5`,
+# because the em-dash suffix is prose and is not part of the key.
+canonical_model_block() {
+  local alias="$1" root="$2" canon="$2/skills/shared/model-prompting.md"
+  [[ -f "$canon" ]] || { echo "prefix-lint: canon not found: $canon" >&2; return 2; }
+  awk -v a="$alias" '
+    $0 ~ "^## " a "($| )" { inalias = 1; next }
+    /^## / { inalias = 0 }
+    inalias && $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$canon"
+}
+
+# canonical_contract_block <root> -> the fenced `text` block in
+# contract-reminder.md — section [1], copied verbatim into every stage prompt.
+# The file holds exactly one fenced block, so this walks the first fence
+# with no per-alias heading gate, unlike canonical_model_block above.
+canonical_contract_block() {
+  local root="$1" canon="$1/skills/worktask/references/contract-reminder.md"
+  [[ -f "$canon" ]] || { echo "prefix-lint: contract canon not found: $canon" >&2; return 2; }
+  awk '
+    $0 == "```text" { infence = 1; next }
+    infence && $0 == "```" { exit }
+    infence { print }
+  ' "$canon"
+}
+
+# ---------- Section [3] ledger-digest grammar ----------
+# ledger_digest_lint <section-text> <label> -> 0 pass / 1 fail, diagnostics on stderr.
+# Not opt-in like `model`/`contract_canon`: a malformed digest is wrong whatever the log sets.
+ledger_digest_lint() {
+  local section="$1" label="$2" rc=0
+  # Short-circuit: an inlined ledger would otherwise also report every key as missing.
+  if [[ "$section" =~ (^|$'\n')[[:space:]]*\{ ]] \
+    || [[ "$section" == *'"tasks"'* ]] || [[ "$section" == *'"facts"'* ]]; then
+    echo "prefix-lint: $label: section [3] embeds the ledger (inlined JSON) instead of the ledger-digest.sh pointer" >&2
+    return 1
+  fi
+  local first_line=""
+  while IFS= read -r _ldl_line; do
+    [[ -n "$_ldl_line" ]] || continue
+    first_line="$_ldl_line"
+    break
+  done <<< "$section"
+  if [[ "$first_line" != "ledger: .context/state.json" ]]; then
+    echo "prefix-lint: $label: section [3] first line must be 'ledger: .context/state.json' (got: ${first_line:-<empty>})" >&2
+    rc=1
+  fi
+  # Key order, not just presence: a digest with the right six keys shuffled is
+  # still not the grammar this check enforces.
+  local keys_found expected_keys
+  keys_found=$(printf '%s\n' "$section" | grep -oE '^[a-z_]+:' | sed 's/:$//')
+  expected_keys=$'ledger\nrun_index\nready\nin_progress\nblocked\nopen_blocking_questions'
+  if [[ "$keys_found" != "$expected_keys" ]]; then
+    echo "prefix-lint: $label: section [3] keys must be ledger, run_index, ready, in_progress, blocked, open_blocking_questions in that order (got: $(tr '\n' ',' <<< "$keys_found"))" >&2
+    rc=1
+  fi
+  return $rc
 }
 
 # ---------- Forbidden-token scanner ----------
@@ -450,19 +736,31 @@ prefix_lint() {
     # prompt — the only multi-line one — is whatever follows the first two lines.
     # The `X` sentinel keeps command substitution from eating the separator that
     # an EMPTY prompt is reduced to, which would shift `stage` into `prompt`.
-    local fields wid stage prompt
-    fields=$(jq -r '.worktask_id, .stage, .prompt' <<< "$line"; printf 'X')
+    local fields wid stage model ccanon prompt
+    fields=$(jq -r '.worktask_id, .stage, (.model // ""), (.contract_canon // false), .prompt' <<< "$line"; printf 'X')
     fields="${fields%X}"
     wid="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
-    stage="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
+    stage="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    model="${fields%%$'\n'*}"; fields="${fields#*$'\n'}"
+    ccanon="${fields%%$'\n'*}"; prompt="${fields#*$'\n'}"
     # Three separate substitutions stripped every trailing newline from each
     # field; keep that, so a prompt is compared the same way it always was.
     while [ "${prompt%$'\n'}" != "$prompt" ]; do prompt="${prompt%$'\n'}"; done
 
-    local s1 s2 s4
+    local s1 s2 s3 s4 s4b
     s1=$(extract_section "$prompt" "contract-reminder")
     s2=$(extract_section "$prompt" "worktask-header")
+    s3=$(extract_section "$prompt" "state-json")
     s4=$(extract_section "$prompt" "stage-contract")
+    s4b=$(extract_section "$prompt" "model-discipline")
+
+    # extract_section yields "" for an absent marker and for an empty body; only an
+    # absent [3] may skip, since an empty body is itself a missing pointer.
+    if grep -qx '<<<state-json>>>' <<< "$prompt"; then
+      if ! ledger_digest_lint "$s3" "worktask_id=$wid stage=$stage"; then
+        rc=1
+      fi
+    fi
 
     # L1 forbidden-token scan — runs on EVERY line (intrinsic per-section
     # check, independent of the cross-line byte-identity comparison below).
@@ -475,6 +773,39 @@ prefix_lint() {
     if ! forbidden_token_scan "$s4" "worktask_id=$wid stage=$stage section[4]"; then
       rc=1
     fi
+    if ! forbidden_token_scan "$s4b" "worktask_id=$wid stage=$stage section[4b]"; then
+      rc=1
+    fi
+
+    # Canon check. Opt-in on the log line carrying `model`, because the field is
+    # new and a log written before it existed must stay lintable rather than
+    # fail as if the block were wrong.
+    if [[ -n "$model" ]]; then
+      local canon
+      if canon=$(canonical_model_block "$model" "$(plugin_root)"); then
+        while [ "${canon%$'\n'}" != "$canon" ]; do canon="${canon%$'\n'}"; done
+        if [[ "$s4b" != "$canon" ]]; then
+          echo "prefix-lint: worktask_id=$wid stage=$stage: section [4b] does not match model-prompting.md block for model=$model" >&2
+          rc=1
+        fi
+      else
+        rc=1
+      fi
+    fi
+
+    # Opt-in like `model` above: [1] must equal contract-reminder.md's block byte for byte.
+    if [[ "$ccanon" == "true" ]]; then
+      local ccanon_block
+      if ccanon_block=$(canonical_contract_block "$(plugin_root)"); then
+        while [ "${ccanon_block%$'\n'}" != "$ccanon_block" ]; do ccanon_block="${ccanon_block%$'\n'}"; done
+        if [[ "$s1" != "$ccanon_block" ]]; then
+          echo "prefix-lint: worktask_id=$wid stage=$stage: section [1] does not match contract-reminder.md" >&2
+          rc=1
+        fi
+      else
+        rc=1
+      fi
+    fi
 
     # Sanitize wid/stage for use in filenames (allow [a-zA-Z0-9._-]). Pattern
     # substitution rather than `tr`, which cost two forks on every line.
@@ -483,6 +814,7 @@ prefix_lint() {
     local f1="$td/wf-${widsafe}-s1"
     local f2="$td/wf-${widsafe}-s2"
     local f4="$td/wf-${widsafe}-stage-${stagesafe}-s4"
+    local f4b="$td/wf-${widsafe}-stage-${stagesafe}-s4b"
 
     if [[ ! -f "$f1" ]]; then
       printf '%s' "$s1" > "$f1"
@@ -504,6 +836,13 @@ prefix_lint() {
       echo "prefix-lint: worktask_id=$wid stage=$stage: section [4] stage-contract DRIFT" >&2
       rc=1
     fi
+
+    if [[ ! -f "$f4b" ]]; then
+      printf '%s' "$s4b" > "$f4b"
+    elif [[ "$s4b" != "$(<"$f4b")" ]]; then
+      echo "prefix-lint: worktask_id=$wid stage=$stage: section [4b] model-discipline DRIFT" >&2
+      rc=1
+    fi
   done < "$log"
 
   if [[ $rc -eq 0 ]]; then
@@ -518,17 +857,27 @@ prefix_lint() {
 # Extract the contents of the first ```yaml fenced block that appears
 # AFTER the `## Handoff Protocol` H2 and BEFORE the next H2 heading.
 # Returns the YAML body (without the fence markers). Empty if not found.
+# A block opening with a `# …continued:` marker is the tail of the one above it, split only
+# so the prose stays under the section-length cap; it rejoins here and is not counted twice.
+CONTINUATION_RE='^#[[:space:]]*(…|\.\.\.)continued[:[:space:]]'
+
 extract_handoff_yaml_block() {
   local f="$1"
-  awk '
-    BEGIN { in_section = 0; in_fence = 0; emit = 0 }
+  awk -v cont_re="$CONTINUATION_RE" '
+    BEGIN { in_section = 0; in_fence = 0; emit = 0; seen = 0 }
     /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
     in_section && /^## / { exit }
     in_section && /^```yaml[[:space:]]*$/ && !in_fence {
-      in_fence = 1; emit = 1; next
+      in_fence = 1; first = 1; next
     }
     in_section && /^```[[:space:]]*$/ && in_fence {
-      in_fence = 0; exit
+      in_fence = 0; emit = 0; next
+    }
+    in_fence && first {
+      first = 0
+      if ($0 ~ cont_re) { emit = seen; next }   # tail of the block already emitted
+      if (seen) { exit }                        # a second independent block ends the read
+      seen = 1; emit = 1
     }
     in_fence && emit { print }
   ' "$f"
@@ -537,14 +886,15 @@ extract_handoff_yaml_block() {
 # Count the number of ```yaml ... ``` fenced blocks inside Handoff Protocol.
 count_handoff_yaml_blocks() {
   local f="$1"
-  awk '
+  awk -v cont_re="$CONTINUATION_RE" '
     BEGIN { in_section = 0; in_fence = 0; n = 0 }
     /^## Handoff Protocol[[:space:]]*$/ { in_section = 1; next }
     in_section && /^## / { print n; exit_done = 1; exit }
     in_section && /^```yaml[[:space:]]*$/ && !in_fence {
-      in_fence = 1; n++; next
+      in_fence = 1; first = 1; n++; next
     }
     in_section && /^```[[:space:]]*$/ && in_fence { in_fence = 0; next }
+    in_fence && first { first = 0; if ($0 ~ cont_re) n-- }
     END { if (!exit_done) print n }
   ' "$f"
 }
@@ -664,9 +1014,9 @@ filename_lint() {
     actual_name=$(basename "$artifact")
     name_re="^${expected_base}-[0-9]+\\.md\$"
     expected_desc="${expected_base}-N.md"
-    # DV fans out one sub-agent per TL-assigned workstream, each writing
-    # development-N-<stream>.md; the entry agent merges them into the canonical
-    # development-N.md. Both names are legal on disk simultaneously.
+    # DV fans out onto ledger tasks, one per stream, each writing its own
+    # development-N-<stream>.md handoff; a run with a single DV row may omit the
+    # stream and write development-N.md (handoff-protocol.md § DV fan-out).
     if [[ "$expected_base" == "development" ]]; then
       name_re="^development-[0-9]+(-[a-z0-9]+(-[a-z0-9]+)*)?\\.md\$"
       expected_desc="development-N.md or development-N-<stream>.md"
@@ -689,6 +1039,18 @@ filename_lint() {
 # ---------- main ----------
 case "${1:-}" in
   --anchor-lint) shift; [[ $# -ge 1 ]] || usage; anchor_lint "$1" ;;
+  --anchor-diff) shift; anchor_diff_cli "$@"; exit $? ;;
+  --allow-list)
+    shift
+    if [[ "${1:-}" == "--stage" ]]; then
+      [[ -n "${2:-}" ]] || usage
+      allow_list "$2" || { echo "allow-list: unknown stage '$2'" >&2; exit 2; }
+    else
+      [[ $# -eq 0 ]] || usage
+      allow_list
+    fi
+    exit 0
+    ;;
   --frontmatter-template-lint)
     shift; [[ $# -ge 1 ]] || usage
     frontmatter_template_lint "$@"; exit $?

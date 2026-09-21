@@ -87,3 +87,31 @@ FIX_AUDIT="${FIXTURES}/skills/post-compact-audit.jsonl"
   assert_success
   assert_output --partial "All self-tests passed"
 }
+
+# --- default paths --------------------------------------------------------
+# The defaults were cwd-relative, so a PostCompact firing from a linked worktree
+# or any subdirectory read an empty audit trail and wrote the pointer where no
+# resume looks — the hazard state-merge.sh was already hardened against.
+
+@test "paths: defaults are rooted on CLAUDE_PROJECT_DIR, not on cwd" {
+  local wd elsewhere
+  wd="$(mk_tmpworkdir)"
+  elsewhere="$(mk_tmpworkdir)"
+  mkdir -p "$wd/.context/logs"
+  cp "$FIX_AUDIT" "$wd/.context/logs/audit.jsonl"
+  printf '%s' '{"version":2,"tasks":{}}' > "$wd/.context/state.json"
+
+  # Run from an unrelated cwd with no .context/ of its own.
+  run bash -c 'cd "$2" && CLAUDE_PROJECT_DIR="$1" bash "$3" >/dev/null 2>&1' \
+    _ "$wd" "$elsewhere" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+
+  # The pointer landed under the project dir...
+  run bash -c 'ls "$1"/.context/logs/post-compact-*.json' _ "$wd"
+  assert_success
+  # ...and it resolved a stage, so the audit file was read from there too.
+  run bash -c 'jq -r ".recovery.interrupted_stage.agent" "$1"/.context/logs/post-compact-*.json' _ "$wd"
+  refute_output "null"
+  # Nothing was written beside the caller.
+  [ ! -d "$elsewhere/.context" ]
+}
