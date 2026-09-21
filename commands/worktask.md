@@ -935,6 +935,24 @@ Execute the loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
 `Task()` delegation apply the FN gate check (STOP on `checkpoint`, proceed on `bypass`) —
 `skills/worktask/SKILL.md § FN Gate`.
 
+##### After Step A — scripts the loop runs directly
+
+The loop body lives in the skill, but these four run under THIS file's grants, so they are named
+here too: a grant invoked only in the skill reads as unused, and the next audit drops it.
+
+```bash
+# Assigned root for a row, after any stream re-pin — SKILL.md § Step 4.8
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh --task "<TASK_ID>"
+# Land a producer's artifacts — SKILL.md § Step 4.7a
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer "<TASK_ID>"
+# Re-land what a row consumes — SKILL.md § Step 4.8
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer "<TASK_ID>"
+# The tree's landed set — SKILL.md § Step 6.5a3
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed --tree "$_orch_root"
+```
+
+A refused landing is reported, never worked around: SKILL.md § Step 6.5d.
+
 #### Workspace-root cross-check (BINDING)
 
 Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from
