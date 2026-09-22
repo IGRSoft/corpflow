@@ -15,7 +15,7 @@ self_test() {
   require_tools
 
   local failures=0 pass_count=0 td
-  td=$(mktemp -d -t resolve-pbxproj-selftest.XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/resolve-pbxproj-selftest.XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'; cleanup_tmp" EXIT
   local RESOLVE_TMPDIR="$td"

@@ -145,7 +145,7 @@ EOF
 
 # ---------------- Self-test ----------------
 if [ "$SELF_TEST" -eq 1 ]; then
-  td=$(mktemp -d -t megatask-monitor-XXXXXX); trap 'rm -rf "$td"' EXIT
+  td=$(mktemp -d "${TMPDIR:-/tmp}/megatask-monitor.XXXXXX"); trap 'rm -rf "$td"' EXIT
   mkdir -p "$td/.worktrees/milestone-9/41" "$td/.worktrees/milestone-9/42" "$td/.context/logs"
   cat > "$td/.worktrees/milestone-9/orchestrator.json" <<'EOF'
 { "version":"3.1","group":"milestone-9","milestone":{"number":9,"title":"T"},

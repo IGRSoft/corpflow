@@ -70,6 +70,14 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$SELF")" 2> /dev/null && pwd -P)" |
 # The self-test re-runs this file after cd-ing into a fixture, so a relative path would break.
 [ -n "$SCRIPT_DIR" ] && SELF="$SCRIPT_DIR/$(basename -- "$SELF")"
 
+# Advisory tier (AD-1): a missing lib degrades every host_os call to "unknown" rather
+# than taking this preflight down — every case below already has a default arm for it.
+if [ -n "$SCRIPT_DIR" ] && [ -r "$SCRIPT_DIR/host-os-lib.sh" ]; then
+  # shellcheck source=host-os-lib.sh
+  . "$SCRIPT_DIR/host-os-lib.sh"
+fi
+command -v host_os > /dev/null 2>&1 || host_os() { printf 'unknown\n'; }
+
 readonly RENDERER_BINS="silicon magick convert"
 readonly KNOWN_TOOLS="renderer $RENDERER_BINS playwright playwright-browser adb-device simulator xcodebuildmcp"
 # Buffers are removed by --record only when their basename carries one of these
@@ -264,9 +272,9 @@ _settings_sources() {
     printf 'project settings\t%s\n' "$d/.claude/settings.json"
     printf 'project local settings\t%s\n' "$d/.claude/settings.local.json"
   done <<< "$(_project_dirs)"
-  case "$(uname -s 2> /dev/null)" in
-    Darwin) printf 'managed settings\t%s\n' "/Library/Application Support/ClaudeCode/managed-settings.json" ;;
-    Linux) printf 'managed settings\t%s\n' "/etc/claude-code/managed-settings.json" ;;
+  case "$(host_os)" in
+    macos) printf 'managed settings\t%s\n' "/Library/Application Support/ClaudeCode/managed-settings.json" ;;
+    linux) printf 'managed settings\t%s\n' "/etc/claude-code/managed-settings.json" ;;
   esac
 }
 
@@ -489,8 +497,8 @@ _browser_dirs() {
     done <<< "$(_project_dirs)"
     return 0
   fi
-  case "$(uname -s 2> /dev/null)" in
-    Darwin) printf '%s\n' "${HOME:-}/Library/Caches/ms-playwright" ;;
+  case "$(host_os)" in
+    macos) printf '%s\n' "${HOME:-}/Library/Caches/ms-playwright" ;;
     *) printf '%s\n' "${XDG_CACHE_HOME:-${HOME:-}/.cache}/ms-playwright" ;;
   esac
 }
@@ -672,8 +680,8 @@ check_android_toolchain() {
   fi
   sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
   if [ -z "$sdk" ]; then
-    case "$(uname -s 2> /dev/null)" in
-      Darwin) sdk="${HOME:-}/Library/Android/sdk" ;;
+    case "$(host_os)" in
+      macos) sdk="${HOME:-}/Library/Android/sdk" ;;
       *) sdk="${HOME:-}/Android/Sdk" ;;
     esac
   fi

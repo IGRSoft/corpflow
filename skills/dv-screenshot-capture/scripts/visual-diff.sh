@@ -159,8 +159,12 @@ fi
 # Run magick compare. RMSE output goes to stderr in the form:
 #   <absolute> (<normalized>)
 # Save the diff PNG to a temp path; we keep it only on fail (pd2).
-DIFF_TMP="$(mktemp -t visual-diff-XXXXXX.png)"
-trap 'rm -f "$DIFF_TMP"' EXIT
+# A suffixed name has no portable single-mktemp form (BSD substitutes only a trailing
+# X-run, so "-XXXXXX.png" left the suffix literal and unrandomised) — name it inside a
+# private temp dir instead and remove the whole dir on exit.
+DIFF_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/visual-diff.XXXXXX")"
+DIFF_TMP="$DIFF_TMP_DIR/diff.png"
+trap 'rm -rf "$DIFF_TMP_DIR"' EXIT
 
 # magick compare returns:
 #   0 on identical, 1 on differences, ≥2 on error

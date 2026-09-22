@@ -17,7 +17,7 @@
 # ---------- Self-test ----------
 self_test() {
   local td
-  td=$(mktemp -d -t handoff-selftest-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/handoff-selftest-XXXXXX")
   trap "rm -rf '$td'" EXIT
 
   make_fixtures "$td"
@@ -71,7 +71,7 @@ self_test_blocked_on() {
   # The verdict the no-yq reader reaches on the same artifact: 0 valid or absent, 1 refused.
   _bo_awk_verdict() {
     local fm raw norm vrc=0
-    fm=$(mktemp -t handoff-bo-st-XXXXXX)
+    fm=$(mktemp "${TMPDIR:-/tmp}/handoff-bo-st-XXXXXX")
     corpflow_fm_block "$1" > "$fm" 2> /dev/null || true
     raw=$(awk "$_FM_BO_AWK" "$fm" 2> /dev/null) || { rm -f "$fm"; return 1; }
     rm -f "$fm"

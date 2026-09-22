@@ -24,7 +24,7 @@ jobs:
   deterministic:
     # ubuntu cannot run this at all: run-benchmark.sh requires a swift toolchain and
     # ttt-template imports SwiftUI/AppKit/AudioToolbox, which no Linux toolchain ships.
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5

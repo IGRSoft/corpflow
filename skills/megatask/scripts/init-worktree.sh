@@ -340,7 +340,7 @@ run_init() {
   # 9. Stamp workspace.json v2.0 (atomic write).
   # ------------------------------------------------------------------
   local ws_tmp
-  ws_tmp=$(mktemp -t init-worktree-ws.XXXXXX)
+  ws_tmp=$(mktemp "${TMPDIR:-/tmp}/init-worktree-ws.XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -f '$ws_tmp'" EXIT
 

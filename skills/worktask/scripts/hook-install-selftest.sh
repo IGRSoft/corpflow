@@ -13,7 +13,7 @@ self_test() {
   local self_path
   self_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
   local td
-  td=$(mktemp -d -t hook-install-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/hook-install-XXXXXX")
   trap "rm -rf '$td'" EXIT
 
   mkdir -p "$td/plugin/hooks" "$td/plugin/.claude-plugin"
