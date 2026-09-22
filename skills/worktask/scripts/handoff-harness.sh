@@ -1006,7 +1006,7 @@ check_decision_divergence() {  # <artifact> <fmfile> <stage>
   rows=$(yq eval '(.handoff.key_decisions // []) | .[] | ((.id // "") + "\t" + (.summary // ""))' \
     "$fmfile" 2> /dev/null || printf '')
   [[ -n "$rows" ]] || return 0
-  body=$(mktemp -t handoff-body-XXXXXX)
+  body=$(mktemp "${TMPDIR:-/tmp}/handoff-body-XXXXXX")
   awk '/^---$/ { c++; next } c >= 2' "$artifact" > "$body"
 
   local failed=0
@@ -1521,7 +1521,7 @@ validate_frontmatter() {
   # Extract just the frontmatter block (between first two ^---$ lines) to a tmp,
   # so yq can parse it as pure YAML (the rest of the markdown is not YAML).
   local fmfile
-  fmfile=$(mktemp -t handoff-fm-XXXXXX)
+  fmfile=$(mktemp "${TMPDIR:-/tmp}/handoff-fm-XXXXXX")
   # One cleanup for fourteen exits. Every failure arm below used to carry its own
   # `rm -f`, so a new arm leaked the temp file unless its author noticed. RETURN
   # traps are not inherited by called functions without `set -T`, which this
@@ -1719,7 +1719,7 @@ read_blocked_on() {
     echo "fail: $f carries a control byte or cannot be scanned" >&2
     return 1
   fi
-  fmfile=$(mktemp -t handoff-bo-XXXXXX)
+  fmfile=$(mktemp "${TMPDIR:-/tmp}/handoff-bo-XXXXXX")
   # shellcheck disable=SC2064  # bake the path in, as validate_frontmatter's trap does
   trap "rm -f '$fmfile'" RETURN
   corpflow_fm_block "$f" > "$fmfile" 2> /dev/null || true
@@ -1751,7 +1751,7 @@ validate_state() {
 
   # Atomic-write idempotency check: re-merging the same patch must be a no-op.
   local td
-  td=$(mktemp -d -t handoff-state-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/handoff-state-XXXXXX")
   trap "rm -rf '$td'" RETURN
   cp "$f" "$td/orig.json"
   local patch='{"tasks":{"PL0":{"status":"completed"}}}'
@@ -1956,7 +1956,7 @@ EOF
 }
 
 run_token_count() {
-  local d="${1:-$(mktemp -d -t handoff-demo-XXXXXX)}"
+  local d="${1:-$(mktemp -d "${TMPDIR:-/tmp}/handoff-demo-XXXXXX")}"
   make_fixtures "$d"
 
   echo "Fixtures created at: $d"

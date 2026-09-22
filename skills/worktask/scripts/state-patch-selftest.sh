@@ -16,7 +16,7 @@ run_self_test() {
   SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
   local td
-  td=$(mktemp -d -t state-patch-selftest-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/state-patch-selftest-XXXXXX")
   # shellcheck disable=SC2064   # expand $td now so the trap removes the right dir
   trap "rm -rf '${td}'" EXIT
 

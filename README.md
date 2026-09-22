@@ -1,5 +1,8 @@
 # Company Worktask Plugin
 
+[![OS](https://img.shields.io/badge/OS-macOS%20%7C%20Linux-2f81f7)](#requirements)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.270%2B-d97757)](#requirements)
+
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
 **Plugin 4.0.32 · Requires Claude Code 2.1.270+**
@@ -48,18 +51,51 @@ lock, the atomic write, and the disk guard.
 
 ### Requirements
 
-| Requirement | Needed for |
-|-------------|------------|
-| **Claude Code 2.1.270+** | Two things. The state ledger: since 2.1.268 the task-tracking tools (`TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`, `TodoWrite`) are offered only on Claude 3.x, Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, and the ledger replaces them — the plugin never calls them, even on a haiku-tier stage that still sees them (see the note under [State Ledger](#state-ledger)). And the resume loop: reattach branches on `SendMessage` delivery results and trusts them — every non-delivery is reported, including `queued` for an offline peer on another machine (2.1.261); a delivered send reaches the addressed session, not a phantom `ListAgents` twin (2.1.260); a busy `claude agents` row stays busy while that session runs background agents (2.1.269). `/megatask` fan-out relies on it too: concurrent sessions no longer revert each other's `~/.claude.json`, which reset workspace trust and silently skipped agent-frontmatter gate hooks (2.1.259). 2.1.270 rather than 2.1.269, because 2.1.269 regressed read-only git commands into permission prompts that park headless stages |
-| **git** | Every worktask runs in a dedicated worktree |
-| **jq** | `state-patch.sh`, the only writer to the ledger. Hard requirement — without it no stage can complete |
-| **`gh`**, authenticated | Post-PL issue publishing, `/megatask` milestone and issue reads, FN pull requests |
-| **yq** | Full artifact frontmatter validation. Without it the handoff gate degrades to a grep-only check rather than failing |
-| **python3 ≥ 3.10** | `/estimate --export csv` only. Note macOS ships 3.9.6 as `/usr/bin/python3`, which is too old — `brew install python@3.12` if you need the CSV pack |
+Tools listed below are organized by status (required, optional, platform-specific) with their degradation mode — what capability is lost if the tool is missing. **All tool invocations in the repository are derived from actual call sites, not assumed**.
 
-Screenshot capture at the DV stage pulls in per-platform tooling on demand (ImageMagick,
-pngquant, Playwright, a Swift toolchain). None of it is needed to install or to run a
-worktask; see `skills/dv-screenshot-capture/SKILL.md` for what each capture path expects.
+#### Hard requirements — your worktask will not complete without these
+
+| Tool | Status | Needed for | Degradation | macOS | Linux |
+|------|--------|-----------|-------------|-------|-------|
+| **bash 3.2+** | Required | Plugin scripts run on bash; 3.2 is the declared floor on macOS | No worktask will start | Installed by default | `apt-get install bash` or `dnf install bash` |
+| **Claude Code 2.1.270+** | Required | Ledger worktree resume loop; task-tracking fallback when CC tools unavailable; `/megatask` session coordination | No worktask will start | N/A | N/A |
+| **git** | Required | Worktask isolation via git worktree; worktask state from branch tracking | No worktask will start | Installed with Xcode CLT | `apt-get install git` or `dnf install git` |
+| **POSIX text toolchain** — `awk`, `sed`, `grep`, `find`, `tr`, `mktemp`, `cut`, `sort`, `comm` | Required | Core shell scripting throughout hooks, skills, tests | No worktask will start | Installed by default (BSD variants) | `apt-get install gawk sed grep findutils coreutils` or `dnf install gawk sed grep findutils coreutils` |
+| **Hash tools** — `md5`, `md5sum`, `sha256sum`, `shasum` | Required | File integrity checks; used unguarded in tests and build | No worktask will start | Stock macOS ships `md5` and `shasum` (Perl-shipped). `sha1sum` and `sha256sum` are not available by default; dual-path code handles this (uses `shasum` instead) | `apt-get install coreutils` or `dnf install coreutils` |
+| **make** | Required | `make test` (test suite entry point), `make coverage` (coverage gating), `make bootstrap` (dependency resolution) | Cannot run test suite or verify coverage | Installed with Xcode CLT | `apt-get install make` or `dnf install make` |
+| **jq** | **Split behavior** — see below | `state-patch.sh` (ledger writer) and `hooks/agent-stop.sh` (hook caller) use it for JSON manipulation | Ledger writers **fail and stop** (e.g., plan approval hangs); hooks **skip gracefully** with a message; the split is documented and intentional | `brew install jq` | `apt-get install jq` or `dnf install jq` |
+
+**The jq split behavior, explained:** `hooks/agent-stop.sh` (line 29) exits 0 when jq is missing — hook skips with "jq not found, skipping" message — so you can still run worktasks. `state-patch.sh` (line 1777, the main patch path at 1833) exits 2 when jq is missing — ledger write fails and blocks the entire stage — so the ledger stays unchanged. Both behaviors are correct for their context: hooks must never block the orchestrator; the ledger writer must never silently skip. If you see "jq required" errors in your logs, you cannot proceed until jq is installed.
+
+#### Strongly recommended — your worktask is slower or incomplete without these
+
+| Tool | Status | Needed for | Degradation | macOS | Linux |
+|------|--------|-----------|-------------|-------|-------|
+| **`curl`** | Guarded | Anonymous image reachability check in plan issue publishing (`skills/worktask/scripts/publish-pl-issue.sh:469`) | Falls back to authenticated existence check when curl is absent (best effort; only for public repos; private/internal always fail). Non-blocking. | `brew install curl` (or use `/usr/bin/curl` from Xcode CLT if already installed) | `apt-get install curl` or `dnf install curl` |
+| **`gitleaks`** (secrets scanner) | Guarded | Security review: scanning for leaked credentials (`skills/security-review-process/scripts/scan-secrets.sh:293`) | Falls back to six built-in regex patterns when gitleaks is absent. Same exit codes (0 = clean, 1 = findings, 2 = error). Less comprehensive but covers the most common patterns. | `brew install gitleaks` | `apt-get install gitleaks` (if available in repos) or download from https://github.com/gitleaks/gitleaks/releases |
+| **`gh`** (GitHub CLI, authenticated) | Recommended | Post-PL issue publishing; `/megatask` milestone and issue reads; FN pull requests | Post-PL output prints to the console instead of opening a GitHub issue; `/megatask` cannot read milestones; finalization cannot open PRs | `brew install gh` | `apt-get install gh` or `dnf install gh` (requires 3rd-party repos on some distros; see https://github.com/cli/cli#installation) |
+| **yq** | Recommended | Full YAML artifact validation in the handoff gate (uses `yq eval` syntax from mikefarah/yq, the Go implementation) | Frontmatter validation degrades from schema-aware check to grep-only partial check; later stages may proceed with incomplete frontmatter that yq would have caught | `brew install yq` | Distro packages vary: `apt-get install yq` on Debian/Ubuntu installs the wrong tool (Python wrapper). Install via Homebrew (`brew install yq`) or download the Go binary from https://github.com/mikefarah/yq/releases |
+| **python3 ≥ 3.10** | Recommended | `/estimate --export csv` (optional performance-analysis export); Python skill tests in QA | CSV export unavailable; Python suite tests skip with "Python 3.10+ not found"; code-coverage assertions skip (per-file assertion-density gate remains in place) | macOS ships 3.9.6 as `/usr/bin/python3` — too old. Use `brew install python@3.12` | Ubuntu 22.04 LTS ships 3.10; Ubuntu 20.04 LTS ships 3.8. Debian 12 ships 3.11. For older LTS versions: `apt-get install python3.12` or `dnf install python3.12` |
+
+#### Platform-specific tools — degrade gracefully on other platforms
+
+| Tool | Status | Needed for | Degradation | Notes |
+|------|--------|-----------|-------------|-------|
+| **Swift toolchain** | macOS-specific | Apple-platform stages (building Swift packages, DV screenshot capture, code signing) | Swift-dependent phases report as skipped with "swift toolchain absent" message; shell tests and Linux builds unaffected | Install via Xcode CLT: `xcode-select --install`. Or standalone: https://swift.org/install. Linux users with no Swift: this is expected — Swift is an Apple-only platform capability |
+| **Xcode command-line tools (CLT)** | macOS-specific | Git integration, code signing, simulator management, compiler access | Xcode-gated phases skip with "Xcode CLT absent" message. Worktask still runs; shell tests and the ledger work on plain bash and git | Install: `xcode-select --install`. Includes: Swift, git, clang, Make |
+| **kcov** | Optional, macOS fallback | Code coverage instrumentation for bash (`make coverage`) | **Unusable on macOS** (Error 137, bash 3.2 parser mismatch, mis-parses `BASH_VERSINFO` guards). Falls back to assertion-density proxy (tests/COVERAGE.md documents per-file coverage assertions). On Linux, `make coverage` runs faster with per-target instrumentation. | macOS: documented per-file assertions are the gate (tests/COVERAGE.md). Omit kcov. | Linux: `apt-get install kcov` or `dnf install kcov`. `make bootstrap` tier sequence: checks system binary → attempts `brew install kcov` (if Homebrew available) → falls back to documented per-file assertion-density proxy (tests/COVERAGE.md). |
+| **Android toolchain** | Optional, degrades on non-Android hosts | Android-platform stages (Kotlin/Gradle builds, APK signing, device testing) | Android-gated phases skip with "android toolchain absent" message; no effect on general worktask flow | Not needed unless you develop Android apps. Probed by `skills/worktask/scripts/autonomy-preflight.sh` for context; never fatally required |
+
+#### Screenshot capture (on-demand per platform)
+
+Screenshot capture at the DV stage pulls in per-platform tooling on demand (ImageMagick, pngquant, Playwright, a Swift toolchain on macOS). None of it is needed to install or to run a worktask; see `skills/dv-screenshot-capture/SKILL.md` for what each capture path expects.
+
+#### New tools in this release
+
+| Tool | Purpose | Status | Notes |
+|------|---------|--------|-------|
+| **`portability-lint.sh`** | New CI gate that enforces portable shell (dual-path file-stat/hashing, bash 3.2 floor, no BSD/GNU divergences) | Included, no install needed | Runs in the lint job; exits 0 on this repository. 8 rules (P001–P008) cover `mktemp -t`, `sed -i` without suffix, single-path hash/stat/date tools, unguarded platform binaries, bash 4+ syntax, and `mapfile`/`readarray` |
+| **`host-os-lib.sh`** | Shared helper for host operating system detection; centralizes `uname` branching logic | Included, no install needed | Sourced from `skills/worktask/scripts/host-os-lib.sh`. Exported vocab: `macos`, `linux`, `bsd`, `windows`, `unknown`. Three consumers: `autonomy-preflight.sh`, `portability-lint.sh`, `portability-lint-selftest.sh` |
 
 ### Install
 

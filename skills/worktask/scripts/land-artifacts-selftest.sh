@@ -44,7 +44,7 @@ hash_stdin() {
   esac
 }
 
-TD=$(mktemp -d -t land-artifacts-selftest-XXXXXX)
+TD=$(mktemp -d "${TMPDIR:-/tmp}/land-artifacts-selftest-XXXXXX")
 
 # ---------- shared fixture: one bare-ish main repo, two worktrees ----------
 MAIN="$TD/main"

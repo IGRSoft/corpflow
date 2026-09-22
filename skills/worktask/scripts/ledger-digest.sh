@@ -117,7 +117,7 @@ print_digest() {
 # real CLI (arg parsing, exit codes) rather than print_digest in isolation.
 self_test() {
   local td
-  td=$(mktemp -d -t ledger-digest-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/ledger-digest-XXXXXX")
   # Expanded now on purpose: `td` is local and out of scope when the EXIT trap fires.
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT

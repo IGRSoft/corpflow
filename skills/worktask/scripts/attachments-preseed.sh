@@ -313,7 +313,7 @@ emit() {
 # ----------------------------------------------------------- self-test ----
 
 if [[ "$MODE" == "self-test" ]]; then
-  td="$(mktemp -d -t preseed-selftest-XXXXXX)"
+  td="$(mktemp -d "${TMPDIR:-/tmp}/preseed-selftest-XXXXXX")"
   trap 'rm -rf "$td"' EXIT
   WORKDIR="$td"; BASE_BRANCH="main"; BRANCH="feature/x"; WORKTASK_ID="self-test"
   UNCOMMITTED=0; UPSTREAM=""; UPSTREAM_LINE="No upstream branch yet — use \`git push -u origin ${BRANCH}\`."

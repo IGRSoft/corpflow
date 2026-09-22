@@ -726,7 +726,7 @@ prefix_lint() {
   # POSIX-compatible state: store per-key sections as files in a tempdir.
   # bash 3.2 has no associative arrays, so we use the filesystem.
   local td
-  td=$(mktemp -d -t cache-lint-prefix-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/cache-lint-prefix-XXXXXX")
   trap "rm -rf '$td'" RETURN
 
   local rc=0

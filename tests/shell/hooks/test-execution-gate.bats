@@ -505,9 +505,11 @@ teardown() {
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null || fail "got: $output"
 }
 
+# portability-lint disable=P005 — prose naming the |& form under test, not bash syntax
 @test "bare &: redirect forms >&, <&, &> and |& are not split and stay allowed" {
   state_with DR
   local cmd
+  # portability-lint disable=P005 — literal fixture data fed to the script under test
   for cmd in 'ls 2>&1' 'ls >&2' 'ls &>/dev/null' 'ls &>>log' 'ls <&3' 'ls |& cat' 'true & ls'; do
     run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$cmd")"
     assert_success

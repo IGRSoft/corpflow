@@ -11,7 +11,7 @@
 run_self_test() {
   local SELF td repo wt rc out
   SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-  td=$(mktemp -d -t dv-tree-preflight-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/dv-tree-preflight-XXXXXX")
   # shellcheck disable=SC2064  # expand $td now so the trap removes the right dir
   trap "rm -rf '${td}'" EXIT
 

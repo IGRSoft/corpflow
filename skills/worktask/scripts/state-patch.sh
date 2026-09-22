@@ -464,7 +464,7 @@ parse_frontmatter() {
   PARSED_TE_STATE="unparsed" PARSED_TE_JSON="null"
 
   local fmfile
-  fmfile=$(mktemp -t corpflow-fm-XXXXXX) || {
+  fmfile=$(mktemp "${TMPDIR:-/tmp}/corpflow-fm-XXXXXX") || {
     # A staging failure here is the tool's own disk/tmp, not the artifact's shape — a
     # different failure class from every other arm below, so it exits directly rather than
     # returning into a caller that would fold it into the shape-defect exit code.
@@ -795,7 +795,7 @@ _finding_cleanup() {
 # finding renders byte-for-byte — a silently clipped one would still read as verbatim.
 reopen_read_finding() {
   local src="$1" bytes=0
-  _FINDING_TMP=$(umask 077 && mktemp -t corpflow-finding-XXXXXX) || {
+  _FINDING_TMP=$(umask 077 && mktemp "${TMPDIR:-/tmp}/corpflow-finding-XXXXXX") || {
     printf >&2 'reopen: cannot stage the finding (mktemp failed); state.json unchanged\n'
     log_msg ERROR "cannot stage finding for reopen of tasks.${TASK_OP_ID}; state.json unchanged"
     exit 2
@@ -846,7 +846,7 @@ parse_files_touched() {
   PARSED_FT_JSON="[]"
   [ -r "$art" ] || return 0
   command -v corpflow_fm_block > /dev/null 2>&1 || return 0
-  fmfile=$(mktemp -t corpflow-ft-XXXXXX) || return 0
+  fmfile=$(mktemp "${TMPDIR:-/tmp}/corpflow-ft-XXXXXX") || return 0
   if ! corpflow_fm_block "$art" > "$fmfile" 2> /dev/null \
     || ! corpflow_fm_has_handoff "$fmfile"; then
     rm -f "$fmfile"
