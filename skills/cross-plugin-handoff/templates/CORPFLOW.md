@@ -167,7 +167,7 @@ yours to resolve, not the user's — cost is not an exemption.
 | Where | Carries |
 |---|---|
 | artifact `## elicitation-sweep` H2 | the FULL item. Canonical. Heading present even when the array is empty. |
-| `handoff.open_questions[]` | the stub `{{ id, class, ref }}` |
+| `handoff.open_questions[]` | the stub `{ id, class, ref }` |
 | `state-patch.sh --facts` | the stub plus `stage`, `blocks_next_stage`, `status` |
 
 #### The item, as written in the artifact
