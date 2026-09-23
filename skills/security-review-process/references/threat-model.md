@@ -1,6 +1,6 @@
 # Threat Model (SR0)
 
-Lightweight threat modeling for the SR stage. Scope is **the change under review**: model the
+Lightweight threat modeling for the SR stage. Scope is the change under review: model the
 boundaries the diff crosses, not every boundary that exists.
 
 Runs at SR0, before the OWASP checklist. Its output is the `## threat-model` section of
@@ -23,7 +23,7 @@ For each: name the two sides, the asset that crosses, and who is trusted on each
 
 ## Step 2 — Attack surface
 
-Per boundary, enumerate the concrete **entry points the diff adds or widens** — an endpoint,
+Per boundary, enumerate the concrete entry points the diff adds or widens — an endpoint,
 an IPC/URL scheme, a parsed file format, a CLI flag, an exported component, a new dependency,
 a new tool granted to an agent — recording each input's origin (who controls it) and where it
 lands.
@@ -33,8 +33,8 @@ rather than listing it for completeness.
 
 ## Step 3 — STRIDE categorization
 
-Categorize each entry point's plausible threats. STRIDE says *what kind* of threat it is; it
-does **not** set severity — severity stays the table in `agents/security-reviewer.md
+Categorize each entry point's plausible threats. STRIDE says what kind of threat it is; it
+does not set severity — severity stays the table in `agents/security-reviewer.md
 § Severity Classification`. Never introduce a second severity vocabulary.
 
 | STRIDE | Violates | Ask |
@@ -78,12 +78,10 @@ boundary and adds no attacker-controlled input, the whole section is one line:
 No material threat surface: <what the diff changes and why nothing crosses a boundary>.
 ```
 
-That is a complete, passing threat model. Never invent threats to fill the table — a
+That is a complete, passing threat model. Don't invent threats to fill the table — a
 speculative threat with no reachable path costs the next reviewer real time.
 
 ## Relation to the OWASP checklist
 
-The threat model scopes the checklist, it does not replace it; `owasp-checklist.md § A04`
-carries the checkbox this procedure satisfies. Run the checklist at SR1 against the surface
-identified here, plus the always-on passes (secrets, dependencies) which run whether or not a
-boundary was crossed.
+The threat model scopes the SR1 checklist, it does not replace it; `owasp-checklist.md § A04`
+carries this procedure's completion criteria.
