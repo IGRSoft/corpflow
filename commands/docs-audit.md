@@ -15,12 +15,6 @@ related:
 
 Audit documentation for gaps, outdated content, and quality issues.
 
-## Usage
-
-```
-/docs-audit [--path <dir>] [--type code|readme|api|architecture] [--scope full|section] [--fix] [--report]
-```
-
 ## Options
 
 | Option | Values | Purpose |
@@ -31,9 +25,8 @@ Audit documentation for gaps, outdated content, and quality issues.
 | `--fix` | — | Apply the mechanical fixes listed under Auto-Fix Available, in place, to files this run already read |
 | `--report` | — | Emit every report section and write it to `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`, the only file this command creates; without it, emit Summary + Critical Issues only |
 
-## Examples
-
 ```
+/docs-audit [--path <dir>] [--type code|readme|api|architecture] [--scope full|section] [--fix] [--report]
 /docs-audit
 /docs-audit --path src/auth --type code
 /docs-audit --type api --report
@@ -74,9 +67,3 @@ Quality-metric targets: doc coverage 80%, example coverage 60%, link health 100%
 | README | Sections, examples, installation, usage |
 | API | Endpoints, params, responses, examples |
 | Architecture | Currency, diagrams, decisions |
-
-## Integration
-
-- `/docs-readme` — fix the README issues this audit reports
-- `/worktask` DC stage — documentation phase
-- `agents/technical-writer.md` — owning agent
