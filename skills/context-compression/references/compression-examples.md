@@ -1,6 +1,6 @@
 # Compression Examples & Anti-Patterns
 
-Worked pairs, formats, and anti-patterns backing `../SKILL.md § Core Principles`, `§ Handoff Template`, and `§ Compression Techniques by Content Type`.
+Worked pairs, formats, and anti-patterns backing `../SKILL.md § Core Principles`.
 
 ## Before/After: Requirements Handoff
 
@@ -58,12 +58,12 @@ ADR: .context/architecture-N.md#adr-theme-system
 
 | Anti-Pattern | Problem | Fix |
 |--------------|---------|-----|
-| **Full file dumps** | Wastes 500-2000 tokens per file | Reference by path |
-| **Complete ADRs inline** | 300-500 tokens each | Reference + one-line summary |
-| **Explaining obvious decisions** | Unnecessary tokens | Only document non-obvious choices |
-| **Historical context every handoff** | Compounds over stages | Include only for first handoff, then reference |
-| **Prose over lists** | 2-3x more tokens | Use structured formats |
-| **Including rejected alternatives** | Low value, high cost | Mention names only |
+| Full file dumps | 500-2000 tokens per file | Reference by path |
+| Complete ADRs inline | 300-500 tokens each | Reference + one-line summary |
+| Explaining obvious decisions | Unnecessary tokens | Only document non-obvious choices |
+| Historical context every handoff | Compounds over stages | Include only for first handoff, then reference |
+| Prose over lists | 2-3x more tokens | Use structured formats |
+| Including rejected alternatives | Low value, high cost | Mention names only |
 
 ## Quick Reference Card
 
