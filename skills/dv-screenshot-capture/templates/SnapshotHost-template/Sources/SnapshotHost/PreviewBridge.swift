@@ -2,7 +2,7 @@
 //
 // Bridge between SnapshotHost's CLI and the project's View modules.
 // This file is the ONLY place `@testable import <ProjectModule>` lines are
-// permitted (ad3 — `@testable import` boundary rule).
+// permitted (leaf View modules only).
 //
 // REWRITTEN IDEMPOTENTLY by the apple-canvas adapter before each render:
 //   - Same project state → byte-identical file content (no spurious diff churn).

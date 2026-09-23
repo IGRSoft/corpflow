@@ -2,7 +2,7 @@
 
 How `dv-screenshot-capture/apple-canvas` consumes `preview-ensurer`. The full skill lives at `../../preview-ensurer/SKILL.md`; the canonical cross-skill contract (call signature, result shape, invocation sequence) lives in `apple-canvas.md`.
 
-> **One chokepoint** (v1): the apple-canvas adapter is the sole caller. Do not invoke preview-ensurer directly from DV outside `dv-screenshot-capture`.
+> One chokepoint: the apple-canvas adapter is the sole caller. Do not invoke preview-ensurer directly from DV outside `dv-screenshot-capture`.
 
 ## What preview-ensurer does
 
@@ -14,7 +14,7 @@ For each modified SwiftUI View file:
 4. If absent and `auto_add: true`: synthesize a minimal `#Preview { TypeName(<mocked-args>) }`, append it, run a `swift -frontend -parse <file>` smoke check, and roll back on parse failure.
 5. Return `{views, errors}` and write `state.json → facts.previews_added[]`.
 
-**A4 invariant**: NEVER overwrite an existing `#Preview` or `PreviewProvider` — pre-existing previews always win.
+Never overwrite an existing `#Preview` or `PreviewProvider` — pre-existing previews always win.
 
 ## Mock-arg derivation rules (priority order)
 
@@ -29,7 +29,7 @@ For each modified SwiftUI View file:
 
 ## Call and result (summary)
 
-apple-canvas calls `ensure_previews(modified_files, options={auto_add: true, write_mode: "in-source"})` — `in-source` is the only v1 mode (ad4) — and receives `{views: [{file, type, has_preview, action, reason?, mock_strategy?}], errors: [String]}`. Empty `errors` → continue to `swift run SnapshotHost`; non-empty → apple-canvas throws `missing_input` and the DV completion gate records it in `.context/errors/developer.md`. Field-level contract: `apple-canvas.md § Function signature (canonical)`.
+apple-canvas calls `ensure_previews(modified_files, options={auto_add: true, write_mode: "in-source"})` — `in-source` is the only mode — and receives `{views: [{file, type, has_preview, action, reason?, mock_strategy?}], errors: [String]}`. Empty `errors` → continue to `swift run SnapshotHost`; non-empty → apple-canvas throws `missing_input` and the DV completion gate records it in `.context/errors/developer.md`. Field-level contract: `apple-canvas.md § Function signature (canonical)`.
 
 ## Failure / escalation
 
@@ -37,7 +37,7 @@ apple-canvas calls `ensure_previews(modified_files, options={auto_add: true, wri
 |---|---|
 | SwiftSyntax parse fails on an input file | Append `parse_failed: <file>` to `errors[]`; skip that file, continue with the others |
 | Post-edit `swift -frontend -parse` fails on the generated `#Preview` | Roll back (`git checkout -- <file>`); record skipped with reason `generated_preview_invalid`; never leave broken syntax |
-| swift-syntax API breakage on a toolchain bump | Surface as `errors[]` with `swift_syntax_api_break: <hint>`; escalates per coordination-0.md risk-watch row 1 (apple-developer:ios-developer) |
+| swift-syntax API breakage on a toolchain bump | Surface as `errors[]` with `swift_syntax_api_break: <hint>`; escalate to `apple-developer:ios-developer` |
 | File contains 3+ View structs and `args.view` unspecified | Skip with reason `ambiguous_view_target`; user disambiguates via `metadata.canvas_view` |
 
 Each added preview emits one `preview_added` audit row (`file`, `view_type`, `mock_strategy`, `lines_added`).

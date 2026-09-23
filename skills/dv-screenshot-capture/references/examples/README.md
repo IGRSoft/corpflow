@@ -1,12 +1,10 @@
 # Examples — dv-screenshot-capture
 
-These three PNGs are the inaugural output of this skill, captured during the worktask that introduced it (issue #114, run 0): they prove the contract end-to-end (the skill captured the diff that defines the skill itself) and document the expected shape of a manifest entry for future DV stages.
-
-All three came from the `cli_fallback` adapter via `silicon` (Dracula theme), downscaled to ≤200 KB per the AR ad7 size budget. Platform was `all` (plugin meta-work has no UI); adapter selection is deterministic per `../../SKILL.md § Adapters`.
+A worked manifest: three real captures from the `cli_fallback` adapter via `silicon` (Dracula theme), downscaled to ≤200 KB. Platform was `all` (plugin meta-work has no UI).
 
 ## Manifest
 
-This table is the **canonical 9-column shape** — what `attach-visual-evidence.sh
+This table is the canonical 9-column shape — what `attach-visual-evidence.sh
 --validate-manifest` asserts, and the file its failure diagnostic points a DV agent at.
 
 | # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |
@@ -28,17 +26,8 @@ capture maps to, or `—` when there is no registry or no unique match (plugin m
 neither). Full template and row grammar, including the `tool_missing` row:
 `../../SKILL.md § Row grammar` and `§ tool_missing row`.
 
-## AC coverage (from planning-0.md)
-
-A list, not a second table, deliberately: `--validate-manifest` reads *every* pipe table in the
-file it is pointed at, so a companion table here would be judged against the capture-row grammar
-and reported as a schema violation.
-
-- AC-1 skill present — dv-DV0-01 — pass
-- AC-2 ≥1 screenshot artifact — dv-DV0-01..03 — pass
-- AC-4 QA-readable artifact — dv-DV0-01..03 (PNG, universally readable) — pass
-- AC-5 DR-citable artifact — dv-DV0-01..03 + the manifest above — pass
-- AC-6 deterministic platform routing — Adapter column above — pass
+Keep this file to one pipe table: `--validate-manifest` reads every pipe table in the file it is
+pointed at and judges each against the capture-row grammar.
 
 ## Reproducing
 

@@ -2,15 +2,15 @@
 
 Reference for the `apple-canvas` adapter in `dv-screenshot-capture`. Renders SwiftUI `#Preview` views to PNG via `ImageRenderer` in a host-side SPM executable target (`tools/SnapshotHost/`), without booting the simulator.
 
-> Companion: `preview-ensurer.md` (heuristics summary). The canonical contract for the cross-skill boundary lives in **this** file.
+> Companion: `preview-ensurer.md` (heuristics summary). The canonical contract for the cross-skill boundary lives in this file.
 
 ## When this adapter runs
 
-Selected when `state.platform == "apple"` and this adapter's degraded-mode predicate fires — plan-level `metadata.requires_canvas_screenshot`, per-call `args.force_canvas`, or a sim-unavailable inference (xcframework-without-sim-slice, etc.). The dispatcher only calls `ADAPTERS["apple"]["degraded_if"]`; the clauses are the adapter's own and canonical in `../SKILL.md § apple degraded-mode predicate`. Render destination comes from `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` (default `macos-host`, ad5).
+Selected when `state.platform == "apple"` and this adapter's degraded-mode predicate fires — plan-level `metadata.requires_canvas_screenshot`, per-call `args.force_canvas`, or a sim-unavailable inference (xcframework-without-sim-slice, etc.). The dispatcher only calls `ADAPTERS["apple"]["degraded_if"]`; the clauses are the adapter's own and canonical in `../SKILL.md § apple degraded-mode predicate`. Render destination comes from `metadata.canvas_destination ∈ {"macos-host","ios-sim"}` (default `macos-host`).
 
 ## Cross-skill contract with preview-ensurer
 
-**preview-ensurer runs BEFORE SnapshotHost**, and the apple-canvas adapter is its sole caller — never invoked directly from DV in v1 (ad8, single chokepoint).
+preview-ensurer runs before SnapshotHost, and the apple-canvas adapter is its sole caller — never invoked directly from DV.
 
 ### Function signature (canonical)
 
@@ -19,7 +19,7 @@ ensure_previews(
   modified_files: [Path],         # absolute paths from git diff --diff-filter=AMR
   options: {
     auto_add: Bool,               # default true; false = dry-run (detect only)
-    write_mode: "in-source"       # OQ1 ratified; "staged-patch" unsupported in v1
+    write_mode: "in-source"       # the only mode; "staged-patch" unsupported
   }
 ) → {
   views: [
@@ -75,16 +75,16 @@ The standard adapter shape (`../SKILL.md § Adapters`); `error` here is one of `
 
 ## Failure cascade ladder
 
-Four tiers (ad6), additive to the existing `dv-screenshot-capture` failure-mode vocabulary — apple-canvas never replaces that chain. Each transition emits its own audit row.
+Four tiers, additive to the `dv-screenshot-capture` failure-mode vocabulary, never replacing that chain. Each transition emits its own audit row.
 
 ### Tiers
 
 1. **SnapshotHost missing on disk** → scaffold from `templates/SnapshotHost-template/`, write the `tools/SnapshotHost/.canvas-scaffold-version` marker, retry the render, emit `canvas_render` `phase: "scaffold"`.
 2. **Host build fails** (`swift build` non-zero, or exit `module_graph_sim_required`) → escalate to the `apple` (sim) adapter; `screenshot_platform_fallback`, `reason: "canvas_host_build_failed"`.
 3. **Sim adapter unavailable** (`sim_unavailable(state) == true`) → `cli/fallback`; `reason: "canvas_sim_unavailable"`.
-4. **preview-ensurer returned errors** → bubble as `missing_input` to the DV completion gate, append to `.context/errors/developer.md`. Do NOT render; do NOT silently skip (ad8).
+4. **preview-ensurer returned errors** → bubble as `missing_input` to the DV completion gate, append to `.context/errors/developer.md`. Do not render and do not silently skip.
 
-## macOS host vs ios-sim destination selection (ad5)
+## macOS host vs ios-sim destination selection
 
 | Destination | When to use | `Package.swift` platforms | Speed | Determinism | Font fidelity |
 |---|---|---|---|---|---|
@@ -95,9 +95,9 @@ Switch via `metadata.canvas_destination: "ios-sim"`; the scaffolder uncomments t
 
 ## Fidelity caveats (ImageRenderer ≠ XCPreviewAgent)
 
-Host-side `ImageRenderer` does not match `XCPreviewAgent`'s rasterization: font metrics differ by 1–2 px on some SF Pro weights; system materials (`.ultraThinMaterial` and friends) rasterize differently; there is NO device chrome — status bar, dynamic island, bezel are absent from the clipped content rect (C5); and only a single-shot snapshot is produced (trait matrices await a future `args.trait_collections` flag).
+Host-side `ImageRenderer` does not match `XCPreviewAgent`'s rasterization: font metrics differ by 1–2 px on some SF Pro weights; system materials (`.ultraThinMaterial` and friends) rasterize differently; there is no device chrome — status bar, dynamic island, bezel are absent from the clipped content rect; and only a single-shot snapshot is produced (trait matrices await a future `args.trait_collections` flag).
 
-Mitigations: pin `proposedSize = CGSize(width: 393, height: 852)` so layout is deterministic across host and sim; rely on the default 8% RMSE threshold to absorb sub-pixel drift while still catching real regressions; escape to `metadata.canvas_destination: "ios-sim"` when pixel-perfect; and for whole-screen Figma comparisons including chrome, document an inset wrapper in the project's own preview file rather than rendering chrome here (C5).
+Mitigations: pin `proposedSize = CGSize(width: 393, height: 852)` so layout is deterministic across host and sim; rely on the default 8% RMSE threshold to absorb sub-pixel drift while still catching real regressions; escape to `metadata.canvas_destination: "ios-sim"` when pixel-perfect; and for whole-screen Figma comparisons including chrome, document an inset wrapper in the project's own preview file rather than rendering chrome here.
 
 ## tools/SnapshotHost/ on-disk shape
 

@@ -1,6 +1,6 @@
 ---
 name: dv-screenshot-capture
-description: Use PROACTIVELY and ALWAYS when DV is about to complete and `metadata.requires_screenshots` is true (default) — the completion gate fails otherwise. Capture screenshots during the DV stage and attach to the PR as visual evidence for QA and DR.
+description: Use when DV is about to complete and `metadata.requires_screenshots` is true (the default) — the completion gate blocks otherwise. Captures DV screenshots (or an annotated diff for meta-work) as visual evidence for QA, DR and the PR.
 version: 1.0.1
 argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
 keep-coding-instructions: true
@@ -36,7 +36,7 @@ bash "${CLAUDE_SKILL_DIR}/scripts/resolve-worktask.sh" --task-id <task_id>
 
 ### Why the guard keys on the ledger
 
-The skill is model-invocable, so this step, not the harness, decides whether a run may write. It tests whether a worktask ledger resolves, not who called: inside a live worktask the skill runs with no per-run pre-authorization, and a standalone call with no worktask ends at exit 4. The script finds the ledger through § Root resolution and creates nothing. Its exit 4 is unrelated to the gate's `--check` exit 4 (`tool_missing_only`), so never chain the two on a bare exit code.
+The skill is model-invocable, so this step, not the harness, decides whether a run may write: it tests whether a worktask ledger resolves (§ Root resolution), not who called, and creates nothing. Its exit 4 is unrelated to the gate's `--check` exit 4 (`tool_missing_only`), so never chain the two on a bare exit code.
 
 ## Storage layout
 
@@ -56,7 +56,7 @@ The skill is model-invocable, so this step, not the harness, decides whether a r
 
 ### Numbering
 
-`NN` is **two-digit zero-padded** and monotonic per task: `NN = 1 + max` over the `dv-<TASK_ID>-[0-9][0-9]-*` files in the images dir and `oversize/` and the `#` column of `screenshots-<TASK_ID>.md` (first = `01`; past `99` the script exits 1). Another task's files never advance it, so parallel streams each start at `01`. Reruns (`run_index > 0`) do NOT reset it: captures append (`dv-DV0-06-…`), and cleanup happens at FN/ST or via `/worktask archive`.
+`NN` is two-digit zero-padded and monotonic per task: `NN = 1 + max` over the `dv-<TASK_ID>-[0-9][0-9]-*` files in the images dir and `oversize/` and the `#` column of `screenshots-<TASK_ID>.md` (first = `01`; past `99` the script exits 1). Another task's files never advance it, so parallel streams each start at `01`. Reruns (`run_index > 0`) do not reset it: captures append (`dv-DV0-06-…`), and cleanup happens at FN/ST or via `/worktask archive`.
 
 ### Legacy manifest
 
@@ -82,13 +82,13 @@ Minimum **1 screenshot** per task when `metadata.requires_screenshots: true`, ex
 
 ## Live-drive verification (`ui_visual_check`)
 
-When the plan sets `ui_visual_check: true`, static evidence alone does NOT satisfy the DV exit gate. The principle is platform-independent: **a static or host-rendered snapshot verifies structure, not runtime presentation.** A component rendered outside the running app never executes the app's real update, layout and navigation path, so same-frame update faults, control overflow, and dropped state transitions survive it — as they survive a passing unit test.
+When the plan sets `ui_visual_check: true`, static evidence alone does not satisfy the DV exit gate: a static or host-rendered snapshot verifies structure, not runtime presentation. It never runs the app's real update, layout and navigation path, so same-frame update faults, control overflow and dropped state transitions survive it.
 
 ### Live-drive steps
 
 1. Build and run the app on its real runtime surface (booted simulator, emulator, device, browser session).
-2. Drive it through EACH rendered substate the ACs name (default, error, empty, loading, success, every result/review state), tapping through the real transitions rather than jumping to a state in isolation.
-3. Confirm each primary control is on-screen and hittable and that transition controls actually present the next state, THEN capture from that live-driven state.
+2. Drive it through each rendered substate the ACs name (default, error, empty, loading, success, every result/review state), tapping through the real transitions rather than jumping to a state in isolation.
+3. Confirm each primary control is on-screen and hittable and that transition controls actually present the next state, then capture from that live-driven state.
 
 A `ui_visual_check` row whose only evidence is a static render or a passing unit test is incomplete — recapture from a live-driven run.
 
@@ -121,7 +121,7 @@ capture(task_id: string, slug: string, platform: string, args: object) → {
 
 ### Adapter selection rule
 
-One table lookup for every platform. A platform whose primary adapter can be unusable registers a **degraded-mode predicate** — a hook the dispatcher calls without knowing what it tests. No platform gets a branch of its own here.
+One table lookup for every platform. A platform whose primary adapter can be unusable registers a degraded-mode predicate, which the dispatcher calls without knowing what it tests.
 
 #### Dispatch table
 
@@ -151,7 +151,7 @@ Unknown or `"all"` platform → `cli_fallback_adapter` + audit row `screenshot_p
 
 #### Degraded-mode predicate contract
 
-`degraded_if(state, args) → bool`: total, side-effect free, and safe to call when its platform's tooling is absent — a predicate that cannot decide returns `False`, running the primary and letting the fallback ladder handle a real failure. Only `apple` registers one today; a platform gains degraded mode by adding the two keys, with no dispatcher change.
+`degraded_if(state, args) → bool`: total, side-effect free, and safe to call when its platform's tooling is absent — a predicate that cannot decide returns `False`, running the primary and letting the fallback ladder handle a real failure.
 
 ### Per-adapter behavior
 
@@ -161,7 +161,7 @@ request goes to the override's entry agent instead.
 
 #### apple, web, android adapters
 
-These three **delegate the capture to the platform's own agent** — corpflow holds no platform tool grants (XcodeBuildMCP and friends), the platform plugin does. Ask that agent to produce a file at the target path, then stat the path yourself to fill the `{path, bytes, ok, error}` contract.
+These three delegate the capture to the platform's own agent — corpflow holds no platform tool grants (XcodeBuildMCP and friends), the platform plugin does. Ask that agent to produce a file at the target path, then stat the path yourself to fill the `{path, bytes, ok, error}` contract.
 
 ##### Delegation targets
 
@@ -173,9 +173,7 @@ These three **delegate the capture to the platform's own agent** — corpflow ho
 
 ##### Delegated-capture result handling
 
-The scripts above are the executable form of those rows, not a second delegation path: plain CLI (`npx`, `adb`) holding no MCP grant, so the delegated agent runs them exactly as a direct caller would.
-
-The delegate's prose reply is never the evidence — **the file is**. After the `Task` returns, stat the target path:
+The delegate's prose reply is never the evidence — the file is. After the `Task` returns, stat the target path:
 
 - Non-empty file → `{path, bytes: <stat>, ok: true, error: null}`; apply the size budget.
 - No file, empty file, or an errored `Task` → fall through to `cli_fallback` exactly as a missing tool did, emitting `screenshot_platform_fallback` with the table's `reason` (or `"delegation_unavailable"` when the agent was unreachable). The enum is unchanged: the capture still surfaces as `"capture_failed"`, or `"tool_missing"` once `cli_fallback` also bottoms out.
@@ -186,7 +184,7 @@ The delegate's prose reply is never the evidence — **the file is**. After the 
 
 ##### apple degraded-mode predicate
 
-Registered as `ADAPTERS["apple"]["degraded_if"]`, Apple-adapter-owned on purpose: the xcodebuild log scrape is exactly the platform detail the generic dispatcher must not carry.
+Registered as `ADAPTERS["apple"]["degraded_if"]`, so the xcodebuild log scrape stays out of the generic dispatcher.
 
 ```python
 def degraded(state, args) -> bool:
@@ -199,7 +197,7 @@ def degraded(state, args) -> bool:
     )
 ```
 
-The log scrape reads the most recent xcodebuild log under `.context/logs/` and catches the xcframework-missing-sim-slice case (C1). All clauses false → the sim-booting `apple` adapter runs unchanged.
+The log scrape reads the most recent xcodebuild log under `.context/logs/` and catches the xcframework-missing-sim-slice case. All clauses false → the sim-booting `apple` adapter runs unchanged.
 
 ##### apple-canvas failure → fallback
 
@@ -209,9 +207,9 @@ The log scrape reads the most recent xcodebuild log under `.context/logs/` and c
 
 #### cli/fallback adapter
 
-Also serves `platform: "all"`, and is implemented by `scripts/cli-fallback.sh`. Chain: **1)** `git diff` piped to `silicon --language diff`; **2)** silicon absent → an ImageMagick `caption:` text card of the first 60 diff lines; **3)** neither produced a usable PNG → **no file is written**: `ok: false` with `error: "tool_missing"` (exit 2, nothing on PATH) or `"render_failed"` (exit 3, a tool ran and failed).
+Also serves `platform: "all"`, and is implemented by `scripts/cli-fallback.sh`. Chain: 1) `git diff` piped to `silicon --language diff`; 2) silicon absent → an ImageMagick `caption:` text card of the first 60 diff lines; 3) neither produced a usable PNG → no file is written: `ok: false` with `error: "tool_missing"` (exit 2, nothing on PATH) or `"render_failed"` (exit 3, a tool ran and failed).
 
-This IS the fallback — nothing sits under it, and its floor is a loud failure rather than an artifact. A placeholder file passes an existence check while proving nothing, so consumers must treat any non-zero exit as "no capture" and never manifest the path from the contract line. Exact commands, the floor's exit codes, and the redaction recipe: `references/cli-fallback.md`.
+Nothing sits under this fallback, and its floor is a loud failure rather than an artifact: a placeholder passes an existence check while proving nothing, so consumers treat any non-zero exit as "no capture" and never manifest the path from the contract line. Exact commands, the floor's exit codes, and the redaction recipe: `references/cli-fallback.md`.
 
 ##### tool_missing floor row
 
@@ -265,11 +263,11 @@ Playwright resolves as a `playwright` binary on PATH, else the local package via
 
 All but `apple-canvas.sh` implement `--self-test` — fixture-driven, needing no network, git, browser, or device. Exit codes and the stdout contract live in each script's shdoc header.
 
-The three capture scripts share one exit-code grammar: **0** success, **1** bad arguments, an unresolved root, a ledger mismatch or a task the ledger lacks, **2** `tool_missing`, **3** `capture_failed` (`render_failed` in `cli-fallback.sh`, which has no lower rung to route to). Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
+The three capture scripts share one exit-code grammar: 0 success, 1 bad arguments, an unresolved root, a ledger mismatch or a task the ledger lacks, 2 `tool_missing`, 3 `capture_failed` (`render_failed` in `cli-fallback.sh`, which has no lower rung to route to). Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
 
 ### Adapter maturity
 
-`apple` is the one prose-only adapter — booting a simulator and driving the running app needs the XcodeBuildMCP grant this skill deliberately does not hold, so an `apple` failure falls through to `cli_fallback`. Every other adapter ships a self-tested script, so its failures are reportable tool or device conditions.
+`apple` is the one prose-only adapter — driving a simulator needs the XcodeBuildMCP grant this skill does not hold — so an `apple` failure falls through to `cli_fallback`. Every other adapter ships a self-tested script.
 
 ## Attachment
 
@@ -308,7 +306,7 @@ Path is exactly `—` and Bytes `0`; the Caption lists at least one tool, each s
 
 #### Design Ref column (QA join key)
 
-The trailing **`Design Ref`** column is the QA join key: the matching `figma-registry.md` row `ID` when the capture maps to a known design frame, else `—` (see `§ Registry tagging`). The column is optional and append-only — old manifests lacking it parse fine (QA treats a missing value as `—`).
+The trailing `Design Ref` column is the QA join key: the matching `figma-registry.md` row `ID` when the capture maps to a known design frame, else `—` (see `§ Registry tagging`). The column is optional and append-only — old manifests lacking it parse fine (QA treats a missing value as `—`).
 
 #### Manifest tail sections
 
@@ -328,13 +326,13 @@ The trailing **`Design Ref`** column is the QA join key: the matching `figma-reg
 When `.context/designs/figma-registry.md` exists at capture time, resolve each capture's `Design Ref` so QA can reuse the result image instead of re-capturing:
 
 1. Determine the capture's intended **Screen** and **State** (from the slug / capture purpose / the AC it satisfies).
-2. Find the registry row whose `Screen` **and** `State` both equal the capture's; on a unique match write that row's `ID` (e.g. `design-002`).
-3. **Overview rows (`State: overview`) are NEVER a match target** — they are container-completeness references, not per-state result frames. Skip them.
+2. Find the registry row whose `Screen` and `State` both equal the capture's; on a unique match write that row's `ID` (e.g. `design-002`).
+3. Skip overview rows (`State: overview`) — they are container-completeness references, not per-state result frames.
 4. No registry, no unique match, or an ambiguous (multi-row) match → write `—`.
 
 #### Advisory semantics
 
-This step never fails DV: a failed, missing, or ambiguous match writes `—` and DV proceeds. The registry is **PM-owned** — DV reads it, NEVER writes or back-patches it. When in doubt write `—`, which routes QA to its safe live-capture fallback rather than a wrong pairing.
+This step never fails DV: a failed, missing, or ambiguous match writes `—` and DV proceeds. The registry is PM-owned — DV reads it, never writes or back-patches it. When in doubt write `—`, which routes QA to its live-capture fallback rather than a wrong pairing.
 
 #### Skip manifest (requires_screenshots: false)
 
@@ -348,7 +346,7 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 ### PR body attachment
 
-**Do NOT** hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies (camo fetches anonymously; private raw URLs 404; relative links unresolved).
+Do not hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies.
 
 FN instead runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes`. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block of hosted URLs, and prints nothing when `requires_screenshots == false` or no captures exist. It reads every `screenshots-*.md` in task-id order, then a legacy `screenshots.md`, and the embed cap spans that union. Oversize rows, tool_missing rows and rows past the cap become plain bullets, never image embeds. Insertion contract: `skills/worktask/references/conductor-attachments.md`.
 
@@ -368,11 +366,11 @@ Enforced after every `capture()` call:
 
 1. Read `result.bytes`.
 2. `bytes ≥ 500_000` → `pngquant --quality=65-80 --force --output <path> <path>`; re-stat.
-3. Still `≥ 500_000` → move to `.context/images/<worktask_id>/oversize/` (not committed), record link-only in `screenshots-<TASK_ID>.md § Out-of-budget files`, `ok: false`, `error: "oversize_unquantizable"`. DV does NOT abort — it proceeds with remaining captures.
+3. Still `≥ 500_000` → move to `.context/images/<worktask_id>/oversize/` (not committed), record link-only in `screenshots-<TASK_ID>.md § Out-of-budget files`, `ok: false`, `error: "oversize_unquantizable"`. DV proceeds with remaining captures.
 4. `200_000 ≤ bytes < 500_000` → audit row `screenshot_size_warn` with `metadata: {path, bytes}`; keep file.
 5. `count > 5` for the task → refuse further captures, audit `screenshot_count_exceeded`, DV stops at 5.
 
-Budget constants: **warn ≥200 KB**, **hard fail ≥500 KB**, **cap 5 files per task**.
+Budget constants: warn ≥200 KB, hard fail ≥500 KB, cap 5 files per task.
 
 ## Failure modes
 
@@ -403,7 +401,7 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 
 | Failure | Detection | Required Behavior |
 |---------|-----------|-------------------|
-| `metadata.requires_screenshots: false` AND zero captures | DV completion checklist | Write `screenshots-<TASK_ID>.md` with skip rationale. DV proceeds. NO `missing_screenshot_artifact` error. |
+| `metadata.requires_screenshots: false` AND zero captures | DV completion checklist | Write `screenshots-<TASK_ID>.md` with skip rationale. DV proceeds; no `missing_screenshot_artifact` error. |
 | `metadata.requires_screenshots: true` (default) AND zero captures | DV completion checklist; `--check` exit 3 | Outside `backend`/`systems`, DV FAILS with `missing_screenshot_artifact` and the gate blocks `no_captures`. Append `## DV[N] Retry [X/3]` block to `.context/errors/developer.md` (classification: `logic`). Retry: attempt `cli_fallback` once. |
 | Platform capture produced no file (delegate unreachable, or its tooling — XcodeBuildMCP / Playwright / adb — missing) | Target path absent or empty after the delegated `Task`; `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
 
@@ -414,7 +412,7 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 | All adapters fail including `cli_fallback` | `ok: false`; stdout `error=tool_missing` (exit 2) or `error=render_failed` (exit 3, a tool ran, no usable PNG) | No image is written: a placeholder passes an existence check while proving nothing. Audit `screenshot_capture_failed`; all tools absent adds a tool_missing row. DV reports a failed capture. |
 | Size budget exceeded after pngquant | `oversize_unquantizable` | Move to `oversize/`, link-only in `screenshots-<TASK_ID>.md`. Continue. |
 | 5-cap reached | `screenshot_count_exceeded` | Stop further captures. Audit row. Continue. |
-| `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/worktask.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Do NOT silently treat as success. |
+| `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/worktask.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Never treat as success. |
 
 ## Redaction
 
@@ -426,7 +424,7 @@ The `cli/fallback` `git diff` pipe can expose env files, tokens, or secrets pres
 |----------|-------|----------------|-----------------|
 | **DV** | DV | Captures; writes its own `screenshots-<TASK_ID>.md` + `state.json → facts.screenshots[]` | `development-N.md § Decisions` + audit.jsonl |
 | **DR** | DR | Each DV task's `screenshots-<TASK_ID>.md` (count, first filename, fallbacks, oversize notes) | `developer-review-N.md § Findings` |
-| **QA** | QA | Every `screenshots-*.md` (a legacy `screenshots.md` by its `## <TASK_ID>` sections) + each image. `Design Ref` joins each result image to a `figma-registry.md` row `ID`; the manifests are the **RMSE result-image source** for QA's Registry-Driven Design Comparison (the `--candidate` for `scripts/visual-diff.sh`). Live re-capture is QA's fallback only. | `testing-N.md § Visual Evidence` + `§ Design Comparison` |
+| **QA** | QA | Every `screenshots-*.md` (a legacy `screenshots.md` by its `## <TASK_ID>` sections) + each image. `Design Ref` joins each result image to a `figma-registry.md` row `ID`; the manifests are the RMSE result-image source for QA's Registry-Driven Design Comparison (the `--candidate` for `scripts/visual-diff.sh`). Live re-capture is QA's fallback only. | `testing-N.md § Visual Evidence` + `§ Design Comparison` |
 
 ### state.json registration schema
 
@@ -456,4 +454,4 @@ The `cli/fallback` `git diff` pipe can expose env files, tokens, or secrets pres
 
 ##### Adapter-scoped `canvas_render` extras
 
-Those keys are the contract every canvas adapter satisfies. Toolchain identifiers are the reporting adapter's own business — optional additions, never contract-level: `apple-canvas` also records `swift_version` and `swift_syntax_version` and uses `destination ∈ {"macos-host","ios-sim"}`; a future canvas adapter on another platform records its own toolchain keys and `destination` values.
+Those keys are the contract every canvas adapter satisfies; toolchain identifiers are optional adapter-scoped additions. `apple-canvas` also records `swift_version` and `swift_syntax_version` and uses `destination ∈ {"macos-host","ios-sim"}`.
