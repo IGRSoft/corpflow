@@ -13,26 +13,23 @@ related:
 
 # Optimize Command
 
-Analyze and optimize existing command definitions for usability, consistency, and completeness. Improves command quality using prompt engineering best practices.
-
-## Usage
-
-```
-/optimize-command <command-file>
-/optimize-command --all
-/optimize-command commands/estimate.md --focus examples
-```
+Optimize existing command definitions using prompt-engineering best practices.
 
 ## Options
 
-- `--all` - Optimize all commands in the commands directory
-- `--focus <area>` - Focus area: usage, options, examples, output, integration, frontmatter
-- `--dry-run` - Show recommendations without making changes
-- `--report` - Generate detailed optimization report
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--all` | — | Every command in `commands/` |
+| `--focus <area>` | see § Focus Areas | One area only (default: all) |
+| `--dry-run` | — | Recommend without editing files |
+| `--report` | — | Emit the full optimization report |
 
 ## Examples
 
 ```
+/optimize-command <command-file> [--focus <area>] [--dry-run] [--report]
+/optimize-command --all [--focus <area>] [--dry-run] [--report]
+
 /optimize-command commands/worktask.md
 /optimize-command commands/estimate.md --focus options
 /optimize-command --all --dry-run
@@ -70,13 +67,13 @@ Must Apply / Should Apply / Consider — numbered, most impactful first.
 
 - Score every area even when `--focus` narrows the edits; the reader needs the baseline.
 - Scoring scale is n/10 with a status glyph: ✅ Good/Excellent (≥8), ⚠️ Improvable (6–7), 🔴 Insufficient (≤5).
-- Quote the command's exact current text before the recommended replacement — never paraphrase it.
-- Frontmatter findings come first and are blocking (Must Apply tier).
+- Quote the command's current text verbatim before the recommended replacement.
+- Frontmatter findings come first and are blocking (Must Apply).
 - `--dry-run` omits `## Changes Applied` and the Summary "After" column.
 
 ## Focus Areas
 
-`--focus` values `usage`, `options`, `examples`, `output`, and `integration` each narrow the pass to the matching row of § Optimization Criteria. `--focus frontmatter` runs only § Frontmatter Audit (description length, model fit, allowed-tools precision, argument-hint alignment).
+`--focus` values `usage`, `options`, `examples`, `output`, `integration` and `body` each narrow the pass to the matching row of § Optimization Criteria. `--focus frontmatter` runs only § Frontmatter Audit.
 
 ## Optimization Criteria
 
@@ -91,41 +88,28 @@ Must Apply / Should Apply / Consider — numbered, most impactful first.
 
 ### Frontmatter Audit
 
-Run on every command regardless of focus area. Treat findings here as blocking on the "Must Apply" tier. Reference rubric: `skills/shared/model-selection.md § Cost Tiers`.
+Runs on every command regardless of `--focus`. Rubric: `skills/shared/model-selection.md § Cost Tiers`.
 
 #### Frontmatter Audit — P0 fields
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `description` | ≤250 characters. Same metric as agents. | P0 |
-| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}. Tier per `model-selection.md`: meta-tooling and orchestration → `opus`; analysis/summary → `sonnet`; one-shot scans → `haiku`. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) running on `sonnet` or below — meta-optimization is opus tier. | P0 |
+| `description` | ≤250 characters, measured as in `/optimize-agent`. | P0 |
+| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}, tier per § Cost Tiers. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) set to `sonnet` or below. | P0 |
 
 #### Frontmatter Audit — P1 fields
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `allowed-tools` | Explicit list. Bash subcommand scoping required: `Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)` — never bare `Bash` unless the command's purpose is general shell access. Flag `Write` declared without `Read` (likely incomplete). | P1 |
-| `argument-hint` | Must align with the `## Usage` positional/optional surface: count `--<flag>` mentions in Usage vs the hint and flag mismatch (hint says `<command name>` but Usage shows `--all`, `--focus`, `--dry-run`). Square brackets for optional positional, angle brackets for required. | P1 |
-
-#### Frontmatter Audit — P1 description trigger phrase
-
-| Field | Audit Rule | Severity |
-|-------|------------|----------|
-| `description` trigger phrase | Include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. EXEMPT: `disable-model-invocation: true` (slash-only) or `paths:` frontmatter (path-triggered) — these bypass description-trigger auto-invocation and are not flagged. | P1 |
+| `allowed-tools` | Explicit list with Bash subcommand scoping (`Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)`); bare `Bash` only when the command's purpose is general shell access. Flag `Write` declared without `Read` (likely incomplete). | P1 |
+| `argument-hint` | Matches the flag surface in § Options and the § Examples synopsis (or `## Usage`, where one remains): flag each `--<flag>` the hint omits. Square brackets for optional positional, angle brackets for required. | P1 |
+| `description` trigger phrase | Include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. Exempt: `disable-model-invocation: true` (slash-only) and `paths:` frontmatter (path-triggered) — neither is invoked from its description. | P1 |
 
 #### Frontmatter Audit — P2 consistency checks
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `$ARGUMENTS` substitution | Body references `$ARGUMENTS` → `argument-hint` is non-empty. Body has no `$ARGUMENTS` but hint is set → suggest removing the hint. Unmatched `$1`/`$2` placeholders survive verbatim in bodies (not silently stripped), so positional forms are safe to audit literally. | P2 |
-| Option-to-example coverage | Every `--option` in `## Options` should appear at least once in `## Examples`. Compute `set(options) − set(options-used-in-examples)`; flag each diff as "missing example for `--<flag>`". | P2 |
+| Option-to-example coverage | Every `--option` in § Options appears at least once in § Examples; flag each one missing as "missing example for `--<flag>`". | P2 |
 | Output-format consistency | Output samples must match the schema declared in prose — e.g. flag a command claiming "JSON output via `--format json`" whose Output Format shows only Markdown. | P2 |
-| Related links | Cross-reference targets (`./create-agent.md`, `../agents/prompt-engineer.md`) must resolve. Flag dead links. | P2 |
-
-#### Frontmatter Audit — reporting
-
-Report failures as a `## Frontmatter Findings` table before the scoring tables in § Output Format. Row schema mirrors `/optimize-agent`: `| Field | Observed | Required | Severity | Suggested edit |`.
-
-## Integration
-
-Used by the `prompt-engineer` agent for command optimization, during command ecosystem maintenance, and after worktask changes that require command updates.
+| Related links | `related:` entries and paths cited in the body must resolve. Flag dead links. | P2 |
