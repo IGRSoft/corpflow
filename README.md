@@ -5,7 +5,7 @@
 
 A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.32 · Requires Claude Code 2.1.270+**
+**Plugin 4.0.32 · Requires Claude Code 2.1.280+**
 
 ## Features
 
@@ -58,7 +58,7 @@ Tools listed below are organized by status (required, optional, platform-specifi
 | Tool | Status | Needed for | Degradation | macOS | Linux |
 |------|--------|-----------|-------------|-------|-------|
 | **bash 3.2+** | Required | Plugin scripts run on bash; 3.2 is the declared floor on macOS | No worktask will start | Installed by default | `apt-get install bash` or `dnf install bash` |
-| **Claude Code 2.1.270+** | Required | Ledger worktree resume loop; task-tracking fallback when CC tools unavailable; `/megatask` session coordination | No worktask will start | N/A | N/A |
+| **Claude Code 2.1.280+** | Required | Ledger worktree resume loop; task-tracking fallback when CC tools unavailable; `/megatask` session coordination; cross-session `SendMessage` delivery notice for permission-mode-held recipients | No worktask will start | N/A | N/A |
 | **git** | Required | Worktask isolation via git worktree; worktask state from branch tracking | No worktask will start | Installed with Xcode CLT | `apt-get install git` or `dnf install git` |
 | **POSIX text toolchain** — `awk`, `sed`, `grep`, `find`, `tr`, `mktemp`, `cut`, `sort`, `comm` | Required | Core shell scripting throughout hooks, skills, tests | No worktask will start | Installed by default (BSD variants) | `apt-get install gawk sed grep findutils coreutils` or `dnf install gawk sed grep findutils coreutils` |
 | **Hash tools** — `md5`, `md5sum`, `sha256sum`, `shasum` | Required | File integrity checks; used unguarded in tests and build | No worktask will start | Stock macOS ships `md5` and `shasum` (Perl-shipped). `sha1sum` and `sha256sum` are not available by default; dual-path code handles this (uses `shasum` instead) | `apt-get install coreutils` or `dnf install coreutils` |

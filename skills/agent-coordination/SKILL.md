@@ -468,7 +468,7 @@ Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "op
 
 #### Cross-session reach & SendMessage authority
 
-> `SendMessage` reaches sessions on **other machines**; `ListAgents` discovers them, labelling disconnected Remote Control rows `offline` and cloud rows `cloud`, and it also lists live **teammates** and reports the session's **own name** — the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value warns and **holds** messages (user settings) or **refuses** them (managed settings) rather than being ignored.
+> `SendMessage` reaches sessions on **other machines**; `ListAgents` discovers them, labelling disconnected Remote Control rows `offline` and cloud rows `cloud`, and it also lists live **teammates** and reports the session's **own name** — the address peers use (confirmed live at CC 2.1.280: the interactive row's `name` key, the same key the 2026-07-07 baseline already carried — no new key was added). `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value warns and **holds** messages (user settings) or **refuses** them (managed settings) rather than being ignored. **CC 2.1.271**: a message held by the *receiving* session's own permission-mode policy — not just an invalid `crossSessionInbound` value — used to leave the headless sender with no trace of it; the sender now gets a delivery notice, closing that silent-failure class (the min-CC-worthy precedent this file already tracks). The exact reported string this notice uses is unconfirmed — not yet observed live — so treat it as a `blocked`-class result (§ Delivery is reported, so check it) until a watch run pins it.
 
 > **Authority does not relay** — and matters more across machines, not less. Receivers **refuse relayed permission requests**; auto mode blocks them outright. A reattach may *nudge* a parked agent (re-prompt, supply an awaited answer) but never *authorize*: permission escalations and the PL gate stay operator-owned.
 
@@ -524,6 +524,10 @@ Claude Code keys installed agents by frontmatter `name`, so two plugins shipping
 #### Stall Timeout
 
 A subagent stalled >10 minutes fails with a clear error rather than hanging, and Monitor sessions inherit the guard: no output for >10 min is a failure — escalate per `Error Handling § Retry / Escalate Matrix`. Idle background shells may also be reaped under memory pressure; set `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` where a long-lived monitor or `tee` pipe must survive. The tee'd `.context/logs/*.log` is the durable record either way.
+
+#### Watch Deadline (CC 2.1.271)
+
+Every Monitor watch now carries a bounded deadline — at most 30 minutes, or 10 minutes inside a single-prompt (`-p`) run — replacing the old no-timeout `persistent` option (this plugin never set it). On expiry Claude is **notified to re-arm** the watch rather than the watch silently dying; a long build/test/archive step that outlives the deadline (QA `xcodebuild test`, RE `xcodebuild archive`, IR log tail) must re-attach Monitor on that notification instead of assuming one attach spans the whole operation. This is additive to, not a replacement for, the >10-min stall-timeout guard above.
 
 ### MCP Auto-Background
 
@@ -715,7 +719,7 @@ The worktask's two human checkpoints — the PL plan gate and the FN finalizatio
 
 They compose: a DV agent inside a worktask may spin up a native dynamic workflow to parallelize sub-tasks, then consolidate before its DR handoff. Workflow-spawned agents carry `workflow.run_id`/`workflow.name` OTel attributes, so a composed fan-out can be reconstructed alongside the audit trail.
 
-> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts, default **medium** = aim for <15 agents, settable anywhere via `workflowSizeGuideline`) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). An 11-stage worktask is not "oversized" by it, but a DV fan-out composed *on top of* one is, and that fan-out spends from the same 20-concurrent budget.
+> Naming note: the `/config` **"Dynamic workflow size"** setting (advisory agent counts, default **medium** = aim for <10 agents (CC 2.1.271 lowered this from <15), settable anywhere via `workflowSizeGuideline`) governs **native dynamic workflows** only — it is unrelated to PL0 dynamic *sizing* (complexity-scored stage selection). An 11-stage worktask is not "oversized" by it, but a DV fan-out composed *on top of* one is, and that fan-out spends from the same 20-concurrent budget. Small-plan Pro-plan sessions now default to **small**, not medium — a DV agent composing a workflow on a Pro account should confirm the active guideline via `/config` rather than assuming medium.
 
 ### Gate prompts (AskUserQuestion)
 

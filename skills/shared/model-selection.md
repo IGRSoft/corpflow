@@ -21,7 +21,7 @@ to write a prompt for the model this file picks** lives in `skills/shared/model-
 
 | Alias | Resolves to | Context | Pricing |
 |-------|-------------|---------|---------|
-| `opus` | **Opus 5** (`claude-opus-5`) — the default Opus | 1M by default; no plan qualifier, no usage-credit gate | fast mode $10/$50 per Mtok |
+| `opus` | **Opus 5.5** (`claude-opus-5-5`) — the default Opus (CC 2.1.280, superseding Opus 5/`claude-opus-5`) | 1M by default; no plan qualifier, no usage-credit gate | $4/$20 per Mtok, $0.20/Mtok cache reads; fast mode price multiplier applies on top |
 | `sonnet` | **Sonnet 5** — the Claude Code default model | native 1M | promo $2/$10 per Mtok through 2026-08-31 |
 | `fable` | **Fable 5.1** (`claude-fable-5-1`) — Mythos-class top reasoning. Claude apps gateway sessions keep resolving `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | $10/$50 per Mtok, $0.25/Mtok cache reads |
 | `haiku` | current Haiku | standard | § Cost Tiers |
@@ -58,7 +58,12 @@ on older models. "ultrathink" still triggers high effort; `/effort auto` resets,
 `/effort` opens the interactive Faster/Smarter slider. `/effort` now stores its default
 **per model**, so switching model no longer carries the previous model's effort — a user
 setting the pipeline does not control, which is why every stage still passes `effort`
-explicitly.
+explicitly. **CC 2.1.280**: a saved effort level never carries forward onto a newly-released
+model (e.g. Opus 5.5 launches at its own default until a level is explicitly picked for it),
+and Opus 4.7/4.8 and Fable 5 no longer hold their launch-default effort over an explicit
+`/effort` set anywhere (`-p`, Agent SDK, project/managed/`--settings` `effortLevel`, or a
+per-model level) — another reason every stage keeps passing `effort` explicitly rather than
+relying on a carried-over default.
 
 ### xhigh routing
 

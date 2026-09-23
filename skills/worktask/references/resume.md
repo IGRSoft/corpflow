@@ -409,7 +409,7 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 #### Reattach, cross-spawn & inspection
 
    - **Reattach fidelity**: `SendMessage` asks the caller to retarget when a re-spawned agent reuses a previous name; a `SendMessage`-resumed agent does not stick as `failed`/`completed`; a per-stage model override survives resume and follow-up messages (`skills/shared/model-selection.md § Per-Invocation Override`); `/rename` persists across restarts.
-   - **Cross-spawn targeting**: `TaskStop`/`TaskOutput` find agents spawned by **another** agent and list them by id/description on error — resume can target a cross-spawned stage agent.
+   - **Cross-spawn targeting**: `TaskStop` finds agents spawned by **another** agent and lists them by id/description on error — resume can target a cross-spawned stage agent. `TaskOutput` is removed (CC 2.1.277): read a background task's output through its output file with `Read` instead; `taskOutputMaxChars`/`TASK_MAX_OUTPUT_LENGTH` no longer apply.
    - **Inspection**: completed agents stay in `/tasks` until cleanup and attaching shows the transcript immediately, so a just-finished stage is still inspectable. Reopening a stopped session resumes it or reports why it cannot — a refusal means re-delegate, not retry blindly.
 
 ### Steps 1–7 — replay & audit
