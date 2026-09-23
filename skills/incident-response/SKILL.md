@@ -1,7 +1,6 @@
 ---
 name: incident-response
 description: Use when handling production incidents or emergency hotfixes. Incident classification, hotfix worktask, rollback procedures, and post-mortem templates for IR stage.
-effort: high
 ---
 
 # Incident Response

@@ -2,7 +2,6 @@
 name: arch-decision
 description: Create or update Architecture Decision Records (ADRs) or Technology Decision Records (TDRs) to document significant technical decisions
 argument-hint: <decision topic or context> [--type adr|tdr]
-model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/software-architector.md

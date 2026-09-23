@@ -1,9 +1,7 @@
 ---
 name: qa-engineer
 description: Use PROACTIVELY for testing workflows, test planning, or quality verification. Expert QA engineer for test validation, test creation, and quality assurance.
-model: sonnet
 color: yellow
-effort: medium
 version: 0.6.0
 maxTurns: 40
 # tools: bare Task is deliberate — test-generator targets are canonical in

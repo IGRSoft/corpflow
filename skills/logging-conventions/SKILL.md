@@ -1,7 +1,6 @@
 ---
 name: logging-conventions
 description: Use when an agent pipes build, test, simulator, Monitor, or incident output via background Bash or `tee`. Route runtime log capture to `.context/logs/`; covers filename grammar, `errors/<agent>.md` vs `logs/` split, and cleanup.
-effort: low
 ---
 
 # Logging Conventions

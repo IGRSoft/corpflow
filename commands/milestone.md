@@ -2,7 +2,6 @@
 name: milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
 argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure]'
-model: sonnet
 # tools: bare Bash is deliberate — ticket generation drives per-milestone repo tooling
 # (gh, git, and whatever the project's own scripts expose), unknown until the milestone is
 # read; the bound is that it writes issues and milestone files, never source.

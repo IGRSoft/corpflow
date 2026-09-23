@@ -1,6 +1,5 @@
 ---
 name: test-selection-syntax
-effort: low
 ---
 
 # Test Selection Syntax

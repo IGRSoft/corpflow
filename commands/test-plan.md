@@ -2,7 +2,6 @@
 name: test-plan
 description: Generate a comprehensive test plan from requirements or code changes with coverage analysis
 argument-hint: <feature or module description>
-model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/qa-engineer.md

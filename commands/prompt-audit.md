@@ -6,7 +6,6 @@ argument-hint: '[--scope agents|commands|skills|all]'
 # the only file this command creates is `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`.
 # Edit exists solely for `--fix`, bounded to files this same run already read under `--scope`.
 allowed-tools: Read, Glob, Grep, Write, Edit
-model: opus
 related:
   - agents/prompt-engineer.md
   - commands/optimize-agent.md
@@ -92,14 +91,16 @@ Continuing the same order, after Consistency Checks:
 - `--severity` filters which findings appear; the Summary counts stay unfiltered.
 - Group identical findings across files into a single numbered entry listing the files.
 - Skill-manifest findings share the same numbered Critical/Warnings lists and the same `<file>:<line>` locators; the Summary carries a Skills row.
-- Model-Conditioned Findings are a *view*, not a second list: every row there is also a numbered entry under Critical or Warnings. The section exists because these findings are only legible next to the asset's `model:`, which the numbered lists do not carry.
+- Model-Conditioned Findings are a *view*, not a second list: every row there is also a numbered entry under Critical or Warnings. The section exists because these findings are only legible next to the asset's resolved model (agents: `skills/shared/stage-codes.md § Agent Model Matrix`; commands/skills carry no model at all now), which the numbered lists do not carry.
 
 ## Audit Rules
 
 ### Agent Rules
 
-1. Valid YAML frontmatter (name, description, model)
-2. Model appropriate for task complexity
+1. Valid YAML frontmatter (name, description) and **no** `model:`/`effort:` key — those are no
+   longer frontmatter fields; flag either as a finding, fix line: delete, the pair lives solely in
+   `skills/shared/stage-codes.md § Agent Model Matrix`
+2. Resolved model (matrix, not frontmatter) appropriate for task complexity
 3. Clear purpose statement
 4. No capability overlap with other agents
 5. Worktask stage integration documented, and every stage code referenced still exists in `skills/shared/stage-codes.md` (removed/renamed stages are a critical finding)
@@ -154,13 +155,14 @@ The Fix line names the artifact the criterion is checked against; it never adds 
    rule, skips it under pressure" is a warning whose Fix line names the correct form — positive
    recipe, REQUIRED template slot, or conditional on an observable predicate. Existing
    `## Constraints (DO NOT)` blocks are reported, never auto-fixed: `--fix` must not touch them.
-4. **No-op instructions.** Flag an instruction the asset's own `model:` already obeys by default —
+4. **No-op instructions.** Flag an instruction the asset's resolved model already obeys by default —
    the test is model-relative, so the same sentence can be load-bearing in one asset and waste in
    another. The Fix line is deletion of the whole sentence; a reworded no-op is still a no-op.
 
 #### Body rule 5 — model-conditioned anti-patterns
 
-Read the asset's `model:`, then check its body against that alias's row in
+Resolve the asset's model (agents: the matrix row; commands/skills carry no model at all, so this
+rule does not fire on them), then check its body against that alias's row in
 `skills/shared/model-prompting.md`. An instruction that collides with a documented behaviour of
 that model is a finding whose Fix line is deletion, and whose evidence is the vendor page the canon
 file cites — not the auditor's judgement.
@@ -201,7 +203,7 @@ Skip either and the rule manufactures findings:
 
 #### Body rule 6 — scope explicitness
 
-On an asset whose `model:` is `sonnet`, flag an instruction that names one item where the asset's
+On an agent whose resolved model is `sonnet`, flag an instruction that names one item where the asset's
 own scope covers a set, with no statement of which. Sonnet 5 follows instructions literally and does
 not generalise from one item to the next, so "add a verdict line to the finding" leaves the other
 findings unverdicted where "add a verdict line to every finding" does not.

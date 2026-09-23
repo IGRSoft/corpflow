@@ -1,7 +1,6 @@
 ---
 name: cost-optimization
 description: Apply for budget management, model selection, and efficiency analysis. Cost tracking and optimization strategies for AI agent worktasks.
-effort: medium
 version: 0.3.0
 related:
   - skills/worktask/SKILL.md

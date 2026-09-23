@@ -2,7 +2,6 @@
 name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path dir] [--severity critical|high|medium|low]'
-model: sonnet
 # tools: Write takes no path predicate, so the bounds are stated here and in `## Options`:
 # `--report` creates `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`, and `--add`/`--prioritize`
 # maintain the single register `.context/audits/tech-debt.md` (Write on first use, Edit after).

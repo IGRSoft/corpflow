@@ -1,6 +1,5 @@
 ---
 name: model-prompting
-effort: low
 ---
 
 # Model-Conditioned Prompting

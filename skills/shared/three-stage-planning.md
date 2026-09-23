@@ -1,6 +1,5 @@
 ---
 name: three-stage-planning
-effort: low
 ---
 
 # 3-Stage Sequential Planning Model

@@ -1,6 +1,5 @@
 ---
 name: testing-strategy
-effort: low
 version: 0.5.0
 ---
 

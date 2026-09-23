@@ -85,12 +85,25 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+#                                             --raise-only: drop `model`/`effort` from the
+#                                             merge when it would lower the row's CURRENT
+#                                             value (ladder rank; opus>sonnet>haiku) — every
+#                                             other key still applies. Opt-in; unset means the
+#                                             legacy unconditional merge.
 # @arg --ledger-meta  --set <json>            Merge into the ledger's TOP-LEVEL metadata{}.
 #                                             The only op that writes outside tasks{} and
 #                                             facts{}: base_ref, milestone and the other
 #                                             run-wide keys readers resolve from there had
 #                                             no scripted writer, so they were hand-edited
 #                                             into state.json around this script.
+# @arg --resolve-models [--corpflow <path>]   Stamp state.models{<agent>: {model,effort,source}}
+#                                             for every agents/*.md row, merging a project-root
+#                                             CORPFLOW.md `## Models` override (default lookup:
+#                                             ${CONTEXT_DIR%/.context}/CORPFLOW.md) row by row,
+#                                             fail-open, over the built-in matrix
+#                                             (skills/shared/stage-codes.md § Agent Model
+#                                             Matrix). Resolved once; --task-create reads the
+#                                             result. Idempotent overwrite, not a merge.
 # @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
 #                                             stage loop dispatches it again.  Clears
 #                                             metadata.retry_count, metadata.error_escalated_to
@@ -1568,6 +1581,8 @@ ALLOW_MISSING_ARTIFACT=""
 TASK_ID_ARG=""
 TASK_OP=""
 LEDGER_META_OP=""
+RESOLVE_MODELS_OP=""
+RESOLVE_MODELS_CORPFLOW_ARG=""
 TASK_OP_ID=""
 TASK_OP_VALUE=""
 RESOLVE_CODE_ARG=""
@@ -1577,6 +1592,7 @@ VERIFY_EXPECT=""
 VERIFY_EXPECT_GIVEN=""
 FACTS_ARG=""
 REPLAY_CASCADE="false"
+RAISE_ONLY_FLAG=""
 AGENTS_JSON_ARG=""
 DISPATCH_AGENT_ID=""
 DISPATCH_STATUS=""
@@ -1623,6 +1639,9 @@ while [[ $# -gt 0 ]]; do
     --task-unblock) shift; TASK_OP="unblock"; TASK_OP_ID="${1:-}"; shift ;;
     --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
+    --resolve-models) shift; RESOLVE_MODELS_OP="1" ;;
+    --raise-only) RAISE_ONLY_FLAG="1"; shift ;;
+    --corpflow) shift; RESOLVE_MODELS_CORPFLOW_ARG="${1:-}"; shift ;;
     --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
     --task-reopen) shift; TASK_OP="reopen"; TASK_OP_ID="${1:-}"; shift ;;
     --task-settle-stale) shift; TASK_OP="settle_stale"; TASK_OP_ID="${1:-}"; shift ;;
@@ -1961,6 +1980,168 @@ if [[ -n "$LEDGER_META_OP" ]]; then
   exit 1
 fi
 
+# ---------- --resolve-models (Validation check 13, sibling of check 12's routing merge) ----
+# Stamps state.models for every agents/*.md row so `model-matrix.sh --resolve` has a fast,
+# re-readable rank-1 lookup instead of re-parsing stage-codes.md and CORPFLOW.md on every call
+# — PL0 runs that wrapper itself now (sw-AR0-1 reversed --task-create's own auto-fill, which
+# used to read this map directly; the map itself is unaffected). Idempotent overwrite (not a
+# union): re-running mid-worktask reflects an edited CORPFLOW.md rather than freezing the first
+# answer, matching routing's resolved-once-per-run contract at the call-site level (the
+# orchestrator calls this once, at init).
+if [[ -n "$RESOLVE_MODELS_OP" ]]; then
+  # model_resolve/model_override_rows signal "no row" and "section absent" via a plain
+  # nonzero `return` — routine fail-open control flow (ad5), not an exception. The global
+  # ERR trap does not exempt a `return` following `||`/`if` (bash only exempts the TEST,
+  # never the consequent), so it fires once per miss across 16 agents without this. The op
+  # always exits before falling through, so disabling it for the block's duration is safe.
+  trap - ERR
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 -- '--resolve-models needs jq; state.json unchanged\n'
+    log_msg ERROR "--resolve-models needs jq; state.json unchanged"
+    exit 1
+  }
+  if [[ ! -f "$STATE_PATH" ]]; then
+    printf >&2 -- 'no state.json at %s; --resolve-models writes into an existing ledger only\n' "$STATE_PATH"
+    log_msg ERROR "--resolve-models: no state.json at ${STATE_PATH}; nothing written"
+    exit 1
+  fi
+  _RM_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/model-matrix-lib.sh"
+  if [ ! -r "$_RM_LIB" ]; then
+    printf >&2 'state-patch.sh: plugin install broken — model-matrix-lib.sh not found at %s\n' "$_RM_LIB"
+    exit 2
+  fi
+  # shellcheck source=model-matrix-lib.sh
+  . "$_RM_LIB"
+
+  # Project root is one level above .context/ — the same anchor CORPFLOW.md § Routing already
+  # reads from (skills/worktask/SKILL.md § Validation check 12).
+  _RM_CORPFLOW="$RESOLVE_MODELS_CORPFLOW_ARG"
+  if [[ -z "$_RM_CORPFLOW" ]]; then
+    _RM_ROOT="$CTX"
+    case "$_RM_ROOT" in */.context) _RM_ROOT="${_RM_ROOT%/.context}" ;; esac
+    _RM_CORPFLOW="${_RM_ROOT}/CORPFLOW.md"
+  fi
+
+  _RM_AUDIT_DIR="${CTX}/logs"
+  if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+    _RM_AUDIT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
+    [ -r "$_RM_AUDIT_LIB" ] && { . "$_RM_AUDIT_LIB" || true; }
+  fi
+
+  # ad2 rule 4 makes the extractor fail-closed (exit 3 on zero rows or a bad row); a
+  # process-substitution `while … done < <(model_matrix_rows)` discards that exit and a
+  # partial/empty stream just runs the loop zero times, so this consumer re-opened the
+  # closed door. Capture first, check the return, and refuse before atomic_apply rather
+  # than silently stamping a truncated (or empty) state.models under a success log line.
+  _RM_ROWS=""
+  _RM_ROWS_RC=0
+  _RM_ROWS=$(model_matrix_rows) || _RM_ROWS_RC=$?
+  if [[ "$_RM_ROWS_RC" -ne 0 ]]; then
+    printf >&2 -- 'resolve-models: matrix extraction failed (exit %s); state.json unchanged\n' "$_RM_ROWS_RC"
+    log_msg ERROR "resolve-models: model_matrix_rows exited ${_RM_ROWS_RC}; refusing partial stamp"
+    exit 1
+  fi
+  if [[ -z "$_RM_ROWS" ]]; then
+    printf >&2 -- 'resolve-models: matrix extraction returned zero rows; state.json unchanged\n'
+    log_msg ERROR "resolve-models: model_matrix_rows returned zero rows; refusing empty stamp"
+    exit 1
+  fi
+  # Zero-row and non-zero-exit are the two failures model_matrix_rows itself can signal;
+  # neither catches a TRUNCATED-but-parseable table (some rows silently deleted, the
+  # survivors still well-formed) — a bats bijection test asserts that shape, but nothing
+  # runtime-side did. Re-derive the same bijection here as the floor DR asked for: the row
+  # count must equal the agents/*.md count, or a partial state.models is refused rather
+  # than stamped under a success log line.
+  _RM_ROW_COUNT=$(printf '%s\n' "$_RM_ROWS" | wc -l | tr -d '[:space:]')
+  _RM_AGENT_COUNT=$(find "${_MML_DEFAULT_AGENTS_DIR}" -maxdepth 1 -name '*.md' -type f 2> /dev/null | wc -l | tr -d '[:space:]')
+  if [[ "$_RM_ROW_COUNT" != "$_RM_AGENT_COUNT" ]]; then
+    printf >&2 -- 'resolve-models: matrix has %s rows but agents/ has %s files; state.json unchanged\n' \
+      "$_RM_ROW_COUNT" "$_RM_AGENT_COUNT"
+    log_msg ERROR "resolve-models: row-count floor failed (matrix=${_RM_ROW_COUNT} agents=${_RM_AGENT_COUNT}); refusing truncated stamp"
+    exit 1
+  fi
+
+  _RM_JSON='{}'
+  _RM_SOURCE_OVERALL="matrix"
+  while IFS=$'\t' read -r _rm_agent _rm_dmodel _rm_deffort; do
+    _rm_pair=""
+    _rm_pair=$(model_resolve "$_rm_agent" "" "$_RM_CORPFLOW") || _rm_pair=""
+    if [[ -z "$_rm_pair" ]]; then
+      # A matrix-listed agent that still fails to resolve should not happen; degrade to its
+      # own matrix row rather than dropping it from state.models, and name it in the audit
+      # trail — this is the sw-PL0-7 "warn, never block" reading applied at seed time.
+      _rm_model="$_rm_dmodel"
+      _rm_effort="$_rm_deffort"
+      _rm_src="matrix"
+      if command -v corpflow_audit_row > /dev/null 2>&1; then
+        corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
+          --action model_unresolved --subject "$_rm_agent" --result degraded \
+          --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rm_agent}" --meta-kv "fallback=matrix" \
+          --meta-kv "rank_reached=matrix"
+      fi
+    else
+      _rm_model="${_rm_pair%%$'\t'*}"
+      _rm_rest="${_rm_pair#*$'\t'}"
+      _rm_effort="${_rm_rest%%$'\t'*}"
+      _rm_src="${_rm_rest##*$'\t'}"
+    fi
+    if [[ "$_rm_src" == "project-override" ]]; then
+      _RM_SOURCE_OVERALL="project-override"
+      if command -v corpflow_audit_row > /dev/null 2>&1; then
+        corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
+          --action model_override --subject "$_rm_agent" --result ok \
+          --task-id "$(_audit_task_ref)" \
+          --meta "$(jq -cn --arg a "$_rm_agent" --arg dm "$_rm_dmodel" --arg de "$_rm_deffort" \
+            --arg om "$_rm_model" --arg oe "$_rm_effort" \
+            '{agent:$a, default_model:$dm, default_effort:$de, override_model:$om, override_effort:$oe}')"
+      fi
+    fi
+    _RM_JSON=$(printf '%s' "$_RM_JSON" | jq -c --arg a "$_rm_agent" --arg m "$_rm_model" \
+      --arg e "$_rm_effort" --arg s "$_rm_src" '. + {($a): {model: $m, effort: $e, source: $s}}')
+  done <<< "$_RM_ROWS"
+
+  # CORPFLOW.md rows that never reach model_resolve at all (unknown agent, off-enum cell, or
+  # the whole section unparseable) still need their own audit trail — ad5's fail-open table.
+  if [[ -f "$_RM_CORPFLOW" ]]; then
+    _RM_OV_RC=0
+    _RM_OV_OUT=$(model_override_rows "$_RM_CORPFLOW") || _RM_OV_RC=$?
+    if [[ "$_RM_OV_RC" -eq 3 ]]; then
+      if command -v corpflow_audit_row > /dev/null 2>&1; then
+        corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
+          --action model_override_unparsed --subject "CORPFLOW.md" --result degraded \
+          --task-id "$(_audit_task_ref)" --meta-kv "path=${_RM_CORPFLOW}" \
+          --meta-kv "reason=header_or_rows"
+      fi
+    elif [[ "$_RM_OV_RC" -eq 0 && -n "$_RM_OV_OUT" ]] && command -v corpflow_audit_row > /dev/null 2>&1; then
+      while IFS=$'\t' read -r _rov_agent _rov_model _rov_effort _rov_status; do
+        case "$_rov_status" in
+          unknown)
+            corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
+              --action model_override_unknown --subject "$_rov_agent" --result degraded \
+              --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
+              --meta-kv "reason=no-matrix-row"
+            ;;
+          invalid)
+            corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
+              --action model_override_unknown --subject "$_rov_agent" --result degraded \
+              --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
+              --meta-kv "reason=invalid-cell" --meta-kv "cell=${_rov_model}/${_rov_effort}"
+            ;;
+        esac
+      done <<< "$_RM_OV_OUT"
+    fi
+  fi
+
+  if atomic_apply "$STATE_PATH" '.models = $models | .models_source = $src' \
+    --argjson models "$_RM_JSON" --arg src "$_RM_SOURCE_OVERALL"; then
+    log_msg INFO "resolve-models: stamped $(printf '%s' "$_RM_JSON" | jq 'length') rows, source=${_RM_SOURCE_OVERALL}"
+    exit 0
+  fi
+  printf >&2 -- 'resolve-models failed; state.json unchanged (see %s)\n' "$LOG_FILE"
+  log_msg ERROR "jq apply failed for --resolve-models; state.json unchanged"
+  exit 1
+fi
+
 # ---------- Ledger ops ----------
 # Direct tasks{} writes for the orchestrator loop; they short-circuit the
 # artifact/frontmatter path entirely.
@@ -1995,6 +2176,20 @@ if [[ -n "$TASK_OP" ]]; then
     printf >&2 -- '--changed applies to --task-settle-stale only (got --task-%s)\n' "$TASK_OP"
     usage
   fi
+  if [[ "$TASK_OP" != "meta" && -n "$RAISE_ONLY_FLAG" ]]; then
+    printf >&2 -- '--raise-only applies to --task-meta only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
+
+  # --task-create auto-fill REMOVED (sw-AR0-1, reversed at the FN-gate sweep over the
+  # recommended architecture-0.md#ad3/REQ-4 design): resolution now happens at the CALLER —
+  # PL0 runs `model-matrix.sh --resolve <agent>` and pastes the pair into its own `--metadata`
+  # before calling `--task-create` (agents/product-manager.md's new Bash grant). Retaining this
+  # block as a silent fallback would defeat the reversal's own premise: a pasted-wrong or
+  # forgotten value must surface as a mistier row, not be quietly repaired here, or the
+  # hand-copy risk the user explicitly re-accepted stays invisible. `model_resolve` and
+  # `model-matrix-lib.sh` are unchanged and still exist — this stage's `--resolve-models` op
+  # (state.models, Validation check 13) is untouched by this reversal.
 
   # `metadata.effort` is a dispatch parameter the ledger carries, not free text: the Step
   # C.0a resolver bumps it one rung (`skills/shared/stage-contracts.md § Blocking items are
@@ -2028,6 +2223,61 @@ if [[ -n "$TASK_OP" ]]; then
           "$_TASK_EFFORT" "$EFFORT_ENUM"
         log_msg ERROR "invalid metadata.effort (${_TASK_EFFORT}); state.json unchanged"
         exit 2
+      fi
+    fi
+  fi
+
+  # --task-meta --raise-only for model/effort (architecture-0.md#ad3, #ad4; composition
+  # reversed by sw-AR0-2 at the FN-gate sweep — see below): opt-in, not the default for every
+  # --task-meta caller — an ordinary reassignment (QA re-pinning a stage, a correction round)
+  # must still be free to lower a tier. Scoped to the score>=35 DV/DR complexity bump ONLY,
+  # which must never silently lower a pair a project already raised via CORPFLOW.md § Models.
+  # The `--secure`/`--full` DC override does NOT use this flag: sw-AR0-2 reversed that
+  # composition to win outright, so PL0 writes the DC rows with a plain `--task-meta`, and a
+  # project's raised tier CAN be silently lowered by a secure run (pl0-procedure.md § Default
+  # writer rules states this as the accepted cost). The comparison, when the flag is given, is
+  # always against the row's CURRENT value (PL0's own pasted resolution, or an earlier write),
+  # never against the built-in matrix directly. Dropping the losing key from the payload —
+  # rather than refusing the call — lets PL0 issue the same unconditional
+  # `--task-meta --raise-only` on every DV/DR trigger match without computing the comparison
+  # itself.
+  if [[ "$TASK_OP" == "meta" ]] && [[ -n "$RAISE_ONLY_FLAG" ]] \
+    && [[ -n "$TASK_OP_VALUE" ]] && [[ -f "$STATE_PATH" ]]; then
+    _TM_HAS_MODEL=$(printf '%s' "$TASK_OP_VALUE" \
+      | jq -r 'if type=="object" and has("model") then "1" else "" end' 2> /dev/null) \
+      || _TM_HAS_MODEL=""
+    _TM_HAS_EFFORT=$(printf '%s' "$TASK_OP_VALUE" \
+      | jq -r 'if type=="object" and has("effort") then "1" else "" end' 2> /dev/null) \
+      || _TM_HAS_EFFORT=""
+    if [[ -n "$_TM_HAS_MODEL" || -n "$_TM_HAS_EFFORT" ]]; then
+      _TM_CUR_MODEL=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].metadata.model // ""' \
+        "$STATE_PATH" 2> /dev/null) || _TM_CUR_MODEL=""
+      _TM_CUR_EFFORT=$(jq -r --arg id "$TASK_OP_ID" '.tasks[$id].metadata.effort // ""' \
+        "$STATE_PATH" 2> /dev/null) || _TM_CUR_EFFORT=""
+      _TM_MML="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/effort-ladder.sh"
+      if [[ -z "${EFFORT_ENUM:-}" ]] && [ -r "$_TM_MML" ]; then
+        # shellcheck source=effort-ladder.sh
+        . "$_TM_MML"
+      fi
+      if [[ -n "$_TM_HAS_EFFORT" && -n "$_TM_CUR_EFFORT" && -n "${EFFORT_ENUM:-}" ]]; then
+        _TM_NEW_EFFORT=$(printf '%s' "$TASK_OP_VALUE" | jq -r '.effort')
+        _TM_NEW_RANK=$(effort_rank "$_TM_NEW_EFFORT" 2> /dev/null) || _TM_NEW_RANK=""
+        _TM_CUR_RANK=$(effort_rank "$_TM_CUR_EFFORT" 2> /dev/null) || _TM_CUR_RANK=""
+        if [[ -n "$_TM_NEW_RANK" && -n "$_TM_CUR_RANK" && "$_TM_NEW_RANK" -lt "$_TM_CUR_RANK" ]]; then
+          TASK_OP_VALUE=$(printf '%s' "$TASK_OP_VALUE" | jq -c 'del(.effort)' 2> /dev/null) \
+            || true
+        fi
+      fi
+      if [[ -n "$_TM_HAS_MODEL" && -n "$_TM_CUR_MODEL" ]]; then
+        _TM_NEW_MODEL=$(printf '%s' "$TASK_OP_VALUE" | jq -r '.model')
+        # opus > sonnet > haiku (stage-codes.md § Model alias notes) — the only three ranked
+        # aliases; anything else compares as unranked and is never dropped by this guard.
+        case "$_TM_NEW_MODEL" in haiku) _TM_NEW_MR=0 ;; sonnet) _TM_NEW_MR=1 ;; opus) _TM_NEW_MR=2 ;; *) _TM_NEW_MR="" ;; esac
+        case "$_TM_CUR_MODEL" in haiku) _TM_CUR_MR=0 ;; sonnet) _TM_CUR_MR=1 ;; opus) _TM_CUR_MR=2 ;; *) _TM_CUR_MR="" ;; esac
+        if [[ -n "$_TM_NEW_MR" && -n "$_TM_CUR_MR" && "$_TM_NEW_MR" -lt "$_TM_CUR_MR" ]]; then
+          TASK_OP_VALUE=$(printf '%s' "$TASK_OP_VALUE" | jq -c 'del(.model)' 2> /dev/null) \
+            || true
+        fi
       fi
     fi
   fi

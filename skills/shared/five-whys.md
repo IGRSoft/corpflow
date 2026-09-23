@@ -1,6 +1,5 @@
 ---
 name: five-whys
-effort: low
 ---
 
 # Five Whys Analysis

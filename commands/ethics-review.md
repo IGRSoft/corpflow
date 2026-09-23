@@ -2,7 +2,6 @@
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
 argument-hint: <feature or decision to review> [--lens harm|full]
-model: sonnet
 allowed-tools: Read, Glob, Grep
 related:
   - agents/ethics-reviewer.md

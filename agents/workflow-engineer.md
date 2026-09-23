@@ -1,9 +1,7 @@
 ---
 name: workflow-engineer
 description: Use PROACTIVELY for worktask initialization, state management, or debugging worktask issues. Worktask system expert for task management, stage transitions, state-ledger orchestration, and troubleshooting.
-model: sonnet
 color: green
-effort: medium
 version: 0.4.0
 maxTurns: 40
 # tools: bare Bash is deliberate — ledger and worktree repair spans arbitrary repo tooling

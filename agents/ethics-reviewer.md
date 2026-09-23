@@ -1,9 +1,7 @@
 ---
 name: ethics-reviewer
 description: Use PROACTIVELY for high-risk decisions, potential harm scenarios, or when ethical implications are unclear. Ethics and constitutional compliance reviewer for AI agent decisions and outputs.
-model: opus
 color: white
-effort: xhigh
 version: 0.3.0
 maxTurns: 25
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write

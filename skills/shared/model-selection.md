@@ -1,6 +1,5 @@
 ---
 name: model-selection
-effort: low
 ---
 
 # Model Selection Guidelines
@@ -87,7 +86,9 @@ explicitly.
 
 ### Effort frontmatter and caps
 
-> `effort:` frontmatter on subagents, commands and skills is honoured on every model. A managed or
+> `effort:` frontmatter on subagents, commands and skills is a Claude Code capability honoured on
+> every model — no corpflow-shipped agent, command, or skill sets it any more (`skills/shared/
+> stage-codes.md § Agent Model Matrix` is the sole source for a stage agent's tier). A managed or
 > user `maxEffortLevel` (top-level, or per model under `modelSettings`) caps effort on every
 > provider, Bedrock, Vertex and Foundry included: a stage pinned above the cap runs at the cap with
 > no error. `metadata.effort` keeps recording the requested tier, so read the hook-reported
@@ -181,30 +182,35 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 - An explicit per-call override **survives resume and follow-up `SendMessage`** — a pinned
   stage does not revert to the parent's model on reattach, so `model_requested`/
   `model_resolved` in `dispatched_agents[]` keep matching for the stage's whole lifecycle.
-- Command and skill frontmatter `model:` is honoured in interactive sessions. In auto mode, a
-  command or skill naming a model auto mode does not support keeps the session model for that turn.
+- Command and skill frontmatter `model:` is honoured in interactive sessions where a project sets
+  one — no corpflow-shipped command or skill does. In auto mode, a command or skill naming a model
+  auto mode does not support keeps the session model for that turn.
 
 ### Worktask stages: explicit, never inherited
 
 A worktask stage is **always** dispatched with an explicit `model`. The orchestrator reads
 `task.metadata.model` from the ledger and passes it as a short alias — `Task({ model: "opus" })` —
-never relying on the agent file's frontmatter to supply it.
+resolved from `skills/shared/stage-codes.md § Agent Model Matrix`, never from the agent file's
+frontmatter — no corpflow agent carries a `model:` key any more, so there is no frontmatter to
+fall back to.
 
-Frontmatter inheritance is silent when it fails: the stage runs on whatever the parent session had,
-`model_requested` and `model_resolved` disagree in `dispatched_agents[]`, and the effort tier the
-stage was sized for is gone with no error anywhere. `xhigh` in particular needs Opus 5 or Fable 5
-(§ xhigh routing) — a stage that inherits Sonnet is downgraded, not refused.
+A dispatch that skips this resolution is silent when it fails: the stage runs on whatever the
+parent session had, `model_requested` and `model_resolved` disagree in `dispatched_agents[]`, and
+the effort tier the stage was sized for is gone with no error anywhere. `xhigh` in particular needs
+Opus 5 or Fable 5 (§ xhigh routing) — a stage that inherits Sonnet is downgraded, not refused.
 
 ## Default Subagent Model (`CLAUDE_CODE_SUBAGENT_MODEL`)
 
 `CLAUDE_CODE_SUBAGENT_MODEL` sets the **default** subagent model, not an override: an agent
-definition's frontmatter `model:` and an explicit per-spawn `model` both take precedence over it.
+definition's frontmatter `model:` (no corpflow agent sets one) and an explicit per-spawn `model`
+both take precedence over it.
 
 This is what makes "always pass `metadata.model` explicitly" load-bearing rather than advisory.
 Ledger-dispatched stages are safe — `metadata.model` is required there and validated at step 6.
-The exposure is any dispatch that bypasses the ledger, such as the ad-hoc nested `Task()` calls a
-stage agent makes for a Tier-2 specialist: omit the model there and the spawn no longer falls back
-to the agent's own tier, it falls through to whatever an operator or CI runner exported.
+The exposure is any dispatch that bypasses the ledger, such as an ad-hoc nested `Task()` call a
+stage agent makes for a Tier-2 specialist: omit the model there and the spawn has **no**
+frontmatter fallback any more — it falls straight through to `CLAUDE_CODE_SUBAGENT_MODEL`, or the
+session model if that too is unset.
 
 A mid-worktask switch away from a pinned model is separately gated by `hooks/model-switch-gate.sh`
 (`agent-coordination/references/hook-monitoring.md § Model-Switch Hooks`).

@@ -1,9 +1,7 @@
 ---
 name: developer
 description: Use for DV stage development, code implementation, debugging, and refactoring. Dynamic platform developer that routes to specialized agents (apple, android, web, systems, backend, ai) based on platform context.
-model: opus
 color: magenta
-effort: high
 version: 0.9.2
 maxTurns: 80
 # isolation: deliberately ABSENT. Every DV ledger row's tree is pinned by the dispatcher

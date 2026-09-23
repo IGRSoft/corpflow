@@ -1,7 +1,6 @@
 ---
 name: code-comment-standard
 description: Use when writing or editing source comments or DocC (/// or //) in any context — worktask stages, direct edits, reviews, remediation. Compact source comment standard — comment the non-obvious WHY and contract, never the WHAT, history, or provenance.
-effort: low
 version: 0.1.0
 ---
 

@@ -2,7 +2,6 @@
 name: appstore
 description: 'Store publishing front door — listing metadata, screenshots, or in-app purchases; delegates to the platform plugin''s release engineer (Apple App Store, Google Play).'
 argument-hint: '--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run]'
-model: haiku
 allowed-tools: Read, Glob, Grep, Task(corpflow:release-engineer)
 version: 0.1.0
 related:

@@ -1,9 +1,7 @@
 ---
 name: product-manager
 description: Use PROACTIVELY for product planning, feature definition, or strategic product decisions. Master product strategy, roadmap planning, feature prioritization, and user-centric decision making.
-model: opus
 color: blue
-effort: high
 version: 0.12.0
 maxTurns: 40
 # tools: Bash(curl:*) is NARROWLY scoped to curl only (NOT bare Bash) so PL0 can
@@ -12,7 +10,16 @@ maxTurns: 40
 # (commands/worktask.md:99-102 forbid Bash pre-approval), so the PM is the only
 # actor that can fetch the bytes while the URL is still valid. See `skills/shared/figma-capture.md § Capture Workflow`.
 # Bash(mkdir:*) is granted so PL0 can create `.context/designs/` before persisting Figma frames — `curl -o` cannot create parent directories, and `mkdir -p` is benign (creates directories only; documented minimal expansion per the security rule).
-tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
+# Bash(… model-matrix.sh *) — narrowly scoped to that one script, same shape as the
+# state-patch.sh grant above (commands/worktask.md:99-102 forbids bare-Bash pre-approval).
+# PL0 resolves an agent's model/effort pair by running `model-matrix.sh --resolve <agent>`
+# and copying the printed pair into the `--metadata` it passes to `state-patch.sh
+# --task-create` — reversed from the mechanically-enforced auto-fill inside `--task-create`
+# itself (sw-AR0-1, chosen over the recommended `ad3`/REQ-4 design at the FN-gate sweep).
+# This re-permits a hand-copied value: `--task-create` no longer fills an absent pair for
+# PL0, so a value PL0 forgets to paste, or pastes wrong, is not caught until a downstream
+# dispatch runs at the wrong tier. Accepted cost of the reversal, not an oversight.
+tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh *), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
 hooks:
   Stop:
     - type: command
@@ -153,6 +160,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 ### State Patch — REQUIRED before return
+
+Before each stage task's `--task-create` call, PL0 runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve <agent>` and pastes the printed `model`/`effort` pair into that call's `--metadata` — the mechanism `pl0-procedure.md § Propagation fields — dispatch pair` names (`sw-AR0-1`, reversed at the FN-gate sweep from the mechanically-enforced auto-fill `--task-create` originally shipped with).
 
 PL0's `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh` call, the seed payload and every downstream propagation field are specified in `skills/worktask/references/pl0-procedure.md § Handoff Protocol` and `§ Completion Verification` — the only place they exist. This section points there and restates none of it.
 

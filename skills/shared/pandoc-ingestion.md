@@ -1,6 +1,5 @@
 ---
 name: pandoc-ingestion
-effort: low
 ---
 
 # Pandoc Ingestion

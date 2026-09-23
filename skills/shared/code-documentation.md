@@ -1,6 +1,5 @@
 ---
 name: code-comment-standard
-effort: low
 ---
 
 # Code Documentation Standard

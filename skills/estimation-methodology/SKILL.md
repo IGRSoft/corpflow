@@ -2,7 +2,6 @@
 name: estimation-methodology
 description: Use when estimating task complexity, effort, or determining worktask tier. Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation.
 version: 0.4.0
-effort: low
 related:
   - ../cost-optimization/SKILL.md
   - ../worktask/SKILL.md

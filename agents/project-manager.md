@@ -1,9 +1,7 @@
 ---
 name: project-manager
 description: Use PROACTIVELY for project planning, task management, or cross-stage resource coordination. Master project management with agile methodologies, task coordination, resource allocation, and risk management.
-model: sonnet
 color: cyan
-effort: medium
 version: 0.6.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh *), EnterWorktree, ExitWorktree

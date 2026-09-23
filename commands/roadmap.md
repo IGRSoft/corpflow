@@ -2,7 +2,6 @@
 name: roadmap
 description: Create or update product roadmap with timeline, milestones, and dependencies
 argument-hint: '[--quarter Q1-Q4] [--format timeline|list]'
-model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md

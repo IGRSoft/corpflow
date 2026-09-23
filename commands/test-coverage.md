@@ -6,7 +6,6 @@ argument-hint: '[--path dir] [--threshold N]'
 # the only file this command creates is `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`.
 # No Edit — the command reports coverage and mutates nothing it read.
 allowed-tools: Read, Glob, Grep, Write, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
-model: haiku
 related:
   - agents/qa-engineer.md
   - commands/test-plan.md

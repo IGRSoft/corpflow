@@ -1,9 +1,7 @@
 ---
 name: stakeholder
 description: Use PROACTIVELY for strategic business decisions, budget discussions, or business validation. Business stakeholder providing strategic direction, budget approval, and business requirements; validates alignment and ROI.
-model: sonnet
 color: white
-effort: low
 version: 0.3.0
 maxTurns: 20
 # tools: Skill is REQUIRED — `## Step 4` makes the self-improvement retrospective

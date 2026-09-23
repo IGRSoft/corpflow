@@ -2,7 +2,6 @@
 name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
-model: sonnet
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
 version: 0.3.0
 related:

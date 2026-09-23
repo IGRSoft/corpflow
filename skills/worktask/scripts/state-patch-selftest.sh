@@ -1351,12 +1351,17 @@ EOART
 
   # ---- T31: --dispatch upserts facts.dispatched_agents by task_id, clamps 6-launched-newest ----
   make_state
-  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer","model":"opus"}')" > /dev/null
   bash "$SELF" --dispatch DV0 sess-dv0 launched || {
     printf 'T31: --dispatch returned non-zero\n' >&2
     exit 1
   }
-  if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched"}]' \
+  # metadata.model is PASSED EXPLICITLY here (developer -> opus, corpflow:developer's matrix
+  # row) rather than relying on --task-create to fill it: sw-AR0-1 reversed the mechanically-
+  # enforced auto-fill at the FN-gate sweep, so a caller that omits it now stays unset (this is
+  # exactly what PL0's model-matrix.sh --resolve + hand-paste replaces). The dispatch row still
+  # carries model_requested when the caller supplies the value (dv10's original assertion).
+  if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched","model_requested":"opus"}]' \
     .context/state.json > /dev/null; then
     printf 'T31: first dispatch appends the row: ok\n'
   else

@@ -2,7 +2,6 @@
 name: dv-screenshot-capture
 description: Use PROACTIVELY and ALWAYS when DV is about to complete and `metadata.requires_screenshots` is true (default) — the completion gate fails otherwise. Capture screenshots during the DV stage and attach to the PR as visual evidence for QA and DR.
 version: 1.0.1
-effort: medium
 argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
 keep-coding-instructions: true
 ---

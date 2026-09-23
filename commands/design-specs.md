@@ -2,7 +2,6 @@
 name: design-specs
 description: Generate developer-ready design specifications for components, screens, or features
 argument-hint: <component or screen name>
-model: sonnet
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/designer.md

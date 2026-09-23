@@ -1,9 +1,7 @@
 ---
 name: security-reviewer
 description: Use PROACTIVELY for security audits or vulnerability assessment; owns the SR stage in secure/full worktasks. Security review specialist for OWASP compliance, vulnerability scanning, and secure coding.
-model: opus
 color: red
-effort: xhigh
 version: 0.4.0
 maxTurns: 50
 tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)

@@ -6,7 +6,6 @@ argument-hint: '[--path dir] [--scope full|section]'
 # the only file this command creates is `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`.
 # Edit exists solely for `--fix`, bounded to the rows under `## Auto-Fix Available`.
 allowed-tools: Read, Glob, Grep, Write, Edit
-model: haiku
 related:
   - agents/technical-writer.md
   - commands/docs-readme.md
