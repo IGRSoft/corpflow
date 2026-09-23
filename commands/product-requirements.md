@@ -12,22 +12,14 @@ related:
 
 Generate a Product Requirements Document (PRD) from task description or user stories.
 
-## Usage
-
-```
-/product-requirements "Feature description"
-/product-requirements --from-user-story "As a user..."
-/product-requirements --template [full|lite|api]
-```
-
 ## Options
 
-- `--from-user-story` - Generate from user story format
-- `--template <type>` - PRD template (default: full)
-- `--include-metrics` - Add success metrics section
-- `--technical` - Include technical requirements
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--from-user-story "<story>"` | — | Build the PRD from a user story instead of a feature description |
+| `--template <type>` | `full`, `lite`, `api` | PRD template (default: `full`; see § Template Types) |
+| `--include-metrics` | — | Add the success metrics section |
+| `--technical` | — | Include technical requirements |
 
 ```
 /product-requirements "Add dark mode support to the application"
@@ -68,10 +60,3 @@ PRD skeleton — parenthesised notes give each section's shape:
 | full | Complete features | All sections |
 | lite | Quick features | Overview, Stories, Requirements |
 | api | API features | Endpoints, Schemas, Examples |
-
-## Integration
-
-This command feeds into:
-- `/arch-decision` - Technical decisions from requirements
-- `/test-plan` - Test cases from acceptance criteria
-- `/worktask` - Requirements for PL stage
