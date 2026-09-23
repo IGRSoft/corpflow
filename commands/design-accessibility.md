@@ -12,12 +12,6 @@ related:
 
 Accessibility audit of a screen, component, or the entire application against WCAG plus platform guidelines.
 
-## Usage
-
-```
-/design-accessibility [target] [options]
-```
-
 ## Options
 
 | Option | Values | Effect |
@@ -26,9 +20,8 @@ Accessibility audit of a screen, component, or the entire application against WC
 | `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
 | `--scope` | `quick`, `standard`, `comprehensive` | Audit scope (default: standard) |
 
-## Examples
-
 ```
+/design-accessibility [target] [options]
 /design-accessibility LoginScreen
 /design-accessibility "Navigation component" --level AAA
 /design-accessibility --scope comprehensive --platform apple
@@ -36,9 +29,11 @@ Accessibility audit of a screen, component, or the entire application against WC
 
 ## Procedure
 
-1. **Analyze** — WCAG success criteria at `--level`, platform-specific guidelines, assistive-technology support.
-2. **Identify issues** — severity, WCAG criterion, and remediation guidance per issue.
-3. **Report** — emit every § Output Format section. Every § Audit Categories row, plus every § Platform-Specific Checks row `--platform` selects, carries a verdict — pass, an issue, or `not applicable: <reason>` — and every issue names the WCAG 2.2 success criterion it fails, its severity, and the remediation. An unscored row means the audit is unfinished.
+Audit the target against the WCAG success criteria at `--level`, the platform guidelines, and
+assistive-technology support, then emit every § Output Format section. Every § Audit Categories row,
+plus every § Platform-Specific Checks row `--platform` selects, carries a verdict — pass, an issue,
+or `not applicable: <reason>` — and every issue names the WCAG 2.2 success criterion it fails, its
+severity, and the remediation. An unscored row means the audit is unfinished.
 
 ## Audit Categories
 
@@ -51,9 +46,7 @@ Accessibility audit of a screen, component, or the entire application against WC
 
 ## Platform-Specific Checks
 
-Run only the platforms selected by `--platform`; `all` runs every row. This command covers the
-three UI platforms — `systems`, `backend`, and `ai` work has no user-facing surface to audit and
-is out of scope.
+Run only the platforms `--platform` selects; `all` runs every row.
 
 ### Apple
 
@@ -73,6 +66,8 @@ VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Sw
 Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators.
 
 ## Output Format
+
+One markdown report; the three blocks below are one continuous document.
 
 ```markdown
 # Accessibility Audit: [Target]
@@ -96,7 +91,6 @@ Screen reader compatibility; keyboard navigation; ARIA implementation; focus ind
 ### Template — issue inventory
 
 ```markdown
-<!-- …continued: issue sections -->
 ## Critical Issues (P0)
 
 ### Issue: [Description]
@@ -112,7 +106,6 @@ Screen reader compatibility; keyboard navigation; ARIA implementation; focus ind
 ### Template — findings and next steps
 
 ```markdown
-<!-- …continued: findings, recommendations, next steps -->
 ## Platform-Specific Findings
 
 <!-- one subsection per platform in scope; emit nothing for platforms --platform excluded -->
@@ -139,9 +132,9 @@ Screen reader compatibility; keyboard navigation; ARIA implementation; focus ind
 
 - **Color contrast**: text 4.5:1 (normal), 3:1 (large); UI components 3:1.
 - **Focus management**: visible focus indicator, logical focus order, focus trap in modals.
-- **Text scaling** — Dynamic Type on Apple, font scale / display size on Android, browser zoom and
-  `rem`-based type on web. Same three checks everywhere: support the full user-selectable size
-  range; layout adapts gracefully (reflow, no clipping); no truncation of critical content.
+- **Text scaling** — Dynamic Type (Apple), font scale / display size (Android), browser zoom and
+  `rem`-based type (web). Everywhere: support the full user-selectable size range; layout reflows
+  without clipping; no truncation of critical content.
 
 ### Touch Targets
 
@@ -150,9 +143,5 @@ Screen reader compatibility; keyboard navigation; ARIA implementation; focus ind
 | Apple | 44x44pt | 44x44pt plus 8pt spacing |
 | Android | 48x48dp | 48x48dp plus 8dp spacing |
 | Web | 24x24 CSS px (WCAG 2.2 AA) | 44x44 CSS px (AAA) |
-
-## Worktask Integration
-
-PL — accessibility requirements · DV — implementation checks · QA — compliance verification · standalone — periodic audits.
 
 Target: $ARGUMENTS
