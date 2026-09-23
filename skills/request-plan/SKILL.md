@@ -6,13 +6,13 @@ version: 0.4.0
 
 # Request Plan
 
-Produce a **lightweight, grounded plan** from a free-form request plus current repository context,
-then hand off to the worktask system. It bridges "I have an idea" and a full worktask: lighter than
-a PRD (`/product-requirements`), broader than a sizing estimate (`/estimate`).
+Produce a lightweight, grounded plan from a free-form request plus current repository context, then
+hand off to the worktask system — lighter than a PRD (`/product-requirements`), broader than a
+sizing estimate (`/estimate`).
 
-The value is being **grounded** — the plan reflects this repo (in-flight work, recent commits,
-project memory, relevant code), not a generic template. Read context before planning and let it
-change the plan; otherwise this is a wishlist.
+The value is being grounded: the plan reflects this repo (in-flight work, recent commits, project
+memory, relevant code), not a generic template. Read context before planning and let it change the
+plan.
 
 ## Workflow
 
@@ -26,18 +26,17 @@ Asking is the exception. The first test — *did the search find the surface?* �
 where the evidence arrives. What is left here, in order:
 
 1. **No surface at all? Ask — and only ask.** Available once § 2's search has run and found
-   nothing. Say so plainly and ask which system is meant. Never produce a full plan for a codebase
+   nothing. Say so plainly and ask which system is meant. Don't produce a full plan for a codebase
    you cannot see: plausible phases for a system nobody can point at read as real work and are not.
 2. **Surface found, but two readings of it change the phases? Fold it into the plan.** They
    usually become P0 and P1, or an explicit **Out:** line. Present the plan and name the
-   assumption. This branch needs a surface to be ambiguous *about* — reaching it from a request
-   whose subject the repo does not contain is how a full plan gets written for a system that
-   isn't there.
+   assumption. This branch needs a surface to be ambiguous *about* — a request whose subject the
+   repo does not contain belongs to branch 1.
 3. **Genuinely incompatible readings, or no subject named? Ask 1–2 focused questions.**
 
 ##### Never both
 
-Never emit both a question and a full plan for one request — pick one. Don't invent scope to fill
+Emit either a question or a full plan for one request, not both. Don't invent scope to fill
 silence; a wrong assumption propagates into every later section, but so does a needless question.
 
 ### 2. Gather context (lean)
@@ -47,13 +46,12 @@ Follow `references/context-gathering.md`. Read only what could change the plan: 
 
 #### Start from what already ships
 
-**Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh` first, every
-time, before any grep.** Not only for "I want X" requests — deciding whether a request is about a capability is itself a guess
-made before you know the answer, and the whole list costs about 7k tokens. It is the complete
-inventory of this plugin's commands, agents, skills, hooks, skill scripts and harness modules, so it
-is not a search and has no stop condition. It is long enough now to be worth reading in one pass
-rather than skimming for a keyword: the entry you need is the one whose *description* matches, and
-a skim finds only the ones whose path does.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh` first, every
+time, before any grep — not only for "I want X" requests, because deciding whether a request is
+about a capability is itself a guess made before you know the answer. It is the complete inventory
+of this plugin's commands, agents, skills, hooks, skill scripts and harness modules, so it is not a
+search and has no stop condition. Read it in one pass: the entry you need is the one whose
+*description* matches, and a skim finds only the ones whose path does.
 
 The request words a *need*; the registry words a *domain* — "make the app usable one-handed" will
 never share a word with the entry that covers it. Read each description for what the capability
@@ -61,34 +59,25 @@ never share a word with the entry that covers it. Read each description for what
 
 ##### No worked examples here
 
-Deliberately omitted. Any example concrete enough to be useful is a request someone will later
-evaluate this skill against, and printing the answer beside it turns that case into a lookup —
-which is exactly how eval cases 73 and 75 were contaminated.
+Deliberately omitted: an example concrete enough to help is a request someone
+will later evaluate this skill against, and printing its answer beside it turns the case into a
+lookup.
 
 ##### The registry precedes the search, never replaces it
 
-**The registry precedes the behaviour search; it never replaces it.** A registry hit tells you which
-surface the work belongs to — you still open that surface and read it before planning against it, and
-§ "Search by behaviour" below still applies to everything the registry does not list: a skill's
-`references/`, the shared canon under `skills/shared/*.md`, and test or eval infrastructure.
+A registry hit tells you which surface the work belongs to — you still open that surface and read
+it before planning against it, and § "Search by behaviour" below still applies to everything the
+registry does not list: a skill's `references/`, the shared canon under `skills/shared/*.md`, and
+test or eval infrastructure.
 
 ##### A hit changes the plan's content, not its obligations
 
-**A registry hit changes the plan's content, not its obligations — with one exception, below.**
 Finding an adjacent, partial or underlying capability makes the plan about *using, verifying, or
 extending* it. It does not license a short answer: the full template still applies, and the plan
 still ends with exactly one `/worktask` line (§ 4). "This already ships, run `/x`" with no trigger is
 a failure, not a shortcut — the three ways this goes wrong are ending with a question instead of a
 plan, recommending another command *in place of* the handoff, and dropping the trigger because
-nothing seems left to do.
-
-##### The one exception: the hit *is* the request
-
-**The exception is § 4's and it is narrow**: only when the request asked to *build* the thing, the
-thing already ships as asked, and nothing is left to do. Then the answer says so, cites where, and
-stops. It does **not** cover a request to *find*, *use* or *reach* a surface that exists — that is
-still a plan, and it is the commonest way this rule gets misread. Nor does it cover a shipped
-headline with a live remainder: refute the stale part, plan the rest.
+nothing seems left to do. The one exception is § 4's, and it is narrow.
 
 #### Decide which class owns the behaviour
 
@@ -97,18 +86,18 @@ A behaviour in this plugin lives in exactly one of six classes: a **command**, a
 six, but the classes are the shape of the search even for what it cannot list — a skill's
 `references/`, the shared canon, and test or eval infrastructure all sit behind one of the six.
 
-**A search that has not decided which class owns the behaviour has not finished.** Naming the class
-is the cheapest way to notice you only looked in one: three of the six are executable and none of
-them are found by grepping prose.
+A search that has not decided which class owns the behaviour has not finished. Naming the class is
+the cheapest way to notice you only looked in one: three of the six are executable and none of them
+are found by grepping prose.
 
 #### Search by behaviour, not by filename
 
-Half of all graded failures were one mistake: the search stopped at a file whose *name* fit, in the
-first directory that hit, while the file owning the behaviour sat in another subtree. **"Lean"
-governs how much you read, never how hard you look.**
+The commonest graded failure: the search stopped at a file whose *name* fit, in the first directory
+that hit, while the file owning the behaviour sat in another subtree. "Lean" governs how much you
+read, never how hard you look.
 
-- **Use `Explore` for every "where does X live" question** — not a preference. A grep sweep anchored
-  on a guessed filename only reproduces the guess.
+- **Use `Explore` for every "where does X live" question.** A grep sweep anchored on a guessed
+  filename only reproduces the guess.
 - **Search for what the code does, not what it would be called.** Grep the symbols, strings, and
   error text the behaviour must produce. A filename is a hypothesis; a matching symbol is evidence.
 - **One hit is not a finding.** Continue until a repo-wide search for the behaviour turns up nothing
@@ -116,42 +105,38 @@ governs how much you read, never how hard you look.**
 
 #### When you may stop searching
 
-Stop on evidence, not on satisfaction: when you can **name the owning file and say what in it you
-read**. "More reading wouldn't change the plan" is not a stop condition — a search that has not
+Stop on evidence, not on satisfaction: when you can name the owning file and say what in it you
+read. "More reading wouldn't change the plan" is not a stop condition — a search that has not
 reached the right file cannot tell that from the inside, which is how a confident plan ends up about
 the wrong module.
 
-§ 1's "no surface at all" branch is available **only after this search has actually run**.
-Asking which system is meant is right when the repo genuinely lacks it, wrong as the exit from a
-search that got hard.
+§ 1's "no surface at all" branch is available only after this search has actually run. Asking
+which system is meant is right when the repo genuinely lacks it, wrong as the exit from a search
+that got hard.
 
 #### Confirm ownership before planning against a file
 
-**Confirm the file you found actually owns the behaviour** — open it and check rather than inferring
-ownership from a plausible name. A neighbouring file with a similar name is the most common way a
-plan ends up specific, confident, and about the wrong thing (a stage-ownership plan that never
-opened the stage-ownership doc; a cost-comparison plan that never reached the module producing the
-costs). If you cannot confirm ownership, name the file you believe owns it and say you did not verify.
+Open the file you found and check that it owns the behaviour, rather than inferring ownership from a
+plausible name. A neighbouring file with a similar name is the most common way a plan ends up
+specific, confident, and about the wrong thing. If you cannot confirm ownership, name the file you
+believe owns it and say you did not verify.
 
 #### Found the surface? Plan it
 
-**The registry or the search located the file, command, hook or mechanism the request is about?
-That is enough to plan** — even if a follow-up question also comes to mind. A question you could
-have answered by planning costs a round trip and delivers nothing.
-
-This test lives here, not in § 1, because it is decided the moment the evidence arrives. Reaching
-§ 1's "ask" branch means this one already answered *no*: the search ran and found nothing.
+The registry or the search located the file, command, hook or mechanism the request is about? That
+is enough to plan, even if a follow-up question also comes to mind. A question you could have
+answered by planning costs a round trip and delivers nothing.
 
 #### Do not assert what you did not check
 
-**Every negative claim carries its own scope.** "No other path exists", "that mapping is already
+Every negative claim carries its own scope. "No other path exists", "that mapping is already
 complete", or a count of things you did not enumerate are the claims most likely to be wrong and
 least likely to be questioned, because they sound like the product of a search.
 
-Make it structural rather than a caution: name the directories you actually enumerated and scope the
-sentence to them — "nothing under `tests/`", never "nothing anywhere". **An unscoped negative is a
-claim about the whole repo** and needs a whole-repo search behind it; a negative scoped to where you
-looked is true and still useful. Whatever the scope does not cover is unverified, so say so.
+Name the directories you actually enumerated and scope the sentence to them — "nothing under
+`tests/`", never "nothing anywhere". An unscoped negative is a claim about the whole repo and needs
+a whole-repo search behind it; a negative scoped to where you looked is true and still useful.
+Whatever the scope does not cover is unverified, so say so.
 
 ### 3. Synthesize the plan
 
@@ -160,24 +145,24 @@ Fill the template in `references/plan-template.md` exactly (fixed section order)
 #### Key reuse — do not reinvent these
 
 - **Phases** use the P0 Required / P1 Nice-to-have / P2 v1.1 model from
-  `skills/shared/three-stage-planning.md`, each independently deliverable. **All three rows always
-  appear.** With nothing deferrable, write `P2 — v1.1: none` — dropping the row reads as an
-  oversight. Any follow-up you name anywhere in the plan belongs in P1 or P2; naming it and then
-  folding it into P0 hides that it is deferrable and collapses a three-phase plan to one.
+  `skills/shared/three-stage-planning.md`, each independently deliverable. All three rows always
+  appear: with nothing deferrable, write `P2 — v1.1: none` — dropping the row reads as an
+  oversight. Any follow-up you name anywhere in the plan belongs in P1 or P2; folding it into P0
+  hides that it is deferrable and collapses a three-phase plan to one.
 - **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
 
 ##### Effort
 
 A T-shirt size plus the 5-factor complexity score (0–25) from
-`skills/estimation-methodology/SKILL.md`, as a range — a rough cut, not a budget. **Both parts are
-required for every request type**, incidents included: a severity or priority table is not an effort
+`skills/estimation-methodology/SKILL.md`, as a range — a rough cut, not a budget. Both parts are
+required for every request type, incidents included: a severity or priority table is not an effort
 estimate and does not replace one. Naming the factors behind a surprising score helps, but the size
 and the number are what the section owes.
 
 ### 4. Recommend the handoff
 
-Follow `references/handoff.md`. Map size + complexity to an invocation with the canonical **Worktask
-Tier Selection** logic in `skills/estimation-methodology/SKILL.md`, and emit one ready-to-paste
+Follow `references/handoff.md`. Map size + complexity to an invocation with the canonical Worktask
+Tier Selection logic in `skills/estimation-methodology/SKILL.md`, and emit one ready-to-paste
 command line (e.g. `/worktask "<restated goal>"`). The surface check in that section decides
 `--secure` and `--emergency` before size is considered.
 
@@ -187,10 +172,11 @@ runs, so a stage that finds a surface this plan could not see adds itself back t
 
 #### Exactly one `/worktask` line
 
-**Every plan ends with exactly one `/worktask` line.** Naming a more specific command
-(`/estimate`) is useful context, never a replacement — recommending one *instead*
-of the worktask leaves the user with no handoff. Mention it alongside the trigger, not in place of it.
-**Disputing the premise does not suspend the line.** A plan concluding the reported defect is
+Every plan ends with exactly one `/worktask` line. Naming a more specific command (`/estimate`) is
+useful context alongside the trigger, never a replacement — recommending one *instead* of the
+worktask leaves the user with no handoff.
+
+Disputing the premise does not suspend the line. A plan concluding the reported defect is
 misdiagnosed, unreproducible, or absent from the file it was blamed on still emits one — triage is
 work, and on a present-tense report `--emergency` is the tier that triages it. Prose naming the tier
 ("route this to incident response") is not the line; the line is a command the user can paste.
@@ -199,36 +185,34 @@ work, and on a present-tense report `--emergency` is the tier that triages it. P
 elsewhere. A request whose *subject system* the repo does not contain is § 1's "no surface at
 all" branch instead, and § 1 wins: ask, emit no line.
 
-##### One narrow exception: asked to BUILD what already exists, with nothing left
+##### One narrow exception: asked to build what already exists, with nothing left
 
 All three must hold: the request asks to **build, add or fix** something; the search shows it
 already exists in the form asked for; and **nothing remains to be done**. Then say so, cite where,
-and **stop** — no plan template, no trigger. Rendering the sections anyway (a Scope for work that
+and stop — no plan template, no trigger. Rendering the sections anyway (a Scope for work that
 exists, a P0 reading "run the command") is a build plan wearing a refutation's opening line.
 
 ##### Two shapes that resemble that exception and are not it
 
 ###### Asked to find, reach or use a capability
 
-"How do I…", "I want X", "where does X live" — the surface existing is the *answer to the
-search*, not a reason to withhold the plan. Plan the using,
-verifying or extending of what you found, and end with the trigger (§ 2). Stopping at "this already
-ships, run `/x`" is the failure § 2 names, not a shortcut it licenses. A found surface makes the
-plan shorter and better grounded; it never makes the plan optional.
+"How do I…", "I want X", "where does X live" — the surface existing is the *answer to the search*,
+not a reason to withhold the plan. Plan the using, verifying or extending of what you found, and end
+with the trigger (§ 2). A found surface makes the plan shorter and better grounded; it never makes
+the plan optional.
 
 ###### A shipped premise with a live remainder
 
-The headline capability shipped, but the search finds something genuinely still missing or
-broken. Refute the stale premise *and* plan the remainder — the
-refutation replaces the wrong plan, not the plan. Say plainly which part is stale and which part is
-still open, so the user can see you did not simply accept the request as posed.
+The headline capability shipped, but the search finds something genuinely still missing or broken.
+Refute the stale premise *and* plan the remainder — the refutation replaces the wrong plan, not the
+plan. Say plainly which part is stale and which is still open.
 
 The test is always whether anything remains to be done. A misdiagnosed bug still needs triage; a
 request to *use* a shipped feature still needs a plan; a shipped feature with nothing left does not.
 
 ### 5. Output
 
-Print the plan inline; the default is **not** to write files. Offer to persist it to
+Print the plan inline; the default is not to write files. Offer to persist it to
 `.context/request-plan-0.md` (naming per `skills/task-folder-organization/SKILL.md`) when the user
 wants it kept or it will directly seed a worktask run.
 

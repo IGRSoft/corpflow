@@ -14,7 +14,7 @@ name: three-stage-planning
 
 ## Sequential Rules
 
-1. **No parallel development** between stages — each starts only after the previous completes
+1. No parallel development between stages — each starts only after the previous completes
 2. Gates must pass before a stage transition
 3. Buffer is calculated per stage (10%)
 4. Track calendar months for AI billing — minimize month overlap
