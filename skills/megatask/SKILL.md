@@ -105,13 +105,13 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh
 
 #### Behavior — resolve-pbxproj-membership
 
-The one exception to § Conflict Resolution's hand-resolve rule, and only because it **refuses
-everything it does not recognise**. Any of these refuses the **whole file** — exit 1 with
-`refusing: <reason>`, file byte-identical (structurally: the parse writes a `mktemp` buffer and
-`mv -f`s only on accept): a conflict elsewhere in the file; a comment or blank line inside a side;
-nested or unterminated markers; a diff3 `|||||||` base section (an entry may have been deliberately
-deleted — a union would resurrect it); a hunk spanning the list's `);`. Exit codes: 0 union written
-/ no conflict / dry-run / self-test passed; 1 refusal or usage error; 2 `awk` missing. Rule 2 of
+The one exception to § Conflict Resolution's hand-resolve rule, and only because it refuses
+everything it does not recognise. Any of these refuses the whole file — exit 1 with
+`refusing: <reason>`, file byte-identical (the parse writes a `mktemp` buffer and `mv -f`s only on
+accept): a conflict elsewhere in the file; a comment or blank line inside a side; nested or
+unterminated markers; a diff3 `|||||||` base section (an entry may have been deliberately deleted,
+and a union would resurrect it); a hunk spanning the list's `);`. Exit codes: 0 union written / no
+conflict / dry-run / self-test passed; 1 refusal or usage error; 2 `awk` missing. Rule 2 of
 § Conflict Resolution still applies: build and test before pushing.
 
 ## Inputs
@@ -119,7 +119,7 @@ deleted — a union would resurrect it); a hunk spanning the list's `);`. Exit c
 `N` (bare integer) ⇒ milestone; `--issues 12,15,18` ⇒ explicit set (may span milestones); together,
 `--issues` filters within milestone `N`. At least one is required. Full flag surface:
 `../../commands/megatask.md § Usage`. Cross-issue concurrency is orchestrator-derived (§ Track
-Derivation); intra-issue async (DV0 splitting into DV0/DV1/…) belongs to each issue's TL stage.
+Derivation); intra-issue async belongs to each issue's TL stage.
 
 ## Dependency & Blocker Resolution (DAG)
 
@@ -173,12 +173,8 @@ relevant directories — less per-worktree disk, faster init:
 
 #### Including gitignored paths (`.worktreeinclude`)
 
-`.worktreeinclude` names paths to carry into a new worktree even when gitignored. A pattern
-starting with `**/` no longer silently matches nothing when its target lives inside a gitignored
-directory — before that fix such a line looked correct and copied nothing.
-
-A background session and its subagents can now edit files inside a worktree the session created
-itself with `git worktree add`; the isolation check used to block that and stall the lane.
+`.worktreeinclude` names paths to carry into a new worktree even when gitignored, including a
+`**/`-leading pattern whose target lives inside a gitignored directory.
 
 ### Unattended Execution
 
@@ -190,11 +186,10 @@ confirmation**, before any worktree exists; per-issue changes are reviewable as 
 
 #### Parking an escalate-class question
 
-Escalate-class questions are never auto-decided — they **PARK that single issue** while the batch
+Escalate-class questions are never auto-decided — they park that single issue while the batch
 continues with the remaining unblocked issues. Parking needs no new state: it settles
-`execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
-audit row, so the monitor frees the track and dependents stay `blocked`, and the batch summary lists
-each parked issue with its unanswered questions. Mechanics:
+`execution.status: "failed"` + `execution.reason: "parked_escalation"`, so the monitor frees the
+track and dependents stay `blocked`. Mechanics:
 `../../commands/megatask.md § Step 3 — parking mechanics`.
 
 ##### Parking — non-planning stages
@@ -210,26 +205,20 @@ item, the emitting stage's own `<CODE><N>` for one marked `blocks_next_stage`
 ## Track Derivation
 
 `parallel_tracks` is computed at init and re-derived as blockers merge, into
-`orchestrator.json → configuration.parallel_tracks`. Never a flag/default.
-
-```
-parallel_tracks = min( count(currently-ready issues), 5 )
-parallel_tracks = reduce_by_disk_capacity(parallel_tracks)   # each worktree duplicates the tree
-parallel_tracks = reduce_by_concurrency_cap(parallel_tracks) # CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS (20)
-# single explicit issue ( /megatask --issues 12 ) ⇒ 1
-```
+`orchestrator.json → configuration.parallel_tracks`. Never a flag/default. Formula:
+`../../commands/megatask.md § Phase 2`; the three ceilings it reduces against are below.
 
 ### Subagent spawn budget
 
-> Each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) plus nested delegation (DV → platform agent → Tier-2 specialist, QA → `test-generator`). CC 2.1.224 removed the per-session total-spawn cap: batch size is **no longer bounded by a running count** — no ~18/~22-issue ceiling, no env var to raise. What still refuses a dispatch is **concurrency** (`agent-coordination § Two independent ceilings`) and, below it, disk for the worktrees and your rate budget. Size batches against peak concurrency, not a total.
+> Each issue dispatches ~9–11 stage subagents (9-stage default, 11-stage `--secure`) plus nested delegation (DV → platform agent → Tier-2 specialist, QA → `test-generator`). No per-session total-spawn cap bounds batch size. What refuses a dispatch is concurrency (`agent-coordination § Two independent ceilings`) and, below it, disk for the worktrees and your rate budget — so size batches against peak concurrency, not a total.
 
 ### Concurrency budget
 
-> **20 subagents may run concurrently** by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`) — a cap distinct from spawn total and depth. Subagents are background-by-default, so live population ≈ `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)`; at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. Track derivation bounds itself against this ceiling; raise the env var only when disk and rate budgets also allow it.
+> 20 subagents may run concurrently by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`) — a cap distinct from spawn total and depth. Subagents are background-by-default, so live population ≈ `parallel_tracks × (1 orchestrator + 1 stage agent + its nested children)`; at `parallel_tracks = 5` with routine Tier-2 delegation that approaches the cap. Track derivation bounds itself against this ceiling; raise the env var only when disk and rate budgets also allow it.
 
 ### Nesting-depth budget
 
-> **`/megatask` spends one depth level before any stage runs.** Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain sits one level deeper than a standalone worktask at every point:
+> `/megatask` spends one depth level before any stage runs: Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain sits one level deeper than a standalone worktask at every point.
 
 | Level | Standalone `/worktask` | Under `/megatask` |
 |-------|------------------------|-------------------|
@@ -241,12 +230,10 @@ parallel_tracks = reduce_by_concurrency_cap(parallel_tracks) # CLAUDE_CODE_MAX_C
 
 #### Depth remediations
 
-> Default cap **3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). A batch whose DV stages route through a platform router to a Tier-2 specialist loses that last delegation — the specialist is never spawned and the platform agent does the work itself. Two remediations:
+> Default cap **3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). A batch whose DV stages route through a platform router to a Tier-2 specialist loses that last delegation — the specialist is never spawned and the platform agent does the work itself. Two remediations, chosen at the R1 gate, which reports the projected max depth:
 >
 > 1. **Raise the cap** (preferred — preserves routing): export `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4` (higher for `--secure` batches that also nest under SR) before starting the batch.
 > 2. **Flatten Tier-2** (no config required): DV dispatches the platform specialist directly (`apple-developer:ios-developer`) instead of the router, reclaiming one level at the cost of the router's platform-detection step.
->
-> The R1 gate reports the batch's projected max depth, so the choice precedes any worktree.
 
 #### One formula, two callers
 
@@ -287,9 +274,9 @@ worktask (PL→…→ST) with gates pre-bypassed.
 ## Per-Track Task IDs
 
 Every track uses the same plain `<STAGE>0` ledger keys (`PL0`, `AR0`, `DV0`, `DR0`, `QA0`). The
-namespace is the **worktree**, not the key: each track has its own `.context/state.json` under its
-own worktree, so two tracks both writing `PL0` cannot collide. Track-offset ids would additionally
-break every hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
+namespace is the worktree, not the key: each track has its own `.context/state.json` under its own
+worktree, so two tracks both writing `PL0` cannot collide. Track-offset ids would break every
+hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
 `../shared/state-ledger.md`.
 
 ### Seeding a track's PL
@@ -330,16 +317,15 @@ truncated on a word boundary. Canonical definition: `../shared/milestone-helpers
 
 A **seam** is a code surface more than one issue in the batch touches by name: a shared protocol, a
 dependency-injection extension point, a coordinator, or a shared test assertion. Parallel tickets
-cannot see each other's work in progress, so two of them independently invent the same abstraction
-under different names unless one place tells them it already exists. The dependency graph cannot
-catch this class — the tickets are genuinely independent; only their *seams* collide.
+cannot see each other's work in progress, so two of them invent the same abstraction under
+different names unless one place tells them it already exists. The dependency graph cannot catch
+this class — the tickets are genuinely independent; only their seams collide.
 
 ### Registry location
 
 **Exactly one registry per batch**, in an issue body under a `## Shared Seams` H2 — an issue body
 already exists, is already fetched at dispatch, and needs no lifecycle. The host is a rule, not a
-judgement call: two hosts reproduce the very failure this prevents, each ticket reading a different
-registry and concluding no seam exists.
+judgement call: with two hosts, each ticket reads a different registry and concludes no seam exists.
 
 | Batch shape | Registry host |
 |---|---|
@@ -352,11 +338,10 @@ per-issue prompt directing every issue to read it before introducing a shared ab
 
 ### Registry schema
 
-One block per seam. `declaration` carries the **verbatim** signature with every parameter label in
+One block per seam. `declaration` carries the verbatim signature with every parameter label in
 order — a name-only entry would not catch two issues agreeing on a concept but reversing an argument
 order. `consumers:` plus `change-protocol:` are what make an additive change safe: adding a member
-to a shared protocol silently breaks every test double conforming to it, and the adder is the only
-party positioned to know.
+to a shared protocol silently breaks every test double conforming to it.
 
 #### Registry entry — canonical shape
 
@@ -383,12 +368,9 @@ party positioned to know.
 
 ### Initialization
 
-1. Create `.worktrees/<group>/`; resolve the issue set (milestone fetch or per-issue
-   `gh issue view`), dropping closed / `skipped_has_pr` ones.
-2. Build the DAG (`references/dependency-graph.md`) — cycles STOP; compute topological + priority
-   order; **derive** `parallel_tracks` (§ Track Derivation).
-3. Write `orchestrator.json` (schema v3.1) with the DAG, order, and tracks.
-4. Run the **R1 batch confirmation gate**, then create worktrees and start the first ready issues.
+Resolve the issue set → build the DAG (cycles stop the run) → write `orchestrator.json` v3.1 with
+the DAG, order and derived tracks → R1 batch confirmation → create worktrees for the first ready
+issues. Step-by-step procedure: `../../commands/megatask.md § Phase 1`.
 
 ### Monitoring Loop
 
@@ -412,10 +394,8 @@ single-issue worktasks are untouched. Optional agent-teams event model (`Teammat
 ## Execution Flow
 
 The three modes differ only in issue-set resolution — milestone fetch, `gh issue view` per issue
-(group `issues-{shortid}`), or milestone ∩ explicit set. All then execute identically: build the DAG
-and sort → R1 gate → init `parallel_tracks` worktrees → each runs independently → on completion open
-the PR, unblock dependents, assign the next ready issue. Phase-by-phase procedure and the resolution
-commands: `../../commands/megatask.md § Phase 1`, `§ Phase 2`.
+(group `issues-{shortid}`), or milestone ∩ explicit set — then execute identically. Phase-by-phase
+procedure and the resolution commands: `../../commands/megatask.md § Phase 1`, `§ Phase 2`.
 
 Track count is orchestrator-derived (max 5) and gated by the DAG — only ready issues consume tracks,
 so a deep chain (A→B→C→D→E) runs effectively serially however many tracks exist.
@@ -427,21 +407,18 @@ a batch produces.
 
 ### Rule 1 — hand-resolve DI and coordinator shapes
 
-**Dependency-injection containers and coordinator-shaped files are hand-resolved by a human;
-never script-merge them.** Any "keep both sides" automation is forbidden on these shapes: a
-registration list, a DI container extension, a coordinator's argument list, or a switch over
-destinations. Observed failure: a scripted keep-both-sides join dropped an argument separator and
-duplicated a closing brace twice; both survived review and were caught only by a later build.
+**Dependency-injection containers and coordinator-shaped files are hand-resolved by a human; never
+script-merged.** No "keep both sides" automation on these shapes — a registration list, a DI
+container extension, a coordinator's argument list, a switch over destinations — because a scripted
+join silently drops separators and duplicates braces, which survives review and fails only at build.
 
 A script is allowed only where its conflict class needs no interpretation *and* the script refuses
-everything it does not recognise (§ Canonical Scripts names any such tool the batch ships). Absent
-that, this rule stands.
+everything it does not recognise (§ Canonical Scripts names any such tool the batch ships).
 
 ### Rule 2 — build and test before pushing
 
-**Build and test after every conflict resolution, before pushing.** Not a read-through, not a
-syntax check — the real build and the real test run, from the worktree. Rule 1's failure mode is
-invisible to everything cheaper.
+**Build and test after every conflict resolution, before pushing** — the real build and the real
+test run, from the worktree. Rule 1's failure mode is invisible to everything cheaper.
 
 ### Recovery when the branch cannot be re-pushed
 

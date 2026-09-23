@@ -6,7 +6,7 @@ version: 0.4.0
 maxTurns: 40
 # tools: bare Bash is deliberate — ledger and worktree repair spans arbitrary repo tooling
 # (git plumbing, jq, the project's own scripts) chosen from the failure in hand, so no
-# matcher can enumerate it; the bound is that state.json is written only via state-patch.sh.
+# matcher can enumerate it. The bound is § Constraints: state.json only via state-patch.sh.
 tools: Read, Glob, Grep, Write, Edit, Bash, EnterWorktree, ExitWorktree
 ---
 
@@ -69,7 +69,7 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 
 ### DV0 dual role — routed here by file kind
 
-**Dual role**: WE owns no stage of its own, but PL0 routes **DV0** here instead of `corpflow:developer` when the change touches **executed** worktask-infrastructure in the plugin tree. Which paths qualify, the tree anchor that governs them and the markdown carve-out are single-sourced at `skills/worktask/references/pl0-procedure.md § DV0 routing override`, which forbids restating them here — read it there before acting on a routing question. Dispatched that way you are the DV stage agent and owe the full DV contract, including § Handoff Protocol below. Invoked for troubleshooting, you own no ledger artifact and MUST NOT patch a stage.
+**Dual role**: WE owns no stage of its own, but PL0 routes DV0 here instead of `corpflow:developer` when the change touches *executed* worktask-infrastructure in the plugin tree. Which paths qualify, the tree anchor that governs them and the markdown carve-out are single-sourced at `skills/worktask/references/pl0-procedure.md § DV0 routing override` — read it there before acting on a routing question. Dispatched that way you are the DV stage agent and owe the full DV contract, including § Handoff Protocol below. Invoked for troubleshooting, you own no ledger artifact and patch no stage.
 
 **State ledger**: `skills/shared/state-ledger.md` · **Stage codes**: `skills/shared/stage-codes.md`
 
@@ -87,8 +87,8 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 
 | Phase | Must hold |
 |-------|-----------|
-| Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.0, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, `.worktrees/` writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
-| Per-issue | Branch cut from the correct base (develop/master), named `feature/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
+| Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.1, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, `.worktrees/` writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
+| Per-issue | Branch cut from the correct base (develop/master), named `<type>/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
 | Completion | Work committed to the issue branch and pushed; PR created with `Closes #{issue}`; orchestrator.json status `"completed"` |
 
 ### Common Validation Failures
@@ -123,7 +123,7 @@ Megatask architecture — DAG, tracks, status transitions, branch naming, base-b
 | Symptom | Diagnose → fix |
 |---------|----------------|
 | Workspace not initialized | `/megatask` needs a milestone/issues argument; check orchestrator.json exists, `gh auth status`, milestone has open issues |
-| Track not assigned | orchestrator.json lists free tracks; parallel_tracks is orchestrator-derived (min(open issues, 5), disk-reduced; single issue ⇒ 1) — never a flag. Wait or free one |
+| Track not assigned | orchestrator.json lists free tracks; parallel_tracks is orchestrator-derived (min(ready issues, 5), disk-reduced; single issue ⇒ 1) — never a flag. Wait or free one |
 | Orchestrator out of sync | Run the monitoring loop; compare orchestrator.json against the ledger and each workspace.json `current_stage`; check `.context/errors/*.md` for failed-but-unsynced stages and `.context/logs/` for run artifacts (raw captures outlive task state) |
 
 **Trust but verify "done" claims.** `completed` in state.json is a claim, not proof — reconcile against the on-disk artifact (`.context/<stage>-N.md` + handoff frontmatter): a stage can report done while its artifact write silently failed.
@@ -201,7 +201,7 @@ A partially-succeeded worktree op drifts orchestrator state from the filesystem.
 
 | Symptom | Recovery |
 |---------|----------|
-| orchestrator.json has worktree_path for issue #N, `git worktree list` does not | `git worktree add -b feature/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
+| orchestrator.json has worktree_path for issue #N, `git worktree list` does not | `git worktree add -b <type>/{N}-{slug} {path} origin/{base}` → restore `.context/` from `workspace.json` if present |
 | Path listed by git, no orchestrator.json entry (orphan from a cancelled worktask) | `.context/` empty or archived → `git worktree remove {path}`; else resume via the ledger and remove on FN |
 | Stale untracked files block `worktree remove` | Auto-cleanup handles most; fallback `git -C {path} clean -fd` → retry |
 
@@ -223,11 +223,11 @@ A partially-succeeded worktree op drifts orchestrator state from the filesystem.
 
 ### EnterWorktree out-of-tree confirmation
 
-A `path` **outside** `.claude/worktrees/` triggers a confirmation prompt: keep unattended resume/megatask targets inside it, pre-authorize via auto/skip-permissions mode, or rely on cwd-based pre-existing-worktree recognition (`agents/developer.md:262`). A committed symlink at `.claude/worktrees` cannot redirect worktree creation outside the repo. In megatask fan-out, an "Always allow" rule approved in one worktree applies to every worktree of the repo (rules save at repo root) — approval is once per milestone, not per lane.
+A `path` **outside** `.claude/worktrees/` triggers a confirmation prompt: keep unattended resume/megatask targets inside it, pre-authorize via auto/skip-permissions mode, or use absolute-path mode on the assigned tree (`agents/developer.md § Absolute-path mode`). A committed symlink at `.claude/worktrees` cannot redirect worktree creation outside the repo. In megatask fan-out, an "Always allow" rule approved in one worktree applies to every worktree of the repo (rules save at repo root) — approval is once per milestone, not per lane.
 
 ### Worktree Mode (Always Active)
 
-Every megatask run is worktree-isolated. Expected: orchestrator.json version `"3.0"`, `configuration.isolation` and workspace.json `isolation` both `"worktree"`, issue dir `.worktrees/milestone-{N}/{issue#}/`, full source copy present.
+Every megatask run is worktree-isolated. Expected: orchestrator.json version `"3.1"`, `configuration.isolation` and workspace.json `isolation` both `"worktree"`, issue dir `.worktrees/milestone-{N}/{issue#}/`, full source copy present.
 
 ## Example Interactions
 

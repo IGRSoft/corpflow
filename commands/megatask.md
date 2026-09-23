@@ -16,28 +16,29 @@ related:
   - agents/workflow-engineer.md
 ---
 
-> **Execution model** — megatask is the **meta-orchestrator**: it owns the issue set,
-> builds the dependency DAG, and launches one **`/worktask`** per issue in its own worktree. It
-> writes no code and holds no stage logic — stages belong to `/worktask`. Every per-issue `PL0` is
-> stamped `plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`: a batch cannot stop
-> for one issue's approvals or open questions (§ Step 3). Review surface is the **per-issue PR**.
-> megatask's own sole human checkpoint is the **R1 batch confirmation** (Phase 1). `--dry-run` stops
-> once the DAG is built — no worktrees, no PRs.
+> **Execution model** — megatask is the meta-orchestrator: it owns the issue set, builds the
+> dependency DAG, and launches one `/worktask` per issue in its own worktree. It writes no code and
+> holds no stage logic — stages belong to `/worktask`. Every per-issue `PL0` is stamped
+> `plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`: a batch cannot stop for one
+> issue's approvals or open questions (§ Step 3). Review surface is the per-issue PR; megatask's
+> sole human checkpoint is the R1 batch confirmation (Phase 1). `--dry-run` stops once the DAG is
+> built — no worktrees, no PRs.
 
 # Megatask Command
 
-Issues run in **topological + priority order** — never one whose blockers have not merged. Canonical
-mechanics: `skills/megatask/SKILL.md`.
+Issues run in topological + priority order — never one whose blockers have not merged. Canonical
+mechanics: `skills/megatask/SKILL.md`. Two constraints bound every run:
 
-> **CRITICAL CONSTRAINTS**
-> - Orchestrator + per-issue state lives in `.context/state.json` `tasks{}`, written only via `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
-> - On a dependency **cycle**, or when the ledger cannot be read or written: STOP and report. Never guess an order, never fall back to alternative planning.
+- Orchestrator and per-issue state live in `.context/state.json` `tasks{}`, written only via
+  `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh`. Do not use Claude Code's
+  built-in plan mode.
+- On a dependency cycle, or when the ledger cannot be read or written: stop and report. Never guess
+  an order, never fall back to alternative planning.
 
 ## Usage
 
-`/megatask <N> | --issues N,N,N [--secure] [--platform <p>] [--dry-run]` — `N` (bare positional
-integer) selects a milestone, `--issues` an explicit set; at least one is required, and together
-`--issues` filters within milestone `N`.
+`N` (bare positional integer) selects a milestone, `--issues` an explicit set; at least one is
+required, and together `--issues` filters within milestone `N`.
 
 ## Options
 
@@ -49,8 +50,8 @@ integer) selects a milestone, `--issues` an explicit set; at least one is requir
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Forwarded per issue |
 | `--dry-run` | Resolve, build the DAG, print the plan — no worktrees, no PRs |
 
-Cross-issue concurrency (`parallel_tracks`) is **orchestrator-derived, never a flag** (§ Track
-Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belongs to its **TL stage**.
+Cross-issue concurrency (`parallel_tracks`) is orchestrator-derived, never a flag (§ Track
+Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belongs to its TL stage.
 
 ## Examples
 
@@ -65,8 +66,8 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 
 ## Phase 1: Resolve & Plan (execute immediately)
 
-> **BINDING — Pre-work Prohibition**: Phase 1 creates NO worktrees and modifies NO project files.
-> Only `mkdir -p .worktrees/<group>` and reads/`gh` queries are permitted until R1 clears.
+Phase 1 creates no worktrees and modifies no project files: only `mkdir -p .worktrees/<group>`,
+reads, and `gh` queries are permitted until R1 clears.
 
 ### Phase 1 · Steps 1–2 — Parse arguments & resolve the issue set
 
@@ -134,7 +135,7 @@ Over-cap depth ⇒ name both remediations: raise the env var, or flatten Tier-2 
 
 **Track Derivation** — compute once into `configuration.parallel_tracks`; re-derive as blockers
 merge and the ready-set grows. Never a flag, never a fixed default; the concurrency and depth
-ceilings it respects are in `skills/megatask/SKILL.md § Track Derivation`.
+ceilings it respects: `skills/megatask/SKILL.md § Track Derivation`.
 
 ```
 parallel_tracks = min( count(currently-ready issues), 5 )      # ready = blocked_by empty/all-merged
@@ -157,7 +158,7 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 
 ### Phase 2 loop · Step 3 — Launch the per-issue worktask
 
-3. Delegate to `/worktask` for that issue, **both gates pre-bypassed**, stamping `PL0.metadata`:
+3. Delegate to `/worktask` for that issue, both gates pre-bypassed, stamping `PL0.metadata`:
    `{ stage:"PL", agent:"corpflow:product-manager", model:"opus", issue_number, track,
    workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
    plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", approved:"auto",
@@ -168,30 +169,30 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 
 #### Step 3 — standing directives in the per-issue prompt
 
-Include these verbatim in every per-issue dispatch prompt. They are read once per run, which
-documentation in a reference file is not.
+Include these verbatim in every per-issue dispatch prompt — a prompt is read once per run, a
+reference file is not.
 
-- **Read `## Shared Seams` in the batch's registry issue before introducing any shared protocol,
-  dependency-injection extension point, coordinator, or shared test assertion.** The registry issue
-  is the batch's **foundation issue** — its sole level-0 issue (the only empty `blocked_by[]`) — or,
-  when the batch has several level-0 issues or none, the milestone issue / orchestrator issue
-  (`--issues` mode). Name that number explicitly; there is exactly one per batch. If the seam is
-  registered, conform to the declaration exactly — labels and order included; if not, add an entry
-  rather than inventing a parallel abstraction (`skills/megatask/SKILL.md § Shared-Seam Registry`).
+- Read `## Shared Seams` in the batch's registry issue before introducing any shared protocol,
+  dependency-injection extension point, coordinator, or shared test assertion. The registry issue is
+  the batch's foundation issue — its sole level-0 issue (the only empty `blocked_by[]`) — or, when
+  the batch has several level-0 issues or none, the milestone issue / orchestrator issue (`--issues`
+  mode). Name that number explicitly; there is exactly one per batch. If the seam is registered,
+  conform to the declaration exactly, labels and order included; if not, add an entry rather than
+  inventing a parallel abstraction (`skills/megatask/SKILL.md § Shared-Seam Registry`).
 
 ##### Step 3 — conflict directives
 
-- **Read `skills/megatask/references/git-integration.md § Conflict Recovery` before resolving a
-  merge conflict.** Two rules apply regardless: (1) dependency-injection and coordinator-shaped
-  conflicts are hand-resolved, never script-merged; (2) run a real build and the real tests after
-  any conflict resolution, before pushing.
+- Read `skills/megatask/references/git-integration.md § Conflict Recovery` before resolving a merge
+  conflict. Two rules apply regardless: (1) dependency-injection and coordinator-shaped conflicts
+  are hand-resolved, never script-merged; (2) run a real build and the real tests after any conflict
+  resolution, before pushing.
 
 #### Step 3 — decision_gate and issue parking
 
 `decision_gate:"auto"` is stamped because a batch is unattended: PL0 open questions route through
 the Fable decision pass (`commands/worktask.md § Step A.4`) instead of parking on a human.
-Escalate-class questions are still never auto-decided — they PARK that one issue while the batch
-proceeds with the other unblocked issues.
+Escalate-class questions are never auto-decided — they park that one issue while the batch proceeds
+with the other unblocked issues.
 
 ##### Step 3 — parking mechanics
 
@@ -199,8 +200,8 @@ Parking rides the monitor's existing failure path, so it needs no new state: the
 writes `workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"` and
 an `escalation_parked` audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`);
 `hooks/megatask-monitor.sh` settles it like any failed issue — track freed, dependents stay
-`blocked`. The batch summary lists each parked issue with its unanswered escalate questions (told
-apart by `execution.reason`) so the user can re-run it interactively, re-scope, or drop it.
+`blocked`. The batch summary lists each parked issue (told apart by `execution.reason`) with its
+unanswered escalate questions, so the user can re-run it interactively, re-scope, or drop it.
 
 ### Phase 2 loop · Steps 4–6 — Monitor, completion, termination
 
@@ -231,9 +232,7 @@ A dependency cycle or an unreadable ledger replaces everything after `## Plan` w
 
 ## Relationship to /worktask and /milestone
 
-`/milestone` writes issues carrying `Depends on` / `Blocks` / `P0`–`P3` → `/megatask` reads that
-DAG and runs one `/worktask` per issue → `/worktask` executes ONE issue's pipeline (PL→…→ST),
-milestone-agnostic and no longer accepting `--milestone:N`. Everything multi-issue (issue-set
-resolution, DAG, track derivation, the monitoring hook, gate-bypass) is megatask's. Edge semantics
-and status values: `skills/megatask/SKILL.md § Dependency & Blocker Resolution`,
-`§ Status Transitions`.
+`/milestone` writes issues carrying `Depends on` / `Blocks` / `P0`–`P3` → `/megatask` reads that DAG
+and runs one `/worktask` per issue → `/worktask` executes one issue's milestone-agnostic pipeline
+(PL→…→ST). Edge semantics and status values: `skills/megatask/SKILL.md § Dependency & Blocker
+Resolution`, `§ Status Transitions`.

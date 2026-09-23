@@ -100,7 +100,7 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 
 - Aggregate upstream artifacts **frontmatter-first**: `state.json` facts plus each upstream
   `.context/*-N.md` artifact's `handoff:` frontmatter (≤200 tokens each — verdict/decisions/refs).
-  Deep-read a body ONLY when its `next_stage_focus`/`verdict` flags a section or `retry_count > 0`.
+  Deep-read a body only when its `next_stage_focus`/`verdict` flags a section or `retry_count > 0`.
 - Verify QA's evidence is green from `.context/testing-N.md` `handoff:` frontmatter. FN executes
   nothing — no test authority, no build path (no `Skill` tool, no build/test grant) — so it
   confirms the upstream result. Missing or non-green → do not commit; record
@@ -115,10 +115,10 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 Before staging, `git status --porcelain` must show only files this run intended to change. Build
 tools mutate tracked files as a side effect — auto-extracted localization keys, scheme and
 build-configuration rewrites, generated-project or lockfile touch-ups — and those edits belong to
-no stage's diff. Revert them (`git checkout -- <path>`) as the **last** action before `git add`,
-and run nothing that builds afterwards: any build re-creates exactly the churn just removed. FN's
-lack of a build path is what makes it the right stage to own the unwind. List each reverted path
-in `complete-summary-N.md`; a path that churns every run is a repo defect worth its own issue.
+no stage's diff. Revert them (`git checkout -- <path>`) as the last action before `git add`, and
+run nothing that builds afterwards: any build re-creates exactly the churn just removed. List each
+reverted path in `complete-summary-N.md`; a path that churns every run is a repo defect worth its
+own issue.
 
 ##### Untracked files and the landed set
 
@@ -220,7 +220,7 @@ the only copy of a DV task's commits.
 #### Conductor attachments
 
 Write `.context/attachments/PR instructions.md` and `.context/attachments/Review request.md`
-BEFORE `gh pr create`, **overwriting from scratch** the orchestrator's pre-gate seed (no skip, no
+before `gh pr create`, **overwriting from scratch** the orchestrator's pre-gate seed (no skip, no
 merge — pre-existing files are expected, not current). They prime Conductor's "Create PR" /
 "Request Review" actions in later sessions and are FN's own read-then-execute PR script.
 Templates, data sources, full procedure:
@@ -301,11 +301,11 @@ line plus the audit reason) to `.context/errors/project-manager.md`, and do NOT 
 3. PL0 task `metadata.github_issue_number` (megatask per-issue mode).
 4. Branch parse `<type>/<NNN>-<slug>`, or the first `#NNN` in `git log --oneline -n 5`.
 
-##### Degraded visual evidence — REPORT IT
+##### Degraded visual evidence — report it
 
 `visual_evidence_pr_emitted` reports `ok` whether or not an image embedded, so it cannot tell you
 the reader got nothing. The signal for that is a separate `visual_evidence_degraded` row carrying
-`captured`, `embedded`, `reason`. **Whenever present, state it in the FN summary** — e.g.
+`captured`, `embedded`, `reason`. Whenever present, state it in the FN summary — e.g.
 `⚠ 6 captures taken, 0 reached the PR (reason=probe_timeout)`. Never report success while the
 evidence is invisible; `probe_timeout`/`token_invalid` is resolved by exporting
 `GH_SESSION_TOKEN`.
@@ -355,10 +355,9 @@ the `HEAD:refs/heads/<facts.branch>` refspec makes both true at once. Never "cor
 
 #### Recurring-defect escalation
 
-A pre-existing pipeline-infrastructure defect reproducing **3+ times inside one worktask** is a
+A pre-existing pipeline-infrastructure defect reproducing 3+ times inside one worktask is a
 standing hazard, not a deferral: file it high-priority / next-sprint, and record the reproduction
-count and the stages that hit it in the issue body. The count is the priority signal — each
-occurrence cost a manual remediation, and a one-line backlog entry discards that evidence.
+count and the stages that hit it in the issue body — the count is the priority signal.
 
 #### complete-summary-N.md Stage Timings
 

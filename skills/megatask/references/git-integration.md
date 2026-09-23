@@ -42,12 +42,11 @@ Fresh agent context per issue — the orchestrator delegates via Task, each suba
 | 1 — before `worktree add` | Append `/workspace.json` and `/.worktrees/` to the git **common dir**'s `info/exclude` (idempotent, exact-line matched) |
 | 2 — issue starts (PL) | `worktree add -b {branch}` → `mkdir -p {path}/.context` → write `workspace.json` (`isolation: "worktree"`, `version: "2.0"`) per § Workspace Setup |
 
-The exclusion runs **first** so the scratch file is never visible to a `git add -A`, and it goes in
-the common dir because git does not consult a per-worktree `info/exclude` — so, stated rather than
-hidden, it covers every worktree of the checkout. It cannot mask a *tracked* file, so a repo that
-legitimately tracks a root `workspace.json` still sees its diffs. The repository's own `.gitignore`
-is deliberately not touched: that would commit the exclusion to every future branch, the exact
-mistake this prevents.
+The exclusion runs first so the scratch file is never visible to a `git add -A`, and it goes in the
+common dir because git does not consult a per-worktree `info/exclude` — so it covers every worktree
+of the checkout. It cannot mask a *tracked* file, so a repo that legitimately tracks a root
+`workspace.json` still sees its diffs. The repository's own `.gitignore` is deliberately not
+touched: that would commit the exclusion to every future branch.
 
 ### During Execution
 
@@ -72,7 +71,7 @@ A **running** backgrounded lane holds its worktree's lock for the duration, so t
 
 1. **Uncommitted changes**: `removeIssueWorktree()` checks `git status --porcelain` and refuses removal by default; `force=true` overrides.
 2. **Failed issues**: worktree preserved with `status: "failed"` in orchestrator — inspect and retry.
-3. **Stale worktrees**: interrupted parallel runs are auto-cleaned on startup; manual fallback `git worktree prune`. The background retention sweep no longer removes `.claude/worktrees/` trees you created yourself when a stale background-session record pointed at them, so a hand-made worktree survives an unrelated session's cleanup.
+3. **Stale worktrees**: interrupted parallel runs are auto-cleaned on startup; manual fallback `git worktree prune`. The background retention sweep leaves `.claude/worktrees/` trees you created yourself alone, so a hand-made worktree survives an unrelated session's cleanup.
 4. **Disk space**: each worktree duplicates the working tree — on large repos monitor `du -sh .worktrees/`.
 
 ## Conflict Recovery
@@ -113,18 +112,16 @@ which is exactly what the host refuses. A new name is an ordinary fast-forward p
 
 ### Why this does not contradict the merge strategy
 
-`../../shared/git-conventions.md § Merge Strategy` requires integration by **merge commit** — never
-`--squash`, never `--rebase` — and step 5 obeys it verbatim. Step 1's rebase is a *local* history
-operation on an unmerged feature branch before review; the rule governs how a PR is integrated into
-the base, not whether a branch may be rebased beforehand. Per-commit boundaries survive the rebase,
-so the per-stage history the rule protects arrives intact.
+`../../shared/git-conventions.md § Merge Strategy` requires integration by merge commit — never
+`--squash`, never `--rebase` — and step 5 obeys it. Step 1's rebase is a *local* history operation
+on an unmerged feature branch before review, and per-commit boundaries survive it, so the per-stage
+history the rule protects arrives intact.
 
 ### Two hard rules that apply during step 1
 
-1. **Dependency-injection and coordinator-shaped conflicts are hand-resolved, never
-   script-merged** — `../SKILL.md § Conflict Resolution`.
-2. **Build and test after any conflict resolution, before pushing.** A mis-joined argument list
-   compiles in the reviewer's head and nowhere else.
+Both are canonical in `../SKILL.md § Conflict Resolution`: DI- and coordinator-shaped conflicts are
+hand-resolved, never script-merged; and the real build plus the real tests run after any conflict
+resolution, before pushing.
 
 `rebase --continue` opens an editor, so an issue-prefixed subject (`#{issue#} feat: …`) is silently
 destroyed by git's comment-character default — trap and per-invocation remedy stated once in

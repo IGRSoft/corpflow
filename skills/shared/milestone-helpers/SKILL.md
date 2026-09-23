@@ -11,7 +11,7 @@ related:
 
 ## Canonical Dispatcher
 
-**`scripts/milestone-helpers.sh`** is the single executable home for all slug/branch/priority/base-branch logic. Megatask scripts MUST invoke it rather than reimplementing these operations.
+**`scripts/milestone-helpers.sh`** is the single executable home for all slug/branch/priority/base-branch logic. Megatask scripts invoke it rather than reimplementing these operations.
 
 ```
 bash scripts/milestone-helpers.sh <subcommand> [args...]
@@ -33,7 +33,7 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 ### Slug-length canon: **50 characters**
 
-The dispatcher implements **50** (matching `megatask/SKILL.md §Branch Naming`) as the single source of truth. The issue number sits **outside** the cap: `<type>/{issue#}-{slug}` spends the 50 characters on the slug alone. Worktask's own budget is 48 and is spent on `<ticket>-<slug>` together (`git-conventions.md § Slug budget`) — the two budgets differ deliberately and are not being unified.
+The dispatcher implements **50** (matching `megatask/SKILL.md §Branch Naming`) as the single source of truth. The issue number sits outside the cap: `<type>/{issue#}-{slug}` spends the 50 characters on the slug alone. Worktask's own budget is 48, spent on `<ticket>-<slug>` together (`git-conventions.md § Slug budget`) — the two differ deliberately.
 
 ### Slug truncation: whole words only
 
@@ -43,11 +43,11 @@ Same rule as `derive_slug` in `skills/worktask/scripts/branch-lib.sh`; the two a
 
 ### Branch type: derived, not fixed
 
-`branch-name` derives the type from the issue title via `derive_type`, **sourced** from `skills/worktask/scripts/branch-lib.sh` — the same function worktask uses, never a second copy. `feature` is the default for titles that read as new work; a title starting with "Build" derives `feat` (`"Build multiplatform leaderboard"` → `feat/7-build-multiplatform-leaderboard`); defect, refactor, docs, chore, and the rest resolve to their own prefix. If `branch-lib.sh` is unreachable the dispatcher exits 2 rather than falling back to `feature/`: a plausible-looking wrong branch name is worse than a loud stop.
+`branch-name` derives the type from the issue title via `derive_type`, sourced from `skills/worktask/scripts/branch-lib.sh` — the same function worktask uses, never a second copy. `feature` is the default for titles that read as new work; a title starting with "Build" derives `feat` (`"Build multiplatform leaderboard"` → `feat/7-build-multiplatform-leaderboard`); defect, refactor, docs, chore, and the rest resolve to their own prefix. If `branch-lib.sh` is unreachable the dispatcher exits 2 rather than falling back to `feature/`: a plausible-looking wrong branch name is worse than a loud stop.
 
 #### Where each constant is canonical
 
-> **Constants are canonical in `megatask`** — one exception: the branch **type** vocabulary and its derivation are canonical in `skills/shared/git-conventions.md § Branch Naming` (machine-readable copy: `BRANCH_TYPES` + `derive_type` in `branch-lib.sh`). `megatask` owns the number-interpolation format (`<type>/{issue#}-{slug}`), the slug cap, the priority labels (P0–P3 + none), and the base-branch chain (issue body → develop → master). This skill applies them via `scripts/milestone-helpers.sh`; do not redefine — reference the `megatask` skill (or `git-conventions.md` for the type vocabulary) to avoid drift.
+> Constants are canonical in `megatask`, which owns the number-interpolation format (`<type>/{issue#}-{slug}`), the slug cap, the priority labels (P0–P3 + none), and the base-branch chain (issue body → develop → master). One exception: the branch **type** vocabulary and its derivation are canonical in `skills/shared/git-conventions.md § Branch Naming` (machine-readable copy: `BRANCH_TYPES` + `derive_type` in `branch-lib.sh`). This skill applies them via `scripts/milestone-helpers.sh`; reference those two rather than redefining here.
 
 ## Function Index (pseudocode spec — implemented in scripts/milestone-helpers.sh)
 
@@ -66,7 +66,7 @@ Same rule as `derive_slug` in `skills/worktask/scripts/branch-lib.sh`; the two a
 
 ## Git Commands Reference
 
-> **Orchestrator-side only.** The `git -C` forms below run from the **parent** session reaching *into* a worktree. Inside a worktree use plain `git` — the runtime blocks an isolated subagent from redirecting git at the shared checkout (`git -C`, `--git-dir`, `GIT_DIR`, `GIT_WORK_TREE`), so copying these there fails.
+> **Orchestrator-side only.** The `git -C` forms below run from the parent session reaching *into* a worktree. Inside a worktree use plain `git` — the runtime blocks an isolated subagent from redirecting git at the shared checkout (`git -C`, `--git-dir`, `GIT_DIR`, `GIT_WORK_TREE`), so copying these there fails.
 
 | Operation | Non-worktree Command | Worktree Command |
 |-----------|----------------|------------------|
