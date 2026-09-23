@@ -171,6 +171,10 @@ Live probe; `--json --all` returned interactive rows only. Those rows carry exac
 
 `claude agents run` is **not** a subcommand — `claude agents run --help` prints `claude agents` usage. Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but **no `--cwd`**, so an external dispatcher must `cd` into the worktree first. Re-deriving the external one-liner is an **open follow-up**.
 
+#### Watch run — CC 2.1.280 (observed)
+
+Live probe; `--json` (no live background/dispatched agents at observation time) returned interactive rows only, shape unchanged from the 2.1.270 baseline: `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`. Reconfirms **obligation 1a** (own-name reuses the existing `name` key — no new key introduced through 2.1.280). **Obligation 1b** (teammate/dispatched-agent row `kind` discriminator) stays **still unconfirmed**: no non-`"interactive"` row was live to sample.
+
 #### Defensive jq pattern
 
 Canonical for any plugin code reading this output:
