@@ -11,25 +11,15 @@ related:
 
 # Architecture Review Command
 
-Perform architecture review for PRs, features, or system changes. Evaluates architectural integrity, scalability, and maintainability.
-
-## Usage
-
-```
-/arch-review
-/arch-review --pr <number>
-/arch-review --path <directory>
-/arch-review --scope [full|focused]
-```
+Review architectural integrity, scalability, and maintainability for a PR, a directory, or the
+current working tree.
 
 ## Options
 
 - `--pr <number>` - Review specific PR
 - `--path <dir>` - Review specific directory/module
 - `--scope [full|focused]` - Review depth (default: focused)
-- `--checklist` - Score against the standard architecture checklist
-
-## Examples
+- `--checklist` - Score against § Review Checklist
 
 ```
 /arch-review
@@ -107,16 +97,11 @@ platform has an architect agent, run both passes:
 2. **Platform architecture review** — delegate to that architect for pattern compliance,
    boundary violations, and language/runtime-specific concerns
 
-### Resolving the architect agent
+### Resolving and combining
 
 Take the architect and its plugin prefix from `skills/shared/routing-matrix.md §
-Functional-role aliases` (`apple-architector`, `kotlin-architector`, `frontend-architector`,
-`system-architector`, `backend-architector`, `ai-architector`) — never hardcode the prefix here.
-
-If the platform is ambiguous, or its plugin is not installed, run the general pass alone and
-say so in the output. Never silently downgrade to single-pass.
-
-### Combining the passes
+Functional-role aliases` rather than hardcoding either here. If the platform is ambiguous, or its
+plugin is not installed, run the general pass alone and say so in the output.
 
 Merge both passes into one report: architect findings become a `### <Platform> Architecture`
 subsection of Pattern Analysis, its P0-P3 severities mapped to Must Fix / Should Fix / Consider.
@@ -126,7 +111,6 @@ skip apple-architector and use `backend-architector` as the second pass when ins
 
 ## Review Checklist
 
-Evaluated against:
 - [ ] SOLID principles compliance
 - [ ] Design pattern appropriateness
 - [ ] Dependency management
@@ -136,10 +120,3 @@ Evaluated against:
 - [ ] Testability
 - [ ] Documentation
 - [ ] Platform architecture pattern compliance (when the platform has an architect agent)
-
-## Integration
-
-This command is used:
-- In AR stage - Formal architecture review
-- Before merging large PRs
-- When introducing new patterns
