@@ -6,31 +6,23 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
   - commands/product-requirements.md
+  - commands/sprint.md
 ---
 
 # Roadmap Command
 
 Create or update product roadmap with timeline, milestones, and dependencies.
 
-## Usage
-
-```
-/roadmap
-/roadmap --quarter [Q1|Q2|Q3|Q4]
-/roadmap --add "Feature" --quarter Q2
-/roadmap --view [timeline|kanban|list]
-```
-
 ## Options
 
-- `--quarter <Q>` - Focus on specific quarter
-- `--add "feature"` - Add item to roadmap
-- `--move <id> --to <quarter>` - Move item between quarters
-- `--view <type>` - Display format (default: timeline)
-- `--export` - Export roadmap
-- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--quarter <Q>` | `Q1`, `Q2`, `Q3`, `Q4` | Focus on one quarter |
+| `--add "<feature>"` | — | Add an item to the roadmap |
+| `--move <id> --to <quarter>` | — | Move an item between quarters |
+| `--view <type>` | `timeline`, `kanban`, `list` | Display format (default: `timeline`) |
+| `--export` | — | Export the roadmap |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`) |
 
 ```
 /roadmap
@@ -122,9 +114,3 @@ Table Risk | Impact | Probability | Mitigation — roadmap-level risks only
 | At Risk | May miss target |
 | Blocked | Waiting on dependency |
 | Complete | Delivered |
-
-## Integration
-
-This command works with:
-- `/product-requirements` - Detail features on roadmap
-- `/sprint` - Break roadmap into sprints
