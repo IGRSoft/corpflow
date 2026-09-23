@@ -13,12 +13,6 @@ related:
 
 Generate release notes from completed work, git history, or worktask artifacts.
 
-## Usage
-
-```
-/docs-release-notes [--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|html|slack] [--audience internal|external|all] [--platform <target>]
-```
-
 ## Options
 
 | Option | Values | Purpose |
@@ -34,6 +28,7 @@ Generate release notes from completed work, git history, or worktask artifacts.
 ## Examples
 
 ```
+/docs-release-notes [--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|html|slack] [--audience internal|external|all] [--platform <target>]
 /docs-release-notes
 /docs-release-notes --version 2.1.0 --format markdown
 /docs-release-notes --from-commits --audience external
@@ -88,10 +83,3 @@ cc @engineering @product
 ```
 
 Highlights mirror the external Highlights section, trimmed to three bullets.
-
-## Integration
-
-- End of `/worktask` FN stage — document the release
-- Stakeholder communication and customer announcements
-- `/sprint` — sprint scope feeding `--from-worktask`
-- `agents/project-manager.md`, `agents/technical-writer.md` — owning agents
