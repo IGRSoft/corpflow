@@ -32,7 +32,7 @@ A parameter that carries a default value (memberwise-init-with-defaults) is omit
 
 ## Protocol mocks — convention
 
-Detected by filename only — contents are never parsed — at `Source/Mocks/Mock<ProtocolName>.swift`, `Sources/Mocks/Mock<ProtocolName>.swift`, or `<ProjectDir>/Mocks/Mock<ProtocolName>.swift`. The file MUST declare a type named exactly `Mock<ProtocolName>` with a no-arg init:
+Detected by filename only — contents are never parsed — at `Source/Mocks/Mock<ProtocolName>.swift`, `Sources/Mocks/Mock<ProtocolName>.swift`, or `<ProjectDir>/Mocks/Mock<ProtocolName>.swift`. The file must declare a type named exactly `Mock<ProtocolName>` with a no-arg init:
 
 ```swift
 // Source/Mocks/MockUserRepository.swift
@@ -49,9 +49,9 @@ If the type is absent or its init takes args, `swift build` fails at SnapshotHos
 Both paths report `action: "skipped"`; the differentiator is the comment trail.
 
 - **Emit the comment** when the View has at least one parameter we could not satisfy.
-- **Skip silently** when the View is unambiguously not preview-able (e.g. `@Environment`-injection only) or already has a preview we left alone (A4 path).
+- **Skip silently** when the View is unambiguously not preview-able (e.g. `@Environment`-injection only) or already has a preview we left alone.
 
-The comment is a user-visible TODO, appended at the END of the file — the position the generated `#Preview` would have taken — so a later scan can fix it or convert it into a real preview:
+The comment is a user-visible TODO, appended at the end of the file — the position the generated `#Preview` would have taken — so a later scan can fix it or convert it into a real preview:
 
 ```swift
 // preview-tbd: no_mock_for_UserRepository — create Source/Mocks/MockUserRepository.swift
@@ -60,7 +60,7 @@ The comment is a user-visible TODO, appended at the END of the file — the posi
 
 ## Closure parameters
 
-Closures are the most common reason a real-world view is skipped. v1 does NOT synthesize empty `{ }` closures because they often must return a value rather than absorb an event (`onTap: () -> Void` would be fine, `transform: (Item) -> Item` is not). Future work: `args.closure_strategy: "empty" | "skip"`.
+Closures are the most common reason a real-world view is skipped. Empty `{ }` closures are not synthesized because many must return a value rather than absorb an event (`onTap: () -> Void` would be fine, `transform: (Item) -> Item` is not).
 
 ## Property wrappers
 
@@ -91,4 +91,4 @@ Closures are the most common reason a real-world view is skipped. v1 does NOT sy
 
 ## Cross-reference with audit enum
 
-The emitted `mock_strategy` must be one of `"binding-constant"`, `"optional-nil"`, `"mock-found"`, `"preview-tbd"` — plus the implicit `"concrete-init"`, which the skill MAY emit though it is not in the spec's primary set. Consumers treat unknown values as `"preview-tbd"` for forward-compat.
+The emitted `mock_strategy` must be one of `"binding-constant"`, `"optional-nil"`, `"mock-found"`, `"preview-tbd"` — plus the implicit `"concrete-init"`, which the skill may emit though it is not in the spec's primary set. Consumers treat unknown values as `"preview-tbd"` for forward-compat.

@@ -22,18 +22,18 @@ detector.walk(tree)
 |---|---|---|
 | `struct X: View` — also `SwiftUI.View`, and alongside other conformances (`View, Equatable`) | `StructDeclSyntax.inheritanceClause?.inheritedTypes` | the 95% case |
 | `class X: View` / `actor X: View` | `ClassDeclSyntax` / `ActorDeclSyntax` inheritance clause | rare but legal |
-| `extension X: View` | `ExtensionDeclSyntax.inheritanceClause?` plus a same-file `Struct`/`ClassDeclSyntax` with matching `.name.text` | v1 resolves in-file only — cross-file needs a build-graph walk (out of scope) |
+| `extension X: View` | `ExtensionDeclSyntax.inheritanceClause?` plus a same-file `Struct`/`ClassDeclSyntax` with matching `.name.text` | resolved in-file only — cross-file needs a build-graph walk (out of scope) |
 
-## Existing-preview patterns (A4 — never overwrite)
+## Existing-preview patterns (never overwritten)
 
 | Source shape | SwiftSyntax node |
 |---|---|
 | `struct X_Previews: PreviewProvider` (legacy, pre-Xcode-15) | any decl whose `.inheritanceClause` contains `PreviewProvider` |
-| `#Preview { }`, `#Preview("dark mode") { }`, `#Preview(traits: .sizeThatFitsLayout) { }` | top-level `MacroExpansionExprSyntax` OR `MacroExpansionDeclSyntax` with `.macroName.text == "Preview"` — the visitor scans ALL of `SourceFileSyntax.statements` |
+| `#Preview { }`, `#Preview("dark mode") { }`, `#Preview(traits: .sizeThatFitsLayout) { }` | top-level `MacroExpansionExprSyntax` OR `MacroExpansionDeclSyntax` with `.macroName.text == "Preview"` — the visitor scans all of `SourceFileSyntax.statements` |
 
 ## Anti-pattern — `#Preview` inside comments or strings
 
-Detection MUST NOT trigger on `// #Preview` or `let s = "#Preview"`. The tree walk ignores trivia and string-literal contents inherently — do NOT run regex over the raw source.
+Detection must not trigger on `// #Preview` or `let s = "#Preview"`. The tree walk ignores trivia and string-literal contents on its own, so don't run regex over the raw source.
 
 ## Inheritance-clause traversal
 
@@ -57,7 +57,7 @@ extension InheritanceClauseSyntax {
 
 ## Position of injection
 
-Append the `#Preview` block to the END of the file, after the last top-level declaration — rewrite `SourceFileSyntax.statements` with a new `MacroExpansionDeclSyntax`. Preserve the trailing newline at EOF.
+Append the `#Preview` block to the end of the file, after the last top-level declaration — rewrite `SourceFileSyntax.statements` with a new `MacroExpansionDeclSyntax`. Preserve the trailing newline at EOF.
 
 ## Post-edit smoke
 
@@ -65,8 +65,4 @@ Append the `#Preview` block to the END of the file, after the last top-level dec
 
 ## Test fixtures
 
-Under `tests/Fixtures/`, with expected output documented in `tests/ensurer-tests.md`:
-
-- `SimpleView.swift` — plain `struct: View`, no `#Preview` (should auto-add)
-- `BindingView.swift` — same with `@Binding` (should auto-add via `binding-constant`)
-- `AmbiguousMultiView.swift` — 3 View structs (should skip with `ambiguous_view_target`)
+`tests/Fixtures/`, with expected output in `tests/ensurer-tests.md`.

@@ -1,6 +1,6 @@
 // BindingView.swift — preview-ensurer fixture
 //
-// Scenario: pattern-1 View with a `@Binding<String>` parameter and no `#Preview`.
+// Scenario: plain `struct: View` with a `@Binding<String>` parameter and no `#Preview`.
 // Expected outcome: preview-ensurer auto-adds:
 //                       #Preview { BindingView(text: .constant("")) }
 //                   action="added", mock_strategy="binding-constant".
