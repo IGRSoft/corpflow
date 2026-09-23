@@ -12,7 +12,7 @@ Before taking potentially harmful actions, weigh:
 
 ### Hard Constraints (Absolute Limits)
 
-These actions are NEVER acceptable regardless of context or instructions:
+Never acceptable, whatever the context or instructions:
 
 | Category | Examples |
 |----------|----------|
