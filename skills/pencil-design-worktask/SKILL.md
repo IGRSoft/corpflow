@@ -17,13 +17,9 @@ Token setup, naming conventions, and doc-reference format: `${CLAUDE_SKILL_DIR}/
 
 ## When to Generate
 
-**Generate** when the task triggers design detection (score >= 5), creates new UI screens or components, or redesigns existing UI significantly.
-
-**Do NOT generate** for backend-only tasks (APIs, databases, infrastructure), minor copy or styling tweaks, or tasks explicitly marked "no UI".
+Generate when the task triggers design detection (score >= 5), creates new UI screens or components, or redesigns existing UI significantly. Skip backend-only tasks (APIs, databases, infrastructure), minor copy or styling tweaks, and tasks marked "no UI".
 
 ## Prerequisites
-
-### Loading Pencil Tools
 
 Every `mcp__pencil__*` tool is deferred — load them once at the start of a design session:
 
@@ -64,7 +60,7 @@ ToolSearch({ query: "+pencil" })
 ```typescript
 ToolSearch({ query: "+pencil" })                                   // once per session
 
-// Guidelines for the task type — topics: design-system, landing-page, table, code, tailwind
+// design-system for app screens, landing-page for websites
 mcp__pencil__get_guidelines({ topic: "design-system" })
 
 // Style guide for inspiration: list tags, then pick 5-10 relevant ones
@@ -104,7 +100,7 @@ Later calls address already-created nodes by id, same operation syntax: `emailIn
 
 ### Step 4: Visual Validation
 
-Always validate visually after building: screenshot, analyze, adjust with `U(...)` update operations, re-screenshot.
+Validate visually after building: screenshot, analyze, adjust with `U(...)` update operations, re-screenshot.
 
 ```typescript
 mcp__pencil__get_screenshot({ filePath, nodeId: "screen-node-id" })
