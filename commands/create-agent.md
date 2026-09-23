@@ -11,15 +11,8 @@ related:
 
 # Create Agent Command
 
-Create new agent definitions with proper structure, model selection, and best practices. Generates production-ready agent files.
-
-## Usage
-
-```
-/create-agent <name> --purpose <description>
-/create-agent "database-admin" --purpose "Database administration and optimization"
-/create-agent "api-designer" --model haiku --template minimal
-```
+Generate a production-ready agent definition with the canonical frontmatter, a resolved model,
+and the required body sections.
 
 ## Options
 
@@ -33,6 +26,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 ## Examples
 
 ```
+/create-agent <name> --purpose <description>
 /create-agent "database-admin" --purpose "Database schema design, query optimization, and migration management"
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal
 /create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read
@@ -72,13 +66,16 @@ Create new agent definitions with proper structure, model selection, and best pr
 
 ## Model Auto-Selection
 
-When `--model` is not specified, selection is based on purpose analysis: procedural keywords (format, convert, validate) map to the lowest tier, balanced keywords (implement, review, design) to the mid tier, and complex-reasoning keywords (architect, optimize, research) to the top tier.
+Without `--model`, select from purpose keywords: procedural (format, convert, validate) → lowest
+tier, balanced (implement, review, design) → mid tier, complex reasoning (architect, optimize,
+research) → top tier.
 
-Model tiers and stage→model mapping: see `skills/shared/model-selection.md` and `skills/shared/stage-codes.md` (canonical).
+Model tiers and stage→model mapping: see `skills/shared/model-selection.md` and
+`skills/shared/stage-codes.md` (canonical).
 
 ## Tool Presets
 
-When using `--tools`, specify a preset name or a comma-separated tool list:
+`--tools` takes a preset name or a comma-separated tool list:
 
 | Preset | Expands To |
 |--------|-----------|
@@ -88,15 +85,13 @@ When using `--tools`, specify a preset name or a comma-separated tool list:
 | orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *) |
 | design | Read, Glob, Grep, Write, ToolSearch |
 
-### Cross-Plugin Delegation
-
-Add Task delegation syntax to any preset: `--tools full,Task(apple-developer:ios-developer)`
+Cross-plugin delegation appends to any preset: `--tools full,Task(apple-developer:ios-developer)`
 
 ## Agent Structure Guidelines
 
 ### Frontmatter (Required)
 
-Canonical field order — every agent in `agents/` follows it, and a new agent that deviates is drift, not style:
+Canonical field order — every agent in `agents/` follows it:
 
 ```yaml
 ---
@@ -109,12 +104,14 @@ tools: Read, Glob, Grep, Write, Edit
 ---
 ```
 
-Model and effort are no longer frontmatter fields: `skills/shared/stage-codes.md § Agent Model
-Matrix` is the sole source, resolved by `model-matrix-lib.sh`/`model_resolve`. A newly-scaffolded
-agent needs a matrix row (or an explicit `--model`/`--effort` pass-through at dispatch), not a
-frontmatter pin.
+Model and effort are not frontmatter fields: `skills/shared/stage-codes.md § Agent Model Matrix`
+is the sole source, resolved by `model-matrix-lib.sh`/`model_resolve`. A newly-scaffolded agent
+needs a matrix row, or an explicit `--model`/`--effort` pass-through at dispatch.
 
-Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:` and `tools:`, in that order; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
+Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:`
+and `tools:`, in that order; `hooks:` last, after `tools:`. A comment explaining a
+narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately
+above the `tools:` line it explains and moves with it.
 
 ### Body sections
 
@@ -124,21 +121,23 @@ Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` betw
 | Purpose | Role, domain and boundaries, integration context. |
 | Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
-| Model fit | Write the body for the model this agent resolves to in `skills/shared/stage-codes.md § Agent Model Matrix` — `skills/shared/model-prompting.md` lists what each alias needs countered. A body `commands/prompt-audit.md § Body rules 5-7` would flag is a generation bug, not a follow-up. |
+| Model fit | Write the body for the model this agent resolves to in `skills/shared/stage-codes.md § Agent Model Matrix`; `skills/shared/model-prompting.md` lists what each alias needs countered, and `commands/prompt-audit.md § Body rules 5-7` is the check. |
 | Emphasis | Generate the plain imperative. `CRITICAL`/`MUST` is earned by a recorded failure, later. |
 
 #### Slots that carry their own shape
 
-Naming either slot without its shape reproduces the gap one level down; both are REQUIRED.
+Both slots are required, and so is the shape below.
 
 | Section | Rule |
 |---|---|
-| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), then two sub-sections that make them falsifiable: `### Rationalizations`, an `Excuse | Reality` table of 3-5 rows whose Excuse is a shortcut *this* agent takes mid-run and whose Reality is the rule overriding it; and `### Red Flags — STOP`, 3-5 observable behaviours closing on a bold `**All of these mean: …**` verdict. Both: `agents/qa-engineer.md § Constraints (DO NOT)`. |
+| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), then two sub-sections that make them falsifiable: `### Rationalizations`, an `Excuse \| Reality` table of 3-5 rows whose Excuse is a shortcut *this* agent takes mid-run and whose Reality is the rule overriding it; and `### Red Flags — STOP`, 3-5 observable behaviours closing on a bold `**All of these mean: …**` verdict. Both: `agents/qa-engineer.md § Constraints (DO NOT)`. |
 | Example Interactions | 5-8 bullets, each a verbatim user phrasing that should route to this agent — never a description of its job. Placement: last section, or immediately before `## Worktask Integration` for a stage owner, since § Handoff Protocol stays last. |
 
 ### Completion Verification (optional)
 
-A **supplement** to `skills/shared/stage-contracts.md § Completion Verification`, never a restatement of it. Include it only when the stage adds checks the shared contract does not cover; omit it entirely otherwise. Sits immediately before § Handoff Protocol.
+A supplement to `skills/shared/stage-contracts.md § Completion Verification`, never a restatement.
+Include it only when the stage adds checks the shared contract does not cover; omit it otherwise.
+Sits immediately before § Handoff Protocol.
 
 ### Handoff Protocol (stage owners only)
 
@@ -148,7 +147,9 @@ A **supplement** to `skills/shared/stage-contracts.md § Completion Verification
 
 #### Handoff Protocol exemptions
 
-**Do not add this section to a support agent.** It asserts a ledger-write responsibility, so an agent that owns no stage artifact must not carry it. Current exemptions, verified against `skills/shared/stage-codes.md`:
+Do not add this section to a support agent: it asserts a ledger-write responsibility, so an agent
+that owns no stage artifact must not carry it. Current exemptions, verified against
+`skills/shared/stage-codes.md`:
 
 | Agent | Why exempt |
 |---|---|
@@ -156,8 +157,5 @@ A **supplement** to `skills/shared/stage-contracts.md § Completion Verification
 | `prompt-engineer` | Support agent (PE). Agent-optimization work, outside the worktask ledger. |
 | `product-manager` | Owns PL, but its handoff and completion checklist are canonical in `skills/worktask/references/pl0-procedure.md`. Duplicating them here would create a second source of truth. |
 
-`workflow-engineer` is **not** exempt: it is a support agent by default, but PL0 routes DV0 to it for worktask-infrastructure changes, so it carries a DV-scoped Handoff Protocol gated on that mode.
-
-## Integration
-
-Used by the `prompt-engineer` agent to create new agents, when expanding the agent ecosystem, and for specialized domain agents.
+`workflow-engineer` is not exempt: it is a support agent by default, but PL0 routes DV0 to it for
+worktask-infrastructure changes, so it carries a DV-scoped Handoff Protocol gated on that mode.
