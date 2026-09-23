@@ -2,7 +2,6 @@
 name: create-agent
 description: Create new agent definitions with proper structure, model selection, and best practices
 argument-hint: <agent name and purpose>
-model: opus
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md
@@ -45,7 +44,7 @@ Create new agent definitions with proper structure, model selection, and best pr
 
 | Section | minimal | standard (default) | comprehensive |
 |---|---|---|---|
-| Frontmatter | name, description, model | + tools | + tools |
+| Frontmatter | name, description | + tools | + tools |
 | Constraints (DO NOT) | 3 items | 3-5 items | 5-7 items |
 | Purpose | basic | basic | expert purpose |
 | Capabilities | 3-5 items | by category | detailed subsections |
@@ -103,14 +102,17 @@ Canonical field order — every agent in `agents/` follows it, and a new agent t
 ---
 name: agent-name
 description: Brief description for routing (1-2 sentences). Use PROACTIVELY for...
-model: haiku|sonnet|opus
 color: blue
-effort: medium
 version: 0.1.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit
 ---
 ```
+
+Model and effort are no longer frontmatter fields: `skills/shared/stage-codes.md § Agent Model
+Matrix` is the sole source, resolved by `model-matrix-lib.sh`/`model_resolve`. A newly-scaffolded
+agent needs a matrix row (or an explicit `--model`/`--effort` pass-through at dispatch), not a
+frontmatter pin.
 
 Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:` and `tools:`, in that order; `hooks:` last, after `tools:`. An explanatory comment for a narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately above the `tools:` line it explains and moves with it.
 
@@ -122,7 +124,7 @@ Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` betw
 | Purpose | Role, domain and boundaries, integration context. |
 | Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
-| Model fit | Write the body for the `model:` in the frontmatter — `skills/shared/model-prompting.md` lists what each alias needs countered. A body `commands/prompt-audit.md § Body rules 5-7` would flag is a generation bug, not a follow-up. |
+| Model fit | Write the body for the model this agent resolves to in `skills/shared/stage-codes.md § Agent Model Matrix` — `skills/shared/model-prompting.md` lists what each alias needs countered. A body `commands/prompt-audit.md § Body rules 5-7` would flag is a generation bug, not a follow-up. |
 | Emphasis | Generate the plain imperative. `CRITICAL`/`MUST` is earned by a recorded failure, later. |
 
 #### Slots that carry their own shape

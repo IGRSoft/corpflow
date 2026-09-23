@@ -3,7 +3,6 @@ name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
 version: 0.3.0
 argument-hint: <agent name or path>
-model: opus
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md
@@ -107,15 +106,16 @@ Runs on every agent regardless of `--focus`; findings land in Findings by Area. 
 | **Disclosure** | An H2 subtree over 200 lines whose body only *some* branches reach | The reference file it belongs behind, and which branch reaches it |
 | **Completion criteria** | A criterion fails *clarity* (done indistinguishable from not-done) or *demand* (no artifact named to check it against) | The artifact it is checked against |
 | **Negation form** | A `DO NOT` aimed at any `§ Form to failure` row but "knows the rule, skips it under pressure" | The correct form — positive recipe, REQUIRED template slot, or observable-predicate conditional |
-| **No-op pruning** | An instruction this agent's own `model:` already obeys by default | Deletion of the whole sentence, never a rewording |
+| **No-op pruning** | An instruction the agent's matrix-resolved model already obeys by default | Deletion of the whole sentence, never a rewording |
 
 #### Body doctrine — the model-conditioned rows
 
-These three read the agent's own `model:` before they can fire at all.
+These three resolve the model from § Agent Model Matrix — never from frontmatter, which carries
+no `model:` any more.
 
 | Check | Finding when | Fix line states |
 |---|---|---|
-| **Model-conditioned** | An instruction collides with a documented behaviour of this `model:` — per-alias list in `skills/shared/model-prompting.md` | Deletion, citing the vendor page that canon file names |
+| **Model-conditioned** | An instruction collides with a documented behaviour of the agent's resolved model — per-alias list in `skills/shared/model-prompting.md` | Deletion, citing the vendor page that canon file names |
 | **Scope explicitness** | On a `sonnet` agent, an instruction names one item where the agent's scope covers a set | The scope — `every`, `each`, the named set — never added emphasis |
 | **Emphasis inflation** | An emphasised rule with no recorded failure behind it | Downgrade to the plain imperative; the rule itself stays |
 
@@ -149,14 +149,13 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 |-------|------------|----------|
 | `name` | Globally unique and **must not contain `:`** — CC rejects the file (`:` is reserved for call-site namespacing, `corpflow:developer`). CC keys agents by this field, so generic stems (`developer`, `qa-engineer`, `incident-responder`) silently overwrite across plugins: cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` stems, prefer `<plugin>-<role>`. | P0 (`:`) / P1 (collision) |
 | `description` | ≤250 characters, measured with `awk -F'description: ' '/^description:/{print length($2)}'`; report exact count, suggest a 240-char rewrite for headroom. | P0 |
-| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`, `fable`}. Reject `claude-*` ids, version aliases, omission. | P0 |
+| `model` | **Must be absent** — the pair lives only in § Agent Model Matrix now. Flag `model:`/`effort:` in any definition frontmatter as P0; fix is deletion. | P0 |
 
-#### Frontmatter audit — tools & effort (P1)
+#### Frontmatter audit — tools (P1)
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `tools` | Least-privilege explicit list, cross-checked against the agent's documented constraints. Flag: bare `Bash` (needs sub-matchers like `Bash(git:*)`); `Bash(*)`/`Read(*)`; `Write`/`Edit` on review-only agents (DR/SR/QA); single-segment `dir/**` (cwd-anchored — any-depth needs `**/dir/**`); `Write(path)`/`NotebookEdit(path)`/`Glob(path)` (startup warning — use `Edit(path)`/`Read(path)`). Scoped wildcards are fine: `WebFetch(domain:*.example.com)`, `Read(secrets-*/config.json)`. | P1 |
-| `effort` | Present on every stage agent, matching role tier in the model-selection matrix. `xhigh` requires `model: opus` or `model: fable` — Sonnet silently downgrades (`skills/cost-optimization/SKILL.md § Per-Effort Thinking-Budget Ceilings`). | P1 |
 
 #### Frontmatter audit — hooks (P1)
 
@@ -192,7 +191,7 @@ REQUIRED slot in the template being filled in.
 Do **not** answer a recurring class with a generic self-check block ("Before responding, verify:
 output matches format, constraints satisfied, no conflicting information"). It reads as diligence
 and is the instruction `skills/shared/model-prompting.md § opus` names as compounding into
-over-verification, and 8 of this plugin's 16 agents are `model: opus`. A criterion that names an
+over-verification, and 8 of this plugin's 16 agents resolve to `opus` in the matrix. A criterion that names an
 artifact is a different thing and stays — that is the completion-criteria row, not this one.
 
 ## Integration

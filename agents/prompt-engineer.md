@@ -1,9 +1,7 @@
 ---
 name: prompt-engineer
 description: Use when optimizing agents, commands, or skills, auditing prompt quality, or choosing a model for an agent. Elite AI prompt engineering specialist that masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
-model: opus
 color: yellow
-effort: xhigh
 version: 0.3.0
 maxTurns: 50
 # tools: bare Bash is deliberate — lint and grep targets vary per audited asset (any agent,

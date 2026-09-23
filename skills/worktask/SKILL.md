@@ -1,7 +1,6 @@
 ---
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Complete staged worktask system with dynamic sizing, task initialization, and stage management.
-effort: high
 version: 0.6.0
 ---
 
@@ -300,6 +299,18 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 ### Validation check 12 — Routing resolution
 
 12. **Routing resolution** (first stage only, after the state.json seed): read `CORPFLOW.md § Routing` at the project root, if present, and merge its `| Alias | Target |` rows over the defaults in `skills/shared/routing-matrix.md § Matrix`. Stamp the resolved map on the ledger as `state.routing: {"<alias>": "<plugin:agent>", …}` (only aliases that differ from the default need stamping; an absent map means all-default) plus `state.routing_source: "matrix" | "project-override"`. Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of the project file never splits routing across stages. No `CORPFLOW.md` or no `## Routing` heading → all-default, no rows, no warning.
+
+### Validation check 13 — Model/effort resolution
+
+13. **Model/effort resolution** (first stage only, right after check 12): run `state-patch.sh
+    --resolve-models` before PL0 is dispatched. Merges `CORPFLOW.md § Models`, fail-open per row
+    (`#ad5`), over the built-in matrix, via `model-matrix-lib.sh`. Stamps `state.models` for
+    **all sixteen** agents (diverging from check 12's differences-only map, `#ad4`) plus
+    `state.models_source`. PL0 reads this map itself: `model-matrix.sh --resolve <agent>`
+    (`product-manager.md`'s dedicated Bash grant) checks `state.models` first, then
+    `CORPFLOW.md`, then the matrix, and PL0 pastes the pair into `--task-create`'s `--metadata`
+    (`sw-AR0-1` reversed `--task-create`'s own auto-fill — it no longer reads the map for PL0,
+    re-permitting a hand-copied value). No `CORPFLOW.md`/`## Models` → all rows `"matrix"`.
 
 ### On validation failure
 
@@ -1915,8 +1926,9 @@ Corrected artifact exists only now; source resumes here not at route that parked
     //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
     //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
-    //      either way. In-process the row records effort_resolved "requested, not applied"
-    //      until upstream U7 lands. Never swap in a higher-frontmatter agent to make it real.
+    //      ("none" in-process, since no in-process effort transport exists) either way.
+    //      In-process the row records effort_resolved "requested, not applied" until
+    //      upstream U7 lands. Never swap in a different agent to make it real.
 ```
 
 ##### Step 6.6b — render the remainder

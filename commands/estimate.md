@@ -2,7 +2,6 @@
 name: estimate
 description: Estimate task complexity, effort, and resources; optionally review an estimate or export it to CSV
 argument-hint: '<task description> [--quick|--detailed] [--review] [--export csv]'
-model: sonnet
 # tools: the Budget and AI Cost rows under `#### Detailed Estimation — Budget & AI Cost
 # Sections` order `estimate-calc.py` as the canonical math, so the grant names that one
 # interpreter and that one script; every other number in the output is read, not computed.

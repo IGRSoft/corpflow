@@ -1,9 +1,7 @@
 ---
 name: team-lead
 description: Use PROACTIVELY for team management, sprint planning, or in-team resource coordination. Engineering team leadership with team coordination, performance management, and agile practices.
-model: sonnet
 color: cyan
-effort: medium
 version: 0.5.0
 maxTurns: 30
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task(corpflow:technical-lead)

@@ -585,11 +585,11 @@ Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium 
 
 ### The tier is a request, not a guarantee
 
-`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory in-process** — `Task()` takes no effort parameter, so an in-process resolver runs at its agent's own frontmatter tier. The bump is therefore computed and recorded on every path and *applied* on one. Every resolver audit row carries `effort_transport` saying which it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
+`metadata.effort` is honoured on the headless dispatch surface (`--effort`) and is **advisory in-process** — `Task()` takes no effort parameter and the sub-agent's frontmatter carries no `effort:` to fall back to, so an in-process resolver has no transport to carry the bump at all. The bump is therefore computed and recorded on every path and *applied* on one. Every resolver audit row carries `effort_transport` saying which it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
 
 #### Recorded vs applied tiers
 
-Under `frontmatter-only` the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier; under `dispatch-flag` `effort_resolved` is the tier the session ran at. Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item deserved. What it is not is a licence to reach the number another way — substituting a higher-frontmatter agent trades the domain expertise answering the question for a field value.
+Under `none` the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier; under `dispatch-flag` `effort_resolved` is the tier the session ran at. Recorded-not-applied is still worth doing: the ledger gains the tier the pipeline believes the item deserved. What it is not is a licence to reach the number another way — substituting a different agent believed to run at a higher tier trades the domain expertise answering the question for a guess.
 
 ### The tier the model can actually carry
 

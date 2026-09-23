@@ -1,9 +1,7 @@
 ---
 name: incident-responder
 description: Use PROACTIVELY for production incidents, outages, or emergency hotfixes; owns the IR stage in emergency worktasks. Incident response specialist for production triage, hotfix coordination, and post-mortems.
-model: opus
 color: red
-effort: high
 version: 0.3.0
 maxTurns: 50
 # tools: bare Bash is deliberate — triage commands are unknown before the incident (whatever

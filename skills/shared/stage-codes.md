@@ -6,22 +6,49 @@ name: stage-codes
 
 Single source of truth for worktask stage codes.
 
+## Agent Model Matrix
+
+Single source of truth for every agent's default model/effort, one row per `agents/*.md`.
+§ Primary/Support Stages map a code to its agent; the pair lives only here (removes
+`technical-lead`'s DR/TC duplicate). Extracted by `model-matrix-lib.sh`, resolved via
+`model_resolve` with `CORPFLOW.md § Models` override. No `Stages` column — see § Model and
+Effort Lookup.
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| designer | sonnet | medium |
+| developer | opus | high |
+| ethics-reviewer | opus | xhigh |
+| incident-responder | opus | high |
+| product-manager | opus | high |
+| project-manager | sonnet | medium |
+| prompt-engineer | opus | xhigh |
+| qa-engineer | sonnet | medium |
+| release-engineer | sonnet | low |
+| security-reviewer | opus | xhigh |
+| software-architector | opus | high |
+| stakeholder | sonnet | low |
+| team-lead | sonnet | medium |
+| technical-lead | opus | high |
+| technical-writer | haiku | low |
+| workflow-engineer | sonnet | medium |
+
 ## Primary Stages (11-Stage)
 
-| Code | Stage | Agent | Model | Effort |
-|------|-------|-------|-------|--------|
-| PL | Planning | product-manager | opus | high |
-| AR | Architecture | software-architector | opus | high |
-| TL | Team Lead | team-lead | sonnet | medium |
-| DV | Development | developer | opus | high |
-| DR | Developer Review | technical-lead | opus | high |
-| SR | Security Review | security-reviewer | opus | xhigh |
-| QA | QA Testing | qa-engineer | sonnet | medium |
-| DC | Documentation | technical-writer | haiku | low |
-| RE | Release Engineering | release-engineer | sonnet | low |
-| FN | Finalization | project-manager | sonnet | medium |
-| ST | Stakeholder | stakeholder | sonnet | low |
-| IR | Incident Response | incident-responder | opus | high |
+| Code | Stage | Agent |
+|------|-------|-------|
+| PL | Planning | product-manager |
+| AR | Architecture | software-architector |
+| TL | Team Lead | team-lead |
+| DV | Development | developer |
+| DR | Developer Review | technical-lead |
+| SR | Security Review | security-reviewer |
+| QA | QA Testing | qa-engineer |
+| DC | Documentation | technical-writer |
+| RE | Release Engineering | release-engineer |
+| FN | Finalization | project-manager |
+| ST | Stakeholder | stakeholder |
+| IR | Incident Response | incident-responder |
 
 ### Test-execution authority note
 
@@ -52,27 +79,29 @@ Single source of truth for worktask stage codes.
 
 ## Model and Effort Lookup
 
-The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and
-stamp both onto `tasks.<ID>.metadata`. The **Model** and **Effort** columns in § Primary
-Stages are that lookup, and § Secure overrides replaces a stage's pair under `--secure`/`--full`;
-support agents use § Support Agents below. These tables are the only stage/agent → model and
-effort assignment; other files point to a row here, and `model-selection.md` keeps the rules.
+The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and stamp
+both onto `tasks.<ID>.metadata`. Two-hop join: § Primary/Support Stages resolves a code to its
+agent, § Agent Model Matrix resolves that agent to its pair. PL0 performs the join itself via
+`model-matrix.sh --resolve <agent>` and pastes the pair into `--task-create`'s `--metadata`
+(`sw-AR0-1` reversed the mechanically-enforced auto-fill) — `--task-create` no longer reads
+either table for PL0. § Secure overrides replaces a resolved pair under `--secure`/`--full`
+**outright** (`sw-AR0-2`, also reversed — a `CORPFLOW.md`-raised pair can be silently lowered).
 
-> `effort` is stamped for the same reason `model` is, plus one of its own: the Step C.0a
-> resolver dispatches one rung above the stage that raised the item
-> (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`), and agent
-> frontmatter is the wrong fallback for that — a stage dispatched at an override runs at a
-> tier its frontmatter never mentions. Only the ledger holds the value that actually ran.
+> `effort` is also stamped because the Step C.0a resolver dispatches one rung above the item
+> that raised it (`stage-contracts.md § Blocking items are resolved, not asked`) — only the
+> ledger holds the tier that actually ran.
 
 ### Secure overrides
 
-> Under `--secure` or `--full`, a row here replaces its stage's § Primary Stages model and
-> effort, and a stage with no row keeps its primary pair. PL0 stamps the override through its
-> default-writer rows (`skills/worktask/references/pl0-procedure.md § Default writer rules`);
-> no script resolves a model at runtime. Agent frontmatter keeps the primary pair, so the
-> primary table still equals frontmatter and a dispatch outside a worktask runs the default.
-> DC is here because a secure run's DC turns option-gate findings into typed corrections,
-> which takes judgement the default tier is not sized for.
+> Under `--secure` or `--full`, a row here replaces its stage's resolved model and effort
+> (§ Agent Model Matrix, via the stage's agent) **outright** — a pair a project raised
+> through `CORPFLOW.md § Models` IS silently lowered back to this row if this row is lower
+> (`sw-AR0-2`, reversed at the FN-gate sweep from the raise-only design `dv3` shipped with).
+> A stage with no row keeps its resolved pair. PL0 stamps the override through its
+> default-writer rows (`skills/worktask/references/pl0-procedure.md § Default writer rules`)
+> via a plain `--task-meta` write — no `--raise-only`. DC is here because a secure run's DC
+> turns option-gate findings into typed corrections, which takes judgement the default tier
+> is not sized for.
 
 | Code | Condition | Model | Effort |
 |------|-----------|-------|--------|
@@ -80,13 +109,13 @@ effort assignment; other files point to a row here, and `model-selection.md` kee
 
 ## Support Agents (On-Demand)
 
-| Code | Agent | Model | Effort | Invoked By |
-|------|-------|-------|--------|------------|
-| DS | designer | sonnet | medium | PL, AR, DV, QA |
-| TC | technical-lead | opus | high | AR, TL, DV, QA |
-| ET | ethics-reviewer | opus | xhigh | Any stage |
-| PE | prompt-engineer | opus | xhigh | Agent optimization |
-| WE | workflow-engineer | sonnet | medium | Worktask troubleshooting |
+| Code | Agent | Invoked By |
+|------|-------|------------|
+| DS | designer | PL, AR, DV, QA |
+| TC | technical-lead | AR, TL, DV, QA |
+| ET | ethics-reviewer | Any stage |
+| PE | prompt-engineer | Agent optimization |
+| WE | workflow-engineer | Worktask troubleshooting |
 
 Support agents own no worktask stage but can be invoked on-demand via the Task tool.
 
@@ -102,17 +131,16 @@ Support agents own no worktask stage but can be invoked on-demand via the Task t
 
 ### Model alias notes
 
-> The Model column uses aliases (`opus`, `sonnet`, `haiku`); full model ids are also valid
-> in agent frontmatter, but aliases stay portable across providers. Which model an alias
-> resolves to, the Fable 5 credit gate, managed-allowlist resolution, and the default
-> effort tier are canonical in `skills/shared/model-selection.md` — agents with explicit
-> `effort:` frontmatter are unaffected by the plan default.
+> The Model column uses aliases (`opus`, `sonnet`, `haiku`); a full model id would also be
+> valid there, but aliases stay portable across providers. No agent file carries its own
+> `model:`/`effort:` any more — the matrix row above is the only place either is set. Which
+> model an alias resolves to, the Fable 5 credit gate, managed-allowlist resolution, and the
+> default effort tier are canonical in `skills/shared/model-selection.md`.
 
 ## Agent Frontmatter Fields
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | Default effort level for the agent |
 | `maxTurns` | number | Limit agent turn count |
 | `disallowedTools` | comma-separated | Block specific tools from the agent |
 | `initialPrompt` | string | Auto-submit first turn on agent start |

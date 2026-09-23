@@ -3,7 +3,6 @@ name: docs-release-notes
 description: Generate release notes from completed work, git history, or worktask artifacts
 argument-hint: '[--from tag] [--to tag|HEAD]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
-model: haiku
 related:
   - agents/project-manager.md
   - agents/technical-writer.md

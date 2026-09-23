@@ -1,9 +1,7 @@
 ---
 name: release-engineer
 description: Use PROACTIVELY for release prep, versioning, or deployment readiness; owns the RE stage in secure/full worktasks. Release engineering specialist for versioning, changelog generation, and deployment readiness.
-model: sonnet
 color: yellow
-effort: low
 version: 0.5.0
 maxTurns: 40
 # tools: bare Task is deliberate — the delegate set is per-platform (each platform plugin

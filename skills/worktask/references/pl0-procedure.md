@@ -140,8 +140,8 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp *
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | the stage's alias from `stage-codes.md § Primary Stages`, or from its § Secure overrides when the row's condition matches | Passed to `Task()`; never inherited from frontmatter. |
-| `metadata.effort` | that table's tier, or the override actually dispatched | **Mandatory, not optional** since Step C.0a began reading it. The resolver bumps it one rung, and frontmatter is the wrong fallback — DV sub-tasks dispatched at `xhigh` run at a tier `developer.md`'s `effort: high` never mentions. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`) and its blocking items go back to asking a human. |
+| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` no longer fills an absent value (`sw-AR0-1`) | Passed to `Task()`; never inherited from frontmatter — no agent file carries one. |
+| `metadata.effort` | same resolver, or the override actually dispatched | **Mandatory, not optional** since Step C.0a reads it. No agent file carries an `effort:` key, so a DV sub-task at `xhigh` runs at a tier nothing states. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
 
 ##### Propagation fields — gates
 
@@ -201,18 +201,22 @@ PL0 MAY populate the remaining optional dispatch fields (`skills/shared/state-le
 
 ##### Default writer rules
 
-Apply on trigger match; leave unset otherwise so downstream falls back to agent frontmatter:
+Apply on trigger match; leave unset otherwise, falling back to PL0's own resolution (above;
+`sw-AR0-1`):
 
 | Field | Set when | Value |
 |---|---|---|
-| `permission_mode` | Stage is `SR` or `FN` AND worktask flags include `--secure`/`--full` | `"default"` |
-| `effort` | Stage is `DV` AND complexity score ≥ 35 | `"xhigh"` |
-| `effort` | Stage is `DR` AND complexity score ≥ 35 | `"high"` |
-| `model` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"sonnet"` |
-| `effort` | Stage is `DC` AND worktask flags include `--secure`/`--full` | `"medium"` |
-| `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` tasks | (refuse) |
+| `permission_mode` | `SR`/`FN` & `--secure`/`--full` | `"default"` |
+| `effort` | `DV`, complexity ≥ 35 | `"xhigh"` |
+| `effort` | `DR`, complexity ≥ 35 | `"high"` |
+| `model` | Stage is `DC` & `--secure`/`--full` | `"sonnet"` |
+| `effort` | Stage is `DC` & `--secure`/`--full` | `"medium"` |
+| `dangerously_skip_permissions` | NEVER on `PL`/`SR`/`FN` | (refuse) |
 
-Reuse the complexity score from `### Dynamic Worktask Sizing`; stage code = the row being created, flags = the orchestrator invocation. Cheap, and gives every downstream dispatcher (in-process or CLI) one source of truth. The two `DC` rows mirror `stage-codes.md § Secure overrides`.
+Two compositions: `DV`/`DR` effort still writes via `--raise-only` (unaffected by `sw-AR0-2`).
+`DC` model/effort now writes via a plain `--task-meta`, no `--raise-only` (`sw-AR0-2` reversed
+`dv3`) — a `CORPFLOW.md`-raised `technical-writer` pair IS silently lowered by a secure run;
+accepted cost, `§ Secure overrides` mirrors it. `--raise-only` is opt-in, never a default.
 
 ##### Notation
 

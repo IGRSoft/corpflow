@@ -1,8 +1,8 @@
 <!-- TEMPLATE. Copy to the root of an integrating plugin as CORPFLOW.md and replace every
 <PLACEHOLDER>. Normative contract: corpflow skills/cross-plugin-handoff/references/plugin-contract.md.
 Keep it one self-contained file; splitting it into references/ rebuilds the coupling it replaced.
-Never add a `## Routing` heading — that one is reserved for a CORPFLOW.md at a *user project* root
-(override template: corpflow templates/PROJECT-CORPFLOW.md). -->
+Never add a `## Routing` or `## Models` heading — both are reserved for a CORPFLOW.md at a *user
+project* root (override template: corpflow templates/PROJECT-CORPFLOW.md). -->
 
 # corpflow Integration — <PLUGIN>
 

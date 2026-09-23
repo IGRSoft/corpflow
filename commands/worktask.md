@@ -3,7 +3,6 @@ name: worktask
 description: Initialize a new worktask task with proper folder structure and state-ledger integration
 argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
 version: 0.6.0
-model: opus
 allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
   - skills/worktask/SKILL.md
@@ -1210,7 +1209,7 @@ must say which surface it got:
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
 | headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
-| in-process `Task()` | nothing — the sub-agent runs at its own frontmatter `effort:` | `frontmatter-only` |
+| in-process `Task()` | nothing — `Task()` carries no effort parameter and the sub-agent's frontmatter carries no `effort:` to fall back to | `none` |
 
 In-process the tier is **recorded, not applied**, and the resolver still runs: the row's
 `effort_resolved` is the literal `"requested, not applied"`, never a tier the session did not run
@@ -1218,9 +1217,9 @@ at. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tr
 
 ###### Step C.0a — do not reach the tier another way
 
-Never substitute a different agent whose frontmatter sits a rung higher: that trades the domain
-expertise answering the question for a field value. `Task()` gains no `effort` parameter here and
-none is invented; if one lands later, the table above and the `frontmatter-only` literal in
+Never substitute a different agent believed to run at a higher tier: that trades the domain
+expertise answering the question for a guess. `Task()` gains no `effort` parameter here and
+none is invented; if one lands later, the table above and the `none` literal in
 step 4 are the only places that change.
 
 ##### Step C.0a — what the prompt carries
@@ -1242,7 +1241,7 @@ write, exactly as at Step A.4.
    `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
    effort_transport, decisions: [{question, answer, rationale}] }`). `effort_requested` is the
    computed tier on both surfaces. `effort_resolved` is the tier the session ran at under
-   `dispatch-flag`, and `"requested, not applied"` under `frontmatter-only`.
+   `dispatch-flag`, and `"requested, not applied"` under `none`.
 5. Fall through to § Step C.0 with whatever remains: every `escalate` item, everything the
    delegate declined, and everything C.0a's four conditions excluded.
 
@@ -1252,7 +1251,7 @@ The comparison applies only under `effort_transport: "dispatch-flag"`. There,
 `effort_requested` != `effort_resolved` means the tier evaporated in transit — thinking disabled
 downgrades `xhigh`/`max` to `high` silently (`model-selection.md § xhigh routing`). Recorded, not
 enforced: the answer stands, it just was not reached at the tier asked for. Under
-`frontmatter-only` the request never left the orchestrator, so `effort_resolved` reads
+`none` the request never left the orchestrator, so `effort_resolved` reads
 `"requested, not applied"` and the pair says nothing about the session.
 
 ##### Step C.0a stamps no approval carrier

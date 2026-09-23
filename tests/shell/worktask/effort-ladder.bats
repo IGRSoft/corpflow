@@ -138,36 +138,64 @@ ladder() { # <shell body>
 # DIFFERENT column orders (Primary: Stage,Agent,Model,Effort — Support: Agent,Model,Effort,
 # InvokedBy), so the header line selects the mapping. A single column-index guess reads the
 # Support table's Model column as an agent name and passes vacuously.
+#
+# Retargeted (architecture-0.md#ad1/#ad6): § Primary Stages and § Support Agents no longer
+# carry Model/Effort at all — that pair now lives in one agent-keyed § Agent Model Matrix
+# table, read through model-matrix-lib.sh's own validated extractor rather than a second,
+# bats-local awk. A fourth parser is a review reject (ad2); this suite is a consumer, not
+# an implementation.
 stage_table_rows() {
-  awk -F'|' '
-    # A table ends at the first non-table line; without this reset the mapping leaks into
-    # every later `| XX |` table in the file (the artifact map matched, silently).
-    !/^\|/ { t = 0 }
-    /^\| Code \| Stage \| Agent \| Model \| Effort \|/ { t = 1; next }
-    /^\| Code \| Agent \| Model \| Effort \| Invoked By \|/ { t = 2; next }
-    t && /^\| [A-Z][A-Z] \|/ {
-      for (i = 1; i <= NF; i++) gsub(/^ +| +$/, "", $i)
-      if (t == 1) print $4 "\t" $5 "\t" $6
-      else if (t == 2) print $3 "\t" $4 "\t" $5
-    }
-  ' "$PLUGIN_ROOT/$STAGE_CODES" | sort -u
+  ( . "$PLUGIN_ROOT/skills/worktask/scripts/model-matrix-lib.sh"; model_matrix_rows ) | sort -u
 }
 
-# The value the agent actually ships, for one frontmatter key.
-agent_frontmatter() { # <agent> <key>
-  awk -v k="^$2:" '/^---$/ { n++ } n == 1 && $0 ~ k { print $2; exit }' \
-    "$PLUGIN_ROOT/agents/$1.md"
+# Retargeted twice. ad6: agent files carry no model:/effort: any more, so "the agent actually
+# ships" moved to what got stamped into the ledger. rework-3 (sw-AR0-1 reversed): --task-create
+# auto-fill is REMOVED, so a caller must resolve first and paste — this now mirrors PL0's own
+# real workflow end-to-end rather than a single seam: (1) model-matrix.sh --resolve <agent>,
+# the same CLI subprocess PL0 calls (crosses the CLI/parsing boundary, not just a library call);
+# (2) paste that resolved pair into --task-create's explicit --metadata, the same paste PL0
+# performs, and read back what the ledger actually stored. Doing only (1) would compare the
+# resolver against itself (model_resolve's rank-3 fallback IS model_matrix_rows, so a bare
+# --resolve call proves nothing new the bijection test below does not already prove); step (2)
+# is what still crosses a real seam post-reversal — it is the only place left that can catch a
+# --task-create regression that silently rewrites an explicitly-given value, which is exactly
+# the failure mode the reversal accepted responsibility for NOT catching upstream of the ledger.
+ledger_stamped() { # <agent> <key>
+  local resolved model effort rest state
+  # Passes the real "corpflow:<name>" string (rework-4, F8): model_resolve normalizes at
+  # its own boundary now, so this also re-covers the dv10 class a bare-basename call would
+  # have missed — the reversal removed the auto-fill site the original bug lived in, but the
+  # underlying "does the boundary strip the prefix" question is still worth asking here.
+  # A bare --resolve now reads state.models/CORPFLOW.md from the root ladder; pin CONTEXT_DIR
+  # to an empty dir so the parity is against the matrix, not this checkout's own ledger.
+  resolved=$(CONTEXT_DIR="$(mktemp -d)" bash "$PLUGIN_ROOT/skills/worktask/scripts/model-matrix.sh" --resolve "corpflow:$1") || return 1
+  model="${resolved%%$'\t'*}"
+  rest="${resolved#*$'\t'}"
+  effort="${rest%%$'\t'*}"
+  state="$(mktemp -d)/state.json"
+  printf '{"version":2,"tasks":{}}' > "$state"
+  bash "$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh" --task-create DV9 --state "$state" \
+    --metadata "{\"stage\":\"DV\",\"agent\":\"corpflow:$1\",\"model\":\"$model\",\"effort\":\"$effort\",
+      \"plan_file\":\"planning-0.md\",\"run_index\":0,\"base_ref\":\"develop\",
+      \"isolation\":\"worktree\",\"requires_screenshots\":false,\"workspace_path\":\"/tmp/x\"}" \
+    > /dev/null
+  jq -r ".tasks.DV9.metadata.$2" "$state"
 }
 
-@test "the extractor sees both stage-codes tables and nothing else" {
-  # Guards the guard twice over: a column-order change that empties either table would make
-  # every parity assertion below pass without comparing anything, and a missing table-scope
-  # reset pulls in unrelated `| XX |` tables whose columns are not agents at all.
+@test "the extractor sees the agent model matrix and nothing else, one row per agents/*.md" {
+  # Non-vacuity floor (ad2 rule 4): the row set is a BIJECTION with agents/*.md, stronger than
+  # a hard-coded count. Two spot checks — one row that used to live only in § Primary Stages,
+  # one that used to live only in § Support Agents — guard the old duplicate-row class (both
+  # tables fed one matrix) without re-parsing either table.
   run stage_table_rows
   assert_success
-  assert_line "developer	opus	high"        # Primary Stages mapping
-  assert_line "workflow-engineer	sonnet	medium"  # Support Agents mapping
-  [ "${#lines[@]}" -eq 16 ]
+  assert_line "developer	opus	high"
+  assert_line "workflow-engineer	sonnet	medium"
+  local agent_files
+  agent_files=$(cd "$PLUGIN_ROOT/agents" && ls -1 ./*.md | sed 's/^\.\///; s/\.md$//' | sort)
+  local matrix_agents
+  matrix_agents=$(printf '%s\n' "${lines[@]}" | cut -f1 | sort)
+  [ "$matrix_agents" = "$agent_files" ]
 }
 
 @test "every effort in stage-codes.md is a rung the ladder knows" {
@@ -180,16 +208,142 @@ agent_frontmatter() { # <agent> <key>
   done < <(stage_table_rows)
 }
 
-@test "stage-codes.md model and effort match the agents' shipped frontmatter" {
-  # This parity is what the RE row lost: the table said haiku for seven months after the
+@test "the matrix and the ledger agree — every agent's stamped model and effort match its matrix row" {
+  # Retargeted (architecture-0.md#ad6/REQ-7), then again in rework-4 (F9): the resolve half
+  # (model-matrix.sh --resolve) is the resolver checked against itself — its rank-3 fallback IS
+  # model_matrix_rows, so it proves nothing the bijection test above does not already prove.
+  # What this still genuinely crosses is the ledger_stamped() paste step: does --task-create
+  # persist an explicitly-given value unchanged. That is a real, narrower floor than the one
+  # this test used to have before sw-AR0-1 removed --task-create's own auto-fill — see
+  # `## rework-4` for why the floor is lower now and that is an accepted cost, not a defect.
+  # This is what the RE row lost originally: the table said haiku for seven months after the
   # agent shipped sonnet. The lookup is only authoritative if it tracks what actually runs.
   while IFS="$(printf '\t')" read -r agent model effort; do
     [ -f "$PLUGIN_ROOT/agents/$agent.md" ] || fail "no agent file for '$agent'"
-    [ "$(agent_frontmatter "$agent" model)" = "$model" ] \
-      || fail "$agent: table model '$model' != frontmatter '$(agent_frontmatter "$agent" model)'"
-    [ "$(agent_frontmatter "$agent" effort)" = "$effort" ] \
-      || fail "$agent: table effort '$effort' != frontmatter '$(agent_frontmatter "$agent" effort)'"
+    [ "$(ledger_stamped "$agent" model)" = "$model" ] \
+      || fail "$agent: matrix model '$model' != ledger-stamped '$(ledger_stamped "$agent" model)'"
+    [ "$(ledger_stamped "$agent" effort)" = "$effort" ] \
+      || fail "$agent: matrix effort '$effort' != ledger-stamped '$(ledger_stamped "$agent" effort)'"
   done < <(stage_table_rows)
+}
+
+# --- model-matrix-lib.sh extractor regression cases (architecture-0.md#ad2) ------------------
+#
+# Fixture docs in BATS_TEST_TMPDIR, never the live file — these exercise the parser against the
+# exact two misfires reproduced twice at planning time, not against stage-codes.md's own content.
+
+mml() { # <shell body>
+  bash -c "set -euo pipefail; . '$PLUGIN_ROOT/skills/worktask/scripts/model-matrix-lib.sh'; $1"
+}
+
+@test "R1: a second table on the same page is not captured" {
+  local doc="${BATS_TEST_TMPDIR}/r1.md"
+  cat > "$doc" << 'EOF'
+## Agent Model Matrix
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| product-manager | opus | high |
+| developer | opus | high |
+
+## Secure overrides
+
+| Code | Condition | Model | Effort |
+|------|-----------|-------|--------|
+| DC | `--secure` / `--full` | sonnet | medium |
+
+| Code | Artifact |
+|------|----------|
+| DC | documentation-N.md |
+EOF
+  run mml "model_matrix_rows '$doc'"
+  assert_success
+  assert_line "product-manager	opus	high"
+  assert_line "developer	opus	high"
+  [ "${#lines[@]}" -eq 2 ] # neither later table's rows leaked in
+}
+
+@test "R1b: a note paragraph inside the section does not end capture" {
+  # ad2 rule 1's OTHER half: R1 above only exercised "scope ends at the next # line".
+  # This exercises "a note paragraph inside the section must NOT end capture" —
+  # prose before the header, and prose between two data rows.
+  local doc="${BATS_TEST_TMPDIR}/r1b.md"
+  cat > "$doc" << 'EOF'
+## Agent Model Matrix
+
+A lead-in note paragraph, immediately under the heading and before the header row.
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| product-manager | opus | high |
+
+A second note paragraph, between two data rows, still inside the section.
+
+| developer | opus | high |
+
+## Secure overrides
+
+| Code | Condition | Model | Effort |
+|------|-----------|-------|--------|
+| DC | `--secure` / `--full` | sonnet | medium |
+EOF
+  run mml "model_matrix_rows '$doc'"
+  assert_success
+  assert_line "product-manager	opus	high"
+  assert_line "developer	opus	high"
+  [ "${#lines[@]}" -eq 2 ] # neither note paragraph was read as a row
+}
+
+@test "R1c: a second table inside the same section fails closed rather than leaking rows" {
+  # ad2 rule 1's second half, the other shape: a second table BEFORE the closing heading
+  # (not after, like R1) must not silently blend its rows into the matrix. The header
+  # assertion only fires once per section, so a later 4-cell table row is read as a
+  # malformed 3-cell row — fail-closed (exit 3), never a leak.
+  local doc="${BATS_TEST_TMPDIR}/r1c.md"
+  cat > "$doc" << 'EOF'
+## Agent Model Matrix
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| product-manager | opus | high |
+
+| Code | Condition | Model | Effort |
+|------|-----------|-------|--------|
+| DC | `--secure` / `--full` | sonnet | medium |
+
+## Secure overrides
+EOF
+  run mml "model_matrix_rows '$doc'"
+  assert_failure 3
+  refute_line --partial 'DC'
+}
+
+@test "R2: a literal like opus is never read as an agent name" {
+  local doc="${BATS_TEST_TMPDIR}/r2.md"
+  cat > "$doc" << 'EOF'
+## Agent Model Matrix
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| product-manager | opus | high |
+| opus | sonnet | high |
+EOF
+  run mml "model_matrix_rows '$doc'"
+  assert_failure 3
+  assert_output --partial "unknown agent opus"
+  refute_line --partial 'opus	sonnet	high'
+}
+
+@test "R3: zero rows under the heading is the vacuity floor, not a silent pass" {
+  local doc="${BATS_TEST_TMPDIR}/r3.md"
+  cat > "$doc" << 'EOF'
+## Agent Model Matrix
+
+| Agent | Model | Effort |
+EOF
+  run mml "model_matrix_rows '$doc'"
+  assert_failure 3
+  assert_output --partial "zero rows"
 }
 
 @test "EFFORT_ENUM matches the ladder model-selection.md documents" {

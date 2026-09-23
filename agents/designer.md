@@ -1,9 +1,7 @@
 ---
 name: designer
 description: Use PROACTIVELY for design decisions, UX planning, or visual direction; joins PL-stage planning. Lead product designer specializing in UI/UX strategy, design systems, and user-centered design.
-model: sonnet
 color: blue
-effort: medium
 version: 0.2.0
 maxTurns: 30
 # tools: no Bash grant — DS is a nested consult (`pl0-procedure.md § Designer Invocation`),

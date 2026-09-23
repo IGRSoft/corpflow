@@ -6,7 +6,6 @@ argument-hint: '[--since <ref>] [--target agents|skills|commands|all] [--dry-run
 # which differ per repository, so no matcher can name them; the bound is that proposals land
 # in .context/learnings.md and are applied only under `--apply`.
 allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(corpflow:prompt-engineer)
-model: sonnet
 estimated-cost:
   min-tokens: 3000
   max-tokens: 20000

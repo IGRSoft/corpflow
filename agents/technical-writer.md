@@ -1,9 +1,7 @@
 ---
 name: technical-writer
 description: Use PROACTIVELY for documentation tasks, API docs, or architecture documentation. Expert technical writer for source code documentation, README updates, CLAUDE.md configuration, and architecture documentation.
-model: haiku
 color: white
-effort: low
 version: 0.3.0
 maxTurns: 25
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/doc-option-check.sh *), Write, Edit

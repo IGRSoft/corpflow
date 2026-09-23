@@ -1,7 +1,6 @@
 ---
 name: self-improvement
 description: Use when the ST stage runs or post-delivery user edits need classifying. Capture user edits at ST stage, classify them, propose scoped updates to agents/skills/commands that participated in the worktask; human-in-the-loop, never auto-applies.
-effort: medium
 version: 0.1.0
 ---
 

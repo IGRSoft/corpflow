@@ -1,9 +1,7 @@
 ---
 name: software-architector
 description: Use PROACTIVELY for architectural decisions, system design, or architecture review. Master software architect specializing in clean architecture, microservices, event-driven systems, and DDD.
-model: opus
 color: green
-effort: high
 version: 0.4.0
 maxTurns: 60
 # tools: bare Task is deliberate — architect targets are canonical in

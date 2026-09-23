@@ -73,7 +73,7 @@ Neither `claude agents run` nor top-level `--cwd` exists on the probed CLI (§ W
 
 ### Model & effort defaults
 
-`$MODEL` and `$EFFORT` come from the stage's row in `skills/shared/stage-codes.md` (§ Primary Stages; § Secure overrides under `--secure`), the one stage → model assignment. Pass the model as the pinned id its alias maps to in § Alias note. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
+`$MODEL` and `$EFFORT` come from `skills/shared/stage-codes.md § Agent Model Matrix` (a two-hop join: § Primary Stages resolves the stage to its agent, the matrix resolves that agent to its pair; § Secure overrides under `--secure` replaces the resolved pair, raising only), the one agent → model assignment. Pass the model as the pinned id its alias maps to in § Alias note. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
 
 ### Alias note
 

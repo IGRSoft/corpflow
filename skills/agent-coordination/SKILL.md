@@ -1,7 +1,6 @@
 ---
 name: agent-coordination
 description: Use when coordinating agent handoffs, debugging multi-stage execution, or managing parallel agent workflows. Patterns for multi-agent coordination, handoffs, parallel execution, and error escalation.
-effort: medium
 version: 0.4.0
 related:
   - ../worktask/SKILL.md

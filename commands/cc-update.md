@@ -4,7 +4,6 @@ description: Update plugin agents, commands, and skills with new Claude Code fea
 version: 0.3.0
 argument-hint: '<version> [--notes <url|text>] [--dry-run]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch, Bash(curl:*), Bash(jq:*), Bash(claude agents:*), Bash(claude --version)
-model: sonnet
 related:
   - agents/prompt-engineer.md
   - commands/optimize-agent.md

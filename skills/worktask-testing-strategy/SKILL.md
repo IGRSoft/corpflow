@@ -1,7 +1,6 @@
 ---
 name: worktask-testing-strategy
 description: Use when planning test strategy during Planning or Architecture stages before implementation. Test strategy planning guidance for PL and AR worktask stages.
-effort: medium
 related:
   - agents/product-manager.md
   - agents/software-architector.md
