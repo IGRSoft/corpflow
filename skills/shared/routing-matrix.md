@@ -69,19 +69,19 @@ test-generator | code-fixer. One subsection per platform.
 
 ### Release-engineer aliases (publishing — apple and android only)
 
-These targets are **RE-stage consultation**: corpflow's own `agents/release-engineer.md` retains the
-stage and every `state.json` write, exactly as AR works. Only platforms with a store have a row —
-a web, backend, systems, or ai alias would promise a target that does not exist.
+These targets are **RE-stage consultation**: corpflow's own `agents/release-engineer.md` keeps the
+stage and every `state.json` write, exactly as AR works. Only a platform with a store gets a row —
+a web, backend, systems, or ai alias would name a target that does not exist.
 
 | Alias | Default target | Role | Platform |
 |-------|----------------|------|----------|
 | `corpflow:apple-release-engineer` | `apple-developer:apple-release-engineer` | release-engineer | apple |
 | `corpflow:android-release-engineer` | `android-developer:and-release-engineer` | release-engineer | android |
 
-Their own section, not rows in § Functional-role aliases, because that section's test loops all six
-platforms × four roles and a fifth role there would demand a row per platform. There is also no bare
-`corpflow:release-engineer` alias — corpflow ships an agent with that exact `name:`, and the
-no-collision test in `routing-matrix.bats` rejects the clash.
+Their own section, not rows in § Functional-role aliases: that section's test loops six platforms ×
+four roles, so a fifth role would demand a row per platform. There is also no bare
+`corpflow:release-engineer` alias — corpflow ships an agent with that `name:`, and the no-collision
+test in `routing-matrix.bats` rejects the clash.
 
 ### UI-verifier aliases (native UI legs — apple and android only)
 

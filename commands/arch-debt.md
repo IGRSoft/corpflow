@@ -37,6 +37,8 @@ Analyze, document, and prioritize technical debt in the codebase. Analysis is th
 
 Analysis mode (the default) emits every section below, in this order.
 
+### Report skeleton — summary & inventory
+
 ```markdown
 # Technical Debt Analysis
 
@@ -54,7 +56,11 @@ One row per § Debt Categories entry; effort in days.
 - **Category**, **Location** (`path`), **Impact**, **Effort** (Nd)
 - **Interest**: rate + why it compounds — see § Interest Rate Guide
 - **Recommendation**: fix immediately | next sprint | during related work
+```
 
+### Report skeleton — economics & plan
+
+```markdown
 ## Debt Interest Calculation
 | Item | Principal | Interest Rate | Total Cost if Delayed 6mo |
 Principal in days; total cost = principal x (1 + rate).
