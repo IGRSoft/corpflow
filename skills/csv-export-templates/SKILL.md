@@ -1,15 +1,14 @@
 ---
 name: csv-export-templates
 description: Use when generating CSV export files for estimates, budgets, timelines, or reports. 13-category CSV export structure for Google Sheets import.
+# G3: no standalone value — the layout is keyed to an /estimate --detailed breakdown a user does not have on hand.
 disable-model-invocation: true
-# G3: no standalone value — the 13-category layout is keyed to an estimate
-# breakdown produced by /estimate --detailed, which a user does not have on hand.
 ---
 
 # CSV Export Templates
 
-Canonical 13-category export shape for Google Sheets import — `/estimate --export csv`
-references this file; never redefine the file list or format elsewhere.
+Canonical 13-file export pack for Google Sheets import, referenced by `/estimate --export csv`;
+define the file list and format here only.
 Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 
 ## Format Specification
@@ -35,15 +34,15 @@ Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 | 07 | budget_estimate.csv | Cost breakdown |
 | 08 | success_metrics.csv | KPIs, acceptance criteria |
 | 09 | competitive_analysis.csv | Market positioning |
-| 10 | `<platform>_specifics.csv` | Platform details — name resolves per `--platform` |
-| 11 | `<framework>_specifics.csv` | Framework/runtime details — name resolves per `--platform` |
+| 10 | `<platform>_specifics.csv` | Platform details |
+| 11 | `<framework>_specifics.csv` | Framework/runtime details |
 | 12 | integration_specifics.csv | SDK/API details |
 | 13 | phase_summary.csv | Phase rollup |
 
 ### Platform Variants (files 10 and 11)
 
-Files 10 and 11 have no fixed name — filename and column schema both resolve from `--platform`,
-which has no default. Keys match `skills/shared/compatible-plugins.md § Registry`.
+Filename and column schema of files 10 and 11 resolve from `--platform`; keys match
+`skills/shared/compatible-plugins.md § Registry`.
 
 | `--platform` | File 10 | File 11 |
 |--------------|---------|---------|
@@ -53,33 +52,30 @@ which has no default. Keys match `skills/shared/compatible-plugins.md § Registr
 | `systems`    | `10_systems_specifics.csv` | `11_toolchain_specifics.csv` |
 | `backend`    | `10_backend_specifics.csv` | `11_runtime_specifics.csv` |
 | `ai`         | `10_ai_specifics.csv` | `11_model_stack_specifics.csv` |
-| `all` (default) | one set per platform in scope | — |
+| `all` (default) | one file 10/11 pair per platform in scope | |
 
 ### File 12 and column schemas
 
-File 12 (`integration_specifics.csv`) keeps a stable filename across platforms; its rows enumerate
-whatever that platform integrates against — Apple SDKs, Android/Jetpack APIs, web SDKs, system
-libraries and toolchains, upstream services and datastores, or model/inference providers.
+File 12 (`integration_specifics.csv`) keeps its filename on every platform; its rows list whatever
+that platform integrates against (SDKs, APIs, system libraries, upstream services, model providers).
 
-`references/templates.md` gives the column schema for files 10 and 11 using the `apple` variant as
-its worked example; other platforms reuse that column shape with their own rows.
+`references/templates.md` shows files 10 and 11 for `apple` only; other platforms reuse that
+column shape with their own rows.
 
 ## Validator Script
 
 ```sh
-bash skills/csv-export-templates/scripts/validate-export.sh --dir <export-dir> [--out <report.csv>]
+bash "${CLAUDE_SKILL_DIR}/scripts/validate-export.sh" --dir <export-dir> [--out <report.csv>]
 ```
 
-- Emits `<export-dir>/validation_report.csv` (columns: `check;status;detail`).
-- Exits `0` on full pass, `1` on any violation, `2` on usage/missing-file error.
-- Columns are keyed by **header name**, not position — safe against column reordering.
-- Semicolon-delimited CSVs with quoted semicolons parse correctly (embedded `python3 csv` heredoc).
-- `--self-test` runs a no-network fixture check (matching set exits 0; mismatched set exits 1).
+- Writes `<export-dir>/validation_report.csv` (columns `check;status;detail`).
+- Exits `0` on full pass, `1` on any violation, `2` on usage or missing-directory error.
+- Finds columns by header name, so column order does not matter.
+- `--self-test` runs a fixture check with no network.
 
 ## Validation Rules
 
-The spec the validator implements — in the happy path run the script instead of checking by hand.
-After export, verify:
+The spec the validator implements; run the script rather than checking by hand.
 
 1. **Totals match**:
    - 04 features SP Min sum = 13 phase summary SP Min sum

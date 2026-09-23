@@ -22,8 +22,6 @@ Backend;[STATUS];;[NOTES]
 Test Coverage Target;[%]+;;Integrated with development
 ```
 
----
-
 ## Template: 02_complexity_analysis.csv
 
 ```csv
@@ -35,8 +33,6 @@ Unknowns;[1-5];5;[REASON]
 Domain Expertise;[1-5];5;[REASON]
 TOTAL;[SUM];25;[LEVEL: LOW/MEDIUM/HIGH]
 ```
-
----
 
 ## Template: 03_technology_stack.csv
 
@@ -50,8 +46,6 @@ API;[API];[VERSION];[PURPOSE]
 Database;[DB];[VERSION];Data persistence
 ```
 
----
-
 ## Template: 04_features_breakdown.csv
 
 ```csv
@@ -64,8 +58,6 @@ Feature Group;Feature;Subtask;Size;SP Min;SP Max;Hours Min;Hours Max;Priority;Ph
 - Hours Min = SP Min × 6, Hours Max = SP Max × 6
 - Phase number matches roadmap
 
----
-
 ## Template: 05_roadmap_milestones.csv
 
 ```csv
@@ -75,8 +67,6 @@ Buffer;[START]-[END];Contingency;Risk mitigation, feedback;;;[BUFFER_MIN];[BUFFE
 TOTAL;;;[SP_MIN];[SP_MAX];[HOURS_MIN];[HOURS_MAX];
 ```
 
----
-
 ## Template: 06_risk_assessment.csv
 
 ```csv
@@ -85,8 +75,6 @@ R-[N];[DESCRIPTION];[CATEGORY];[H/M/L];[H/M/L];[1-10];[STRATEGY]
 ```
 
 **Categories**: Technical, Schedule, Resource, External
-
----
 
 ## Template: 07_budget_estimate.csv
 
@@ -98,8 +86,6 @@ Buffer;Contingency (15%);;;[BUFFER_MIN];[BUFFER_MAX];$[RATE];$[BUFFER_COST_MIN];
 TOTAL;;;[TOTAL_HOURS_MIN];[TOTAL_HOURS_MAX];$[RATE];$[TOTAL_COST_MIN];$[TOTAL_COST_MAX];100%;
 ```
 
----
-
 ## Template: 08_success_metrics.csv
 
 ```csv
@@ -110,16 +96,12 @@ User Experience;[METRIC];[TARGET];[HOW];[P0-P3]
 Business;[METRIC];[TARGET];[HOW];[P0-P3]
 ```
 
----
-
 ## Template: 09_competitive_analysis.csv
 
 ```csv
 Competitor;Category;Feature;Product;Differentiation
 [NAME];[CATEGORY];[FEATURE];[HOW PRODUCT DIFFERS];[ADVANTAGE]
 ```
-
----
 
 ## Template: 10_ios_specifics.csv
 
@@ -130,8 +112,6 @@ Framework;[FRAMEWORK];iOS [VERSION];[APPROACH];[NOTES]
 API;[API];iOS [VERSION];[APPROACH];[NOTES]
 ```
 
----
-
 ## Template: 11_swiftui_specifics.csv
 
 ```csv
@@ -141,16 +121,12 @@ State;[COMPONENT];[FEATURE];[APPROACH];[L/M/H]
 Navigation;[COMPONENT];[FEATURE];[APPROACH];[L/M/H]
 ```
 
----
-
 ## Template: 12_integration_specifics.csv
 
 ```csv
 SDK;Type;Documentation;Effort;Features;Risks
 [SDK NAME];[Internal/External];[Quality];[Size];[FEATURES];[RISKS]
 ```
-
----
 
 ## Template: 13_phase_summary.csv
 
