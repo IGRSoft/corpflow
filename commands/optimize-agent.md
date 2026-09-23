@@ -14,13 +14,6 @@ related:
 
 Optimize existing agent definitions using prompt-engineering best practices.
 
-## Usage
-
-```
-/optimize-agent <agent-file> [--focus <area>] [--dry-run] [--report]
-/optimize-agent --all [--focus <area>] [--dry-run] [--report]
-```
-
 ## Options
 
 | Option | Values | Effect |
@@ -33,6 +26,9 @@ Optimize existing agent definitions using prompt-engineering best practices.
 ## Examples
 
 ```
+/optimize-agent <agent-file> [--focus <area>] [--dry-run] [--report]
+/optimize-agent --all [--focus <area>] [--dry-run] [--report]
+
 /optimize-agent agents/developer.md
 /optimize-agent agents/qa-engineer.md --focus model
 /optimize-agent --all --dry-run
@@ -110,8 +106,7 @@ Runs on every agent regardless of `--focus`; findings land in Findings by Area. 
 
 #### Body doctrine — the model-conditioned rows
 
-These three resolve the model from § Agent Model Matrix — never from frontmatter, which carries
-no `model:` any more.
+These three resolve the model from `skills/shared/stage-codes.md § Agent Model Matrix`.
 
 | Check | Finding when | Fix line states |
 |---|---|---|
@@ -119,21 +114,14 @@ no `model:` any more.
 | **Scope explicitness** | On a `sonnet` agent, an instruction names one item where the agent's scope covers a set | The scope — `every`, `each`, the named set — never added emphasis |
 | **Emphasis inflation** | An emphasised rule with no recorded failure behind it | Downgrade to the plain imperative; the rule itself stays |
 
-#### Body doctrine — three guards
+#### Body doctrine — guards
 
-An existing `## Constraints (DO NOT)` block is **reported, never rewritten in place** — recasting
-constraint blocks under the negation rule is its own worktask, so the finding is advisory and
-`--dry-run` semantics apply to it even without the flag.
+An existing `## Constraints (DO NOT)` block is reported, never rewritten in place: the finding is
+advisory and `--dry-run` semantics apply to it even without the flag, because recasting constraint
+blocks is its own worktask.
 
-A disclosure finding against a section every run executes end to end is a **false positive**: length
-is the symptom that makes you look, branching is what decides, and inline is the correct tier for
-work every branch reaches.
-
-A model-conditioned finding against a **completion criterion** is a false positive. "Confirm the
-manifest exists on disk" names an artifact and is graded under the completion-criteria row; only a
-re-read of the agent's own reasoning is a verification instruction in the sense
-`model-prompting.md` means. Deleting the artifact gates lowers demand on exactly the axis this
-rubric raises.
+A model-conditioned finding is subject to the two guards in `commands/prompt-audit.md § Body rule 5
+— the two guards`: a completion criterion that names an artifact is not a verification instruction.
 
 ### Model Selection
 
@@ -147,9 +135,9 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `name` | Globally unique and **must not contain `:`** — CC rejects the file (`:` is reserved for call-site namespacing, `corpflow:developer`). CC keys agents by this field, so generic stems (`developer`, `qa-engineer`, `incident-responder`) silently overwrite across plugins: cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` stems, prefer `<plugin>-<role>`. | P0 (`:`) / P1 (collision) |
+| `name` | Globally unique and must not contain `:` — CC rejects the file (`:` is reserved for call-site namespacing, `corpflow:developer`). CC keys agents by this field, so generic stems (`developer`, `qa-engineer`, `incident-responder`) silently overwrite across plugins: cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` stems, prefer `<plugin>-<role>`. | P0 (`:`) / P1 (collision) |
 | `description` | ≤250 characters, measured with `awk -F'description: ' '/^description:/{print length($2)}'`; report exact count, suggest a 240-char rewrite for headroom. | P0 |
-| `model` | **Must be absent** — the pair lives only in § Agent Model Matrix now. Flag `model:`/`effort:` in any definition frontmatter as P0; fix is deletion. | P0 |
+| `model` | Must be absent — the pair lives only in `skills/shared/stage-codes.md § Agent Model Matrix`. Flag `model:`/`effort:` in any definition frontmatter as P0; fix is deletion. | P0 |
 
 #### Frontmatter audit — tools (P1)
 
@@ -161,7 +149,7 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` | Required on PL/FN/ST (gate notifications); recommended on DV/DR/QA/SR/RE but flag PL/FN/ST omissions only. **Trust precondition**: hooks run only when the agent file's own folder has accepted workspace trust — otherwise silently skipped, so a missing hook artifact never proves the hook passed. | P1 (PL/FN/ST) / P2 (others) |
+| `hooks:` | Required on PL/FN/ST (gate notifications); recommended on DV/DR/QA/SR/RE but flag PL/FN/ST omissions only. Trust precondition: hooks run only when the agent file's own folder has accepted workspace trust — otherwise silently skipped, so a missing hook artifact never proves the hook passed. | P1 (PL/FN/ST) / P2 (others) |
 
 #### Frontmatter audit — execution scope (P2)
 
@@ -176,9 +164,8 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `mcpServers` | Optional; if absent, MCP scope comes from inline `mcp__<server>__*` entries in `tools`. Flag only when no `mcp__*` tools AND `Skill(*)` wildcards — that pair silently broadens scope. | P2 |
-| `context: fork` | A forked skill runs **in the background by default**; `background: false` opts out. Flag when the caller needs its result inline rather than a completion notification. | P2 |
+| `context: fork` | A forked skill runs in the background by default; `background: false` opts out. Flag when the caller needs its result inline rather than a completion notification. | P2 |
 | booleans | Frontmatter booleans accept `yes`/`no`/`on`/`off`/`1`/`0` (case-insensitive) alongside `true`/`false`. Flag only inconsistent spellings within one file. | P3 |
-| `color` | Cosmetic; no enforcement. | — |
 
 ### Failure Mode Analysis
 
@@ -188,12 +175,7 @@ Where a class recurs, fix it in the form that class takes — `agents/prompt-eng
 § Form to failure`. A wrong output shape takes a positive recipe; a missing element takes a
 REQUIRED slot in the template being filled in.
 
-Do **not** answer a recurring class with a generic self-check block ("Before responding, verify:
-output matches format, constraints satisfied, no conflicting information"). It reads as diligence
-and is the instruction `skills/shared/model-prompting.md § opus` names as compounding into
-over-verification, and 8 of this plugin's 16 agents resolve to `opus` in the matrix. A criterion that names an
-artifact is a different thing and stays — that is the completion-criteria row, not this one.
-
-## Integration
-
-Used by `prompt-engineer` for agent-ecosystem maintenance and post-worktask agent updates.
+Don't answer a recurring class with a generic self-check block ("Before responding, verify:
+output matches format…"): `skills/shared/model-prompting.md § opus` names it as compounding into
+over-verification, and half the agents resolve to `opus`. A criterion that names an artifact stays —
+that is the completion-criteria row.
