@@ -15,25 +15,18 @@ related:
 
 Analyze test coverage gaps and generate recommendations for improving test quality.
 
-## Usage
-
-```
-/test-coverage
-/test-coverage --path <directory>
-/test-coverage --threshold <percentage>
-```
-
 ## Options
 
-- `--path <dir>` - Analyze specific directory (default: entire project)
-- `--threshold <n>` - Set coverage threshold (default: 80)
-- `--report` - Write a detailed markdown summary to `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`, linking the toolchain's own coverage artifact; the only file this command creates
-- `--critical-only` - Focus on critical/high-risk areas
-- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--path <dir>` | any directory | Analyze that subtree only (default: entire project) |
+| `--threshold <n>` | percentage | Coverage target (default: 80) |
+| `--report` | — | Write a detailed markdown summary to `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`, linking the toolchain's own coverage artifact; the only file this command creates |
+| `--critical-only` | — | Focus on critical/high-risk areas |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`; detected per `skills/shared/platform-detection.md`) |
 
 ```
+/test-coverage [--path <dir>] [--threshold <n>] [--report] [--critical-only] [--platform <p>]
 /test-coverage
 /test-coverage --path src/auth --threshold 90 --report
 /test-coverage --critical-only --platform apple
@@ -41,9 +34,10 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 
 ## Running the suite
 
-Coverage numbers need a run. Delegate to `/<plugin>:build-test` for the detected platform — it
-knows the repo's build system, coverage flags, and report location. Fall back to the scoped
-runners in `allowed-tools` only when no plugin covers the repo. Never assume a Swift toolchain.
+Coverage numbers need a run. Delegate to `/<plugin>:build-test` for the detected platform; it knows
+the repo's build system, coverage flags, and report location. Fall back to the scoped runners in
+`allowed-tools` only when no plugin covers the repo, and pick the runner from the repo, not by
+assuming Swift.
 
 ## Output Format
 
@@ -120,9 +114,8 @@ actions close the section.
 
 ### Template — selection marker coverage
 
-Reports the share of test files annotated with markers from
-`skills/shared/test-selection-syntax.md`. Low marker coverage means selective execution defaults
-to `covers-changed-files` (filename correlation only) — degrading to `scoped` mode automatically.
+Share of test files carrying `skills/shared/test-selection-syntax.md` markers. With low coverage,
+selection falls back to filename correlation and the run degrades to `scoped`.
 
 ```markdown
 <!-- …continued: selection marker coverage -->
@@ -140,7 +133,7 @@ to `covers-changed-files` (filename correlation only) — degrading to `scoped` 
 
 ```markdown
 <!-- …continued: untagged tests -->
-### Untagged Tests (warn-only on first release; block once project sets `selective_tests_ready: true`)
+### Untagged Tests
 
 | File | Tests | Recommendation |
 |------|-------|----------------|
@@ -150,11 +143,11 @@ to `covers-changed-files` (filename correlation only) — degrading to `scoped` 
 
 #### Framework compliance
 
-"Expected" means **the project's established framework** for that layer — resolved from
-`skills/shared/testing-strategy.md § Framework by platform` plus what the repo already uses. Flag
-divergence from that, never from a specific vendor's framework. Typical divergences: a second
-framework added alongside the existing one, a legacy runner on new modules, integration tests
-hitting a shared live environment, evals with no recorded threshold.
+"Expected" is the project's established framework for that layer, from
+`skills/shared/testing-strategy.md § Framework by platform` plus what the repo already uses; flag
+divergence from that, not from a particular vendor. Typical divergences: a second framework beside
+the existing one, a legacy runner on new modules, integration tests hitting a shared live
+environment, evals with no recorded threshold.
 
 ```markdown
 <!-- …continued: framework compliance -->
@@ -166,9 +159,3 @@ hitting a shared live environment, evals with no recorded threshold.
 | Integration | <e.g. Testcontainers / Robolectric / MSW> | <actual> | ✅ |
 | UI / E2E | <e.g. Playwright / XCUITest / Compose UI test> | <actual> | ✅ |
 ```
-
-## Integration
-
-Use this command:
-- Before `/test-plan` - Identify what needs testing
-- During QA stage - Verify coverage goals
