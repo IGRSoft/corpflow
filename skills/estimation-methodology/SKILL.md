@@ -1,6 +1,6 @@
 ---
 name: estimation-methodology
-description: Use when estimating task complexity, effort, or determining worktask tier. Standardized complexity scoring (0-50 scale) and T-shirt sizing for project estimation.
+description: Use when estimating task complexity, effort, hours, or budget, or determining worktask tier and PL0 stage set. Complexity scoring (0-50 scale), T-shirt sizing, and mid-run stage escalation for project estimation.
 version: 0.4.0
 related:
   - ../cost-optimization/SKILL.md
@@ -9,13 +9,10 @@ related:
 
 # Estimation Methodology
 
-Standardized project estimation for Claude Code worktasks.
-
 ## Calculator Script (canonical math path)
 
-`scripts/estimate-calc.py` implements the complete fixed arithmetic chain — use it instead of
-reasoning through the formulas manually. The model supplies the judgment inputs (T-shirt size,
-factor scores); the script does the arithmetic.
+`scripts/estimate-calc.py` does the arithmetic; you supply the judgment inputs (T-shirt size,
+factor scores). Use it instead of working the formulas by hand.
 
 ### Invocation
 
@@ -33,13 +30,11 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-cal
 
 One JSON line, numbers only — `sp`, `multiplier_h`, `base_hours`, `buffer_pct`, `total_hours`,
 `budget` (with `--rate`), `phase`, `ai_cost` (with `--tokens`), `complexity` (with `--factors`).
-Self-test (no network, no external deps): `--self-test` alone.
+`--self-test` alone runs the built-in checks.
 
-The sections below are the specification the script implements — the canonical math path
-`commands/estimate.md` cites for its `### Budget Calculation` and `### AI Cost`. In the happy
-path read the script output instead. Estimation-run procedure, phase distribution, re-estimation
-triggers, AI cost factors: `references/estimation-run.md`; the platform adjustment tables the
-review step applies: `references/estimate-review.md`.
+The sections below are the specification the script implements. Estimation-run procedure, phase
+distribution, re-estimation triggers, AI cost factors: `references/estimation-run.md`; the
+platform adjustment tables the review step applies: `references/estimate-review.md`.
 
 ## T-Shirt Sizing → Story Points (Range)
 
@@ -51,23 +46,20 @@ review step applies: `references/estimate-review.md`.
 | L | 6 | 10 | 36 | 60 |
 | XL | 13 | 21 | 78 | 126 |
 
-Every size routes to the single `/worktask` entry point; XL splits into ≤ L sub-tasks first
-(§ Worktask Tier Selection).
-
 ## Story Points to Hours
 
-**Formula**: `Hours = SP × multiplier`, applied to SP Min and SP Max independently.
+`Hours = SP × multiplier`, applied to SP Min and SP Max independently.
 
 | Level | Multiplier | Use When |
 |-------|------------|----------|
 | Junior | 10h | New to platform/domain |
 | Mid-level | 8h | Familiar with stack |
-| Senior | 6h | **Default** |
+| Senior | 6h | Default |
 | Expert | 4h | Deep specialization |
 
 ## 5-Factor Complexity Analysis
 
-Score each factor 1-5. **Overall score** = sum (0-25): 0-10 LOW, 11-17 MEDIUM, 18-25 HIGH.
+Score each factor 1-5. Overall score = sum (0-25): 0-10 LOW, 11-17 MEDIUM, 18-25 HIGH.
 
 | Factor | Description | Score 5 = |
 |--------|-------------|-----------|
@@ -79,21 +71,18 @@ Score each factor 1-5. **Overall score** = sum (0-25): 0-10 LOW, 11-17 MEDIUM, 1
 
 ## Phase Constraints
 
-**Rule**: maximum 4 weeks (~160 hours) per phase — 4-week phases keep delivery predictable and
-risk contained. Split anything longer into sub-phases: redistribute features, chain the
-dependencies.
+At most 4 weeks (~160 hours) per phase, to keep delivery predictable. Split anything longer into
+sub-phases: redistribute features, chain the dependencies.
 
 ## Test Integration
 
-**Rule**: tests MUST be included in each subtask, never a separate phase — written alongside the
-feature, they catch issues early.
-
-**Format**: `[Task description] + tests` — "Implement login + tests" (28h), not "Implement
-login" (20h) plus a separate "Write login tests" (8h) or a standalone "Unit Tests" phase.
+Tests belong to each subtask, never a separate phase: `[Task description] + tests` —
+"Implement login + tests" (28h), not "Implement login" (20h) plus a separate "Write login tests"
+(8h) or a standalone "Unit Tests" phase.
 
 ## Buffer Calculation
 
-**Rule**: add 15% buffer to base hours. Every line below applies to Min and Max independently.
+Add 15% buffer to base hours. Every line below applies to Min and Max independently.
 
 ```
 Base Hours  = Total SP × multiplier    (6h = senior default)
@@ -102,24 +91,19 @@ Total Hours = Base Hours + Buffer
 Budget      = Total Hours × Rate
 ```
 
-**Buffer uses**: SDK integration surprises, third-party API changes, client feedback cycles,
+The buffer covers SDK integration surprises, third-party API changes, client feedback cycles,
 bug fixes and polish.
-
-Phase distribution (duration, cost, share) and the 9-step estimation run:
-`references/estimation-run.md`.
 
 ## Worktask Tier Selection
 
-Canonical tier logic, cited by `commands/estimate.md` and `skills/request-plan/`. Tier is decided
-by *what the work touches* first, and only then by size — size alone sent ordinary work into the
-security pipeline and left live incidents on the standard one.
+Canonical tier logic. Tier is decided by what the request touches first, and only then by size.
 
 ```
-# 1. Surface check — beats size, and reads the REQUEST
+# 1. Surface check — beats size, and reads the request
 IF the request names credentials, tokens, secrets, PII, payments,
    authn/authz, or untrusted input as part of what it asks for:
   → /worktask --secure     (regardless of size)
-ELIF the request describes something broken RIGHT NOW and still failing:
+ELIF the request describes something broken right now and still failing:
   → /worktask --emergency  (regardless of size)
 
 # 2. Otherwise, size decides
@@ -131,50 +115,42 @@ ELSE:
 
 ### What the two escalations are not
 
-**--secure is not "security-adjacent".** Hardening a lint, adding a deny-list guard, or renaming
-a branch touches no protected asset — those are standard tier. The test is whether the request
-names a secret or an untrusted input, not whether the word "security" appears nearby.
-Security-sensitive work runs the full 11-stage pipeline.
+`--secure` is not "security-adjacent". Hardening a lint, adding a deny-list guard, or renaming a
+branch touches no protected asset — standard tier. The test is whether the request names a secret
+or an untrusted input, not whether the word "security" appears nearby. Security-sensitive work
+runs the full 11-stage pipeline.
 
-**--emergency is not "urgent-sounding".** A task that has *stopped* — wedged, abandoned, a batch
-that ran away and ended — is standard work. The test is whether something is failing as you write
-the plan. A task can be both stuck and still failing; when it is, escalation wins.
+`--emergency` is not "urgent-sounding". A task that has stopped — wedged, abandoned, a batch that
+ran away and ended — is standard work. The test is whether something is failing as you write the
+plan. A task both stuck and still failing escalates.
 
 #### A surface you discover does not raise the tier
 
-**The tier follows the request, never the findings.** A search that reaches a secret-handling
-file has learned something about the repo, not about what was asked for — and almost every
-file in a plugin sits near one. Reading the check the other way escalates on discovery, which
-is how three plans in the 0.2.0 capture took `--secure` for a webhook URL, a CI login and a
-dependency scan that none of their requests mentioned.
-
-It also makes the tier undecidable when the plan is written: two searches of the same repo
-find different things, so the same request would route differently on different days. A tier
-that cannot be derived from the request is not a rule, it is a coin toss with a rationale.
+The tier follows the request, never the findings. A search that reaches a secret-handling file
+has learned something about the repo, not about what was asked for — almost every file in a
+plugin sits near one. Escalating on discovery also makes the tier undecidable at plan time: two
+searches of the same repo find different things, so the same request would route differently.
 
 Name what you found in the plan body — a discovered credential path is worth stating and may
 well change the work. It does not change the flag.
 
 #### A synthetic asset is not evidence about the asset the request names
 
-**The request naming a protected asset IS the surface.** Learning that the credential is a test
+The request naming a protected asset is the surface. Learning that the credential is a test
 fixture, the key a planted specimen, or the values already fake describes what the repo holds,
 not what was asked for. A secret scanner, a rotation runbook and a key-handling path all look
-synthetic from inside their own test data, and routing them standard on that basis puts the
-work that handles secrets on the pipeline that does not review them.
-
-None of those observations downgrade a request naming credentials, tokens, secrets, PII,
-payments, authn/authz or untrusted input. Mirror of the rule above, failing the same way: a
-tier depending on what the fix turns out to touch is not derivable when the plan is written.
+synthetic from inside their own test data; routing them standard puts the work that handles
+secrets on the pipeline that does not review them. None of those observations downgrade the
+tier.
 
 Name the finding in the plan body — that a specimen is planted is worth stating. It does not
 lower the flag.
 
 #### A quiet local tree is not evidence about the failure being reported
 
-**The present-tense report in the request IS the evidence.** A clean worktree, an absent
+The present-tense report in the request is the evidence. A clean worktree, an absent
 `.context/`, no live `state.json`, or a green local test run say nothing about the environment the
-user is describing — they describe *this* checkout, which is not the one that is failing.
+user is describing — they describe this checkout, which is not the one that is failing.
 
 None of them downgrade a reported live failure, and none of them settle the surface check either
 way. If a local observation genuinely changes the tier, name the observation and say what it rules
@@ -182,15 +158,9 @@ out; absence of local wreckage rules out nothing.
 
 ## PL0 Stage-Set & Test-Mode by Complexity Score
 
-PL0 (`skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)` and
-`§ Required Metadata: Test Selection Gate`) uses the 0–50 complexity score to pick the stage set
-and the default `test_mode`.
-
-Each created stage task carries `metadata.agent`. Measured against the full nine-stage reference
-pipeline `PL→AR→TL→DV→DR→QA→DC→FN→ST`, stamp `metadata.skipped_stages` (`{stage, reason}`) for
-every stage the tier does NOT create and `metadata.added_stages` (same shape) for every stage PL0
-adds beyond the tier default — a stage PL0 declines always appears in `skipped_stages` with a
-reason.
+PL0 uses the 0–50 complexity score to pick the stage set and the default `test_mode`
+(`skills/worktask/references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)`, which owns
+the `skipped_stages` / `added_stages` stamping, and `§ Required Metadata: Test Selection Gate`).
 
 ### Stage set table
 
@@ -208,29 +178,27 @@ reason.
 
 ### Stage Inclusion Criteria (PL0 authority)
 
-Both decisions are made by PL0 DURING PLANNING, before the plan-approval gate,
-and surfaced in the gate summary. DV0, DR0, QA0 are the floor and are never
-removable. Every decision MUST be recorded as a metadata.skipped_stages /
-metadata.added_stages entry ({stage, reason}) on the PL0 task; reasons are one
+PL0 makes both decisions during planning, before the plan-approval gate, and surfaces them in
+the gate summary. DV0, DR0, QA0 are the floor and are never removable. Record every decision as a
+`metadata.skipped_stages` / `metadata.added_stages` entry (`{stage, reason}`); reasons are one
 sentence, decision-shaped, not scores.
 
 AR0 — tier default (score ≥11) with PL0 override.
-PL0 MAY exclude it when ALL hold: change follows existing patterns;
-no new interfaces or schemas; confined to one module; no open design questions.
-PL0 MUST include it (any tier, incl. Low) when ANY holds: new module/service/
-public API/schema surface; ≥2 viable design approaches needing a recorded
-decision; cross-cutting integration (≥3 files across ≥2 subsystems); patterns
-novel to this codebase; security- or data-model-relevant structure.
+PL0 may exclude it only when all hold: change follows existing patterns; no new interfaces or
+schemas; confined to one module; no open design questions.
+PL0 includes it at any tier, Low included, when any holds: new module/service/public API/schema
+surface; ≥2 viable design approaches needing a recorded decision; cross-cutting integration
+(≥3 files across ≥2 subsystems); patterns novel to this codebase; security- or
+data-model-relevant structure.
 
 #### TL0 criterion
 
-TL0 — decision-only, never a tier default. Include TL0 ONLY when the work must
-be split across ≥2 developers/engineers: parallelizable workstreams, multiple
-DV specialists (mixed-platform DV), or external-plugin fan-out requiring
-coordination/merge. Single workstream + single DV agent → no TL0, at any score.
+TL0 — decision-only, never a tier default. Include TL0 only when the work must be split across
+≥2 developers/engineers: parallelizable workstreams, multiple DV specialists (mixed-platform DV),
+or external-plugin fan-out requiring coordination/merge. Single workstream + single DV agent → no
+TL0, at any score.
 
-Constraint: TL0 without AR0 is allowed (prev edge PL→TL); AR0 at Low tier is
-allowed (added_stages).
+TL0 without AR0 is allowed (prev edge PL→TL); AR0 at Low tier is allowed (`added_stages`).
 
 ### Default test_mode by score
 
@@ -242,13 +210,10 @@ Combine with marker coverage; PL0 stamps `metadata.test_mode`:
 | 11–25 (Medium) | `scoped` | `full` if multi-module diff |
 | 26–50 (High/Critical) | `full` | — |
 
-Uncertain between `scoped` and `full`? Choose `scoped` — the auto-promotion safety net (DV warns,
-QA promotes if the Selected list is empty) catches under-selection.
-
 ### Mid-run re-sizing (one-way ratchet)
 
 Sizing is decided once, at PL0, and the plan gate freezes it. The one sanctioned exception is a
-downstream stage discovering a *surface* PL0 could not have seen: it stops, says so, and returns a
+downstream stage discovering a surface PL0 could not have seen: it stops, says so, and returns a
 `requests_stage_escalation` object in its artifact `handoff:` frontmatter. It never patches the
 ledger — the orchestrator performs the write through the existing `state-patch.sh --task-create` /
 `--task-block` operations and records `{stage, reason}` in `metadata.added_stages`.
@@ -266,22 +231,21 @@ requests_stage_escalation:
   reason: "<200 chars or fewer>"
 ```
 
-This is an artifact field, following the precedent of `requests_test_evidence`. It is never a
-ledger key — `state-patch.sh` gates `--facts` to a fixed key set and would reject it.
+An artifact field, like `requests_test_evidence` — never a ledger key; `state-patch.sh` gates
+`--facts` to a fixed key set and would reject it.
 
 #### The four fire conditions — all four, or it does not fire
 
 1. **Surface, not size.** The work touches a surface whose stage the inclusion criteria mandate:
    credentials, authn, or untrusted input → SR; release artifacts → RE; a protected population or
-   an automated user-facing decision → ET. Surfaces are observable and binary; "it feels bigger"
-   is not a surface.
+   an automated user-facing decision → ET. "It feels bigger" is not a surface.
 2. **Undiscoverable at PL0.** Found in the tree, not re-derived from the plan's own text. If the
    plan names it, the answer is "do the work", never "add a stage".
 3. **A recorded reason is falsified.** Quote the exact `skipped_stages[].reason` being refuted,
-   verbatim. A rebuttal of one recorded sentence is greppable against `state.json`; an opinion is
-   not — and a stage PL0 declined without recording a reason cannot be escalated against at all.
-4. **No planned stage can absorb it.** Right-sizing inverted: a fresh reviewer could reject this
-   work while approving its neighbour.
+   verbatim, so it is greppable against `state.json`. A stage PL0 declined without recording a
+   reason cannot be escalated against at all.
+4. **No planned stage can absorb it.** A fresh reviewer could reject this work while approving its
+   neighbour.
 
 #### Structural caps
 
@@ -290,18 +254,16 @@ ledger key — `state-patch.sh` gates `--facts` to a fixed key set and would rej
 - **Only stages in the canonical set** — never a second instance of a stage, a re-order, a
   removal, or a re-scored complexity number.
 - **Valid at AR, TL, DV\*, DR, and QA only.** At PL, DC, FN, or ST the answer is a follow-up
-  issue — PL is where sizing is decided, not revised.
-- **Never where a channel already exists**: runtime evidence is `requests_test_evidence`, a second
-  opinion is DR's job. Reaching for escalation where a channel exists is itself a Red Flags row.
+  issue.
+- **Not where a channel already exists**: runtime evidence is `requests_test_evidence`, a second
+  opinion is DR's job.
 - **Calibration is auditable.** ST0 reads `added_stages` for escalation entries; firing in more
-  than one run in five means PL0 sizing is mis-calibrated, not that the runs were big.
+  than one run in five means PL0 sizing is mis-calibrated.
 
 #### What the ratchet is not
 
-It is not a re-plan. The plan's requirements, acceptance criteria, and scope are unchanged by an
-escalation — only the stage set grows. Work that needs the plan rewritten is not an escalation; it
-goes back to the human gate.
-
+It is not a re-plan. Requirements, acceptance criteria, and scope stay unchanged — only the stage
+set grows. Work that needs the plan rewritten goes back to the human gate.
 
 ## AI Agent Cost Estimation
 
@@ -321,9 +283,8 @@ Token bands by task type:
 AI Cost = Base Tokens × Model Rate × (1 + Retry Factor) × Complexity Multiplier
 ```
 
-The factor values (Model Rate, Retry Factor, Complexity Multiplier) are defined canonically in
-`skills/cost-optimization/SKILL.md § Cost Estimation Formula` — reference them there rather than
-restating, to avoid drift.
+Factor values (Model Rate, Retry Factor, Complexity Multiplier):
+`skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
 
 Codebase/files/tests/docs/retries/context multipliers, the human-vs-AI scale check, and the
 AI-cost-vs-dev-time tradeoff table: `references/estimation-run.md`.

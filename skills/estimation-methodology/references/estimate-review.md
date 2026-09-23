@@ -25,8 +25,7 @@ per-platform tables below.
 ## Platform-Specific Adjustments
 
 Apply only the table matching the reviewed platform; each row instantiates an Adjustment
-Matrix capability with that platform's concrete APIs. Table order mirrors the `--platform`
-enum; it is not a priority order.
+Matrix capability with that platform's concrete APIs.
 
 ### Apple/SwiftUI
 | Feature | Min Adjustment | Max Adjustment |
@@ -97,8 +96,6 @@ enum; it is not a priority order.
    range, and the timeline range if it shifts.
 
 ## Review Checklist
-
-Before finalizing estimates, verify:
 
 - [ ] All SDK integrations identified
 - [ ] Background mode requirements assessed
