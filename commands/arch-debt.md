@@ -14,16 +14,8 @@ related:
 
 # Technical Debt Command
 
-Analyze, document, and prioritize technical debt in the codebase.
-
-## Usage
-
-```
-/arch-debt
-/arch-debt --path <directory>
-/arch-debt --add "Description of debt"
-/arch-debt --report
-```
+Analyze, document, and prioritize technical debt in the codebase. Analysis is the default mode;
+`--add`, `--report`, and `--prioritize` write under `.context/audits/`.
 
 ## Options
 
@@ -33,8 +25,6 @@ Analyze, document, and prioritize technical debt in the codebase.
 - `--prioritize` - Re-prioritize existing debt in place, in the register `.context/audits/tech-debt.md`
 - `--category [code|architecture|testing|docs|security]` - Filter by category
 - `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
-
-## Examples
 
 ```
 /arch-debt
@@ -46,8 +36,6 @@ Analyze, document, and prioritize technical debt in the codebase.
 ## Output Format
 
 Analysis mode (the default) emits every section below, in this order.
-
-### Report skeleton — summary & inventory
 
 ```markdown
 # Technical Debt Analysis
@@ -66,11 +54,7 @@ One row per § Debt Categories entry; effort in days.
 - **Category**, **Location** (`path`), **Impact**, **Effort** (Nd)
 - **Interest**: rate + why it compounds — see § Interest Rate Guide
 - **Recommendation**: fix immediately | next sprint | during related work
-```
 
-### Report skeleton — economics & plan
-
-```markdown
 ## Debt Interest Calculation
 | Item | Principal | Interest Rate | Total Cost if Delayed 6mo |
 Principal in days; total cost = principal x (1 + rate).
@@ -103,10 +87,3 @@ Last 3-4 quarters, newest first.
 | High | Compounds quickly | Security issues, blocking features |
 | Medium | Steady cost | Maintenance burden, slower dev |
 | Low | Minimal ongoing cost | Style issues, minor improvements |
-
-## Integration
-
-This command supports:
-- Sprint planning - Allocate debt reduction time
-- Architecture reviews - Identify new debt
-- Prioritization - Balance features vs debt
