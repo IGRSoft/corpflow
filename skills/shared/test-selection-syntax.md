@@ -15,7 +15,7 @@ as `@test-tag: regression` with no dependency edges, so it runs only in `test_mo
 
 ### `@test-required`
 
-Runs in **every** mode (`build-only`, `scoped`, `full`). Use sparingly — smoke tests, app-launch checks, auth round-trip, and other "if this fails the build is unusable" guards.
+Runs in every mode (`build-only`, `scoped`, `full`). Use sparingly — smoke tests, app-launch checks, auth round-trip, and other "if this fails the build is unusable" guards.
 
 ### `@depends-on: <SymbolName>`
 
@@ -65,7 +65,7 @@ Declare tags once per project (`extension Tag { @Tag static var smoke: Self }`),
 DV's D2 step:
 
 1. `changed_symbols` = top-level symbols (types, funcs, enums) extracted from every source file in `git diff --name-only <base>...HEAD`.
-2. Parse markers on each test in the test source roots; select it if **any** holds: it carries `@test-required` or tag `smoke`; one `@depends-on` symbol is in `changed_symbols`; it *covers* a changed file (below).
+2. Parse markers on each test in the test source roots; select it if any holds: it carries `@test-required` or tag `smoke`; one `@depends-on` symbol is in `changed_symbols`; it *covers* a changed file (below).
 3. Union in `metadata.always_required_tests` (plan-level override).
 4. Write the result to `§ Selected Tests` in the DV row's artifact (`metadata.artifact`).
 
@@ -108,13 +108,13 @@ Parsing is permissive; each case logs to `.context/logs/test-selection-warnings.
 
 - Unknown tag (`@test-tag: foo`) — preserved, ignored by the dispatcher.
 - Malformed marker (`@depends-on:` with no symbol) — test included as if the marker were absent.
-- Marker on the wrong scope (`@test-required` on a `@Suite`, not a `@Test`) — applies to **all** tests in the suite. Documented behavior; intentional.
+- Marker on the wrong scope (`@test-required` on a `@Suite`, not a `@Test`) — applies to all tests in the suite, intentionally.
 
 ## Closure rules
 
-A matching `@depends-on: A` selects the marked test only — **transitive closure is NOT computed**; chasing A's downstream callers balloons the selected set and defeats selective execution. Fan-out tests that must always run get `@test-required` or `metadata.always_required_tests`.
+A matching `@depends-on: A` selects the marked test only — transitive closure is not computed; chasing A's downstream callers balloons the selected set and defeats selective execution. Fan-out tests that must always run get `@test-required` or `metadata.always_required_tests`.
 
-Exception: under `test_mode=scoped` the parser also adds tests for **any module** touched by the diff (module = directory of the changed file) — deliberate over-inclusion, `scoped` being the safety mode for users who can't yet trust the marker graph.
+Exception: under `test_mode=scoped` the parser also adds tests for any module touched by the diff (module = directory of the changed file) — deliberate over-inclusion, `scoped` being the safety mode for users who can't yet trust the marker graph.
 
 ## Examples
 
@@ -134,7 +134,7 @@ Diff `src/components/LoginForm.tsx` + a design PNG under `test_mode: build-only`
 
 ### Migration: untagged repository
 
-Zero markers under `test_mode: build-only` yields an empty Selected Tests list (apart from `metadata.always_required_tests`), triggering the **auto-promotion safety net** of `testing-strategy.md § Three test modes`: QA promotes that run to `scoped` and records the promotion plus the remedy (add `@test-required` markers or `metadata.always_required_tests`) in `testing-N.md § Notes`.
+Zero markers under `test_mode: build-only` yields an empty Selected Tests list (apart from `metadata.always_required_tests`), triggering the auto-promotion safety net (`testing-strategy.md § Auto-promotion safety nets`): QA promotes that run to `scoped` and records the promotion plus the remedy (add `@test-required` markers or `metadata.always_required_tests`) in `testing-N.md § Notes`.
 
 #### DV warning and DR surfacing
 
@@ -160,7 +160,7 @@ DR (`agents/technical-lead.md`) reads that log during review and surfaces non-em
 ## Platform handlers
 
 The marker grammar is platform-agnostic (line comments parse everywhere). What varies is the
-**identifier grammar** each runner accepts and whether corpflow has wired a handler that emits it.
+identifier grammar each runner accepts and whether corpflow has wired a handler that emits it.
 Status is per-platform and load-bearing: an unwired platform auto-promotes (§ Auto-promotion when
 no handler) however well-specified its syntax is.
 
@@ -186,7 +186,7 @@ syntax a future handler will need.
 | Go | `-run '^<TestFunc>$'` scoped to a package path | Documented, not wired |
 | Rust | `cargo test <substring>` (matches the test path) | Documented, not wired |
 | C / C++ | `ctest -R '<regex>'`; GoogleTest `--gtest_filter='<Suite>.<Test>'` | Documented, not wired |
-| Bash (bats) | `<file>` positional + `-f '<name regex>'` | **Wired** [^bats] |
+| Bash (bats) | `<file>` positional + `-f '<name regex>'` | Wired [^bats] |
 
 #### Bash (bats) — reference implementation
 
@@ -212,14 +212,14 @@ when no handler; never `full` — `testing-strategy.md § Test-Execution Authori
 Apple's grammar is a hard runner constraint, not a convention, so it carries the extra rule below;
 the other rows are ordinary filter syntax.
 
-[^apple]: The identifier ends at a **type**, never at a function. `<SuiteName>` is an
+[^apple]: The identifier ends at a type, never at a function. `<SuiteName>` is an
 `XCTestCase` subclass or a Swift Testing suite type, spelled as in source. Nested suites
 legitimately add a segment (`Target/Outer/Inner`) — the terminal segment is still a type.
 
 #### Why per-function forms are forbidden
 
 Per-function forms (`/testRefundFlow`, `/testRefundFlow()`, `/testRefundFlow(amount:)`) are
-**forbidden**: a Swift Testing `@Test` identifier includes the function's parentheses and
+forbidden: a Swift Testing `@Test` identifier includes the function's parentheses and
 `@Test(arguments:)` appends a per-argument suffix, so `Target/Type/methodName` matches zero tests —
 xcodebuild selects nothing and the run degrades to a full-suite fallback. A suite flag runs the
 whole suite; that widening is intended and strictly cheaper than the fallback it replaces. Do not
@@ -232,18 +232,18 @@ parenthesis nor the parameterized-suffix problem, and the same holds for pytest 
 -run`, and `vitest -t`. Apple's suite-terminal rule is the exception, not the model to copy.
 
 [^divergence]: `apple-developer:swift-testing-entry` still documents the per-function form and
-lives in a separate repository. Until that follow-up lands, **this table is authoritative** for
+lives in a separate repository. Until that follow-up lands, this table is authoritative for
 corpflow stages.
 
 ### Auto-promotion when no handler
 
-An unwired platform (every row except Apple in § Identifier grammar by platform) with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to **module-scope** (never `full` — DV holds no full-suite authority, `testing-strategy.md § Test-Execution Authority`) and log to `.context/logs/test-selection-warnings.md`:
+An unwired platform (every row except Apple in § Identifier grammar by platform) with `test_mode ∈ {build-only, scoped}` triggers DV to auto-promote that run to module-scope (never `full` — DV holds no full-suite authority, `testing-strategy.md § Test-Execution Authority`) and log to `.context/logs/test-selection-warnings.md`:
 
 > No selective-test handler wired for platform `<platform>`. Auto-promoted to module-scope for this run (every test file in the touched module(s), via the platform's positional/filter syntax); selective execution will activate when a handler ships. Markers are still parsed and recorded for forward-compatibility.
 
 #### Recording the auto-promotion
 
-The DV artifact's `§ Decisions` records `auto_promoted_mode: module-scope` so QA and DR see the deviation — a DV-artifact execution value, never a `test_mode` value; the plan-level `test_mode` is **not** rewritten. If module scope cannot be computed, DV runs the smoke set and records `deferred_to_qa: full_regression` instead.
+The DV artifact's `§ Decisions` records `auto_promoted_mode: module-scope` so QA and DR see the deviation — a DV-artifact execution value, never a `test_mode` value; the plan-level `test_mode` is not rewritten. If module scope cannot be computed, DV runs the smoke set and records `deferred_to_qa: full_regression` instead.
 
 ## Reader matrix
 
@@ -258,12 +258,12 @@ The DV artifact's `§ Decisions` records `auto_promoted_mode: module-scope` so Q
 
 | Reader | What it does with markers/Selected Tests |
 |--------|------------------------------------------|
-| **DR** (`agents/technical-lead.md`) | Reads the warning log and `§ Executed at DV`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does NOT execute tests — `agents/technical-lead.md § Constraints` holds the forbidden-commands list. |
+| **DR** (`agents/technical-lead.md`) | Reads the warning log and `§ Executed at DV`; surfaces non-empty warnings as findings in `developer-review-N.md § Findings`. Does not execute tests — `agents/technical-lead.md § Constraints` holds the forbidden-commands list. |
 | **PL** (`agents/product-manager.md`) | Writes `metadata.test_mode`, `metadata.always_required_tests`, `metadata.ui_visual_check`. Does not parse markers. |
 
 ## Footer Markers
 
-Metadata blocks appended to source and test files, cross-referencing production code and its tests bidirectionally. They are **advisory** — § Parser algorithm ignores them; their purpose is traceability for developers, reviewers, and QA.
+Metadata blocks appended to source and test files, cross-referencing production code and its tests bidirectionally. They are advisory — § Parser algorithm ignores them; their purpose is traceability for developers, reviewers, and QA.
 
 ### Source File Footer
 
@@ -301,7 +301,7 @@ Optional fields may be omitted; decoration is language-native (§ Platform Varia
 
 ### Platform Variants
 
-Fixed is the **sentinel phrase** — `Test Info` / `Source Info` on a comment line, followed by
+Fixed is the sentinel phrase — `Test Info` / `Source Info` on a comment line, followed by
 contiguous `@`-marker lines. The decoration is the language's own section idiom, not Swift's:
 `MARK:` is an Xcode affordance meaning nothing outside Swift and Objective-C — do not export it;
 where a language has no section idiom, a plain comment banner is correct. Region forms (`region` /
@@ -323,7 +323,7 @@ where the file already uses that convention.
 
 ### Position Rules
 
-- The footer is the **last block** in the file, after all code and closing braces, separated from preceding code by a blank line, with no blank line inside the block.
+- The footer is the last block in the file, after all code and closing braces, separated from preceding code by a blank line, with no blank line inside the block.
 - Paths are relative to project root (the directory holding `.git/`, or the nearest manifest — `Package.swift`, `settings.gradle(.kts)`, `package.json`, `pyproject.toml`, `go.mod`, `CMakeLists.txt`), forward slashes, no leading `./`.
 - Multi-value fields (`@related-tests:`, `@doc-refs:`) delimit with comma-space; past ~120 characters, overflow into repeated marker lines (`// @related-tests: Tests/A.swift`, then `…Tests/B.swift`), which are additive.
 
@@ -337,8 +337,4 @@ where the file already uses that convention.
 
 ### Parser Behavior
 
-Footer markers carry no runtime semantics — `@related-tests:` does NOT select the listed tests; use `@depends-on:` in the test file for that. A missing footer is not an error; a malformed one (`@test-file:` with no path) logs a warning without affecting selection.
-
-### Future: test-generator integration
-
-On creating a test file, a plugin's test generator (`apple-developer:test-generator`, `frontend-developer:fe-test-generator`, `system-developer:sys-test-generator`, and peers in `skills/shared/routing-matrix.md § Functional-role aliases`) SHOULD populate its `Source Info` footer (`@source-file:` plus `@doc-refs:` links) in that language's idiom and emit an update instruction for the source file's `Test Info` footer. Not yet implemented.
+Footer markers carry no runtime semantics — `@related-tests:` does not select the listed tests; use `@depends-on:` in the test file for that. A missing footer is not an error; a malformed one (`@test-file:` with no path) logs a warning without affecting selection.
