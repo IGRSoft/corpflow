@@ -1,11 +1,10 @@
 # Compatible Dev-Plugin Registry
 
-Canonical for **plugin-level** compatibility metadata: which dev plugins the orchestrator
-may route to, their command-set tier, version floors, and handoff defaults. **Not**
-canonical for agent routing — alias→agent routing (entry + functional roles, plus the
-project-override mechanism) lives in `skills/shared/routing-matrix.md`; marker→platform
-detection and platform→specialist tables live in `skills/shared/platform-detection.md`.
-Both are referenced here and never copied.
+Canonical for plugin-level compatibility metadata: which dev plugins the orchestrator
+may route to, their command-set tier, version floors, and handoff defaults. Agent routing
+lives elsewhere and is never copied here: alias→agent routing (entry and functional roles,
+project override) in `skills/shared/routing-matrix.md`; marker→platform detection and
+platform→specialist tables in `skills/shared/platform-detection.md`.
 
 ## Registry
 
@@ -35,8 +34,7 @@ Entry aliases resolve to qualified `plugin:agent` targets in
 | `ai-engineer` | **own set** + `build-test` (documented exception) |
 
 The integration surface is each plugin's root `CORPFLOW.md`
-(`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`), which replaced the
-former `workflow-integration` skill.
+(`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`).
 
 Apple extras: `analyze-issue`, `analyze-localization`, `gen-mock-api`, `fix-security-hardening`,
 `review-swiftui`, `review-uikit`, `review-appkit`.
@@ -47,8 +45,8 @@ Publishing commands are store-specific and exist only where there is a store —
 `gen-appstore-listing`, `gen-appstore-screenshots`, `gen-appstore-iap`; android
 `gen-playstore-listing`, `gen-playstore-screenshots` (Play Billing IAP is not ported). They are
 reached through `/appstore`, which resolves the platform's release engineer via
-`skills/shared/routing-matrix.md § Release-engineer aliases`; they are deliberately **not**
-core-parity, since a store command is meaningless on a platform with no store.
+`skills/shared/routing-matrix.md § Release-engineer aliases`. They are not core-parity,
+since a store command is meaningless on a platform with no store.
 
 ## Functional-role agents
 
@@ -100,23 +98,21 @@ core-parity pass is optional.
 
 `corpflow`, `debugging-toolkit`, `security-scanning`, `skill-creator`, `conductor`, `claude-in-chrome`.
 
-The plugin-prefix regex in `skills/worktask/scripts/publish-pl-issue.sh` MUST equal this
+The plugin-prefix regexes in `skills/worktask/scripts/publish-pl-issue-lib.sh` must equal this
 list united with the Plugin column of § Registry (equivalently: the plugin set of the
-default targets in `skills/shared/routing-matrix.md`). Changing any copy alone lets
+default targets in `skills/shared/routing-matrix.md`). Changing one copy alone lets
 internal agent identifiers leak into published GitHub issues.
 
 ## § Naming — plugin-unique agent prefixes
 
-Functional-role agents MUST carry a plugin-unique prefix: `sys-`, `and-`, `fe-`, `be-`, `ai-`.
-Every registered plugin complies except `apple-developer`, which predates the convention and
-keeps the bare names `security-auditor`, `test-generator`, `code-fixer`, `dependency-manager`.
+Functional-role agents carry a plugin-unique prefix: `sys-`, `and-`, `fe-`, `be-`, `ai-`.
+The one exception is `apple-developer`, which keeps the bare names `security-auditor`,
+`test-generator`, `code-fixer`, `dependency-manager`; any plugin added from here takes a prefix.
 
-Two things break when two plugins ship the same bare name: Claude Code keys installed agents
+Two plugins shipping the same bare name break two things: Claude Code keys installed agents
 by frontmatter `name`, so one silently overwrites the other; and `error_file` derives from
 the agent basename, so both write to the same `.context/errors/test-generator.md` inside one
-worktask. `android-developer` held exactly that collision and took the `and-` prefix in its
-1.4.0 release. No collision remains today, but a *new* plugin using bare names would
-re-create one — which is why the prefix rule binds anything added from here.
+worktask.
 
 ## Adding or replacing a dev plugin
 

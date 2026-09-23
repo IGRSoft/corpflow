@@ -2,9 +2,8 @@
 name: milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
 argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure]'
-# tools: bare Bash is deliberate — ticket generation drives per-milestone repo tooling
-# (gh, git, and whatever the project's own scripts expose), unknown until the milestone is
-# read; the bound is that it writes issues and milestone files, never source.
+# tools: bare Bash is deliberate — the milestone's repo tooling (gh, git, project scripts) is
+# unknown until it is read; the bound is that it writes issues and milestone files, never source.
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
 related:
   - agents/product-manager.md
@@ -17,15 +16,6 @@ related:
 
 Generate GitHub milestone tickets with agent assignments for implementation, test, and review. Ticket creation only — never implementation.
 
-## Usage
-
-```
-/milestone "Feature description" --milestone N
-/milestone --from-prd .context/planning-0.md --milestone N   # any planning-N.md the PL produced
-/milestone "Feature description"                             # creates the milestone too
-/milestone "Feature description" --milestone N --dry-run     # preview only
-```
-
 ## Options
 
 | Option | Effect |
@@ -37,6 +27,16 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 | `--dry-run` | Preview tickets as markdown, create nothing |
 | `--secure` | Add `security-reviewer` to Review on every ticket |
 | `--labels <extra>` | Extra labels beyond the auto-assigned priority |
+
+## Examples
+
+```bash
+/milestone "Add dark mode support" --milestone 3 --platform apple
+/milestone --from-prd .context/planning-0.md --milestone 5 --dry-run   # any planning-N.md the PL produced
+/milestone "Implement OAuth2 flow" --milestone 2 --secure
+/milestone "User profile management"                       # auto-creates the milestone
+/milestone "API rate limiting" --milestone 4 --labels "backend,performance"
+```
 
 ## Step 1 — Parse input
 
@@ -68,18 +68,18 @@ Split the input into discrete units along logical boundaries (separate concerns,
 
 Entry aliases resolve to a qualified `plugin:agent` id per `skills/shared/routing-matrix.md`
 (project `CORPFLOW.md § Routing` override wins); the platform default is the plugin's entry
-router. Always dispatch the resolved qualified id: bare role names collide across plugins
-(`skills/shared/compatible-plugins.md § Naming`).
+router. Write the resolved qualified id into the ticket, because bare role names collide
+across plugins (`skills/shared/compatible-plugins.md § Naming`).
 
 ### Content-based overrides
 
-When a ticket names a specific target inside a platform — macOS/watchOS/tvOS/visionOS, Swift concurrency, Compose UI, React/Vue/Svelte/Angular, CSS, C/C++/Python/Bash, API contracts, schema/query work, RAG/prompt/eval, training pipelines — assign the specialist from the marker→specialist tables in `skills/shared/platform-detection.md` instead of the platform entry agent. Automated batch fixes take that platform's code-fixer alias (`skills/shared/routing-matrix.md § Functional-role aliases`), never unconditionally Apple.
+When a ticket names a specific target inside a platform — macOS/watchOS/tvOS/visionOS, Swift concurrency, Compose UI, React/Vue/Svelte/Angular, CSS, C/C++/Python/Bash, API contracts, schema/query work, RAG/prompt/eval, training pipelines — assign the specialist from the marker→specialist tables in `skills/shared/platform-detection.md` instead of the platform entry agent. Automated batch fixes take that platform's code-fixer alias (`skills/shared/routing-matrix.md § Functional-role aliases`).
 
 Platform-neutral roles stay in corpflow: documentation-only → `technical-writer`; agent/command/skill → `prompt-engineer`; design system or UI design → `designer`.
 
 ### Test and review agents
 
-Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test-generator alias from `skills/shared/routing-matrix.md § Functional-role aliases` — the prefixes differ per plugin, so read the matrix rather than assuming the bare name.
+Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test-generator alias from `skills/shared/routing-matrix.md § Functional-role aliases` (the prefixes differ per plugin).
 
 | Review trigger | Agent (corpflow) |
 |---|---|
@@ -89,7 +89,7 @@ Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, t
 | `--ethics-review` or high risk | `ethics-reviewer` |
 | Agent/prompt change | `prompt-engineer` |
 
-Security auto-detection: add `security-reviewer` to **every ticket** whose own description contains keywords like "auth", "encryption", "credentials", "token", "API key", "certificate", "permission", "keychain" — even without `--secure`. It is per ticket, not per milestone: one ticket matching does not add the reviewer to the rest.
+Security content is judged per ticket: add `security-reviewer` to any ticket whose own description mentions auth, encryption, credentials, token, API key, certificate, permission, or keychain, even without `--secure`. One matching ticket does not add the reviewer to the rest.
 
 ## Steps 4–6 — Generate, create, summarize
 
@@ -138,7 +138,8 @@ Then [expected result]
 
 ## Dependencies
 
-- Depends on: #{N} · Blocks: #{M} (when applicable)
+- Depends on: #{N} (when applicable)
+- Blocks: #{M} (when applicable)
 
 ## Metadata
 
@@ -147,19 +148,12 @@ Then [expected result]
 - Estimated stages: {e.g., PL → DV → DR → QA → FN}
 ```
 
-### Template — machine-read sections
+### Template — machine-read parts
 
-Both trailing sections are parsed, not just read: `Agent Assignments` by the `megatask` skill via `/\| Implementation \| `(.+?)` \|/`, and `Metadata` via the `key: value` form existing `base_branch: <branch>` parsing expects.
-
-## Examples
-
-```bash
-/milestone "Add dark mode support" --milestone 3 --platform apple
-/milestone --from-prd .context/planning-0.md --milestone 5 --dry-run
-/milestone "Implement OAuth2 flow" --milestone 2 --secure
-/milestone "User profile management"                       # auto-creates the milestone
-/milestone "API rate limiting" --milestone 4 --labels "backend,performance"
-```
+`/megatask N` builds its dependency graph from these tickets: the `P0`–`P3` label sets the
+priority tiebreak, and each `Depends on` / `Blocks` keyword is read to the end of its line
+(`skills/megatask/scripts/build-orchestrator.sh`), so keep the two on separate lines — on one
+line, every `#N` after `Depends on` becomes a dependency and the pair turns into a false cycle.
 
 ## Output Format
 
@@ -189,9 +183,3 @@ Ready to create? Run without --dry-run.
 ### Live
 
 Same summary table keyed by issue number (`#42`) instead of ticket index and without the Dependencies column, headed by `Milestone: #{N} "{title}"`, with dependencies listed below as `#43 → #42` and closing on `Next: /megatask {N}` to execute all tickets.
-
-## Integration
-
-Upstream: `/product-requirements` (PRD via `--from-prd`), `/roadmap` (roadmap features to decompose).
-
-Downstream: `/megatask N` executes the created tickets; `skills/megatask` parses ticket bodies for agent assignments and metadata, and sorts on the `P0`–`P3` labels.
