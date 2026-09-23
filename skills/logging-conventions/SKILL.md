@@ -9,11 +9,9 @@ Runtime log capture routing for the corpflow worktask. Pairs with `task-folder-o
 
 ## The Split
 
-Two artifacts — two purposes — two locations.
-
 | Artifact | Location | Author | Purpose |
 |----------|----------|--------|---------|
-| `errors/<agent>.md` | `.context/errors/<agent>.md` | Owning agent, narrative | Escalation story per agent: what went wrong, retry count, handoff context. One file per agent — parallel-safe for TL-split DVN, megatask tracks, and QA+DC parallel patterns. |
+| `errors/<agent>.md` | `.context/errors/<agent>.md` | Owning agent, narrative | Escalation story per agent: what went wrong, retry count, handoff context. One file per agent, so parallel stages never collide. |
 | `*.log` | `.context/logs/` | Machine-written stdout/stderr | Raw runtime capture for post-hoc inspection |
 
 ## Filename Grammar
@@ -24,7 +22,7 @@ Two artifacts — two purposes — two locations.
 
 ### Kind Taxonomy
 
-The kind names what the log **is**, not which tool made it.
+The kind names what the log is, not which tool made it.
 
 | Kind | Source | Example |
 |------|--------|---------|
@@ -60,9 +58,9 @@ Use the same `tee` under Claude Code's `Bash` tool with `run_in_background: true
 
 1. Start background Bash writing to `.context/logs/monitor-<agent>-<ts>.log` (via `tee`).
 2. Attach `Monitor` to the running background id for live events.
-3. On detach the file stays readable via `Read`; reference its path in downstream stage docs (`testing.md`, `incident-report.md`, `release-prep.md`).
+3. On detach the file stays readable via `Read`; reference its path in downstream stage docs (`testing-N.md`, `incident-N.md`, `release-N.md`).
 
-> **MCP auto-background**: the tee pattern covers Bash-invoked builds/tests only. An MCP tool call (`build_sim`, `test_sim`, …) past ~2 min is auto-backgrounded at the CC layer, and no tee'd log exists until the agent reads the completion result — treat the completion notification, never a `.context/logs/*.log` file's mere presence, as the readiness signal. See `agent-coordination § MCP Auto-Background`.
+MCP auto-background: the tee pattern covers Bash-invoked builds/tests only. An MCP tool call (`build_sim`, `test_sim`, …) past ~2 min is auto-backgrounded, and no tee'd log exists until the agent reads the completion result — treat the completion notification, never a `.context/logs/*.log` file's mere presence, as the readiness signal (`agent-coordination § MCP Auto-Background`).
 
 ## Cleanup & Retention
 
@@ -75,14 +73,13 @@ Use the same `tee` under Claude Code's `Bash` tool with `run_in_background: true
 
 - `skills/task-folder-organization/SKILL.md` — canonical `.context/` folder rules.
 - `skills/agent-coordination/SKILL.md` §Monitor Tool for Background Events — tool mechanics.
-- `skills/incident-response/SKILL.md` — IR-specific log tailing.
+- `skills/incident-response/SKILL.md` — DV hotfix log stream (`hotfix` kind).
 - `agents/workflow-engineer.md` §Handle Error — per-agent `errors/<agent>.md` escalation (narrative counterpart).
 
 ## Common Mistakes
 
 1. **Runtime output in `errors/<agent>.md`** — those are narrative escalation; raw captures belong in `logs/`.
-2. **Writing to `.context/error.md`** — retired path; use `.context/errors/<agent>.md` (per-agent).
-3. **Missing timestamp** — re-runs then clobber prior evidence. Always `$(date -u +%Y%m%d-%H%M%S)`.
-4. **Scattering to `/tmp`** — invisible to downstream stages, lost on workspace reset.
-5. **Logging secrets** — redact before `tee`; never commit logs that may hold credentials.
-6. **A sibling `log/` folder** — canonical name is `logs/` (plural), one per project.
+2. **Missing timestamp** — re-runs then clobber prior evidence. Always `$(date -u +%Y%m%d-%H%M%S)`.
+3. **Scattering to `/tmp`** — invisible to downstream stages, lost on workspace reset.
+4. **Logging secrets** — redact before `tee`; never commit logs that may hold credentials.
+5. **A sibling `log/` folder** — canonical name is `logs/` (plural), one per project.

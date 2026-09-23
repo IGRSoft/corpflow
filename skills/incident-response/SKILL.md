@@ -5,8 +5,6 @@ description: Use when handling production incidents or emergency hotfixes. Incid
 
 # Incident Response
 
-Guidelines for incident triage, hotfix coordination, and post-mortem facilitation.
-
 ## Incident Classification
 
 ### Severity Levels
@@ -53,16 +51,17 @@ RE release → FN deploy.
 |-------|-------|---------|
 | IR | incident-responder | Classify, assess, decide approach |
 | DV | developer | Implement minimal fix |
+| DR | technical-lead | Review the hotfix |
 | QA | qa-engineer | Regression test critical paths |
 | RE | release-engineer | Prepare hotfix release |
 | FN | project-manager | Execute emergency deployment |
 
-> **DV Hotfix Tip**: stream build output with the Monitor tool over `run_in_background` Bash instead of polling, and tee it into `.context/logs/hotfix-<YYYYMMDD-HHMMSS>.log` so the evidence survives into `complete.md` / `release-prep.md`. See `${CLAUDE_SKILL_DIR}/../agent-coordination/SKILL.md §Monitor Tool` and `${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`.
+DV hotfix builds: stream with `Monitor` over `run_in_background` Bash and tee to `.context/logs/hotfix-<scope>-<YYYYMMDD-HHMMSS>.log`, so the evidence reaches `release-N.md` and `complete-summary-N.md` (`${CLAUDE_SKILL_DIR}/../logging-conventions/SKILL.md`).
 
 ### IR → DV Handoff Contract
 
-`incident-report.md` MUST carry these four sections before IR transitions to DV;
-the orchestrator validates per `shared/stage-contracts.md § IR–ET`. Any empty section
+`incident-N.md` carries these four sections before IR transitions to DV; the orchestrator
+validates per `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md § IR–ET`. Any empty section
 means DV is not dispatched and IR is re-queued with a `missing_input` error entry.
 
 #### Required Sections
@@ -70,22 +69,19 @@ means DV is not dispatched and IR is re-queued with a `missing_input` error entr
 | Section | Content | Purpose |
 |---------|---------|---------|
 | **Required Fix** | Concrete code-level change or data correction needed. Not a description of the problem — the *solution*. | Prevents DV from re-diagnosing |
-| **Constraints** | What DV MUST NOT do (no schema changes, no new dependencies, keep wire format stable, etc.) | Protects production invariants |
+| **Constraints** | What DV must not do (no schema changes, no new dependencies, keep wire format stable, etc.) | Protects production invariants |
 | **Blast Radius** | Files/modules DV may touch. Explicit allow-list. | Prevents scope creep during emergency |
 | **Verification Command** | Exact command QA will run (`curl …`, `xcodebuild test -only-testing:X`, manual steps) | Aligns QA criteria upfront |
 
 #### DV Delegation Prompt
 
-The orchestrator's DV dispatch prompt MUST include this phrase — mandatory, not a
-suggestion (emergency worktasks run via `/worktask --emergency`; see
-`commands/worktask.md` Options):
+In a `/worktask --emergency` run, the orchestrator puts this phrase in the DV dispatch prompt:
 
-> Focus strictly on the Required Fix in `.context/incident-N.md`. Do NOT
-> modify files outside the listed Blast Radius. Do NOT refactor, clean up,
-> reformat, or improve adjacent code. Emergencies are not the time for scope
-> expansion. If the Required Fix cannot be implemented within the Blast
-> Radius, STOP and escalate back to IR via `error_escalated_to: "IR"` — do
-> NOT expand scope unilaterally.
+> Focus strictly on the Required Fix in `.context/incident-N.md`. Do not
+> modify files outside the listed Blast Radius, and do not refactor, clean up,
+> reformat, or improve adjacent code. If the Required Fix cannot be implemented
+> within the Blast Radius, stop and escalate back to IR via
+> `error_escalated_to: "IR"` instead of expanding scope.
 
 ## Decision Framework
 
@@ -115,7 +111,7 @@ suggestion (emergency worktasks run via `/worktask --emergency`; see
 
 ### Rollback Safety Checklist
 
-Rollback is SAFE when:
+Rollback is safe when:
 ```markdown
 - [ ] Issue introduced by recent deployment
 - [ ] No database schema changes
@@ -125,7 +121,7 @@ Rollback is SAFE when:
 - [ ] External dependencies unchanged
 ```
 
-Rollback is UNSAFE when:
+Rollback is unsafe when:
 ```markdown
 - [ ] Database schema changed (forward-only migrations)
 - [ ] Data transformation already applied
@@ -135,8 +131,6 @@ Rollback is UNSAFE when:
 ```
 
 ## Incident Runbook Structure
-
-Production runbooks follow this structure:
 
 ```
 1. Overview & Impact
@@ -203,6 +197,6 @@ Communication templates and common incident runbooks: `references/templates.md`.
 
 ## Integration Points
 
-`agents/incident-responder.md` runs these patterns at the IR stage; `debugging-toolkit:debugger`
+`agents/incident-responder.md` runs these patterns at the IR stage; `debugging-toolkit:debugging-toolkit-debugger`
 does root-cause analysis, `skills/shared/five-whys.md` the post-mortem analysis, and
 `agents/security-reviewer.md` takes security-incident escalations.
