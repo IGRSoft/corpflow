@@ -6,34 +6,30 @@ allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/qa-engineer.md
   - skills/worktask/SKILL.md
+  - commands/product-requirements.md
+  - commands/test-coverage.md
 ---
 
 # Test Plan Command
 
-Generate a comprehensive test plan from requirements or code changes. Creates structured test cases with coverage analysis.
-
-## Usage
-
-```
-/test-plan "Feature or requirement description"
-/test-plan --from-pr <PR number>
-/test-plan --from-file <path to requirements>
-```
+Generate a test plan with structured test cases and coverage targets from a requirement, a PR, or
+a requirements file.
 
 ## Options
 
-- `--from-pr <number>` - Generate test plan from PR changes
-- `--from-file <path>` - Generate from requirements file
-- `--coverage` - Include coverage targets
-- `--automation` - Focus on automation-ready test cases
-- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all; detected per `skills/shared/platform-detection.md`)
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--from-pr <number>` | PR number | Plan from that PR's changes |
+| `--from-file <path>` | requirements file, e.g. a PL `planning-N.md` | Plan from that file |
+| `--coverage` | — | Include coverage targets |
+| `--automation` | — | Focus on automation-ready test cases |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`; detected per `skills/shared/platform-detection.md`) |
 
 ```
+/test-plan "<feature or requirement>" | --from-pr <number> | --from-file <path> [--coverage] [--automation] [--platform <p>]
 /test-plan "User authentication with OAuth"
 /test-plan --from-pr 123 --automation
-/test-plan --from-file .context/planning-0.md --coverage    # or any planning-N.md the PL produced
+/test-plan --from-file .context/planning-0.md --coverage
 /test-plan "Payment refund flow" --platform backend
 ```
 
@@ -60,10 +56,10 @@ Generate a comprehensive test plan from requirements or code changes. Creates st
 
 ### Template — testing framework
 
-Fill the table with the **detected platform's row only** — one framework column per plan, not a
-survey. Detect the platform per `skills/shared/platform-detection.md`, take the row from
-`skills/shared/testing-strategy.md § Framework by platform` (which also carries the Apple-only
-XCTest/XCUITest split). If the repo already uses a different framework, the repo wins; note the
+Fill the table from the detected platform's row only (one framework per plan, not a survey): detect
+per `skills/shared/platform-detection.md`, take the row from
+`skills/shared/testing-strategy.md § Framework by platform`, which also carries the Apple-only
+XCTest/XCUITest split. If the repo already uses a different framework, the repo wins; note the
 deviation.
 
 ```markdown
@@ -80,10 +76,9 @@ deviation.
 ### Template — test cases
 
 Every case carries selection metadata so DV's parser can place it in the right Selected Tests
-list — grammar in `skills/shared/test-selection-syntax.md`: `@test-required` (smoke /
-critical-path), `@depends-on: <Symbol>` (one symbol per marker, cross-file coverage),
-`@test-tag:` (`smoke`, `regression`, `perf`, `ui`, `flaky`). Emit the `Required?` and
-`Dependencies` fields on every case — empty when not applicable, never omitted.
+list, per `skills/shared/test-selection-syntax.md`: `@test-required` (smoke / critical-path),
+`@depends-on: <Symbol>` (one symbol per marker), `@test-tag:` (`smoke`, `regression`, `perf`,
+`ui`, `flaky`). Emit `Required?` and `Dependencies` on every case, empty when not applicable.
 
 ```markdown
 <!-- …continued: test cases -->
@@ -105,8 +100,8 @@ critical-path), `@depends-on: <Symbol>` (one symbol per marker, cross-file cover
 #### Test case pattern
 
 Repeat that field set under `### Integration Tests` (`IT-NNN`) and `### E2E Tests` (`E2E-NNN`).
-Those cases also name the environment in **Preconditions** (mock OAuth provider, seeded test
-user) and the driver in **Automation** (`Yes (mock provider)`, `Yes (Playwright)`). Critical user
+Those cases also name the environment in Preconditions (mock OAuth provider, seeded test user)
+and the driver in Automation (`Yes (mock provider)`, `Yes (Playwright)`). Critical user
 journeys are `Priority: Critical`.
 
 ### Template — edge cases, security, test data
@@ -139,10 +134,3 @@ journeys are `Priority: Critical`.
 
 - Mock OAuth provider for CI, test database with seed data, E2E automation setup
 ```
-
-## Integration
-
-This command is typically used:
-- After `/product-requirements` - Generate tests from requirements
-- Before `/worktask` QA stage - Prepare test strategy
-- With `/test-coverage` - Identify gaps
