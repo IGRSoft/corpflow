@@ -1,8 +1,8 @@
 ---
 name: csv-export-templates
 description: Use when generating CSV export files for estimates, budgets, timelines, or reports. 13-category CSV export structure for Google Sheets import.
-# G3: no standalone value — the layout is keyed to an /estimate --detailed breakdown a user does not have on hand.
 disable-model-invocation: true
+# G3: no standalone value — the layout is keyed to an /estimate --detailed breakdown a user does not have on hand.
 ---
 
 # CSV Export Templates
