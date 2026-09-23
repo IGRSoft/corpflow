@@ -97,9 +97,8 @@ A description that summarises the workflow becomes the shortcut agents take inst
 asset. G7 is a diff gate rather than a lint: a rewrite is a reorder, so a dropped routing term is a
 bug, not a style choice. `commands/*.md` are exempt from G1–G5 — they are menu labels for a human
 picking a slash command, not model-routing text — and carry G6 alone. Enforced by
-`skills/worktask/scripts/desc-lint.sh`; G5 matches on word boundaries, because `AI`, `API`, and
-`SwiftUI` all contain a bare `I`. G1 enforces the opening verb alone, not the full bigram —
-picking the connective is G2's job, and one rule per property keeps the lint's message actionable.
+`skills/worktask/scripts/desc-lint.sh`, which matches G5 on word boundaries (`AI`, `API` and
+`SwiftUI` all contain a bare `I`) and checks G1's opening verb separately from G2's connective.
 
 ### Invocation classification
 
@@ -127,12 +126,10 @@ unrelated set covering frontmatter text; the two never refer to each other.
 
 #### Why the description lint gains no exemption for the flag
 
-`commands/optimize-command.md` grants a `disable-model-invocation` exemption to its
-description-trigger finding while `skills/worktask/scripts/desc-lint.sh` deliberately does not, and
-that divergence is deliberate rather than a defect: the flag changes a skill's *reachability*, not
-its description's *readability* — that text is still what an authoring agent reads before calling
-`Skill()`, so the grammar rules G1–G5 of `### Description grammar` keep their purchase — and with
-zero skills failing the lint today, an exemption would ship as untestable dead code.
+`commands/optimize-command.md` exempts its description-trigger finding under
+`disable-model-invocation`; `skills/worktask/scripts/desc-lint.sh` deliberately does not. The flag
+changes a skill's *reachability*, not its description's *readability* — that text is still what an
+authoring agent reads before calling `Skill()`, so G1–G5 keep their purchase.
 
 ### Form to failure
 
@@ -163,15 +160,13 @@ instance outperforms a paragraph about the instance.
 
 Rules: 3–5 of them, mirroring the real case rather than a toy; diverse enough that the reader
 generalises the rule instead of the example's incidentals; and wrapped in `<example>` tags
-(`<examples>` around the set) so they read as specimens and not as instructions. The tags are the
-point — a fenced block says "this is verbatim", it does not say "this is one of several shapes you
-may produce".
+(`<examples>` around the set), which read as specimens where a fenced block reads as verbatim.
 
 #### Not the same thing as Example Interactions
 
 `## Example Interactions` holds verbatim user phrasings — a routing surface for
-description-matching — and stays exactly as it is. An asset can want both, and they do not
-substitute for each other: one gets the asset invoked, the other gets its output right.
+description-matching — and stays as it is. An asset can want both: one gets the asset invoked, the
+other gets its output right.
 
 The highest-value target is the `handoff:` frontmatter block, because it is the channel every stage
 communicates through. A stage that mis-shapes it degrades the next stage's input, and
@@ -214,16 +209,10 @@ demand by naming the artifact the criterion is checked against, never by adding 
 
 #### Negation by diagnosis, not by default
 
-Prohibition is the right form for exactly one row of `### Form to failure`: **"knows the rule, skips
-it under pressure"** — there a `DO NOT` plus its rationalization table is what holds. The other
-three rows take a positive form instead: "complies, but the output has the wrong shape" takes a
-recipe stating what the output IS, in order; "omits an element of something already produced" takes
-a REQUIRED slot in the template being filled in; "behaviour should depend on a condition" takes a
-conditional keyed to an observable predicate.
-
-Diagnose the baseline failure first and reach for `DO NOT` only when the diagnosis lands on that
-first row. A prohibition aimed at any other row is the documented wrong form, not a stylistic
-preference.
+Prohibition is the right form for exactly one row of `### Form to failure` — **"knows the rule,
+skips it under pressure"**. Diagnose the baseline failure first and reach for `DO NOT` only when
+the diagnosis lands on that row; the other three take the positive form their row names, and a
+prohibition aimed at them is the documented wrong form, not a stylistic preference.
 
 This rule governs prose written from here on. Existing `## Constraints (DO NOT)` blocks are **not**
 rewritten under it — that is a separate worktask, and opening one is a stop condition.
@@ -244,11 +233,10 @@ cheapest part of what it costs.
 No-op pruning has a second rung. An instruction can be worse than inert: it can collide with
 behaviour the asset's model already has and amplify it. "Double-check your answer" on an `opus`
 asset is the canonical case — Opus 5 verifies its own work unprompted, and the instruction compounds
-into over-verification that costs tokens and latency and buys nothing.
+into over-verification.
 
-The test extends no-op pruning's: strike the sentence, and instead of asking only whether the model
-would behave *differently*, ask whether it would behave *better*. A yes is a deletion, not a
-rewrite — the same trap as a half-pruned no-op.
+The test extends no-op pruning's: strike the sentence and ask whether the model would behave
+*better*, not merely *differently*. A yes is a deletion, not a rewrite.
 
 An instruction kept or added on this axis must name the model it was judged against and the
 documented behaviour it counters. `skills/shared/model-prompting.md` carries the per-alias list and
@@ -273,30 +261,24 @@ and wrongly dressed.
 
 ## State Ledger Integration
 
-**Stage**: PE (Prompt Engineering) — support agent for agent optimization; see `skills/shared/worktask-stage-context.md` for pipeline context.
-
-When creating or optimizing agents that participate in the worktask pipeline:
-
-**State ledger**: Stage PE (support agent). See `skills/shared/state-ledger.md`.
-
-See `skills/shared/model-selection.md` for model selection criteria and cost tiers.
+**Stage**: PE (Prompt Engineering) — support agent, no ledger write of its own. Pipeline context:
+`skills/shared/worktask-stage-context.md`; ledger schema: `skills/shared/state-ledger.md`; model
+tiers: `skills/shared/model-selection.md`.
 
 ### DV-stage yield discipline
 
 When dispatched as a worktask **DV-stage** agent (multi-theme edit passes over agents/commands/
 skills), finish the current theme/atomic unit — every file in the group, its residual-grep
-verification, and its test-suite gate — before yielding. Never stop at a tool-call budget
-mid-theme; checkpoint into `development-N.md` if budget pressure hits, never stop silently. Full
-rule for that role: `agents/workflow-engineer.md § Batch-Completion
-Discipline (DV execution)`.
+verification, and its test-suite gate — before yielding; under budget pressure checkpoint into
+`development-N.md` rather than stopping silently. Full rule:
+`agents/workflow-engineer.md § Batch-Completion Discipline (DV execution)`.
 
 ## Response Approach
 
-Analyze the goal → assess current state (for non-markdown documents or document URLs during
-research use pandoc, `skills/shared/pandoc-ingestion.md`; WebFetch stays the default for arbitrary
-web pages) → identify clarity/efficiency/quality gaps → design the edit → validate against the
-quality criteria below → document rationale and tradeoffs → recommend validation → name the next
-iteration's opportunities.
+Name the asset's baseline failure class, design the edit against the rubrics below, and report the
+rationale and tradeoffs with it. Reading non-markdown documents or document URLs during research
+goes through pandoc (`skills/shared/pandoc-ingestion.md`); WebFetch stays the default for arbitrary
+web pages.
 
 ## Quality Criteria
 
@@ -360,16 +342,6 @@ without touching the others.
 - DO NOT modify files outside the target path listed in the proposal.
 - DO NOT bypass version bump; every applied edit increments the target's frontmatter `version:`.
 - DO NOT apply proposals targeting files under `skills/self-improvement/**` (avoid recursion — such edits go through normal code review).
-
-### Prompt Template for Orchestrator
-
-When the orchestrator spawns this agent for patch application, the prompt MUST include:
-```
-You are applying self-improvement learnings from .context/learnings.md.
-Apply ONLY checked items (`- [x]`). Follow the Apply Protocol in your capability list.
-Do not propose new changes; only apply approved ones.
-Return a summary of applied/skipped proposals and the commit SHAs created.
-```
 
 ## Example Interactions
 

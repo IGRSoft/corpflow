@@ -23,15 +23,7 @@ related:
 
 # Improve Yourself Command
 
-Manual entry point for the `self-improvement` skill — run the retrospective **outside** a full worktask (after ad-hoc edits, between worktasks, or to iterate on proposals). `skills/self-improvement/SKILL.md` does the work; this command is the CLI surface and wires user approval through to `prompt-engineer`.
-
-## Usage
-
-```
-/improve-yourself
-/improve-yourself [--since <ref>] [--target agents|skills|commands|all]
-/improve-yourself [--dry-run] [--no-scope-filter] [--apply]
-```
+Manual entry point for the `self-improvement` skill — run the retrospective **outside** a full worktask (after ad-hoc edits, between worktasks, or to iterate on proposals). The ST-stage invocation is the production path; both run the same pipeline and write the same `.context/learnings.md`. `skills/self-improvement/SKILL.md` does the work; this command is the CLI surface and wires user approval through to `prompt-engineer`.
 
 ## Options
 
@@ -65,12 +57,11 @@ The skill owns the pipeline; this command wires flags around it:
 
 ### Step 4 — Label Append
 
-Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`. Appends one row per kept change to the label dataset under plugin data. Falls back to `evals/failure-labels.jsonl` with stderr notice if no plugin data dir exists. Skipping this discards all labels the pipeline produced.
+Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`, which carries the dataset-resolution ladder and the fallback notice. Skipping this discards all labels the pipeline produced.
 
 #### Invocation options
 
 - `--worktask-id` from `.context/state.json`; outside worktask, pass `--since`, uses `manual-<YYYYMMDD-HHMMSS>`.
-- Runs whether or not the user approves proposals — rejected proposals are still evidence of needed changes.
 - `--dry-run` is read-only; reports row count that *would* append. Re-run without `--dry-run` to record.
 - `SELF_IMPROVE_LABELS=0` makes this step a no-op.
 
@@ -80,7 +71,7 @@ The closing `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline
 
 #### Aggregating the dataset
 
-Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories). It resolves the dataset the same way, fallback included.
+Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
 
 ### Step 6 — Apply Phase
 
@@ -110,10 +101,6 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 - Check the boxes next to proposals you want applied
 - Re-run with `--apply` (or reply "apply" if the current call used --apply)
 ```
-
-## Relationship to Automatic ST Invocation
-
-Same skill, same `.context/learnings.md`. The ST-stage invocation is the production path; use this command outside a full worktask, to iterate on proposals (`--since`/`--target`), or to `--dry-run` the proposal set before applying.
 
 ## Constraints (DO NOT)
 

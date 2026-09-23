@@ -31,7 +31,7 @@ Execute the five steps in order. If any step fails, write the failure to `.conte
 
 **Output:** one plugin-root-relative path per line under section `## Context Set` of `.context/logs/self-improve-<ts>.log`. Deduplicate on path; skip paths not present on disk.
 
-#### Step 1 — two rules the set depends on
+#### Step 1 — rules the set depends on
 
 **Source 4 is not optional.** Sources 1–3 name *agents*, so a hook or a bundled script can drive most of a run and still be invisible to the retrospective — the class of participant that most often needs correcting after delivery.
 
@@ -78,7 +78,7 @@ Happy path: a prompt file (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`)
 
 Write it per `references/retrospective-template.md` — header block, What Worked / What the User Changed / Proposed Updates / Deferred / Out-of-Context Discards, approval footer. Follow that template rather than improvising: it fixes proposal ordering and the sub-bullets each numbered, independently tickable `- [ ]` proposal carries.
 
-**Versioning:** a proposal that modifies a file's frontmatter MUST instruct prompt-engineer to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
+**Versioning:** a proposal that modifies a file's frontmatter instructs prompt-engineer to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
 
 ### Step 5b — Append to the label dataset
 
@@ -126,7 +126,7 @@ An empty value or the unsubstituted literal token counts as unset. Under plugin 
 
 ##### An empty join is a silent no-op
 
-**A non-empty context set is necessary, not sufficient.** The pipeline is four stages — `build-context-set.sh` → `detect-user-changes.sh` → `map-and-filter.sh` → `append-labels.sh` — and any of three conditions empties the run: zero context paths, zero changed paths, or a join that matches nothing because no mapping rule emits the targets the set actually holds. All three look identical to "the user made no edits". `pipeline-counts.sh` records the surviving count at each of the four stages, so a zero-row result is never read as a clean run.
+**A non-empty context set is necessary, not sufficient.** Three conditions empty a run and all three look identical to "the user made no edits": zero context paths, zero changed paths, or a join that matches nothing because no mapping rule emits the targets the set actually holds. `pipeline-counts.sh` records the surviving count at each of the four stages, so a zero-row result is never read as a clean run.
 
 #### Step 5b — privacy and opt-out
 
@@ -173,7 +173,7 @@ Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
 ## Hand-off to prompt-engineer
 
-After user approval (orchestrated per `commands/worktask.md`), each checked item goes to `prompt-engineer`, which applies the edit, bumps `version:` in frontmatter, and creates one commit per proposal. Protocol: `agents/prompt-engineer.md § Self-Improvement Patch Application`.
+After user approval (orchestrated per `commands/worktask.md`), each checked item goes to `prompt-engineer`, one commit per proposal: `agents/prompt-engineer.md § Self-Improvement Patch Application`.
 
 ## Constraints (DO NOT)
 
