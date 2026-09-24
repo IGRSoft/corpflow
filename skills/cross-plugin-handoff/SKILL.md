@@ -76,13 +76,13 @@ Provide Swift app architecture for the corpflow worktask AR stage:
 4. Concurrency strategy (actors, async/await patterns)
 5. Navigation pattern
 6. Swift test architecture (unit, integration, UI)
-7. Write full output to .context/swift-architecture.md
+7. Write full output to .context/apple-architecture.md
 8. Return compressed summary (max 500 tokens)
 ```
 
 ### Return and Merge Protocol
 
-The architect writes `.context/swift-architecture.md` in full and returns a ≤500-token summary; `software-architector` reads the file when merging. `architecture.md` gains `## Swift App Architecture` with `### Pattern` (+ rationale), `### Module Structure`, `### State & Dependency Boundaries`, `### Concurrency Strategy` and `### Navigation Pattern`; its `## Test Architecture` splits into system tests (`software-architector`) and Swift app tests (`apple-architector`).
+The architect writes `.context/apple-architecture.md` in full and returns a ≤500-token summary; `software-architector` reads the file when merging. `architecture.md` gains `## Swift App Architecture` with `### Pattern` (+ rationale), `### Module Structure`, `### State & Dependency Boundaries`, `### Concurrency Strategy` and `### Navigation Pattern`; its `## Test Architecture` splits into system tests (`software-architector`) and Swift app tests (`apple-architector`).
 
 System constraints override app-level preferences: where the architect's pattern conflicts with the system architecture (e.g. TCA's unidirectional flow vs. required bidirectional API streaming), `software-architector` takes the compatible option and records the trade-off in an ADR.
 

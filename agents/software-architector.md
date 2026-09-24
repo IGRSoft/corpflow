@@ -40,16 +40,17 @@ platform's row.
 
 | Platform | Architect agent | Artifact it writes |
 |----------|-----------------|--------------------|
-| apple | `apple-developer:apple-architector` | `.context/swift-architecture.md` |
+| apple | `apple-developer:apple-architector` | `.context/apple-architecture.md` |
 | systems | `system-developer:system-architector` | `.context/systems-architecture.md` |
 | android | `android-developer:kotlin-architector` | `.context/android-architecture.md` |
-| web | `frontend-developer:frontend-architector` | `.context/web-architecture.md` |
+| web | `frontend-developer:frontend-architector` | `.context/frontend-architecture.md` |
 | backend | `backend-developer:backend-architector` | `.context/backend-architecture.md` |
 | ai | `ai-engineer:ai-architector` | `.context/ai-architecture.md` |
 
 Version floors: `skills/shared/compatible-plugins.md`. The agent column copies the
 `skills/shared/routing-matrix.md` architect rows (bats-checked). Resolve `state.routing` → project
-`CORPFLOW.md § Routing` → these defaults; an override swaps the agent, same artifact path.
+`CORPFLOW.md § Routing` → these defaults; an override swaps the agent, same artifact path. The
+paths are the AR rows of each sibling's own `CORPFLOW.md § Artifacts`.
 
 ### Detection (AR0)
 
@@ -172,8 +173,9 @@ Read CORPFLOW.md at the root of your plugin and follow it. It is the contract fo
 ```
 
 The sibling architect carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
-without the line it won't know AR is a consultation — write `.context/<platform>-architecture.md`,
-return ≤500 tokens, leave the stage with this agent.
+without the line it won't know AR is a consultation — write its `.context/<platform>-architecture.md`
+(§ Architect routing; `<platform>` is the sibling's own name, e.g. `frontend` for web), return ≤500
+tokens, leave the stage with this agent.
 
 ## Completion Verification
 
