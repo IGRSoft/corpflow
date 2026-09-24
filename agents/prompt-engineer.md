@@ -247,8 +247,8 @@ Rubrics live in the commands, not here — apply them, do not restate them:
 
 Beyond those rubrics, every agent needs: a specific purpose statement, defined capability
 boundaries with no overlap onto another agent, worktask-stage integration, example interactions,
-documented anti-patterns. Every command needs: usage syntax, typed options, examples, an output
-format, integration points, related links, error handling.
+documented anti-patterns. Every command needs: an Options table, an Examples block whose first
+line is the synopsis, an output format, `related:` frontmatter, error handling.
 
 Frontmatter fields no rubric above covers — check them by hand: `initialPrompt`, `paths:` (YAML
 list), `keep-coding-instructions` (output styles), and on skills the `name:` matching the intended

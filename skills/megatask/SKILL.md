@@ -118,7 +118,7 @@ conflict / dry-run / self-test passed; 1 refusal or usage error; 2 `awk` missing
 
 `N` (bare integer) ⇒ milestone; `--issues 12,15,18` ⇒ explicit set (may span milestones); together,
 `--issues` filters within milestone `N`. At least one is required. Full flag surface:
-`../../commands/megatask.md § Usage`. Cross-issue concurrency is orchestrator-derived (§ Track
+`../../commands/megatask.md § Options`. Cross-issue concurrency is orchestrator-derived (§ Track
 Derivation); intra-issue async belongs to each issue's TL stage.
 
 ## Dependency & Blocker Resolution (DAG)

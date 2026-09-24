@@ -16,17 +16,20 @@ and the required body sections.
 
 ## Options
 
-- `--purpose <description>` - Agent purpose (required)
-- `--model <haiku|sonnet|opus>` - Model selection (default: auto-select)
-- `--template <minimal|standard|comprehensive>` - Template style (default: standard)
-- `--tools <preset|list>` - Tool access preset or comma-separated list (see § Tool Presets)
-- `--stage <code>` - Worktask stage integration: PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR
-- `--output <path>` - Output path (default: agents/<name>.md)
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--purpose <description>` | text | Agent purpose (required) |
+| `--model <tier>` | `haiku`, `sonnet`, `opus` | Model selection (default: auto-select) |
+| `--template <style>` | `minimal`, `standard`, `comprehensive` | Template style (default: `standard`) |
+| `--tools <preset\|list>` | § Tool Presets, or a comma-separated list | Tool access |
+| `--stage <code>` | PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR | Worktask stage integration |
+| `--output <path>` | path | Output path (default: `agents/<name>.md`) |
 
 ## Examples
 
 ```
-/create-agent <name> --purpose <description>
+/create-agent <name> --purpose <description> [--model <tier>] [--template <style>] [--tools <preset|list>] [--stage <code>] [--output <path>]
+
 /create-agent "database-admin" --purpose "Database schema design, query optimization, and migration management"
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal
 /create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read

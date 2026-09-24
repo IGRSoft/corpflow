@@ -79,30 +79,29 @@ Must Apply / Should Apply / Consider — numbered, most impactful first.
 
 | Area (`--focus`) | Criteria |
 |------|----------|
-| `usage` | Clear syntax with all arguments shown; optional vs required indicated; sensible defaults documented |
-| `options` | All options documented with types; valid values specified for enums; defaults stated explicitly; purpose clear from description |
+| `usage` | § Examples opens on the synopsis line, with every argument shown and optional vs required marked; no separate `## Usage` restating it |
+| `options` | § Options is a table; every option documented with its type, enum values and default; purpose clear from the Effect column |
 | `examples` | Minimum 3 diverse examples; cover common use cases; show option combinations; realistic values |
 | `output` | Output format structured and parseable; all fields documented; status indicators consistent; actionable information |
-| `integration` | Related commands linked; agent relationships documented; worktask stage usage noted |
-| `body` | Passes `commands/prompt-audit.md § Body Rules`. Rules 5–7 read the command's own `model:` — see `skills/shared/model-prompting.md` |
+| `integration` | `related:` frontmatter lists the related commands and agents; worktask stage use noted where the command has one |
+| `body` | Passes `commands/prompt-audit.md § Body Rules`; commands carry no model, so the model-conditioned rules 5–6 do not fire |
 
 ### Frontmatter Audit
 
-Runs on every command regardless of `--focus`. Rubric: `skills/shared/model-selection.md § Cost Tiers`.
+Runs on every command regardless of `--focus`.
 
 #### Frontmatter Audit — P0 fields
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `description` | ≤250 characters, measured as in `/optimize-agent`. | P0 |
-| `model` | Strict membership: ∈ {`haiku`, `sonnet`, `opus`}, tier per § Cost Tiers. Flag commands that optimize other prompts (`/optimize-*`, `/create-*`, `/prompt-audit`) set to `sonnet` or below. | P0 |
 
 #### Frontmatter Audit — P1 fields
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
 | `allowed-tools` | Explicit list with Bash subcommand scoping (`Bash(git:*)`, `Bash(gh:*)`, `Bash(swift test:*)`); bare `Bash` only when the command's purpose is general shell access. Flag `Write` declared without `Read` (likely incomplete). | P1 |
-| `argument-hint` | Matches the flag surface in § Options and the § Examples synopsis (or `## Usage`, where one remains): flag each `--<flag>` the hint omits. Square brackets for optional positional, angle brackets for required. | P1 |
+| `argument-hint` | Matches the flag surface in § Options and the § Examples synopsis: flag each `--<flag>` the hint omits. Square brackets for optional positional, angle brackets for required. | P1 |
 | `description` trigger phrase | Include a recognised trigger phrase (`Use when …`, `Use after …`, `Use PROACTIVELY when …`, `Auto-loads when …`, `Reference when …`, `Apply for …`) so the model can decide whether to invoke. Exempt: `disable-model-invocation: true` (slash-only) and `paths:` frontmatter (path-triggered) — neither is invoked from its description. | P1 |
 
 #### Frontmatter Audit — P2 consistency checks

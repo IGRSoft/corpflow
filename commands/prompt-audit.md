@@ -60,7 +60,7 @@ Report skeleton — sections in this order:
 | Agent | Model | Clarity | Efficiency | Consistency |    + Model Distribution table
 
 ## Command Analysis
-| Metric | Commands | Percentage |   (has Usage / Options / 3+ Examples / Output Format / Related / platform param)
+| Metric | Commands | Percentage |   (has Options table / synopsis-first Examples / 3+ Examples / Output Format / `related:` / platform param)
 
 ## Model-Conditioned Findings
 | Asset | Model | Rule | Finding | Fix |   (body rules 5-7, plus rule 7's per-asset count)
@@ -105,11 +105,11 @@ Continuing the same order, after Consistency Checks:
 
 ### Command Rules
 
-1. Usage section with syntax
-2. Options section with types and defaults
+1. § Examples opens on the synopsis line (`/<name> <args>`), which replaces a separate `## Usage`
+2. § Options is a table giving each option's values and default
 3. Minimum 3 diverse examples
 4. Output format specification
-5. Related section with links
+5. `related:` frontmatter lists the commands and agents it works with, and every entry resolves
 6. Consistent option format
 7. Body passes § Body Rules
 
@@ -217,7 +217,7 @@ downgrade cannot tell earned emphasis from inflated.
 
 1. Platform values: `<apple|android|web|systems|backend|ai|all>`, matching `skills/shared/platform-detection.md`. A command whose scope excludes some platforms may list a subset (the UI-only `design-*` commands use `<apple|android|web|all>`). Flag Apple sub-platforms (`iOS|macOS`) or a platform advertised with no content path behind it.
 2. Option syntax: `--option <value>` or `--flag`
-3. Section ordering: Usage → Options → Examples → Output → Integration → Related
+3. Section ordering: Options → Examples → Output Format, then the command's own sections
 4. Terminology standardized
 
 ### Frontmatter Parsing Convention

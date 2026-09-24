@@ -35,12 +35,9 @@ mechanics: `skills/megatask/SKILL.md`. Two constraints bound every run:
 - On a dependency cycle, or when the ledger cannot be read or written: stop and report. Never guess
   an order, never fall back to alternative planning.
 
-## Usage
-
-`N` (bare positional integer) selects a milestone, `--issues` an explicit set; at least one is
-required, and together `--issues` filters within milestone `N`.
-
 ## Options
+
+`N` or `--issues` is required; given both, `--issues` filters within milestone `N`.
 
 | Option | Effect |
 |--------|--------|
@@ -56,6 +53,8 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 ## Examples
 
 ```bash
+/megatask [N] [--issues N,N,N] [--secure] [--platform <p>] [--dry-run]
+
 /megatask 7                       # milestone 7 by DAG + priority
 /megatask 7 --secure              # …with the 11-stage secure pipeline per issue
 /megatask 7 --issues 12,15        # subset within milestone 7
