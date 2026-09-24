@@ -331,8 +331,8 @@ so. Omit any column the ledger cannot support rather than inventing a number for
 
 | Stage | Agent | Model | Tokens (in/out) | Duration | Cost | Retries |
 |-------|-------|-------|-----------------|----------|------|---------|
-| DV | developer | opus | 8200 / 4600 | 3m08s | $0.47 | 1 |
-| **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.90** | **1** |
+| DV | developer | opus | 8200 / 4600 | 3m08s | $0.12 | 1 |
+| **Total** | — | — | **23,400 / 12,000** | **6m40s** | **$0.23** | **1** |
 
 ```
 

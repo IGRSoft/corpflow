@@ -51,12 +51,14 @@ Estimation`):
 | Context window usage | +10-30% |
 
 Scale check: a medium feature (`/worktask`, SP 3-5) is 18-30 hours × $150/hr = $2,700-$4,500 of
-human time against ~100K tokens ≈ $0.35 of AI cost — AI adds <0.01% to total project cost.
+human time against ~100K tokens ≈ $0.36 of AI cost at the sonnet rate — AI adds <0.01% to total project cost.
 
 ## AI Cost vs Development Time Tradeoff
 
 | Approach | Dev Time | AI Cost | Best For |
 |----------|----------|---------|----------|
 | Minimal AI | 100% | ~$0 | Simple, familiar tasks |
-| Balanced | 70-80% | $0.20-0.50 | Standard features |
-| AI-Heavy | 50-60% | $0.50-2.00 | Complex, exploratory |
+| Balanced | 70-80% | Standard band | Standard features |
+| AI-Heavy | 50-60% | Complex band | Complex, exploratory |
+
+Bands: `SKILL.md § AI Agent Cost Estimation`.

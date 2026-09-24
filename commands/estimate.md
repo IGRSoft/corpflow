@@ -121,7 +121,7 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | Section | Content |
 |---------|---------|
 | `### Budget Calculation` | Base Hours (SP × multiplier), Buffer (15%), Total Hours, Budget = Total × `--dev-rate`. **Canonical math**: run `python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py --size <S> --rate <R>` and read `total_hours` + `budget` from the JSON output. |
-| `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: run `python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py --tokens <n> --model <m>` and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
+| `### AI Cost` | Est. tokens, AI cost, % of total budget. **Canonical math**: run `python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py --tokens <n> --model <m>` (add `--input-tokens`/`--output-tokens` when the split is known) and read `ai_cost.usd`. Formula + token bands: `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`. |
 
 If `--dev-rate` is omitted, the Budget row is replaced by
 `[budget skipped: --dev-rate not set]` and only Base/Buffer/Total Hours are emitted.

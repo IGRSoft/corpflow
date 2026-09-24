@@ -79,7 +79,7 @@ Above 200 lines, read a known location with `offset`/`limit` instead of the whol
 | Documentation-only | Skip DV stage, minimal QA stage |
 | Hotfix / trivial change | `/worktask` — PL0 dynamic sizing drops AR/TL/DC for low complexity |
 
-Cost by size (PL0-sized): trivial ~1-4 stages $0.01-0.10 · standard 9 stages $0.20-0.40 · complex 9 + iterations $0.50-1.00+.
+Cost by size (PL0-sized): trivial ~1-4 stages · standard 9 stages · complex 9 + iterations; dollar ranges per size are the token bands in `skills/estimation-methodology/SKILL.md § AI Agent Cost Estimation`.
 
 ## Prompt Caching (1h TTL) & Handoff Protocol
 
@@ -120,13 +120,17 @@ CC staggers same-prefix siblings on a fan-out so later ones read the cached pref
 ### Cost Estimation Formula
 
 ```
-Estimated Cost = Base Tokens × Model Cost × (1 + Retry Factor) × Complexity Multiplier
+Estimated Cost = (Input Tokens × Input Rate + Output Tokens × Output Rate)
+                 × (1 + Retry Factor) × Complexity Multiplier
 ```
 
-- **Base Tokens**: per-stage baselines (`${CLAUDE_SKILL_DIR}/references/token-baselines.md`)
-- **Model Cost**: haiku $0.25/1M · sonnet $3/1M · opus $15/1M · fable (Fable 5.1) $10/$50 per Mtok, $0.25/Mtok cache reads
+- **Base Tokens**: per-stage baselines (`${CLAUDE_SKILL_DIR}/references/token-baselines.md`); Base Tokens = Input Tokens + Output Tokens
+- **Default split**: 80:20 input:output, applied when only Base Tokens is known, or when one side is known and the other is not. At that split one million tokens costs 1.8 × the tier's input rate
+- **Input Rate / Output Rate**: per tier in `skills/shared/model-selection.md § Cost Tiers`. The formula prices all input as uncached, so cache reads bring the real figure down
 - **Retry Factor**: 0.1 low · 0.2 medium · 0.5 high complexity
 - **Complexity Multiplier**: 1.0 standard · 1.5 large codebase · 2.0 novel domain
+
+`skills/estimation-methodology/scripts/estimate-calc.py` implements this formula (`--tokens`, or `--input-tokens`/`--output-tokens`).
 
 ### Budget Alert Thresholds
 

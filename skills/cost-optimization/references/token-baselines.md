@@ -2,9 +2,9 @@
 
 ## Per-Stage Token Baselines
 
-Per-stage typical token ranges are the **Typical tokens** column of `skills/context-compression/SKILL.md § Stage Budget Table`; price a row with the tier rate in `skills/shared/model-selection.md § Cost Tiers`.
+Per-stage typical token ranges are the **Typical tokens** column of `skills/context-compression/SKILL.md § Stage Budget Table`; price a row with `skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
 
-**Total Worktask Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet).
+**Total Worktask Range**: 58,000-123,000 tokens (~$0.21-0.44 for sonnet at the default split, before retry and complexity multipliers).
 
 ## Context Window Efficiency Improvements
 
@@ -94,14 +94,14 @@ Constitutional compliance outranks cost optimization. Don't optimize in these ca
 
 ### Ethics Review Cost Budgeting
 
-Ethics work runs on opus.
+Ethics work runs on opus. Costs are the opus rate at the default split of `SKILL.md § Cost Estimation Formula`, before retry and complexity multipliers.
 
 | Ethics Activity | Typical Tokens | Est. Cost |
 |-----------------|----------------|-----------|
-| Quick ethics check | 2,000-5,000 | $0.03-0.075 |
-| Standard ethics review | 5,000-10,000 | $0.075-0.15 |
-| Comprehensive ethics audit | 15,000-30,000 | $0.225-0.45 |
-| Hard constraint analysis | 5,000-10,000 | $0.075-0.15 |
+| Quick ethics check | 2,000-5,000 | $0.014-0.036 |
+| Standard ethics review | 5,000-10,000 | $0.036-0.072 |
+| Comprehensive ethics audit | 15,000-30,000 | $0.108-0.216 |
+| Hard constraint analysis | 5,000-10,000 | $0.036-0.072 |
 
 ### Constitutional Budget Allocation
 

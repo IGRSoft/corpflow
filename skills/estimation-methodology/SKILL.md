@@ -21,7 +21,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-cal
   --size <XS|S|M|L|XL> [--level <junior|mid|senior|expert>] [--multiplier <h>] \
   [--rate <hourly>] \
   [--factors <f1> <f2> <f3> <f4> <f5>] \
-  [--tokens <n>] [--model <haiku|sonnet|opus>] \
+  [--tokens <n>] [--input-tokens <n>] [--output-tokens <n>] [--model <haiku|sonnet|opus|fable>] \
   [--retry-complexity <low|medium|high>] [--codebase-type <standard|large|novel>] \
   [--phase-hours <min> <max>]
 ```
@@ -267,23 +267,26 @@ set grows. Work that needs the plan rewritten goes back to the human gate.
 
 ## AI Agent Cost Estimation
 
-Token bands by task type:
+Token bands by task type. Est. AI Cost is `scripts/estimate-calc.py` at the default split before
+retry and complexity multipliers: the low end at the cheaper model of the mix, the high end at the
+dearer (mixed = sonnet to opus).
 
 | Task Type | Typical Tokens | Model Mix | Est. AI Cost |
 |-----------|----------------|-----------|--------------|
-| Trivial | 5,000-10,000 | haiku/sonnet | $0.01-0.03 |
-| Simple | 15,000-30,000 | sonnet | $0.05-0.10 |
-| Standard | 60,000-120,000 | mixed | $0.20-0.50 |
-| Complex | 150,000-300,000 | mixed | $0.50-1.50 |
-| Large | 300,000+ | mixed | $1.50+ |
+| Trivial | 5,000-10,000 | haiku/sonnet | $0.01-0.04 |
+| Simple | 15,000-30,000 | sonnet | $0.05-0.11 |
+| Standard | 60,000-120,000 | mixed | $0.22-0.86 |
+| Complex | 150,000-300,000 | mixed | $0.54-2.16 |
+| Large | 300,000+ | mixed | $1.08+ |
 
 ### AI Budget Planning Formula
 
 ```
-AI Cost = Base Tokens × Model Rate × (1 + Retry Factor) × Complexity Multiplier
+AI Cost = (Input Tokens × Input Rate + Output Tokens × Output Rate)
+          × (1 + Retry Factor) × Complexity Multiplier
 ```
 
-Factor values (Model Rate, Retry Factor, Complexity Multiplier):
+The default input:output split, the factor values and where the rates live:
 `skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
 
 Codebase/files/tests/docs/retries/context multipliers, the human-vs-AI scale check, and the

@@ -10,19 +10,32 @@ lives in `skills/shared/stage-codes.md`; how to write a prompt for the chosen mo
 
 ## Cost Tiers
 
-| Model | Relative Cost | Cost/1M Tokens | Use For |
-|-------|---------------|----------------|---------|
-| **haiku** | 1x (baseline) | ~$0.25 | Formatting, routing, checklists, status checks |
-| **sonnet** | ~10x haiku | ~$3.00 | Implementation, analysis, test design, coordination |
-| **opus** | ~50x haiku | ~$15.00 | Architecture decisions, review gates, complex reasoning, meta-optimization |
+Standard API rates, USD per million tokens, for the model each alias resolves to (§ Aliases).
+
+| Alias | Model | Input $/Mtok | Output $/Mtok | Cache read $/Mtok | Relative cost | Use For |
+|-------|-------|--------------|---------------|-------------------|---------------|---------|
+| **haiku** | Haiku 4.5 | 1.00 | 5.00 | 0.10 | 1x (baseline) | Formatting, routing, checklists, status checks |
+| **sonnet** | Sonnet 5 | 2.00 | 10.00 | 0.20 | 2x haiku | Implementation, analysis, test design, coordination |
+| **opus** | Opus 5.5 | 4.00 | 20.00 | 0.20 | 4x haiku | Architecture decisions, review gates, complex reasoning, meta-optimization |
+| **fable** | Fable 5.1 | 10.00 | 50.00 | 0.25 | 10x haiku | Operator override only, never a stage default |
+
+Relative cost holds at any input:output mix, since every tier prices output at 5x input. Dollars:
+`skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
+
+### Rate ownership
+
+This table owns the rates; everything else points here.
+`skills/estimation-methodology/scripts/estimate-calc.py` keeps the one code copy, and
+`tests/python/test_estimate_calc.py` fails when the two drift.
+Re-check the rates against the `claude-api` skill whenever an alias moves to a new model.
 
 ## Aliases
 
 | Alias | Resolves to | Context | Pricing |
 |-------|-------------|---------|---------|
-| `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus | 1M by default, no usage-credit gate | $4/$20 per Mtok, $0.20/Mtok cache reads; fast mode multiplier on top |
-| `sonnet` | Sonnet 5, the Claude Code default model | native 1M | `/model` or the `claude-api` skill |
-| `fable` | Fable 5.1 (`claude-fable-5-1`), Mythos-class top reasoning. Claude apps gateway sessions still resolve `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | $10/$50 per Mtok, $0.25/Mtok cache reads |
+| `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus | 1M by default, no usage-credit gate | § Cost Tiers; fast mode multiplier on top |
+| `sonnet` | Sonnet 5, the Claude Code default model | native 1M | § Cost Tiers |
+| `fable` | Fable 5.1 (`claude-fable-5-1`), Mythos-class top reasoning. Claude apps gateway sessions still resolve `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | § Cost Tiers |
 | `haiku` | current Haiku | standard | § Cost Tiers |
 
 Opus-tier stages follow the `opus` alias to each new default Opus with no plugin change. `fable` is
