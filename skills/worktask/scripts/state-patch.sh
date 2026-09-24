@@ -1404,7 +1404,7 @@ _spill_evicted_items() {
   [[ "$pre_len" -gt "$post_len" ]] || return 0
 
   # Attribution, in the order the writer's own identity becomes known: parsed frontmatter,
-  # then --stage, then the code behind --task-id (the only identity a --facts-only call has).
+  # then --stage, then the code behind --task-id (the only identity a standalone --facts call has).
   local from_stage
   from_stage="${PARSED_STAGE:-${STAGE_ARG:-${SWEEP_STAGE_FALLBACK:-}}}"
   [[ -n "$from_stage" ]] || from_stage="unknown"
@@ -1924,7 +1924,7 @@ if [[ -n "$RESOLVE_CODE_ARG" ]]; then
     printf >&2 'no state.json at %s — cannot resolve a task id\n' "$STATE_PATH"
     exit 1
   fi
-  # Ambiguity is exit 4 here too: --resolve-code is what the orchestrator asks before it
+  # Ambiguity is exit 4 here too: --resolve-task-id is what the orchestrator asks before it
   # patches, so answering with a guess would only move the mis-slot one call later.
   if ! _RESOLVED=$(resolve_task_id "$RESOLVE_CODE_ARG"); then
     exit 4
@@ -1990,7 +1990,7 @@ fi
 # orchestrator calls this once, at init).
 if [[ -n "$RESOLVE_MODELS_OP" ]]; then
   # model_resolve/model_override_rows signal "no row" and "section absent" via a plain
-  # nonzero `return` — routine fail-open control flow (ad5), not an exception. The global
+  # nonzero `return` — routine fail-open control flow, not an exception. The global
   # ERR trap does not exempt a `return` following `||`/`if` (bash only exempts the TEST,
   # never the consequent), so it fires once per miss across 16 agents without this. The op
   # always exits before falling through, so disabling it for the block's duration is safe.
@@ -2028,7 +2028,7 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
     [ -r "$_RM_AUDIT_LIB" ] && { . "$_RM_AUDIT_LIB" || true; }
   fi
 
-  # ad2 rule 4 makes the extractor fail-closed (exit 3 on zero rows or a bad row); a
+  # model-matrix-lib.sh hardening rule 4 makes the extractor fail-closed (exit 3 on zero rows or a bad row); a
   # process-substitution `while … done < <(model_matrix_rows)` discards that exit and a
   # partial/empty stream just runs the loop zero times, so this consumer re-opened the
   # closed door. Capture first, check the return, and refuse before atomic_apply rather
@@ -2101,7 +2101,7 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
   done <<< "$_RM_ROWS"
 
   # CORPFLOW.md rows that never reach model_resolve at all (unknown agent, off-enum cell, or
-  # the whole section unparseable) still need their own audit trail — ad5's fail-open table.
+  # the whole section unparseable) still need their own audit trail — model_override_rows' fail-open statuses.
   if [[ -f "$_RM_CORPFLOW" ]]; then
     _RM_OV_RC=0
     _RM_OV_OUT=$(model_override_rows "$_RM_CORPFLOW") || _RM_OV_RC=$?
@@ -2182,7 +2182,7 @@ if [[ -n "$TASK_OP" ]]; then
   fi
 
   # --task-create auto-fill REMOVED (sw-AR0-1, reversed at the FN-gate sweep over the
-  # recommended architecture-0.md#ad3/REQ-4 design): resolution now happens at the CALLER —
+  # recommended design): resolution now happens at the CALLER —
   # PL0 runs `model-matrix.sh --resolve <agent>` and pastes the pair into its own `--metadata`
   # before calling `--task-create` (agents/product-manager.md's new Bash grant). Retaining this
   # block as a silent fallback would defeat the reversal's own premise: a pasted-wrong or
@@ -2227,7 +2227,7 @@ if [[ -n "$TASK_OP" ]]; then
     fi
   fi
 
-  # --task-meta --raise-only for model/effort (architecture-0.md#ad3, #ad4; composition
+  # --task-meta --raise-only for model/effort (composition
   # reversed by sw-AR0-2 at the FN-gate sweep — see below): opt-in, not the default for every
   # --task-meta caller — an ordinary reassignment (QA re-pinning a stage, a correction round)
   # must still be free to lower a tier. Scoped to the score>=35 DV/DR complexity bump ONLY,
@@ -2859,7 +2859,7 @@ if [[ -n "$STAGE_ARG" || -n "$ARTIFACT_ARG" ]]; then
   # A warning, never a refusal: the name is the caller's, the stage map is advisory here, and
   # a stage that has already written its artifact must not be blocked from recording it.
   # Reuses basename_for_stage() rather than adding a fourth copy of the stage→basename map —
-  # state-patch.sh:177, hooks/anchor-preflight.sh's ARTIFACT_RE and handoff-protocol.md are
+  # basename_for_stage() itself, hooks/anchor-preflight.sh's ARTIFACT_RE and handoff-protocol.md are
   # already three.
   if [[ -n "$ARTIFACT_ARG" && -n "$STAGE_ARG" ]]; then
     _CANON_BASE="$(basename_for_stage "$STAGE_ARG")"
@@ -2894,7 +2894,7 @@ if [[ -n "$STAGE_ARG" || -n "$ARTIFACT_ARG" ]]; then
   if [[ -z "$ART" || ! -f "$ART" ]]; then
     log_msg WARN "no artifact resolved (stage=${STAGE_ARG:-} artifact=${ARTIFACT_ARG:-}) — no-op"
     # `--prev` present with `--via` absent is the documented signature of a Layer-1 agent
-    # self-patch (handoff-protocol.md:837,846), i.e. a stage patching the artifact it just
+    # self-patch (handoff-protocol.md#layer-1-fallback), i.e. a stage patching the artifact it just
     # wrote. Finding nothing there is a real failure, so it is the one unresolved case that
     # must not exit 0. Hook and Step-6.5 callers pass --via and keep the no-op contract.
     if [[ -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then

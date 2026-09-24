@@ -6,11 +6,11 @@ stage writes into `.context/attachments/`. Read by `agents/project-manager.md`
 
 ## Why these files exist
 
-Conductor (the parallel-agents Mac app) injects them into a new session on a UI action — **Create PR** → `.context/attachments/PR instructions.md`, **Request Review** → `.context/attachments/Review request.md`. Absent, Conductor uses its generic defaults: no DR/QA verdicts, no conventional-commit type, no resolved base branch, no link to `.context/complete-summary-N.md`. FN writes both so the FN agent follows `PR instructions.md` for `gh pr create` (the single source of truth, identical to a later Conductor re-trigger) and later Conductor-driven actions inherit worktask-aware prompts.
+Conductor injects them into a new session on a UI action: "Create PR" → `.context/attachments/PR instructions.md`, "Request Review" → `.context/attachments/Review request.md`. Without them it falls back to generic prompts with no DR/QA verdicts, commit type, resolved base branch or summary link. The FN agent also runs `gh pr create` from `PR instructions.md`, so FN and a later Conductor re-trigger follow the same instructions.
 
 ## When to write
 
-**Two writers, idempotent**, both sourcing from this template:
+Two idempotent writers, both rendering these templates:
 
 | Writer | When | Data quality |
 |--------|------|-------------|
@@ -19,7 +19,7 @@ Conductor (the parallel-agents Mac app) injects them into a new session on a UI 
 
 ### Writer 1 — Orchestrator pre-gate (tool-explicit)
 
-Step 1 of the FN gate's *Effect (checkpoint)* list, not a separate phase — full procedure in `skills/worktask/references/fn-gate.md § Pre-gate Conductor-attachments writer` (gate detection stays in `skills/worktask/SKILL.md § FN Gate`). Fires on the gated path only, wrapped in `test -f` trip-wires (Effect steps 1 and 6) so a skipped or partially-completed run cannot reach `return` silently.
+Step 1 of the FN gate's Effect (checkpoint) list, gated path only. Procedure: `skills/worktask/references/fn-gate.md § Pre-gate Conductor-attachments writer`; gate detection: `skills/worktask/SKILL.md § FN Gate`. The `test -f` trip-wires in Effect steps 1 and 6 stop a skipped or partial run from reaching `return`.
 
 ### Writer 2 — FN agent post-approval
 
@@ -29,33 +29,23 @@ In `agents/project-manager.md § FN Stage`, immediately before `gh pr create`:
 mkdir -p .context/attachments
 ```
 
-Then `Write` both files from the templates below, overwriting from scratch — no skip, no merge; a pre-seed is expected and never assumed current.
+Then `Write` both files from the templates below, overwriting from scratch (no skip, no merge): a pre-seed is expected but never assumed current.
 
-**Post-write verify (mirror of Writer 1's gate trip-wire)** — immediately after both `Write` calls:
+Post-write verify, mirroring Writer 1's trip-wire:
 
 ```bash
 test -f ".context/attachments/PR instructions.md" && test -f ".context/attachments/Review request.md" && echo OK
 ```
 
-On `OK`, run `gh pr create` from `PR instructions.md`. Otherwise abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and do NOT proceed — a PR without the attachments leaves Conductor in the degraded state the trip-wire exists to prevent.
+On `OK`, run `gh pr create` from `PR instructions.md`. Otherwise abort FN with `handoff.verdict: blocked`, write the cause to `.context/errors/project-manager.md`, and stop, because a PR without the attachments leaves later Conductor actions on generic prompts.
 
 ### Known emission-rule defects
 
-#### How to fix one safely
+`skills/worktask/scripts/attachments-preseed.sh` renders these blocks at run time and reproduces the defects below as written (it handles defect 1 by matching surrounding text). Fix one in this document and the script in the same commit, never in a fenced template body alone.
 
-`skills/worktask/scripts/attachments-preseed.sh` reproduces the three defects below verbatim rather than smoothing them — its contract is fidelity to this document, and `attachments-preseed.bats` P2/P12 re-derive their expectations from these blocks at run time. **Never fix one by editing a fenced template body alone**: document and script change in the same commit.
-
-#### The three defects
-
-1. **`<N>` is overloaded** — uncommitted-file count in parts 1 and 3, **issue number** in part 7's
-   `Closes #<N>` checklist row. Token substitution cannot tell them apart; the script renders
-   correctly only by matching surrounding text. Fix: rename the checklist token to `<ISSUE>`.
-2. **No blank line before `## 2. Push`** — part 3 is the only fenced body ending without a
-   trailing blank line, so concatenating it with part 3b runs the two sections together.
-3. **Authoring comments are shipped** — `<!-- If issue ref present: … -->` and the two
-   `<!-- One bullet per … -->` notes sit *inside* the fenced bodies, so "no separators added or
-   removed" emits them into the real attachment. Harmless but near-certainly unintended; this
-   section is the only thing that can decide to strip them.
+1. `<N>` is overloaded: uncommitted-file count in parts 1 and 3, issue number in part 7's `Closes #<N>` checklist row. Fix: rename the checklist token to `<ISSUE>`.
+2. No blank line before `## 2. Push`: part 3 is the only fenced body without a trailing blank line, so it runs into part 3b.
+3. Authoring comments ship: `<!-- If issue ref present: … -->` and the two `<!-- One bullet per … -->` notes sit inside the fenced bodies, so the emission rule copies them into the real attachment. Harmless, probably unintended.
 
 ## Data sources
 
@@ -64,8 +54,8 @@ On `OK`, run `gh pr create` from `PR instructions.md`. Otherwise abort FN with `
 | Field | Source |
 |-------|--------|
 | Current branch | `git rev-parse --abbrev-ref HEAD` |
-| Branch (PR head) | `state.json § facts.branch` — **planned** name from PL start. **Validate first** (`^[A-Za-z0-9._/-]+$` — `project-manager.md § Validating facts.branch`). Push: `git push -u origin HEAD:refs/heads/<facts.branch>` (topology-independent) |
-| Target / base branch | One resolution order, highest first, ending in unresolved with no literal fallback — canonical in `handoff-protocol.md § metadata.base_ref`, implemented by `fn-preflight.sh` `resolve_base_ref` |
+| Branch (PR head) | `state.json § facts.branch`, the planned name from PL start. Validate first (`^[A-Za-z0-9._/-]+$`, `project-manager.md § Validating \`facts.branch\` before the push`). Push: `git push -u origin HEAD:refs/heads/<facts.branch>` (topology-independent) |
+| Target / base branch | One resolution order, highest first, ending unresolved with no literal fallback; canonical in `handoff-protocol.md § metadata.base_ref`, implemented by `fn-preflight.sh` `resolve_base_ref` |
 | Uncommitted change count | `git status --porcelain \| wc -l` |
 | Upstream tracked? | `git rev-parse --abbrev-ref --symbolic-full-name @{u}` (non-zero exit = no upstream) |
 
@@ -87,14 +77,13 @@ On `OK`, run `gh pr create` from `PR instructions.md`. Otherwise abort FN with `
 
 | Field | Source |
 |-------|--------|
-| Existing PR URL (idempotency probe) | `gh pr view --json url,state -q '"\(.state) \(.url)"' 2>/dev/null` (empty = no PR). Resolved by the consumer agent at execute time, NOT by the FN-stage writer |
-| `<CLOSES_LINE>` placeholder | `Closes #<ISSUE>` if `ISSUE_REF` present, else empty line |
+| Existing PR URL (idempotency probe) | `gh pr view --json url,state -q '"\(.state) \(.url)"' 2>/dev/null` (empty = no PR). Resolved by the consuming agent at execute time, not by the FN writer |
 | `<ISSUE_LINE>` placeholder | `- Issue: #<ISSUE> — include \`Closes #<ISSUE>\` in the PR body to auto-close on merge.` if `ISSUE_REF` present, else empty string (line omitted) |
 | `<UPSTREAM_LINE>` placeholder | `Upstream tracking: origin/<BRANCH>.` if `git rev-parse @{u}` succeeds, else `No upstream branch yet — use \`git push -u origin <BRANCH>\`.` |
 
 ## Template — `PR instructions.md`
 
-**Emission rule**: the attachment file content is the concatenation of the fenced bodies of the `Template part N` blocks below, in order (part 1 first), with no separators added or removed — template text is byte-equivalent to the original single template.
+Emission rule: the attachment is the concatenation of the fenced bodies of the `Template part N` blocks below, in order, with no separators added or removed.
 
 #### Template part 1
 
@@ -228,7 +217,7 @@ If any other step fails, ask the user — do not improvise destructive recovery.
 
 ## Template — `Review request.md`
 
-**Emission rule**: as above — concatenate the fenced bodies of the `Template part N` blocks below in order, no separators added or removed.
+Emission rule: as above.
 
 #### Template part 1
 
@@ -389,11 +378,4 @@ Verdict: approve. No findings meet the bar.
 
 ## Idempotency
 
-Both files are overwritten on every FN run; the header comment (`worktask_id` + `ts`) carries traceability without append-only history. Stage agents that run after FN MUST NOT modify these files.
-
-## Cross references
-
-- `agents/project-manager.md § FN Stage` — the writer
-- `skills/shared/stage-contracts.md` § FN row — validation
-- `skills/worktask/SKILL.md § FN Gate` — pre-FN summary (separate artifact, not these files)
-- `rules/git-conventions.md` — commit format referenced from `PR instructions.md`
+Both files are overwritten on every FN run; the header comment (`worktask_id` + `ts`) carries traceability. Stages after FN do not modify them.

@@ -5,7 +5,7 @@
 # worktask's change set touches UI, and stamps the result on
 # `metadata.requires_screenshots` (plan frontmatter + DV/QA task metadata +
 # state.json). The flag drives dv-screenshot-capture and its completion gate.
-# See skills/worktask/references/pl0-procedure.md § Required Metadata: Test Selection Gate and analyzing-0.md (ad2).
+# See skills/worktask/references/pl0-procedure.md § Required Metadata: Test Selection Gate.
 #
 # Usage:
 #   detect-ui-change.sh <plan-file> [--platform <p>]
@@ -26,7 +26,7 @@
 #     are cheap; a missed UI capture re-opens the original bug).
 #   - ANY signal true ⇒ requires_screenshots: true (OR over S1..S4).
 #
-# Signals (analyzing-0.md#architecture (a)):
+# Signals:
 #   S1  plan frontmatter `ui_visual_check: true` (invariant: ui_visual_check ⇒ true)
 #   S2  .context/designs/ contains figma-registry.md OR any *.png
 #   S3  plan ## scope / ## requirements match the UI keyword set (word-boundary, -i)

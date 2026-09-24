@@ -398,7 +398,7 @@ resolve_context_issue_search_for() {
 
 # ---------- label auto-provisioning -----------------------------------------
 # Color/description registry for canonical worktask labels (AC-1).
-# Per spec §4.1: worktask (blue), planning-approved (green), complexity:<tier>
+# worktask (blue), planning-approved (green), complexity:<tier>
 # (severity gradient), ticket:<prefix> (purple). Unknown labels fall back to
 # a neutral grey + generic description.
 label_color() {

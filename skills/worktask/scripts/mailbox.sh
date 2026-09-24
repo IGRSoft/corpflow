@@ -555,7 +555,7 @@ cmd_sweep() {
   jq -cn --argjson e "$expired" '{expired: $e}'
 }
 
-# --- wait (loop-boundary fallback poll; never required — D of § schemas) -----------
+# --- wait (loop-boundary fallback poll; never required) -----------
 cmd_wait() {
   resolve_state
   local max="${MAX_SECONDS_ARG:-3600}" poll="${MAILBOX_POLL_SECONDS:-15}"

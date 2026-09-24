@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # publish-pl-issue.sh — auto-publish a sanitised GitHub issue after PL approval.
 #
-# Invoked by the orchestrator at Step 6.5 of skills/worktask/SKILL.md. NEVER blocks the
+# Invoked by the orchestrator after PL0 (skills/worktask/SKILL.md § PL Issue Publish). NEVER blocks the
 # worktask: operational outcomes are audit.jsonl rows (result + reason) and exit 0; only a
 # catastrophe (jq missing, audit dir unwritable, state corrupt) exits 1, and --self-test
 # failure exits 2. An unreachable sibling folds into those two: publish-pl-issue-lib.sh
@@ -14,7 +14,7 @@
 #     comment and milestone-mode: skills/gh-issue-dedup. Env: GH_ISSUE_ANCHOR (anchor path),
 #     GH_ISSUE_SEARCH=0 (disable the title search).
 #   - plan_file shape boundary (path in state.json, bare basename in task metadata; readers
-#     MUST accept either): handoff-protocol.md § state.json schema. The PLAN_FILE block below
+#     MUST accept either): handoff-protocol.md § plan_file shape boundary. The PLAN_FILE block below
 #     tries the value as given, then its basename against the state directory, and names both
 #     candidates on the fatal path.
 #   - {{asset:<basename>}} placeholder grammar and the .context/designs/-only lookup:

@@ -2,7 +2,7 @@
 # attach-visual-evidence.sh — embed DV screenshot captures into the PR body and
 # the GitHub issue, on a UI-change run (metadata.requires_screenshots=true).
 #
-# Publishing modes (analyzing-0.md ad4, change-map #4), plus a read-only
+# Publishing modes, plus a read-only
 # --validate-manifest <path> documented with the others below. The publishing modes'
 # exit-0 contract is load-bearing — their stdout is spliced into the PR body — so the
 # schema check is a SEPARATE mode with its own exit codes and never alters theirs:
@@ -58,9 +58,9 @@
 # default) auto-derives from repo visibility, declining --public on a
 # PRIVATE/INTERNAL repo where it adds indexing without improving rendering.
 # Neither kind preserves screenshot confidentiality (camo fetches anonymously);
-# do not capture secrets/tokens/PII (C3 capture policy), and use
+# do not capture secrets/tokens/PII, and use
 # ASSET_HOST_MODE=none for material that must not leave the org. See
-# publish-pl-issue.sh header § AC1 Privacy posture for full rationale.
+# the `Privacy:` paragraph in publish-pl-issue.sh's header for full rationale.
 #
 # Idempotency (all three publishing modes):
 #   --emit pr:    cached at .context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md,

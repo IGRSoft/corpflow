@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # portability-lint.sh — flags BSD/GNU shell divergences (rules P001-P008) so a new one
-# cannot land the way the 32 mktemp -t sites did (architecture-0.md AD-2, AD-4).
+# cannot land the way the 32 mktemp -t sites did.
 #
 # Usage:
 #   portability-lint.sh                 # repo subject: git ls-files '*.sh' '*.bats' 'Makefile'
@@ -300,7 +300,7 @@ scan_line_rules() {
 # file-scoped exoneration applies: for P004, the SIBLING form of the same tool family is
 # also present in the file (both a GNU and a BSD form — evidence of an existing dual-path
 # dispatch, not just any two unrelated tools), or a matching command -v guard; for P006, a
-# matching command -v guard. Deliberately coarse (architecture-0.md AD-2) — a line-oriented
+# matching command -v guard. Deliberately coarse — a line-oriented
 # bash lint cannot do reliable scope analysis — but coarse is not the same as inert: a
 # single-family check (was: "file has || AND any of stat/date/hash", which the hit line
 # itself always satisfies, making every P004 candidate self-exonerate) must require the

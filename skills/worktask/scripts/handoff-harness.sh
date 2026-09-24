@@ -75,13 +75,7 @@
 #       proxy, atomic-write idempotency check by re-merging the same patch).
 #       Exits 0 on pass, 1 on fail.
 #
-# Tokenizer proxy: wc-words × 1.33. Documented in handoff-protocol.md.
-# Spec: AR RK-6 accepts proxy because AC-12 is a RELATIVE reduction metric.
-#
-# AR decisions implemented: AD-1 (atomic write), AD-2 (frontmatter schema),
-# AD-3 (state.json schema).
-# AC satisfied: AC-5 (harness exists), AC-6 (validates schemas), AC-7
-# (atomic-write idempotency), AC-8 (token reduction ≥30%).
+# Tokenizer proxy: wc-words × 1.33 — enough, because the ≥30% gate is a RELATIVE reduction.
 
 set -euo pipefail
 

@@ -3,9 +3,9 @@
 #   in stage-codes.md, the fail-open reader for a project's `CORPFLOW.md § Models` override,
 #   and the ranked resolver both feed. state-patch.sh and effort-ladder.bats source this file;
 #   model-matrix.sh wraps it for callers that cannot source bash. A fourth parser anywhere is
-#   a review reject (architecture-0.md#ad2).
+#   a review reject.
 #
-#   Hardening (architecture-0.md#ad2), each mapped to an observed misfire:
+#   Hardening, each mapped to an observed misfire:
 #     1. Section-anchored, not row-shaped: scope opens on the literal `## Agent Model Matrix`
 #        heading line and closes at the next `^#` line of ANY level — a note paragraph inside
 #        the section must not end capture, the next heading always must.
@@ -19,9 +19,9 @@
 #        set is a bijection with `agents/*.md` themselves (stronger than a hard-coded count).
 #
 #   `model_override_rows` reads a project-root CORPFLOW.md `## Models` section the same way,
-#   fail-open row by row (architecture-0.md#ad5): a malformed cell or an unknown agent name
+#   fail-open row by row: a malformed cell or an unknown agent name
 #   is never fatal — the caller decides what to audit. `model_resolve` composes both into the
-#   three READ ranks of architecture-0.md#ad3 (state.models -> CORPFLOW.md -> built-in matrix);
+#   three READ ranks (state.models -> CORPFLOW.md -> built-in matrix);
 #   ranks 4-5 (the stamped task, an explicit dispatch flag) are not read ranks and live in the
 #   caller.
 #
@@ -47,7 +47,7 @@ _CORPFLOW_MODEL_MATRIX_LIB=1
 # source this file more than once per process.
 MODEL_ENUM='opus sonnet haiku'
 
-# effort_rank comes from effort-ladder.sh, never re-typed here (ad2 rule 3). Sourced
+# effort_rank comes from effort-ladder.sh, never re-typed here (hardening rule 3 above). Sourced
 # defensively: a caller that already has it loaded pays nothing extra (include-guarded).
 _MML_EFFORT_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/effort-ladder.sh"
 if [ -z "${EFFORT_ENUM:-}" ] && [ -r "$_MML_EFFORT_LIB" ]; then
@@ -197,7 +197,7 @@ model_matrix_rows() {
 
 # model_override_rows <corpflow_md_path> [agents_dir]
 # Reads a project-root CORPFLOW.md `## Models` section, fail-open per row
-# (architecture-0.md#ad5): a bad cell or an unknown agent is reported, never fatal.
+# — a bad cell or an unknown agent is reported, never fatal.
 # Prints "agent<TAB>model<TAB>effort<TAB>status" per data row, status one of:
 #   ok       — agent known, model/effort each valid or "-"/empty (inherits the matrix cell)
 #   unknown  — agent not present under agents/<agent>.md
@@ -276,7 +276,7 @@ model_override_rows() {
 }
 
 # model_resolve <agent> [state_path] [corpflow_md_path] [doc] [agents_dir]
-# The three READ ranks of architecture-0.md#ad3: state.models[<agent>] (already-resolved
+# The three READ ranks: state.models[<agent>] (already-resolved
 # ledger copy) -> CORPFLOW.md `## Models` at the project root -> the built-in matrix. Prints
 # "model<TAB>effort<TAB>source" (source: state|project-override|matrix). Ranks 4 (the
 # stamped task) and 5 (an explicit dispatch flag) are materialized output and caller

@@ -24,7 +24,7 @@ fi
 _CORPFLOW_HOST_OS_LIB=1
 
 # Not `readonly`: consumer bats suites source this file more than once per process, and a
-# second `readonly` assignment is rc 1 that kills a `set -e` caller (branch-lib.sh:38 documents
+# second `readonly` assignment is rc 1 that kills a `set -e` caller (branch-lib.sh's BRANCH_TYPES note documents
 # the same defect class).
 _HOST_OS_CACHE=""
 

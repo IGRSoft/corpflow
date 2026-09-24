@@ -164,7 +164,7 @@ _resolve_script_dir() {
 SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
 
 # Sanitiser library, resolved from this script's own location (mirrors
-# attach-visual-evidence.sh:69).
+# attach-visual-evidence.sh's _LIB).
 # shellcheck disable=SC2034  # read by sanitise_stream in fn-preflight-cmds.sh
 LIB_PATH="${SCRIPT_DIR}/publish-pl-issue.sh"
 

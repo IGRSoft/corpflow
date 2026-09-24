@@ -2,7 +2,7 @@
 # @description model-matrix.sh — CLI wrapper over model-matrix-lib.sh for callers that
 #   cannot source bash (PL0's `--resolve <agent>` paste step, the benchmark's Python suite).
 #   state-patch.sh sources the library directly; this file exists solely for that one class
-#   of caller (architecture-0.md#ad2).
+#   of caller.
 #
 #   Path defaults: `--resolve` and `--resolved-json` take optional [state_path]
 #   [corpflow_md_path]. When omitted they are derived from the same root ladder
@@ -82,7 +82,7 @@ case "$1" in
     }
     _mm_default_paths "${1:-}" "${2:-}"
     # Capture before looping: `done < <(model_matrix_rows)` would discard the extractor's
-    # exit 3 and print `{}` with exit 0 on a broken matrix — the fail-open ad2 rule 4 forbids
+    # exit 3 and print `{}` with exit 0 on a broken matrix — the fail-open model-matrix-lib.sh hardening rule 4 forbids
     # and state-patch.sh --resolve-models already closes the same way.
     _mm_rows=$(model_matrix_rows) || exit 3
     [ -n "$_mm_rows" ] || exit 3
