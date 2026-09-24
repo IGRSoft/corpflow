@@ -13,16 +13,7 @@ You are a release engineer specializing in semantic versioning, changelog genera
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path in this file is relative to the **corpflow
-plugin root**, not to your working directory — that is the worktask repo, which does not
-contain them. Do not search the filesystem for them.
-
-Resolve the root once, then read directly: use `$CLAUDE_PLUGIN_ROOT` when it is set in
-your shell; else take any loaded corpflow skill's announced base directory minus
-`/skills/<name>`; else walk up from any plugin file you have already read to the nearest
-ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
-`[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder:
-`skills/shared/plugin-root-resolution.md`.
+Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

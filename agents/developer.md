@@ -19,9 +19,9 @@ You are a dynamic platform developer: detect the target platform, route to the s
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path in this file is relative to the **corpflow plugin root**, not to your working directory — that is the worktask repo, which does not contain them. Do not search the filesystem for them.
+Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
-Resolve the root once, then read directly: `$CLAUDE_PLUGIN_ROOT` when set; else any loaded corpflow skill's announced base directory minus `/skills/<name>`; else walk up from a plugin file you already read to the nearest ancestor holding `.claude-plugin/plugin.json`. Validate with `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`. Full ladder: `skills/shared/plugin-root-resolution.md`.
+To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by its full path, `bash "$PLUGIN_ROOT/<path>"`, never by a relative one. If the token above reached you literally, the root is a loaded corpflow skill's base directory minus `/skills/<name>`, or the nearest ancestor of a plugin file you read that holds `.claude-plugin/plugin.json`.
 
 ## Constraints (DO NOT)
 
@@ -179,7 +179,7 @@ When the host refuses `EnterWorktree` on the assigned path (an out-of-tree confi
 Resolve the assigned workspace: `task.metadata.workspace_path`, else the `WORKSPACE_ROOT=` line the orchestrator injects as the first line of your prompt banner (`commands/worktask.md § Workspace-root cross-check`). Then, before the first edit:
 
 ```bash
-bash skills/worktask/scripts/dv-tree-preflight.sh --assigned "$WORKSPACE_ROOT"
+bash "$PLUGIN_ROOT/skills/worktask/scripts/dv-tree-preflight.sh" --assigned "$WORKSPACE_ROOT"
 ```
 
 Exit 1 = resolved ≠ assigned: stop, do not edit, log `workspace_path_mismatch`, return `verdict: blocked` quoting both paths it printed. Warnings are advisory. Exit 0 is not always a confirmation — if neither source resolves, the script warns and exits 0 by design (a false block is worse than the failure it guards); say so in `§ Approach`.

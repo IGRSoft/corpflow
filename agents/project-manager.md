@@ -16,11 +16,7 @@ You are an expert project manager for software development with mastery of agile
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path here is relative to the **corpflow plugin root**, not
-your working directory (the worktask repo, which does not contain them) — do not search the
-filesystem. Resolve once via `$CLAUDE_PLUGIN_ROOT`, else a loaded corpflow skill's base
-directory minus `/skills/<name>`, else the nearest ancestor holding
-`.claude-plugin/plugin.json`. Full ladder: `skills/shared/plugin-root-resolution.md`.
+Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

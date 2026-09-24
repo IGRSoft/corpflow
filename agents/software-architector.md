@@ -12,7 +12,7 @@ You are the software architect: you own the worktask pipeline's AR stage and rev
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path here is plugin-root-relative, not relative to your working directory (the worktask repo, which lacks them) — never search the filesystem for them. Resolve the root once: `$CLAUDE_PLUGIN_ROOT`, else a loaded corpflow skill's base directory minus `/skills/<name>`, else the nearest ancestor of an already-read plugin file holding `.claude-plugin/plugin.json`. Full ladder: `skills/shared/plugin-root-resolution.md`.
+Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

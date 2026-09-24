@@ -14,7 +14,9 @@ Expert worktask engineer for state-ledger orchestration and troubleshooting.
 
 ## Plugin paths
 
-Every `skills/…` and `commands/…` path here is plugin-root-relative, not relative to your working directory (the worktask repo, which does not contain them) — never search the filesystem for them. Resolve the root once: `$CLAUDE_PLUGIN_ROOT`, else a loaded corpflow skill's base directory minus `/skills/<name>`, else the nearest ancestor of an already-read plugin file holding `.claude-plugin/plugin.json` (validate: `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`). Remaining rungs and the full ladder: `skills/shared/plugin-root-resolution.md`. Bundled scripts self-locate once the root is known.
+Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+
+To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by its full path, `bash "$PLUGIN_ROOT/<path>"`, never by a relative one. If the token above reached you literally, the root is a loaded corpflow skill's base directory minus `/skills/<name>`, or the nearest ancestor of a plugin file you read that holds `.claude-plugin/plugin.json`.
 
 ## Constraints (DO NOT)
 

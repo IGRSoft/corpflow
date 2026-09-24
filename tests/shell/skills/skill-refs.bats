@@ -95,13 +95,16 @@ dangling_skill_paths() {
 # missing_paths_block <plugin-root>
 # An agent citing a plugin-root-relative path without saying what that path is
 # relative to sends the model hunting: PL spent 14 of its 17 Bash calls in the
-# live run locating plugin files, one of them a `find /`.
+# live run locating plugin files, one of them a `find /`. The block under
+# `## Plugin paths` must point at the canonical ladder, so the resolution rule
+# lives in one file instead of drifting across per-agent copies.
 missing_paths_block() {
   local root="$1" f
   ( cd "$root" || return 1
     for f in $(git ls-files -- 'agents/*.md'); do
       grep -qE 'skills/[a-z0-9-]+/' "$f" || continue
-      grep -qx '## Plugin paths' "$f" || printf '%s\n' "$f"
+      awk '/^## Plugin paths$/{p=1; next} p && /^## /{exit} p' "$f" \
+        | grep -qF 'skills/shared/plugin-root-resolution.md' || printf '%s\n' "$f"
     done
     return 0 )
 }
@@ -178,9 +181,10 @@ mk_skill_layout() {
   local root
   root="$(mk_tmpworkdir)"
   mk_git_fixture --dir "$root" \
-    --file 'agents/developer.md:---\ntools: Read, Skill, Bash\n---\n\n## Plugin paths\n\nPaths are plugin-root-relative.\n\n## Body\n\nRun `Skill({skill: "corpflow:capture"})`; canon in `skills/capture/SKILL.md`.\n' \
+    --file 'agents/developer.md:---\ntools: Read, Skill, Bash\n---\n\n## Plugin paths\n\nPaths are plugin-root-relative; resolve per `skills/shared/plugin-root-resolution.md`.\n\n## Body\n\nRun `Skill({skill: "corpflow:capture"})`; canon in `skills/capture/SKILL.md`.\n' \
     --file 'agents/router.md:---\ntools: Read\n---\n\n| Entry | `Skill({skill:"corpflow:capture"})` |\n' \
-    --file 'skills/capture/SKILL.md:x\n' >/dev/null
+    --file 'skills/capture/SKILL.md:x\n' \
+    --file 'skills/shared/plugin-root-resolution.md:x\n' >/dev/null
   printf '%s\n' "$root"
 }
 
@@ -250,6 +254,15 @@ mk_skill_layout() {
   assert_output --partial "agents/developer.md"
 }
 
+@test "resolver: a Plugin paths block that skips the canonical ladder is named" {
+  local root
+  root="$(mk_skill_layout)"
+  printf -- '---\ntools: Read\n---\n\n## Plugin paths\n\nPaths are plugin-root-relative.\n\n## Body\n\nCanon in `skills/capture/SKILL.md`; ladder in `skills/shared/plugin-root-resolution.md`.\n' \
+    > "$root/agents/developer.md"
+  run missing_paths_block "$root"
+  assert_output --partial "agents/developer.md"
+}
+
 # --- this repo (always runs) -------------------------------------------------
 
 @test "contract: every ordered Skill call in this repo has its grant" {
@@ -275,7 +288,7 @@ mk_skill_layout() {
   assert_output ""
 }
 
-@test "contract: every agent citing plugin paths carries the resolution block" {
+@test "contract: every agent citing plugin paths carries the resolution pointer" {
   run missing_paths_block "$PLUGIN_ROOT"
   assert_output ""
 }
