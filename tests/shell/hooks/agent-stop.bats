@@ -75,3 +75,80 @@ setup() {
   assert_success
   [ ! -e "$outside/.context" ]
 }
+
+# --- wiring: plugin.json SubagentStop is the only route that fires this hook ----
+# Claude Code ignores `hooks:` in plugin agent frontmatter, so the anchored matchers
+# in plugin.json are what scope agent-stop.sh to the PL/FN/ST agents.
+
+# Prints "<command>\t<args as JSON>" for every agent-stop.sh entry in a SubagentStop
+# group whose matcher selects agent type $1, following the hooks-doc matcher rules:
+# omitted, "" or "*" match everything; letters/digits/_/-/space/,/| only is an exact
+# list; anything else is an unanchored regular expression.
+_subagent_stop_agent_stop_entries() {
+  jq -r --arg t "$1" '
+    def selects($m):
+      if ($m // "") == "" or $m == "*" then true
+      elif ($m | test("^[A-Za-z0-9_ ,|-]+$")) then
+        [$m | splits("[|,]") | gsub("^\\s+|\\s+$"; "")] | index([$t]) != null
+      else $t | test($m) end;
+    .hooks.SubagentStop[]
+    | select(selects(.matcher))
+    | .hooks[]
+    | select(.command | endswith("/hooks/agent-stop.sh"))
+    | "\(.command)\t\(.args // [] | tojson)"
+  ' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+}
+
+# Fires every matched agent-stop.sh entry the way the runtime would, for agent type $1.
+_fire_subagent_stop() {
+  local agent="$1" cmd args
+  while IFS=$'\t' read -r cmd args; do
+    [ -n "$cmd" ] || continue
+    cmd="${cmd//\$\{CLAUDE_PLUGIN_ROOT\}/$PLUGIN_ROOT}"
+    # shellcheck disable=SC2046
+    jq -n --arg t "$agent" '{agent_type:$t, agent_id:"agt_w", session_id:"sess_w"}' \
+      | env CLAUDE_PROJECT_DIR="$WD" "$cmd" $(jq -r '.[]' <<< "$args") \
+      || return 1
+  done < <(_subagent_stop_agent_stop_entries "$agent")
+}
+
+@test "wiring: agent-stop.sh is registered only under SubagentStop, one anchored matcher per stage agent" {
+  run jq -r '
+    .hooks | to_entries[] | .key as $ev | .value[]
+    | .matcher as $m | .hooks[]
+    | select((.command // "") | endswith("/hooks/agent-stop.sh"))
+    | "\($ev) \($m) \(.args | join(" "))"
+  ' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  assert_success
+  assert_output "$(printf '%s\n' \
+    'SubagentStop ^corpflow:product-manager$ --stage PL' \
+    'SubagentStop ^corpflow:project-manager$ --stage FN' \
+    'SubagentStop ^corpflow:stakeholder$ --stage ST')"
+}
+
+@test "wiring: each PL/FN/ST agent's stop writes exactly one row carrying its own stage" {
+  local agent stage
+  for agent in product-manager:PL project-manager:FN stakeholder:ST; do
+    stage="${agent#*:}"
+    agent="corpflow:${agent%%:*}"
+    rm -f "$WD/.context/logs/audit.jsonl"
+    _fire_subagent_stop "$agent" || fail "hook failed for $agent"
+    run jq -s -c 'map({subject, stage: .metadata.stage})' "$WD/.context/logs/audit.jsonl"
+    assert_success
+    assert_output "[{\"subject\":\"$agent\",\"stage\":\"$stage\"}]"
+  done
+}
+
+@test "wiring: other agents, near-miss names and internal agents fire nothing" {
+  local agent
+  # "" is the agent type Claude Code sends for its own internal agents (prompt
+  # suggestions, /btw); a named matcher must not select it.
+  for agent in corpflow:developer corpflow:product-manager-x xcorpflow:stakeholder \
+    other-plugin:project-manager product-manager ""; do
+    run _subagent_stop_agent_stop_entries "$agent"
+    assert_success
+    [ -z "$output" ] || fail "agent-stop.sh selected for agent type '$agent': $output"
+  done
+  _fire_subagent_stop corpflow:developer
+  [ ! -e "$WD/.context/logs/audit.jsonl" ]
+}

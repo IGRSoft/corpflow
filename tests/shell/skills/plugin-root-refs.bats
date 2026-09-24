@@ -179,9 +179,11 @@ composed_token_check() {
 
 @test "contract: the CC-native hook wiring the grammar exists for is present" {
   # Positive-presence guard: the grammar must not pass a tree that has quietly
-  # dropped every hook declaration it was written to permit.
+  # dropped every hook declaration it was written to permit. The live declarations
+  # are in plugin.json (JSON, outside this walk), so the guard looks for the
+  # verbatim quotes of them that the docs carry.
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.md" \
-    | xargs -0 grep -c "command: \${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh" 2>/dev/null \
+    | xargs -0 grep -c "\"command\": \"\${CLAUDE_PLUGIN_ROOT}/hooks/" 2>/dev/null \
     | grep -vc ":0$"'
   assert_success
   [ "${output}" -ge 1 ]
@@ -207,12 +209,12 @@ composed_token_check() {
   assert_output --partial "docs/bare.md:1:"
 }
 
-@test "checker: a NEW agent file declaring a frontmatter hook stays clean" {
+@test "checker: a NEW skill file declaring a frontmatter hook stays clean" {
   # Direct replacement for the deleted frozen whitelist: growth in the number of
   # files carrying a legal token must not turn the contract red.
   local repo
   repo="$(mk_git_fixture \
-    --file 'agents/new-agent.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n\nBody.\n')"
+    --file 'skills/new-skill/SKILL.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n\nBody.\n')"
   run composed_token_check "$repo"
   assert_success
   assert_output ""
@@ -253,7 +255,7 @@ composed_token_check() {
   local repo
   repo="$(mk_git_fixture \
     --file 'docs/gone.md:# placeholder\n' \
-    --file 'agents/a.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n')"
+    --file 'skills/a/SKILL.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n')"
   rm "$repo/docs/gone.md"
   run composed_token_check "$repo"
   assert_success

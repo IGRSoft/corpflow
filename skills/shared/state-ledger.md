@@ -484,8 +484,8 @@ have invalidated.
 
 ## Hook Events for Stage Monitoring
 
-Stage-monitoring hooks are configured in project `settings.json` or the agent frontmatter `hooks`
-field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, matchers, payloads,
+Stage-monitoring hooks are configured in the plugin's `.claude-plugin/plugin.json` or project
+`settings.json`; plugin agents ignore a frontmatter `hooks` field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, matchers, payloads,
 the conditional `if` field) and configuration examples:
 `skills/agent-coordination/references/hook-monitoring.md § Project-Level Configuration`.
 

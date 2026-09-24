@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Stop event multiplexer for PL/FN/ST worktask-boundary agents.
-# Wired via agent frontmatter `hooks:`.
+# Stage-completion audit row for the PL/FN/ST worktask-boundary agents.
+# Registered in plugin.json under SubagentStop, one matcher group per agent
+# (`^corpflow:<agent>$`) passing that agent's `--stage`. Claude Code ignores
+# `hooks:` in plugin agent frontmatter, so the anchored matcher is what scopes
+# this hook to those three agents.
 #
 # Writes one canonical `stage_completion_hook` row to
-# .context/logs/audit.jsonl. PushNotification at PL/FN approval gates is
-# handled by the sibling `type: "mcp_tool"` hook entry in plugin.json —
-# keeping this bash hook portable (no MCP server dependency).
+# .context/logs/audit.jsonl.
 set -eu
 
 STAGE="unknown"

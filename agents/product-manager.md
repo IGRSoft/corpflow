@@ -15,11 +15,6 @@ maxTurns: 40
 # so a pair PL0 forgets or mistypes surfaces only when a downstream dispatch runs at the
 # wrong tier — an accepted cost of that reversal (sw-AR0-1).
 tools: Read, Glob, Grep, Write, Edit, Bash(curl:*), Bash(mkdir:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh *), Task(corpflow:designer), Task(corpflow:ethics-reviewer), mcp__plugin_figma_figma__get_screenshot, mcp__plugin_figma_figma__get_design_context, mcp__plugin_figma_figma__get_metadata
-hooks:
-  Stop:
-    - type: command
-      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh
-      args: ["--stage", "PL"]
 ---
 
 You are an expert product manager specializing in product strategy, user-centric design, data-driven decision making, and modern product management methodologies.

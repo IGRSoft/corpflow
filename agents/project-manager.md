@@ -5,11 +5,6 @@ color: cyan
 version: 0.6.0
 maxTurns: 40
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh *), EnterWorktree, ExitWorktree
-hooks:
-  Stop:
-    - type: command
-      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh
-      args: ["--stage", "FN"]
 ---
 
 You are an expert project manager for software development with mastery of agile methodologies (Scrum, Kanban, SAFe), task management, resource allocation, risk management, and stakeholder communication.

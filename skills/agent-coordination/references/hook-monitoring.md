@@ -15,11 +15,14 @@ Claude Code hook events for monitoring agent lifecycle within worktasks.
 | `WorktreeCreate` | Worktree created | — | Worktree path |
 | `DirectoryAdded` | A working directory is registered mid-session (`/add-dir`, or the SDK `register_repo_root` control request) | — | Added directory path |
 
-#### Workspace trust is a precondition for agent-frontmatter hooks
+#### Agent-scoped hooks live in plugin.json
 
-Hooks declared in an agent file's own frontmatter run only when that file's folder has accepted workspace trust. In an untrusted plugin folder they are silently skipped — no error, no audit row, the stage just completes without its gate. Affected: `agents/product-manager.md`, `agents/project-manager.md`, `agents/stakeholder.md`.
+Claude Code ignores `hooks:` (and `mcpServers:`, `permissionMode:`) in the frontmatter of an agent loaded from a plugin, so a hook declared there never runs. To scope a hook to one corpflow agent, register it in `.claude-plugin/plugin.json` under `SubagentStart` or `SubagentStop` with an anchored matcher: the matcher tests the plugin-scoped agent type, and an unanchored `corpflow:stakeholder` would also match any name containing it. `hooks/agent-stop.sh` is wired this way, one group per stage agent:
 
-So a missing hook-emitted audit row is not evidence the hook passed; it is equally consistent with the hook never running. When a stage's completion depends on a frontmatter hook, confirm trust was granted for the plugin folder. `plugin.json` hooks and the repo's own `hooks/` scripts are unaffected.
+    { "matcher": "^corpflow:product-manager$",
+      "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh", "args": ["--stage", "PL"] } ] }
+
+Claude Code's own internal agents (prompt suggestions, `/btw`) also fire `SubagentStop`, with an empty `agent_type`; a named matcher never selects them, a missing one does. `tests/shell/hooks/agent-stop.bats` pins the wiring.
 
 ### Later lifecycle events
 
@@ -229,7 +232,7 @@ Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries th
 #### Config-error hints & main-thread agents
 
 - A prompt-type or agent-type hook for `SessionStart`, `Setup` or `SubagentStart` is rejected at load ("use a command-type hook instead"): stage-lifecycle hooks that must react before any session message exists are `type: "command"` (or `type: "mcp_tool"`).
-- Agent frontmatter `hooks:` also fire when the agent runs main-thread via `--agent <name>` (for events beyond `Stop`/`SubagentStop`), and frontmatter `mcpServers` load for those sessions too — plugin agents behave the same in `--agent` runs as in subagent delegations.
+- Agent frontmatter `hooks:` and `mcpServers` apply in `--agent <name>` main-thread runs as well as subagent delegations, but only for project and user agents: a plugin agent ignores both in either context (§ Agent-scoped hooks live in plugin.json).
 
 ### Hook Terminal Sequences
 

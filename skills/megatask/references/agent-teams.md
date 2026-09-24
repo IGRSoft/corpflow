@@ -116,9 +116,7 @@ Payload fields and the `{"continue": false, "stopReason": "..."}` stop response:
 #### Session state and commit handling
 
 > - Concurrent sessions do not revert each other's `~/.claude.json`, so workspace trust and
->   MCP/project state hold under fan-out — which keeps agent-frontmatter hooks firing in every lane
->   (`../../agent-coordination/references/hook-monitoring.md § Workspace trust is a precondition for
->   agent-frontmatter hooks`).
+>   MCP/project state hold under fan-out.
 > - Deleting a `claude agents` session whose worktree has unpushed commits names the branch and
 >   commit count, and deleting again discards the worktree — lane cleanup pushes or salvages those
 >   commits before the second delete.

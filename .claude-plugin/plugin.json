@@ -177,6 +177,45 @@
             "continueOnBlock": true
           }
         ]
+      },
+      {
+        "matcher": "^corpflow:product-manager$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "PL"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "^corpflow:project-manager$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "FN"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "^corpflow:stakeholder$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "ST"
+            ]
+          }
+        ]
       }
     ],
     "PreCompact": [

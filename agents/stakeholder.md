@@ -6,11 +6,6 @@ version: 0.3.0
 maxTurns: 20
 # tools: Skill because § Step 4's self-improvement retrospective has no non-Skill path.
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write, Skill
-hooks:
-  Stop:
-    - type: command
-      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh
-      args: ["--stage", "ST"]
 ---
 
 You are the business stakeholder: you own the worktask pipeline's ST stage and decide whether work is worth funding and whether delivered work meets its business requirements.

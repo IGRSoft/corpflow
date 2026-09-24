@@ -139,7 +139,9 @@ managed-allowlist resolution and the default effort tier are canonical in
 ### Agent Frontmatter Fields (continued)
 
 Claude Code ignores these three when it loads an agent from a plugin, which every
-`agents/*.md` here is:
+`agents/*.md` here is, so none of them may appear there. A hook scoped to one agent is a
+`.claude-plugin/plugin.json` `SubagentStart`/`SubagentStop` entry with the matcher
+`^corpflow:<name>$` (the PL/FN/ST `hooks/agent-stop.sh` wiring is the example):
 
 | Field | Type | Purpose |
 |-------|------|---------|

@@ -109,8 +109,9 @@ is the sole source, resolved by `model-matrix-lib.sh`/`model_resolve`. A newly-s
 needs a matrix row, or an explicit `--model`/`--effort` pass-through at dispatch.
 
 Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:`
-and `tools:`, in that order; `hooks:` last, after `tools:`. A comment explaining a
-narrowly-scoped grant (`# tools: Bash(curl:*) is scoped to curl because …`) sits immediately
+and `tools:`, in that order. Omit `hooks:`, `mcpServers:` and `permissionMode:`, which plugin
+agents ignore; scope a hook to the agent with a `^corpflow:<name>$` `SubagentStop` matcher in
+`.claude-plugin/plugin.json`. A comment explaining a narrowly-scoped grant sits immediately
 above the `tools:` line it explains and moves with it.
 
 ### Body sections

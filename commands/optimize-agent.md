@@ -149,7 +149,7 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` | Required on PL/FN/ST (gate notifications); recommended on DV/DR/QA/SR/RE but flag PL/FN/ST omissions only. Trust precondition: hooks run only when the agent file's own folder has accepted workspace trust — otherwise silently skipped, so a missing hook artifact never proves the hook passed. | P1 |
+| `hooks:`, `mcpServers:`, `permissionMode:` | Must be absent: Claude Code ignores all three when it loads an agent from a plugin, so they parse and never run. An agent-scoped hook goes in `.claude-plugin/plugin.json` under `SubagentStart`/`SubagentStop` with an anchored `^corpflow:<name>$` matcher, as the PL/FN/ST `hooks/agent-stop.sh` entries do. Fix: move the hook there, or delete the field. | P1 |
 
 #### Frontmatter audit — execution scope (P2)
 
@@ -163,7 +163,6 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `mcpServers` | Optional; if absent, MCP scope comes from inline `mcp__<server>__*` entries in `tools`. Flag only when no `mcp__*` tools AND `Skill(*)` wildcards — that pair silently broadens scope. | P2 |
 | `context: fork` | A forked skill runs in the background by default; `background: false` opts out. Flag when the caller needs its result inline rather than a completion notification. | P2 |
 | booleans | Frontmatter booleans accept `yes`/`no`/`on`/`off`/`1`/`0` (case-insensitive) alongside `true`/`false`. Flag only inconsistent spellings within one file. | P3 |
 

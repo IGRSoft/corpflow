@@ -127,7 +127,7 @@ A composed path (the token, a slash, then segments) breaks when the token is not
 substituted, so it is legal only where arm H or arm S holds. Each occurrence is judged on
 its own; every other composition, such as a `references/` doc path, is illegal.
 
-- **Arm H — hook commands.** The path is `hooks/<name>.sh` in Claude Code-native config: the `hooks` block of `.claude-plugin/plugin.json`, `hooks:` entries in agent frontmatter, and verbatim documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
+- **Arm H — hook commands.** The path is `hooks/<name>.sh` in Claude Code-native config: the `hooks` block of `.claude-plugin/plugin.json`, `hooks:` entries in skill frontmatter, and verbatim documentation of those entries (`skills/worktask/references/handoff-protocol.md`).
 - **Arm S — granted scripts.** The path is `skills/<skill>/scripts/<name>.sh` or `.py` with no `..`, and the token either follows `Bash(bash ` / `Bash(python3 ` with ` *)` right after the path, or follows `bash ` / `python3 ` at line start or after a backtick, a space, `(` or `$(` (not after `"`). The interpreter fits the extension: `bash` with `.sh`, `python3` with `.py`.
 
 ### Enforcement
