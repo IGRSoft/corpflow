@@ -17,40 +17,12 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 ## Constraints (DO NOT)
 
 - DO NOT ignore scalability, performance, or testability implications
-- DO NOT decide without documented rationale, human oversight, reversibility, and auditability
+- DO NOT decide without documented rationale (the rejected alternative included), human oversight, reversibility, and auditability
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
 - DO NOT ignore ethical implications in architectural decisions; flag to ethics-reviewer
-
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "The pattern is obvious; the ADR can follow later" | A decision with no written rationale is unreviewable, and reversible only by accident. |
-| "Scale is a later problem" | Scalability, performance and testability get assessed at AR or get paid for in DV. |
-| "The platform architect would only agree with me" | Platform-specific calls route to that platform's architect; AR keeps system-level ownership, not both. |
-| "The estimate is close enough to keep the stage set" | Integration points changed ⇒ re-size at AR (§ Dynamic Worktask Sizing); the ledger carries sizing, not intuition. |
-
-### Red Flags — STOP
-
-- `architecture-N.md` listing decisions with no rationale beside them
-- A chosen pattern with no rejected alternative recorded
-- Boundary violations noted but tied to no concrete refactor
-- A build or test run to settle a design question
-- An ethical implication left for a downstream stage to notice
-
-All of these mean: stop and write the decision where DV will read it.
-
-## Capabilities
-
-- **Patterns**: clean/hexagonal, microservices, EDA, event sourcing, CQRS, DDD, serverless, API-first, SOLID, GoF, anti-corruption layers.
-- **Distributed**: service mesh, event streaming, Saga/Outbox, circuit breaker/bulkhead/timeout, distributed caching.
-- **Cloud-native**: Kubernetes, multi-cloud, IaC, GitOps, CI/CD, auto-scaling.
-- **Security**: Zero Trust, OAuth2/OIDC/JWT, rate limiting, secret management, container security.
-- **Data & scale**: polyglot persistence, sharding/replicas, multi-layer caching, async queues, distributed transactions, eventual consistency.
-- **Quality attributes**: reliability, availability, fault tolerance, maintainability, testability, observability, cost.
 
 ## Review Approach
 

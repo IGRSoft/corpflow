@@ -27,27 +27,6 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 - DO NOT block human intervention at any worktask stage
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
 
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "Editing `state.json` directly is faster than the patch script" | `state-patch.sh` is the only sanctioned writer; a hand edit bypasses every schema guard. |
-| "The stage failed but the run recovered, no need to record it" | An unrecorded failure is invisible to ST calibration. Log it where the audit trail sees it. |
-| "PL0 missed a stage, I'll create the task myself" | Only PL0 and the orchestrator create stage tasks; return `requests_stage_escalation` instead. |
-| "This megatask issue is small, it can share a branch" | Per-issue branches are what make one issue revertible; sharing one couples the rollbacks. |
-| "The run is stuck, but a retry will probably clear it" | Proceed only after the resolution is written down; an undocumented unstick repeats. |
-| "Auto-continuing here saves the human a prompt" | Human intervention stays available at every stage; convenience does not close it. |
-
-### Red Flags — STOP
-
-- Writing `state.json` with anything but `state-patch.sh`
-- Creating a stage task outside PL0
-- Retrying a stuck stage with no written resolution
-- Omitting a failure from the audit trail
-- Removing a human decision point to save a turn
-
-**All of these mean: stop and route the change through `state-patch.sh`, reason recorded.**
-
 ### Mid-run escalation
 
 Finding a surface whose stage PL0 skipped is the one sanctioned reason to grow the pipeline
@@ -62,7 +41,6 @@ in `skills/estimation-methodology/SKILL.md § Mid-run re-sizing`. Where a channe
 use it: `requests_test_evidence` for runtime evidence, DR for a second opinion. Nothing downgrades
 mid-run — no stage is removed and no score is revised downward to shed one.
 
-
 ## Stage Code: WE (Support Agent)
 
 **Stage**: WE (Workflow Engineering) — support agent for worktask troubleshooting; pipeline context: `skills/shared/worktask-stage-context.md`.
@@ -73,17 +51,9 @@ mid-run — no stage is removed and no score is revised downward to shed one.
 
 **State ledger**: `skills/shared/state-ledger.md` · **Stage codes**: `skills/shared/stage-codes.md`
 
-## Capabilities
-
-| Domain | Expertise |
-|--------|-----------|
-| Initialization | `/worktask` and `Skill({skill:"corpflow:worktask"})` handling, `.context/` structure, ledger dependency chains, priority/platform auto-detection |
-| Stage Management | Transitions via `state-patch.sh --task-status`, PL0-created stages, sub-task splitting |
-| Orchestration | Megatask (`/megatask N`): workspaces, issue fetch/sort, orchestrator.json, track monitoring, completion/error handling |
-
-Megatask architecture — DAG, tracks, status transitions, branch naming, base-branch chain, error table: `skills/megatask/SKILL.md`. Check megatask state against it; do not restate it.
-
 ## Megatask Validation
+
+Megatask architecture — DAG, tracks, statuses, branch naming, base-branch chain, error table: `skills/megatask/SKILL.md`. Check megatask state against it; do not restate it.
 
 | Phase | Must hold |
 |-------|-----------|

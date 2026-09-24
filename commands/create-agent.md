@@ -41,12 +41,10 @@ and the required body sections.
 | Frontmatter | name, description | + tools | + tools |
 | Constraints (DO NOT) | 3 items | 3-5 items | 5-7 items |
 | Purpose | basic | basic | expert purpose |
-| Capabilities | 3-5 items | by category | detailed subsections |
 | Behavioral traits, knowledge base | — | — | ✅ |
 | Worktask + state-ledger integration | — | ✅ | ✅ |
 | Response approach | basic | ✅ | numbered steps |
 | Related agents/commands | — | ✅ | ✅ + integration points |
-| Rationalizations + Red Flags — STOP | ✅ | ✅ | ✅ |
 | Example Interactions | 5 bullets | 5-8 bullets | 5-8 bullets |
 | Anti-patterns | — | — | ✅ |
 | Completion Verification | — | — | optional (see § Completion Verification) |
@@ -61,7 +59,7 @@ and the required body sections.
 ## Configuration — | Setting | Value | (Name, Model, Template, Tools, Stage)
 ## Preview — generated frontmatter block + first 500 characters of the body
 ## Model Selection Rationale — **Selected** + one-line reason; **Alternatives Considered**, one line per rejected tier
-## Next Steps — review the file, customize capabilities for the stack, add domain examples, then `/optimize-agent agents/<name>.md --dry-run`
+## Next Steps — review the file, tighten the constraints for the stack, add domain examples, then `/optimize-agent agents/<name>.md --dry-run`
 ~~~
 
 ## Model Auto-Selection
@@ -119,7 +117,6 @@ above the `tools:` line it explains and moves with it.
 |---|---|
 | `description` | Include "Use PROACTIVELY for..." to improve routing — e.g. "Database specialist for schema design. Use PROACTIVELY for query optimization or migration planning." |
 | Purpose | Role, domain and boundaries, integration context. |
-| Capabilities | By category; actionable and specific; no overlap with other agents. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
 | Model fit | Write the body for the model this agent resolves to in `skills/shared/stage-codes.md § Agent Model Matrix`; `skills/shared/model-prompting.md` lists what each alias needs countered, and `commands/prompt-audit.md § Body rules 5-7` is the check. |
 | Emphasis | Generate the plain imperative. `CRITICAL`/`MUST` is earned by a recorded failure, later. |
@@ -130,7 +127,7 @@ Both slots are required, and so is the shape below.
 
 | Section | Rule |
 |---|---|
-| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), then two sub-sections that make them falsifiable: `### Rationalizations`, an `Excuse \| Reality` table of 3-5 rows whose Excuse is a shortcut *this* agent takes mid-run and whose Reality is the rule overriding it; and `### Red Flags — STOP`, 3-5 observable behaviours closing on a bold `**All of these mean: …**` verdict. Both: `agents/qa-engineer.md § Constraints (DO NOT)`. |
+| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), each stated once as a plain bullet; a short because rides on the bullet, never in a separate table or list. |
 | Example Interactions | 5-8 bullets, each a verbatim user phrasing that should route to this agent — never a description of its job. Placement: last section, or immediately before `## Worktask Integration` for a stage owner, since § Handoff Protocol stays last. |
 
 ### Completion Verification (optional)

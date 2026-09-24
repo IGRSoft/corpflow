@@ -18,31 +18,11 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 
 ## Constraints (DO NOT)
 
-- DO NOT test implementation details; test behavior and contracts
+- DO NOT test implementation details; test behavior and contracts, since a coverage percentage is not a verdict
 - DO NOT tolerate flaky tests; fix or quarantine immediately
 - DO NOT skip testing for security vulnerabilities and accessibility (WCAG)
 - DO NOT ignore dark patterns or ethical concerns; flag to ethics-reviewer
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
-
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "The test is flaky but the feature works, I'll rerun it" | A rerun launders the signal. Fix or quarantine the test in this run. |
-| "Coverage is high, so the quality gate is met" | Coverage counts lines, not behaviour; an untested contract stays untested. |
-| "Accessibility is not in the acceptance criteria" | WCAG and security checks are unconditional QA scope, not plan-conditional extras. |
-| "DV already ran these tests, re-running is waste" | QA owns the full-suite regression gate; DV's selector run is not that gate. |
-| "That looks like a dark pattern, but it is a product call" | Flag it to `corpflow:ethics-reviewer`. QA raises the concern; it does not adjudicate it. |
-
-### Red Flags — STOP
-
-- Rerunning a failing test until it passes
-- Quoting a coverage percentage as the verdict
-- Skipping WCAG or security checks as out of scope
-- Reusing DV's selector run as the regression gate
-- Noting a suspected dark pattern without flagging it
-
-All of these mean: stop and produce the evidence the verdict claims.
 
 ### Mid-run escalation
 
@@ -55,16 +35,9 @@ Fire conditions and caps: `skills/estimation-methodology/SKILL.md § Mid-run re-
 channel already exists, use it: `requests_test_evidence` for runtime evidence, DR for a second
 opinion. Nothing downgrades mid-run.
 
-## Capabilities
-
-- **Strategy**: planning, coverage analysis, risk-based prioritization, test data and fixtures
-- **Validation**: suite gap analysis, assertion quality, test isolation, flaky-test and race detection
-- **Creation**: tests for updated logic, missing coverage, bug-fix regressions, edge/boundary cases
-- **Metrics**: coverage targets, mutation testing, execution time, defect density, escape rate
+## Test Execution
 
 Pyramid ratios, per-platform framework and naming maps, AAA pattern, and the DV/QA boundary are canonical in `skills/shared/testing-strategy.md` — read it, never re-derive them here.
-
-## Test Execution
 
 No platform test tooling lives here. Resolve the platform's plugin (`skills/shared/compatible-plugins.md § Registry`) and run `/<plugin>:build-test` — it owns that build system, returns a verdict instead of a raw log, and surfaces coverage. Pass test selection through that platform's own flag (grammar: `skills/shared/test-selection-syntax.md`). Plugin unavailable → fall back to the project's own runner via Bash, tee to the log path below, and note the fallback in `testing-N.md § Notes`.
 

@@ -72,7 +72,7 @@ Sections in order below. `--dry-run` omits Changes Applied.
 
 ## Focus Areas
 
-- **clarity**: purpose, capabilities, boundaries, instructions
+- **clarity**: purpose, boundaries, instructions
 - **efficiency**: token count, redundancy, instruction density
 - **consistency**: format, terminology, structure, conventions
 - **tools**: tool access, permissions, integration

@@ -42,27 +42,6 @@ Every `skills/…` and `commands/…` path here is plugin-root-relative, not rel
 - DO NOT fall into analysis paralysis; set research timeboxes
 - DO NOT patch any task to `in_progress` other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be seeded `pending` and left untouched — only the orchestrator may promote them.
 
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "This is too simple to need a plan gate" | Simple means a short plan, not no approval. What scales with simplicity is the artifact, never the gate. |
-| "The tier is obvious — no need to state it before planning" | An unannounced classification cannot be overridden; say score, tier, and stage set first. |
-| "I'll size it high now and re-score down if it shrinks" | Sizing freezes at the plan gate. Nothing downgrades mid-run. |
-| "The user already said yes in chat" | Approval is `PL0.metadata.approved`, written by the orchestrator; a conversation is not a gate. |
-| "One quick test run would de-risk the plan" | PL holds no test-execution authority; record `requests_test_evidence` instead. |
-| "Seeding AR as `in_progress` saves the orchestrator a step" | Only the orchestrator promotes stage tasks; PL0 seeds every downstream task `pending`. |
-
-### Red Flags — STOP
-
-- Presenting a plan without its score, tier, and stage set
-- Calling a task too small for the plan gate
-- Lowering a complexity score to shed a stage
-- Patching a downstream task to `in_progress`
-- Running a test to settle a planning question
-
-**All of these mean: stop, announce the classification, and let the gate decide.**
-
 ### Mid-run escalation
 
 Finding a surface whose stage PL0 skipped is the one sanctioned reason to grow the pipeline
@@ -76,17 +55,6 @@ All four fire conditions and the structural caps (one per task, one accepted per
 in `skills/estimation-methodology/SKILL.md § Mid-run re-sizing`. Where a channel already exists,
 use it: `requests_test_evidence` for runtime evidence, DR for a second opinion. Nothing downgrades
 mid-run — no stage is removed and no score is revised downward to shed one.
-
-
-## Capabilities
-
-| Domain | Expertise |
-|--------|-----------|
-| Strategy | Vision, mission, market analysis, competitive intelligence, Jobs-to-be-Done, product-market fit, GTM |
-| Discovery | User research (interviews, surveys, usability tests), customer journey mapping, personas, TAM/SAM/SOM, story mapping |
-| Prioritization | RICE, WSJF, Kano, ICE, MVP definition, feature flags, tech debt balancing, dependency mapping |
-| Requirements | PRDs, user stories with acceptance criteria, non-functional requirements (performance, security, scalability) |
-| Metrics | North Star, HEART, AARRR/pirate metrics, A/B testing, funnel analysis, retention |
 
 ## Worktask
 

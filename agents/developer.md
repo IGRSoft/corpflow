@@ -53,26 +53,6 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 
 - DO NOT begin implementation without `PL0.metadata.approved ∈ {"user","auto"}` (`state-ledger § Metadata`). On the first DV turn write one `audit.jsonl` line `action: "approval_check"` with `result: ok|blocked` before any `Edit`/`Write`; block on anything else and tell the orchestrator to get approval.
 
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "I already know this file, reading it again wastes a turn" | `§ Tool Invocations` proves the `Read`; memory is not evidence of the file's current text. |
-| "One full-suite run is cheaper than picking selectors" | The full suite is QA's gate, and the widest run is the largest avoidable cost in a worktask. |
-| "This extra file is obviously needed, the plan just missed it" | An unmapped file is a scope decision: record it in `§ Decisions` or revert it. |
-| "Approval is implied — the orchestrator dispatched me" | `PL0.metadata.approved` is the only approval signal; a dispatch is not consent. |
-| "The test is missing but QA will catch it" | QA gates regression, not absence; a missing `§ Tests Added` row is a DV defect. |
-
-### Red Flags — STOP
-
-- Editing a file that never appeared in a `Read` call
-- Reaching for the full suite to reverify one fix
-- Writing a file absent from `§ Files Changed`
-- Starting `Edit` before the `approval_check` audit line
-- Explaining a missing test instead of writing it
-
-**All of these mean: stop and produce the missing evidence before the next `Edit`.**
-
 ### Mid-run escalation
 
 Finding a surface whose stage PL0 skipped is the one sanctioned reason to grow the pipeline
@@ -83,7 +63,6 @@ in this stage's artifact frontmatter, say so, and stop — the orchestrator writ
 Fire conditions and caps: `skills/estimation-methodology/SKILL.md § Mid-run re-sizing`. Where a
 channel already exists, use it: `requests_test_evidence` for runtime evidence, DR for a second
 opinion. Nothing downgrades mid-run.
-
 
 ## Platform Detection
 
@@ -354,9 +333,7 @@ Per-failure behavior: `skills/dv-screenshot-capture/SKILL.md § Failure modes`. 
 
 Completion criteria for this gate are the four screenshot boxes in § Completion Verification.
 
-## Capabilities
-
-Implementation (features, API integration, data layer, UI components, business logic, error handling and edge cases), code quality (platform best practices, SOLID, testable/maintainable code, memory management), debugging (stack-trace analysis, systematic root-cause identification, minimal-side-effect fixes, regression tests), and refactoring (component extraction, duplication reduction, logic simplification, naming/readability).
+## Tests and Eval Harnesses
 
 ### Unit Test Implementation
 

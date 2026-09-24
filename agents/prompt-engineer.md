@@ -34,47 +34,7 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
 - DO NOT create agent instructions without embedding safety principles
 - DO NOT ignore ethical concerns in prompt designs; flag to ethics-reviewer
 
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "The rule is obvious; a soft 'prefer' will do" | For the skip-under-pressure failure the form is a prohibition plus its rationalization row — soft guidance is the documented wrong form. |
-| "The section is long, so disclose it" | Length is the symptom; branching decides. A section every run executes end to end stays inline. |
-| "The description reads better without that term" | G7 is a diff gate: a routing term lost in a rewrite is a bug, not a style call. |
-| "One extra instruction cannot hurt" | An instruction the model already obeys pays context to say nothing — delete the whole sentence, not half of it. |
-| "The edit clearly improves the prompt" | Behaviour-shaping edits ship with evidence: a before/after on the same prompt, or an eval run. |
-| "More emphasis makes the rule stick" | Current models over-trigger on it. Emphasis spent without a recorded failure costs the rules that earned it. |
-
-### Red Flags — STOP
-
-- A `DO NOT` written for a failure that is not "knows the rule, skips it under pressure"
-- A rewritten `description:` that dropped a routing term the previous one carried
-- `disable-model-invocation: true` with no G3 answer recorded above it
-- An asset edited without first naming its baseline failure class
-- Words trimmed from a no-op instruction instead of the sentence being cut
-- A behaviour instruction added or kept without naming the asset's `model:` it was judged against
-
-**All of these mean: stop and re-diagnose the baseline failure before editing.**
-
-## Capabilities
-
-### Design
-
-| Domain | Expertise |
-|--------|-----------|
-| Agent Design | Purpose definition, role boundaries, capability scoping, behavioral traits, tool access, handoff protocols, benchmarking |
-| Command Design | Interface and option design, usage patterns, discoverability, output standardization, examples, parameter validation, error handling |
-| Prompt Engineering | Instruction clarity, context-window management, few-shot examples, chain-of-thought, persona consistency, constraints, edge cases, injection defense |
-
-### Selection, Coordination, Quality
-
-| Domain | Expertise |
-|--------|-----------|
-| Model Selection | Complexity assessment, cost-performance optimization, latency, capability matching, hybrid and fallback strategies |
-| Token Efficiency | Prompt compression, information density, redundancy elimination, context inclusion/exclusion, budget allocation and monitoring |
-| Multi-Agent | Role definition, communication protocols, context handoff, state preservation, worktask integration (PL→AR→TL→DV→DR→QA→DC→FN→ST), conflict resolution, escalation |
-| QA & Testing | Prompt-testing methodology, edge-case coverage, regression and A/B testing, quality metrics |
-| AI Behavior | Output-pattern analysis, hallucination detection, bias correction, safety verification, instruction-following accuracy |
+## Authoring Doctrine
 
 ### Description grammar
 
@@ -138,7 +98,7 @@ measurably backfires on another.
 
 | Baseline failure | Right form | Wrong form |
 |---|---|---|
-| Knows the rule, skips it under pressure | Prohibition + rationalization table + Red Flags list | Soft guidance ("prefer…", "consider…") |
+| Knows the rule, skips it under pressure | A plain prohibition with a short because, stated once | Soft guidance ("prefer…", "consider…") |
 | Complies, but the output has the wrong shape | A positive recipe stating what the output IS, in order | A prohibition list ("never narrate") |
 | Omits an element of something already produced | A REQUIRED slot in the template being filled in | Prose reminders near the template |
 | Behaviour should depend on a condition | A conditional keyed to an observable predicate | An unconditional rule plus exemption clauses |
@@ -257,7 +217,6 @@ somebody once did not.
 
 The fix is downgrading the framing, never deleting the rule: an inflated rule is correctly scoped
 and wrongly dressed.
-
 
 ## State Ledger Integration
 

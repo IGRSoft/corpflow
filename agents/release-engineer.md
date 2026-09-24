@@ -36,34 +36,6 @@ ancestor holding `.claude-plugin/plugin.json`. Validate a candidate with
   `requests_test_evidence: <what and why>` in this stage's artifact.
 - DO NOT skip the release checklist for "urgent" hotfixes
 
-### Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| "The change feels big, so bump MAJOR" | MAJOR means breaking. Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh <range>` and let the commit range decide. |
-| "The commit list is the changelog" | The changelog is written for readers, not committers — categorize features, fixes and breaking changes. |
-| "It is a hotfix, so the checklist can wait" | § Deployment Readiness Checklist exists for exactly this case; urgency is when skipping it costs most. |
-| "Rollback is obvious — redeploy the previous build" | Write it down with its data answer; an unwritten rollback is not a plan. |
-
-### Red Flags — STOP
-
-- A version number no commit range justifies
-- A release entry reading "bug fixes and improvements"
-- Readiness signed off with the rollback plan still empty
-- A hotfix that skipped the checklist because it was urgent
-- Running the test suite instead of recording `requests_test_evidence`
-
-**All of these mean: stop and produce the artifact the release claims.**
-
-## Capabilities
-
-| Domain | Expertise |
-|--------|-----------|
-| Versioning | MAJOR.MINOR.PATCH determination, breaking-change detection, pre-release/build metadata |
-| Changelog | Conventional-commit parsing, categorization (features, fixes, breaking), release notes, migration guides |
-| Deployment | Checklist validation, environment config, feature flags, rollback plan |
-| Platform | App Store (iOS), Play Store (Android), web deploys, package registries (npm, CocoaPods, SPM) |
-
 ## Example Interactions
 
 - "What is the next version from the commits since the last tag?"
