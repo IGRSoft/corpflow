@@ -60,18 +60,18 @@ DV hotfix builds: stream with `Monitor` over `run_in_background` Bash and tee to
 
 ### IR → DV Handoff Contract
 
-`incident-N.md` carries these four sections before IR transitions to DV; the orchestrator
+`incident-N.md` carries these four H3 sections before IR transitions to DV; the orchestrator
 validates per `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md § IR–ET`. Any empty section
 means DV is not dispatched and IR is re-queued with a `missing_input` error entry.
 
 #### Required Sections
 
-| Section | Content | Purpose |
-|---------|---------|---------|
-| **Required Fix** | Concrete code-level change or data correction needed. Not a description of the problem — the *solution*. | Prevents DV from re-diagnosing |
-| **Constraints** | What DV must not do (no schema changes, no new dependencies, keep wire format stable, etc.) | Protects production invariants |
-| **Blast Radius** | Files/modules DV may touch. Explicit allow-list. | Prevents scope creep during emergency |
-| **Verification Command** | Exact command QA will run (`curl …`, `xcodebuild test -only-testing:X`, manual steps) | Aligns QA criteria upfront |
+| Section (H3) | Under | Content | Purpose |
+|---------|-------|---------|---------|
+| **Required Fix** | `## fix-plan` | Concrete code-level change or data correction needed. Not a description of the problem — the *solution*. | Prevents DV from re-diagnosing |
+| **Constraints** | `## fix-plan` | What DV must not do (no schema changes, no new dependencies, keep wire format stable, etc.) | Protects production invariants |
+| **Blast Radius (file allow-list)** | `## blast-radius` | Files/modules DV may touch. Explicit allow-list, separate from the Impact Assessment beside it. | Prevents scope creep during emergency |
+| **Verification Command** | `## fix-plan` | Exact command QA will run (`curl …`, `xcodebuild test -only-testing:X`, manual steps) | Aligns QA criteria upfront |
 
 #### DV Delegation Prompt
 

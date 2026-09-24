@@ -588,7 +588,7 @@ Fields each handoff carries in addition to the standard format above:
 | DV → SR | **Security-Sensitive Areas** (area: why relevant); **Recommended Focus**: auth, data handling, APIs |
 | SR → QA | **Security Status** [Approved\|Blocked\|Conditional]; **Critical/High Findings** count; **Security Tests Recommended** |
 | DC → RE | **Commit Summary** (feat/fix list); **Recommended Version Bump** [MAJOR\|MINOR\|PATCH] |
-| IR → DV | **Incident ID** INC-[N]; **Severity** P[0-3]; **Required Fix**; **Constraints**: minimal change, no refactoring |
+| IR → DV | **Incident ID** INC-[N]; **Severity** P[0-3]; **Required Fix**; **Constraints**: minimal change, no refactoring; **Blast Radius** file allow-list; **Verification Command** (`incident-response/SKILL.md § IR → DV Handoff Contract`) |
 
 ## Constitutional Coordination
 

@@ -67,13 +67,24 @@ Create `.context/incident-N.md` (N from `task.metadata.run_index`; first run wri
 | Under | Section | Content |
 |---|---|---|
 | H1 title | Incident Summary | ID `INC-[number]`, severity P[0-3], status Active/Mitigated/Resolved, timestamps started · detected · mitigated · resolved |
-| `## blast-radius` | Impact Assessment | Users affected, services impacted, business impact, blast radius |
+| `## blast-radius` | Impact Assessment | Users affected, services impacted, business impact |
 | `## root-cause` | Timeline | `Time`/`Event` table, one row per event |
 | `## root-cause` | Root Cause Analysis | Immediate cause, contributing factors, root cause (the systemic one) |
 | `## fix-plan` | Response Actions | Numbered, each with its timestamp |
 | `## fix-plan` | Resolution | Fix applied, verification (how it was confirmed), rollback used (yes/no + details) |
 | `## fix-plan` | Action Items | `Priority`/`Action`/`Owner`/`Due` table — P1 prevent recurrence, P2 improve detection |
 | `## fix-plan` | Lessons Learned | What worked, what to improve, process changes needed |
+
+#### DV handoff sections
+
+DV is told to implement the Required Fix inside the Blast Radius (`skills/incident-response/SKILL.md § IR → DV Handoff Contract`), so write these four H3s, non-empty, first under their H2 before handoff:
+
+| Under | Section | Content |
+|---|---|---|
+| `## fix-plan` | Required Fix | The concrete code or data change DV makes: the solution, not the symptom |
+| `## fix-plan` | Constraints | What DV must not do: schema changes, new dependencies, wire-format changes, refactors |
+| `## fix-plan` | Verification Command | Exact command or manual steps QA runs to confirm the fix |
+| `## blast-radius` | Blast Radius (file allow-list) | Files and modules DV may touch, one per line; DV edits nothing else |
 
 ## Severity Classification
 

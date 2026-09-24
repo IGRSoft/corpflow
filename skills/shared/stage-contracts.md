@@ -239,7 +239,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
-| **IR** | User incident report | `incident-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## root-cause`, `## fix-plan`, `## blast-radius` non-empty |
+| **IR** | User incident report | `incident-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | `## root-cause`, `## fix-plan`, `## blast-radius` non-empty; H3s Required Fix, Constraints, Verification Command (under `## fix-plan`) and Blast Radius (file allow-list, under `## blast-radius`) non-empty (`incident-response/SKILL.md § IR → DV Handoff Contract`) |
 | **ET** | `<plan_file>` + high-risk keyword match | `ethics-review-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list` | Decision ∈ {pass, block, conditional} |
 
 ## Validation Protocol
