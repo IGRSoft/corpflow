@@ -752,8 +752,12 @@ if [ "$STRICT" != "1" ] && [ "$STRICT" != "true" ]; then
   if [ "$STATE_STRICT" = "true" ]; then STRICT=1; fi
 fi
 
-# Guard 1: opt-out via task metadata or env override.
-NO_GH=$(jq -r '.metadata.no_gh_issue // false' "$STATE_FILE" 2>/dev/null)
+# Guard 1: opt-out via env override, or the flag on this run's PL task (where
+# /worktask Step 4 stamps it). The run-level key is read too, so a ledger that sets
+# it there still opts out.
+NO_GH=$(jq -r --arg pl "PL${RUN_INDEX:-0}" \
+  '(.tasks[$pl].metadata.no_gh_issue // .tasks.PL0.metadata.no_gh_issue // .metadata.no_gh_issue // false)' \
+  "$STATE_FILE" 2>/dev/null)
 if [ "${NO_GH_ISSUE:-${NO_GH}}" = "true" ]; then
   defer "opted_out"
 fi

@@ -319,7 +319,7 @@ Unset or empty ⇒ no item. Under `--auto=[decision]` the default is proceed, be
 
 #### `--no-gh-issue` opt-out
 
-Under `--no-gh-issue`, stamp `metadata.no_gh_issue: true` on the PL0 task and every downstream task. The orchestrator's publish step (`skills/worktask/SKILL.md § PL Issue Publish`) reads it via `skills/worktask/scripts/publish-pl-issue.sh`, which exits 0 with no `gh` call, auditing `result: "deferred"`, `reason: "opted_out"`. The stage loop is unaffected.
+Under `--no-gh-issue`, `/worktask` Step 4 has already stamped `metadata.no_gh_issue: true` on PL0; copy it to every downstream task you create. The orchestrator's publish step (`skills/worktask/SKILL.md § PL Issue Publish`) reads it via `skills/worktask/scripts/publish-pl-issue.sh`, which exits 0 with no `gh` call, auditing `result: "deferred"`, `reason: "opted_out"`. The stage loop is unaffected.
 
 ##### Default publish path (flag absent) & megatask opt-out
 
@@ -529,7 +529,7 @@ Weighted-score the task description for design indicators:
 
 #### Designer Invocation
 
-Flag gate: invoke `corpflow:designer` only under `--with-design` (`metadata.with_design == true`); the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
+Flag gate: invoke `corpflow:designer` only under `--with-design` (`PL0.metadata.with_design == true`, stamped by `/worktask` Step 4); the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
 
 Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` requesting:
 1. UX Assessment, Design Scope, Technical Design, Pencil Mockups, Effort Estimate

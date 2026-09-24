@@ -3,7 +3,10 @@ name: worktask
 description: Run one task through the staged worktask pipeline (plan, build, review, test, docs, PR) with plan and finalization gates and a resumable state ledger
 argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.6.0
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
+# tools: bare Task because each stage row's metadata.agent may name a platform variant from any
+# plugin (`pl0-procedure.md § Stage → agent table`, a CORPFLOW.md § Routing override included), and
+# the Step C.0a resolver and Phase 3 re-dispatch those agents or `corpflow:prompt-engineer`.
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -81,7 +84,7 @@ verbatim; never default, extend or infer it, so a tool nobody named stays a fail
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
-| `--with-design` | Invoke `corpflow:designer` during PL. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
+| `--with-design` | Invoke `corpflow:designer` during PL. Sets `metadata.with_design: true` on PL0. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
 | `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. |
@@ -181,8 +184,8 @@ detection`), and the workspace-root cross-check before every `Task()`.
    `--accept-absent=` beside it (§ Gate automation flag — `--accept-absent`): keep the value
    verbatim for Step 2a-pre, and reject an unknown tool.
 2. **Detect embedded commands**: extract any `/plugin:command` or `/command` pattern into
-   `metadata.embedded_commands` (comma-separated), strip the prefix from the description passed to
-   PL0, preserve the arguments. See § Embedded Command Detection.
+   PL0's `metadata.embedded_commands` (comma-separated, stamped at Step 4), strip the prefix from
+   the description passed to PL0, preserve the arguments. See § Embedded Command Detection.
 
 ### Step 2a-pre — Autonomy preflight (unattended runs)
 
@@ -557,8 +560,27 @@ there is a bug report: a conventional target existed and something stamped past 
 
 4. The Step 3a seed already created `tasks.PL0`, so this step merges metadata rather than creating
 the task (`--task-create` would hit the create op's idempotent early-exit and drop the payload
-silently). `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
+silently). `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"<model>","effort":"<effort>","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
 — `metadata.agent` is always the fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
+
+#### Step 4 — PL0's model and effort
+
+Resolve the pair the way every other stage row's is (`skills/shared/stage-codes.md § Model and
+Effort Lookup`), never type it: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve product-manager`
+prints `<model>`, `<effort>` and the source, tab-separated; paste the first two into the payload.
+It reads `state.models` first, then `CORPFLOW.md § Models`, then the matrix. No § Secure
+overrides row names PL.
+
+#### Step 4 — option-flag stamping
+
+Merge these into the same payload. A flag that was not passed leaves its key absent, and every
+reader treats an absent key as off.
+
+| Key | Stamp only when | Read by |
+|---|---|---|
+| `with_design: true` | `--with-design` | PM, `pl0-procedure.md § Designer Invocation` |
+| `no_gh_issue: true` | `--no-gh-issue` | `skills/worktask/SKILL.md § PL Issue Publish`, `publish-pl-issue.sh`, `mailbox.sh` |
+| `embedded_commands` | Step 2 found any | the DV dispatch, `skills/worktask/SKILL.md` loop step 5a |
 
 #### Step 4 — workspace_path stamping
 
@@ -1472,10 +1494,11 @@ that command, so the DV stage records the failure and escalates.
 
 #### Prohibited fallback and escalation target
 
-On Skill failure the DV agent halts and writes an error entry with
-`metadata.embedded_command_failure: true` before returning. Escalation target: TL0 if it exists
-(retry, split the work, or revise approach), otherwise PL, which may add TL0, revise the embedded
-command choice, or remove the embedding.
+On Skill failure the DV agent halts, appends the entry the table above names to
+`.context/errors/developer.md` (its `retry_count` and, at the ceiling, `error_escalated_to` go on
+the DV task's ledger row as for any retry), and returns without marking DV complete. Escalation
+target: TL0 if it exists (retry, split the work, or revise approach), otherwise PL, which may add
+TL0, revise the embedded command choice, or remove the embedding.
 
 ## Headless Dispatch (external runners)
 

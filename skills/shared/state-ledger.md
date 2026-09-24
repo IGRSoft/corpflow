@@ -125,6 +125,17 @@ otherwise `git rev-parse --show-toplevel` at init
 three assigned-tree guards read it and each degrades to a silent pass when it is absent. Isolation
 is not assignment — a stale worktree satisfies `isolation` and still fails these guards.
 
+### PL0 option fields
+
+Stamped on `tasks.PL0.metadata` by `/worktask` Step 4 (`commands/worktask.md § Step 4 — option-flag
+stamping`); absent means the flag was not passed.
+
+| Field | Writer → Reader | Purpose |
+|-------|-----------------|---------|
+| `with_design` | `--with-design` → PM (`pl0-procedure.md § Designer Invocation`) | `true` lets PL0 invoke `corpflow:designer`; otherwise Designer is skipped |
+| `no_gh_issue` | `--no-gh-issue` → `publish-pl-issue.sh`, `mailbox.sh` | `true` suppresses GitHub issue publishing; PM copies it to every stage row |
+| `embedded_commands` | Step 2 detection → DV dispatch | Comma-separated `/plugin:command` ids (`commands/worktask.md § Embedded Command Detection`) |
+
 ### Fan-out fields (DV rows)
 
 Set on DV rows only. Canonical model, naming grammar and the single-DV case:
@@ -438,10 +449,9 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 
 | Field | Writer → Reader | Description |
 |-------|-----------------|-------------|
-| `embedded_commands` | orchestrator at `/worktask` parse time → DV agent | Comma-separated `/plugin:command` identifiers detected on the trigger (e.g. `skill-creator`). See `commands/worktask.md § Embedded Command Detection` |
 | `preexisting_plan` | orchestrator → PL agent | Absolute path to a user-approved plan supplied at init; PL0 adopts it verbatim and reuses its anchors |
-| `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
-| `with_design` | `--with-design` → `skills/worktask/references/pl0-procedure.md § Designer Invocation` | When `true`, PL0 invokes `corpflow:designer`; otherwise Designer is skipped even for UI work and the keyword score stays advisory. No component stamps the field, so the gate reads absent on every run. |
+
+The `/worktask` option flags are not here: they land on PL0's task metadata (§ PL0 option fields).
 
 ### Release fields
 

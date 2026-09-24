@@ -55,6 +55,17 @@ setup() {
   assert_output "opted_out"
 }
 
+@test "happy: opt-out stamped on PL0's task metadata (the /worktask Step 4 site) defers opted_out" {
+  cd "$WD"
+  # /worktask Step 4 writes the flag on tasks.PL0.metadata, never on run-level
+  # .metadata; a reader of the run-level key alone would publish anyway.
+  jq '.tasks.PL0.metadata.no_gh_issue = true' .context/state.json > s2 && mv s2 .context/state.json
+  run env GH_BIN=/nonexistent/gh-tripwire WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
+  assert_output "opted_out"
+}
+
 @test "edge: idempotency — pre-set github_issue_url defers already_published" {
   cd "$WD"
   jq '.metadata.github_issue_url = "https://github.com/o/r/issues/7"' \

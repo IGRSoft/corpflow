@@ -130,6 +130,18 @@ matrix_target() {
   done
 }
 
+@test "grants: /worktask carries a bare Task grant, since a stage row may name any plugin's agent" {
+  local tools
+  tools="$(grep -E '^allowed-tools:' "$PLUGIN_ROOT/commands/worktask.md")"
+  [ -n "$tools" ] || { echo "commands/worktask.md: no allowed-tools line" >&2; return 1; }
+  printf '%s\n' "$tools" | grep -qE '(^allowed-tools:|,)[[:space:]]*Task([[:space:]]*(,|$))' \
+    || { echo "commands/worktask.md: no bare Task grant" >&2; return 1; }
+  if printf '%s\n' "$tools" | grep -qE 'Task\([a-z-]+:'; then
+    echo "commands/worktask.md: literal Task(plugin:agent) grant remains" >&2
+    return 1
+  fi
+}
+
 @test "copy: developer.md common-rows table matches matrix entry targets" {
   local p target row
   for p in $DEV_PLUGINS; do

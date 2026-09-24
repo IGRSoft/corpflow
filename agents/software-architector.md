@@ -5,7 +5,9 @@ color: green
 version: 0.4.0
 maxTurns: 60
 # tools: bare Task because a CORPFLOW.md § Routing override may point the architect at any plugin.
-tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task
+# The model-matrix.sh --resolve grant backs § Model Selection (AR): a stage row AR creates needs
+# the resolved model/effort pair, and neither the orchestrator nor --task-create fills one.
+tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Write, Edit, Task
 ---
 
 You are the software architect: you own the worktask pipeline's AR stage and review designs and changes for architectural integrity, scalability and maintainability.
@@ -140,10 +142,12 @@ create the missing stages or flag to the user before proceeding.
 
 #### Model Selection (AR)
 
-Complexity-driven — see `skills/shared/model-selection.md`. A row you create carries the fields PL0
-stamps (`skills/worktask/references/pl0-procedure.md § Downstream propagation`), `metadata.model`
-and `metadata.effort` included; `--task-create` refuses a row without `effort`. The stage's
-reasoning tier rides on that field alone — no prompt keyword raises it past the `high` default.
+A row you create carries the fields PL0 stamps (`skills/worktask/references/pl0-procedure.md §
+Downstream propagation`), `metadata.model` and `metadata.effort` included; `--task-create` refuses
+a row without `effort`. Resolve the pair as PL0 does, never from memory:
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve <agent>` prints model,
+effort and source, tab-separated; paste the first two. The stage's reasoning tier rides on that
+field alone — no prompt keyword raises it past the resolved default.
 
 #### Low-Complexity Gate (AR)
 

@@ -58,7 +58,7 @@ If the sanitiser removes more than 50% of the body length, the helper refuses to
 
 ## Skip paths: opt-out and megatask
 
-- **`--no-gh-issue`**: PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates it. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call. Stage-loop entry proceeds unchanged.
+- **`--no-gh-issue`**: `/worktask` Step 4 stamps `metadata.no_gh_issue: true` on PL0 and PM propagates it. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call. Stage-loop entry proceeds unchanged.
 - **Megatask per-issue**: exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**, because the parent milestone issue is the canonical record and auto-posted plan comments fragment the review surface; PR linkage ties the implementation back. Detection (highest priority first): `MILESTONE_MODE=1` env override (tests), non-empty `state.json:metadata.milestone`, `workspace.json` present at `$PWD` or `$WORKSPACE_ROOT`.
 
 ## Cross-run dedup (one `.context/` ↔ one issue)

@@ -76,7 +76,8 @@ The orchestrator passes both `model` and `effort` when spawning a stage agent, a
 onto `tasks.<ID>.metadata`. Two-hop join: § Primary/Support Stages resolve a code to its agent,
 § Agent Model Matrix resolves that agent to its pair. PL0 does the join itself via
 `model-matrix.sh --resolve <agent>` and pastes the pair into `--task-create`'s `--metadata`;
-`--task-create` reads neither table. § Secure overrides can then replace the pair.
+`--task-create` reads neither table. The same call resolves PL0's own pair (`/worktask` Step 4)
+and any stage row AR adds. § Secure overrides can then replace the pair.
 
 `effort` is stamped because the Step C.0a resolver dispatches one rung above the item that
 raised it (`stage-contracts.md § Blocking items are resolved, not asked`), and only the ledger
