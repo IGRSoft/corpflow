@@ -130,7 +130,7 @@ Diff `Sources/Networking/RetryPolicy.swift`, with markers `RetryPolicyTests` →
 
 ### UI feature diff
 
-Diff `src/components/LoginForm.tsx` + a design PNG under `test_mode: build-only`, `ui_visual_check: true` → DV builds only, executes nothing, writes the marker-derived Selected Tests; QA runs that list plus Design Comparison (gated on `ui_visual_check=true` AND designs present, independent of `test_mode`).
+Diff `src/components/LoginForm.tsx` + a design PNG under `test_mode: build-only`, `ui_visual_check: true` → DV builds and writes the marker-derived Selected Tests; it executes nothing on a platform with a wired handler, and here (web, unwired) runs the touched module through § Auto-promotion when no handler; QA runs that list plus Design Comparison (gated on `ui_visual_check=true` AND designs present, independent of `test_mode`).
 
 ### Migration: untagged repository
 
@@ -251,7 +251,7 @@ The DV artifact's `§ Decisions` records `auto_promoted_mode: module-scope` so Q
 
 | Reader | What it does with markers/Selected Tests |
 |--------|------------------------------------------|
-| **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests and warnings. Builds in every mode. Executes only `Executed Tests (DV)` = `Selected ∩ test files Added/Modified` (`git diff --diff-filter=AMR`) ∪ `metadata.always_required_tests`; empty set → smoke set with `auto_executed: smoke_set` (`testing-strategy.md § DV Executed vs Selected`). |
+| **DV** (`agents/developer.md` D2) | Parses markers; writes Selected Tests and warnings. Builds in every mode. Executes only `Executed Tests (DV)` = `Selected ∩ test files Added/Modified` (`git diff --diff-filter=AMR`) ∪ `metadata.always_required_tests`, under `scoped`/`full` only; empty set → smoke set with `auto_executed: smoke_set` (`testing-strategy.md § DV Executed vs Selected`). Under `build-only` it executes nothing apart from § Auto-promotion when no handler. |
 | **QA** (`agents/qa-engineer.md` Q1) | Reads `§ Selected Tests` from every DV artifact (`refs.dev[]`; `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), the union of full lists, not DV's Executed subsets; runs it (build-only/scoped) or the full suite (full); copies WARN lines from the warning log into `testing-N.md § Notes`. |
 
 ### DR and PL

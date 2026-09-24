@@ -327,7 +327,7 @@ simulator-startup cost.
 
 | Mode | DV behaviour | QA behaviour | When PL sets it |
 |------|--------------|--------------|-----------------|
-| `build-only` | Build + run smoke set only (`@test-required` ∪ `metadata.always_required_tests`). Parse `@depends-on:` markers. Emit Selected Tests list for QA. | Run only Selected Tests (always-required ∪ dependency-matched). Visual comparison gated on `ui_visual_check`. | Opt-in via explicit `test_mode: build-only`, in repos that completed marker migration: refactors without behavior change, dep updates, doc-only and internal-tool changes. |
+| `build-only` | Build; run no tests (`Executed at DV` empty), except the no-handler promotion in § Auto-promotion safety nets. Parse `@depends-on:` markers. Emit Selected Tests list for QA. | Run only Selected Tests (always-required ∪ dependency-matched). Visual comparison gated on `ui_visual_check`. | Opt-in via explicit `test_mode: build-only`, in repos that completed marker migration: refactors without behavior change, dep updates, doc-only and internal-tool changes. |
 
 #### `scoped` and `full` modes
 
@@ -359,7 +359,7 @@ in `complete-summary-N.md`.
 
 DV/QA enforce these even if PL set a tighter mode:
 
-- Selected Tests empty AND `test_mode = build-only` → DV warns and runs the smoke set; QA promotes to
+- Selected Tests empty AND `test_mode = build-only` → DV warns and still runs no tests; QA promotes to
   `scoped` with a logged note in `testing-N.md § Notes`.
 - No wired marker-parser handler for the platform (every platform except Apple today —
   `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}`
@@ -382,8 +382,11 @@ DV/QA enforce these even if PL set a tighter mode:
 
 #### Readers
 
-- DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs only when
-  `test_mode ∈ {scoped, full}`.
+- DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs `Executed Tests
+  (DV)` only when `test_mode ∈ {scoped, full}`; under `build-only` it runs tests only through the
+  no-handler promotion (§ Auto-promotion safety nets). The mode is D2's rule, not a gate:
+  `hooks/test-execution-gate.sh` never reads `test_mode` and allows DV a selector-bearing run in
+  every mode.
 - QA step Q1 (`agents/qa-engineer.md`) — three-mode dispatcher.
 - QA Design Comparison (`agents/qa-engineer.md § Design Comparison`) — gated on `ui_visual_check=true`
   (not `test_mode`).

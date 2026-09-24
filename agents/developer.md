@@ -162,7 +162,7 @@ D0 is self-consistent inside whatever tree you are in; only D0.0a detects a wron
 
 ### D0.0 — Worktree isolation (before any Edit/Write)
 
-DV runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If not isolated, either create one (`EnterWorktree`, honoring `task.metadata.base_ref`/`worktree.baseRef`, then re-run D0 inside it) or — if one genuinely cannot be created (bare/read-only repo) — return a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `§ Approach` and set the `worktree:` handoff field.
+DV runs in an isolated worktree. Confirm via `git rev-parse --git-dir` (linked worktrees resolve under `.git/worktrees/<name>`) or `git worktree list`. If not isolated, either create one (with `task.metadata.base_ref` set, `git worktree add -b <branch> <path> <base_ref>` then `EnterWorktree(path)`; otherwise bare `EnterWorktree`, which branches per `worktree.baseRef` — `skills/worktask/references/workspace-modes.md § Base-ref resolution` — then re-run D0 inside it) or — if one genuinely cannot be created (bare/read-only repo) — return a `worktree_isolation_missing` audit row + `verdict: blocked` naming the reason, never writing to the shared checkout. Record the resolution in `§ Approach` and set the `worktree:` handoff field.
 
 This proves isolation, not assignment: a stale worktree from an earlier session passes D0.0 while being the wrong tree.
 
@@ -223,7 +223,7 @@ Compute **Selected Tests** from `<plan_file>` metadata + inline source markers p
 
 #### Executed Tests (DV) derivation & execution
 
-`Executed Tests (DV)` = (`Selected Tests` ∩ test files Added/Modified/renamed-to in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Tests matched only by `@depends-on:` / covers-changed-files / module-level that this run did NOT touch stay in the `Selected Tests` artifact for QA. `<base>` = the worktask base branch: `task.metadata.base_ref` (stamped by PL0) when present, else session-level `worktree.baseRef` (`handoff-protocol.md § state.json schema`).
+`Executed Tests (DV)` = (`Selected Tests` ∩ test files Added/Modified/renamed-to in `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Tests matched only by `@depends-on:` / covers-changed-files / module-level that this run did NOT touch stay in the `Selected Tests` artifact for QA. `<base>` = the worktask base branch: `task.metadata.base_ref` (stamped by PL0) when present, else the order in `skills/worktask/references/workspace-modes.md § Base-ref resolution order` (`worktree.baseRef` names no branch, so it is never `<base>`).
 
 Per mode: DV runs only `Executed Tests (DV)`, QA the broader Selected list. `build-only` = build, no tests at DV. `scoped`/`full` = build + `Executed Tests (DV)` as a sanity check on what DV touched; QA runs the module/full scope.
 
@@ -241,7 +241,7 @@ Pass each Executed test through the platform's own selection flag; the grammar, 
 
 #### Test-run counters
 
-Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag or a trailing positional test-target argument (e.g. `bats tests/foo.bats`, `cargo test foo`; a bare runner name with no argument at all is `full_test_run` instead), `action: "full_test_run"` otherwise. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests, so it emits no row. Audit-only: a missing or unexpected counter row never blocks a stage.
+Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag or a trailing positional test-target argument (e.g. `bats tests/foo.bats`, `cargo test foo`; a bare runner name with no argument at all is `full_test_run` instead), `action: "full_test_run"` otherwise. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests outside the no-handler promotion, so it usually emits no row. Audit-only: a missing or unexpected counter row never blocks a stage.
 
 #### D2 failure handling
 
@@ -375,7 +375,7 @@ An H3 under `## tests-added`: one row per material build/test/MCP call, chronolo
 
 An H3 under `## tests-added`, required when `<plan_file>` declares `metadata.test_mode`. Under a mode/auto-promotion header row, write **Always Required**, **Dependency-Matched** and **Excluded (with reason)** in the shapes canonical to `skills/shared/testing-strategy.md § Selected Tests — production by DV`, plus these two DV-only sub-sections:
 
-- **Executed at DV** — `| Test | Source | Status |`, Source ∈ {Added, Modified, always_required, smoke_safety_net}, Status ∈ {pass, fail}. Empty when `test_mode=build-only`.
+- **Executed at DV** — `| Test | Source | Status |`, Source ∈ {Added, Modified, always_required, smoke_safety_net}, Status ∈ {pass, fail}. Empty when `test_mode=build-only`, unless the no-handler promotion ran.
 - **Warnings** — first 3 lines of `.context/logs/test-selection-warnings.md`, if any.
 
 QA reads Always Required / Dependency-Matched / Excluded and executes the full Selected scope; DR reads Warnings (silent test drops) and Executed at DV (scope adherence).

@@ -179,7 +179,7 @@ The delegate's prose reply is never the evidence — the file is. After the `Tas
 
 #### apple-canvas adapter
 
-**Backing tool**: `swift run SnapshotHost` (host-side SPM executable) + `Skill("preview-ensurer")`. Scaffold `tools/SnapshotHost/` from template if missing → `preview-ensurer` auto-adds `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`ios-sim`). Emits `canvas_render` + `preview_added` audit rows. Full recipe: `references/apple-canvas.md`; heuristics: `references/preview-ensurer.md`.
+**Backing tool**: `scripts/apple-canvas.sh`, which runs two host-side SPM executables: `PreviewEnsurer` (`swift run --package-path <plugin>/skills/preview-ensurer/references/reference-impl PreviewEnsurer …`) and `SnapshotHost`. Scaffold `tools/SnapshotHost/` from template if missing → PreviewEnsurer auto-adds `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`ios-sim`). Emits `canvas_render` + `preview_added` audit rows. Full recipe: `references/apple-canvas.md`; heuristics: `references/preview-ensurer.md`.
 
 ##### apple degraded-mode predicate
 

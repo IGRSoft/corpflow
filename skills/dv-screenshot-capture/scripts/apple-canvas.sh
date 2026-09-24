@@ -7,7 +7,7 @@
 #
 #   1. Scaffold-if-missing  → tools/SnapshotHost/ from templates/SnapshotHost-template/
 #   2. Invoke preview-ensurer (Swift executable) on modified files
-#   3. Rewrite PreviewBridge.swift viewRegistry (idempotent)
+#   3. PreviewBridge.swift viewRegistry rewrite — not implemented; logged as deferred
 #   4. swift run --package-path tools/SnapshotHost SnapshotHost --view ... --output ...
 #   5. Apply 500 KB size budget (pngquant fallback / oversize/)
 #   6. Emit manifest row + audit JSON (canvas_render, preview_added, ...)

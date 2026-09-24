@@ -68,7 +68,7 @@ Megatask architecture — DAG, tracks, statuses, branch naming, base-branch chai
 | Failure | Cause | Fix |
 |---------|-------|-----|
 | One branch for all issues | Missing branch-per-issue logic | Every issue gets its own branch |
-| Branch from wrong base | Not using a remote ref | `git fetch origin develop && git checkout -b … origin/develop` (`EnterWorktree` branches from local HEAD by default; override via `worktree.baseRef`=`head`\|`fresh`) |
+| Branch from wrong base | Not using a remote ref | `git fetch origin develop && git checkout -b … origin/develop` (a new `EnterWorktree` tree branches from `origin/<default-branch>` unless the user sets `worktree.baseRef: "head"` — `skills/worktask/references/workspace-modes.md § Base-ref resolution`) |
 | Missing orchestrator.json | Init skipped | Run megatask init before issues |
 | No PR created | FN incomplete | Ensure `gh pr create` runs per issue |
 | Duplicate PR | PR check skipped | Check the issue timeline first |

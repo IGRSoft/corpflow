@@ -233,7 +233,7 @@ Artifact paths use `<basename>-N.md` (N per [#run-index-resolution](#run-index-r
 | Stage | Required Inputs | Required Outputs | Validation |
 |-------|-----------------|------------------|------------|
 | **FN** | Upstream `.context/*-N.md` † (log each deep read in the `deep_reads` tripwire) + `state.json` facts | `complete-summary-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`. Plus `.context/attachments/{PR instructions,Review request}.md` (`conductor-attachments.md`) and commit/PR. Preflight: `skills/worktask/scripts/fn-preflight.sh` | Both attachments exist + commit created OR PR opened |
-| **ST** | `complete-summary-N.md` | `retrospective-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`. Plus optional `.context/learnings.md`, only on in-scope user changes (`skills/self-improvement/SKILL.md`) | Decision ∈ {approved, rejected, changes-requested} + `self-improvement` invocation recorded (`learnings.md` present, or `Result: no-changes` in `.context/logs/self-improve-*.log`) |
+| **ST** | `complete-summary-N.md` | `retrospective-N.md`, H2 set: `handoff-protocol.md#anchor-allow-list`. Plus optional `.context/learnings.md`, only on in-scope user changes (`skills/self-improvement/SKILL.md`) | Verdict ∈ {approve, reject} (reject carries `blockers:` and loops back to DV) + `self-improvement` invocation recorded (`learnings.md` present, or `Result: no-changes` in `.context/logs/self-improve-*.log`) |
 
 ### IR–ET
 
@@ -1071,6 +1071,7 @@ handoff:
   stage: ST
   verdict: approve             # approve / reject
   summary: "Approved. <N follow-ups filed or 'No follow-ups'>."
+  # blockers: ["<criterion>: <gap>"]   # reject only — injected into the replayed DV prompt
   key_decisions:
     - { id: st1, summary: "Approve merge", anchor: "retrospective-N.md#decision" }
   open_questions:

@@ -59,9 +59,9 @@ Fixture files are mutated on `--auto-add true`; reset them between runs with `gi
 
 ```jsonc
 {
-  "actor": "preview-ensurer",
+  "actor": "apple-canvas-adapter",
   "action": "preview_added",
-  "subject": "SimpleView",
+  "subject": "<worktask_id>/<slug>",
   "result": "ok",
   "metadata": {
     "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",

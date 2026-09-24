@@ -351,8 +351,8 @@ issue done and unblock dependents — `skills/megatask/references/schemas.md § 
 Use the resolved `git.base_branch` from `workspace.json`; reference the issue number in title and
 body. In worktree mode, `ExitWorktree` before `git worktree remove`; `EnterWorktree` with `path`
 targets a specific worktree when several exist, switching between Claude-managed worktrees
-mid-session without an intervening `ExitWorktree`, and honours `worktree.baseRef`
-(`head`\|`fresh`; the plugin assumes `head`). Stale worktrees are auto-cleaned. A `path` outside
+mid-session without an intervening `ExitWorktree`. Only a new tree follows `worktree.baseRef`
+(default `fresh`; the plugin needs the user to set `head` — `skills/worktask/references/workspace-modes.md § Base-ref resolution`). Stale worktrees are auto-cleaned. A `path` outside
 `.claude/worktrees/` prompts for confirmation — keep unattended re-targets inside it, or
 pre-authorize via skip-permissions mode.
 

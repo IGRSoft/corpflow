@@ -19,6 +19,7 @@ Coordinating agents across worktask stages: handoffs, errors, the audit trail, d
 - **Per-stage I/O contracts**: `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` — the Inputs → Outputs → Validation table every stage agent's Completion Verification references.
 - `references/hook-monitoring.md` — wiring or debugging hooks: event catalog (lifecycle, agent teams, MCP elicitation), matchers, conditional `if`, PreToolUse/PostToolUse decisions, gate-feedback contract, OTEL, agent teams vs subagents.
 - `references/headless-dispatch.md` — dispatching from CI/cron/a shell: `task.metadata` → `claude agents` flag bridge, live-session discovery, permission-mode pinning.
+- `references/audit-actions.md` — writing or reading an `audit.jsonl` row: every registered `action`, grouped by writer.
 
 ## Handoff Protocol
 
@@ -241,7 +242,7 @@ Every row above is authoritative. `audit-subagent` and `agent-stop` rows also ca
 |-------|-----------------|
 | External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage outside `Task()` — see `references/headless-dispatch.md`) |
 | `apple-canvas` adapter (in `dv-screenshot-capture`) | `canvas_render` (one row per phase ∈ scaffold\|complete\|retry — see `skills/dv-screenshot-capture/references/apple-canvas.md § Audit row schema`) |
-| `preview-ensurer` skill | `preview_added` (one row per `#Preview` block written to source — `metadata: {file, view_type, mock_strategy, lines_added}`) |
+| `apple-canvas` adapter, from the `preview-ensurer` result | `preview_added` (one row per `#Preview` block written to source — `metadata: {file, view_type, mock_strategy, lines_added}`) |
 | QA visual-diff wrapper (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
 
 #### Hook authority + dedupe rule
@@ -270,8 +271,10 @@ A hook row's actor is `hook:<name>` or `<plugin>:hook:<name>` — every installe
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "worktask_init|stage_transition|artifact_created|error_recorded|retry_attempt|escalation|approval_received|resume|stage_replay|permission_denied|permission_resumed|subagent_stopped|tool_invoked|precompact_checkpoint|stage_completion_hook|permission_mode_pinned|external_dispatch|github_issue_created|canvas_render|preview_added|visual_diff_run|full_test_run|scoped_test_run|test_execution_blocked|test_execution_deduped|test_dedupe_skipped_zero_prior|test_delegation_observed|test_gate_disabled|test_dedupe_disabled|state_merge_noop|facts_items_rejected|dispatch_depth_projected|dispatch_flattened|stage_returned_incomplete|reattach_send_result|message_ack|blocked_on|model_switch_blocked|model_switch_confirm_requested|model_switch_annotated|model_switch_gate_disabled|model_switched",   // legacy cross_session_ask alias rows are read, never written
+  "action": "<one registered action — references/audit-actions.md>",   // legacy cross_session_ask alias rows are read, never written
 ```
+
+`references/audit-actions.md` lists every action a shipped writer emits, grouped by writer; the § Writers tables above name the main owners, not every writer.
 
 #### Schema — remaining fields
 

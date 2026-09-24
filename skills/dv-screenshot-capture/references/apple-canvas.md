@@ -2,7 +2,7 @@
 
 Reference for the `apple-canvas` adapter in `dv-screenshot-capture`. Renders SwiftUI `#Preview` views to PNG via `ImageRenderer` in a host-side SPM executable target (`tools/SnapshotHost/`), without booting the simulator.
 
-> Companion: `preview-ensurer.md` (heuristics summary). The canonical contract for the cross-skill boundary lives in this file.
+> Companion: `preview-ensurer.md` (heuristics summary). The call's CLI and result shape are canonical in `../../preview-ensurer/SKILL.md § Contract (canonical signature)`; the adapter side of the boundary lives in this file.
 
 ## When this adapter runs
 
@@ -12,37 +12,17 @@ Selected when `state.platform == "apple"` and this adapter's degraded-mode predi
 
 preview-ensurer runs before SnapshotHost, and the apple-canvas adapter is its sole caller — never invoked directly from DV.
 
-### Function signature (canonical)
+### Call
 
-```
-ensure_previews(
-  modified_files: [Path],         # absolute paths from git diff --diff-filter=AMR
-  options: {
-    auto_add: Bool,               # default true; false = dry-run (detect only)
-    write_mode: "in-source"       # the only mode; "staged-patch" unsupported
-  }
-) → {
-  views: [
-    {
-      file: Path,
-      type: String,               # e.g. "ContentView"
-      has_preview: Bool,
-      action: "found" | "added" | "skipped",
-      reason: String?,            # populated when action == "skipped"
-      mock_strategy: String?      # populated when action == "added"; matches audit enum
-    }
-  ],
-  errors: [String]                # non-empty → SnapshotHost run aborts; DV reports missing_input
-}
-```
+`scripts/apple-canvas.sh` Step 2 runs `swift run --package-path <plugin>/skills/preview-ensurer/references/reference-impl PreviewEnsurer --modified-files <list-file> --auto-add true --project-root <root>` and saves stdout to `.context/logs/preview-ensurer-<ts>.json`. The CLI, the `{views, errors}` result and the exit code are canonical in `../../preview-ensurer/SKILL.md § Contract (canonical signature)`. The skill sets `disable-model-invocation`, so the `Skill` tool never reaches it.
 
 ### Invocation sequence
 
-`Skill("dv-screenshot-capture", task_id=<TASK_ID>, platform="apple", args.force_canvas=true)` → adapter selection picks apple-canvas → `Skill("preview-ensurer", modified_files, auto_add=true)` → empty `errors` continues, non-empty throws `missing_input` (the DV completion gate appends it to `.context/errors/developer.md`) → `swift run --package-path tools/SnapshotHost SnapshotHost …` → PNG → `screenshots-<TASK_ID>.md` manifest row + `state.json` `facts.screenshots`.
+`Skill("dv-screenshot-capture", task_id=<TASK_ID>, platform="apple", args.force_canvas=true)` → adapter selection picks apple-canvas → `apple-canvas.sh` → `swift run … PreviewEnsurer` → exit 0 continues; non-zero makes apple-canvas append `missing_input: preview-ensurer errors` to `.context/errors/developer.md`, write a `canvas_render` error row and exit 2 → `swift run --package-path tools/SnapshotHost SnapshotHost …` → PNG → `screenshots-<TASK_ID>.md` manifest row + `state.json` `facts.screenshots`.
 
 ### State sharing
 
-preview-ensurer appends to `state.json → facts.previews_added[]` — `{file, type, action, mock_strategy}` per view, e.g. `{"file": "Sources/UI/ContentView.swift", "type": "ContentView", "action": "added", "mock_strategy": "binding-constant"}`. The DV summary surfaces the array, so a single `git checkout -- <file>` reverts an auto-added `#Preview`.
+preview-ensurer writes no `state.json` fact. Its per-view result is the saved JSON log, and apple-canvas writes one `preview_added` audit row per added preview (§ Audit row schema). An auto-added `#Preview` is the last block in its file; delete that block to revert it, since `git checkout -- <file>` would also discard the developer's uncommitted edits.
 
 ## Adapter inputs / outputs / audit schemas
 
@@ -50,8 +30,8 @@ preview-ensurer appends to `state.json → facts.previews_added[]` — `{file, t
 
 | Input | Source | Required |
 |---|---|---|
-| `modified_files` | `git diff --name-only --diff-filter=AMR <base>...HEAD` filtered to `*.swift` under View paths | Yes |
-| `args.view` | `metadata.canvas_view` or auto-derived (first View under modified_files) | No |
+| `modified_files` | `git diff --name-only --diff-filter=AMR <base>...HEAD`; preview-ensurer drops non-`.swift` paths and `tools/SnapshotHost/`, with no View-path filter | Yes |
+| `args.view` | `metadata.canvas_view`; apple-canvas.sh derives none, and an empty `--view` makes SnapshotHost exit 2 | No |
 | `args.force_canvas` | `metadata.requires_canvas_screenshot` or explicit | No |
 | `args.canvas_destination` | `metadata.canvas_destination`, default `"macos-host"` | No |
 | `args.size` | `metadata.canvas_size`, default `393x852` (iPhone artboard) | No |
@@ -82,7 +62,7 @@ Four tiers, additive to the `dv-screenshot-capture` failure-mode vocabulary, nev
 1. **SnapshotHost missing on disk** → scaffold from `templates/SnapshotHost-template/`, write the `tools/SnapshotHost/.canvas-scaffold-version` marker, retry the render, emit `canvas_render` `phase: "scaffold"`.
 2. **Host build fails** (`swift build` non-zero, or exit `module_graph_sim_required`) → escalate to the `apple` (sim) adapter; `screenshot_platform_fallback`, `reason: "canvas_host_build_failed"`.
 3. **Sim adapter unavailable** (`sim_unavailable(state) == true`) → `cli/fallback`; `reason: "canvas_sim_unavailable"`.
-4. **preview-ensurer returned errors** → bubble as `missing_input` to the DV completion gate, append to `.context/errors/developer.md`. Do not render and do not silently skip.
+4. **preview-ensurer exited non-zero** → apple-canvas appends `missing_input: preview-ensurer errors` to `.context/errors/developer.md` and exits 2 without rendering; DV reports it as `missing_input`.
 
 ## macOS host vs ios-sim destination selection
 
@@ -108,7 +88,7 @@ tools/SnapshotHost/
   Package.swift                 # from templates/SnapshotHost-template/Package.swift
   Sources/SnapshotHost/
     main.swift                  # CLI: --view --output --size --scheme
-    PreviewBridge.swift         # @testable import of leaf View modules; rewritten idempotently
+    PreviewBridge.swift         # @testable imports + viewRegistry; empty from the template, filled by hand
   .canvas-scaffold-version      # plain text "1"; bumped on backward-incompatible template changes
 ```
 
@@ -134,13 +114,17 @@ swift run SnapshotHost
 
 ## Driver script
 
-`scripts/apple-canvas.sh` is the bash driver; its flags are listed in `../SKILL.md § Script usage`. Steps, matching the cascade above:
+`scripts/apple-canvas.sh` is the bash driver; its flags are listed in `../SKILL.md § Script usage`. Steps:
 
 1. Resolve the context root (`../SKILL.md § Root resolution`; unresolved or ledger mismatch → exit 1) and the output path `<ctx>/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png` (`NN` per `../SKILL.md § Numbering`; default slug `canvas-preview`).
 2. Copy `templates/SnapshotHost-template/` when `tools/SnapshotHost/Package.swift` is absent.
-3. Invoke preview-ensurer; abort on errors with `missing_input`.
-4. Update the `PreviewBridge.swift` viewRegistry (idempotent).
+3. Run preview-ensurer; non-zero aborts with `missing_input` (exit 2).
+4. No viewRegistry rewrite (§ viewRegistry is not populated).
 5. `swift run --package-path tools/SnapshotHost SnapshotHost --view <…> --output <…> --size <…> --scheme <…>`.
 6. Apply the parent skill's 500 KB size budget (pngquant → `oversize/`), then emit the manifest row + audit JSON.
 
 Logs land in `.context/logs/build-developer-<ts>.log` and `.context/logs/canvas-render-<ts>.log` (per logging-conventions).
+
+### viewRegistry is not populated
+
+The scaffold copies the template's empty `PreviewBridge.viewRegistry` and a `main.swift` whose `lookupRegistry()` returns `[:]`, and apple-canvas rewrites neither. Every `--view` key therefore misses — SnapshotHost exit 2, `error: "capture_failed"` — until the project edits its `tools/SnapshotHost/` copy by hand: fill `viewRegistry` with `"ModuleName.TypeName": AnyView(…)` entries and make `lookupRegistry()` return `PreviewBridge.viewRegistry`. Scaffolding runs only when `tools/SnapshotHost/Package.swift` is absent, so the edits persist.

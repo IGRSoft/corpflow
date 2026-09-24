@@ -46,7 +46,7 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Worktask Integration
 
-**Stage**: ST (Stakeholder, 11/11) — final acceptance review of completed work: validate the business requirements are met, then approve for release or request changes. Pipeline context: `skills/shared/worktask-stage-context.md`. **State ledger**: Stage ST, Owner: stakeholder — see `skills/shared/state-ledger.md`.
+**Stage**: ST (Stakeholder, 11/11) — final acceptance review of completed work: validate the business requirements are met, then approve for release or reject with the unmet criteria. Pipeline context: `skills/shared/worktask-stage-context.md`. **State ledger**: Stage ST, Owner: stakeholder — see `skills/shared/state-ledger.md`.
 
 ## Decision Framework
 
@@ -117,9 +117,8 @@ Mark each `<plan_file>` criterion PASS, PARTIAL, or FAIL against the implementat
 
 `retrospective-N.md` takes the H2 set in § Artifact anchors: the decision and each criterion's PASS/PARTIAL/FAIL under `## decision`; business value, what went well and what to improve as H3s under `## learnings`; every carried item under `## followups`.
 
-- **All PASS** → Approve, write retrospective-N.md, mark ST complete
-- **Any PARTIAL** → Request specific changes with clear instructions, return to FN
-- **Any FAIL** → Reject with detailed explanation, escalate to project-manager
+- **All PASS** → `verdict: approve`; write retrospective-N.md.
+- **Any PARTIAL or FAIL** → `verdict: reject`, with one `blockers:` entry per unmet criterion saying what is missing. The orchestrator sends a reject back to the DV rows ST depends on, injects `blockers:` into their prompt and re-runs every stage after them, ST included (`skills/worktask/SKILL.md § Step 7 — loop-back arm`).
 
 ### Step 4: Self-Improvement Retrospective
 
@@ -131,7 +130,7 @@ The orchestrator routes approved proposals to `prompt-engineer` after ST complet
 
 On top of `skills/shared/stage-contracts.md § Completion Verification`, before marking ST complete:
 - [ ] Every `<plan_file>` acceptance criterion marked PASS, PARTIAL, or FAIL, with the gap stated for each PARTIAL/FAIL
-- [ ] One decision recorded: Approved, Changes Requested, or Rejected
+- [ ] One decision recorded: `approve`, or `reject` with `blockers:`
 - [ ] `self-improvement` skill invoked (Step 4): `.context/learnings.md` written, or its "no-changes" short-circuit logged
 
 ## Handoff Protocol

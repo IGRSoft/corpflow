@@ -121,11 +121,11 @@ A fresh worktree per delegation is the intent, not a guarantee. Assert it with `
 
 ##### Base-ref resolution
 
-`worktree.baseRef` controls base-branch resolution: `fresh` (Claude Code's default — branch from the remote default branch, dropping unpushed work) or `head` (branch from local HEAD). The plugin assumes `head`; do not set `fresh` without coordinating with workflow-engineer. `head` resolves the current linked worktree's HEAD (not the main checkout's) when spawning subagents or entering a worktree from inside one, so nested-worktree flows share a base.
+`worktree.baseRef` sets the base of every worktree Claude Code creates (`EnterWorktree` without a `path`, `--worktree`, `isolation: worktree` subagents): `fresh`, the default, branches from `origin/<default-branch>` and drops unpushed work; `head` branches from local HEAD — inside a linked worktree, that worktree's HEAD. The plugin's own trees (megatask `init-worktree.sh`, pinned DV streams) come from `git worktree add` with an explicit base, so the setting only reaches a harness-created tree, and there the plugin needs `head` to carry the worktask's in-progress branch. A plugin cannot set it — plugin `settings.json` accepts only `agent` and `subagentStatusLine` — so the user sets `"worktree": {"baseRef": "head"}` in `.claude/settings.json` (shared) or `~/.claude/settings.json`.
 
 ##### Per-task base override
 
-When the merge target is not the worktask default (e.g. `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref`. DV honours it over the session-level `worktree.baseRef` for both `git diff` ranges in test selection (D2) and `EnterWorktree` base resolution; a higher-level dispatcher passes `--base-ref` to `EnterWorktree` (`skills/agent-coordination/references/headless-dispatch.md`). Neither set → `worktree.baseRef` governs.
+When the merge target is not the worktask default (e.g. `origin/release/v2` instead of `origin/master`), PL0 sets `task.metadata.base_ref`. DV uses it for the `git diff` ranges in test selection (D2). `EnterWorktree` takes no base argument, so a DV that must create a tree on that base runs `git worktree add -b <branch> <path> <base_ref>` and enters it with `EnterWorktree(path)`; a bare `EnterWorktree` follows `worktree.baseRef`.
 
 ##### Base-ref resolution order
 

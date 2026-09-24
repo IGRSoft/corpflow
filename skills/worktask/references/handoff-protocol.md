@@ -629,7 +629,7 @@ cross-stage blocked exception above.
 | DC | files_touched, open_questions | key_decisions | ok / blocked / escalate |
 | RE | files_touched, key_decisions (= version), open_questions | — | ok / blocked |
 | FN | next_stage_focus, files_touched, open_questions | key_decisions, deep_reads | ok / blocked |
-| ST | key_decisions (= rationale), open_questions | — | approve / reject |
+| ST | key_decisions (= rationale), open_questions | blockers (on reject) | approve / reject |
 | IR | key_decisions (= root cause), next_stage_focus, open_questions | files_touched | ok / escalate |
 | ET | key_decisions (= ethics findings), open_questions | — | pass / fail |
 
@@ -927,6 +927,7 @@ fails an undeclared one.
     "verdict": { "type": "string", "enum": ["approve", "reject"] },
     "key_decisions": { "type": "array", "items": { "type": "string" } },
     "follow_ups": { "type": "array", "items": { "type": "string" } },
+    "blockers": { "type": "array", "items": { "type": "string" }, "description": "reject only: one unmet criterion each; the loop-back injects them into the replayed DV prompt" },
     "open_questions": { "type": "array", "items": { "$ref": "#/$defs/SweepItem" } }
   }
 }

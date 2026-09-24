@@ -37,7 +37,7 @@ Plans declare `test_mode` + `ui_visual_check`; the marker grammar DV parses is c
 
 | Mode | When to choose | Effect |
 |------|----------------|--------|
-| `build-only` | Repo has marker coverage (`@test-required`/`@depends-on:` widely used) AND change is refactor/dep-update/doc-only. Opt-in — do not pick if uncertain. | DV builds + runs smoke set (`@test-required` + `always_required_tests`). QA runs Selected Tests only. |
+| `build-only` | Repo has marker coverage (`@test-required`/`@depends-on:` widely used) AND change is refactor/dep-update/doc-only. Opt-in — do not pick if uncertain. | DV builds and runs no tests (except the no-handler module-scope promotion). QA runs Selected Tests only. |
 | `scoped` (effective default if omitted) | Bug fixes, small features, anything touching a known set of modules. Default for untagged or partially-tagged repos. | DV + QA run Selected Tests + tests in any module the diff touches. |
 | `full` | Release candidate, multi-module feature, post-major-dep-upgrade, stakeholder-requested full regression. | DV runs Selected Tests; QA runs the entire project test suite. |
 

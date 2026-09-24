@@ -681,7 +681,7 @@ Correction re-opens a task of any stage; gate loop-back reaches DV. When `fix_ro
 ###### Remediation injection code
 
 ```typescript
-    // The stage code that raised it: "DR" | "QA" copied by the Step 7 loop-back from the gate
+    // The stage code that raised it: "DR" | "QA" | "ST" copied by the Step 7 loop-back from the gate
     // row, or the correcting stage's own code written by --task-reopen. state-patch.sh writes both.
     const fromStage = full.metadata.gate_from_stage;
     const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[] | [finding]
@@ -2167,7 +2167,7 @@ function ingestReply(askId, answer, kind, session) {   // kind: "peer" (message)
 // depends on go back first; Step 4.6 then injects the gate's findings into their prompt.
 function loopBackToDV(ledger, gateId, gateRow) {
   const h = parseFrontmatter(gateRow.artifact);
-  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR shape | QA shape
+  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR/ST shape | QA shape
   const deps = new Set(), stack = [...(gateRow.blocked_by ?? [])];
   while (stack.length) {
     const id = stack.pop();

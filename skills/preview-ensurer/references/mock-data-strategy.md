@@ -18,17 +18,18 @@ Defaults are conservative — identity or empty values that can never crash a Sw
 
 ## Derivation — non-`Binding` parameters
 
+Checked in this order:
+
 | Parameter type `T` | Generated arg | `mock_strategy` |
 |---|---|---|
 | `Optional<U>` / `U?` | `nil` | `optional-nil` |
-| protocol existential (`some P` / `any P` / `P`) with `Mock<P>.swift` present | `Mock<P>()` | `mock-found` |
-| protocol existential, no mock file | skip view | `preview-tbd`, reason `no_mock_for_<P>` |
-| concrete struct/class with a synthesized no-arg init | `T()` | `concrete-init` |
 | closure (`(...) -> ...`) | skip view | `preview-tbd`, reason `closure_unsupported` |
-| generic / type-erased / opaque (`AnyView`, `some Equatable`) | skip view | `preview-tbd`, reason `generic_unsupported` |
-| anything else | skip view | `preview-tbd`, reason `unsupported_init_signature` |
+| `some P` / `any P` / `AnyView` | skip view | `preview-tbd`, reason `generic_unsupported` |
+| `T` with `Mock<T>.swift` present | `Mock<T>()` | `mock-found` |
+| any other capitalized simple name — struct, class, or a protocol with no mock | `T()` | `concrete-init` |
+| anything else (generic arguments, qualified names, tuples) | skip view | `preview-tbd`, reason `unsupported_init_signature:<T>` |
 
-A parameter that carries a default value (memberwise-init-with-defaults) is omitted from the generated call; a fully-defaulted view therefore renders as `TypeName()`.
+A protocol with no mock file therefore becomes `P()`; the parse smoke passes it and the SnapshotHost build fails on it. A stored property with a default value is left out of the inferred memberwise call, so a fully-defaulted view renders as `TypeName()`; an explicit `init`'s defaulted parameters still get an argument.
 
 ## Protocol mocks — convention
 
@@ -44,19 +45,9 @@ struct MockUserRepository: UserRepository {
 
 If the type is absent or its init takes args, `swift build` fails at SnapshotHost link time and the apple-canvas failure cascade catches it.
 
-## Skip silently vs emit `// preview-tbd:`
+## Skipped views leave no trail in the file
 
-Both paths report `action: "skipped"`; the differentiator is the comment trail.
-
-- **Emit the comment** when the View has at least one parameter we could not satisfy.
-- **Skip silently** when the View is unambiguously not preview-able (e.g. `@Environment`-injection only) or already has a preview we left alone.
-
-The comment is a user-visible TODO, appended at the end of the file — the position the generated `#Preview` would have taken — so a later scan can fix it or convert it into a real preview:
-
-```swift
-// preview-tbd: no_mock_for_UserRepository — create Source/Mocks/MockUserRepository.swift
-// preview-tbd: closure_unsupported — onTap parameter is a closure
-```
+A view with a parameter no rule satisfies is reported as `action: "skipped"`, `mock_strategy: "preview-tbd"` and the first failing parameter's reason; nothing is written to the source, so the JSON result (`.context/logs/preview-ensurer-<ts>.json` under apple-canvas) is the only record. A view whose only properties are wrapper-injected (§ Property wrappers) is not skipped: it gets `TypeName()`.
 
 ## Closure parameters
 
@@ -68,7 +59,7 @@ Closures are the most common reason a real-world view is skipped. Empty `{ }` cl
 |---|---|
 | `@Binding var x: T` | `Binding<T>` |
 | `@ObservedObject var x: T` | `T` (usually an `ObservableObject` class) → concrete-init |
-| `@State` / `@StateObject` / `@EnvironmentObject` / `@Environment` | ignored — by language rule these are not memberwise-init parameters |
+| `@State` / `@StateObject` / `@EnvironmentObject` / `@Environment` / `@FocusState` | left out of the call — by language rule these are not memberwise-init parameters |
 
 ## Generated block — template
 
