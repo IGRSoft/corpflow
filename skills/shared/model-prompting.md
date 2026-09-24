@@ -4,38 +4,30 @@ name: model-prompting
 
 # Model-Conditioned Prompting
 
-Canonical for **how to write for** a model. `skills/shared/model-selection.md` is canonical
-for **which** model and effort tier a stage gets; the two never restate each other.
+How to write for a model; `skills/shared/model-selection.md` owns which model and effort tier a
+stage gets.
 
-Each alias below carries a **discipline block**: the literal text the orchestrator injects into
-a delegation prompt at slot `[4b]`, selected by `task.metadata.model`
-(`skills/worktask/references/handoff-protocol.md#cache-prefix`). The fenced block holds the
-section **body** only — the `<<<model-discipline>>>` marker belongs to the envelope, and
-`cache-lint.sh` compares the two accordingly.
+Each alias carries a discipline block: the literal text the orchestrator injects at preamble slot
+`[4b]`, selected by `task.metadata.model` (`skills/worktask/references/handoff-protocol.md#cache-prefix`).
+The fenced block is the section body only — the `<<<model-discipline>>>` marker belongs to the
+envelope — and `cache-lint.sh` and `brief-compose.sh` read it byte for byte.
 
-The block is the enforcement surface. The table above each one records the behaviour it counters
-and the vendor page that documents it, so a later reader re-checks the block against the docs
-rather than against taste.
+Blocks are counter-instructions: each line exists because the model's default on that axis is
+wrong for this pipeline, and an axis the model already gets right carries no text
+(`agents/prompt-engineer.md § No-op pruning`). The table above each block names the behaviour it
+counters and the vendor page documenting it, so the block is re-checked against the docs.
 
 ## Why this lives at dispatch and not in the agent files
 
-`Task()` accepts `model` but **not** `effort` (`commands/worktask.md § Dispatch model &
-effort`). On the in-process path the effort tier is advisory, which leaves prompt text as the
-only lever that reaches the model's behaviour. A block in an agent file would also be wrong
-twice over: the same agent can be re-tiered, and a block that is right for `opus` is
-counter-productive for `fable` — narration is the clean example, damped on one and raised on
-the other.
+`Task()` carries `model` but no effort (`commands/worktask.md § Step C.0a — the tier only reaches
+some dispatch surfaces`), so in-process prompt text is the only lever on the model's behaviour.
+An agent file is the wrong home: the same agent can be re-tiered, and a block right for `opus`
+is wrong for `fable` — narration is damped on one and raised on the other.
 
-## Reading these blocks
+## opus — Claude Opus 5.5
 
-They are **counter-instructions**, not general advice: each one exists because the model's
-default on that axis is wrong for this pipeline. An axis a model already gets right carries no
-text — a block that says nothing pays context to say nothing
-(`agents/prompt-engineer.md § No-op pruning`).
-
-## opus — Claude Opus 5
-
-Sources are anchors on [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5).
+Anchors are on [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5),
+which the Opus 5.5 guide keeps as the starting point for its prompts.
 
 | Behaviour to counter | Anchor |
 |---|---|
@@ -70,21 +62,20 @@ continue.
 
 ### The verification line is narrower than it looks
 
-"Do not verify your own work" governs **re-checking reasoning**. It does not reach a
-completion criterion that names an artifact — "the screenshot manifest exists on disk", "the
-audit row is present", "`git status` is clean". Those are
-`agents/prompt-engineer.md § Completion criteria`, and removing them lowers demand on exactly
-the axis that doctrine raises. Keep the artifact gates; drop the re-reads.
+The over-verification row covers re-checking reasoning ("double-check", "verify before
+responding"). It does not reach a completion criterion that names an artifact — "the screenshot
+manifest exists on disk", "`git status` is clean" (`agents/prompt-engineer.md § Completion
+criteria`). Keep the artifact gates; drop the re-reads.
 
 ### xhigh with thinking disabled
 
-`model-selection.md § xhigh routing` records that `xhigh`/`max` is silently sent as `high`
-when thinking is off. On Opus 5 two further artifacts appear in that configuration: a tool
-call written into visible text instead of a `tool_use` block — which then sits in history and
-never runs — and internal XML tags leaking into the response. The pinned-`xhigh` agents
-(`ethics-reviewer`, `prompt-engineer`, `security-reviewer`) are the exposure. The mitigation
-is to keep thinking on and lower the tier rather than disable it; do not add a rule telling
-the model not to think, which increases tag leakage rather than reducing it.
+Opus 5.5 does not accept thinking disabled, so this bites only a session still on Opus 5. There,
+thinking off can put a tool call in visible text instead of a `tool_use` block — it never runs
+and stays in history — and leak internal XML tags
+([`#running-with-thinking-disabled`](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5#running-with-thinking-disabled)).
+The pinned-`xhigh` agents (`ethics-reviewer`, `prompt-engineer`, `security-reviewer`) are the
+exposure. Keep thinking on and lower the tier instead. Add no rule telling the model not to
+think: it increases tag leakage.
 
 ## sonnet — Claude Sonnet 5
 
@@ -105,12 +96,10 @@ answer from the prompt alone. A claim about code you have not opened is a findin
 not made.
 ```
 
-Sonnet 5's literalism is also why a review prompt that says "only report high-severity
-issues" or "be conservative" loses recall: the model finds the bug and then declines to report
-it. corpflow already prompts the other way — `commands/tech-code-review.md` decouples
-detection from filtering and states that over-inclusion at the detection phase is correct.
-**Apply that rule; do not restate it here**, and do not add a confidence bar to a detection
-step anywhere in the pipeline.
+The same literalism makes a review prompt that says "only report high-severity issues" or "be
+conservative" lose recall: the model finds the bug, then declines to report it. Put no confidence
+bar on a detection step anywhere in the pipeline; `commands/tech-code-review.md § Phase 1 —
+Detection` is the rule.
 
 ## fable — Claude Fable 5
 
@@ -140,28 +129,19 @@ When it will not affect the result, edit a file surgically rather than rewriting
 
 ### Version sensitivity
 
-`model-selection.md § Aliases` resolves `fable` to **Fable 5**, and the page cited above
-documents Fable **5.1** — its content is a set of deltas *from* Fable 5, so some of it
-describes behaviour Fable 5 does not have. The blocks above are the subset that is safe either
-way: each one is a counter-instruction whose worst case on the model that lacks the behaviour
-is a no-op, never a regression.
-
-**Re-check trigger:** when `model-selection.md` advances the `fable` alias past Fable 5,
-re-read the 5.1 page in full and revisit this section — in particular the
-`max_tokens` headroom note for `xhigh`/`max`, which is 5.1-specific and deliberately omitted
-here. The live consumer today is the `--auto=[decision]` pass
-(`skills/worktask/SKILL.md § Auto-Decision Delegation (decision_gate)`).
+`model-selection.md § Aliases` resolves `fable` to Fable 5.1, but Claude apps gateway sessions
+still get Fable 5. The block is safe on both: each line is a counter-instruction whose worst
+case on a model without the behaviour is a no-op. The 5.1 page's
+`#leave-room-for-long-outputs-at-xhigh-and-max-effort` (`max_tokens` headroom) is not carried
+here. The live consumer is the `--auto=[decision]` pass (`skills/worktask/SKILL.md §
+Auto-Decision Delegation (decision_gate)`).
 
 ## haiku
 
-No block. Haiku's defaults are the ones corpflow's existing explicitness rules were written
-against, so a discipline block here would be the no-op case
-`agents/prompt-engineer.md § No-op pruning` describes — and the same sentence that is
-load-bearing on Opus is waste here.
+No block: corpflow's explicitness rules were written against Haiku's defaults, so a block here
+would be a no-op (`agents/prompt-engineer.md § No-op pruning`).
 
 ## Related
 
-- `skills/shared/model-selection.md` — tiers, alias resolution, effort ladder, allowlists
-- `skills/worktask/references/handoff-protocol.md#cache-prefix` — slot `[4b]` and the markers
 - `agents/prompt-engineer.md § Prompt-body doctrine` — the doctrine these blocks are audited under
 - `commands/prompt-audit.md § Body Rules` — the audit that enforces them per asset
