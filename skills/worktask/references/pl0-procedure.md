@@ -221,7 +221,7 @@ accepted cost that `§ Secure overrides` mirrors. `--raise-only` is opt-in, neve
 Every stage writes `<basename>-N.md`, N = this run's `planning-N.md` index. Canonical stage→basename map: `skills/worktask/references/handoff-protocol.md#stage-artifact-map` (mirrored in `skills/shared/stage-codes.md`). Two-step resolver: (1) `task.metadata.run_index` → `<basename>-${N}.md`; (2) newest glob `<basename>-*.md` when metadata is absent.
 
 ### PL0 Stage (Planning)
-- Detect workspace context from task metadata — workspace mode: read the issue from `workspace.json`, write artifacts to the workspace's `.context/`; standard mode: create `.context/`, reading per-issue context from `milestone.json` when `/megatask` set one
+- Detect workspace context per § Workspace Mode — workspace mode (`/megatask` per-issue run): read the issue from `workspace.json`, write artifacts to the workspace's `.context/`; standard mode: create `.context/`
 - Compute `<plan_file>` per § Plan File & Run Index Naming, then write `.context/<plan_file>` with requirements and acceptance criteria
 - Define the test strategy (what to test, existing tests to update), scope, priorities, dependencies
 - Detect the integration branch once and stamp it (below), so DV does not fork from the wrong branch
@@ -413,10 +413,12 @@ At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list an
 #### Workspace Mode
 
 `task.metadata.workspace_path` is not a mode detector — `/worktask` stamps it on every run
-(step 3a/4). Detect workspace mode from `workspace.json` / `.context/milestone.json` presence,
-and propagate `workspace_path` verbatim onto every stage task you create as the assigned tree.
-Read the issue from `workspace.json` (megatask per-issue: `.context/milestone.json`) and write
-artifacts to the workspace `.context/`. See `skills/megatask/SKILL.md § Orchestrator Pattern`.
+(step 3a/4). Detect workspace mode from the presence of `workspace.json` at the worktree root
+(`/megatask` writes it per issue; shape: `skills/shared/milestone-helpers/references/implementations.md
+§ workspace.json — canonical shape`), and propagate `workspace_path` verbatim onto every stage
+task you create as the assigned tree. Read the issue from `workspace.json` `.issue` and write
+artifacts to the workspace `.context/`. See
+`skills/megatask/SKILL.md § Orchestrator Pattern`.
 
 ### Dynamic Worktask Sizing (PL0 Stage)
 
