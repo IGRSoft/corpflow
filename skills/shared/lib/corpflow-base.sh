@@ -2,17 +2,16 @@
 # @description corpflow-base.sh — the path-resolution primitives a script needs before it
 #   can reach anything else: its own physical directory, and the plugin root.
 #
-#   MIRRORED, NOT SHARED. skills/shared/lib/corpflow-base.sh and hooks/lib/corpflow-base.sh
-#   are byte-identical and pinned by tests/shell/skills/corpflow-base.bats. A hook cannot
-#   reach skills/shared/lib/ without first resolving a plugin root — the very thing this
-#   file supplies — so the boundary is mirrored rather than crossed, matching the
-#   hooks/model-switch-lib.sh precedent. Edit one, edit both.
+#   Mirrored, not shared: skills/shared/lib/corpflow-base.sh and hooks/lib/corpflow-base.sh
+#   are byte-identical, pinned by tests/shell/skills/corpflow-base.bats. A hook cannot
+#   reach skills/shared/lib/ without first resolving a plugin root, which this file
+#   supplies. Edit one, edit both.
 #
 #   Symbols: corpflow_script_dir, corpflow_plugin_root.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
-# Anti-execution guard — MUST be the first statement.
+# Anti-execution guard — must be the first statement.
 if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
   printf >&2 'corpflow-base.sh: this is a library — source it, do not execute it directly\n'
   exit 2
@@ -57,9 +56,8 @@ corpflow_script_dir() {
 # sourced by everything cannot be on that list. Callers honouring it pass it as a candidate,
 # keeping that rung and its failure policy where the allowlist can see them.
 #
-# The fallback walks up from THIS file's directory, not the caller's: a library's depth below
-# the root is fixed, a caller's is not — which is why the copies this replaces each hard-coded
-# their own `../..` count and disagreed.
+# The fallback walks up from this file's directory, not the caller's: a library's depth below
+# the root is fixed, a caller's is not.
 # Callable with no candidates at all: bash gives a bare call an empty "$@", so the loop
 # simply falls through to the self-location walk.
 # shellcheck disable=SC2120
