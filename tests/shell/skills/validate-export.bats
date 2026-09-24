@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Contract tests for skills/csv-export-templates/scripts/validate-export.sh
-# Contracts: exit 0 all-pass, exit 1 on violations, exit 2 usage/missing-dir.
+# Contracts: exit 0 all-pass, exit 1 on violations, exit 2 usage/missing-dir/bad
+# --delimiter.
 # Writes a semicolon-delimited report (check;status;detail) with ;FAIL; rows on
 # failure; --self-test runs internal pass+fail fixtures and exits 0.
 #
@@ -23,7 +24,18 @@ report_ids() {
   tail -n +2 "$1" | cut -d';' -f1,2
 }
 
-@test "happy: a consistent 4-file export set passes (exit 0)" {
+# Rewrites every fixture CSV in $1 into $2 with delimiter $3, quoting as needed.
+redelimit() {
+  local f
+  for f in "$1"/*.csv; do
+    python3 -c 'import csv, sys
+w = csv.writer(sys.stdout, delimiter=sys.argv[2], lineterminator="\n")
+w.writerows(csv.reader(open(sys.argv[1], encoding="utf-8", newline=""), delimiter=";"))' \
+      "$f" "$3" > "$2/${f##*/}"
+  done
+}
+
+@test "happy: a consistent export set passes (exit 0)" {
   cp "$PASS_FIX"/*.csv "$WD/"
   run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
   assert_success
@@ -39,6 +51,7 @@ report_ids() {
   run report_ids "$WD/report.csv"
   assert_output "format/file-01;PASS
 format/file-04;PASS
+format/file-05;PASS
 format/file-07;PASS
 format/file-13;PASS
 sum/04-vs-13/SP-Min;PASS
@@ -53,7 +66,65 @@ range/13/SP-Min-le-Max;PASS
 range/13/Hours-Min-le-Max;PASS
 phase-cap/13/Hours-Max-le-160;PASS
 range/07/Hours-Min-le-Max;PASS
-phase-cap/07/Hours-Max-le-160;PASS"
+phase-cap/07/Hours-Max-le-160;PASS
+phase/13/Weeks-continuous;PASS
+phase/13/Dependencies-valid;PASS
+phase/05/Weeks-continuous;PASS
+phase/05/Dependencies-valid;PASS"
+}
+
+@test "happy: 01 Total Hours is checked against 13 phases plus its Buffer row" {
+  # 01 Total Hours is base + buffer (69/138); 13's phase rows alone sum to 60/120.
+  cp "$PASS_FIX"/*.csv "$WD/"
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_success
+  run grep '^sum/01-vs-13/' "$WD/report.csv"
+  assert_output "sum/01-vs-13/Hours-Min;PASS;both=69
+sum/01-vs-13/Hours-Max;PASS;both=138"
+  # The base-hour sums still leave the buffer out.
+  run grep '^sum/07-vs-13/Hours-Min;' "$WD/report.csv"
+  assert_output "sum/07-vs-13/Hours-Min;PASS;both=60"
+}
+
+@test "failure: 01 without a Total Hours row fails the 01-vs-13 checks" {
+  cp "$PASS_FIX"/*.csv "$WD/"
+  grep -v '^Total Hours;' "$PASS_FIX/01_project_overview.csv" > "$WD/01_project_overview.csv"
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  run grep ';FAIL;' "$WD/report.csv"
+  assert_output "sum/01-vs-13/Hours-Min;FAIL;01 has no Total Hours row
+sum/01-vs-13/Hours-Max;FAIL;01 has no Total Hours row"
+}
+
+@test "happy: a comma-delimited set passes with --delimiter ," {
+  redelimit "$PASS_FIX" "$WD" ","
+  run_script "$SCRIPT" --dir "$WD" --delimiter , --out "$WD/report.csv"
+  assert_success
+  # The report keeps its own semicolon format whatever the export uses.
+  run bash -c "tail -n +2 \"\$1\" | grep -vc ';PASS;'" _ "$WD/report.csv"
+  assert_output "0"
+}
+
+@test "failure: a comma-delimited set without --delimiter fails format only (exit 1)" {
+  redelimit "$PASS_FIX" "$WD" ","
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  # Content checks are skipped rather than run against unsplit rows.
+  run report_ids "$WD/report.csv"
+  assert_output "format/file-01;FAIL
+format/file-04;FAIL
+format/file-05;FAIL
+format/file-07;FAIL
+format/file-13;FAIL"
+  run grep '^format/file-01;' "$WD/report.csv"
+  assert_output "format/file-01;FAIL;DELIMITER|first line has no semicolon (looks comma-delimited)"
+}
+
+@test "failure: --delimiter must be a single character (exit 2)" {
+  run_script "$SCRIPT" --dir "$WD" --delimiter ';;'
+  assert_failure 2
+  run_script "$SCRIPT" --dir "$WD" --delimiter '"'
+  assert_failure 2
 }
 
 @test "failure: the broken set fails (exit 1) on exactly the expected checks" {
@@ -62,13 +133,17 @@ phase-cap/07/Hours-Max-le-160;PASS"
   assert_failure 1
   # Which checks failed is the contract; a different set is a different defect.
   run bash -c "grep ';FAIL;' \"\$1\" | cut -d';' -f1" _ "$WD/report.csv"
-  assert_output "sum/04-vs-13/SP-Min
+  assert_output "format/file-05
+format/file-07
+sum/04-vs-13/SP-Min
 sum/04-vs-13/SP-Max
 sum/07-vs-13/Hours-Max
 sum/01-vs-13/Hours-Min
 sum/01-vs-13/Hours-Max
 range/04/SP-Min-le-Max
-phase-cap/07/Hours-Max-le-160"
+phase-cap/07/Hours-Max-le-160
+phase/13/Weeks-continuous
+phase/13/Dependencies-valid"
 }
 
 @test "failure: the failing report still carries its PASS rows and their details" {
@@ -79,28 +154,59 @@ phase-cap/07/Hours-Max-le-160"
   run bash -c "grep ';PASS;' \"\$1\" | cut -d';' -f1" _ "$WD/report.csv"
   assert_output "format/file-01
 format/file-04
-format/file-07
 format/file-13
 sum/07-vs-13/Hours-Min
 range/04/Hours-Min-le-Max
 range/13/SP-Min-le-Max
 range/13/Hours-Min-le-Max
 phase-cap/13/Hours-Max-le-160
-range/07/Hours-Min-le-Max"
+range/07/Hours-Min-le-Max
+phase/05/Weeks-continuous
+phase/05/Dependencies-valid"
   # The detail column must carry the offending values, not just a verdict.
   run grep '^sum/01-vs-13/Hours-Min;FAIL;' "$WD/report.csv"
-  assert_output "sum/01-vs-13/Hours-Min;FAIL;01=99 13=24"
+  assert_output "sum/01-vs-13/Hours-Min;FAIL;01=99 13=28"
   run grep '^range/04/SP-Min-le-Max;FAIL;' "$WD/report.csv"
   assert_output "range/04/SP-Min-le-Max;FAIL;row=Auth|5|3"
+  run grep '^phase/13/' "$WD/report.csv"
+  assert_output "phase/13/Weeks-continuous;FAIL;row=Buffer|week range 4 leaves a gap after week 2
+phase/13/Dependencies-valid;FAIL;row=1|depends on phase 2, which does not exist"
+}
+
+@test "failure: a TOTAL row one field short of its header fails format" {
+  # The 05 and 07 fixtures carry TOTAL rows in the shape that put every total
+  # one column left of its header.
+  cp "$FAIL_FIX"/*.csv "$WD/"
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  run grep -E '^format/file-0[57];' "$WD/report.csv"
+  assert_output "format/file-05;FAIL;WIDTH|line 3 (TOTAL): 8 fields, header has 9
+format/file-07;FAIL;WIDTH|line 3 (TOTAL): 10 fields, header has 11"
+}
+
+@test "contract: every row of every template in references/templates.md matches its header width" {
+  run python3 - "${PLUGIN_ROOT}/skills/csv-export-templates/references/templates.md" << 'PY'
+import csv, re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+blocks = re.findall(r"## Template: (\S+)\n\n```csv\n(.*?)```", text, re.S)
+assert len(blocks) == 13, f"expected 13 templates, found {len(blocks)}"
+for name, block in blocks:
+    rows = list(csv.reader(block.strip().split("\n"), delimiter=";"))
+    for row in rows[1:]:
+        if len(row) != len(rows[0]):
+            print(f"{name}: {row[0]} has {len(row)} fields, header has {len(rows[0])}")
+PY
+  assert_success
+  assert_output ""
 }
 
 @test "failure: the reported failure count equals the number of FAIL rows" {
   cp "$FAIL_FIX"/*.csv "$WD/"
   run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
   assert_failure 1
-  assert_output --partial "7 check(s) FAILED"
+  assert_output --partial "11 check(s) FAILED"
   run bash -c "grep -c ';FAIL;' \"\$1\"" _ "$WD/report.csv"
-  assert_output "7"
+  assert_output "11"
 }
 
 @test "failure: missing directory is a usage error (exit 2)" {

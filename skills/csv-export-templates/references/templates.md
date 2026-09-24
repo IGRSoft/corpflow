@@ -64,8 +64,13 @@ Feature Group;Feature;Subtask;Size;SP Min;SP Max;Hours Min;Hours Max;Priority;Ph
 Phase;Week;Milestone;Deliverables;SP Min;SP Max;Hours Min;Hours Max;Dependencies
 [N];[START]-[END];[MILESTONE];[DELIVERABLES];[SP_MIN];[SP_MAX];[HOURS_MIN];[HOURS_MAX];[DEPS]
 Buffer;[START]-[END];Contingency;Risk mitigation, feedback;;;[BUFFER_MIN];[BUFFER_MAX];All phases
-TOTAL;;;[SP_MIN];[SP_MAX];[HOURS_MIN];[HOURS_MAX];
+TOTAL;;;;[TOTAL_SP_MIN];[TOTAL_SP_MAX];[TOTAL_HOURS_MIN];[TOTAL_HOURS_MAX];
 ```
+
+**Rules** (also file 13):
+- Week ranges are `N` or `N-M` and leave no week uncovered; ranges may overlap for parallel phases
+- Dependencies are `-`, `All`, or earlier phase numbers (`1, 2`); free text is allowed but not checked
+- Every row, `TOTAL` included, has as many fields as the header
 
 ## Template: 06_risk_assessment.csv
 
@@ -83,7 +88,7 @@ Category;Subcategory;SP Min;SP Max;Hours Min;Hours Max;Rate;Cost Min;Cost Max;Pe
 Phase [N];[NAME];[SP_MIN];[SP_MAX];[HOURS_MIN];[HOURS_MAX];$[RATE];$[COST_MIN];$[COST_MAX];[%];[NOTES]
 Subtotal;Development;[TOTAL_SP_MIN];[TOTAL_SP_MAX];[BASE_HOURS_MIN];[BASE_HOURS_MAX];$[RATE];$[BASE_COST_MIN];$[BASE_COST_MAX];[%];
 Buffer;Contingency (15%);;;[BUFFER_MIN];[BUFFER_MAX];$[RATE];$[BUFFER_COST_MIN];$[BUFFER_COST_MAX];[%];Risk mitigation
-TOTAL;;;[TOTAL_HOURS_MIN];[TOTAL_HOURS_MAX];$[RATE];$[TOTAL_COST_MIN];$[TOTAL_COST_MAX];100%;
+TOTAL;;;;[TOTAL_HOURS_MIN];[TOTAL_HOURS_MAX];$[RATE];$[TOTAL_COST_MIN];$[TOTAL_COST_MAX];100%;
 ```
 
 ## Template: 08_success_metrics.csv

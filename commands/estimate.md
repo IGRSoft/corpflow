@@ -2,9 +2,9 @@
 name: estimate
 description: Estimate task complexity, effort, and resources; optionally review an estimate or export it to CSV
 argument-hint: '["<task description>"] [--quick|--detailed] [--stages] [--sequential] [--compare "<opt1> | <opt2>"] [--multiplier <hours>] [--ai-rate <amount>] [--dev-rate <amount>] [--no-review] [--review [--focus <areas>] [--update]] [--export csv [--dir <path>] [--delimiter <char>] [--validate]] [--platform <p>]'
-# tools: the Budget and AI Cost rows order `estimate-calc.py` as the canonical math, so the grant
-# names that one interpreter and that one script; every other number is read, not computed.
-allowed-tools: Read, Glob, Grep, Write, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py *)
+# tools: the Budget and AI Cost rows order `estimate-calc.py` as the canonical math and `--validate`
+# runs `validate-export.sh`, so the grant names those two scripts; every other number is read, not computed.
+allowed-tools: Read, Glob, Grep, Write, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/csv-export-templates/scripts/validate-export.sh *)
 related:
   - skills/worktask/SKILL.md
   - skills/estimation-methodology/SKILL.md
@@ -191,11 +191,13 @@ stage under `--stages` — compounding across stages gives equivalent contingenc
 `skills/csv-export-templates/SKILL.md` is canonical for the CSV pack and is not restated here:
 § Export Structure (the 13-file list), § Platform Variants (how files 10–11 resolve from
 `--platform`), § File 12 and column schemas, § Format Specification (delimiter, encoding,
-headers, multiline), and § Validation Rules.
+headers, quoting), and § Validation Rules.
 
 ### Export Validation (`--validate`)
 
-The skill defines the rules; this command defines the failure mode:
+The skill defines the rules; this command defines the failure mode. Run
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/csv-export-templates/scripts/validate-export.sh --dir <dir> --delimiter <char>`
+with the same `--dir` and `--delimiter` the export used.
 
 - Aborts the export with a non-zero exit and a row-level diff if any rule fails.
 - Emits a `validation_report.csv` alongside the 13 files listing each rule and pass/fail status.

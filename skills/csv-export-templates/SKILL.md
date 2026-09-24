@@ -15,10 +15,10 @@ Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 
 | Setting | Value |
 |---------|-------|
-| Delimiter | Semicolon (;) |
+| Delimiter | Semicolon (;); `/estimate --delimiter` overrides it |
 | Encoding | UTF-8 |
 | Headers | First row always |
-| Multiline | Quote cells with line breaks |
+| Quoting | Quote cells that contain the delimiter or a line break |
 | Empty cells | Leave empty, no placeholder |
 
 ## Export Structure
@@ -65,11 +65,13 @@ column shape with their own rows.
 ## Validator Script
 
 ```sh
-bash "${CLAUDE_SKILL_DIR}/scripts/validate-export.sh" --dir <export-dir> [--out <report.csv>]
+bash "${CLAUDE_SKILL_DIR}/scripts/validate-export.sh" --dir <export-dir> [--out <report.csv>] [--delimiter <char>]
 ```
 
-- Writes `<export-dir>/validation_report.csv` (columns `check;status;detail`).
+- `--delimiter` is the export's delimiter (default `;`); pass the same value `/estimate --delimiter` wrote with.
+- Writes `<export-dir>/validation_report.csv` (columns `check;status;detail`, always semicolon-delimited).
 - Exits `0` on full pass, `1` on any violation, `2` on usage or missing-directory error.
+- Reads files 01, 04, 07 and 13 (missing ones fail), file 05 when present, and format-checks every `NN_*.csv`.
 - Finds columns by header name, so column order does not matter.
 - `--self-test` runs a fixture check with no network.
 
@@ -80,19 +82,20 @@ The spec the validator implements; run the script rather than checking by hand.
 1. **Totals match**:
    - 04 features SP Min sum = 13 phase summary SP Min sum
    - 04 features SP Max sum = 13 phase summary SP Max sum
-   - 07 budget hours Min/Max = 13 phase summary hours Min/Max
-   - 01 overview Min/Max matches 13 summary Min/Max
+   - 07 budget hours Min/Max = 13 phase summary hours Min/Max (base hours)
+   - 01 overview `Total Hours` Min/Max = 13 phase rows plus the `Buffer` row (base + buffer)
 
 2. **Range consistency**:
    - SP Min ≤ SP Max for every row
    - Hours Min ≤ Hours Max for every row
    - No phase Hours Max > 160 hours
 
-3. **Phase constraints**:
-   - Week ranges continuous
-   - Dependencies valid
+3. **Phase constraints** (file 13, and file 05 when present):
+   - Week ranges continuous: every range is `N` or `N-M`, and no week is left uncovered
+   - Dependencies valid: a phase-number dependency names an earlier phase in the same file
 
 4. **Format valid**:
-   - Semicolon delimiter
+   - The export's delimiter (`;` unless `--delimiter` says otherwise)
    - UTF-8 encoding
    - Headers present
+   - Every row as wide as the header, `TOTAL` included
