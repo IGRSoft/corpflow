@@ -32,7 +32,7 @@ Manual entry point for the `self-improvement` skill — run the retrospective **
 | `--since <ref>` | Git ref used as diff baseline (`HEAD~N`, SHA, tag, branch) | Last commit with `Agent:` trailer; fallback HEAD |
 | `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to those target types. Comma-separated for multiple. | `all` |
 | `--dry-run` | Write `.context/learnings.md` but never enter the apply phase, even if the user checks boxes. Review only. | off |
-| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill): surface all mapped proposals regardless of whether the target participated in any worktask. **Advanced — higher noise.** | off |
+| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill): surface all mapped proposals regardless of whether the target participated in any worktask. **Advanced — for diagnostics and edge cases, not production worktasks; higher noise.** | off |
 | `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `corpflow:prompt-engineer`. | off |
 
 ## Examples
@@ -52,11 +52,11 @@ The skill owns the pipeline; this command wires flags around it:
 1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution).
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
-4. **Step 5b — append labels** (see below).
+4. **Append labels** — § Label Append (the skill's Step 5b).
 5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended, and the `self-improve-counts:` line.
-6. **Apply phase** — see below.
+6. **Apply** — § Apply Phase.
 
-### Step 4 — Label Append
+### Label Append
 
 Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`, which carries the dataset-resolution ladder and the fallback notice. Skipping this discards all labels the pipeline produced.
 
@@ -74,7 +74,7 @@ The closing `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline
 
 Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
 
-### Step 6 — Apply Phase
+### Apply Phase
 
 Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `corpflow:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
 
@@ -105,8 +105,6 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 
 ## Constraints (DO NOT)
 
-- DO NOT apply proposals without `--apply` and explicit user box-checking + approval message.
-- DO NOT use `--no-scope-filter` in production worktasks; it exists for diagnostics and edge cases.
 - DO NOT run this command while a worktask is active (ST not yet complete) — wait for that worktask's own ST-triggered retrospective.
 - DO NOT expect `learnings.md` to accumulate runs: it is single-slot per workspace and a re-run overwrites it.
 

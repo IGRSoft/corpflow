@@ -149,7 +149,7 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `hooks:` | Required on PL/FN/ST (gate notifications); recommended on DV/DR/QA/SR/RE but flag PL/FN/ST omissions only. Trust precondition: hooks run only when the agent file's own folder has accepted workspace trust — otherwise silently skipped, so a missing hook artifact never proves the hook passed. | P1 (PL/FN/ST) / P2 (others) |
+| `hooks:` | Required on PL/FN/ST (gate notifications); recommended on DV/DR/QA/SR/RE but flag PL/FN/ST omissions only. Trust precondition: hooks run only when the agent file's own folder has accepted workspace trust — otherwise silently skipped, so a missing hook artifact never proves the hook passed. | P1 |
 
 #### Frontmatter audit — execution scope (P2)
 

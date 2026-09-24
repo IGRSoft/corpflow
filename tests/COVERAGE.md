@@ -54,7 +54,7 @@ the q3 documented proxy because kcov is impractical on this platform.
 
 | Source file | Test methods | Coverage approach |
 |-------------|---------|-------------------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **22** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test` (and its check count), no-args rc=1, unknown-model rejection |
 
 The scripts are UNCHANGED (skill runtime contract). In-process testing asserts
 true contracts (unknown-model → sonnet fallback, unknown-layout → ValueError)

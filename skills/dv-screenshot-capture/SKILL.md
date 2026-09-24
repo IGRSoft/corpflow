@@ -3,7 +3,6 @@ name: dv-screenshot-capture
 description: Use when DV is about to complete and `metadata.requires_screenshots` is true (the default) — the completion gate blocks otherwise. Captures DV screenshots (or an annotated diff for meta-work) as visual evidence for QA, DR and the PR.
 version: 1.0.1
 argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
-keep-coding-instructions: true
 ---
 
 # dv-screenshot-capture

@@ -172,5 +172,5 @@ frontend-developer plugins — keep them in sync. JVM Kotlin has the analogous c
 When web and native markers co-occur, the layer the change targets decides:
 UI/component/state/styling/build-tooling → `frontend-developer:frontend-developer`; a native
 module, bridging header, or platform-API binding → `apple-developer:*`. React Native / Expo
-splits the same way — JS/TS surface to the (optional) `react-native-developer`, native modules
+splits the same way — JS/TS surface to `frontend-developer:frontend-developer`, native modules
 to `apple-developer:*`. Ambiguous pure-JS/TS web work defaults to `frontend-developer`.

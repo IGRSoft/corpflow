@@ -211,7 +211,7 @@ A `blocked_on` row never carries a full `command`, `request`, `question`, `findi
 
 #### Test-run counter rows
 
-One row per test invocation, keyed on the invocation's shape rather than the plan's mode: ≥1 `-only-testing:` flag → `scoped_test_run`; zero selection flags → `full_test_run`; `build-only` runs emit none. `metadata: {stage, plan_mode, suites_selected, run_index}` — `plan_mode` next to the shape answers "how often did we actually run everything". Audit-only: a missing counter row never blocks a stage and never appears in a completion checklist.
+One row per test invocation, keyed on the invocation's shape rather than the plan's mode: ≥1 test-selection flag (`-only-testing:`, `--tests`, `-k` and the rest of `skills/shared/test-selection-syntax.md § Identifier grammar by platform`) or a trailing positional test target → `scoped_test_run`; neither → `full_test_run`; `build-only` runs emit none. `metadata: {stage, plan_mode, suites_selected, run_index}` — `plan_mode` next to the shape answers "how often did we actually run everything". Audit-only: a missing counter row never blocks a stage and never appears in a completion checklist.
 
 #### Writers — plugin hooks (authoritative)
 

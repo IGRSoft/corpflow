@@ -745,7 +745,7 @@ Before marking PL0 complete, verify:
 
 - [ ] Design detected (score ≥ 5) ⇒ Designer invoked
 - [ ] Figma URL detected ⇒ screenshots captured AND persisted (verified non-zero PNGs) to `.context/designs/figma-*.png`
-- [ ] Container node captured ⇒ one overview PNG + one PNG per child frame persisted, one registry row each (REQ-A/REQ-B)
+- [ ] Container node captured ⇒ one overview PNG + one PNG per child frame persisted, one registry row each (REQ-B)
 - [ ] Figma URL detected ⇒ per-frame design context summarized in `<plan_file> § Figma Design References` (one bullet per frame), and `§ design-preview` lists each persisted per-frame file with state mapping + build notes (REQ-D)
 
 ## Handoff Protocol

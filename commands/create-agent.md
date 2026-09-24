@@ -32,7 +32,7 @@ and the required body sections.
 
 /create-agent "database-admin" --purpose "Database schema design, query optimization, and migration management"
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal
-/create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read
+/create-agent "security-reviewer" --purpose "Security code review and vulnerability assessment" --model opus --tools read-only
 /create-agent "test-automator" --purpose "Automated test generation" --stage QA --template comprehensive
 /create-agent "release-notary" --purpose "Notarization and stapling for macOS builds" --output agents/platform/release-notary.md
 ```
@@ -81,8 +81,7 @@ Model tiers and stage→model mapping: see `skills/shared/model-selection.md` an
 | Preset | Expands To |
 |--------|-----------|
 | read-only | Read, Glob, Grep |
-| standard | Read, Glob, Grep, Write, Edit, Bash |
-| full | Read, Glob, Grep, Write, Edit, Bash |
+| standard (alias: full) | Read, Glob, Grep, Write, Edit, Bash |
 | orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *) |
 | design | Read, Glob, Grep, Write, ToolSearch |
 
@@ -155,7 +154,10 @@ that owns no stage artifact must not carry it. Current exemptions, verified agai
 |---|---|
 | `designer` | Support agent (DS). Invoked by PL/AR/DV/QA, writes no `.context/` stage artifact. |
 | `prompt-engineer` | Support agent (PE). Agent-optimization work, outside the worktask ledger. |
-| `product-manager` | Owns PL, but its handoff and completion checklist are canonical in `skills/worktask/references/pl0-procedure.md`. Duplicating them here would create a second source of truth. |
+
+`product-manager` is not exempt: it owns PL, so it carries the section, as a pointer into
+`skills/worktask/references/pl0-procedure.md`, where its handoff and completion checklist are
+canonical.
 
 `workflow-engineer` is not exempt: it is a support agent by default, but PL0 routes DV0 to it for
 worktask-infrastructure changes, so it carries a DV-scoped Handoff Protocol gated on that mode.

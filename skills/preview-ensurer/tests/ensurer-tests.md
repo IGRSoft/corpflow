@@ -12,9 +12,9 @@ swift run --package-path skills/preview-ensurer/references/reference-impl Previe
   --project-root <repo-root>
 ```
 
-The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to stdout. Each fixture below asserts on:
+The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to stdout, with sorted keys. `JSONEncoder` drops a nil optional, so `reason`, `mock_strategy` and `lines_added` appear only when set; `lines_added` is set on `added` rows only. Each fixture below asserts on:
 
-1. The `views[0]` row (file/type/has_preview/action/reason/mock_strategy).
+1. The `views[0]` row (action/file/has_preview/lines_added/mock_strategy/reason/type).
 2. Side effects on the fixture file (added `#Preview` block vs. unchanged).
 3. The `errors[]` array (empty on success).
 
@@ -35,12 +35,12 @@ Fixture files are mutated on `--auto-add true`; reset them between runs with `gi
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
-      "type": "SimpleView",
-      "has_preview": false,
       "action": "added",
-      "reason": null,
-      "mock_strategy": "concrete-init"
+      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "concrete-init",
+      "type": "SimpleView"
     }
   ]
 }
@@ -89,12 +89,12 @@ Fixture files are mutated on `--auto-add true`; reset them between runs with `gi
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/BindingView.swift",
-      "type": "BindingView",
-      "has_preview": false,
       "action": "added",
-      "reason": null,
-      "mock_strategy": "binding-constant"
+      "file": "skills/preview-ensurer/tests/Fixtures/BindingView.swift",
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "binding-constant",
+      "type": "BindingView"
     }
   ]
 }
@@ -132,12 +132,11 @@ Fixture files are mutated on `--auto-add true`; reset them between runs with `gi
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/AmbiguousMultiView.swift",
-      "type": "HeaderView",
-      "has_preview": false,
       "action": "skipped",
+      "file": "skills/preview-ensurer/tests/Fixtures/AmbiguousMultiView.swift",
+      "has_preview": false,
       "reason": "ambiguous_view_target",
-      "mock_strategy": null
+      "type": "HeaderView"
     }
   ]
 }
@@ -168,12 +167,10 @@ To target one View, the caller passes its type name (`--view HeaderView`); this 
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
-      "type": "SimpleView",
-      "has_preview": true,
       "action": "found",
-      "reason": null,
-      "mock_strategy": null
+      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
+      "has_preview": true,
+      "type": "SimpleView"
     }
   ]
 }
@@ -209,10 +206,11 @@ struct ContentView: View {
   "errors": [],
   "views": [
     {
-      "type": "ContentView",
-      "has_preview": false,
       "action": "added",
-      "mock_strategy": "concrete-init"
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "concrete-init",
+      "type": "ContentView"
     }
   ]
 }

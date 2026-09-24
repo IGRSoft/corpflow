@@ -1,7 +1,6 @@
 ---
 name: pencil-design-worktask
 description: Use when generating design mockups, creating .pen files, or integrating design tokens. Design mockup generation worktask using Pencil MCP tools for the Designer agent.
-keep-coding-instructions: true
 paths:
   - "**/*.pen"
 related:

@@ -2,9 +2,6 @@
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
 argument-hint: '[--path <dir>] [--threshold <n>] [--report] [--critical-only] [--platform <p>]'
-# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
-# the only file this command creates is `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`.
-# No Edit — the command reports coverage and mutates nothing it read.
 allowed-tools: Read, Glob, Grep, Write, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
 related:
   - agents/qa-engineer.md

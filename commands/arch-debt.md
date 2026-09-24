@@ -2,9 +2,6 @@
 name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
 argument-hint: '[--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security] [--platform <p>]'
-# tools: Write takes no path predicate, so the bounds are stated here and in `## Options`:
-# `--report` creates `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`, and `--add`/`--prioritize`
-# maintain the single register `.context/audits/tech-debt.md` (Write on first use, Edit after).
 allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/software-architector.md

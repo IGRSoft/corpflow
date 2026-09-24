@@ -117,7 +117,7 @@ Use the extended inbound figure only on a live 1M window and a genuinely complex
 
 ## Exploration Cache Budget
 
-Per-content budgets for `.context/exploration.md` (template and file-level size budget: `skills/worktask/references/initialization-patterns.md § Pre-Stage Exploration Cache`):
+Per-content budgets for `.context/exploration.md`. The file-level cap and the template live in `skills/worktask/references/initialization-patterns.md § Pre-Stage Exploration Cache`; these rows split that cap:
 
 | Content Type | Token Budget | Technique |
 |-------------|-------------|-----------|
@@ -125,7 +125,6 @@ Per-content budgets for `.context/exploration.md` (template and file-level size 
 | Key interfaces | 200-500 | Code snippets for enums/protocols only |
 | Patterns | 100-200 | One-liner per pattern with file:line ref |
 | External context | 100-300 | Summarized design/Figma/user decisions |
-| **Total** | **500-1200** | |
 
 Leave out full file contents (only interfaces/enums under 30 lines), implementation details (use file:line refs), build commands (already in CLAUDE.md) and architecture decisions (they belong in architecture.md).
 

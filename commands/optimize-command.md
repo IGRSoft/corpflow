@@ -48,7 +48,7 @@ Report skeleton — sections in this order:
 
 ## Current State
 | Metric | Score | Status |
-Rows: Usage Clarity, Options, Examples, Output Format, Integration. **Overall Score**: mean.
+Rows: Usage Clarity, Options, Examples, Output Format, Integration, Body. **Overall Score**: mean.
 
 ## <Area> Improvements        (one per scored area, Current → Recommended + **Changes** list)
 Options / Output Format use `| Option | Status | Issue | Recommendation |`.

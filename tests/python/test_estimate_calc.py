@@ -107,6 +107,12 @@ class CliSmoke(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["self_test"], "ok")
 
+    def test_self_test_reports_checks_it_ran(self):
+        r = run_cli(ESTIMATE_CALC, ["--self-test"])
+        with open(ESTIMATE_CALC, encoding="utf-8") as fh:
+            calls = fh.read().count('    check("')
+        self.assertEqual(json.loads(r.stdout)["checks"], calls)
+
     def test_no_args_exits_1(self):
         r = run_cli(ESTIMATE_CALC, [])
         self.assertEqual(r.returncode, 1)

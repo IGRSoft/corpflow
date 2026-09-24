@@ -227,7 +227,7 @@ Changelog entries are categorized by keyword and routed to the file types below.
 | **Comms** | the keywords in § Communication Surfaces Watch | the owning files named there |
 | **Ledger** | new `claude agents run` flag, new frontmatter key, new `Task()`/`Agent()` param, `claude agents --json` key, `--json-schema`, `--permission-mode` value | the files in § Ledger Field Review |
 | **Commands** | slash command, /clear, /reload-plugins, Tool(param:value) permission syntax | worktask + relevant command files, agent-coordination |
-| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, auth-stub tools headless, --restricted, TOCTOU, path traversal | git-conventions, resume reference, security-reviewer agent |
+| **Security** | auto mode, destructive git block, commit --amend guard, IaC destroy block, trigger delivery can't auto-approve, auth-stub tools headless, --restricted, TOCTOU, path traversal | git-conventions, resume reference, security-review-process `references/claude-code-hardening.md` |
 
 ## Output Format
 

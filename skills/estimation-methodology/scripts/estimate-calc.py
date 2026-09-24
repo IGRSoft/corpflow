@@ -276,8 +276,10 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
 def _self_test() -> None:
     """Run assertions against hand-computed values; exit non-zero on failure."""
     failures: list[str] = []
+    ran: list[str] = []
 
     def check(name: str, got: object, expected: object) -> None:
+        ran.append(name)
         if got != expected:
             failures.append(f"FAIL {name}: got {got!r}, expected {expected!r}")
 
@@ -361,7 +363,7 @@ def _self_test() -> None:
             print(f, file=sys.stderr)
         sys.exit(1)
 
-    print(json.dumps({"self_test": "ok", "checks": 24}))
+    print(json.dumps({"self_test": "ok", "checks": len(ran)}))
 
 
 # ---------------------------------------------------------------------------

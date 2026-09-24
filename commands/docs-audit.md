@@ -2,9 +2,6 @@
 name: docs-audit
 description: Audit documentation for gaps, outdated content, and quality issues
 argument-hint: '[--path <dir>] [--type code|readme|api|architecture] [--scope full|section] [--fix] [--report]'
-# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
-# the only file this command creates is `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`.
-# Edit exists solely for `--fix`, bounded to the rows under `## Auto-Fix Available`.
 allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/technical-writer.md

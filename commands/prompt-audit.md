@@ -2,9 +2,6 @@
 name: prompt-audit
 description: Audit agents, commands, and skills for prompt quality, consistency, and best practices; run for periodic health checks, before a release, or after adding assets
 argument-hint: '[--agents|--commands|--skills] [--report] [--fix] [--severity info|warning|error]'
-# tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
-# the only file this command creates is `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`.
-# Edit exists solely for `--fix`, bounded to files this same run already read.
 allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/prompt-engineer.md

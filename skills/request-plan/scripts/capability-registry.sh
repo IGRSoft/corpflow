@@ -54,11 +54,12 @@ emit_line() {
 }
 
 desc_markdown() {
-  # Frontmatter only: stop at the next key or the closing fence, so a multi-line
-  # description folds but a body heading never leaks in.
+  # Frontmatter only: stop at the next key, a column-0 YAML comment or the closing fence,
+  # so a multi-line description folds but a body heading never leaks in.
   awk '
     /^description:[[:space:]]*/ { sub(/^description:[[:space:]]*/, ""); buf=$0; inside=1; next }
     inside && /^[a-z_-]+:/     { exit }
+    inside && /^#/             { exit }
     inside && /^---/           { exit }
     inside                     { buf = buf " " $0 }
     END                        { print buf }

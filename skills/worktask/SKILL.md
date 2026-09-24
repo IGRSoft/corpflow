@@ -2235,13 +2235,9 @@ with a `plugin_unavailable` audit row.
 
 ### DV Batch Checkpointing
 
-When one DV agent executes multiple non-separable batches in a single run (no separable file
-ownership), it appends a one-line checkpoint to its row's artifact (`metadata.artifact`; or a
-scratch `.context/dv-checkpoint-N.log`) after each completed batch and before starting the next:
-batch id, files-touched count, and the gate result if one ran. Append-only, one entry per batch
-boundary. A DV agent that dies after its edits but before the completion protocol then lets F3
-recovery (§ Step 6.5 Layer 3) resume from the last checkpoint; loop step 4.7 carries it forward on
-re-dispatch.
+A DV agent running several non-separable batches records each finished batch in
+`tasks.<ID>.progress` (`agents/developer.md § Budget-Aware Checkpointing`); loop step 4.7 reads it
+on re-dispatch so the run resumes from `next_batch`.
 
 ## Auto-Decision Delegation (decision_gate)
 

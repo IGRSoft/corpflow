@@ -36,7 +36,7 @@ apple-canvas calls `ensure_previews(modified_files, options={auto_add: true, wri
 | Failure | Behavior |
 |---|---|
 | SwiftSyntax parse fails on an input file | Append `parse_failed: <file>` to `errors[]`; skip that file, continue with the others |
-| Post-edit `swift -frontend -parse` fails on the generated `#Preview` | Roll back (`git checkout -- <file>`); record skipped with reason `generated_preview_invalid`; never leave broken syntax |
+| Post-edit `swift -frontend -parse` fails on the generated `#Preview` | Roll back by rewriting the pre-edit text, so the developer's uncommitted edits survive; record skipped with reason `parse_failed_after_preview_add` and add `parse_failed_after_preview_add: <file>` to `errors[]`; never leave broken syntax |
 | swift-syntax API breakage on a toolchain bump | Surface as `errors[]` with `swift_syntax_api_break: <hint>`; escalate to `apple-developer:ios-developer` |
 | File contains 3+ View structs and `args.view` unspecified | Skip with reason `ambiguous_view_target`; user disambiguates via `metadata.canvas_view` |
 

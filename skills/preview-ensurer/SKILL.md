@@ -3,7 +3,6 @@ name: preview-ensurer
 description: Use when the `dv-screenshot-capture` apple-canvas adapter runs, before `swift run SnapshotHost`. Adds a minimal `#Preview` block via SwiftSyntax to modified SwiftUI View files that have no `#Preview` or `PreviewProvider`.
 version: 1.1.0
 argument-hint: "<modified_files-newline-list> [--auto-add=true|false]"
-keep-coding-instructions: true
 # G3: no standalone value — it edits Swift sources mid-capture from an adapter's modified-file list, which a user outside a DV screenshot run does not have.
 disable-model-invocation: true
 ---

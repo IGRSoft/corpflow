@@ -213,7 +213,7 @@ Every build attempt is tee'd → `.context/logs/build-developer-<ts>.log` (gramm
 
 ### D1.5 — Write unit tests
 
-Write unit tests per `<plan_file> § Test Strategy`. Annotate new tests with markers from `skills/shared/test-selection-syntax.md`: `// @test-required` (smoke), `// @depends-on: <Symbol>` (cross-file behavior coverage), `// @test-tag: <tag>` (categorization); untagged tests fall back to filename/type-name correlation only.
+Write unit tests per `<plan_file> § test-strategy`. Annotate new tests with markers from `skills/shared/test-selection-syntax.md`: `// @test-required` (smoke), `// @depends-on: <Symbol>` (cross-file behavior coverage), `// @test-tag: <tag>` (categorization); untagged tests fall back to filename/type-name correlation only.
 
 **Footer markers**: append `// MARK: - Test Info` to each modified production source file (`@test-file:` primary test path, optional `@related-tests:`, `@test-coverage:` description) and `// MARK: - Source Info` to each new/modified test file (`@source-file:`, optional `@doc-refs:`). Grammar: `test-selection-syntax.md § Footer Markers`.
 

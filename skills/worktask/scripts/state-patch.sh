@@ -2270,7 +2270,7 @@ if [[ -n "$TASK_OP" ]]; then
       fi
       if [[ -n "$_TM_HAS_MODEL" && -n "$_TM_CUR_MODEL" ]]; then
         _TM_NEW_MODEL=$(printf '%s' "$TASK_OP_VALUE" | jq -r '.model')
-        # opus > sonnet > haiku (stage-codes.md § Model alias notes) — the only three ranked
+        # opus > sonnet > haiku (model-selection.md § Cost Tiers) — the only three ranked
         # aliases; anything else compares as unranked and is never dropped by this guard.
         case "$_TM_NEW_MODEL" in haiku) _TM_NEW_MR=0 ;; sonnet) _TM_NEW_MR=1 ;; opus) _TM_NEW_MR=2 ;; *) _TM_NEW_MR="" ;; esac
         case "$_TM_CUR_MODEL" in haiku) _TM_CUR_MR=0 ;; sonnet) _TM_CUR_MR=1 ;; opus) _TM_CUR_MR=2 ;; *) _TM_CUR_MR="" ;; esac

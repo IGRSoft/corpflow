@@ -22,7 +22,7 @@ Platform→plugin routing: `skills/shared/platform-detection.md`.
 
 Use the project's established framework — detect it (test layout, manifest dependencies, CI
 config) before writing a test. Never add a second framework to a repo that has one; where a repo has
-none, pick from the matrix and record the choice in `<plan_file> § Test Strategy`.
+none, pick from the matrix and record the choice in `<plan_file> § test-strategy`.
 
 ### Framework matrix — app platforms
 
@@ -347,7 +347,7 @@ warns if `< 50%` of test files lack any marker).
 
 When every hunk of the planned diff is a comment, a prose file (`docs/`, `*.md`), or a non-executable
 string, no test outcome can change: PL sets `test_mode: build-only` and says why in
-`<plan_file> § Test Strategy`. The one case where the marker-coverage precondition does not apply —
+`<plan_file> § test-strategy`. The one case where the marker-coverage precondition does not apply —
 the mode is chosen because nothing executable changed, not because markers stand in for a run. One
 executable hunk anywhere in the planned diff disqualifies it.
 

@@ -254,40 +254,7 @@ state-patch.sh --task-status PL0 completed
 
 ## Task Execution Pattern
 
-When a task starts, the executor reads `metadata.agent` and spawns the agent. `metadata.agent` is always the fully-qualified `plugin:agent` form (e.g., `corpflow:developer`, `apple-developer:ios-developer`); bare names are not accepted.
-
-### Resolve agent & model
-
-```typescript
-const task = state.tasks[currentTaskId];
-const agentType = task.metadata.agent;  // e.g., "corpflow:developer" or "apple-developer:ios-developer"
-const model = task.metadata.model;      // e.g., "haiku"
-
-const subagentType = agentType;  // already fully-qualified `plugin:agent`
-```
-
-### Build prompt & dispatch
-
-```typescript
-// …continued: same execution flow
-// Build context-aware prompt
-const explorationExists = fileExists('.context/exploration.md');
-const previousArtifacts = getPreviousStageArtifacts(task.metadata.stage);
-
-let prompt = task.description;
-if (explorationExists) {
-  prompt += `\n\n## Shared Exploration Cache\nRead .context/exploration.md for pre-explored codebase context. Do not re-read files listed there unless you need to modify them.\n`;
-}
-for (const artifact of previousArtifacts) {
-  prompt += `\n## Previous Stage: Read .context/${artifact}\n`;
-}
-
-Task({
-  subagent_type: subagentType,           // qualified `plugin:agent`
-  model: model,                           // explicit model — frontmatter inheritance is not relied on
-  prompt: prompt                           // context-enriched instructions
-});
-```
+When a task starts, the executor reads `metadata.agent` and spawns the agent. `metadata.agent` is always the fully-qualified `plugin:agent` form (e.g., `corpflow:developer`, `apple-developer:ios-developer`); bare names are not accepted. The dispatch itself (prompt built by `brief-compose.sh`, explicit `model` and `effort` from the task metadata) is specified in `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
 
 ## Stage Sub-Task Splitting
 
