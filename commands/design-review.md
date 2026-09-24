@@ -1,7 +1,7 @@
 ---
 name: design-review
 description: Conduct a comprehensive design review for screens, components, or features
-argument-hint: '<screen, component, or feature>'
+argument-hint: '<screen, component, or feature> [--focus ui|ux|a11y|system] [--depth quick|standard|comprehensive] [--platform apple|android|web|all]'
 allowed-tools: Read, Glob, Grep, Task(corpflow:designer)
 related:
   - agents/designer.md
@@ -22,7 +22,7 @@ Comprehensive design review of a screen, component, or feature, run through the 
 | `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
 
 ```
-/design-review [target] [options]
+/design-review <screen, component, or feature> [--focus ui|ux|a11y|system] [--depth quick|standard|comprehensive] [--platform apple|android|web|all]
 /design-review LoginScreen
 /design-review "Settings feature" --focus ux --depth comprehensive
 /design-review Button component --focus system

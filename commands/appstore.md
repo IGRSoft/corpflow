@@ -1,7 +1,7 @@
 ---
 name: appstore
 description: 'Store publishing front door — listing metadata, screenshots, or in-app purchases; delegates to the platform plugin''s release engineer (Apple App Store, Google Play).'
-argument-hint: '--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run]'
+argument-hint: '--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run] [--bundle <id>] [--apple-platform ios|macos|tvos|watchos] [--android-form-factor <factor>]'
 allowed-tools: Read, Glob, Grep, Task(corpflow:release-engineer)
 version: 0.1.0
 related:
@@ -33,7 +33,10 @@ grant.
 deliberately distinct from the plugin-wide `--platform`. Pass it through; never fold one into the
 other.
 
+## Examples
+
 ```
+/appstore --task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run] [--bundle <id>] [--apple-platform ios|macos|tvos|watchos] [--android-form-factor <factor>]
 /appstore --task listing --platform apple --lang ua
 /appstore --task screenshots --apple-platform macos --path AppStore/
 /appstore --task iap --platform apple --bundle com.example.app --dry-run   # read-only; no product created

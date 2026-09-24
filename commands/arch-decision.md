@@ -1,7 +1,7 @@
 ---
 name: arch-decision
 description: Create or update Architecture Decision Records (ADRs) or Technology Decision Records (TDRs) to document significant technical decisions
-argument-hint: <decision topic or context> [--type adr|tdr]
+argument-hint: '["<decision topic>"] [--type adr|tdr] [--list] [--update <number>] [--supersede <number>] [--status proposed|accepted|deprecated|superseded] [--evaluate "<name>"] [--compare "<t1>" "<t2>"]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/software-architector.md
@@ -28,7 +28,10 @@ Technology Decision Records (`--type tdr`); they differ in scope, owner, and out
 | `--evaluate "name"` | technology name | Run the § Evaluation Framework (TDR-oriented) |
 | `--compare "t1" "t2"` | two technology names | Compare two technologies (TDR-oriented) |
 
+## Examples
+
 ```
+/arch-decision ["<decision topic>"] [--type adr|tdr] [--list] [--update <number>] [--supersede <number>] [--status proposed|accepted|deprecated|superseded] [--evaluate "<name>"] [--compare "<t1>" "<t2>"]
 /arch-decision "Use PostgreSQL for primary database"
 /arch-decision --list
 /arch-decision --update ADR-005 --status deprecated

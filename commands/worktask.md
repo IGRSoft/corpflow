@@ -1,7 +1,7 @@
 ---
 name: worktask
 description: Run one task through the staged worktask pipeline (plan, build, review, test, docs, PR) with plan and finalization gates and a resumable state ledger
-argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
+argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.6.0
 allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
 related:
@@ -97,15 +97,17 @@ verbatim; never default, extend or infer it, so a tool nobody named stays a fail
 ## Examples
 
 ```bash
+/worktask "<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>]
+/worktask --resume <STAGE_ID> [--cascade]
 /worktask "Add dark mode support"                      # standard pipeline
-/worktask "Rotate the API token store" --secure        # 11-stage; --full is the same flag
+/worktask "Rotate the API token store" --secure        # 11-stage
 /worktask "Fix flaky sync test" --priority High --platform apple
 /worktask "Ship the referral banner" --ethics-review --sequential
 /worktask "Bump the SDK" --no-gh-issue --auto=[plan,finalization]
 /worktask "Add the export endpoint" --platform backend --auto=[plan,finalization] --accept-absent=renderer
 /worktask --emergency "Production login failing"       # IR→DV→DR→QA→RE→FN
 /worktask --resume DV1 --cascade                       # replay DV1 and its dependents
-# Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
+# Multi-issue: /megatask 1 (milestone) or /megatask --issues 12,15,18 (array)
 ```
 
 ## Phase 0: Replay one stage (`--resume <STAGE_ID>`)

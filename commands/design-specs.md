@@ -1,7 +1,7 @@
 ---
 name: design-specs
 description: Generate developer-ready design specifications for components, screens, or features
-argument-hint: <component or screen name>
+argument-hint: '<component or screen name> [--format markdown|figma|json] [--platform apple|android|web|all] [--include-assets]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/designer.md
@@ -21,7 +21,7 @@ Developer-ready specification for a component, screen, or feature — measured v
 | `--include-assets` | flag | Include asset export list |
 
 ```
-/design-specs [target] [options]
+/design-specs <component or screen name> [--format markdown|figma|json] [--platform apple|android|web|all] [--include-assets]
 /design-specs ProfileCard
 /design-specs "Onboarding flow" --platform apple --include-assets
 /design-specs NavigationBar --format json

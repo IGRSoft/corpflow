@@ -1,7 +1,7 @@
 ---
 name: estimate
 description: Estimate task complexity, effort, and resources; optionally review an estimate or export it to CSV
-argument-hint: '<task description> [--quick|--detailed] [--review] [--export csv]'
+argument-hint: '["<task description>"] [--quick|--detailed] [--stages] [--sequential] [--compare "<opt1> | <opt2>"] [--multiplier <hours>] [--ai-rate <amount>] [--dev-rate <amount>] [--no-review] [--review [--focus <areas>] [--update]] [--export csv [--dir <path>] [--delimiter <char>] [--validate]] [--platform <p>]'
 # tools: the Budget and AI Cost rows order `estimate-calc.py` as the canonical math, so the grant
 # names that one interpreter and that one script; every other number is read, not computed.
 allowed-tools: Read, Glob, Grep, Write, Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-calc.py *)
@@ -35,45 +35,56 @@ mode — do not cross-apply them:
 
 ### Estimate mode (default)
 
-- `--quick` - Quick estimation (T-shirt size only)
-- `--detailed` - Detailed estimation with full breakdown
-- `--stages` - Emits the 3-stage breakdown (Required, Nice-to-have, v1.1) using the template in `skills/shared/three-stage-planning.md § Stage Budget Template`
-- `--sequential` - Flag-only; documents that stages cannot run in parallel. Sequential-only rules: `skills/shared/three-stage-planning.md`
-- `--compare` - Accepts `"opt1 | opt2 | opt3"`; emits a comparison table with size, SP range, hours range, complexity score, and recommended worktask per option
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--quick` | — | Quick estimation (T-shirt size only) |
+| `--detailed` | — | Detailed estimation with full breakdown |
+| `--stages` | — | Emit the 3-stage breakdown (Required, Nice-to-have, v1.1) using `skills/shared/three-stage-planning.md § Stage Budget Template` |
+| `--sequential` | — | Record that stages cannot run in parallel; rules in `skills/shared/three-stage-planning.md` |
+| `--compare "<opt1> \| <opt2>"` | two or more options | Comparison table with size, SP range, hours range, complexity score and recommended worktask per option |
 
 #### Estimate mode — rates and review
 
-- `--multiplier <hours>` - Override SP multiplier (default: 6)
-- `--ai-rate <amount>` - AI agent monthly rate (no default — if omitted, AI cost row shows [ai-cost skipped: --ai-rate not set])
-- `--dev-rate <amount>` - Developer hourly rate (no default — required for budget calculation; estimate runs without budget if omitted)
-- `--no-review` - Skip the inline review step even when its trigger fires (see Review Step below)
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--multiplier <hours>` | hours per SP | Override the SP multiplier (default: 6) |
+| `--ai-rate <amount>` | monthly rate | AI agent monthly rate; no default — without it the AI cost row shows `[ai-cost skipped: --ai-rate not set]` |
+| `--dev-rate <amount>` | hourly rate | Developer hourly rate; no default — without it the estimate runs with no budget |
+| `--no-review` | — | Skip the inline review step even when its trigger fires (§ Review Step) |
 
 ### Review mode (`--review`)
 
-- `--focus <areas>` - Comma-separated focus areas (ar, ble, vision, api, camera, sync)
-- `--update` - Auto-update estimation files with the review's adjustments
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--review` | — | Review an existing estimate |
+| `--focus <areas>` | comma-separated: `ar`, `ble`, `vision`, `api`, `camera`, `sync` | Focus areas (default: all) |
+| `--update` | — | Auto-update estimation files with the review's adjustments |
 
 ### Export mode (`--export csv`)
 
-- `--export csv` - After running the estimation, emit the 13 CSV files defined in `skills/csv-export-templates/SKILL.md`. Requires `--detailed` (quick estimates have no breakdown to export). Bare `--export` defaults to `csv`, the only supported format.
-- `--dir <path>` - Output directory (default: `exports/`)
-- `--delimiter <char>` - CSV delimiter, overriding the skill's default `;`
-- `--validate` - Validate totals across the emitted files (see Export Validation below)
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--export csv` | `csv` (bare `--export` means `csv`) | After the estimation, emit the 13 CSV files defined in `skills/csv-export-templates/SKILL.md`. Requires `--detailed` (quick estimates have no breakdown to export). |
+| `--dir <path>` | directory | Output directory (default: `exports/`) |
+| `--delimiter <char>` | one character | CSV delimiter (default: the skill's `;`) |
+| `--validate` | — | Validate totals across the emitted files (§ Export Validation) |
 
 ### Shared
 
-- `--platform <apple|android|web|systems|backend|ai|all>` - Platform-specific templates/context (default: all). Keys match `skills/shared/compatible-plugins.md § Registry`.
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Platform-specific templates and context (default: `all`); keys match `skills/shared/compatible-plugins.md § Registry` |
 
 ## Examples
 
 ```
+/estimate ["<task description>"] [--quick|--detailed] [--stages] [--sequential] [--compare "<opt1> | <opt2>"] [--multiplier <hours>] [--ai-rate <amount>] [--dev-rate <amount>] [--no-review] [--review [--focus <areas>] [--update]] [--export csv [--dir <path>] [--delimiter <char>] [--validate]] [--platform <p>]
 /estimate "Add dark mode support"
 /estimate --detailed "Implement user authentication with OAuth"
 /estimate --quick "Fix button alignment on login page"
 /estimate --review --platform apple --focus ar,ble
 /estimate --review --platform android --update
-/estimate --detailed "Build MVP" --export csv --dir exports/ --delimiter , --platform apple
-/estimate --detailed "Build MVP" --export csv --validate
+/estimate --detailed "Build MVP" --export csv --dir exports/ --delimiter , --validate
 /estimate --detailed --stages --sequential "Offline sync"   # 3-stage budget, no parallelism
 /estimate --compare "SwiftData | GRDB | Core Data"
 /estimate --detailed "Payments" --multiplier 8 --dev-rate 95 --ai-rate 200

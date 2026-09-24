@@ -1,7 +1,7 @@
 ---
 name: docs-readme
 description: Update README files based on code changes, keeping documentation in sync with implementation
-argument-hint: '[--path README.md]'
+argument-hint: '[--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate] [--platform <target>]'
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git log:*)
 related:
   - agents/technical-writer.md

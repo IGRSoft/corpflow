@@ -1,10 +1,10 @@
 ---
 name: prompt-audit
 description: Audit agents, commands, and skills for prompt quality, consistency, and best practices; run for periodic health checks, before a release, or after adding assets
-argument-hint: '[--scope agents|commands|skills|all]'
+argument-hint: '[--agents|--commands|--skills] [--report] [--fix] [--severity info|warning|error]'
 # tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
 # the only file this command creates is `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`.
-# Edit exists solely for `--fix`, bounded to files this same run already read under `--scope`.
+# Edit exists solely for `--fix`, bounded to files this same run already read.
 allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/prompt-engineer.md
@@ -27,13 +27,13 @@ With no scope flag, all three asset classes are audited.
 | `--commands` | — | Audit commands only |
 | `--skills` | — | Audit skill manifests only (`skills/**/SKILL.md`) |
 | `--report` | — | Write the report to `.context/audits/prompt-audit-<YYYYMMDD-HHMMSS>.md`, the only file this command creates |
-| `--fix` | — | Auto-fix minor issues (formatting, links) in place, only in files this run already read under `--scope`; never inside a `## Constraints (DO NOT)` block |
+| `--fix` | — | Auto-fix minor issues (formatting, links) in place, only in files this run already read; never inside a `## Constraints (DO NOT)` block |
 | `--severity <level>` | `info`, `warning`, `error` | Minimum severity shown |
 
 ## Examples
 
 ```
-/prompt-audit [--agents|--commands|--skills] [--report] [--fix] [--severity <level>]
+/prompt-audit [--agents|--commands|--skills] [--report] [--fix] [--severity info|warning|error]
 
 /prompt-audit
 /prompt-audit --agents --report

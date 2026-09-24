@@ -1,7 +1,7 @@
 ---
 name: sprint
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
-argument-hint: <sprint name or number>
+argument-hint: '[<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--include-debt] [--export]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
@@ -19,6 +19,7 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 
 | Option | Values | Purpose |
 |--------|--------|---------|
+| `<sprint name or number>` | text | Sprint ID for the plan title (`Sprint Plan: Sprint {ID}`) |
 | `--capacity <points>` | — | Team capacity in story points |
 | `--from-backlog <file>` | — | Import items from a backlog file |
 | `--duration <weeks>` | `1`, `2`, `3`, `4` | Sprint length in weeks (default: `2`) |
@@ -26,8 +27,9 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | `--export` | — | Export the sprint plan |
 
 ```
+/sprint [<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--include-debt] [--export]
 /sprint
-/sprint --capacity 40 --duration 2
+/sprint 14 --capacity 40 --duration 2
 /sprint --from-backlog backlog.md --include-debt
 /sprint --capacity 30 --export
 ```

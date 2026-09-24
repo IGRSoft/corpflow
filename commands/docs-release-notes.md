@@ -1,7 +1,7 @@
 ---
 name: docs-release-notes
 description: Generate release notes from completed work, git history, or worktask artifacts
-argument-hint: '[--from tag] [--to tag|HEAD]'
+argument-hint: '[--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|html|slack] [--audience internal|external|all] [--platform <target>]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
 related:
   - agents/project-manager.md

@@ -1,7 +1,7 @@
 ---
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
-argument-hint: '[--path dir] [--threshold N]'
+argument-hint: '[--path <dir>] [--threshold <n>] [--report] [--critical-only] [--platform <p>]'
 # tools: Write takes no path predicate, so the bound is stated here and in `## Options`:
 # the only file this command creates is `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`.
 # No Edit — the command reports coverage and mutates nothing it read.

@@ -2,7 +2,7 @@
 name: cc-update
 description: Update plugin agents, commands, and skills with new Claude Code features, including cross-session/cross-plugin comms surfaces and new flags that deserve state-ledger fields, then sync MEMORY.md and README.md version tracking
 version: 0.3.0
-argument-hint: '<version> [--notes <url|text>] [--dry-run]'
+argument-hint: '<version> [--notes <url|text>] [--scope agents|commands|skills|all] [--agent <name>] [--command <name>] [--dry-run] [--memory-only] [--bump-min] [--force] [--worktask-impact-only]'
 allowed-tools: Read, Glob, Grep, Write, Edit, WebFetch, Bash(curl:*), Bash(jq:*), Bash(claude agents:*), Bash(claude --version)
 related:
   - agents/prompt-engineer.md
@@ -48,6 +48,7 @@ them on; `--worktask-impact-only` only narrows the output.
 ## Examples
 
 ```
+/cc-update <version> [--notes <url|text>] [--scope agents|commands|skills|all] [--agent <name>] [--command <name>] [--dry-run] [--memory-only] [--bump-min] [--force] [--worktask-impact-only]
 /cc-update 2.1.77 --notes https://github.com/anthropics/claude-code/releases/tag/v2.1.77
 /cc-update 2.1.77 --dry-run                    # preview impact first
 /cc-update 2.1.77 --memory-only                # after manual agent edits

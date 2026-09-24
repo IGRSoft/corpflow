@@ -1,7 +1,7 @@
 ---
 name: arch-review
 description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
-argument-hint: '[--pr N | --path dir] [--scope full|focused]'
+argument-hint: '[--pr <number> | --path <dir>] [--scope full|focused] [--checklist]'
 allowed-tools: Read, Glob, Grep
 related:
   - agents/software-architector.md
@@ -16,12 +16,15 @@ current working tree.
 
 ## Options
 
-- `--pr <number>` - Review specific PR
-- `--path <dir>` - Review specific directory/module
-- `--scope [full|focused]` - Review depth (default: focused)
-- `--checklist` - Score against § Review Checklist
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--pr <number>` | PR number | Review that PR |
+| `--path <dir>` | directory or module | Review that directory (default: the current working tree) |
+| `--scope <depth>` | `full`, `focused` | Review depth (default: `focused`) |
+| `--checklist` | — | Score against § Review Checklist |
 
 ```
+/arch-review [--pr <number> | --path <dir>] [--scope full|focused] [--checklist]
 /arch-review
 /arch-review --pr 123 --scope full --checklist
 /arch-review --path src/auth

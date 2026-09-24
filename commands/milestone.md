@@ -1,7 +1,7 @@
 ---
 name: milestone
 description: Generate GitHub milestone tickets with agent assignments for implementation, test, and review
-argument-hint: '<feature description or --from-prd path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure]'
+argument-hint: '"<description>" | --from-prd <path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure] [--labels <extra>]'
 # tools: bare Bash is deliberate — the milestone's repo tooling (gh, git, project scripts) is
 # unknown until it is read; the bound is that it writes issues and milestone files, never source.
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash
@@ -31,6 +31,7 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 ## Examples
 
 ```bash
+/milestone "<description>" | --from-prd <path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure] [--labels <extra>]
 /milestone "Add dark mode support" --milestone 3 --platform apple
 /milestone --from-prd .context/planning-0.md --milestone 5 --dry-run   # any planning-N.md the PL produced
 /milestone "Implement OAuth2 flow" --milestone 2 --secure

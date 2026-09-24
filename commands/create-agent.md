@@ -1,7 +1,7 @@
 ---
 name: create-agent
 description: Create new agent definitions with proper structure, model selection, and best practices
-argument-hint: <agent name and purpose>
+argument-hint: '<name> --purpose "<description>" [--model haiku|sonnet|opus] [--template minimal|standard|comprehensive] [--tools <preset|list>] [--stage <code>] [--output <path>]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md
@@ -28,7 +28,7 @@ and the required body sections.
 ## Examples
 
 ```
-/create-agent <name> --purpose <description> [--model <tier>] [--template <style>] [--tools <preset|list>] [--stage <code>] [--output <path>]
+/create-agent <name> --purpose "<description>" [--model haiku|sonnet|opus] [--template minimal|standard|comprehensive] [--tools <preset|list>] [--stage <code>] [--output <path>]
 
 /create-agent "database-admin" --purpose "Database schema design, query optimization, and migration management"
 /create-agent "api-designer" --purpose "REST/GraphQL API design" --model haiku --template minimal

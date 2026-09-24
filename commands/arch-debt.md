@@ -1,7 +1,7 @@
 ---
 name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
-argument-hint: '[--path dir] [--severity critical|high|medium|low]'
+argument-hint: '[--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security] [--platform <p>]'
 # tools: Write takes no path predicate, so the bounds are stated here and in `## Options`:
 # `--report` creates `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`, and `--add`/`--prioritize`
 # maintain the single register `.context/audits/tech-debt.md` (Write on first use, Edit after).
@@ -19,14 +19,19 @@ Analyze, document, and prioritize technical debt in the codebase. Analysis is th
 
 ## Options
 
-- `--path <dir>` - Analyze specific directory
-- `--add "description"` - Append a tech debt item to the register `.context/audits/tech-debt.md`
-- `--report` - Write the full tech debt report to `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md`
-- `--prioritize` - Re-prioritize existing debt in place, in the register `.context/audits/tech-debt.md`
-- `--category [code|architecture|testing|docs|security]` - Filter by category
-- `--platform <apple|android|web|systems|backend|ai|all>` - Target platform context (default: all)
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--path <dir>` | any directory | Analyze that directory only (default: whole codebase) |
+| `--add "<description>"` | text | Append a tech debt item to the register `.context/audits/tech-debt.md` |
+| `--report` | — | Write the full tech debt report to `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md` |
+| `--prioritize` | — | Re-prioritize existing debt in place, in the register `.context/audits/tech-debt.md` |
+| `--category <c>` | `code`, `architecture`, `testing`, `docs`, `security` | Filter by category (default: all) |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`) |
+
+## Examples
 
 ```
+/arch-debt [--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security] [--platform <p>]
 /arch-debt
 /arch-debt --path src/legacy --prioritize
 /arch-debt --add "Migrate from callbacks to async/await in api module"

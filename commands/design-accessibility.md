@@ -1,7 +1,7 @@
 ---
 name: design-accessibility
 description: Conduct an accessibility audit for screens, components, or the entire application
-argument-hint: '<screen, component, or app path>'
+argument-hint: '[<screen, component, or app path>] [--level A|AA|AAA] [--platform apple|android|web|all] [--scope quick|standard|comprehensive]'
 allowed-tools: Read, Glob, Grep
 related:
   - agents/designer.md
@@ -21,7 +21,7 @@ Accessibility audit of a screen, component, or the entire application against WC
 | `--scope` | `quick`, `standard`, `comprehensive` | Audit scope (default: standard) |
 
 ```
-/design-accessibility [target] [options]
+/design-accessibility [<screen, component, or app path>] [--level A|AA|AAA] [--platform apple|android|web|all] [--scope quick|standard|comprehensive]
 /design-accessibility LoginScreen
 /design-accessibility "Navigation component" --level AAA
 /design-accessibility --scope comprehensive --platform apple

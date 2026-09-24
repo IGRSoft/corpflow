@@ -1,7 +1,7 @@
 ---
 name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
-argument-hint: '[--pr N | --path dir] [--depth surface|deep]'
+argument-hint: '[--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]'
 allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
 version: 0.3.0
 related:
@@ -43,6 +43,7 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 | `--ethics` | — | Include constitutional compliance checks |
 
 ```
+/tech-code-review [--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]
 /tech-code-review
 /tech-code-review --platform apple --path Sources/
 /tech-code-review --pr 42 --focus security,performance

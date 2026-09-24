@@ -1,7 +1,7 @@
 ---
 name: product-requirements
 description: Generate a Product Requirements Document (PRD) from task description or user stories
-argument-hint: <feature or task description>
+argument-hint: '"<feature or task description>" | --from-user-story "<story>" [--template full|lite|api] [--include-metrics] [--technical]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
@@ -22,6 +22,7 @@ Generate a Product Requirements Document (PRD) from task description or user sto
 | `--technical` | — | Include technical requirements |
 
 ```
+/product-requirements "<feature or task description>" | --from-user-story "<story>" [--template full|lite|api] [--include-metrics] [--technical]
 /product-requirements "Add dark mode support to the application"
 /product-requirements --from-user-story "As a user, I want to toggle dark mode so I can reduce eye strain"
 /product-requirements --template api --technical "REST API for user management"

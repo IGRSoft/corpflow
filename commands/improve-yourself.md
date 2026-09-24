@@ -38,6 +38,7 @@ Manual entry point for the `self-improvement` skill — run the retrospective **
 ## Examples
 
 ```bash
+/improve-yourself [--since <ref>] [--target agents|skills|commands|all] [--dry-run] [--no-scope-filter] [--apply]
 /improve-yourself                                  # manual retrospective after a burst of edits
 /improve-yourself --since v4.0.0 --dry-run         # review since the last release tag, don't apply
 /improve-yourself --target skills --apply          # skills only, apply after review

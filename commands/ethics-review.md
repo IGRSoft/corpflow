@@ -1,7 +1,7 @@
 ---
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
-argument-hint: <feature or decision to review> [--lens harm|full]
+argument-hint: '[<target>] [--lens full|harm] [--scope task|feature|architecture|code] [--depth quick|standard|comprehensive] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix|report]'
 allowed-tools: Read, Glob, Grep
 related:
   - agents/ethics-reviewer.md
@@ -44,8 +44,8 @@ task), required under `--lens harm`.
 ## Examples
 
 ```
-/ethics-review [target] [options]
-/ethics-review [target] --lens harm [harm options]
+/ethics-review [<target>] [--lens full] [--scope task|feature|architecture|code] [--depth quick|standard|comprehensive] [--focus safety|honesty|harm|autonomy|all] [--output <format>]
+/ethics-review <target> --lens harm [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output <format>]
 /ethics-review --depth quick                                                  # current task
 /ethics-review "user authentication system" --scope feature --depth comprehensive
 /ethics-review src/payment.ts --scope code --focus safety --output checklist

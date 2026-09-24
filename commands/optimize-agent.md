@@ -2,7 +2,7 @@
 name: optimize-agent
 description: Analyze and optimize existing agent definitions for clarity, efficiency, and consistency
 version: 0.3.0
-argument-hint: <agent name or path>
+argument-hint: '<agent-file> | --all [--focus <area>] [--dry-run] [--report]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/prompt-engineer.md

@@ -1,7 +1,7 @@
 ---
 name: roadmap
 description: Create or update product roadmap with timeline, milestones, and dependencies
-argument-hint: '[--quarter Q1-Q4] [--format timeline|list]'
+argument-hint: '[--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban|list] [--add "<feature>"] [--move <id> --to <quarter>] [--export] [--platform <p>]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
@@ -25,6 +25,7 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 | `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`) |
 
 ```
+/roadmap [--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban|list] [--add "<feature>"] [--move <id> --to <quarter>] [--export] [--platform <p>]
 /roadmap
 /roadmap --quarter Q1 --view timeline
 /roadmap --add "Dark Mode" --quarter Q1
