@@ -125,11 +125,13 @@ Cheapest-first when only the delta is needed to update a doc reference: frontmat
 ### Version-ordering check
 
 When the worktask touches a version (release, tag, or `version:`/`CHANGELOG`/`MEMORY.md` change),
-confirm the proposed version exceeds every entry in the `MEMORY.md` release-history section. If
-not, flag a version-ordering anomaly in `documentation-N.md` naming both versions and request
+run PL0's check (`skills/worktask/references/pl0-procedure.md § Version Bump Planning`) again:
+`max_released_version` is the greater of the highest git tag and the `MEMORY.md` release-history
+max, and only `proposed_version < max_released_version` is an anomaly. An equal version is not:
+`version-bump-from-git.sh` returns `none` for a range with nothing release-worthy, and that
+release keeps its version. On an anomaly, name both versions in `documentation-N.md` and request
 stakeholder acknowledgment before FN commits. Non-blocking: surface it, don't halt the worktask.
-It repeats PL0's check (`skills/worktask/references/pl0-procedure.md § Version Bump Planning`)
-because DC is the last reviewer before FN.
+DC repeats the check because it is the last reviewer before FN.
 
 ## Platform Documentation Pipelines
 
