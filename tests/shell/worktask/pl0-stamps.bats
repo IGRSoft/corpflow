@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Contract tests for what /worktask Step 4 stamps on PL0 (commands/worktask.md):
-#   - PL0's model/effort pair comes from model-matrix.sh --resolve, never a typed alias;
+#   - PL0's model/effort pair comes from model-matrix.sh --resolve, never a typed alias,
+#     and /megatask's per-issue PL0 stamp (commands/megatask.md Phase 2 Step 3) does the same;
 #   - `--with-design` stamps `with_design: true`, the key the Designer gate in
 #     skills/worktask/references/pl0-procedure.md § Designer Invocation reads.
 #
@@ -11,6 +12,7 @@
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 WORKTASK_DOC="commands/worktask.md"
+MEGATASK_DOC="commands/megatask.md"
 PL0_DOC="skills/worktask/references/pl0-procedure.md"
 LEDGER_DOC="skills/shared/state-ledger.md"
 PATCH_SCRIPT="skills/worktask/scripts/state-patch.sh"
@@ -58,6 +60,22 @@ step4_payload() {
   assert_success
   run jq -r '.tasks.PL0.metadata | "\(.model) \(.effort)"' .context/state.json
   assert_output "$model $effort"
+}
+
+@test "PL0 pair: /megatask's per-issue stamp takes the resolver's pair and holds the grant" {
+  local stamp grant
+  stamp="$(section "$MEGATASK_DOC" "### Phase 2 loop · Step 3 — Launch the per-issue worktask")"
+  [ -n "$stamp" ] || fail "no Phase 2 Step 3 section in $MEGATASK_DOC"
+  printf '%s' "$stamp" | grep -qF 'model:"<model>", effort:"<effort>"' \
+    || fail "megatask Step 3 stamps no resolved model/effort pair"
+  run grep -nE 'model: ?"(opus|sonnet|haiku|fable)"' <<< "$stamp"
+  assert_failure
+  section "$MEGATASK_DOC" "#### Step 3 — PL0's model and effort" \
+    | grep -qF "$RESOLVER --resolve product-manager" \
+    || fail "megatask Step 3 no longer names '$RESOLVER --resolve product-manager'"
+  grant="$(sed -n 's/^allowed-tools: //p' "$PLUGIN_ROOT/$MEGATASK_DOC")"
+  printf '%s' "$grant" | grep -qF "Bash(bash \${CLAUDE_PLUGIN_ROOT}/$RESOLVER --resolve *)" \
+    || fail "$MEGATASK_DOC does not grant '$RESOLVER --resolve'"
 }
 
 @test "with_design: --with-design stamps the key the Designer gate reads" {

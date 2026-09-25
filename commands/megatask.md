@@ -3,7 +3,7 @@ name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -168,13 +168,20 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 ### Phase 2 loop · Step 3 — Launch the per-issue worktask
 
 3. Delegate to `/worktask` for that issue, both gates pre-bypassed, stamping `PL0.metadata`:
-   `{ stage:"PL", agent:"corpflow:product-manager", model:"opus", issue_number, track,
-   workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
+   `{ stage:"PL", agent:"corpflow:product-manager", model:"<model>", effort:"<effort>",
+   issue_number, track, workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
    plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", approved:"auto",
    megatask_group:"<group>",
    milestone:<N|null> }`. It then runs its normal stage loop unattended and milestone-agnostic
    (`commands/worktask.md`); the presence of `workspace.json` makes it auto-skip its own
    GitHub-issue publish — the parent milestone/issue is the canonical record.
+
+#### Step 3 — PL0's model and effort
+
+Resolve the pair once per batch, the way `/worktask` does (`commands/worktask.md § Step 4 — PL0's
+model and effort`), never type it: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve product-manager`
+prints `<model>`, `<effort>` and the source, tab-separated; paste the first two into every
+issue's stamp.
 
 #### Step 3 — standing directives in the per-issue prompt
 
