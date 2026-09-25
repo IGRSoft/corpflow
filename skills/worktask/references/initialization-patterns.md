@@ -102,11 +102,14 @@ Only PL0 is created at startup. PL0 creates all subsequent stage tasks after pla
 
 ```bash
 WORKTASK_ID="dark-mode-2025"
+# Resolved like every stage's pair (commands/worktask.md § Step 4 — PL0's model and effort).
+IFS=$'\t' read -r MODEL EFFORT _ < <(model-matrix.sh --resolve product-manager)
 
 # The state.json seed already created PL0 as in_progress, so this attaches its
 # metadata — --task-create would early-exit as a no-op and drop the payload.
 state-patch.sh --task-meta PL0 --set "$(jq -n --arg wid "$WORKTASK_ID" \
-  '{stage:"PL", agent:"corpflow:product-manager", model:"opus",
+  --arg model "$MODEL" --arg effort "$EFFORT" \
+  '{stage:"PL", agent:"corpflow:product-manager", model:$model, effort:$effort,
     description:"Define requirements, assess complexity, seed stage tasks",
     worktask_id:$wid, priority:"medium"}')"
 ```
@@ -198,17 +201,16 @@ After planning completes, PL0 creates stage tasks from the complexity score. Eac
 
 ### Canonical seed call
 
-Every stage seed is this one call with the per-stage values from the table below.
-`$PLAN_FILE` is the **basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is
-the boolean PL0 stamped on the plan frontmatter via
-`skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>` (fail-safe `true` on detector
-error), read back and propagated so the capture skill and `dv-screenshot-gate` fire
-deterministically.
+Every stage seed is this call with the values from the table below. `$PLAN_FILE` is the
+**basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is the plan-frontmatter
+boolean PL0 stamped via `skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>`
+(`true` on detector error), propagated so the capture skill and `dv-screenshot-gate` fire.
 
 ```bash
 state-patch.sh --task-create DV0 --metadata "$(jq -n \
   --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+  --arg model "$MODEL" --arg effort "$EFFORT" \
+  '{stage:"DV", agent:"corpflow:developer", model:$model, effort:$effort,
     description:"Implement dark mode theme system and color tokens",
     error_file:".context/errors/developer.md",
     context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
@@ -219,7 +221,8 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
 
 `priority:"medium"`, `plan_file`, `worktask_id` and `error_file: ".context/errors/<agent>.md"` are
 the same on every row. Drop `--argjson shots` / `requires_screenshots` on rows that do not list it.
-`model` and `effort` come from the stage's row in `skills/shared/stage-codes.md`, not from this table.
+`$MODEL`/`$EFFORT` come from `model-matrix.sh --resolve <agent>` (`stage-codes.md § Model and
+Effort Lookup`).
 
 | Task | stage / agent | `context_refs` | `requires_screenshots` |
 |---|---|---|---|

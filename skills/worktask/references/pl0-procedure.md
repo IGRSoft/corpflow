@@ -584,7 +584,7 @@ PL0 scans the task for high-risk domain signals and inserts ET0 between PL0 and 
 
 #### ET0 Insertion Pattern
 
-When threshold met, PL0: (1) seeds an `ET0` ethics-review task before AR0 with `metadata` `{stage: ET, agent: "corpflow:ethics-reviewer", model: "opus", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`; its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) runs `state-patch.sh --task-block AR0 --on ET0` so AR0 also blocks on ET0 (PL0 completes first, so ET0 is the effective gate).
+When threshold met, PL0: (1) seeds an `ET0` ethics-review task before AR0 with `metadata` `{stage: ET, agent: "corpflow:ethics-reviewer", model: "<model>", effort: "<effort>", error_file: ".context/errors/ethics-reviewer.md", plan_file, run_index: N, worktask_id}`, with the pair from `model-matrix.sh --resolve ethics-reviewer` like every other seed (§ Propagation fields — dispatch pair); its description asks for `.context/ethics-review-${N}.md` with `Decision ∈ {pass, block, conditional}`. (2) runs `state-patch.sh --task-block AR0 --on ET0` so AR0 also blocks on ET0 (PL0 completes first, so ET0 is the effective gate).
 
 Decision cascade:
 - `Decision: pass` → AR0 unblocks, worktask continues
