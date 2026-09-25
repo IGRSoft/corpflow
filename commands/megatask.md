@@ -3,7 +3,7 @@ name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager), Task(general-purpose)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -17,8 +17,9 @@ related:
 ---
 
 > **Execution model** — megatask is the meta-orchestrator: it owns the issue set, builds the
-> dependency DAG, and launches one `/worktask` per issue in its own worktree. It writes no code and
-> holds no stage logic — stages belong to `/worktask`. Every per-issue `PL0` is stamped
+> dependency DAG, and launches one `/worktask` per issue in its own worktree, each as a background
+> subagent (§ Step 3). It writes no code and holds no stage logic — stages belong to `/worktask`.
+> Every per-issue `PL0` is stamped
 > `plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`: a batch cannot stop for one
 > issue's approvals or open questions (§ Step 3). Review surface is the per-issue PR; megatask's
 > sole human checkpoint is the R1 batch confirmation (Phase 1). `--dry-run` stops once the DAG is
@@ -167,14 +168,18 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 
 ### Phase 2 loop · Step 3 — Launch the per-issue worktask
 
-3. Delegate to `/worktask` for that issue, both gates pre-bypassed, stamping `PL0.metadata`:
+3. Dispatch one background `general-purpose` subagent per ready issue; its prompt invokes the
+   `corpflow:worktask` skill (`/worktask`) in the issue's worktree with the standing directives
+   below and this `PL0.metadata` stamp, both gates pre-bypassed. Not a headless `claude -p`:
+   `hooks/megatask-monitor.sh` runs on its `SubagentStop`, and R1's depth and concurrency math
+   count it as one spawned level.
    `{ stage:"PL", agent:"corpflow:product-manager", model:"<model>", effort:"<effort>",
    issue_number, track, workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
    plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", approved:"auto",
    megatask_group:"<group>",
-   milestone:<N|null> }`. It then runs its normal stage loop unattended and milestone-agnostic
-   (`commands/worktask.md`); the presence of `workspace.json` makes it auto-skip its own
-   GitHub-issue publish — the parent milestone/issue is the canonical record.
+   milestone:<N|null> }`. It then runs its stage loop unattended and milestone-agnostic
+   (`commands/worktask.md`); `workspace.json` makes it skip its own GitHub-issue publish — the
+   parent milestone/issue is the canonical record.
 
 #### Step 3 — PL0's model and effort
 
@@ -221,7 +226,7 @@ unanswered escalate questions, so the user can re-run it interactively, re-scope
 
 ### Phase 2 loop · Steps 4–6 — Monitor, completion, termination
 
-4. **Monitor** — `hooks/megatask-monitor.sh` (SubagentStop/Stop) settles each finished issue and
+4. **Monitor** — `hooks/megatask-monitor.sh` (SubagentStop) settles each finished issue and
    unblocks its dependents; each loop turn the orchestrator re-reads `orchestrator.json`, re-derives
    `parallel_tracks`, and assigns freed tracks (`skills/megatask/SKILL.md § Monitoring Loop`).
 5. **Completion / errors** — success: PR with `Closes #{issue}`, track freed. Failure: `failed`,

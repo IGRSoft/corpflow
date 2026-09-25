@@ -2,6 +2,8 @@
 # Contract tests for what /worktask Step 4 stamps on PL0 (commands/worktask.md):
 #   - PL0's model/effort pair comes from model-matrix.sh --resolve, never a typed alias,
 #     and /megatask's per-issue PL0 stamp (commands/megatask.md Phase 2 Step 3) does the same;
+#   - that stamp rides a background general-purpose subagent running the corpflow:worktask
+#     skill, which the command is granted and whose stop the SubagentStop monitor sees;
 #   - `--with-design` stamps `with_design: true`, the key the Designer gate in
 #     skills/worktask/references/pl0-procedure.md § Designer Invocation reads.
 #
@@ -76,6 +78,26 @@ step4_payload() {
   grant="$(sed -n 's/^allowed-tools: //p' "$PLUGIN_ROOT/$MEGATASK_DOC")"
   printf '%s' "$grant" | grep -qF "Bash(bash \${CLAUDE_PLUGIN_ROOT}/$RESOLVER --resolve *)" \
     || fail "$MEGATASK_DOC does not grant '$RESOLVER --resolve'"
+}
+
+@test "launch: /megatask Step 3 names the general-purpose subagent + worktask skill and holds the grant" {
+  local step3 grant
+  step3="$(section "$MEGATASK_DOC" "### Phase 2 loop · Step 3 — Launch the per-issue worktask")"
+  [ -n "$step3" ] || fail "no Phase 2 Step 3 section in $MEGATASK_DOC"
+  printf '%s' "$step3" | grep -qF 'background `general-purpose` subagent' \
+    || fail "megatask Step 3 does not name the background general-purpose subagent"
+  printf '%s' "$step3" | grep -qF '`corpflow:worktask` skill' \
+    || fail "megatask Step 3 does not name the corpflow:worktask skill"
+  printf '%s' "$step3" | grep -qF '`SubagentStop`' \
+    || fail "megatask Step 3 no longer says why a subagent (SubagentStop monitor)"
+  grant="$(sed -n 's/^allowed-tools: //p' "$PLUGIN_ROOT/$MEGATASK_DOC")"
+  [ -n "$grant" ] || fail "$MEGATASK_DOC has no allowed-tools line"
+  printf '%s' "$grant" | grep -qE '(^|, )Task\(general-purpose\)(,|$)' \
+    || fail "$MEGATASK_DOC does not grant Task(general-purpose)"
+  # The monitor the launch relies on must actually be on SubagentStop.
+  jq -e '.hooks.SubagentStop[].hooks[].command | select(endswith("/hooks/megatask-monitor.sh"))' \
+    "$PLUGIN_ROOT/.claude-plugin/plugin.json" >/dev/null \
+    || fail "megatask-monitor.sh is not registered on SubagentStop"
 }
 
 @test "with_design: --with-design stamps the key the Designer gate reads" {

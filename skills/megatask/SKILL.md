@@ -83,7 +83,7 @@ worktree, so an unscoped `git add -A` cannot stage it (`references/git-integrati
 
 #### Runtime twin
 
-> `hooks/megatask-monitor.sh` (SubagentStop/Stop) owns the *completion* side — reconciling
+> `hooks/megatask-monitor.sh` (SubagentStop) owns the *completion* side — reconciling
 > workspace.json outcomes back into orchestrator.json; these INIT scripts own *creation* only. Both
 > sides agree on the `workspace.json v2.0` / `orchestrator.json v3.1` schemas in
 > `references/schemas.md`.
@@ -198,7 +198,7 @@ identically, with the audit subject set to the boundary that surfaced it — `FN
 item, the emitting stage's own `<CODE><N>` for one marked `blocks_next_stage`
 (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`).
 
-> For headless `-p` runs, set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
+> When the megatask session itself runs headless (`-p`), set `MCP_CONNECTION_NONBLOCKING=true` to skip the MCP connection wait;
 > with `--mcp-config`, server connections are bounded at 5s rather than blocking on the slowest.
 
 ## Track Derivation
@@ -217,7 +217,7 @@ item, the emitting stage's own `<CODE><N>` for one marked `blocks_next_stage`
 
 ### Nesting-depth budget
 
-> `/megatask` spends one depth level before any stage runs: Phase 2 Step 3 delegates a per-issue `/worktask` orchestrator as its own sub-agent, so the chain sits one level deeper than a standalone worktask at every point.
+> `/megatask` spends one depth level before any stage runs: Phase 2 Step 3 dispatches each per-issue `/worktask` orchestrator as a background `general-purpose` subagent, so the chain sits one level deeper than a standalone worktask at every point.
 
 | Level | Standalone `/worktask` | Under `/megatask` |
 |-------|------------------------|-------------------|
@@ -373,13 +373,15 @@ issues. Step-by-step procedure: `../../commands/megatask.md § Phase 1`.
 
 ### Monitoring Loop
 
-**Completion-driven** via `hooks/megatask-monitor.sh` (registered SubagentStop/Stop):
+**Completion-driven** via `hooks/megatask-monitor.sh` (registered on SubagentStop):
 
 1. **On per-issue completion** — the hook marks the issue `completed` in `orchestrator.json`,
    removes it from every dependent's `blocked_by[]`, promotes now-unblocked dependents to `ready`,
    frees the track, and writes a `megatask_progress` audit row (+ optional notification).
 2. **Orchestrator turn** — re-read `orchestrator.json`, re-derive `parallel_tracks`, assign freed
-   tracks to ready issues (topological + priority order), launch their worktasks.
+   tracks to ready issues (topological + priority order), launch their worktasks, each a
+   background `general-purpose` subagent whose stop fires this hook
+   (`../../commands/megatask.md § Phase 2 loop · Step 3`).
 3. **Errors** — a `failed` issue frees its track but keeps its dependents permanently `blocked`;
    surface the blocked set so the user can intervene (retry, re-scope, or drop the edge).
 4. **Stage creation** — verify each per-issue `PL0` created its subsequent stages.
