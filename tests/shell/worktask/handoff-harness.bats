@@ -475,7 +475,7 @@ mk_te_legacy() {
   mk_te_legacy "$WD/te-legacy.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy.md" --legacy-tests-executed
   assert_success
-  assert_output --partial "warn: stage=DV tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated, removed in the next minor release; rewrite it as tests_executed: [{runner, count, summary_line}]"
+  assert_output --partial "warn: stage=DV tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated; rewrite it as tests_executed: [{runner, count, summary_line}]"
   [ "$(printf '%s\n' "$output" | grep -c '^warn:.*is a legacy scalar')" -eq 1 ] || fail "$output"
 }
 

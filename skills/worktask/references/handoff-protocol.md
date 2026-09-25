@@ -789,7 +789,7 @@ build: a test target can fail to compile against a clean app build. Contract and
 A scalar `tests_executed` fails validation by default. Under `--legacy-tests-executed` (or
 `CORPFLOW_LEGACY_TESTS_EXECUTED=1`) a legacy scalar and its legacy top-level
 `test_summary_line` validate under the old integer rules with one deprecation `warn:`; the
-opt-in never relaxes a list and is removed in the next minor release. A top-level
+opt-in never relaxes a list and is deprecated but still accepted. A top-level
 `test_summary_line` beside a list is a legacy leftover, ignored as evidence with a `warn:`; its
 line belongs in that runner's `summary_line`.
 

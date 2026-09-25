@@ -25,8 +25,8 @@
 #       invocation: [{runner, count, summary_line}]. A scalar fails.
 #       --legacy-tests-executed (or CORPFLOW_LEGACY_TESTS_EXECUTED=1) validates
 #       a legacy scalar count with its top-level test_summary_line under the
-#       integer rules instead, printing one deprecation warn; the opt-in is
-#       removed in the next minor release. A map never validates.
+#       integer rules instead, printing one deprecation warn. The opt-in is
+#       deprecated but still accepted. A map never validates.
 #
 #       --state adds the AR->DV architecture-reference gate: when the artifact
 #       is a DV handoff and the state ledger has a tasks.AR<N> entry, the
@@ -39,8 +39,8 @@
 #       --strict turns gate violations from `warn:` + exit 0 into `fail:` +
 #       exit 1. Equivalent env opt-in: CORPFLOW_AR_REF_STRICT=1, which the
 #       orchestrator honours when deciding whether to pass --strict. The gate
-#       ships warn-only in 3.42.0; --strict becomes the orchestrator default in
-#       a future minor, so treat warnings as work to do now.
+#       is warn-only by default and blocks only under --strict, so treat
+#       warnings as work to do now.
 #
 #       The inverse guard (an architecture reference with no tasks.AR<N> entry)
 #       always warns and never fails, in either mode.
@@ -56,9 +56,8 @@
 #
 #       Exception: an unreadable --state (file missing, jq unavailable, or
 #       invalid JSON) is itself a gate violation, not a silent skip -- it
-#       warns by default and, unlike every other case above where --strict
-#       is opt-in future behaviour, this ALREADY fails under --strict today
-#       (exit 1). A state file we cannot read is not evidence AR didn't run.
+#       warns by default and fails under --strict (exit 1), like the gate's
+#       other violations. A state file we cannot read is not evidence AR didn't run.
 #
 #       A handoff.blocked_on (or its legacy alias cross_session_ask) fails the same way with
 #       or without yq: an unknown kind, an unknown resume_with, or a missing or empty detail
@@ -1305,12 +1304,12 @@ check_summary_line_list() {  # <artifact> <fmfile> <stage>
 }
 
 # The legacy scalar shape under the opt-in: one count for the whole stage and one
-# top-level summary line, checked with the integer rules the list replaced. Removed in
-# the next minor release together with --legacy-tests-executed.
+# top-level summary line, checked with the integer rules the list replaced. Deprecated
+# together with --legacy-tests-executed, which is still accepted.
 check_summary_line_legacy() {  # <artifact> <fmfile> <stage>
   local artifact="$1" fmfile="$2" stage="$3" executed line
 
-  echo "warn: stage=$stage tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated, removed in the next minor release; rewrite it as tests_executed: [{runner, count, summary_line}]" >&2
+  echo "warn: stage=$stage tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated; rewrite it as tests_executed: [{runner, count, summary_line}]" >&2
 
   executed=$(yq eval '.handoff.tests_executed' "$fmfile")
   case "$executed" in
@@ -1413,8 +1412,8 @@ check_ar_ref() {
   local artifact="$1" fmfile="$2"
 
   # A state file we cannot read is NOT evidence that AR did not run. Saying so
-  # out loud keeps the two cases distinguishable once --strict becomes the
-  # default, where a silent skip would be a false negative on every jq-less host.
+  # out loud keeps the two cases distinguishable under --strict, where a silent
+  # skip would be a false negative on every jq-less host.
   local unreadable
   unreadable=$(state_unreadable_reason)
 
