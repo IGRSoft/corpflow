@@ -1,7 +1,7 @@
 ---
 name: sprint
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
-argument-hint: '[<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--include-debt] [--export]'
+argument-hint: '[<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--export]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
@@ -23,14 +23,13 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 | `--capacity <points>` | — | Team capacity in story points |
 | `--from-backlog <file>` | — | Import items from a backlog file |
 | `--duration <weeks>` | `1`, `2`, `3`, `4` | Sprint length in weeks (default: `2`) |
-| `--include-debt` | — | Include tech debt allocation |
-| `--export` | — | Export the sprint plan |
+| `--export` | — | Also write the plan to `.context/sprint-<ID>.md` (`<ID>` = the sprint name or number, else the start date `YYYYMMDD`), the only file this command creates |
 
 ```
-/sprint [<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--include-debt] [--export]
+/sprint [<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--export]
 /sprint
 /sprint 14 --capacity 40 --duration 2
-/sprint --from-backlog backlog.md --include-debt
+/sprint --from-backlog backlog.md
 /sprint --capacity 30 --export
 ```
 

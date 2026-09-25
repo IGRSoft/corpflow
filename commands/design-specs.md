@@ -1,7 +1,7 @@
 ---
 name: design-specs
 description: Generate developer-ready design specifications for components, screens, or features
-argument-hint: '<component or screen name> [--format markdown|figma|json] [--platform apple|android|web|all] [--include-assets]'
+argument-hint: '<component or screen name> [--platform apple|android|web|all] [--include-assets]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/designer.md
@@ -10,26 +10,25 @@ related:
 
 # Design Specifications Command
 
-Developer-ready specification for a component, screen, or feature — measured values, design-system tokens, states, and platform notes.
+Developer-ready specification for a component, screen, or feature — measured values, design-system tokens, states, and platform notes. The spec is written to `.context/designs/spec-<target-slug>.md`, the only file this command creates.
 
 ## Options
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--format` | `markdown`, `figma`, `json` | Output format (default: markdown) |
 | `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
 | `--include-assets` | flag | Include asset export list |
 
 ```
-/design-specs <component or screen name> [--format markdown|figma|json] [--platform apple|android|web|all] [--include-assets]
+/design-specs <component or screen name> [--platform apple|android|web|all] [--include-assets]
 /design-specs ProfileCard
 /design-specs "Onboarding flow" --platform apple --include-assets
-/design-specs NavigationBar --format json
+/design-specs NavigationBar --platform android
 ```
 
 ## Procedure
 
-1. **Analyze and specify** — map the target's structure, its design-system token usage and its platform-specific variations, then fill the template below in `--format`.
+1. **Analyze and specify** — map the target's structure, its design-system token usage and its platform-specific variations, then fill the template below.
 2. **Hand off** — every slot in § Specification Template holds a measured value or `n/a: <reason>`, and every colour, spacing and type value either names the design-system token it comes from or is flagged as a one-off. With `--include-assets`, each asset carries an export row with size and scale. A `[bracketed placeholder]` left anywhere means the spec is not deliverable.
 
 ## Specification Template

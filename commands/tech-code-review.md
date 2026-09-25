@@ -28,7 +28,7 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 
 | Option | Values | Effect |
 |---|---|---|
-| `--platform` | `apple\|android\|web\|systems\|backend\|ai\|all` | Platform context (default: auto-detect); the plugin resolves via `skills/shared/routing-matrix.md`, project `CORPFLOW.md § Routing` override wins |
+| `--platform` | `apple\|android\|web\|systems\|backend\|ai\|all` | Platform context (default: auto-detect per `skills/shared/platform-detection.md`): fills the findings artifact's `**Platform**:` line and sets the idioms `patterns` and `accessibility` are judged against |
 | `--path <dir>` | directory | Review that directory; the diff is scoped to it |
 | `--pr <number>` | PR number | Review the changes in that PR (§ Reviewing a PR) |
 | `--depth` | `surface\|deep` | Default `surface`; the DR stage passes none, so it always resolves to `surface`. `deep` adds [Deep Mode](#deep-mode---depth-deep) |

@@ -2,7 +2,7 @@
 name: arch-review
 description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
 argument-hint: '[--pr <number> | --path <dir>] [--scope full|focused] [--checklist]'
-allowed-tools: Read, Glob, Grep, Task
+allowed-tools: Read, Glob, Grep, Task, Bash(gh pr diff:*), Bash(gh pr view:*)
 related:
   - agents/software-architector.md
   - commands/arch-decision.md
@@ -18,7 +18,7 @@ current working tree.
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--pr <number>` | PR number | Review that PR |
+| `--pr <number>` | PR number | Review that PR: its changes from `gh pr diff <number>`, its base and file list from `gh pr view <number> --json baseRefName,files` |
 | `--path <dir>` | directory or module | Review that directory (default: the current working tree) |
 | `--scope <depth>` | `full`, `focused` | Review depth (default: `focused`) |
 | `--checklist` | — | Score against § Review Checklist |

@@ -1,7 +1,7 @@
 ---
 name: test-plan
 description: Generate a comprehensive test plan from requirements or code changes with coverage analysis
-argument-hint: '"<feature or requirement>" | --from-pr <number> | --from-file <path> [--coverage] [--automation] [--platform <p>]'
+argument-hint: '"<feature or requirement>" | --from-pr <number> | --from-file <path> [--automation] [--platform <p>]'
 allowed-tools: Read, Glob, Grep, Write, Bash(gh pr diff:*), Bash(gh pr view:*)
 related:
   - agents/qa-engineer.md
@@ -13,7 +13,8 @@ related:
 # Test Plan Command
 
 Generate a test plan with structured test cases and coverage targets from a requirement, a PR, or
-a requirements file.
+a requirements file. The plan is written to `.context/test-plan-<slug>.md` (`<slug>` = the feature,
+`pr<number>`, or the source file's basename), the only file this command creates.
 
 ## Options
 
@@ -21,15 +22,14 @@ a requirements file.
 |--------|--------|---------|
 | `--from-pr <number>` | PR number | Plan from that PR's changes: read its title, body and file list with `gh pr view <number> --json title,body,files` and its changes with `gh pr diff <number>` |
 | `--from-file <path>` | requirements file, e.g. a PL `planning-N.md` | Plan from that file |
-| `--coverage` | — | Include coverage targets |
 | `--automation` | — | Focus on automation-ready test cases |
 | `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`; detected per `skills/shared/platform-detection.md`) |
 
 ```
-/test-plan "<feature or requirement>" | --from-pr <number> | --from-file <path> [--coverage] [--automation] [--platform <p>]
+/test-plan "<feature or requirement>" | --from-pr <number> | --from-file <path> [--automation] [--platform <p>]
 /test-plan "User authentication with OAuth"
 /test-plan --from-pr 123 --automation
-/test-plan --from-file .context/planning-0.md --coverage
+/test-plan --from-file .context/planning-0.md
 /test-plan "Payment refund flow" --platform backend
 ```
 

@@ -1,7 +1,7 @@
 ---
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
-argument-hint: '[<target>] [--lens full|harm] [--scope task|feature|architecture|code] [--depth quick|standard|comprehensive] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix|report]'
+argument-hint: '[<target>] [--lens full|harm] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix]'
 allowed-tools: Read, Glob, Grep, Task(corpflow:ethics-reviewer)
 related:
   - agents/ethics-reviewer.md
@@ -35,9 +35,7 @@ task), required under `--lens harm`.
 | Option | Lens | Values | Default | Purpose |
 |---|---|---|---|---|
 | `--lens` | both | `full`, `harm` | `full` | Constitutional review or harm deep-dive |
-| `--output` | both | `summary`, `detailed`, `checklist`, `matrix`, `report` | `summary` | Output format (`matrix` is harm-lens only) |
-| `--scope` | full | `task`, `feature`, `architecture`, `code` | `task` | Review scope |
-| `--depth` | full | `quick`, `standard`, `comprehensive` | `standard` | Analysis depth |
+| `--output` | both | full: `summary`, `detailed`, `checklist`; harm: `summary`, `matrix` | `summary` | Output format |
 | `--focus` | full | `safety`, `honesty`, `harm`, `autonomy`, `all` | `all` | Focus category |
 | `--stakeholders` | harm | `users`, `operators`, `society`, `all` | `all` | Impact scope |
 | `--include-benefits` | harm | bool | `true` | Include benefits in the cost-benefit analysis |
@@ -46,12 +44,12 @@ task), required under `--lens harm`.
 ## Examples
 
 ```
-/ethics-review [<target>] [--lens full] [--scope task|feature|architecture|code] [--depth quick|standard|comprehensive] [--focus safety|honesty|harm|autonomy|all] [--output <format>]
-/ethics-review <target> --lens harm [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output <format>]
-/ethics-review --depth quick                                                  # current task
-/ethics-review "user authentication system" --scope feature --depth comprehensive
-/ethics-review src/payment.ts --scope code --focus safety --output checklist
-/ethics-review "recommendation algorithm" --focus harm --depth comprehensive  # scoped standard pass
+/ethics-review [<target>] [--lens full] [--focus safety|honesty|harm|autonomy|all] [--output summary|detailed|checklist]
+/ethics-review <target> --lens harm [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|matrix]
+/ethics-review  # current task
+/ethics-review "user authentication system" --output detailed
+/ethics-review src/payment.ts --focus safety --output checklist
+/ethics-review "recommendation algorithm" --focus harm  # scoped standard pass
 /ethics-review "AI-powered content recommendation" --lens harm
 /ethics-review "data collection expansion" --lens harm --output matrix --stakeholders all
 /ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false --include-benefits false
@@ -182,7 +180,6 @@ Very Likely (> 70%) │        │        │        │
 | Level | Icon | Meaning | Action |
 |-------|------|---------|--------|
 | Compliant | ✅ | Meets constitutional requirements | Proceed |
-| Advisory | 💡 | Could be improved | Consider improvements |
 | Concern | ⚠️ | Potential issues identified | Address before proceeding |
 | Violation | ❌ | Hard constraint violated | Must fix before proceeding |
 

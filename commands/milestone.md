@@ -87,7 +87,7 @@ Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, t
 | Default | `technical-lead` |
 | `--secure` or security content | `security-reviewer` |
 | Architecture-level change | `software-architector` |
-| `--ethics-review` or high risk | `ethics-reviewer` |
+| Ethics-sensitive content or high risk | `ethics-reviewer` |
 | Agent/prompt change | `prompt-engineer` |
 
 Security content is judged per ticket: add `security-reviewer` to any ticket whose own description mentions auth, encryption, credentials, token, API key, certificate, permission, or keychain, even without `--secure`. One matching ticket does not add the reviewer to the rest.

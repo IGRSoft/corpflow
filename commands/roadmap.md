@@ -1,7 +1,7 @@
 ---
 name: roadmap
 description: Create or update product roadmap with timeline, milestones, and dependencies
-argument-hint: '[--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban|list] [--add "<feature>"] [--move <id> --to <quarter>] [--export] [--platform <p>]'
+argument-hint: '[--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban] [--add "<feature>"] [--move "<feature>" --to <quarter>]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
@@ -11,7 +11,9 @@ related:
 
 # Roadmap Command
 
-Create or update product roadmap with timeline, milestones, and dependencies.
+Create or update product roadmap with timeline, milestones, and dependencies. The roadmap lives in
+`.context/roadmap.md`, the only file this command writes: a run that finds none there creates it,
+`--add` and `--move` update it in place, and any other run reads it and prints the selected view.
 
 ## Options
 
@@ -19,18 +21,16 @@ Create or update product roadmap with timeline, milestones, and dependencies.
 |--------|--------|---------|
 | `--quarter <Q>` | `Q1`, `Q2`, `Q3`, `Q4` | Focus on one quarter |
 | `--add "<feature>"` | — | Add an item to the roadmap |
-| `--move <id> --to <quarter>` | — | Move an item between quarters |
-| `--view <type>` | `timeline`, `kanban`, `list` | Display format (default: `timeline`) |
-| `--export` | — | Export the roadmap |
-| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`) |
+| `--move "<feature>" --to <quarter>` | feature name as in the Features table | Move that item to another quarter |
+| `--view <type>` | `timeline`, `kanban` | Display format (default: `timeline`) |
 
 ```
-/roadmap [--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban|list] [--add "<feature>"] [--move <id> --to <quarter>] [--export] [--platform <p>]
+/roadmap [--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban] [--add "<feature>"] [--move "<feature>" --to <quarter>]
 /roadmap
 /roadmap --quarter Q1 --view timeline
 /roadmap --add "Dark Mode" --quarter Q1
-/roadmap --move F-12 --to Q2 --export
-/roadmap --platform apple --quarter Q3
+/roadmap --move "Dark Mode" --to Q2
+/roadmap --quarter Q3 --view kanban
 ```
 
 ## Output Format

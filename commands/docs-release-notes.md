@@ -1,7 +1,7 @@
 ---
 name: docs-release-notes
 description: Generate release notes from completed work, git history, or worktask artifacts
-argument-hint: '[--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|html|slack] [--audience internal|external|all] [--platform <target>]'
+argument-hint: '[--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|slack] [--audience internal|external|all]'
 allowed-tools: Read, Glob, Grep, Bash(git log:*)
 related:
   - agents/project-manager.md
@@ -21,18 +21,17 @@ Generate release notes from completed work, git history, or worktask artifacts.
 | `--from <tag>` / `--to <tag\|HEAD>` | git refs | Commit range to read (default: last tag → `HEAD`) |
 | `--from-commits` | — | Source content from git commit history |
 | `--from-worktask` | — | Source content from worktask artifacts |
-| `--format <type>` | `markdown`, `html`, `slack` | Output format (default: `markdown`) |
+| `--format <type>` | `markdown`, `slack` | Output format (default: `markdown`) |
 | `--audience <who>` | `internal`, `external`, `all` | Which template to emit (default: `all`) |
-| `--platform <target>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Platform context (default: `all`) |
 
 ## Examples
 
 ```
-/docs-release-notes [--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|html|slack] [--audience internal|external|all] [--platform <target>]
+/docs-release-notes [--version <v>] [--from <tag>] [--to <tag|HEAD>] [--from-commits] [--from-worktask] [--format markdown|slack] [--audience internal|external|all]
 /docs-release-notes
 /docs-release-notes --version 2.1.0 --format markdown
 /docs-release-notes --from-commits --audience external
-/docs-release-notes --from v2.0.0 --to HEAD --from-worktask --platform apple
+/docs-release-notes --from v2.0.0 --to HEAD --from-worktask --format slack
 ```
 
 ## Output Format

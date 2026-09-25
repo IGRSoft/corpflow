@@ -57,7 +57,7 @@ mode — do not cross-apply them:
 | Option | Values | Effect |
 |--------|--------|--------|
 | `--review` | — | Review an existing estimate |
-| `--focus <areas>` | comma-separated: `ar`, `ble`, `vision`, `api`, `camera`, `sync` | Focus areas (default: all) |
+| `--focus <areas>` | comma-separated: `ar` and `camera` (Realtime graphics / camera), `api` (API integration), `ble` (Hardware / peripheral I/O), `vision` (On-device inference), `sync` (Offline sync) | Review only those `estimate-review.md § Adjustment Matrix` categories and the per-platform rows that instantiate them (default: all) |
 | `--update` | — | Auto-update estimation files with the review's adjustments |
 
 ### Export mode (`--export csv`)

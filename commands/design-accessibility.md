@@ -48,22 +48,11 @@ severity, and the remediation. An unscored row means the audit is unfinished.
 
 Run only the platforms `--platform` selects; `all` runs every row.
 
-### Apple
-
-VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Switch Control compatibility.
-
-### Android
-
-- TalkBack support — announcements, custom actions, live regions
-- `contentDescription` on every non-decorative image and icon-only control
-- Touch targets at least 48x48dp
-- Focus order and traversal (`accessibilityTraversalBefore` / `After`)
-- Compose `semantics {}` on custom composables — merged vs. cleared semantics
-- Font-scale and display-size respect: `sp` for text, no fixed-`dp` type
-
-### Web
-
-Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators.
+| Platform | Checks |
+|----------|--------|
+| Apple | VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Switch Control compatibility |
+| Android | TalkBack support (announcements, custom actions, live regions); `contentDescription` on every non-decorative image and icon-only control; focus order and traversal (`accessibilityTraversalBefore` / `After`); Compose `semantics {}` on custom composables (merged vs. cleared); font scale and display size (`sp` for text, no fixed-`dp` type) |
+| Web | Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators |
 
 ## Output Format
 
