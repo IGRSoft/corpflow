@@ -129,7 +129,7 @@ it to the owning doc, emit `## Communication Surfaces`, and close the standing r
 | Surface | Keywords | Owning files |
 |---------|----------|--------------|
 | **Cross-session** | SendMessage, ListAgents, notify_when_idle, crossSessionInbound, dialogExpiry, refused/dropped/oversized/burst_limited, session list truncated, inbox socket, Desktop routing, `claude agents`/`attach`/`logs`/`stop`/`rm`, Notification push, @-mention | `agent-coordination/SKILL.md § Cross-session reach`, `worktask/references/resume.md § Reattach rows` + `§ Reply routing`, `worktask/scripts/stale-check.sh` |
-| **Cross-agent** | `Agent(name:)`, teammate, background subagent reply, maxTurns partial, CLAUDE_CODE_SUBAGENT_MODEL, fallback model, spawn depth, idle notification | `agent-coordination/SKILL.md`, `worktask/SKILL.md § Step 6.5`, `megatask/references/agent-teams.md`, `shared/model-selection.md` |
+| **Cross-agent** | `Agent(name:)`, teammate, background subagent reply, maxTurns partial, CLAUDE_CODE_SUBAGENT_MODEL, fallback model, spawn depth, idle notification | `agent-coordination/SKILL.md`, `worktask/SKILL.md § Step 6.5`, `shared/model-selection.md` |
 
 ### Comms — cross-plugin surface
 
@@ -202,7 +202,7 @@ Changelog entries are categorized by keyword and routed to the file types below.
 | Category | Keywords | Affected files |
 |----------|----------|----------------|
 | **Hooks** | hook, PostToolUse, SubagentStart, PreToolUse, PostCompact, Elicitation, StopFailure, CwdChanged, FileChanged, TaskCreated, WorktreeCreate, PreModelSwitch, PostModelSwitch, conditional if, scheduled task, webhook, trigger delivery, task notification | agents with hook docs, agent-coordination, worktask resume reference |
-| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, TeamCreate/TeamDelete removed, implicit team, team_name ignored | agents with the tool in `tools:`, state-ledger + agent-teams |
+| **Tools** | new tool, ExitWorktree, EnterWorktree, TaskCreate, worktree, TeamCreate/TeamDelete removed, implicit team, team_name ignored | agents with the tool in `tools:`, state-ledger |
 
 ### Categories — Model, Context, Subagents
 
@@ -210,7 +210,7 @@ Changelog entries are categorized by keyword and routed to the file types below.
 |----------|----------|----------------|
 | **Model** | model alias, Opus/Sonnet/Haiku version, effort level, availableModels, /fast allowlist, model-deprecation | stage-codes, agents with full model IDs, model-selection |
 | **Context** | compaction, context window, sparsePaths, worktree, circuit breaker, --fallback-model | context-compression, agent-coordination |
-| **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination, developer + project-manager agents, state-ledger + agent-teams |
+| **Subagents** | subagent, background agent, teammate, partial result, resume removed, implicit team, Agent(name:) spawn, pre-launch spawn classification, fg/bg nesting depth | agent-coordination, developer + project-manager agents, state-ledger |
 
 ### Categories — MCP, Cost, Frontmatter
 

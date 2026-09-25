@@ -3,7 +3,7 @@ name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
@@ -66,7 +66,8 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 ## Phase 1: Resolve & Plan (execute immediately)
 
 Phase 1 creates no worktrees and modifies no project files: only `mkdir -p .worktrees/<group>`,
-reads, and `gh` queries are permitted until R1 clears.
+reads, `gh` queries and `build-orchestrator.sh` writing `orchestrator.json` are permitted until R1
+clears.
 
 ### Phase 1 · Steps 1–2 — Parse arguments & resolve the issue set
 
@@ -81,19 +82,26 @@ reads, and `gh` queries are permitted until R1 clears.
    Drop `closed` issues and any with a linked PR (`hasExistingPR` —
    `skills/shared/milestone-helpers/SKILL.md`); record them as `skipped_has_pr`.
 
-### Phase 1 · Steps 3–4 — Build the DAG & compute order
+### Phase 1 · Step 3 — Build the DAG
 
-3. **Build the DAG** — parse each body for `Depends on: #N` / `Blocks: #M` (what `/milestone`
-   writes) plus the `P0`–`P3` label into `blocked_by[]`/`blocks[]`; normalize `A Blocks B` ⇔
-   `B Depends on A` to one edge. Edges leaving the resolved set become `external_dependency`
-   warnings — surfaced, never gating.
-4. **Order** — topological sort, **priority tiebreak** (P0 first; FIFO by issue number within a
-   tier). Any cycle ⇒ STOP and report its issues. Rules + levelled schedule:
-   `skills/megatask/references/dependency-graph.md`.
+3. **Build the DAG** with `build-orchestrator.sh`
+   (`skills/megatask/SKILL.md § Canonical Scripts`). Feed it the kept issues on stdin as one
+   JSON array of `{issue, title, labels, body}` (`issue` is gh's `number`, `labels` the names):
+   ```bash
+   bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh --file - \
+     --out .worktrees/<group>/orchestrator.json --group <group> \
+     --milestone-num <N or 0> --milestone-title "<title>" --base-branch <base>
+   ```
+   It reads each body's `Depends on: #N` / `Blocks: #M` (what `/milestone` writes) and the
+   `P0`–`P3` label, folds `A Blocks B` ⇔ `B Depends on A` into one edge, and reports edges leaving
+   the set as `external_dependency` warnings — surfaced, never gating.
 
-### Phase 1 · Step 5 — Seed orchestrator.json
+### Phase 1 · Steps 4–5 — Order & seed orchestrator.json
 
-5. Atomic-write `.worktrees/<group>/orchestrator.json` (schema v3.1,
+4. **Order** — the script sorts topologically with a priority tiebreak (P0 first; FIFO by issue
+   number within a tier) and assigns levels. Exit 1 is a cycle: STOP and report the issues it names
+   on stderr. Rules + levelled schedule: `skills/megatask/references/dependency-graph.md`.
+5. **Seed** — the same call writes `.worktrees/<group>/orchestrator.json` (schema v3.1,
    `skills/megatask/references/schemas.md`): per-issue edges (`blocked_by`/`blocks`/`level`),
    initial `status` (`ready` when `blocked_by` is empty, else `blocked`), priorities, the order, and
    `configuration.parallel_tracks` (Phase 2). `<group>` = `milestone-{N}` or `issues-{shortid}`.
@@ -149,11 +157,13 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 
 1. **Select** — an issue is *ready* when every `blocked_by[]` entry is `status: "completed"` (PR
    merged, or created where the project merges via PR). Take them in the Phase 1 order.
-2. **Assign tracks** — fill up to `parallel_tracks` worktrees; per issue:
-   `git worktree add -b <type>/{issue#}-{slug} .worktrees/<group>/{issue#} origin/{base}` (base and
-   slug per `skills/megatask/SKILL.md § Base Branch Resolution`, `§ Branch Naming`), write
-   `workspace.json` (`isolation: "worktree"`, version 2.0) + `mkdir -p …/.context`, set status
-   `in_progress` and assign `track`.
+2. **Assign tracks** — fill up to `parallel_tracks` worktrees; per issue run
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh --issue {issue#} --title "<title>" --group <group> --track <T> --blocked-by <N,M> --blocks <N,M> --labels <l,l>`.
+   It resolves base and branch (`skills/megatask/SKILL.md § Base Branch Resolution`,
+   `§ Branch Naming`), keeps the batch's scratch files out of `git add -A`, creates the worktree at
+   `.worktrees/<group>/{issue#}` with its `.context/`, and stamps `workspace.json`
+   (`isolation: "worktree"`, version 2.0). Then set the issue's status `in_progress` and its
+   `track` in `orchestrator.json`.
 
 ### Phase 2 loop · Step 3 — Launch the per-issue worktask
 

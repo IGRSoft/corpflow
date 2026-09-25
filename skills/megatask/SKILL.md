@@ -7,7 +7,6 @@ related:
   - references/dependency-graph.md
   - references/schemas.md
   - references/git-integration.md
-  - references/agent-teams.md
   - ../shared/milestone-helpers/SKILL.md
   - ../../hooks/megatask-monitor.sh
   - ../../commands/worktask.md
@@ -388,8 +387,7 @@ issues. Step-by-step procedure: `../../commands/megatask.md § Phase 1`.
 #### Hook properties
 
 Non-blocking (always exits 0) and **self-skips** when no `orchestrator.json` is present, so plain
-single-issue worktasks are untouched. Optional agent-teams event model (`TeammateIdle` /
-`TaskCompleted`): `references/agent-teams.md`.
+single-issue worktasks are untouched.
 
 ## Execution Flow
 

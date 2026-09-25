@@ -511,5 +511,5 @@ Teammates coordinate through the same `.context/state.json` ledger as every othe
 self-claim available work. Live teammates are visible to `ListAgents`/`claude agents --json`, so a
 lead resuming mid-batch uses the stage loop's pre-check
 (`skills/worktask/references/resume.md § Step 0 notes — own-name & teammate visibility — agent
-discovery changes`). Megatask patterns: `skills/megatask/references/agent-teams.md`. Set
+discovery changes`). Megatask does not use teams. Set
 `"autoMemoryDirectory": ".worktask-memory/"` in settings for worktask-specific auto-memory.
