@@ -2,7 +2,7 @@
 name: arch-review
 description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
 argument-hint: '[--pr <number> | --path <dir>] [--scope full|focused] [--checklist]'
-allowed-tools: Read, Glob, Grep
+allowed-tools: Read, Glob, Grep, Task
 related:
   - agents/software-architector.md
   - commands/arch-decision.md
@@ -97,8 +97,8 @@ Detect the platform per `skills/shared/platform-detection.md § Detection Rules`
 platform has an architect agent, run both passes:
 
 1. **General review** — SOLID, scalability, security, error handling (this command)
-2. **Platform architecture review** — delegate to that architect for pattern compliance,
-   boundary violations, and language/runtime-specific concerns
+2. **Platform architecture review** — dispatch that architect with `Task` for pattern
+   compliance, boundary violations, and language/runtime-specific concerns
 
 ### Resolving and combining
 

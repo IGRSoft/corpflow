@@ -2,7 +2,7 @@
 name: test-coverage
 description: Analyze test coverage gaps and generate recommendations for improving test quality
 argument-hint: '[--path <dir>] [--threshold <n>] [--report] [--critical-only] [--platform <p>]'
-allowed-tools: Read, Glob, Grep, Write, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
+allowed-tools: Read, Glob, Grep, Write, Skill, Bash(swift test:*), Bash(xcodebuild:*), Bash(gradle:*), Bash(./gradlew:*), Bash(npm:*), Bash(npx:*), Bash(pnpm:*), Bash(yarn:*), Bash(jest:*), Bash(vitest:*), Bash(pytest:*), Bash(uv:*), Bash(go test:*), Bash(cargo:*), Bash(ctest:*), Bash(bats:*)
 related:
   - agents/qa-engineer.md
   - commands/test-plan.md
@@ -31,8 +31,8 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 
 ## Running the suite
 
-Coverage numbers need a run. Delegate to `/<plugin>:build-test` for the detected platform; it knows
-the repo's build system, coverage flags, and report location. Fall back to the scoped runners in
+Coverage numbers need a run. Invoke the detected platform's `/<plugin>:build-test` with `Skill`; it
+knows the repo's build system, coverage flags, and report location. Fall back to the scoped runners in
 `allowed-tools` only when no plugin covers the repo, and pick the runner from the repo, not by
 assuming Swift.
 

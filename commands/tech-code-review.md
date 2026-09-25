@@ -2,7 +2,7 @@
 name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]'
-allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
+allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
 version: 0.3.0
 related:
   - agents/developer.md
@@ -30,7 +30,7 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 |---|---|---|
 | `--platform` | `apple\|android\|web\|systems\|backend\|ai\|all` | Platform context (default: auto-detect); the plugin resolves via `skills/shared/routing-matrix.md`, project `CORPFLOW.md § Routing` override wins |
 | `--path <dir>` | directory | Review that directory; the diff is scoped to it |
-| `--pr <number>` | PR number | Review the changes in that PR |
+| `--pr <number>` | PR number | Review the changes in that PR (§ Reviewing a PR) |
 | `--depth` | `surface\|deep` | Default `surface`; the DR stage passes none, so it always resolves to `surface`. `deep` adds [Deep Mode](#deep-mode---depth-deep) |
 | `--focus <areas>` | `security, performance, patterns, tests, safety, honesty, accessibility`; deep adds `quality, debt` | See § Focus Areas |
 
@@ -40,7 +40,7 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 |---|---|---|
 | `--output` | `summary\|detailed` | Verbosity for `--depth deep` (default `detailed`); surface mode always writes the findings artifact below |
 | `--severity <level>` | `P2\|P1\|P0` | Minimum severity written to the findings artifact; Phase 1 detection is never filtered by it |
-| `--ethics` | — | Include constitutional compliance checks |
+| `--ethics` | — | Add the § Constitutional pass |
 
 ```
 /tech-code-review [--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]
@@ -65,7 +65,7 @@ Catch real correctness, security, data-loss, concurrency, and regression risks b
 
 | Principle | Rule |
 |---|---|
-| Read, don't run | Static review only (`Read`, `Glob`, `Grep`, `stream-diff.sh`, read-only `git diff`/`log`/`show`). Make up for no execution with deeper reading, never by assuming the code works. |
+| Read, don't run | Static review only (`Read`, `Glob`, `Grep`, `stream-diff.sh`, read-only `git diff`/`log`/`show`, `gh pr diff`/`view`). Make up for no execution with deeper reading, never by assuming the code works. |
 | Adversarial stance | For each non-trivial path, try to construct an input, state, or sequence that breaks it. |
 | Absence of evidence ≠ safety | Not finding a concurrent caller or a consumer does not prove there is none. Inability to verify keeps a concern alive (BLOCKED rule). |
 
@@ -84,7 +84,11 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --tree "$PWD"
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --tree "$PWD" -- <path>
 ```
 
-`--pr N` scopes to that PR, `--path dir` to that directory. Never run `git checkout`/`reset`/`stash`, any other tree-mutating command, or anything that runs the product or its tests.
+`--path dir` scopes to that directory; `--pr N` takes its diff from GitHub (§ Reviewing a PR). Never run `git checkout`/`reset`/`stash`, any other tree-mutating command, or anything that runs the product or its tests.
+
+### Reviewing a PR (`--pr`)
+
+`--pr N` reviews that PR instead of the local tree: `gh pr diff N` is the change set, and `gh pr view N --json baseRefName,headRefOid,files` gives its base, head commit and file list. Read context beyond the diff at the PR head with `git show <headRefOid>:<path>`; when that commit is not local, review the diff alone and say so in the findings. Record `Source: task=- stream=- source=pr:<N> reason=-` in place of a stream-diff header.
 
 ### Reading a stream-diff block
 
@@ -263,7 +267,7 @@ End every review with:
 - `Decision: changes-requested` (verdict `fail`) when any open P0 or P1 finding exists.
 - `Decision: pass` when the review is P2-only or clean — record the P2 findings for follow-up but do not block.
 - `Coverage: N files, M hunks reviewed`.
-- One `Source: task=<ID|-> stream=<s|-> source=<label> reason=<token>` line per stream-diff block, copied from that block's header.
+- One `Source: task=<ID|-> stream=<s|-> source=<label> reason=<token>` line per stream-diff block, copied from that block's header (under `--pr`, the single `source=pr:<N>` line).
 
 These map onto the DR handoff `verdict: pass|fail` in `agents/technical-lead.md`.
 
@@ -325,6 +329,10 @@ Suggested `--focus` sets by change type:
 | **debt** *(deep)* | New debt introduced, existing debt affected, interest-rate assessment, remediation. Codebase-wide inventory: `/arch-debt`. |
 
 `--focus safety` and `--focus honesty` findings use the same entry format and P-scale in `§ Findings`, numbered `#S-01` / `#H-01`, and add two lines: the harm or violated property (`Potential harm: SQL injection, data corruption. Affected: all users submitting profile updates.` / `Property violated: truthful, forthright.`) and a concrete recommendation.
+
+### Constitutional pass (`--ethics`)
+
+`--ethics` adds a constitutional pass. `Read` `skills/claude-constitution/SKILL.md` § Honesty Properties and `skills/claude-constitution/references/harm-framework.md` § Hard Constraints (Absolute Limits), then check the change against both: what the product can be used to do, and what its user-facing text, comments and error messages assert. Report hits in the `#S-` / `#H-` format above; a hard-constraint hit is P0.
 
 ## Deep Mode (`--depth deep`)
 

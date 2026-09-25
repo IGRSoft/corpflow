@@ -2,7 +2,7 @@
 name: test-plan
 description: Generate a comprehensive test plan from requirements or code changes with coverage analysis
 argument-hint: '"<feature or requirement>" | --from-pr <number> | --from-file <path> [--coverage] [--automation] [--platform <p>]'
-allowed-tools: Read, Glob, Grep, Write
+allowed-tools: Read, Glob, Grep, Write, Bash(gh pr diff:*), Bash(gh pr view:*)
 related:
   - agents/qa-engineer.md
   - skills/worktask/SKILL.md
@@ -19,7 +19,7 @@ a requirements file.
 
 | Option | Values | Purpose |
 |--------|--------|---------|
-| `--from-pr <number>` | PR number | Plan from that PR's changes |
+| `--from-pr <number>` | PR number | Plan from that PR's changes: read its title, body and file list with `gh pr view <number> --json title,body,files` and its changes with `gh pr diff <number>` |
 | `--from-file <path>` | requirements file, e.g. a PL `planning-N.md` | Plan from that file |
 | `--coverage` | — | Include coverage targets |
 | `--automation` | — | Focus on automation-ready test cases |

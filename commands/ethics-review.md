@@ -2,7 +2,7 @@
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
 argument-hint: '[<target>] [--lens full|harm] [--scope task|feature|architecture|code] [--depth quick|standard|comprehensive] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix|report]'
-allowed-tools: Read, Glob, Grep
+allowed-tools: Read, Glob, Grep, Task(corpflow:ethics-reviewer)
 related:
   - agents/ethics-reviewer.md
   - skills/claude-constitution/SKILL.md
@@ -11,9 +11,11 @@ related:
 # /ethics-review
 
 Review a task, feature, or code for alignment with Claude's constitutional principles: safety,
-honesty, harm avoidance, user autonomy. Principles canon: `skills/claude-constitution/SKILL.md`;
-the analysis runs through `agents/ethics-reviewer.md`, which escalates complex or critical cases
-to human/stakeholder review.
+honesty, harm avoidance, user autonomy. Principles canon: `skills/claude-constitution/SKILL.md`.
+Dispatch `Task(corpflow:ethics-reviewer)` with the target and options, as a standalone review:
+it returns the report in this file's § Output shape for the chosen lens and writes nothing (no
+`ethics-review-N.md`, no state patch). The agent escalates complex or critical cases to
+human/stakeholder review.
 
 ## Lenses
 
