@@ -471,8 +471,6 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |
 | `agent-stop.sh` | SubagentStop (matched to the PL/FN/ST agents) | Stage-boundary audit row |
 
-A `Stop` matcher on `product-manager`/`project-manager` also fires a `conductor` `PushNotification` when an approval gate is ready for review.
-
 ## Error Handling
 
 ### Retry Logic

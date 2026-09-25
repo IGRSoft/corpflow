@@ -36,7 +36,7 @@ Claude Code's own internal agents (prompt suggestions, `/btw`) also fire `Subage
 
 ### Notification as resume wake-up
 
-`Notification` with `agent_needs_input` / `agent_completed` is the push complement to polling `claude agents --json` during resume: wire it to nudge the orchestrator (or the operator, via PushNotification) the moment a stage parks. The `--json` pre-check stays the authoritative reconciliation (`skills/worktask/references/resume.md` step 0). It fires for permission prompts under Claude Desktop / VS Code too, so an unattended run surfaces a parked stage instead of stalling silently.
+`Notification` with `agent_needs_input` / `agent_completed` is the push complement to polling `claude agents --json` during resume: wire it to nudge the orchestrator (or the operator) the moment a stage parks. The `--json` pre-check stays the authoritative reconciliation (`skills/worktask/references/resume.md` step 0). It fires for permission prompts under Claude Desktop / VS Code too, so an unattended run surfaces a parked stage instead of stalling silently.
 
 The Agent tool has no `resume` parameter; use `SendMessage` to reach running agents.
 
@@ -188,11 +188,7 @@ The `if` field uses permission-rule syntax to avoid unnecessary process spawning
 
 ### Matcher semantics
 
-Hyphenated matchers exact-match rather than substring-match, so the Stop matcher is written with explicit wildcards (`.*corpflow:product-manager.*|.*corpflow:project-manager.*`, per the `mcp__server__.*` guidance) to keep firing however the runtime qualifies the agent name. Comma-separated matchers (`"Bash,PowerShell"`) do not fire — use regex alternation (`Bash|PowerShell`).
-
-### Stop → PushNotification hook
-
-`plugin.json` registers an `mcp_tool` hook on `Stop` (matcher per § Matcher semantics) firing `conductor.PushNotification` at PL and FN completion — observability only, and a no-op when the conductor MCP server is unavailable. Both stages are followed by human gates (PL plan approval, `fn_gate` before commit/push/PR); gate and bypass semantics live in `skills/worktask/SKILL.md`.
+Hyphenated matchers exact-match rather than substring-match, so a matcher meant to catch an agent however the runtime qualifies its name needs explicit wildcards (`.*corpflow:project-manager.*`, per the `mcp__server__.*` guidance). Comma-separated matchers (`"Bash,PowerShell"`) do not fire — use regex alternation (`Bash|PowerShell`). `Stop` takes no matcher (one set there is ignored) and fires only when the main session ends a turn, so per-agent notifications belong on `SubagentStop`.
 
 ### PreToolUse decisions
 

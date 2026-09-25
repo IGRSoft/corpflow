@@ -262,22 +262,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "matcher": ".*corpflow:product-manager.*|.*corpflow:project-manager.*",
-        "hooks": [
-          {
-            "type": "mcp_tool",
-            "server": "conductor",
-            "tool": "PushNotification",
-            "args": {
-              "title": "corpflow worktask",
-              "message": "Approval gate ready for review"
-            }
-          }
-        ]
-      }
     ]
   }
 }
