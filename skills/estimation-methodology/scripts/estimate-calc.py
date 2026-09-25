@@ -7,7 +7,7 @@ Implements exactly:
   3. × rate           → budget min/max          (optional)
   4. phase weeks/%    → per-phase distribution  (optional)
   5. AI cost product  → (in × in_rate + out × out_rate) × (1+retry) × complexity_mult  (optional)
-  6. 5-factor sum     → complexity band LOW/MEDIUM/HIGH
+  6. 5-factor sum     → factor score + band LOW/MEDIUM/HIGH (JSON key `complexity`)
 
 Model judgment (T-shirt sizing, factor scoring) stays outside this script.
 """

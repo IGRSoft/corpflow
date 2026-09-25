@@ -7,7 +7,7 @@ On-demand detail for a full estimation run (`/estimate --detailed`); the rubric 
 
 1. **Gather inputs**: scope.csv, design/, rate, platform, team size
 2. **T-shirt sizing**: assign XS-XL per feature
-3. **Complexity analysis**: score the 5 factors
+3. **Factor score**: score the 5 factors
 4. **Feature breakdown**: subtasks with SP and hours
 5. **Phase planning**: group into ≤4-week phases
 6. **Risk assessment**: identify and mitigate
@@ -31,7 +31,7 @@ Re-run the estimate — `/estimate --detailed` against the new scope, replacing 
 estimate — when any of these occur:
 
 - **Scope change > 20%** — added/removed features shift total SP by more than a fifth.
-- **Complexity score change ≥ 3 points** — any of the 5 factors moves the score by 3 or more.
+- **Factor score change ≥ 3 points** — the 5 factors move the factor score by 3 or more.
 - **New external SDK** not in the baseline estimate.
 - **Risk register adds a High-priority risk** — Probability × Impact crosses the High threshold
   per `references/estimate-review.md § Risk Scoring`.

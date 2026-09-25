@@ -34,11 +34,12 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 ### PL Stage (Planning) — design input
 
 1. **UX assessment**: user impact, reusable existing patterns, new component requirements, accessibility implications.
-2. **Design scope**: deliverables, effort in design sprints, research/prototyping dependencies, review checkpoints.
-3. **Technical considerations**: platform-specific patterns (iOS/macOS/web), animation and motion, performance implications, implementation-complexity signals.
+2. **Design scope**: deliverables, research/prototyping dependencies, review checkpoints.
+3. **Technical design**: platform-specific patterns (iOS/macOS/web), animation and motion, performance implications, implementation-complexity signals.
 4. **Pencil mockups** when the task is UI-related: generate per § Pencil Mockups and reference each one, with a description, in the UX assessment.
+5. **Effort estimate**: design effort in design sprints, split by deliverable from item 2.
 
-Done when `planning-N.md` carries all four items and names every mockup file by name: a `.pen` on disk the plan never references is not delivered, and an accessibility implication recorded without its WCAG 2.2 criterion is not an assessment.
+Done when `planning-N.md` carries all five items and names every mockup file by name: a `.pen` on disk the plan never references is not delivered, and an accessibility implication recorded without its WCAG 2.2 criterion is not an assessment.
 
 ### AR / DV / QA — design support
 

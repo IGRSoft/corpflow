@@ -153,7 +153,7 @@ Fill the template in `references/plan-template.md` exactly (fixed section order)
 
 ##### Effort
 
-A T-shirt size plus the 5-factor complexity score (0–25) from
+A T-shirt size plus the factor score (0–25, 5 factors) from
 `skills/estimation-methodology/SKILL.md`, as a range — a rough cut, not a budget. Both parts are
 required for every request type, incidents included: a severity or priority table is not an effort
 estimate and does not replace one. Naming the factors behind a surprising score helps, but the size
@@ -161,7 +161,7 @@ and the number are what the section owes.
 
 ### 4. Recommend the handoff
 
-Follow `references/handoff.md`. Map size + complexity to an invocation with the canonical Worktask
+Follow `references/handoff.md`. Map size + factor score to an invocation with the canonical Worktask
 Tier Selection logic in `skills/estimation-methodology/SKILL.md`, and emit one ready-to-paste
 command line (e.g. `/worktask "<restated goal>"`). The surface check in that section decides
 `--secure` and `--emergency` before size is considered.

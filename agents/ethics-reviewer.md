@@ -101,6 +101,18 @@ Score: [0-100]
 
 Escalate by the highest level any issue reaches.
 
+### Verdict
+
+The final verdict takes the `#tpl-et` values; the compliance score and issue levels feed it:
+
+| Verdict | When | `handoff.verdict` |
+|---|---|---|
+| `APPROVED` | highest issue NOTE or CLEAR, compliance PASS | `pass` |
+| `CONDITIONS` | highest issue WARNING or CRITICAL, or compliance WARN/FAIL with no hard-constraint violation; each condition goes in `## mitigations`, and a CRITICAL one must be applied before the invoking stage resumes | `fail` |
+| `BLOCKED` | any BLOCKED issue (hard-constraint violation) | `fail` |
+
+In `stage-contracts.md § Not the sweep` these read `pass`, `conditional` and `block`.
+
 ### Recommendation Format
 
 ```markdown
@@ -122,7 +134,7 @@ Escalate by the highest level any issue reaches.
 **Recommendation**: [Suggested action]
 
 ## verdict
-[APPROVED / APPROVED WITH CONDITIONS / REQUIRES CHANGES / BLOCKED]
+[APPROVED / CONDITIONS / BLOCKED] (§ Verdict)
 
 ### Sign-off
 Ethics review completed: [timestamp]

@@ -5,7 +5,7 @@ requires.
 
 ## When to Apply
 
-Complexity score >= 15, or the estimate involves: AR/ML/Vision frameworks, BLE/hardware SDKs,
+Factor score >= 15, or the estimate involves: AR/ML/Vision frameworks, BLE/hardware SDKs,
 real-time camera processing, third-party SDKs of unknown quality, background processing.
 
 ## Adjustment Matrix
@@ -84,7 +84,7 @@ Matrix capability with that platform's concrete APIs.
 
 ## Review Process
 
-1. **Read the estimate** — its `### Breakdown` and `### Complexity Analysis` sections. When
+1. **Read the estimate** — its `### Breakdown` and `### Factor Score` sections. When
    `--export csv` has already run, `features_breakdown.csv`, `complexity_analysis.csv` and
    `integration_specifics.csv` carry the same content and may be read instead.
 2. **Identify adjustment triggers** — check each feature against the matrix; note

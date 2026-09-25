@@ -56,38 +56,39 @@ One testable line per acceptance criterion:
 
 ### What to Include in architecture.md
 
-Concatenate the two template parts below into the `## Test Architecture` block.
+The `## Test Architecture` block holds the three tables `agents/software-architector.md § Test
+Architecture Design` requires; the test data strategy its checklist asks for goes in the Test
+Doubles or Test Boundaries rows. Concatenate the two template parts below.
 
-#### Architecture Template — Patterns & Doubles
+#### Architecture Template — Decisions & Doubles
 
 ```markdown
 ## Test Architecture
 
-### Testability Patterns
-| Pattern | Applied To | Benefit |
-|---------|------------|---------|
-| Dependency Injection | Services, ViewModels | Mockable dependencies |
-| Protocol / interface abstractions | Network, Storage | Swappable implementations |
-| Pure Functions | Business logic | Deterministic testing |
+### Testability Design Decisions
+| Decision | Rationale | Test Impact |
+|----------|-----------|-------------|
+| Inject services into ViewModels | Swap real I/O for doubles | ViewModels unit-testable without network |
+| Protocol boundary for Network and Storage | Isolate platform APIs | Doubles replace them in unit tests |
+| Keep business logic in pure functions | No hidden state | Deterministic tests, no setup |
 
 ### Test Doubles Strategy
-| Component | Strategy | Implementation |
-|-----------|----------|----------------|
-| API Client | Mock | Protocol with mock implementation |
-| Database | In-memory | SQLite in-memory or mock store |
-| File System | Temporary directory | Create in setUp, clean in tearDown |
-| Date/Time | Injectable | Clock protocol |
+| Component | Double Type (mock/in-memory/stub) | Purpose |
+|-----------|-----------------------------------|---------|
+| API Client | mock | Verify requests, script responses |
+| Database | in-memory | Real queries without disk state |
+| Date/Time | stub | Fixed clock for time-dependent logic |
 ```
 
-#### Architecture Template — Data & Organization
+#### Architecture Template — Boundaries
 
 ~~~markdown
-### Test Data Management
-- Fixtures location: `Tests/Fixtures/`
-- Factory pattern for test objects, shared test data builders
-
-### Test Organization
-`Tests/` → `UnitTests/{Domain,Services}`, `IntegrationTests/{API,Storage}`, `Fixtures/`
+### Test Boundaries
+| Layer (domain/data/UI) | What to Test | What to Mock |
+|------------------------|--------------|--------------|
+| domain | Business rules, edge cases | Nothing (pure) |
+| data | Mapping, persistence, fixtures from `Tests/Fixtures/` | Network, clock |
+| UI | State transitions in ViewModels | Services |
 ~~~
 
 ## DV Stage: Test Implementation

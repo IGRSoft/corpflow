@@ -80,7 +80,7 @@ Platform-neutral roles stay in corpflow: documentation-only → `technical-write
 
 ### Test and review agents
 
-Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test-generator alias from `skills/shared/routing-matrix.md § Functional-role aliases` (the prefixes differ per plugin).
+Test agent: `corpflow:qa-engineer` by default; for a platform-specific ticket, that platform's test-generator alias from `skills/shared/routing-matrix.md § Functional-role aliases` (the prefixes differ per plugin), written as its resolved qualified id like the implementation agent.
 
 | Review trigger | Agent (corpflow) |
 |---|---|
@@ -133,9 +133,9 @@ Then [expected result]
 
 | Role | Agent |
 |------|-------|
-| Implementation | `{agent}` |
-| Test | `qa-engineer` |
-| Review | `{agent}` |
+| Implementation | `{plugin:agent}` |
+| Test | `{plugin:agent}` |
+| Review | `{plugin:agent}` |
 
 ## Dependencies
 
@@ -165,7 +165,7 @@ line, every `#N` after `Depends on` becomes a dependency and the pair turns into
 
 ## Ticket 1: {title}
 **Priority**: P0 · **Labels**: P0, feature
-**Agents**: Implementation: `ios-developer` | Test: `qa-engineer` | Review: `technical-lead`
+**Agents**: Implementation: `apple-developer:ios-developer` | Test: `apple-developer:test-generator` | Review: `corpflow:technical-lead`
 
 ### Body
 [Full ticket body]
@@ -175,8 +175,8 @@ line, every `#N` after `Depends on` becomes a dependency and the pair turns into
 ## Summary
 | # | Title | Priority | Implementation | Test | Review | Dependencies |
 |---|-------|----------|----------------|------|--------|--------------|
-| 1 | Core theme system | P0 | ios-developer | qa-engineer | technical-lead | — |
-| 2 | Settings toggle | P1 | ios-developer | qa-engineer | technical-lead | Ticket 1 |
+| 1 | Core theme system | P0 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | — |
+| 2 | Settings toggle | P1 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | Ticket 1 |
 
 Ready to create? Run without --dry-run.
 ```

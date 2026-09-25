@@ -60,7 +60,7 @@ escalates.
 
 ## Phrasing the recommendation
 
-One line of rationale tied to the size/complexity you computed — e.g.:
+One line of rationale tied to the size and factor score you computed — e.g.:
 
 > **Recommended:** `/worktask --secure "add Keychain-backed settings store"` — M-sized, and the
 > request names credential storage, so the full 11-stage pipeline applies.

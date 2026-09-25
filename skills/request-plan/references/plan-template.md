@@ -37,10 +37,10 @@ tests included inside the phase, not split out.
 <!-- …continued: Plan template — effort, risks, recommended next step -->
 
 ## Effort (rough)
-T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/SKILL.md`. A range, not a point.
+T-shirt size + factor score (0–25, 5 factors) per `skills/estimation-methodology/SKILL.md`. A range, not a point.
 
-| Size | Complexity (0–25) | Notes |
-|------|-------------------|-------|
+| Size | Factor score (0–25) | Notes |
+|------|---------------------|-------|
 | <XS–XL> | <score> | key drivers (new tech, integration points, unknowns) |
 
 ## Risks & Dependencies

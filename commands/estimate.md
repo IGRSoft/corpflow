@@ -41,7 +41,7 @@ mode — do not cross-apply them:
 | `--detailed` | — | Detailed estimation with full breakdown |
 | `--stages` | — | Emit the 3-stage breakdown (Required, Nice-to-have, v1.1) using `skills/shared/three-stage-planning.md § Stage Budget Template` |
 | `--sequential` | — | Record that stages cannot run in parallel; rules in `skills/shared/three-stage-planning.md` |
-| `--compare "<opt1> \| <opt2>"` | two or more options | Comparison table with size, SP range, hours range, complexity score and recommended worktask per option |
+| `--compare "<opt1> \| <opt2>"` | two or more options | Comparison table with size, SP range, hours range, factor score and recommended worktask per option |
 
 #### Estimate mode — rates and review
 
@@ -109,7 +109,7 @@ Emit `## Detailed Estimate: <task>` with these sections, in order:
 | Section | Content |
 |---------|---------|
 | `### Sizing` | T-Shirt Size, SP Min/Max, Hours Min/Max (SP × multiplier) |
-| `### Complexity Analysis` | The 5 factors scored 1–5 each, with notes (see Sizing Guide below) |
+| `### Factor Score` | The 5 factors scored 1–5 each and their sum (0–25), with notes (see Sizing Guide below) |
 | `### Recommended Worktask` | Tier + rationale (see Worktask Recommendation Logic below) |
 | `### Resource Requirements` | Skills needed, dependencies, blockers |
 | `### Breakdown` | Per-component table: Component, Size, SP Min, SP Max, Notes — tests included per component |
@@ -131,9 +131,9 @@ If `--dev-rate` is omitted, the Budget row is replaced by
 Emit `## Comparison: <topic>` with one row per option:
 
 ```markdown
-| Option | Size | SP Range | Hours Range | Complexity | Entry point |
-|--------|------|----------|-------------|------------|-------------|
-| OAuth2 | L    | 6–10     | 36–60       | 14         | `/worktask` |
+| Option | Size | SP Range | Hours Range | Factor score | Entry point |
+|--------|------|----------|-------------|--------------|-------------|
+| OAuth2 | L    | 6–10     | 36–60       | 14           | `/worktask` |
 ```
 
 ### Stages Output (`--stages`)
@@ -147,7 +147,7 @@ definitions, sequential rules, calendar month billing and gate criteria:
 
 `--detailed` runs the platform review as part of the estimate, not behind a flag, when the
 trigger in `skills/estimation-methodology/references/estimate-review.md § When to Apply` fires:
-complexity ≥ 15, or the scope names AR/ML/Vision, BLE/hardware, real-time camera, third-party
+factor score ≥ 15, or the scope names AR/ML/Vision, BLE/hardware, real-time camera, third-party
 SDKs of unknown quality, or background processing. `--no-review` suppresses it; `--quick` never
 reviews, having no breakdown to adjust.
 
@@ -179,7 +179,7 @@ only the one matching `--platform`), § Review Process, § Review Checklist, and
 
 Canonical in `skills/estimation-methodology/SKILL.md`: § T-Shirt Sizing → Story
 Points (Range), § Story Points to Hours (formula and Junior/Mid/Senior/Expert
-multiplier variants), § 5-Factor Complexity Analysis (Technical Complexity,
+multiplier variants), § 5-Factor Score (Technical Complexity,
 Integration Points, Risk Level, Unknowns, Domain Expertise), § Phase Constraints,
 § Test Integration, and § Buffer Calculation.
 

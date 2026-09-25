@@ -108,11 +108,14 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 
 ### Step 5 — delegate to prompt-engineer
 
-5. Delegate with one `Agent` call carrying the full list of checked proposals:
+5. Resolve the model like every other dispatch, never type it:
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve prompt-engineer`
+   prints `<model>`, `<effort>` and the source, tab-separated. Then delegate with one `Agent` call
+   carrying the full list of checked proposals:
    ```typescript
    Task({
      subagent_type: "corpflow:prompt-engineer",
-     model: "opus",
+     model: MODEL,  // first field of the --resolve line
      prompt: `Apply self-improvement learnings from .context/learnings.md.
               Apply ONLY checked items (- [x]). Follow the Apply Protocol in your agent definition.
               Do not propose new changes; only apply approved ones.

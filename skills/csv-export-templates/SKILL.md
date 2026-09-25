@@ -26,7 +26,7 @@ Per-file column definitions: `${CLAUDE_SKILL_DIR}/references/templates.md`.
 | # | File | Purpose |
 |---|------|---------|
 | 01 | project_overview.csv | Project metadata, sizing, totals |
-| 02 | complexity_analysis.csv | 5-factor complexity scoring |
+| 02 | complexity_analysis.csv | 5-factor score |
 | 03 | technology_stack.csv | Frameworks, SDKs, tools |
 | 04 | features_breakdown.csv | Subtasks with SP/hours |
 | 05 | roadmap_milestones.csv | Week-by-week plan |

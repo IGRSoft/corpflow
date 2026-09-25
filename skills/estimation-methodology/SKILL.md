@@ -29,7 +29,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/estimation-methodology/scripts/estimate-cal
 ### Output
 
 One JSON line, numbers only — `sp`, `multiplier_h`, `base_hours`, `buffer_pct`, `total_hours`,
-`budget` (with `--rate`), `phase`, `ai_cost` (with `--tokens`), `complexity` (with `--factors`).
+`budget` (with `--rate`), `phase`, `ai_cost` (with `--tokens`), `complexity` (the factor score and
+its band, with `--factors`).
 `--self-test` alone runs the built-in checks.
 
 The sections below are the specification the script implements. Estimation-run procedure, phase
@@ -58,9 +59,11 @@ status-report and budget-approval skeletons for ad-hoc stakeholder requests: `re
 | Senior | 6h | Default |
 | Expert | 4h | Deep specialization |
 
-## 5-Factor Complexity Analysis
+## 5-Factor Score
 
-Score each factor 1-5. Overall score = sum (0-25): 0-10 LOW, 11-17 MEDIUM, 18-25 HIGH.
+Score each factor 1-5. The factor score is their sum (0-25): 0-10 LOW, 11-17 MEDIUM, 18-25 HIGH.
+It sizes an estimate; the complexity score PL0 sizes a worktask with is the separate 0–50 score
+in § PL0 Stage-Set & Test-Mode by Complexity Score.
 
 | Factor | Description | Score 5 = |
 |--------|-------------|-----------|
