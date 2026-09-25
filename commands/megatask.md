@@ -161,25 +161,47 @@ Execution loop, driven cooperatively with `hooks/megatask-monitor.sh`:
 2. **Assign tracks** — fill up to `parallel_tracks` worktrees; per issue run
    `bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh --issue {issue#} --title "<title>" --group <group> --track <T> --blocked-by <N,M> --blocks <N,M> --labels <l,l>`.
    It resolves base and branch (`skills/megatask/SKILL.md § Base Branch Resolution`,
-   `§ Branch Naming`), keeps the batch's scratch files out of `git add -A`, creates the worktree at
-   `.worktrees/<group>/{issue#}` with its `.context/`, and stamps `workspace.json`
-   (`isolation: "worktree"`, version 2.0). Then set the issue's status `in_progress` and its
-   `track` in `orchestrator.json`.
+   `§ Branch Naming`), creates the worktree at `.worktrees/<group>/{issue#}` with its `.context/`,
+   and stamps `workspace.json` (version 2.0). Its `worktree_path=<absolute path>` line, printed on
+   a re-run too, is Step 3's `<wt>`. Then set the issue's status `in_progress` and its `track` in
+   `orchestrator.json`.
 
 ### Phase 2 loop · Step 3 — Launch the per-issue worktask
 
 3. Dispatch one background `general-purpose` subagent per ready issue; its prompt invokes the
-   `corpflow:worktask` skill (`/worktask`) in the issue's worktree with the standing directives
-   below and this `PL0.metadata` stamp, both gates pre-bypassed. Not a headless `claude -p`:
-   `hooks/megatask-monitor.sh` runs on its `SubagentStop`, and R1's depth and concurrency math
-   count it as one spawned level.
+   `corpflow:worktask` skill as `/worktask "<issue title>" --auto=[plan,decision,finalization]`
+   (plus any forwarded `--secure`/`--platform`), with the run environment and standing directives
+   below and this `PL0.metadata` stamp. Not a headless `claude -p`: `hooks/megatask-monitor.sh`
+   runs on its `SubagentStop`, and R1's depth and concurrency math count it as one spawned level.
    `{ stage:"PL", agent:"corpflow:product-manager", model:"<model>", effort:"<effort>",
-   issue_number, track, workspace_path:".worktrees/<group>/{issue#}", isolation:"worktree",
+   issue_number, track, workspace_path:"<wt>", isolation:"worktree",
    plan_gate:"bypass", decision_gate:"auto", fn_gate:"bypass", approved:"auto",
-   megatask_group:"<group>",
-   milestone:<N|null> }`. It then runs its stage loop unattended and milestone-agnostic
-   (`commands/worktask.md`); `workspace.json` makes it skip its own GitHub-issue publish — the
-   parent milestone/issue is the canonical record.
+   megatask_group:"<group>", milestone:<N|null> }`, `<wt>` being the absolute path Step 2 printed.
+
+#### Step 3 — gates: the flags, then the stamp at worktask Step 4
+
+The per-issue ledger does not exist until `/worktask` Step 3a seeds it, so megatask never writes
+that PL0 itself. Order: Step 3a seeds `tasks.PL0`; Step 4 stamps the gates from the `--auto`
+values (`bypass`/`auto`/`bypass`, the stamp's own values) and overlays this stamp in the same
+`--task-meta PL0` call, stamp keys winning (`commands/worktask.md § Step 4 — the /megatask
+stamp`). No `checkpoint`/`user` default lands on a per-issue PL0. The run is unattended and
+milestone-agnostic; the batch markers below make it skip its own GitHub-issue publish, since the
+parent milestone/issue is the canonical record.
+
+#### Step 3 — run environment in the per-issue prompt
+
+State these with `<wt>` filled in. A subagent's shell starts in megatask's root on every call and
+keeps no variables, and without `WORKSPACE_ROOT` the state scripts resolve megatask's own
+`.context/state.json` through `CLAUDE_PROJECT_DIR`.
+
+- Begin every Bash call with `cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`.
+  `MILESTONE_MODE` and `<wt>/workspace.json` are how the scan, preflight, publish and branch
+  scripts recognise a per-issue run.
+- Read, Edit and Write take absolute paths under `<wt>`.
+- Never call `EnterWorktree`: the `cd` already runs every call in the worktree, and a path outside
+  `.claude/worktrees/` asks for a confirmation nobody is there to give.
+- Never wait on the user: every stop settles the issue in `workspace.json` first
+  (`commands/worktask.md § Per-issue run under /megatask`).
 
 #### Step 3 — PL0's model and effort
 
@@ -221,8 +243,10 @@ Parking rides the monitor's existing failure path, so it needs no new state: the
 writes `workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"` and
 an `escalation_parked` audit row (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`);
 `hooks/megatask-monitor.sh` settles it like any failed issue — track freed, dependents stay
-`blocked`. The batch summary lists each parked issue (told apart by `execution.reason`) with its
-unanswered escalate questions, so the user can re-run it interactively, re-scope, or drop it.
+`blocked`. Any other stop for the user settles the same way with `execution.reason:
+"escalated_to_user"` (`skills/worktask/scripts/megatask-settle.sh`). The batch summary lists each
+parked or escalated issue (told apart by `execution.reason`) with its unanswered questions or its
+`megatask_escalated` row, so the user can re-run it interactively, re-scope, or drop it.
 
 ### Phase 2 loop · Steps 4–6 — Monitor, completion, termination
 
@@ -243,7 +267,7 @@ unanswered escalate questions, so the user can re-run it interactively, re-scope
 # Megatask: milestone <N> | issues <list> · <M> issues · <T> tracks
 
 ## Plan — issue | title | blockers | track | priority | worktree path
-## Progress — per issue: stage reached, verdict, PR URL, worktree path
+## Progress — per issue: stage reached, verdict, PR URL, worktree path, any learnings.md left
 ## Blocked — issues waiting, each naming the blocker issue it waits on
 ## Summary — merged / open / failed counts, plus follow-up issues filed
 ~~~

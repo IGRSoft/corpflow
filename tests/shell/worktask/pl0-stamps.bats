@@ -5,7 +5,10 @@
 #   - that stamp rides a background general-purpose subagent running the corpflow:worktask
 #     skill, which the command is granted and whose stop the SubagentStop monitor sees;
 #   - `--with-design` stamps `with_design: true`, the key the Designer gate in
-#     skills/worktask/references/pl0-procedure.md § Designer Invocation reads.
+#     skills/worktask/references/pl0-procedure.md § Designer Invocation reads;
+#   - /megatask's gates survive Step 4: megatask passes them as --auto values AND in the stamp
+#     Step 4 overlays, so the ledger holds bypass/auto/bypass and an absolute workspace_path
+#     workspace-root-banner.sh accepts; both files state the seed → Step 4 order.
 #
 # The stamp is an orchestrator action, so nothing here runs the orchestrator. What is
 # proven is the composition: the payload and key written in the doc, applied with the
@@ -121,4 +124,88 @@ step4_payload() {
   assert_failure
   grep -qE '^\| `with_design` \| `--with-design`' "$PLUGIN_ROOT/$LEDGER_DOC" \
     || fail "$LEDGER_DOC § PL0 option fields has no with_design row"
+}
+
+# --- /megatask's stamp through worktask Step 4 --------------------------------------------
+
+STEP3_HEAD="### Phase 2 loop · Step 3 — Launch the per-issue worktask"
+BANNER="skills/worktask/scripts/workspace-root-banner.sh"
+
+# stamp_gate <key> — the value megatask Step 3's stamp gives a gate key, e.g. bypass.
+stamp_gate() {
+  section "$MEGATASK_DOC" "$STEP3_HEAD" | tr '\n' ' ' | sed -n "s/.*$1:\"\([a-z]*\)\".*/\1/p"
+}
+
+@test "megatask gates: the --auto values and the stamp agree with Step 4's flag table" {
+  local step3 table
+  step3="$(section "$MEGATASK_DOC" "$STEP3_HEAD")"
+  printf '%s' "$step3" | grep -qF '/worktask "<issue title>" --auto=[plan,decision,finalization]' \
+    || fail "megatask Step 3 does not pass --auto=[plan,decision,finalization]"
+  [ "$(stamp_gate plan_gate)" = "bypass" ] || fail "stamp plan_gate is not bypass"
+  [ "$(stamp_gate decision_gate)" = "auto" ] || fail "stamp decision_gate is not auto"
+  [ "$(stamp_gate fn_gate)" = "bypass" ] || fail "stamp fn_gate is not bypass"
+  # Each --auto value stamps the stamp's own value, so either source alone holds the gate.
+  table="$(section "$WORKTASK_DOC" "#### Step 4 — gate stamping")"
+  printf '%s\n' "$table" | grep -E '^\| `plan_gate: "bypass"` \|' | grep -qF 'contains `plan`' \
+    || fail "Step 4 no longer maps --auto plan to plan_gate bypass"
+  printf '%s\n' "$table" | grep -E '^\| `fn_gate: "bypass"` \|' | grep -qF 'contains `finalization`' \
+    || fail "Step 4 no longer maps --auto finalization to fn_gate bypass"
+  printf '%s\n' "$table" | grep -E '^\| `decision_gate: "auto"` \|' | grep -qF 'contains `decision`' \
+    || fail "Step 4 no longer maps --auto decision to decision_gate auto"
+}
+
+@test "megatask stamp: Step 4's overlay lands the stamped gates and an absolute tree" {
+  local payload stamp overlay rule
+  rule="$(section "$WORKTASK_DOC" "#### Step 4 — the /megatask stamp")"
+  [ -n "$rule" ] || fail "no § Step 4 — the /megatask stamp in $WORKTASK_DOC"
+  printf '%s' "$rule" | tr '\n' ' ' | grep -qF 'the stamp winning on every shared key' \
+    || fail "Step 4 no longer says the stamp wins over its defaults"
+  payload="$(step4_payload)"
+  [ -n "$payload" ] || fail "no task-meta PL0 payload under Step 4 of $WORKTASK_DOC"
+  stamp="$(jq -cn --arg p "$(stamp_gate plan_gate)" --arg d "$(stamp_gate decision_gate)" \
+    --arg f "$(stamp_gate fn_gate)" --arg wt "$WD" \
+    '{plan_gate:$p, decision_gate:$d, fn_gate:$f, workspace_path:$wt,
+      megatask_group:"milestone-1", issue_number:7, track:1, approved:"auto"}')"
+  overlay="$(jq -cn --argjson a "$payload" --argjson b "$stamp" \
+    '$a * $b | .model = "opus" | .effort = "high"')"
+
+  cd "$WD"
+  run bash "$PLUGIN_ROOT/$PATCH_SCRIPT" --task-meta PL0 --set "$overlay"
+  assert_success
+  run jq -r '.tasks.PL0.metadata | "\(.plan_gate) \(.decision_gate) \(.fn_gate) \(.megatask_group)"' \
+    .context/state.json
+  assert_output "bypass auto bypass milestone-1"
+  run bash "$PLUGIN_ROOT/$BANNER" --task PL0 --state "$WD/.context/state.json" --orch-root /o
+  assert_success
+  assert_output "WORKSPACE_ROOT=$WD"
+}
+
+@test "megatask stamp: workspace_path is Step 2's absolute path; the relative form is refused" {
+  local step3
+  step3="$(section "$MEGATASK_DOC" "$STEP3_HEAD")"
+  printf '%s' "$step3" | grep -qF 'workspace_path:"<wt>"' \
+    || fail "megatask Step 3 does not stamp workspace_path from <wt>"
+  run grep -nF 'workspace_path:".worktrees' <<< "$step3"
+  assert_failure
+  section "$MEGATASK_DOC" "### Phase 2 loop · Steps 1–2 — Select ready issues & assign tracks" \
+    | tr '\n' ' ' | grep -qF "Its \`worktree_path=<absolute path>\` line" \
+    || fail "megatask Step 2 no longer names init-worktree's worktree_path= line as <wt>"
+  # Why it matters: the banner Step 6 composes into every stage prompt exits 2 on the old form.
+  cd "$WD"
+  bash "$PLUGIN_ROOT/$PATCH_SCRIPT" --task-meta PL0 --set '{"workspace_path":".worktrees/milestone-1/7"}'
+  run bash "$PLUGIN_ROOT/$BANNER" --task PL0 --state "$WD/.context/state.json" --orch-root /o
+  assert_failure 2
+}
+
+@test "megatask stamp: both files put the Step 3a seed before the Step 4 overlay" {
+  local mega wt
+  mega="$(section "$MEGATASK_DOC" "#### Step 3 — gates: the flags, then the stamp at worktask Step 4" | tr '\n' ' ')"
+  [ -n "$mega" ] || fail "no Step 3 gates/order subsection in $MEGATASK_DOC"
+  printf '%s' "$mega" | grep -qF 'Order: Step 3a seeds `tasks.PL0`; Step 4' \
+    || fail "$MEGATASK_DOC does not state seed-then-Step-4 order"
+  printf '%s' "$mega" | grep -qF 'megatask never writes that PL0 itself' \
+    || fail "$MEGATASK_DOC no longer rules out a pre-seed PL0 write"
+  wt="$(section "$WORKTASK_DOC" "#### Step 4 — the /megatask stamp" | tr '\n' ' ')"
+  printf '%s' "$wt" | grep -qF 'megatask cannot write PL0 before Step 3a seeds the ledger' \
+    || fail "$WORKTASK_DOC § Step 4 — the /megatask stamp does not state the order"
 }

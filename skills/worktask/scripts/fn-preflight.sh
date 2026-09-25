@@ -86,7 +86,7 @@
 #   sanitises — a working-folder path must not reach a published body on any route —
 #   but drops its blocking checks: the composition requirements are skipped and an
 #   unreachable sanitiser library degrades to a warning instead of exit 1. See
-#   `fn_batch_scope` (branch-lib.sh) for the five signals.
+#   `fn_batch_scope` (branch-lib.sh) for the six signals.
 #
 #   Branch naming moved to the start of the planning stage (see
 #   `skills/shared/git-conventions.md § Branch Naming`). This validator never

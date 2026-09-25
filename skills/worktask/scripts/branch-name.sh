@@ -351,7 +351,7 @@ derive_target() {
 # /megatask, a hand-run `git worktree add`) provisions. A linked worktree's `--git-dir`
 # points at `<common>/worktrees/<name>` while `--git-common-dir` is the shared
 # `<common>`; in a plain checkout the two are identical. Nothing else in the ladder can
-# see this: a host leaves no `workspace.json` in `$PWD`, so fn_batch_scope's five
+# see this: a host leaves no `workspace.json` in `$PWD`, so fn_batch_scope's six
 # signals all miss it.
 #
 # A detector only. What it gates is the DISCLOSURE and the opt-out, not whether the rename

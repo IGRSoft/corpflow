@@ -6,7 +6,7 @@ version: 0.6.0
 # tools: bare Task because each stage row's metadata.agent may name a platform variant from any
 # plugin (`pl0-procedure.md § Stage → agent table`, a CORPFLOW.md § Routing override included), and
 # the Step C.0a resolver and Phase 3 re-dispatch those agents or `corpflow:prompt-engineer`.
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -18,7 +18,8 @@ related:
 
 > **Execution model** — every worktask is worktree-isolated, so the PR is the review
 > surface. Three orthogonal carriers on `PL0.metadata` drive the two human checkpoints and the
-> optional decision delegate; `/megatask` stamps them directly on each per-issue PL0.
+> optional decision delegate; `/megatask` sets them on each per-issue PL0 (§ Per-issue run under
+> `/megatask`).
 >
 > | Carrier | Default | Alternate | Meaning |
 > |---|---|---|---|
@@ -187,6 +188,29 @@ detection`), and the workspace-root cross-check before every `Task()`.
    PL0's `metadata.embedded_commands` (comma-separated, stamped at Step 4), strip the prefix from
    the description passed to PL0, preserve the arguments. See § Embedded Command Detection.
 
+### Per-issue run under `/megatask`
+
+`/megatask` Phase 2 Step 3 launches this command in a background subagent, one per issue, with
+`--auto=[plan,decision,finalization]`, a `PL0.metadata` stamp carrying `megatask_group`, and a run
+environment in which every Bash call opens with
+`cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`,
+`<wt>` being the issue's absolute worktree path. Keep that prefix on every call, the snippets
+below included. It is what makes the state scripts write `<wt>/.context/state.json` instead of
+megatask's own ledger, and what the scan, preflight, publish and branch scripts read as a
+per-issue run. No user is reachable.
+
+#### Per-issue run — what changes
+
+| Step | Under `/megatask` |
+|---|---|
+| 2a-pre, 2a | Both scripts print `result=skipped reason=milestone_mode`; no `AskUserQuestion` runs |
+| 3c | `branch-name.sh` self-disables; `init-worktree.sh` already named the branch |
+| 4 | The stamp overlays the payload (§ Step 4 — the /megatask stamp) |
+| A | `publish-pl-issue.sh` defers with `reason=milestone_mode` |
+| Any stop for the user | Settles the issue first (`skills/worktask/SKILL.md § USER under /megatask`) |
+| Phase 3 | Skipped |
+| `EnterWorktree` | Never called: the prefix already runs every call in `<wt>` |
+
 ### Step 2a-pre — Autonomy preflight (unattended runs)
 
 Runs when the resolved `--auto` contains `plan` or `finalization`, before Step 2a and Step 3, so
@@ -271,6 +295,9 @@ present each `candidate=<json>` line (number, title, url — at most three, most
   orphaned state.
 - **Use one of the existing issues** — Step 3, then bind this context to the chosen issue: after
   Step 3a seeds `state.json`, write the dedup anchor below.
+
+A `/megatask` per-issue run never asks: its `--auto` holds `plan`, so § Step 2a — unattended runs
+instead, and the scan skips itself there anyway (`reason=milestone_mode`).
 
 #### Step 2a — reusing an existing issue
 
@@ -593,13 +620,23 @@ hazard`).
 
 Gate defaults (`plan_gate: "checkpoint"`, `decision_gate: "user"`, `fn_gate: "checkpoint"`) stamp
 unless a flag overrides. They are the carriers resume logic branches on (`resume.md § State → Action
-Table`); `/megatask` stamps them directly per issue.
+Table`); `/megatask` sets them per issue through its flags and stamp (§ Step 4 — the /megatask
+stamp).
 
 | Alternate | Stamp only when | Notes |
 |---|---|---|
 | `plan_gate: "bypass"` | `--auto` contains `plan`, or `--emergency` | Emergency runs unattended from IR |
 | `fn_gate: "bypass"` | `--auto` contains `finalization`, or `--emergency` | `--auto=[plan]` alone never stamps this (orthogonal carriers); enforced at SKILL.md loop step 4.9 |
 | `decision_gate: "auto"` | `--auto` contains `decision` | `--emergency` leaves it `"user"` (no PL stage, carrier inert) |
+
+#### Step 4 — the /megatask stamp
+
+Under a per-issue `/megatask` run the dispatch prompt carries a `PL0.metadata` stamp
+(`commands/megatask.md § Phase 2 loop · Step 3`). Overlay it on the payload above in the same
+`--task-meta PL0` call, the stamp winning on every shared key. Its `workspace_path` is the absolute
+worktree path, and its gates (`plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`)
+match what `--auto=[plan,decision,finalization]` stamps, so no default gate lands on that PL0. The
+stamp exists only in the prompt: megatask cannot write PL0 before Step 3a seeds the ledger.
 
 #### Step 4 — decision_gate readers
 
@@ -1437,7 +1474,8 @@ blocking one. Full carrier table: `skills/shared/stage-contracts.md § Unattende
 ## Phase 3: Post-Worktask Self-Improvement
 
 After the loop exits (ST completed), run `skills/worktask/SKILL.md § Post-Worktask
-Self-Improvement`:
+Self-Improvement`. A `/megatask` per-issue run skips this phase: nobody is there to check the
+boxes, so the run ends at ST and any `.context/learnings.md` stays in the worktree for review.
 
 1. If `.context/learnings.md` is absent → worktask done, terminate.
 2. If present → display it and stop until the user checks the boxes of proposals they approve

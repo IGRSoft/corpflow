@@ -168,7 +168,7 @@ This proves isolation, not assignment: a stale worktree from an earlier session 
 
 #### Absolute-path mode — supported when EnterWorktree is refused (D0.0)
 
-When the host refuses `EnterWorktree` on the assigned path (an out-of-tree confirmation denied, an externally-managed tree already checked out), use absolute-path mode on the assigned tree — a supported mode, not a degradation. Never fall back to the shared checkout and never pick a different tree.
+When the host refuses `EnterWorktree` on the assigned path (an out-of-tree confirmation denied, an externally-managed tree already checked out), use absolute-path mode on the assigned tree — a supported mode, not a degradation. Never fall back to the shared checkout and never pick a different tree. A `/megatask` per-issue DV starts here without trying `EnterWorktree`, as its banner says: its tree is a linked worktree outside `.claude/worktrees/` (check with `git -C "$WORKSPACE_ROOT" rev-parse --git-dir`).
 
 - Every Read/Edit/Write path is absolute and under `$WORKSPACE_ROOT`; every git call is `git -C "$WORKSPACE_ROOT"`; build and test runners get the same root explicitly.
 - D0.0a still runs, from inside that tree, with `--assigned "$WORKSPACE_ROOT"`.

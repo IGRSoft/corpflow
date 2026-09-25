@@ -108,7 +108,8 @@ stage-validity list, and the structural caps — canonical in
 create the stage with `state-patch.sh --task-create` / `--task-block` and record `{stage, reason}`
 in the existing `metadata.added_stages`; on reject, name the failed condition and continue the run
 unchanged. One accepted per run — a second means the plan itself is wrong, so stop at the
-human gate instead of growing the pipeline. ST0 audits `added_stages` for escalation entries.
+human gate instead of growing the pipeline (under `/megatask`, § USER under /megatask). ST0 audits
+`added_stages` for escalation entries.
 
 ## Workspace Mode
 
@@ -163,6 +164,24 @@ Emergency: FN → RE → QA → DR → DV → IR → USER
 
 Stages absent from the plan drop out of the chain — escalation from DV goes to TL if TL ran, else
 AR if AR ran, else PL.
+
+### USER under /megatask
+
+A `/megatask` per-issue run (`PL0.metadata.megatask_group`) has no user. Every path that ends at
+USER first settles the issue, then stops: the last link of a chain above, a stop per § Error
+Handling, `escalate()`, a Step 7 `blocked` row, a refused landing (§ Step 6.5d), a second mid-run
+escalation, and `stopForUser`.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh --subject <ID> --detail "<one line: why>"
+```
+
+It writes `workspace.json` `execution.status: "failed"`, `execution.reason: "escalated_to_user"`
+and one `megatask_escalated` row, so `hooks/megatask-monitor.sh` frees the track and keeps the
+dependents blocked. Outside `/megatask` it prints `result=skipped` and writes nothing, and it never
+overwrites a settled status, so a PARK (§ Step 7a — the megatask arm) keeps its
+`parked_escalation`. Exit 1 (`result=refused`) leaves the track held: report the issue, the path
+and the reason, and stop.
 
 ## Rule Checks
 
@@ -804,11 +823,15 @@ Step 6's composer emits that as [7]'s first line from the same script, after the
 
 ```typescript
     if (full.metadata.stage === "DV") {
-      const enforce =
-        `WORKTREE ISOLATION REQUIRED (always): ` +
-        `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
-        `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
-        `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
+      // /megatask: the tree is init-worktree.sh's linked worktree, outside .claude/worktrees/,
+      // where EnterWorktree would wait on a confirmation no one can give.
+      const enforce = state.tasks.PL0?.metadata?.megatask_group
+        ? `WORKTREE ISOLATION: WORKSPACE_ROOT is already an isolated worktree. Never call ` +
+          `EnterWorktree; work it in absolute-path mode (D0.0). Set \`worktree: true\`.`
+        : `WORKTREE ISOLATION REQUIRED (always): ` +
+          `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
+          `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
+          `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
       full.description = full.description + "\n\n" + enforce;
 ```
 
@@ -1817,7 +1840,8 @@ The boundary pass skips a `blocked` consumer, so `resume --leg landed` succeeds 
 ##### Step 6.5d — reporting a refused landing
 
 `queueLandingBlock` reports each blocked consumer's `metadata.landing_error` (`reason`, `path`,
-`producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
+`producer`) to the user per § Escalation Chains → USER (§ USER under /megatask settles first),
+after the other ready rows are dispatched.
 Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
 
 On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
@@ -1908,8 +1932,9 @@ Corrected artifact exists only now; source resumes here not at route that parked
     const ledger = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
     const row = ledger.tasks[task.id];
     if (row.status === "blocked") {
-      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp. A
-      // typed or permission park never reaches here: 6.5a3 or 6.5a4 continued, § Step 7a asks.
+      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp
+      // (/megatask: § USER under /megatask). A typed or permission park never reaches here:
+      // 6.5a3 or 6.5a4 continued, § Step 7a asks.
     } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
       loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
     } else if (row.status !== "completed") {
@@ -2382,7 +2407,7 @@ Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:
 
 ## Post-Worktask Self-Improvement
 
-After the execution loop exits (all tasks completed, including ST): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
+After the execution loop exits (all tasks completed, including ST), except in a `/megatask` per-issue run, which ends at ST (`commands/worktask.md § Phase 3`): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
 
 ## Resume After Interruption
 

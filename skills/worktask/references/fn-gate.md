@@ -97,7 +97,7 @@ Bypass path (`--auto=[finalization]` / `--emergency`, or a gate stamped `"bypass
 
 # Post-Worktask Self-Improvement
 
-After the execution loop exits (all tasks completed, including ST), the orchestrator handles any learnings captured at ST. Read from `skills/worktask/SKILL.md § Post-Worktask Self-Improvement` when `.context/learnings.md` exists.
+After the execution loop exits (all tasks completed, including ST), the orchestrator handles any learnings captured at ST; a `/megatask` per-issue run skips this and ends at ST (`commands/worktask.md § Phase 3`). Read from `skills/worktask/SKILL.md § Post-Worktask Self-Improvement` when `.context/learnings.md` exists.
 
 ## Post-ST Procedure
 

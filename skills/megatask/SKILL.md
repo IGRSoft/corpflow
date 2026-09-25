@@ -282,17 +282,22 @@ hardcoded `PL0`/`AR0`/`FN0` reader and the `PL is always PL0 only` rule in
 
 `/worktask` Step 3a seeds the per-issue ledger with `seed-state.sh`
 (`commands/worktask.md § Steps 3–3a`); it already holds `tasks.PL0`, so this row is a metadata merge.
+megatask passes the stamp in the per-issue prompt, and the per-issue run's Step 4 overlays it in
+its own `--task-meta PL0` call (`commands/worktask.md § Step 4 — the /megatask stamp`), from
+`$WT`, the absolute `worktree_path=` that `init-worktree.sh` printed.
+
+#### Seeding a track's PL — the stamp
 
 ```bash
 # megatask bypasses both default-checkpoint gates; decision_gate=auto means open
 # questions go to a Fable decision pass and an escalation parks the issue.
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta "PL0" --set "$(jq -n \
   --argjson issue "$ISSUE_NUMBER" --argjson track "$TRACK" \
-  --arg group "$GROUP" --arg ms "$MILESTONE_OR_EMPTY" \
+  --arg group "$GROUP" --arg ms "$MILESTONE_OR_EMPTY" --arg wt "$WT" \
   '{stage:"PL", agent:"corpflow:product-manager",
     description:"Planning - Issue #\($issue)",
     issue_number:$issue, track:$track,
-    workspace_path:".worktrees/\($group)/\($issue)",
+    workspace_path:$wt,
     isolation:"worktree",
     megatask_group:$group, milestone:(if $ms == "" then null else $ms end),
     fn_gate:"bypass", plan_gate:"bypass",

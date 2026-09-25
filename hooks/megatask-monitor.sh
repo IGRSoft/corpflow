@@ -12,7 +12,8 @@
 # .worktrees/*/orchestrator.json and reads each in-progress issue's
 # workspace.json .execution.status.
 #
-# Completion contract, written by the per-issue worktask's FN/ST stage:
+# Completion contract, written by the per-issue worktask's FN/ST stage, or by its
+# orchestrator when it parks or stops for the user (execution.reason says which):
 #   .worktrees/<group>/<issue#>/workspace.json
 #     .execution.status ∈ {"completed","failed"}  ("in_progress" otherwise)
 #     .execution.pr      PR URL, optional
