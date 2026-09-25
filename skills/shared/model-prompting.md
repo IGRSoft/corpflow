@@ -37,27 +37,29 @@ which the Opus 5.5 guide keeps as the starting point for its prompts.
 | Files written to disk run long; effort does not shorten them | `#written-deliverable-length` |
 | Narrates readily during agentic work | `#user-facing-progress-updates` |
 | Narrates corrections to its own earlier statements | `#self-correction` |
+| Ends a turn on a progress report with work still open | [5.5 guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5#unattended-agentic-runs) |
 
 ### opus — the block
 
 ```text
 Deliver what the stage contract asks for, at the scope it intends. Make routine judgment calls
-yourself; check in only when two readings would mean materially different work. If the task
-looks mistaken, say so in a sentence in your artifact and continue as asked rather than
-narrowing, widening, or transforming it.
+yourself; ask only when two readings mean materially different work. If the task looks
+mistaken, say so in one line of your artifact and do it as asked, without narrowing, widening,
+or transforming it.
 
-Match the artifact's length to what the stage needs: cover the substance, do not pad with filler
-sections or redundant summaries.
+Cover what the stage needs; no filler sections or recaps.
 
-Delegate only for work that is genuinely independent, or needs expertise this stage lacks. Never
-delegate what you can finish in a handful of tool calls, or spawn a subagent to check your own
-work. Where one delegate suffices, use one.
+Delegate only independent work or work needing expertise you lack; never a few tool calls'
+worth or a check of your own work. One delegate if one suffices.
 
-Before your first tool call, say in one sentence what you are about to do. While working, report
-only findings and changes of direction. Lead your final message with the outcome.
+Say in a sentence what you will do before your first tool call, then report only findings and
+changes of direction. Lead your final message with the outcome.
 
-Correct an earlier statement only when the error changes the next stage's decisions, then
-continue.
+Correct an earlier statement only if it changes the next stage's decisions.
+
+A reply without a tool call ends the stage: never end on an announced next step or an offer to
+continue; put status with your next tool call. Stop when the contract is met or only the
+orchestrator can unblock you.
 ```
 
 ### The verification line is narrower than it looks
@@ -108,6 +110,7 @@ Detection` is the rule.
 | Writes fewer user-facing updates during long tool chains | [Ask for user-facing progress updates](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#ask-for-user-facing-progress-updates) |
 | Ends a turn describing the next step instead of taking it; asks permission for work already requested | [Finish the whole task](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#finish-the-whole-task) |
 | Rewrites a whole file for a small change | [Prefer targeted edits](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#prefer-targeted-edits-over-whole-file-rewrites) |
+| Writes a long output twice at `xhigh`+ | [Long outputs](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#leave-room-for-long-outputs-at-xhigh-and-max-effort) |
 
 ### fable — the block
 
@@ -125,16 +128,20 @@ Say in a line what you are about to do, and give brief updates as you work. Clos
 that stands on its own.
 
 When it will not affect the result, edit a file surgically rather than rewriting it.
+
+Reasoning and reply share one output limit: settle a long artifact's structure and hard calls
+in reasoning, then write it once, not twice.
 ```
 
 ### Version sensitivity
 
 `model-selection.md § Aliases` resolves `fable` to Fable 5.1, but Claude apps gateway sessions
 still get Fable 5. The block is safe on both: each line is a counter-instruction whose worst
-case on a model without the behaviour is a no-op. The 5.1 page's
-`#leave-room-for-long-outputs-at-xhigh-and-max-effort` (`max_tokens` headroom) is not carried
-here. The live consumer is the `--auto=[decision]` pass (`skills/worktask/SKILL.md §
-Auto-Decision Delegation (decision_gate)`).
+case on a model without the behaviour is a no-op. The long-output line carries the prompt half
+of the 5.1 page's `#leave-room-for-long-outputs-at-xhigh-and-max-effort`; the `max_tokens` half
+belongs to Claude Code (`model-selection.md § Output headroom at xhigh and max`). The live
+consumer is the `--auto=[decision]` pass (`skills/worktask/SKILL.md § Auto-Decision Delegation
+(decision_gate)`).
 
 ## haiku
 
