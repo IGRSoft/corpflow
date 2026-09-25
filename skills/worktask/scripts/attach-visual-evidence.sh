@@ -416,8 +416,7 @@ EOF
 # ---------- block builder ---------------------------------------------------
 # Build the "## Visual evidence" block from a parsed manifest.
 #   stdout: the block (may be empty)
-#   Heading arrives as $2. BLOCK_MANIFEST_REF is the one global read here, a
-#   test-only override callers leave unset so the path-free default applies.
+#   Heading arrives as $2.
 # Hosting decisions go through the sourced select_host_tier/host_one_asset.
 # Returns the chosen host tier via the HOST_TIER global (set by select_host_tier).
 build_block() {
@@ -518,17 +517,10 @@ EOF
     printf '\nOnly the first %d capture(s) are embedded inline (embed cap %d). The rest are listed above and on disk at the manifest path%s\n' \
       "$MAX_EMBED" "$MAX_EMBED" "$([ "$host_fail" = "1" ] && printf '.' || printf '; hosting is healthy.')"
   fi
-  # Manifest reference, deliberately PATH-FREE. Two independent reasons: relative
-  # links never resolve in PR/issue bodies (ad7), and the working-folder path is
-  # local + gitignored, so it is meaningless to a reviewer. It used to be emitted
-  # as a code span, which also happened to be the one shape that defeated the
-  # sanitiser's pass-1 anchors -- that is now closed in publish-pl-issue.sh, and a
-  # path here would simply be stripped, leaving "see manifest" naming nothing.
-  # Assigned in two steps rather than via ${VAR:-word}: bash treats an apostrophe
-  # inside the word part as an opening quote even within double quotes.
-  local manifest_ref="${BLOCK_MANIFEST_REF:-}"
-  [ -n "$manifest_ref" ] || manifest_ref="screenshots.md, in this run's local images folder (not committed)."
-  printf '\nManifest: %s\n' "$manifest_ref"
+  # Manifest reference, deliberately path-free: relative links never resolve in PR/issue
+  # bodies, the working-folder path is local and gitignored, and publish-pl-issue.sh's
+  # sanitiser would strip a path anyway, leaving "see manifest" naming nothing.
+  printf '\nManifest: %s\n' "screenshots.md, in this run's local images folder (not committed)."
 
   # D4 -- notify when captures exist but did not reach the reader. Emitted from
   # inside build_block on purpose: callers wrap this in $(), which captures stdout

@@ -223,7 +223,7 @@ audit_row() {
   command -v jq >/dev/null 2>&1 || return 1
   corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
     --action github_issue_created --subject PL0 --result "$1" \
-    --task-id "${PL0_TASK_ID:-PL0}" --meta "$2"
+    --task-id PL0 --meta "$2"
   return "$CORPFLOW_AUDIT_LAST_RC"
 }
 
