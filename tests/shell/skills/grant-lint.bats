@@ -430,6 +430,14 @@ echo hello
   assert_output ""
 }
 
+@test "--invocations: the plugin's own agents, commands and skills are clean" {
+  # A message string that names a granted script inside a fenced block reads as a
+  # quoted call, so messages refer to the operation, not the script basename.
+  run bash "$PLUGIN_ROOT/$SCRIPT" --invocations --root "$PLUGIN_ROOT"
+  assert_success
+  assert_output ""
+}
+
 @test "--invocations: a file with no anchored grant is not scanned" {
   mk_git_fixture --dir "$WD/r" \
     --file 'agents/a.md:---\ntools: Read\n---\n\nRun `x.sh --flag`.\n' > /dev/null

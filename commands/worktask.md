@@ -974,7 +974,7 @@ _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
 # so the check passes unconditionally and an unstamped ledger reads as clean — which also
 # leaves dv-tree-preflight.sh and developer.md's path-prefix check inert.
 if [ -z "$_task_root" ]; then
-  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Set it via state-patch.sh --ledger-meta." >&2
+  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Stamp it with a --ledger-meta patch." >&2
   # Write audit row `workspace_path_unstamped` and stop; do not call Task()
   exit 1
 fi
