@@ -74,6 +74,8 @@ RETIRED = {
     74: "context-status was removed; nothing in the repo reports remaining context to plan against",
     98: "status-view.sh was removed with /worktask-status; no live-status table remains to plan",
     114: "worktask-status was removed; its only grounding surface no longer exists",
+    144: "megatask/references/agent-teams.md was deleted; megatask never ran issues as an "
+         "agent team, so no surface remains to plan against",
 }
 
 # (type, grounding, route, prompt, grounding_paths)
@@ -409,8 +411,7 @@ CASES = [
      ["skills/dv-screenshot-capture/references/cli-fallback.md"]),
     ("bug", "buried", "std", "two people sizing the same work get different numbers because they do the steps in a different order. plan a fix.",
      ["skills/estimation-methodology/references/estimation-run.md"]),
-    ("feature", "buried", "std", "i want the issues in a batch to run as one coordinated team rather than isolated sessions. plan it.",
-     ["skills/megatask/references/agent-teams.md"]),
+    None,  # 144 — retired; see RETIRED
     ("bug", "buried", "std", "batch issues start before the ones they are waiting on have finished. plan a fix.",
      ["skills/megatask/references/dependency-graph.md"]),
     ("docs", "buried", "std", "the file that drives a batch run has no written schema. plan the documentation.",

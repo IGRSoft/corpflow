@@ -4870,44 +4870,6 @@
       "split": "test"
     },
     {
-      "id": 144,
-      "prompt": "i want the issues in a batch to run as one coordinated team rather than isolated sessions. plan it.",
-      "dimensions": {
-        "type": "feature",
-        "grounding": "buried",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
-          "type": "regex_any",
-          "values": [
-            "agent-teams",
-            "agent-teams.md",
-            "skills/megatask/references/agent-",
-            "skills/megatask/references/agent-teams.md"
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/megatask/references/agent-teams.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
-    },
-    {
       "id": 145,
       "prompt": "batch issues start before the ones they are waiting on have finished. plan a fix.",
       "dimensions": {
