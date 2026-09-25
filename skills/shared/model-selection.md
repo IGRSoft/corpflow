@@ -33,8 +33,8 @@ Re-check the rates against the `claude-api` skill whenever an alias moves to a n
 
 | Alias | Resolves to | Context | Pricing |
 |-------|-------------|---------|---------|
-| `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus | 1M by default, no usage-credit gate | § Cost Tiers; fast mode multiplier on top |
-| `sonnet` | Sonnet 5, the Claude Code default model | native 1M | § Cost Tiers |
+| `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus and Claude Code's default model outside Foundry | 1M by default, no usage-credit gate | § Cost Tiers; fast mode multiplier on top |
+| `sonnet` | Sonnet 5 | native 1M | § Cost Tiers |
 | `fable` | Fable 5.1 (`claude-fable-5-1`), Mythos-class top reasoning. Claude apps gateway sessions still resolve `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | § Cost Tiers |
 | `haiku` | current Haiku | standard | § Cost Tiers |
 
@@ -56,9 +56,9 @@ Degrade via a session `fallbackModel` (`--fallback-model`) or a `Task({ model })
 
 ### Fast mode and the lean system prompt
 
-`/fast` applies to Opus: higher token rate and price multiplier, pinned via `/model`. Opus 5 also
-uses a lean system prompt by default (Haiku and Sonnet use the standard one), a small standing
-input-token saving on opus-tier stages.
+`/fast` applies to Opus: higher token rate and price multiplier, pinned via `/model`. Every
+model except Haiku, Sonnet and Opus 4.7 and earlier gets Claude Code's lean system prompt by
+default, so `opus` and `fable` stages carry a small standing input-token saving.
 
 ## Effort Levels
 
@@ -74,12 +74,26 @@ is under the pipeline's control, so every stage passes `effort` explicitly.
 `xhigh` requires **Opus 5 or Fable 5.x**. Sonnet silently downgrades the thinking budget; do not
 assume Sonnet 5 accepts `xhigh` without verifying. Prefer the `opus` alias; `fable` carries the credit gate above.
 
-Thinking disabled silently costs a tier: `xhigh`/`max` requested with thinking off is sent as
-`high` rather than failing. A stage pinned to `xhigh` (`agents/ethics-reviewer.md`,
-`agents/prompt-engineer.md`, `agents/security-reviewer.md`) then runs one tier down with no error;
-the step-6 audit row is the only place it shows, so check it before trusting an `xhigh` stage's
-depth. The output artifacts this configuration also causes on Opus 5:
+### Thinking off above high
+
+Opus 5.5 and the Fable models cannot have thinking turned off: `alwaysThinkingEnabled: false`,
+`MAX_THINKING_TOKENS=0` and the session toggle have no effect there, so `opus` and `fable` run
+`xhigh`/`max` as asked. Opus 5 rejects `xhigh`/`max` with thinking off (a 400 at the API), so on
+the Anthropic API Claude Code sends `high` instead. A session still on Opus 5 (a pinned id, or a
+provider whose newest Opus is Opus 5, § Provider Defaults) then runs a stage pinned to `xhigh`
+(`agents/ethics-reviewer.md`, `agents/prompt-engineer.md`, `agents/security-reviewer.md`) one
+tier down with no error; the step-6 audit row is the only place it shows. A model Claude Code
+does not know rejects the pair fails the request with `Effort 'xhigh' isn't available with
+thinking turned off`. Output artifacts of thinking off on Opus 5:
 `skills/shared/model-prompting.md § xhigh with thinking disabled`.
+
+### Output headroom at xhigh and max
+
+Thinking counts toward a request's output limit even when its text is not returned, and at
+`xhigh`/`max` Opus 5.5 and Fable 5.1 think longer per turn. Claude Code sets that limit, not the
+plugin: a `CLAUDE_CODE_MAX_OUTPUT_TOKENS` lowered below the model's default can cut an
+`xhigh` stage's reply off. The prompt-side half for Fable is in
+`skills/shared/model-prompting.md § fable — the block`.
 
 ### Effort visibility and inheritance
 
