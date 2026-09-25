@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for hooks/megatask-monitor.sh (DV0c) — SubagentStop/Stop reconciliation
+# Tests for hooks/megatask-monitor.sh (DV0c) — SubagentStop reconciliation
 # sweep over .worktrees/*/orchestrator.json. Settles completed issues, unblocks
 # dependents, frees tracks, and writes a megatask_progress audit row.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
@@ -91,7 +91,7 @@ EOF
 }
 
 @test "concurrency: simultaneous sweeps leave valid JSON and no lost update" {
-  # Evidence gate for the R4.6 locking decision: SubagentStop/Stop can fire for
+  # Evidence gate for the R4.6 locking decision: SubagentStop can fire for
   # several agents at once, so more than one sweep can be reconciling the same
   # orchestrator.json. This test states what actually happens under that race —
   # it is the input to whether a lock is needed, not a placeholder for one.

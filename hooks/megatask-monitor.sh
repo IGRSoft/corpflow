@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# megatask-monitor.sh — SubagentStop/Stop hook (corpflow worktask plugin).
+# megatask-monitor.sh — SubagentStop hook (corpflow worktask plugin).
 #
 # Drives the megatask completion loop. On every stop it reconciles each active
 # group: a finished issue is marked completed/failed in orchestrator.json, its
@@ -132,7 +132,7 @@ run() { # $1 = root dir
             metadata:{ group:$grp, completed_issue:$num, newly_ready:$ready, remaining:$rem } }' \
           >> "$log_dir/audit.jsonl" 2>/dev/null || true
       fi
-      # Terminal notification (safe additive stdout field on Stop/SubagentStop).
+      # Terminal notification (safe additive stdout field on SubagentStop).
       [ "$SELF_TEST" -eq 0 ] && printf '{"hookSpecificOutput":{"terminalSequence":"\033]9;Megatask %s: #%s %s — %s left\007"}}\n' \
         "$grp" "$num" "$status" "$remaining" 2>/dev/null || true
     done <<EOF
