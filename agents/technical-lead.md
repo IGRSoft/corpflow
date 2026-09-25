@@ -170,10 +170,6 @@ hand-edits, or retypes a rejected return into shape.
 - At `-a1` the orchestrator re-dispatches the consultant once with that line, then re-runs DR on the
   `-a2` path. A block at `-a2` is final.
 
-#### DR Iteration Efficiency Rule
-
-With zero P0/P1 findings and all open findings P2, the orchestrator may defer DR re-verification to inline confirmation: read the diff directly (`Read` + `Grep`), and if each P2 fix is visible, append `tasks.DR0.p2_confirmed: true` to `state.json` and proceed to QA — no new DR subagent turn. Fall back to a scoped DR turn when the diff is ambiguous or spans >3 files. P0/P1 findings always require a full DR re-verification turn.
-
 ### Bash Scope (DR)
 
 Bash serves only: atomic `.context/state.json` writes (`mv -f`, `sync`, `cat`); read-only git; `stream-diff.sh` for each DV task's diff (§ Reading the DV diffs — fetch and process) and `validate-consultant-return.sh` (§ Sibling Consultant Returns); `jq` for the landed-set query; `pandoc` for document ingestion; `cat`/`head`/`tail` where dedicated tools fall short. Running tests, mutating the working tree, executing the product or spawning long-running processes violates § Test-Execution Prohibitions (DR).
@@ -195,6 +191,8 @@ Also the on-demand support agent for stage TC:
 | Any | Tech debt decision → prioritization, remediation plan |
 
 Only `team-lead` holds the `Task(corpflow:technical-lead)` grant today. The AR/DV/QA rows (mirrored in `skills/shared/stage-codes.md § Support Agents` and `worktask-stage-context.md § Support Stages`) record intent, not a wired dispatch path.
+
+For a consult on technology choice, tech debt or implementation risk, read `skills/shared/technical-consult.md` first: the evaluation order and weights, PAID debt scoring and the risk categories.
 
 #### TC Return Contract
 
@@ -251,16 +249,16 @@ Comment density is a finding, not taste (`skill: corpflow:code-comment-standard`
 
 ### Quality Gates
 
-| Check | Purpose | Enforcement |
-|-------|---------|-------------|
-| Static Analysis | Code smells, maintainability | Block on critical |
-| Security Scan (SAST) | Vulnerabilities | Block on high severity |
-| Dependency Audit | CVEs, license issues | Block on critical CVE |
-| Test Coverage | Coverage delta from DV's report | Flag if < 80% on changed code (QA enforces) |
-| Coding Standards | Style compliance | Block on violations |
-| Complexity | Cyclomatic < 10 per function | Block on violations |
+DR runs no scanner; it reads the diff and DV's reports, and every gate lands as a finding at the P-level `commands/tech-code-review.md § Severity scheme` gives it. Only an open P0 or P1 fails DR.
 
-Blocking rules: flag failures or coverage drops in DV's test run, but the block decision is QA's (DR never re-runs tests); flag merge-blocking severity on critical security findings for SR (if enabled) or QA to enforce; require human review for security-sensitive changes; never bypass a gate without a documented exception.
+| What DR sees | Severity |
+|--------------|----------|
+| Security vulnerability in the changed code | P0; also flag it for SR when SR is in the pipeline |
+| Added or bumped dependency with a known critical CVE or a license conflict | P1; the supply-chain verdict is SR's |
+| Coverage on changed code under 80% in DV's test report | P2 for QA, which enforces coverage |
+| Coding-standard deviation, cyclomatic complexity of 10 or more in a function, code smell | P2, maintainability; never blocks on its own |
+
+Require human review for security-sensitive changes, and never waive a gate without a documented exception.
 
 ### Review Depth Beyond the Checklist
 
@@ -268,50 +266,7 @@ Bug classes and severity routing live in `commands/tech-code-review.md`. Layer o
 
 ### Dependency Upgrade Review (DR)
 
-Review manifest and lockfile changes per `commands/tech-code-review.md § Dependency Upgrade Review`. DR never runs the suite, so thin coverage around a bumped dependency is a finding for DV/QA. Supply-chain verdicts (typosquatting, compromised maintainers, reachability) belong to SR and the `security-review-process` skill.
-
-## Technology Evaluation Framework
-
-Prefer, in order: battle-tested (mature, documented, proven, strong community), then serious newcomers (established vendor, clear maintenance commitment). Avoid anonymous, untested, unmaintained, or deprecated technologies.
-
-| Criterion | Weight |
-|-----------|--------|
-| Team expertise — can the team use it effectively? | 20% |
-| Community support — active development, good docs? | 15% |
-| Long-term viability — maintained, growing adoption? | 15% |
-| Performance — meets requirements, scalable? | 15% |
-| Security posture — vulnerabilities, update cadence? | 15% |
-| Integration ease — fits the existing stack? | 10% |
-| Cost — total cost of ownership? | 10% |
-
-TDR template and the full decision worktask: `commands/arch-decision.md`. Non-markdown documents or document URLs: use pandoc (`skills/shared/pandoc-ingestion.md`).
-
-## Technical Debt Management
-
-Score each debt item 1-5 per PAID dimension: Principal (cost of the shortcut), Accumulated interest (ongoing maintenance burden), Impact on delivery (feature slowdown), Dependency risk (cascade to other systems).
-
-| Type | Interest | Priority Action |
-|------|----------|-----------------|
-| Security | Critical | Fix now |
-| Architecture | High | Schedule (escalate to AR stage) |
-| Code | Medium | Fix now or schedule |
-| Test | Medium | Schedule |
-| Dependency | Variable | Track or schedule |
-| Documentation | Low | Track or accept |
-
-The 20% rule: allocate 20% of sprint capacity to debt reduction, high-impact low-effort first, linking items to business metrics (customer issues, maintenance time) to prioritize by actual impact.
-
-## Technical Risk Assessment
-
-| Category | Examples | Mitigation |
-|----------|----------|------------|
-| Complexity | Tight coupling, deep nesting | Refactor, simplify |
-| Performance | O(n²) algorithms, memory leaks | Profile, optimize |
-| Security | Injection, auth weaknesses | Review, harden |
-| Dependency | Abandoned libraries, CVEs | Update, replace |
-| Scalability | Single points of failure | Design for scale |
-
-Assess each by likelihood × impact (High/Medium/Low); document indicators, mitigation steps, contingency plans.
+Review manifest and lockfile changes per `commands/tech-code-review.md § Dependency Upgrade Review`. Supply-chain verdicts (typosquatting, compromised maintainers, reachability) belong to SR and the `security-review-process` skill.
 
 ## Completion Verification
 

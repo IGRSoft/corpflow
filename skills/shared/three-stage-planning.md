@@ -41,6 +41,15 @@ bills the full $200 (1 day in May = $200 for May).
 | NICE-TO-HAVE | M | All Nice-to-have working | Proceed to v1.1 | Ship MVP only |
 | v1.1 RELEASE | K | All v1.1 working | Ship v1.1 | Extend or defer |
 
+## Team Allocation by Stage
+
+These planning stages, not the worktask pipeline's stages, run one after another (§ Sequential
+Rules), so allocate the whole team to one at a time: Required (weeks 1-N, MVP) → Nice-to-have
+(weeks N-M, stretch) → v1.1 (weeks M-K, deferred) → Release. For an AI agent team, emit a
+story-point table: one row per agent, columns `Required` / `Nice-to-have` / `v1.1` / `Total`, each
+cell a `Min-Max SP` range. Report each gate review (§ Gate Template) as `Gate`, `Week`,
+`Attendees`, `Criteria Review` (Pass/Fail), `Decision` (Proceed/Extend/Defer), `Action Items`.
+
 ## ROI by Stage
 
 | Stage | Investment | Expected Return | ROI | Risk |

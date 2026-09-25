@@ -220,7 +220,7 @@ When the change touches a manifest (`Package.swift`, `Podfile`, `*.gradle`, `req
 |------|-----|
 | Read each bumped dependency's changelog (migration notes for a major), not its version number — every bumped package, not just the riskiest-looking | A "patch" can carry behavior change |
 | One dependency per change | A bulk bump that breaks the build hides which package did it |
-| Let the suite decide | Green before and after, not "it resolved"; thin coverage around the dependency is itself a finding |
+| Check DV's test evidence | Suite green after the bump in DV's report, not "it resolved"; missing evidence or thin coverage is a finding for DV/QA |
 | Mind the transitive graph | Review the lockfile / transitive diff, not just the manifest |
 | Keep the lockfile honest | Committed, diff reviewed, never hand-edited — it pins what ships |
 
@@ -284,15 +284,13 @@ A read-confirmed P0/P1 (read-confirmed trigger or directly-cited contradiction) 
 
 3. If you also append a `## DR[N] Retry — <ts>` block to `.context/errors/developer.md`, give it a `### Resolution Path` with one bullet per sound finding and `**Classification**: missing_input` — besides `exhausted`, the only classification the Retry/Escalate Matrix routes to the previous stage (DV). `logic` re-runs the DR reviewer and `ambiguous_requirements` routes to PL. The block is tracking only; step 1 is the mechanism.
 
-### Review Feedback Hygiene
+### Re-review after a DV fix
 
-Before re-requesting review on acted-on comments:
+When DR runs again on a DV fix (`retry_count` above 0), read the previous run's `developer-review-N.md § Findings` before you overwrite it:
 
-- [ ] Every blocking comment addressed — fixed, or explicitly justified in a reply
-- [ ] Each fix references the comment it resolves (commit message or PR thread reply)
-- [ ] No silent scope expansion: changes outside the original request are flagged separately
-- [ ] CI/local checks pass on the updated diff before re-requesting
-- [ ] Rejected comments carry their rationale in the thread — never closed without a reply
+- Each earlier P0/P1 is fixed in the new diff, or answered in the DV artifact with a reason you accept; otherwise it stays open.
+- Changes beyond what the findings asked for get the full review as new code, not a pass as part of the fix.
+- A finding you now drop says why in its entry, never disappears silently.
 
 ### DR3.5 reconciliation
 

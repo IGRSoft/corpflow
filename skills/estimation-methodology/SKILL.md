@@ -34,7 +34,8 @@ One JSON line, numbers only — `sp`, `multiplier_h`, `base_hours`, `buffer_pct`
 
 The sections below are the specification the script implements. Estimation-run procedure, phase
 distribution, re-estimation triggers, AI cost factors: `references/estimation-run.md`; the
-platform adjustment tables the review step applies: `references/estimate-review.md`.
+platform adjustment tables the review step applies: `references/estimate-review.md`; business-case,
+status-report and budget-approval skeletons for ad-hoc stakeholder requests: `references/business-case.md`.
 
 ## T-Shirt Sizing → Story Points (Range)
 

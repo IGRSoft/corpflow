@@ -151,9 +151,9 @@ re-consult with a narrower question. `tc_review.anchor` is the one pointer to fo
 stage gate: `tc_verdict` uses a different key and enum from DR's `handoff.verdict` (`pass`/`fail`),
 never enters `state.json`, and is never patched into the ledger.
 
-## Sequential Resource Allocation
+## Ad-hoc Sprint Planning
 
-Stages run sequentially; allocate the whole team per stage — Required (weeks 1-N, MVP) → Nice-to-have (weeks N-M, stretch) → v1.1 (weeks M-K, deferred) → Release. For AI agent teams emit it as a story-point table: row per agent, columns `Required`/`Nice-to-have`/`v1.1`/`Total`, cells a `Min-Max SP` range. Report each gate review as `Gate`, `Week`, `Attendees`, `Criteria Review` (Pass/Fail), `Decision` (Proceed/Extend/Defer), `Action Items`.
+Outside the TL stage, for sprint or release planning across the Required / Nice-to-have / v1.1 phases, read `skills/shared/three-stage-planning.md § Team Allocation by Stage` first. TL never needs it.
 
 ## Cost-Aware Delegation
 

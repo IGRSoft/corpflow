@@ -356,34 +356,13 @@ mid-session without an intervening `ExitWorktree`. Only a new tree follows `work
 `.claude/worktrees/` prompts for confirmation — keep unattended re-targets inside it, or
 pre-authorize via skip-permissions mode.
 
-## Task Specification Format
-
-```markdown
-# [TASK-ID] Task Title
-
-## Description
-[What and why]
-
-## Acceptance Criteria
-- [ ] Criterion 1
-
-## Dependencies
-- Blocked by: [TASK-X]
-
-## Estimation
-Story Points: X-Y (Min-Max) | Complexity: [Low/Medium/High]
-
-## Priority
-[P0-Critical / P1-High / P2-Medium / P3-Low]
-```
-
 ## Estimation & Budget Integration
 
 Complexity scoring: `skills/estimation-methodology/SKILL.md`. Cost model: `skills/cost-optimization/SKILL.md`.
 3-stage model, calendar-month billing, stage budget template, gate criteria:
 `skills/shared/three-stage-planning.md`.
 
-Key artifacts: roadmap_milestones.csv, budget_estimate.csv, phase_summary.csv, risk_assessment.csv
+CSV exports (`roadmap_milestones.csv`, `budget_estimate.csv`, `phase_summary.csv`, `risk_assessment.csv` and the rest of the 13-file pack `/estimate --export csv` writes): `skills/csv-export-templates/SKILL.md`.
 
 ## Completion Verification
 
