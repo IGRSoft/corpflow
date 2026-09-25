@@ -60,8 +60,10 @@ CAPTURE_CONTRACT = "skill-eval-capture-v1"
 PERMISSION_MODE = "bypassPermissions"
 CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 
-# Matches commands/request-plan.md frontmatter; capturing off-model measures a
-# configuration nobody ships.
+# A fixed id, not an alias and not the shipped model: /request-plan sets no
+# `model:` and runs on the caller's session default, which varies by account and
+# moves with Claude Code releases. Every evals/findings/ capture ran on this id,
+# so moving it re-baselines the series; pass --model to measure another model.
 DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_TIMEOUT = 300.0
 DEFAULT_RETRIES = 2

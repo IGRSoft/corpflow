@@ -17,7 +17,7 @@ The corpflow orchestrator dispatches every stage in-process via `Task({ subagent
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <id>` | string | **Yes** (passed to `Task()`) | DV→`claude-opus-5`; QA/FN→`claude-sonnet-5` |
+| `model` | `--model <alias>` | string | **Yes** (passed to `Task()`) | DV→`opus`; QA/FN→`sonnet` |
 
 A managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` the Default model, so a requested id may silently resolve to another. Benchmark-parity snapshots use pinned ids (§ Alias note); audit rather than assume.
 
@@ -73,11 +73,11 @@ Neither `claude agents run` nor a top-level `--cwd` exists on the CLI as last pr
 
 ### Model & effort defaults
 
-`$MODEL` and `$EFFORT` come from `skills/shared/stage-codes.md § Agent Model Matrix` (a two-hop join: § Primary Stages resolves the stage to its agent, the matrix resolves that agent to its pair; § Secure overrides under `--secure` or `--full` replaces the resolved pair outright, so it can also lower a pair `CORPFLOW.md` raised). Pass the model as the pinned id its alias maps to in § Alias note. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
+`$MODEL` and `$EFFORT` come from `skills/shared/stage-codes.md § Agent Model Matrix` (a two-hop join: § Primary Stages resolves the stage to its agent, the matrix resolves that agent to its pair; § Secure overrides under `--secure` or `--full` replaces the resolved pair outright, so it can also lower a pair `CORPFLOW.md` raised). Pass the model as the alias; the pinned ids in § Alias note are for benchmark-parity runs only. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
 
 ### Alias note
 
-Pinned ids: `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. They exist for SSOT parity — they match `STAGE_TABLE` in the live-dispatch table, so a benchmark run is byte-reproducible — not because the aliases resolve to them. Prefer aliases in ad-hoc runner scripts (`skills/shared/model-selection.md`) and keep pinned ids only where byte-reproducibility matters. Re-pinning the SSOT is a benchmark change, not a docs refresh: measurements before and after are not comparable, so record the cut-over in `benchmark/README.md`.
+Benchmark-parity pins: `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. They sit deliberately behind the aliases (`opus` resolves to Opus 5.5, `skills/shared/model-selection.md § Aliases`) because they match `STAGE_TABLE` in `benchmark/harness/benchmarklive/stage_table.py`, whose per-stage pins stamp every record's comparability era. Moving them opens a new era that is not comparable to the stored baselines (`benchmark/README.md § Comparability eras`), so they move only with a benchmark re-baseline, never as a docs refresh. Everywhere else, including a production headless dispatch, pass the alias.
 
 ### Runner-side reliability
 
