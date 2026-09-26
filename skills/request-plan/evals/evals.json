@@ -8068,44 +8068,6 @@
       "split": "test"
     },
     {
-      "id": 235,
-      "prompt": "the value ordering our agents are told to obey is stated in one base document and paraphrased differently elsewhere. plan a fix.",
-      "dimensions": {
-        "type": "bug",
-        "grounding": "buried",
-        "route": "std"
-      },
-      "expected_outcome": "plan",
-      "assertions": [
-        {
-          "id": "routes-to-standard-tier",
-          "why": "Ordinary work takes the plain trigger; escalating it burns the security pipeline on work with no credential, auth or secret surface",
-          "type": "regex_all",
-          "values": [
-            "/worktask\\s+\\\""
-          ]
-        },
-        {
-          "id": "finds-the-real-surface",
-          "why": "The plan must reach the surface this repo actually has. Relaxing this to 'any real path' let seven plans past that named a plausible neighbour and never touched the ground file",
-          "type": "regex_any",
-          "values": [
-            "constitutional-base",
-            "constitutional-base.md",
-            "skills/shared/constitutional-",
-            "skills/shared/constitutional-base.md"
-          ]
-        }
-      ],
-      "grounding": [
-        "skills/shared/constitutional-base.md"
-      ],
-      "deferred": [
-        "Whether the phases are sequenced by risk rather than chopped in thirds — needs a validated judge."
-      ],
-      "split": "dev"
-    },
-    {
       "id": 236,
       "prompt": "we want the single-caller rule for our snapshot preview helper stated where its only caller can see it. plan it.",
       "dimensions": {

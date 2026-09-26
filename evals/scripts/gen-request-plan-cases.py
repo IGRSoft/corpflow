@@ -76,6 +76,8 @@ RETIRED = {
     114: "worktask-status was removed; its only grounding surface no longer exists",
     144: "megatask/references/agent-teams.md was deleted; megatask never ran issues as an "
          "agent team, so no surface remains to plan against",
+    235: "shared/constitutional-base.md was deleted; nothing read it, and the value ordering "
+         "it restated lives only in claude-constitution/SKILL.md",
 }
 
 # (type, grounding, route, prompt, grounding_paths)
@@ -634,8 +636,7 @@ CASES = [
      ["skills/csv-export-templates/references/templates.md"]),
     ("docs", "buried", "std", "new maintainers have no written account of how the first run record is seeded and how its index is chosen. plan the documentation.",
      ["skills/worktask/references/initialization-patterns.md"]),
-    ("bug", "buried", "std", "the value ordering our agents are told to obey is stated in one base document and paraphrased differently elsewhere. plan a fix.",
-     ["skills/shared/constitutional-base.md"]),
+    None,  # 235 — retired; see RETIRED
     ("feature", "buried", "std", "we want the single-caller rule for our snapshot preview helper stated where its only caller can see it. plan it.",
      ["skills/dv-screenshot-capture/references/preview-ensurer.md"]),
     ("incident", "buried", "emerg", "a run is writing into the wrong checkout right now and nothing stopped it before the first edit. plan the response.",

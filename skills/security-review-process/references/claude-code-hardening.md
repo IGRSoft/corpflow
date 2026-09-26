@@ -45,11 +45,3 @@ backslash, or points outside the plugin directory is refused as path traversal; 
 entry paths get the same check. This repo is both a marketplace and the plugin it publishes, so every
 `commands[]`, `agents[]` and `skills[]` entry in `.claude-plugin/marketplace.json` stays
 `./`-relative — no `../`, absolute path, or external URL.
-
-## Built-in containment
-
-Claude Code enforces these itself:
-
-- Read/Write/Edit do not follow a symlink swapped inside the working directory after the permission check; Grep and Glob apply `Read(...)` deny rules to files reached through a symlinked search path; the Workflow tool does not read (or quote in errors) a `scriptPath` outside what the session may read.
-- Workflow saves and scheduled-task writes do not follow a symlink at `.claude`, and `/rewind` does not restore or delete through symlinks or hard links at tracked paths.
-- Auto mode does not auto-approve cloud metadata-credential fetches, egress evasion, cross-tenant reach, or a link that packs content into a public diagram renderer's URL (counted as an upload) unless the environment marks them expected or the user asked for it.

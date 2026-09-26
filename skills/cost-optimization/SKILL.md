@@ -1,6 +1,6 @@
 ---
 name: cost-optimization
-description: Use for budget management, model selection, and cost tracking and optimization of AI agent worktasks. Model and effort right-sizing, prompt-cache TTL, search batching, cost estimation formula, budget alert thresholds, efficiency analysis.
+description: Use for budget management, model selection, and cost tracking and optimization of AI agent worktasks. Model and effort right-sizing, prompt-cache TTL, search batching, cost estimation formula, efficiency analysis.
 version: 0.3.0
 related:
   - skills/worktask/SKILL.md
@@ -131,18 +131,6 @@ Estimated Cost = (Input Tokens × Input Rate + Output Tokens × Output Rate)
 - **Complexity Multiplier**: 1.0 standard · 1.5 large codebase · 2.0 novel domain
 
 `skills/estimation-methodology/scripts/estimate-calc.py` implements this formula (`--tokens`, or `--input-tokens`/`--output-tokens`).
-
-### Budget Alert Thresholds
-
-Canonical ladder — `level` and `action` are these strings verbatim:
-
-| Threshold | Level | Action | Visual |
-|-----------|-------|--------|--------|
-| < 50% | normal | Normal | Green |
-| 50-74% | warning | Warning logged | Yellow |
-| 75-89% | notify | User notified | Orange |
-| 90-99% | critical | Compression suggested | Red |
-| 100% | pause | Worktask paused | Critical |
 
 ## Optimization Checklist
 
