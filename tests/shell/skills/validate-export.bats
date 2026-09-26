@@ -173,6 +173,67 @@ phase/05/Dependencies-valid"
 phase/13/Dependencies-valid;FAIL;row=1|depends on phase 2, which does not exist"
 }
 
+# Copies the pass set into $1, then rewrites 13 and 05 with phases 1-3 on week
+# cells $2-$4 and Buffer on $5. Phase 3 carries zero SP/hours so every sum and
+# cap check stays as in the pass set; no phase depends on another.
+phase_weeks() {
+  cp "$PASS_FIX"/*.csv "$1/"
+  cat > "$1/13_phase_summary.csv" << EOF
+Phase;Name;Duration;Weeks;SP Min;SP Max;Hours Min;Hours Max;Cost Min;Cost Max;Key Deliverables;Dependencies
+1;Core;2 weeks;$2;6;12;36;72;\$3600;\$7200;Auth;-
+2;Profile;2 weeks;$3;4;8;24;48;\$2400;\$4800;Profile form;-
+3;Extra;2 weeks;$4;0;0;0;0;\$0;\$0;Extra;-
+Buffer;Contingency;1 weeks;$5;;;9;18;\$900;\$1800;Risk mitigation;All
+TOTAL;;5 weeks;;10;20;69;138;\$6900;\$13800;;
+EOF
+  cat > "$1/05_roadmap_milestones.csv" << EOF
+Phase;Week;Milestone;Deliverables;SP Min;SP Max;Hours Min;Hours Max;Dependencies
+1;$2;Core;Auth;6;12;36;72;-
+2;$3;Profile;Profile form;4;8;24;48;-
+3;$4;Extra;Extra;0;0;0;0;-
+Buffer;$5;Contingency;"Risk mitigation, feedback";;;9;18;All phases
+TOTAL;;;;10;20;69;138;
+EOF
+}
+
+@test "happy: week ranges out of start order that cover every week pass" {
+  phase_weeks "$WD" 1-2 5-6 3-4 7
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_success
+  run grep 'Weeks-continuous;' "$WD/report.csv"
+  assert_output "phase/13/Weeks-continuous;PASS;all rows OK
+phase/05/Weeks-continuous;PASS;all rows OK"
+}
+
+@test "failure: a real gap between unsorted week ranges still fails" {
+  # Week 5 is uncovered; the gap is reported once, at the first range past it.
+  phase_weeks "$WD" 1-2 6-7 3-4 8
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  run grep ';FAIL;' "$WD/report.csv"
+  assert_output "phase/13/Weeks-continuous;FAIL;row=2|week range 6-7 leaves a gap after week 4
+phase/05/Weeks-continuous;FAIL;row=2|week range 6-7 leaves a gap after week 4"
+}
+
+@test "failure: a malformed week range fails continuity" {
+  phase_weeks "$WD" 1-2 soon 3-4 5
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  run grep ';FAIL;' "$WD/report.csv"
+  assert_output "phase/13/Weeks-continuous;FAIL;row=2|week range 'soon' is not N or N-M
+phase/05/Weeks-continuous;FAIL;row=2|week range 'soon' is not N or N-M"
+}
+
+@test "failure: a reversed week range fails continuity" {
+  # 3-5 covers the weeks 4-3 names, so only the reversal itself is reported.
+  phase_weeks "$WD" 1-2 4-3 3-5 6
+  run_script "$SCRIPT" --dir "$WD" --out "$WD/report.csv"
+  assert_failure 1
+  run grep ';FAIL;' "$WD/report.csv"
+  assert_output "phase/13/Weeks-continuous;FAIL;row=2|week range 4-3 ends before it starts
+phase/05/Weeks-continuous;FAIL;row=2|week range 4-3 ends before it starts"
+}
+
 @test "failure: a TOTAL row one field short of its header fails format" {
   # The 05 and 07 fixtures carry TOTAL rows in the shape that put every total
   # one column left of its header.

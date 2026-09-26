@@ -240,7 +240,7 @@ def cmd_check_weeks(args: argparse.Namespace) -> None:
         rd = _reader(fh)
         header = next(rd)
         wi = _col_index(header, args.col)
-        max_end: int | None = None
+        spans: list[tuple[int, int, str, str]] = []
         for row in rd:
             if not row:
                 continue
@@ -256,9 +256,16 @@ def cmd_check_weeks(args: argparse.Namespace) -> None:
             end = int(m.group(2)) if m.group(2) else start
             if start > end:
                 print(f"{label}|week range {cell} ends before it starts")
-            if max_end is not None and start > max_end + 1:
-                print(f"{label}|week range {cell} leaves a gap after week {max_end}")
-            max_end = end if max_end is None else max(max_end, end)
+                continue
+            spans.append((start, end, label, cell))
+    # Rows need not be ordered by start week, so coverage is judged on the
+    # sorted spans; a reversed range already failed and covers nothing.
+    # sorted() is stable, so equal starts keep row order in the report.
+    max_end: int | None = None
+    for start, end, label, cell in sorted(spans, key=lambda s: s[0]):
+        if max_end is not None and start > max_end + 1:
+            print(f"{label}|week range {cell} leaves a gap after week {max_end}")
+        max_end = end if max_end is None else max(max_end, end)
 
 
 def cmd_check_deps(args: argparse.Namespace) -> None:
