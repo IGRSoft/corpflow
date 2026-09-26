@@ -107,14 +107,13 @@ _lib() {
   [ "$status" -eq 1 ] || fail "an arm row still reads unlanded: $output"
 }
 
-@test "normalize: blocked_on wins, the alias becomes peer_session, neither exits 1" {
-  _lib "blocked_on_normalize \"\$(cat '$FIX/legacy-cross-session-ask.handoff.json')\""
-  assert_success
-  jq -e '.source == "cross_session_ask" and .blocked_on == {kind: "peer_session",
-    detail: {to: "backend-session", question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' <<< "$output"
+@test "normalize: blocked_on passes through; cross_session_ask is not a need and exits 1" {
   _lib "blocked_on_normalize '{\"blocked_on\":{\"kind\":\"artifact\"},\"cross_session_ask\":{\"to\":\"a\",\"question\":\"b\"}}'"
   assert_success
-  jq -e '.source == "blocked_on" and .blocked_on.kind == "artifact"' <<< "$output"
+  jq -e '. == {blocked_on: {kind: "artifact"}, source: "blocked_on"}' <<< "$output"
+  _lib "blocked_on_normalize \"\$(cat '$FIX/legacy-cross-session-ask.handoff.json')\""
+  assert_failure 1
+  assert_output ""
   _lib "blocked_on_normalize '{\"verdict\":\"blocked\"}'"
   assert_failure 1
   _lib "blocked_on_normalize 'not json'"

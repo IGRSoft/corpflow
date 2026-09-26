@@ -396,16 +396,14 @@ _tree() {
   [ ! -f "$AUDIT" ] || fail "an invalid return wrote an audit row"
 }
 
-@test "route: the legacy cross_session_ask alias routes as peer_session; blocked_on wins when both are present" {
+@test "route: cross_session_ask is not a need — it exits 1 and writes nothing; beside blocked_on it is ignored" {
+  local before
+  before=$(cat "$STATE")
   _route DR0 legacy-cross-session-ask
-  assert_success
-  jq -e '.kind == "peer_session" and .source == "cross_session_ask" and .arm == "peer_session"
-    and .parked == true and (has("fallback_from") | not)
-    and (.ask_id | test("^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$"))
-    and .message == ("mailbox ask " + .ask_id)' <<< "$output"
-  run jq -e '.tasks.DR0.metadata.blocked_on == {kind: "peer_session",
-    detail: {to: "backend-session", question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' "$STATE"
-  assert_success
+  assert_failure 1
+  [[ "$stderr" == *"fail: the payload carries no blocked_on"* ]] || fail "stderr: $stderr"
+  [ "$(cat "$STATE")" = "$before" ] || fail "a return without blocked_on changed the ledger"
+  [ ! -f "$AUDIT" ] || fail "a return without blocked_on wrote an audit row"
   _bo route --task-id QA0 --payload "$(jq -c '. + {cross_session_ask: {to: "x", question: "y"}}' "$FIX/artifact.handoff.json")"
   assert_success
   jq -e '.kind == "artifact" and .source == "blocked_on"' <<< "$output"

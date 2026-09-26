@@ -78,7 +78,7 @@ When the stage cannot continue without something it cannot produce itself, stop 
 - another task's file: `artifact`; a defect in another task's completed work: `correction`
 - a failing autonomy-preflight check: `host_environment`
 
-List the steps that already completed in the artifact body. The orchestrator routes every kind (`skills/worktask/SKILL.md § Step 6.5a3`) and resumes the stage with what `resume_with` names. `cross_session_ask` is the legacy alias of `peer_session`; new returns write `blocked_on`.
+List the steps that already completed in the artifact body. The orchestrator routes every kind (`skills/worktask/SKILL.md § Step 6.5a3`) and resumes the stage with what `resume_with` names.
 
 #### A need you cannot meet — never routed by the stage
 

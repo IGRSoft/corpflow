@@ -1,6 +1,6 @@
 # Audit action registry
 
-Every `action` value a shipped writer puts in `.context/logs/audit.jsonl`, grouped by writer. Row shape: `../SKILL.md § Schema`; per-writer metadata: `../SKILL.md § Writers` and the writer's own doc. Legacy `cross_session_ask` alias rows are read, never written, so they are not listed.
+Every `action` value a shipped writer puts in `.context/logs/audit.jsonl`, grouped by writer. Row shape: `../SKILL.md § Schema`; per-writer metadata: `../SKILL.md § Writers` and the writer's own doc.
 
 Each group's `actions:` line is the registry: `tests/shell/skills/agent-coordination__audit-action-enum.bats` fails when a script writes a literal action no line lists. Add a new action here in the same change that first writes it.
 

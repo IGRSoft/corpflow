@@ -1475,7 +1475,7 @@ landed flag in `scripts/blocked-on-lib.sh` together.
       // …continued: after the 6.5a2 block; ROUTER = scripts/blocked-on-dispatch.sh. No branch
       // picks an arm by hand: the router reads the table above from blocked-on-lib.sh.
       const typedNeed = !incomplete && incHandoff?.verdict === "blocked"
-        && Boolean(incHandoff?.blocked_on ?? incHandoff?.cross_session_ask);   // legacy alias
+        && Boolean(incHandoff?.blocked_on);
       const routed = !typedNeed ? null : spawnSync("bash", [ROUTER, "route", "--task-id", task.id,
         "--payload", JSON.stringify(incHandoff)], { encoding: "utf8" });
 ```

@@ -59,14 +59,14 @@
 #       warns by default and fails under --strict (exit 1), like the gate's
 #       other violations. A state file we cannot read is not evidence AR didn't run.
 #
-#       A handoff.blocked_on (or its legacy alias cross_session_ask) fails the same way with
-#       or without yq: an unknown kind, an unknown resume_with, or a missing or empty detail
-#       each print one `fail:` line and exit 1. The enums are blocked-on-lib.sh's.
+#       A handoff.blocked_on fails the same way with or without yq: an unknown kind, an
+#       unknown resume_with, or a missing or empty detail each print one `fail:` line and
+#       exit 1. The enums are blocked-on-lib.sh's.
 #
 #   handoff-harness.sh --read-blocked-on <artifact.md>
 #       Prints the artifact's need normalized through blocked-on-lib.sh as one compact JSON
-#       line, then `source: blocked_on` or, for the legacy alias, `source: cross_session_ask`.
-#       Exits 1 when the artifact carries neither, or its frontmatter cannot be read; 2 without
+#       line, then `source: blocked_on`.
+#       Exits 1 when the artifact carries none, or its frontmatter cannot be read; 2 without
 #       jq. Without yq every scalar is read as a string.
 #
 #   handoff-harness.sh --validate-state <state.json>
@@ -228,14 +228,11 @@ if ! command -v blocked_on_validate > /dev/null 2>&1; then
   exit 1
 fi
 
-# The no-yq reader of handoff.blocked_on and its legacy alias handoff.cross_session_ask: every CI
-# host lacks yq,
-# so this is the path the gate usually takes, and it must reach the same verdict as yq. It reads
-# the YAML subset a stage writes — block mappings, flow mappings and sequences (JSON included),
-# quoted and plain scalars, `|`/`>` block scalars — and prints
-# {"blocked_on":<json|null>,"cross_session_ask":<json|null>} (the second key is the legacy alias).
-# Exit 1 on a value it cannot parse,
-# which the gate reports as a failure rather than reading as absent.
+# The no-yq reader of handoff.blocked_on: every CI host lacks yq, so this is the path the gate
+# usually takes, and it must reach the same verdict as yq. It reads the YAML subset a stage
+# writes — block mappings, flow mappings and sequences (JSON included), quoted and plain scalars,
+# `|`/`>` block scalars — and prints {"blocked_on":<json|null>}. Exit 1 on a value it cannot
+# parse, which the gate reports as a failure rather than reading as absent.
 read -r -d '' _FM_BO_AWK << 'AWK' || true
 function jstr(s,    i, c, o, n) {
   o = ""; n = length(s)
@@ -406,7 +403,7 @@ function pblock(start, pind, seqok,    j, ind, out, first, key, v, s, rest, col,
 }
 { sub(/\r$/, ""); n++; T[n] = $0; match($0, /^ */); I[n] = RLENGTH; B[n] = ($0 ~ /^[ \t]*(#.*)?$/) }
 END {
-  bo = "null"; csa = "null"
+  bo = "null"
   for (h = 1; h <= n; h++) if (T[h] ~ /^handoff:[ \t]*(#.*)?$/) break
   if (h <= n) {
     ci = -1
@@ -415,14 +412,14 @@ END {
       if (I[k] == 0) break
       if (ci < 0) ci = I[k]
       if (I[k] != ci || !splitkey(T[k])) continue
-      if (KEY != "blocked_on" && KEY != "cross_session_ask") continue  # legacy alias
-      key = KEY; v = inline_block(REST, k, ci, 1)
+      if (KEY != "blocked_on") continue
+      v = inline_block(REST, k, ci, 1)
       if (ERR) exit 1
-      if (key == "blocked_on") bo = v; else csa = v
+      bo = v
       k = NX - 1
     }
   }
-  printf "{\"blocked_on\":%s,\"cross_session_ask\":%s}\n", bo, csa  # legacy alias
+  printf "{\"blocked_on\":%s}\n", bo
 }
 AWK
 
@@ -1674,12 +1671,12 @@ validate_frontmatter() {
   echo "ok: $f stage=$stage tokens=$tcount"
 }
 
-# fm_blocked_on_raw <fmfile> — {"blocked_on":…,"cross_session_ask":…} (legacy alias) from the
-# frontmatter block, null for an absent key; yq when present, the awk reader above otherwise. rc 1 when unreadable.
+# fm_blocked_on_raw <fmfile> — {"blocked_on":…} from the frontmatter block, null for an absent
+# key; yq when present, the awk reader above otherwise. rc 1 when unreadable.
 fm_blocked_on_raw() {
   local out
   if command -v yq > /dev/null 2>&1; then
-    out=$(yq eval -o=json -I=0 '{"blocked_on": .handoff.blocked_on, "cross_session_ask": .handoff.cross_session_ask}' "$1" 2> /dev/null) || return 1  # legacy alias
+    out=$(yq eval -o=json -I=0 '{"blocked_on": .handoff.blocked_on}' "$1" 2> /dev/null) || return 1
   else
     out=$(awk "$_FM_BO_AWK" "$1" 2> /dev/null) || return 1
   fi
@@ -1692,7 +1689,7 @@ fm_blocked_on_raw() {
 check_blocked_on() {
   local raw norm
   # Most artifacts carry no need, and this runs at every stage boundary: no key, no process.
-  grep -qE '^[[:space:]]+(blocked_on|cross_session_ask):' "$1" 2> /dev/null || return 0  # legacy alias
+  grep -qE '^[[:space:]]+blocked_on:' "$1" 2> /dev/null || return 0
   if ! command -v jq > /dev/null 2>&1; then
     echo "fail: handoff.blocked_on present but jq is not installed to validate it" >&2
     return 1
@@ -1718,7 +1715,7 @@ read_blocked_on() {
   corpflow_fm_block "$f" > "$fmfile" 2> /dev/null || true
   [[ -s "$fmfile" ]] || { echo "fail: missing frontmatter block in $f" >&2; return 1; }
   raw=$(fm_blocked_on_raw "$fmfile") || { echo "fail: handoff.blocked_on in $f could not be parsed" >&2; return 1; }
-  norm=$(blocked_on_normalize "$raw") || { echo "fail: no blocked_on or cross_session_ask in $f" >&2; return 1; }  # legacy alias
+  norm=$(blocked_on_normalize "$raw") || { echo "fail: no blocked_on in $f" >&2; return 1; }
   printf '%s' "$norm" | jq -c '.blocked_on'
   printf 'source: %s\n' "$(printf '%s' "$norm" | jq -r '.source')"
 }

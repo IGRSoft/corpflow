@@ -132,16 +132,6 @@ properties:
       open_questions:
         type: array
         items: { $ref: '#/$defs/SweepStub' }   # closing elicitation sweep, the only item shape
-      cross_session_ask:   # deprecated alias of blocked_on kind peer_session
-        type: object
-        description: >
-          OPTIONAL, legacy. Legal only alongside verdict "blocked", and read as blocked_on
-          {kind: peer_session, detail: {to, question}, resume_with: reply_ref}; blocked_on wins
-          when both are present. New returns write blocked_on (§ Schema — blocked_on).
-        required: [to, question]
-        properties:
-          to: { type: string, maxLength: 200 }
-          question: { type: string, maxLength: 160 }
       refs:
         type: object
         additionalProperties: { type: string }
@@ -189,7 +179,6 @@ line number (`UD_ID_RE` in `hooks/lib/user-decision-lib.sh`). The acceptance rul
         kind: user_decision | user_action | permission | peer_session | artifact | correction | host_environment
         detail: {…kind-specific…}   # e.g. permission: {tool, command, classifier_reason, allow_rule}; peer_session: {to, question, deadline}
         resume_with: decision_ref | artifact_path | reply_ref
-      # cross_session_ask stays readable as an alias for blocked_on.kind=peer_session for one minor version
 ```
 
 OPTIONAL, legal only alongside `verdict: "blocked"`, which every stage may return with it under the
@@ -446,14 +435,11 @@ output and boundary prompt. The committed `blocked_on` audit row carries no `req
 redacted-command and `decision_ref` fields (`skills/agent-coordination/SKILL.md § Writers —
 blocked_on rows`).
 
-#### Schema — blocked_on, the cross_session_ask alias
+#### Schema — blocked_on, reading it back
 
-A return carrying the legacy alias `cross_session_ask {to, question}` is read as `{kind:
-peer_session, detail: {to, question}, resume_with: reply_ref}`, and `blocked_on` wins when both are
-present. The alias stays readable through the 4.1.x line and is removable no earlier than 4.2.0.
-`blocked-on-lib.sh` owns that normalize step, so the harness and the router read it alike:
-`handoff-harness.sh --read-blocked-on <artifact>` prints the normalized object plus a
-`source: blocked_on` line, or `source: cross_session_ask` for the alias.
+`blocked-on-lib.sh` owns the normalize step, so the harness and the router read a need alike:
+`handoff-harness.sh --read-blocked-on <artifact>` prints the need plus a `source: blocked_on` line.
+No other handoff key is read as a need.
 
 ### Schema — $defs: SweepItem and SweepStub
 
@@ -665,7 +651,7 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 `blocked_on` is optional on every stage — one shape, defined once at `#frontmatter-schema § Schema — blocked_on` — and no stage's vocabulary limits it, under the cross-stage blocked exception; absent means the stage is not blocked on a typed need.
 
-The legacy alias `cross_session_ask` (§ Schema — blocked_on, the cross_session_ask alias), `acted_on_msg_id` and `decisions_applied` are optional on every stage too, on the terms their frontmatter schemas state. `ack-check.sh` enforces `acted_on_msg_id`, not the validator.
+`acted_on_msg_id` and `decisions_applied` are optional on every stage too, on the terms their frontmatter schemas state. `ack-check.sh` enforces `acted_on_msg_id`, not the validator.
 
 ###### Conventions — the $defs pointer is an obligation
 

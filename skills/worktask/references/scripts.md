@@ -148,8 +148,8 @@ Re-route of same still-open need detected by `opened` leg, not status guard (now
 
 One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
 `fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
-re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from:
-`blocked_on`, or `cross_session_ask` for the legacy alias.
+re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from,
+always `blocked_on`.
 
 ## blocked-on-dispatch.sh — batch
 
@@ -227,8 +227,8 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
 - `BLOCKED_ON_KINDS`, `BLOCKED_ON_RESUME_WITH`: both enums, in registry order.
 - `blocked_on_arm <kind>`: prints the kind's row as `required|optional|resume_with|legs|closing_leg|owner_issue|landed`,
   comma-separated within a field. Exit 1 on an unknown kind.
-- `blocked_on_normalize <handoff json>`: prints `{"blocked_on":{…},"source":…}`. `blocked_on` wins;
-  otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
+- `blocked_on_normalize <handoff json>`: prints `{"blocked_on":{…},"source":"blocked_on"}`. Exit 1
+  when `blocked_on` is absent; no other handoff key is read as a need.
 - `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
   non-empty object; exit 1 with one `fail:` line. The harness stops here.
 - `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`,

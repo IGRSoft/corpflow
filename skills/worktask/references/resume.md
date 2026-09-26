@@ -226,14 +226,6 @@ rows without `metadata.msg_id`.
 | Stage `blocked` with `metadata.blocked_on` of a kind other than `permission` | A `blocked_on` row with `result: "blocked"` and no later closing-leg row for that `task_id` | Parked on a typed need (`SKILL.md § Step 6.5a3`). Do not re-delegate, and do not call `route` again: a second call writes a second opening leg. Re-enter the loop; § Step 7a's `blocked-on-dispatch.sh batch` asks the user at the next boundary — a `user_decision` need only after § Pending communication probes it |
 | Stage `blocked` on `peer_session` with a `metadata.ask_id` | A `sent` or `delivered` leg carrying that `ask_id`, and no `relayed` or `expired` leg for it | The ask is durable and outlives the session; § Pending communication fixes the order it is reconciled in. Never re-route and never re-send: the request file and the `sent` leg both exist |
 
-#### Reply routing — the legacy cross_session_ask row
-
-Runs already in flight may still hold rows of the legacy alias; new returns route through `blocked_on` above.
-
-| Ledger Shape | Audit Tail | Action |
-|----------------|------------|--------|
-| Legacy alias: stage `in_progress`; its return carries `handoff.verdict: "blocked"` with `cross_session_ask` present | `cross_session_ask` with `result: "deferred"` and no later `result: "ok"` for that `task_id` | The peer's reply lands in this (orchestrator) conversation, never on the stage. Check this session's own recent turns first. Present → relay it to the stage's `agent_id` via `SendMessage` and log the closing leg as a `blocked_on` row of kind `peer_session`; the legacy row is read-only and no new `cross_session_ask` row is ever written (`agent-coordination/SKILL.md § Writers — blocked_on rows`). Absent → still outstanding; do not re-delegate and do not re-ask (a second send duplicates the question to the peer) |
-
 #### Reply routing — why the stage cannot ask for itself
 
 A subagent's `SendMessage` to another session delivers its reply to the parent session's

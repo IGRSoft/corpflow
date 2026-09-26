@@ -42,9 +42,10 @@ self_test() {
   echo "self-test: ALL PASS"
 }
 
-# One case per blocked_on kind, plus each refusal and the legacy alias. Every case asserts the
-# gate's exit code on the host's reader AND on the no-yq awk reader, because CI hosts lack yq and
-# a verdict that differs between the two is the drift this gate exists to prevent.
+# One case per blocked_on kind, plus each refusal and a cross_session_ask key read as no need.
+# Every case asserts the gate's exit code on the host's reader AND on the no-yq awk reader,
+# because CI hosts lack yq and a verdict that differs between the two is the drift this gate
+# exists to prevent.
 self_test_blocked_on() {
   local ctx="$1/.context" kind detail rw out rc awk_rc
 
@@ -134,18 +135,17 @@ KINDS
     resume_with: decision_ref'
   _bo_case "empty-detail" 1 'fail: blocked_on.detail is missing or empty' "$ctx/dv-bo-empty-detail.md"
 
-  _bo_artifact "$ctx/dv-bo-alias.md" '  cross_session_ask:
+  # cross_session_ask is no longer a need: the gate ignores the key, and the reader finds nothing.
+  _bo_artifact "$ctx/dv-bo-old-name.md" '  cross_session_ask:
     to: backend-session
     question: "Which base branch?"'
-  _bo_case "legacy-alias/validates" 0 - "$ctx/dv-bo-alias.md"
+  _bo_case "old-name/not-a-need" 0 - "$ctx/dv-bo-old-name.md"
   rc=0
-  out=$(read_blocked_on "$ctx/dv-bo-alias.md" 2>&1) || rc=$?
-  if [[ "$rc" -ne 0 ]] \
-     || ! printf '%s\n' "$out" | head -n 1 | jq -e '. == {kind: "peer_session", detail: {to: "backend-session", question: "Which base branch?"}, resume_with: "reply_ref"}' > /dev/null 2>&1 \
-     || [[ "$(printf '%s\n' "$out" | sed -n 2p)" != "source: cross_session_ask" ]]; then  # legacy alias
-    echo "self-test: blocked_on legacy-alias/reads-as-peer_session: FAIL (rc=$rc)" >&2; exit 1
+  out=$(read_blocked_on "$ctx/dv-bo-old-name.md" 2>&1) || rc=$?
+  if [[ "$rc" -ne 1 ]] || [[ "$out" != *"fail: no blocked_on in"* ]]; then
+    echo "self-test: blocked_on old-name/reads-as-absent: FAIL (rc=$rc)" >&2; exit 1
   fi
-  echo "self-test: blocked_on legacy-alias/reads-as-peer_session: ok"
+  echo "self-test: blocked_on old-name/reads-as-absent: ok"
 }
 
 # tests_executed is a per-runner list: a list passes, a scalar fails, an entry without a

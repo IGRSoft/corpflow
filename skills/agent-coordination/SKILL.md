@@ -135,7 +135,7 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest`, and legacy `cross_session_ask` alias rows read, never written |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
 | Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 
@@ -271,7 +271,7 @@ A hook row's actor is `hook:<name>` or `<plugin>:hook:<name>` — every installe
 {
   "ts": "ISO-8601 UTC",
   "actor": "orchestrator|<agent-name>|hook:<name>",
-  "action": "<one registered action — references/audit-actions.md>",   // legacy cross_session_ask alias rows are read, never written
+  "action": "<one registered action — references/audit-actions.md>",
 ```
 
 `references/audit-actions.md` lists every action a shipped writer emits, grouped by writer; the § Writers tables above name the main owners, not every writer.
