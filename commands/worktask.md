@@ -197,7 +197,9 @@ environment in which every Bash call opens with
 `<wt>` being the issue's absolute worktree path. Keep that prefix on every call, the snippets
 below included. It is what makes the state scripts write `<wt>/.context/state.json` instead of
 megatask's own ledger, and what the scan, preflight, publish and branch scripts read as a
-per-issue run. No user is reachable.
+per-issue run. Hooks never see that export: they bind to `<wt>` from the `WORKSPACE_ROOT=`
+banner line in the acting agent's prompt, so keep § Banner injection on every stage brief. No
+user is reachable.
 
 #### Per-issue run — what changes
 

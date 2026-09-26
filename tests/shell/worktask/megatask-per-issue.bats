@@ -7,10 +7,13 @@
 #     seed-state.sh and state-patch.sh write the worktree's ledger and leave megatask's alone,
 #     and the scan, preflight and branch scripts see a per-issue run;
 #   - without the export, state-patch.sh resolves megatask's ledger (why the prefix exports);
-#   - Step 2a never asks, Phase 3 is skipped, and nothing calls EnterWorktree.
+#   - Step 2a never asks, Phase 3 is skipped, and nothing calls EnterWorktree;
+#   - the real SubagentStop hooks, which inherit megatask's environment and never the prefix,
+#     bind to the issue from their payload and write the issue's log, never the batch's.
 #
 # Nothing here launches a subagent: the prefix is executed by bash exactly as the prompt
-# states it, which is the part of the run a test can reach.
+# states it, and each hook is run as Claude Code runs it — its own process, megatask's
+# environment, a JSON payload on stdin.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 MEGATASK_DOC="commands/megatask.md"
@@ -128,4 +131,141 @@ in_run() {
   section "$SKILL_DOC" "##### Step 4.8 — isolation banner" | tr '\n' ' ' \
     | grep -qE 'megatask_group[^:]*\? *`WORKTREE ISOLATION: WORKSPACE_ROOT is already an isolated worktree\. Never call ` *\+ *`EnterWorktree' \
     || fail "the DV isolation banner has no /megatask arm forbidding EnterWorktree"
+}
+
+# --- hooks bind to the issue from their payload ------------------------------------------------
+
+# issue <n> — a second per-issue worktree beside the setup's #41, seeded and stamped.
+issue() {
+  local wt="$ROOT/.worktrees/milestone-9/$1"
+  mkdir -p "$wt/.context"
+  printf '{"version":2,"run_index":0,"tasks":{"PL0":{"status":"in_progress","metadata":{}}}}\n' \
+    > "$wt/.context/state.json"
+  printf '{"version":"2.0","isolation":"worktree","execution":{"status":"in_progress"}}\n' \
+    > "$wt/workspace.json"
+  printf '%s' "$wt"
+}
+
+# transcript <wt> — a stage agent's transcript whose dispatch prompt carries the brief's
+# `WORKSPACE_ROOT=` banner line, as `/worktask` composes it.
+transcript() {
+  local t
+  t="$(mk_tmpworkdir)/agent.jsonl"
+  jq -cn --arg c "[7] suffix
+WORKSPACE_ROOT=$1
+Run the PL stage." '{type:"user",message:{role:"user",content:[{type:"text",text:$c}]}}' > "$t"
+  printf '%s' "$t"
+}
+
+# hook <script> <payload> [args…] — run as Claude Code runs it: megatask's cwd and
+# CLAUDE_PROJECT_DIR, no WORKSPACE_ROOT, the payload on stdin. Background-safe.
+hook() {
+  local script="$1" payload="$2"
+  shift 2
+  (cd "$ROOT" && printf '%s' "$payload" \
+    | env -u WORKSPACE_ROOT -u MILESTONE_MODE -u CONTEXT_DIR -u _CORPFLOW_ISSUE_ROOT \
+      CLAUDE_PROJECT_DIR="$ROOT" bash "$PLUGIN_ROOT/hooks/$script" "$@")
+}
+
+stop_payload() {  # stop_payload <agent_id> <cwd> [agent_transcript_path]
+  jq -cn --arg a "$1" --arg c "$2" --arg t "${3:-}" '{hook_event_name:"SubagentStop",
+    session_id:"sess_mt", agent_id:$a, agent_type:"corpflow:product-manager", cwd:$c}
+    + (if $t == "" then {} else {agent_transcript_path:$t} end)'
+}
+
+@test "hooks: two concurrent issues each audit into their own log, from the payload cwd" {
+  local wt42
+  wt42="$(issue 42)"
+  printf '{"version":2,"run_index":0,"tasks":{"PL0":{"status":"in_progress","metadata":{}}}}\n' \
+    > "$WT/.context/state.json"
+  hook agent-stop.sh "$(stop_payload agt_41 "$WT")" --stage PL &
+  hook agent-stop.sh "$(stop_payload agt_42 "$wt42")" --stage PL &
+  wait
+  run jq -r '.metadata.dedupe_key' "$WT/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_41:stage:PL"
+  run jq -r '.metadata.dedupe_key' "$wt42/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_42:stage:PL"
+  [ ! -e "$ROOT/.context/logs/audit.jsonl" ] || fail "the batch log received an issue's row"
+}
+
+@test "hooks: a batch-rooted cwd binds through the agent's WORKSPACE_ROOT= banner, concurrently" {
+  local wt42 t41 t42
+  wt42="$(issue 42)"
+  printf '{"version":2,"run_index":0,"tasks":{"PL0":{"status":"in_progress","metadata":{}}}}\n' \
+    > "$WT/.context/state.json"
+  t41="$(transcript "$WT")"
+  t42="$(transcript "$wt42")"
+  hook agent-stop.sh "$(stop_payload agt_41 "$ROOT" "$t41")" --stage PL &
+  hook agent-stop.sh "$(stop_payload agt_42 "$ROOT" "$t42")" --stage PL &
+  hook audit-subagent.sh "$(stop_payload agt_41 "$ROOT" "$t41")" &
+  hook audit-subagent.sh "$(stop_payload agt_42 "$ROOT" "$t42")" &
+  wait
+  run jq -rs '[.[] | select(.action == "stage_completion_hook") | .metadata.dedupe_key] | join(",")' \
+    "$WT/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_41:stage:PL"
+  run jq -rs '[.[] | select(.action == "stage_completion_hook") | .metadata.dedupe_key] | join(",")' \
+    "$wt42/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_42:stage:PL"
+  run grep -c '"hook:audit-subagent"' "$WT/.context/logs/audit.jsonl" "$wt42/.context/logs/audit.jsonl"
+  assert_line --partial "41/.context/logs/audit.jsonl:1"
+  assert_line --partial "42/.context/logs/audit.jsonl:1"
+  [ ! -e "$ROOT/.context/logs/audit.jsonl" ] || fail "the batch log received an issue's row"
+}
+
+@test "hooks: state-merge and dv-screenshot-gate resolve the issue ledger, not the batch's" {
+  local t41
+  printf '{"version":2,"run_index":0,"tasks":{"PL0":{"status":"in_progress","metadata":{}}}}\n' \
+    > "$WT/.context/state.json"
+  t41="$(transcript "$WT")"
+  hook state-merge.sh "$(stop_payload agt_41 "$ROOT" "$t41")"
+  run jq -r 'select(.action == "state_merge_noop") | .actor' "$WT/.context/logs/audit.jsonl"
+  assert_output "hook:state-merge"
+  # Unparseable issue ledger, valid batch ledger: only a gate reading the issue's blocks.
+  printf '{not json' > "$WT/.context/state.json"
+  run hook dv-screenshot-gate.sh "$(jq -cn --arg t "$t41" --arg c "$ROOT" \
+    '{agent_id:"agt_dv41", agent_type:"corpflow:developer", session_id:"sess_mt", cwd:$c, agent_transcript_path:$t}')"
+  assert_output --partial "gate_unresolved"
+  run jq -r 'select(.action == "screenshot_gate_block") | .metadata.block_kind' "$WT/.context/logs/audit.jsonl"
+  assert_output "gate_unresolved"
+  [ ! -e "$ROOT/.context/logs/audit.jsonl" ] || fail "the batch log received an issue's row"
+  cmp -s "$ROOT/.context/state.json" "$ROOT/state.before" || fail "megatask's ledger changed"
+}
+
+@test "hooks: a parent with no ledger still audits the issue instead of skipping it" {
+  printf '{"version":2,"run_index":0,"tasks":{"PL0":{"status":"in_progress","metadata":{}}}}\n' \
+    > "$WT/.context/state.json"
+  rm -rf "$ROOT/.context"
+  hook agent-stop.sh "$(stop_payload agt_41 "$ROOT" "$(transcript "$WT")")" --stage PL
+  run jq -r '.metadata.dedupe_key' "$WT/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_41:stage:PL"
+  [ ! -e "$ROOT/.context" ] || fail "a hook created the batch's .context/"
+}
+
+@test "hooks: an ordinary worktask, with no per-issue worktree, resolves exactly as before" {
+  local plain t
+  plain="$(mk_tmpworkdir)"
+  mkdir -p "$plain/.context"
+  printf '{"version":2,"run_index":0,"tasks":{}}\n' > "$plain/.context/state.json"
+  t="$(transcript "$plain")"
+  (cd "$plain" && stop_payload agt_plain "$plain" "$t" \
+    | env -u WORKSPACE_ROOT -u CONTEXT_DIR CLAUDE_PROJECT_DIR="$plain" \
+      bash "$PLUGIN_ROOT/hooks/agent-stop.sh" --stage PL)
+  run jq -r '.metadata.dedupe_key' "$plain/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_plain:stage:PL"
+  # A .worktrees/<group>/<n> tree that megatask never stamped is not an issue: no workspace.json.
+  rm -f "$WT/workspace.json"
+  printf '{"version":2,"run_index":0,"tasks":{}}\n' > "$WT/.context/state.json"
+  hook agent-stop.sh "$(stop_payload agt_unstamped "$WT" "$(transcript "$WT")")" --stage PL
+  run jq -r '.metadata.dedupe_key' "$ROOT/.context/logs/audit.jsonl"
+  assert_output "sess_mt:agt_unstamped:stage:PL"
+  [ ! -e "$WT/.context/logs/audit.jsonl" ] || fail "an unstamped tree bound as an issue"
+}
+
+@test "doc: megatask's run environment opens the prompt with the WORKSPACE_ROOT=<wt> banner" {
+  section "$MEGATASK_DOC" "$ENV_HEAD" | grep -qF 'Open the prompt with the line `WORKSPACE_ROOT=<wt>`' \
+    || fail "megatask Step 3 no longer tells the per-issue prompt to carry the hook binding banner"
+  section "$MEGATASK_DOC" "#### Step 3 — how hooks find the issue" | grep -qF 'corpflow_bind_payload' \
+    || fail "megatask no longer names the hook-side binding"
+  section "$WORKTASK_DOC" "$PER_ISSUE_HEAD" | tr '\n' ' ' | grep -qF 'Hooks never see that export' \
+    || fail "worktask's per-issue section no longer says hooks bind from the banner"
 }

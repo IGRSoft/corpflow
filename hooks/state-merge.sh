@@ -88,6 +88,16 @@ case "$_CF_OPTS" in *e*) set -e ;; esac
 
 LIB_DEGRADED=0
 if command -v corpflow_hook_audit_row > /dev/null 2>&1; then
+  # The payload is read only to bind a /megatask issue: the inherited
+  # CLAUDE_PROJECT_DIR names the batch, not the issue this agent worked. Bounded
+  # so a manual run on an open terminal or idle pipe never hangs the hook.
+  PAYLOAD=""
+  if [ ! -t 0 ]; then
+    IFS= read -r -d '' -t 1 PAYLOAD || true
+  fi
+  if command -v corpflow_bind_payload > /dev/null 2>&1; then
+    corpflow_bind_payload "$PAYLOAD"
+  fi
   WORKSPACE_DIR=$(corpflow_workspace_root)
 else
   # Library-free last resort: declared roots holding a ledger, never cwd.

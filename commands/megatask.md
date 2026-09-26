@@ -194,6 +194,7 @@ State these with `<wt>` filled in. A subagent's shell starts in megatask's root 
 keeps no variables, and without `WORKSPACE_ROOT` the state scripts resolve megatask's own
 `.context/state.json` through `CLAUDE_PROJECT_DIR`.
 
+- Open the prompt with the line `WORKSPACE_ROOT=<wt>`; hooks bind to the issue by it (below).
 - Begin every Bash call with `cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`.
   `MILESTONE_MODE` and `<wt>/workspace.json` are how the scan, preflight, publish and branch
   scripts recognise a per-issue run.
@@ -202,6 +203,18 @@ keeps no variables, and without `WORKSPACE_ROOT` the state scripts resolve megat
   `.claude/worktrees/` asks for a confirmation nobody is there to give.
 - Never wait on the user: every stop settles the issue in `workspace.json` first
   (`commands/worktask.md § Per-issue run under /megatask`).
+
+#### Step 3 — how hooks find the issue
+
+Hooks run as their own processes with megatask's environment, so the Bash export never reaches
+them, and a subagent's cwd is megatask's root. `corpflow_bind_payload` (`hooks/model-switch-lib.sh`)
+binds each hook process to `<wt>` from its payload instead: the payload's `cwd`, else the
+`WORKSPACE_ROOT=` line in the acting agent's own prompt, accepted only for a stamped
+`.worktrees/<group>/<issue#>` under megatask's root that holds its own ledger. The per-issue
+prompt carries that line; each nested stage agent gets it from `/worktask`'s stage brief
+(`commands/worktask.md § Banner injection`). Their `SubagentStop` audit, merge and DV-gate hooks
+and the ledger-transition audit then use `<wt>/.context/`, never the batch's. The binding lives in
+one hook process, not a shared variable, so concurrent issues cannot cross.
 
 #### Step 3 — PL0's model and effort
 
