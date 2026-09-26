@@ -71,8 +71,11 @@ is under the pipeline's control, so every stage passes `effort` explicitly.
 
 ### xhigh routing
 
-`xhigh` requires **Opus 5 or Fable 5.x**. Sonnet silently downgrades the thinking budget; do not
-assume Sonnet 5 accepts `xhigh` without verifying. Prefer the `opus` alias; `fable` carries the credit gate above.
+`xhigh` runs on **Opus 4.7 and later, Sonnet 5 and Fable 5.x**, so the `opus`, `sonnet` and
+`fable` aliases all carry it, and `max` too. A model without it (Opus 4.6, Sonnet 4.6) runs `xhigh`
+as `high` with no error: Claude Code falls back to the highest level the model supports at or
+below the one set. `haiku` is not on Claude Code's effort list, so `effort-ladder.sh` caps a
+resolver bump on it, or on a pinned id, at `high`. `fable` carries the credit gate above.
 
 ### Thinking off above high
 
@@ -211,7 +214,7 @@ Matrix`, and passes it as a short alias — `Task({ model: "opus" })`. No corpfl
 
 A dispatch that skips this fails silently: the stage runs on the parent session's model,
 `model_requested` and `model_resolved` disagree in `dispatched_agents[]`, and the sized effort
-tier is lost (an inherited Sonnet downgrades `xhigh`, § xhigh routing).
+tier is lost (an inherited Haiku or 4.6-generation model runs `xhigh` as `high`, § xhigh routing).
 
 ## Default Subagent Model (`CLAUDE_CODE_SUBAGENT_MODEL`)
 

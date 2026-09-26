@@ -1222,7 +1222,7 @@ Empty set ⇒ no-op, fall through to § Step C.0 unchanged.
 1. Compute the tier. Read `tasks.<CODE><N>.metadata.effort` and `.model` — the ledger, never the
    agent's frontmatter, because a stage dispatched at an override runs at a tier its frontmatter
    never mentions. Source `skills/worktask/scripts/effort-ladder.sh` and call
-   `effort_for_resolver "<effort>" "<model>"`; it bumps one rung and applies the non-Opus clamp.
+   `effort_for_resolver "<effort>" "<model>"`; it bumps one rung and applies the model clamp.
    A stage row with no `metadata.effort` is a contract violation: fall through to § Step C.0 and
    audit `resolver_skipped` with `reason: "effort_unstamped"` rather than guessing a tier.
 2. Append `auto_decision_dispatched` (`subject:"<CODE><N>"`, `metadata: { questions: <count>,

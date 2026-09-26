@@ -11,7 +11,7 @@
 #
 #   Sources nothing, sets no options, does no work at load.
 #
-#   Symbols: EFFORT_ENUM, EFFORT_NON_OPUS_CEILING, EFFORT_OPUS_FAMILY_RE,
+#   Symbols: EFFORT_ENUM, EFFORT_CAPPED_CEILING, EFFORT_FULL_LADDER_RE,
 #            effort_rank, effort_plus_one, effort_for_resolver.
 #
 # Minimum shell: bash 3.2+ (macOS default) — no associative arrays, no `local -n`.
@@ -36,17 +36,19 @@ _CORPFLOW_EFFORT_LADDER=1
 # and the rank walk below all derive from one string.
 EFFORT_ENUM='low medium high xhigh max'
 
-# `xhigh` requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather
-# than failing (`model-selection.md § xhigh routing`). A resolver that asked for a tier the
-# model cannot carry would run one or two rungs below what the audit row claims, so the bump
-# stops here on everything else. Ceiling, not a rejection: the resolver still runs.
-EFFORT_NON_OPUS_CEILING='high'
+# A model Claude Code does not list for `xhigh` runs it at the highest level it supports at or
+# below, with no error (`model-selection.md § xhigh routing`). A resolver that asked for a tier
+# the model cannot carry would run one or two rungs below what the audit row claims, so the bump
+# stops here on those models. Ceiling, not a rejection: the resolver still runs.
+EFFORT_CAPPED_CEILING='high'
 
 # Alias-level test, matching what `metadata.model` actually carries. `model-selection.md
 # § Prefer the alias over a pinned id` makes the alias the only value the pipeline writes, so
-# matching ids here would encode a form no stage emits. A full id that slipped through is
-# treated as non-Opus — the safe direction, since the clamp only ever lowers.
-EFFORT_OPUS_FAMILY_RE='^(opus|fable)$'
+# matching ids here would encode a form no stage emits. These three aliases resolve to models
+# that carry every rung (Opus 5.5, Sonnet 5, Fable 5.1); `haiku` is not on Claude Code's effort
+# list. A full id that slipped through is capped — the safe direction, since the clamp only
+# ever lowers.
+EFFORT_FULL_LADDER_RE='^(opus|sonnet|fable)$'
 
 # Splits EFFORT_ENUM into _el_arr under a KNOWN IFS. Every consumer sets its own IFS —
 # state-patch.sh runs under `IFS=$'\n\t'` — and a bare `for t in $EFFORT_ENUM` there yields
@@ -93,15 +95,15 @@ effort_plus_one() { # <effort>
 # `effort_clamped` when they differ.
 effort_for_resolver() { # <stage effort> <stage model alias>
   _el_bumped=$(effort_plus_one "${1:-}") || return 2
-  # Opus-family carries every rung, so there is nothing to clamp.
-  if [[ "${2:-}" =~ $EFFORT_OPUS_FAMILY_RE ]]; then
+  # These models carry every rung, so there is nothing to clamp.
+  if [[ "${2:-}" =~ $EFFORT_FULL_LADDER_RE ]]; then
     printf '%s' "$_el_bumped"
     return 0
   fi
   _el_want=$(effort_rank "$_el_bumped") || return 2
-  _el_cap=$(effort_rank "$EFFORT_NON_OPUS_CEILING") || return 2
+  _el_cap=$(effort_rank "$EFFORT_CAPPED_CEILING") || return 2
   if [ "$_el_want" -gt "$_el_cap" ]; then
-    printf '%s' "$EFFORT_NON_OPUS_CEILING"
+    printf '%s' "$EFFORT_CAPPED_CEILING"
   else
     printf '%s' "$_el_bumped"
   fi
