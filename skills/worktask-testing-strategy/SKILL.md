@@ -1,6 +1,6 @@
 ---
 name: worktask-testing-strategy
-description: Use when planning test strategy during Planning or Architecture stages before implementation. Test strategy planning guidance for PL and AR worktask stages.
+description: Use when planning test strategy in the worktask PL (Planning) or AR (Architecture) stage, before implementation. Plan and architecture test templates, required tests per feature type, UI selectors, multi-substate UITests.
 related:
   - agents/product-manager.md
   - agents/software-architector.md
@@ -11,12 +11,11 @@ related:
 
 # Worktask Testing Strategy Skill
 
-Worktask-integrated test *planning* for the PL and AR stages, before implementation begins, so
-developers know WHAT to test while coding rather than after.
+Test planning for the PL and AR stages, so developers know what to test while coding rather than after.
 
 - Framework matrix, AAA pattern, naming conventions, DV/QA boundary:
-  `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`. Name the concrete framework in the plan —
-  never leave it implied. Deeper per-framework guidance is the dev plugin's job, via `/<plugin>:gen-tests`.
+  `${CLAUDE_SKILL_DIR}/../shared/testing-strategy.md`. Name the concrete framework in the plan.
+  Deeper per-framework guidance is the dev plugin's job, via `/<plugin>:gen-tests`.
 - Per-stage test templates (PL, AR, DV): `${CLAUDE_SKILL_DIR}/references/stage-templates.md`.
 
 ## Test Strategy by Feature Type
@@ -32,9 +31,8 @@ developers know WHAT to test while coding rather than after.
 
 ### UI test selectors
 
-Prefer a stable, explicitly-set identifier over brittle text or coordinate lookups, so tests
-survive copy changes and layout shifts. Set it in the view; never query by visible label or
-screen position.
+Query by a stable identifier set in the view, not by visible label or screen position, so tests
+survive copy changes and layout shifts.
 
 | Platform | Set in the view | Query by |
 |----------|-----------------|----------|
@@ -45,37 +43,36 @@ screen position.
 ## Multi-substate UI screens (camera / photo / result)
 
 Screens that cycle one view through several substates (capture → review → result, each with
-default/error/empty/loading variants) hide two defect classes that snapshot and state-machine tests
+default/error/empty/loading variants) hide two defects that snapshot and state-machine tests
 miss: a control clipped or overflowing in one substate, and a transition control that fails to
-return the prior state. Plan a **hittable-control-bounds UITest** for any such screen.
+return the prior state. Plan a hittable-control-bounds UITest for any such screen.
 
 ### Hittable-control-bounds pattern
 
 For each substate the screen renders, assert:
 
-1. Every primary control is present AND hittable — on-screen, within window bounds, not clipped or overlapped. Query by the platform's stable identifier (table above), then assert hittability, not mere existence: `element.isHittable` (XCUITest), `assertIsDisplayed()` + `assertHasClickAction()` (Compose), `toBeVisible()` + `toBeEnabled()` (Playwright).
-2. Each substate-transition control performs its transition AND its inverse returns the prior state — e.g. a RETAKE control from the review state returns the live-capture state.
+1. Every primary control is present and hittable — on-screen, within window bounds, not clipped or overlapped. Query by the stable identifier (table above) and assert hittability, not mere existence: `element.isHittable` (XCUITest), `assertIsDisplayed()` + `assertHasClickAction()` (Compose), `toBeVisible()` + `toBeEnabled()` (Playwright).
+2. Each substate-transition control performs its transition and its inverse returns the prior state — e.g. RETAKE from the review state returns the live-capture state.
 
-One method may sweep every substate or you may write one per substate; coverage is the rule, not shape.
+One method may sweep every substate, or write one per substate; what matters is that every substate is covered.
 
 ## Handoff to QA Stage
 
 | QA receives from DV | Source | QA then |
 |---|---|---|
-| Test scope — WHAT was planned | `<plan_file> § Test Strategy` (resolve via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) | Runs integration + E2E as the plan defines; validates every acceptance criterion is tested |
-| Test architecture — HOW tests are structured | `architecture-N.md`, only when AR ran (AR is optional; with no AR the plan's Test Strategy is the whole authority and DV owns the test shape) | Reviews DV's unit tests for quality and completeness |
-| Implemented unit tests + the existing-tests-to-update list (WHERE changes landed) | Every DV artifact — `refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks` | Fills coverage gaps (edge cases, boundaries) and reports metrics in `testing.md` |
+| Test scope — what was planned | `<plan_file> § test-strategy` (resolve via `task.metadata.plan_file`; fallback: newest `.context/planning-*.md`) | Runs integration + E2E as the plan defines; checks every acceptance criterion is tested |
+| Test architecture — how tests are structured | `architecture-N.md`, only when AR ran (with no AR the plan's test strategy is the whole authority and DV owns the test shape) | Reviews DV's unit tests for quality and completeness |
+| Implemented unit tests + the existing-tests-to-update list | Every DV artifact — `refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks` | Fills coverage gaps (edge cases, boundaries) and reports metrics in `testing.md` |
 
 ## Logic Change Handling
 
 | Stage | Action on a logic change |
 |-------|--------------------------|
-| PL | List affected tests in an `### Existing Tests to Update` table — test file, reason, action (formula changed → update expected values; API contract changed → update mocks) |
+| PL | List affected tests under `### Existing Tests to Update` — test file, reason, action (formula changed → update expected values; API contract changed → update mocks) |
 | AR | New dependencies → define test doubles; new patterns → document the testability approach; changed boundaries → update test organization |
-| DV | Update tests BEFORE or WITH the code change, run them frequently, prove no regressions |
+| DV | Update tests before or with the code change and prove no regressions |
 
 ## Integration with Estimation
 
-Test effort is embedded in each subtask estimate, never a line of its own:
-`Implement login + tests | SP 5–8 | 30–48h` — never `Implement login` plus a separate
-`Write login tests` row.
+Test effort sits inside each subtask estimate (`Implement login + tests | SP 5–8 | 30–48h`), not
+in a separate `Write login tests` row.

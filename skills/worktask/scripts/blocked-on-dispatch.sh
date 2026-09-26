@@ -15,9 +15,8 @@
 #   blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
 #   blocked-on-dispatch.sh --self-test
 #
-# @arg route   Normalizes (legacy cross_session_ask becomes peer_session) and validates the
-#              need against its arm. permission: writes nothing. host_environment: parks,
-#              re-probes the check with autonomy-preflight.sh in check mode and writes `probed`;
+# @arg route   Validates the need against its arm. permission: writes nothing. host_environment:
+#              parks, re-probes the check with autonomy-preflight.sh in check mode and writes `probed`;
 #              a pass clears it and prints resume_block, anything else parks it as a user_action.
 #              user_decision: parks natively and writes `asked` (no fallback_from/owner_issue —
 #              the arm is landed). artifact: parks; a path the landing ladder admits that is
@@ -569,7 +568,7 @@ cmd_route() {
   handoff=$(printf '%s' "$PAYLOAD_ARG" \
     | jq -c 'if type == "object" and (.handoff | type) == "object" then .handoff else . end' 2> /dev/null) || handoff=""
   if ! norm=$(blocked_on_normalize "$handoff"); then
-    printf >&2 'fail: the payload carries no blocked_on or cross_session_ask\n'  # legacy alias
+    printf >&2 'fail: the payload carries no blocked_on\n'
     exit 1
   fi
   BO=$(printf '%s' "$norm" | jq -c '.blocked_on')

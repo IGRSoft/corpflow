@@ -1,7 +1,7 @@
 ---
 name: product-requirements
 description: Generate a Product Requirements Document (PRD) from task description or user stories
-argument-hint: <feature or task description>
+argument-hint: '"<feature or task description>" | --from-user-story "<story>" [--template full|lite|api] [--include-metrics] [--technical]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/product-manager.md
@@ -10,30 +10,25 @@ related:
 
 # Product Requirements Command
 
-Generate a Product Requirements Document (PRD) from task description or user stories.
-
-## Usage
-
-```
-/product-requirements "Feature description"
-/product-requirements --from-user-story "As a user..."
-/product-requirements --template [full|lite|api]
-```
+Generate a Product Requirements Document (PRD) from task description or user stories. The PRD is
+written to `.context/prd-<feature-slug>.md`, the only file this command creates, which
+`/milestone --from-prd` reads.
 
 ## Options
 
-- `--from-user-story` - Generate from user story format
-- `--template <type>` - PRD template (default: full)
-- `--include-metrics` - Add success metrics section
-- `--technical` - Include technical requirements
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `--from-user-story "<story>"` | — | Build the PRD from a user story instead of a feature description |
+| `--template <type>` | `full`, `lite`, `api` | PRD template (default: `full`; see § Template Types) |
+| `--include-metrics` | — | Add §7 Success Metrics to a `lite` or `api` PRD (`full` always carries it) |
+| `--technical` | — | Add §6 Technical Requirements to a `lite` PRD (`full` and `api` always carry it) |
 
 ```
+/product-requirements "<feature or task description>" | --from-user-story "<story>" [--template full|lite|api] [--include-metrics] [--technical]
 /product-requirements "Add dark mode support to the application"
 /product-requirements --from-user-story "As a user, I want to toggle dark mode so I can reduce eye strain"
-/product-requirements --template api --technical "REST API for user management"
-/product-requirements "Team dashboard" --include-metrics
+/product-requirements --template api --include-metrics "REST API for user management"
+/product-requirements "Team dashboard" --template lite --technical
 ```
 
 ## Output Format
@@ -66,12 +61,5 @@ PRD skeleton — parenthesised notes give each section's shape:
 | Template | Use Case | Sections |
 |----------|----------|----------|
 | full | Complete features | All sections |
-| lite | Quick features | Overview, Stories, Requirements |
-| api | API features | Endpoints, Schemas, Examples |
-
-## Integration
-
-This command feeds into:
-- `/arch-decision` - Technical decisions from requirements
-- `/test-plan` - Test cases from acceptance criteria
-- `/worktask` - Requirements for PL stage
+| lite | Quick features | §1 Overview, §2 User Stories, §3 Functional Requirements |
+| api | API features | §1–3, plus §6 Technical Requirements as one row per endpoint: Method \| Path \| Request \| Response \| Errors |

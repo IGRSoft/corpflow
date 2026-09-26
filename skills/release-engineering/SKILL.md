@@ -1,6 +1,6 @@
 ---
 name: release-engineering
-description: Use when preparing releases, generating changelogs, or deployment readiness checks. Semantic versioning, changelog generation, and deployment readiness patterns for RE stage.
+description: Use when preparing releases, generating changelogs, or checking deployment readiness. Semantic versioning from conventional commits, Keep-a-Changelog generation, and rollback plans for the RE stage.
 ---
 
 # Release Engineering
@@ -33,10 +33,10 @@ bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" --file records.bin
 
 #### Two rules the tables cannot express
 
-1. **Highest severity wins across the range.** 3 × `fix:` plus 1 × `feat:` is MINOR, not PATCH. Never bump per commit.
-2. **Breaking is independent of type.** `feat!:`, `fix!:`, and a `BREAKING CHANGE:` footer on any type — `chore:` included — all yield MAJOR.
+1. **Highest severity wins across the range.** 3 × `fix:` plus 1 × `feat:` is MINOR, not PATCH; bump the range, not each commit.
+2. **Breaking is independent of type.** `feat!:`, `fix!:`, and a `BREAKING CHANGE:` footer on any type, `chore:` included, all yield MAJOR.
 
-`none` means the range holds nothing release-worthy; it exits 0, and only a non-zero exit is an error. The script shares `conventional-commits-lib.sh` with `changelog-from-git.sh`, so the two cannot disagree about which commits are breaking. Pre-release and build-metadata suffixes are out of scope — apply those by hand.
+`none` means the range holds nothing release-worthy; it exits 0, and only a non-zero exit is an error. Both scripts detect breaking changes through the shared `conventional-commits-lib.sh`, so they agree. Pre-release and build-metadata suffixes are out of scope — apply those by hand.
 
 ### Version Bump Rules (reference)
 
@@ -49,7 +49,7 @@ bash "${CLAUDE_SKILL_DIR}/scripts/version-bump-from-git.sh" --file records.bin
 
 ### Breaking Change Detection
 
-Mark the commit itself — `!` after the type or a `BREAKING CHANGE:` footer — so the scripts can see it. A change is BREAKING if it removes a public API, changes a public method's return type, adds a required parameter, changes behavior clients depend on, removes or renames configuration options, or changes a database schema incompatibly.
+Mark the commit itself — `!` after the type or a `BREAKING CHANGE:` footer — so the scripts can see it. A change is breaking if it removes a public API, changes a public method's return type, adds a required parameter, changes behavior clients depend on, removes or renames configuration options, or changes a database schema incompatibly.
 
 ### Pre-release Labels
 
@@ -61,33 +61,13 @@ Mark the commit itself — `!` after the type or a `BREAKING CHANGE:` footer —
 
 ## Conventional Commits
 
-### Format
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-Breaking example:
-
-```
-feat!: remove deprecated login endpoint
-
-BREAKING CHANGE: The /api/v1/login endpoint has been removed.
-Use /api/v2/auth instead.
-```
-
 ### Types and Changelog Mapping
 
-Per-commit impact only — the range's bump is the highest severity present, which `scripts/version-bump-from-git.sh` computes.
+Per-commit impact; the range takes the highest.
 
 | Type | Description | Changelog (KCL) | Bump |
 |------|-------------|-----------------|------|
 | `feat` | New feature | Added | MINOR |
-| `feat!` / any type with `BREAKING CHANGE` | Breaking change | Added, `**BREAKING**` prefix | MAJOR |
 | `fix` | Bug fix | Fixed | PATCH |
 | `refactor` | Code change | Changed | PATCH |
 | `perf` | Performance | Changed | PATCH |
@@ -97,7 +77,10 @@ Per-commit impact only — the range's bump is the highest severity present, whi
 | `chore` | Maintenance | — (suppressed) | — |
 | `ci` | CI/CD | — (suppressed) | — |
 | `build` | Build system | — (suppressed) | — |
+| any type + `!` or `BREAKING CHANGE:` | Breaking change | Its type's section, `**BREAKING**` prefix; suppressed types go to Changed | MAJOR |
 | _(non-conventional)_ | — | Other | — |
+
+A breaking commit is never suppressed, so a MAJOR release always names the break.
 
 ## Changelog Generation
 
@@ -119,6 +102,12 @@ bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --repo /
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" --streams entries.tsv --version "1.2.0"
 ```
 
+### Output shape
+
+One `## [<version>] - <date>` block (`## [Unreleased]` without `--version`), then a
+`### <Section>` per non-empty section in Keep-a-Changelog order: Added, Changed, Deprecated,
+Removed, Fixed, Security, Other.
+
 ### Stream entries
 
 - `--streams <tsv>` reads one `<stream><TAB><entry>` line per entry and renders `### <stream>` then
@@ -139,48 +128,3 @@ is named unless one was set:
 ```bash
 bash "${CLAUDE_SKILL_DIR}/scripts/changelog-from-git.sh" "v1.1.0..HEAD" --version "1.2.0" --tag "$(jq -r '.metadata.release_tag // empty' .context/state.json)"
 ```
-
-### Script Classification Behavior
-
-The script classifies all 10 conventional-commit types into the Keep-a-Changelog sections of `§ Types and Changelog Mapping` above. Non-conventional commits are bucketed under "Other" — never dropped. Breaking changes are prefixed with `**BREAKING**`, detected from a `!` suffix or a `BREAKING CHANGE:` footer via the shared `conventional-commits-lib.sh`. Silent types (docs, style, test, chore, ci, build) are suppressed **unless breaking** — a MAJOR release must never ship notes that omit the break. Output is always compact markdown — no large echoes.
-
-The format spec below is retained for the model and for human review; the happy path is the script.
-
-### Keep a Changelog Format (spec / reference)
-
-```markdown
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-## [Unreleased]
-
-## [1.2.0] - 2024-01-15
-
-### Added
-- New user dashboard with analytics (#123)
-
-### Changed
-- Updated login flow for better security (#156)
-
-### Deprecated
-- Legacy API endpoints (removed in 2.0.0)
-
-### Removed
-- Support for iOS 14 (#178)
-
-### Fixed
-- Crash on large file uploads (#189)
-
-### Security
-- Fixed XSS vulnerability in comments (#200)
-
-## [1.1.0] - 2024-01-01
-...
-```
-
-## Integration Points
-
-- **release-engineer agent**: Uses these patterns for RE stage
-- **project-manager**: Uses release artifacts for deployment
-- **apple-developer plugin**: iOS/macOS submission coordination

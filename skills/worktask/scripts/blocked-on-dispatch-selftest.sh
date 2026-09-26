@@ -112,28 +112,38 @@ self_test() {
   fi
 
   rc=0
-  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?  # legacy alias
+  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","blocked_on":{"kind":"peer_session","detail":{"to":"peer","question":"which base?"},"resume_with":"reply_ref"}}') || rc=$?
   if [ "$rc" -eq 0 ] \
-    && printf '%s' "$out" | jq -e '.source == "cross_session_ask" and .kind == "peer_session"
+    && printf '%s' "$out" | jq -e '.source == "blocked_on" and .kind == "peer_session"
       and .arm == "peer_session" and .parked == true and .audit_row_written == false
       and (.ask_id | test("^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$"))
       and .message == ("mailbox ask " + .ask_id)' > /dev/null 2>&1 \
     && jq -e --arg a "$(printf '%s' "$out" | jq -r '.ask_id')" \
       '.tasks.DR0.status == "blocked" and .tasks.DR0.metadata.ask_id == $a' "$state" > /dev/null 2>&1 \
     && [ -f "$td/mailbox/requests/$(printf '%s' "$out" | jq -r '.ask_id').json" ]; then
-    _st_pass "route: the legacy cross_session_ask alias routes as a native peer_session ask"
+    _st_pass "route: a peer_session need parks natively and writes its mailbox request"
   else
-    _st_fail "route: the legacy cross_session_ask alias routes as a native peer_session ask"
+    _st_fail "route: a peer_session need parks natively and writes its mailbox request"
   fi
 
   rc=0
-  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}') || rc=$?  # legacy alias
+  out=$(_st_run route --task-id DR0 --payload '{"verdict":"blocked","blocked_on":{"kind":"peer_session","detail":{"to":"peer","question":"which base?"},"resume_with":"reply_ref"}}') || rc=$?
   if [ "$rc" -eq 0 ] \
     && printf '%s' "$out" | jq -e '.reused == true and (.ask_id | test("^ask-"))' > /dev/null 2>&1 \
     && [ "$(find "$td/mailbox/requests" -name 'ask-*.json' | wc -l | tr -d ' ')" = 1 ]; then
     _st_pass "route: a retried peer return reuses its open ask and mints no second request"
   else
     _st_fail "route: a retried peer return reuses its open ask and mints no second request"
+  fi
+
+  before=$(cat "$state")
+  rc=0
+  rows_before=$(_st_rows blocked_on)
+  _st_run route --task-id DR0 --payload '{"verdict":"blocked","cross_session_ask":{"to":"peer","question":"which base?"}}' > /dev/null || rc=$?
+  if [ "$rc" -eq 1 ] && [ "$(cat "$state")" = "$before" ] && [ "$(_st_rows blocked_on)" = "$rows_before" ]; then
+    _st_pass "route: cross_session_ask is not a need; it exits 1 and writes nothing"
+  else
+    _st_fail "route: cross_session_ask is not a need; it exits 1 and writes nothing"
   fi
 
   rc=0

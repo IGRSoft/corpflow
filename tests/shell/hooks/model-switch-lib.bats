@@ -256,7 +256,7 @@ _ledger() {
 @test "model_family: ANTI-VACUITY — alias and resolved id collapse to one family" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "opus"
   assert_output "opus"
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-opus-5-20260615"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-opus-5-5"
   assert_output "opus"
   run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "OPUS"
   assert_output "opus"
@@ -339,6 +339,64 @@ _ledger() {
     --source "$LIB" corpflow_workspace_root
   assert_success
   [ "$output" = "$(cd "$wt" && pwd -P)" ]
+}
+
+# --- corpflow_bind_payload: per-issue binding stays inside a declared root ----
+
+# _issue_tree <base> <group> <n> — a stamped per-issue worktree with its own ledger.
+_issue_tree() {
+  mkdir -p "$1/.worktrees/$2/$3/.context"
+  printf '{}' > "$1/.worktrees/$2/$3/.context/state.json"
+  printf '{}' > "$1/.worktrees/$2/$3/workspace.json"
+}
+
+# _bind <payload> — binds in a CLAUDE_PROJECT_DIR=$WD session, then resolves.
+_bind() {
+  run env -u WORKSPACE_ROOT -u _CORPFLOW_ISSUE_ROOT CLAUDE_PROJECT_DIR="$WD" bash -c \
+    "cd '$WD' && . '$PLUGIN_ROOT/$LIB' && corpflow_bind_payload \"\$1\" && corpflow_workspace_root" _ "$1"
+}
+
+@test "bind_payload: a payload cwd inside a stamped issue tree outranks CLAUDE_PROJECT_DIR" {
+  _ledger
+  _issue_tree "$WD" g 7
+  mkdir -p "$WD/.worktrees/g/7/src"
+  _bind "$(jq -cn --arg c "$WD/.worktrees/g/7/src" '{cwd:$c}')"
+  assert_success
+  [ "$output" = "$(cd "$WD/.worktrees/g/7" && pwd -P)" ]
+}
+
+@test "bind_payload: an issue-shaped tree outside every declared root never binds" {
+  # The banner is prompt text; pointing it at a foreign tree must not move the hook there.
+  local foreign t
+  _ledger
+  foreign="$(mk_tmpworkdir)"
+  _issue_tree "$foreign" g 7
+  t="$WD/t.jsonl"
+  jq -cn --arg c "WORKSPACE_ROOT=$foreign/.worktrees/g/7" '{type:"user",message:{content:$c}}' > "$t"
+  mkdir -p "$WD/.worktrees"
+  _bind "$(jq -cn --arg c "$foreign/.worktrees/g/7" --arg t "$t" '{cwd:$c, agent_transcript_path:$t}')"
+  assert_success
+  assert_output "$WD"
+}
+
+@test "bind_payload: a non-numeric issue segment or a missing workspace.json never binds" {
+  _ledger
+  _issue_tree "$WD" g notanissue
+  _issue_tree "$WD" g 8
+  rm -f "$WD/.worktrees/g/8/workspace.json"
+  _bind "$(jq -cn --arg c "$WD/.worktrees/g/notanissue" '{cwd:$c}')"
+  assert_output "$WD"
+  _bind "$(jq -cn --arg c "$WD/.worktrees/g/8" '{cwd:$c}')"
+  assert_output "$WD"
+}
+
+@test "bind_payload: an inherited _CORPFLOW_ISSUE_ROOT is not a global override" {
+  _ledger
+  _issue_tree "$WD" g 9
+  run_script_env --cwd "$WD" --unset WORKSPACE_ROOT --env "CLAUDE_PROJECT_DIR=$WD" \
+    --env "_CORPFLOW_ISSUE_ROOT=$WD/.worktrees/g/9" --source "$LIB" corpflow_workspace_root
+  assert_success
+  assert_output "$WD"
 }
 
 # --- corpflow_switch_fields ---------------------------------------------------
@@ -535,7 +593,7 @@ _row_of() { tail -n 1 "$WD/.context/logs/audit.jsonl"; }
   local fns="corpflow_workspace_root corpflow_context_root corpflow_active_stage
     corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family
     corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields corpflow_audit_task_id
-    corpflow_hook_audit_row"
+    corpflow_hook_audit_row corpflow_bind_payload"
   for opts in 'set -eu' 'set -u; set -f' 'set -euo pipefail'; do
     for fn in $fns; do
       run bash -c "cd '$WD'; $opts; . '$PLUGIN_ROOT/$LIB'; $fn" 

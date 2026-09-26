@@ -16,6 +16,11 @@
 #   Idempotent: if the worktree directory already exists the script skips creation
 #   and reports "already exists" rather than erroring (safe to re-run on retry).
 #
+#   stdout carries one `worktree_path=<absolute physical path>` line on creation and on
+#   the already-exists path. /megatask stamps that value as the per-issue PL0
+#   workspace_path, which workspace-root-banner.sh and the worktask cross-check
+#   compare against the worktree's own `git rev-parse --show-toplevel`.
+#
 #   Usage:
 #     bash init-worktree.sh --issue N --title "Add login flow" [OPTIONS]
 #     bash init-worktree.sh --self-test
@@ -232,6 +237,11 @@ run_init() {
   [[ "$OPT_ISSUE" =~ ^[0-9]+$ ]] || die "--issue must be a positive integer, got: $OPT_ISSUE"
   [[ "$OPT_TRACK" =~ ^[0-9]+$ ]] || die "--track must be a positive integer, got: $OPT_TRACK"
 
+  # Physical, because the worktree's own `git rev-parse --show-toplevel` is: a symlinked
+  # --repo-root would otherwise stamp a path the workspace cross-check reads as another tree.
+  local _phys
+  _phys=$(CDPATH='' cd -- "$repo_root" 2> /dev/null && pwd -P) && repo_root="$_phys"
+
   local worktree_path="${repo_root}/.worktrees/${OPT_GROUP}/${OPT_ISSUE}"
 
   # 1. Resolve base branch.
@@ -308,6 +318,7 @@ run_init() {
   # ------------------------------------------------------------------
   if [[ -d "$worktree_path" ]]; then
     printf 'init-worktree: worktree already exists, skipping: %s\n' "$worktree_path" >&2
+    printf 'worktree_path=%s\n' "$worktree_path"
     return 0
   fi
 
@@ -351,7 +362,7 @@ run_init() {
     "$branch" \
     "$base_branch" \
     "$base_branch_src" \
-    ".worktrees/${OPT_GROUP}/${OPT_ISSUE}" \
+    "$worktree_path" \
     "$OPT_GROUP" \
     "$OPT_TRACK" \
     "$blocked_by_json" \
@@ -363,6 +374,7 @@ run_init() {
 
   printf 'init-worktree: created worktree for #%s at %s (branch: %s)\n' \
     "$OPT_ISSUE" "$worktree_path" "$branch"
+  printf 'worktree_path=%s\n' "$worktree_path"
 }
 
 # ---------------------------------------------------------------------------

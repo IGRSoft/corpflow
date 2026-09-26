@@ -106,7 +106,7 @@ Same keys in every state; a `blocked` entry differs only in values — `"status"
     "branch_name": "feature/42-add-login-flow",
     "base_branch": "develop",
     "base_branch_source": "develop_fallback",
-    "worktree_path": ".worktrees/milestone-1/42"
+    "worktree_path": "/abs/repo/.worktrees/milestone-1/42"
   },
   "worktask": { "track": 1, "complexity_score": 18 },
   "dependency": { "blocked_by": [41], "blocks": [60] },
@@ -114,6 +114,10 @@ Same keys in every state; a `blocked` entry differs only in values — `"status"
   "task_ids": { "PL": "PL0", "AR": "AR0", "DV": "DV0", "DR": "DR0", "QA": "QA0" }
 }
 ```
+
+`git.worktree_path` is the absolute physical path `init-worktree.sh` created, the value /megatask
+stamps as the per-issue PL0 `workspace_path`. Nothing compares it in relative form: the monitor
+finds each `workspace.json` at `.worktrees/<group>/<issue#>/` under its own root.
 
 #### Completion contract
 
@@ -124,13 +128,13 @@ The per-issue worktask MUST write its terminal outcome into `workspace.json.exec
 
 | Written by | Values |
 |-----------|--------|
-| the per-issue FN/ST stage (`agents/project-manager.md § FN Stage`), or the per-issue orchestrator when parking on escalate-class questions (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`) | `in_progress` (default) → `completed` (PR created) \| `failed` (max retries, or parked escalation) |
+| the per-issue FN/ST stage (`agents/project-manager.md § FN Stage`), or the per-issue orchestrator when parking on escalate-class questions (`commands/worktask.md § Escalation guard — unattended /megatask per-issue runs (PARK)`) or stopping for the user (`skills/worktask/scripts/megatask-settle.sh`) | `in_progress` (default) → `completed` (PR created) \| `failed` (max retries, parked escalation, or escalated to the user) |
 
 ##### `execution.reason` and `execution.pr`
 
 | Field | Written by | Values |
 |-------|-----------|--------|
-| `execution.reason` | the per-issue orchestrator, on parking only | `"parked_escalation"` (absent otherwise) — lets the batch summary tell a parked issue from a genuine failure |
+| `execution.reason` | the per-issue orchestrator, on parking or on a stop for the user | `"parked_escalation"` or `"escalated_to_user"` (absent otherwise) — lets the batch summary tell a parked or escalated issue from a genuine failure |
 | `execution.pr` | the per-issue FN stage, on PR creation | PR URL (`null` until then); recorded onto `orchestrator.json issues[].pr` |
 
 ##### Monitor reconciliation

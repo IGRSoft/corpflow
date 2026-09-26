@@ -252,14 +252,18 @@ find_workspace_json() {
 # ---------- milestone-mode detector -----------------------------------------
 # Returns 0 (true) if the worktask is running under a batch orchestrator (/megatask)
 # or inside a megatask per-issue workspace. Detection signals (highest priority first):
-#   1. MILESTONE_MODE=1 env override (used by tests).
+#   1. MILESTONE_MODE=1 env override (/megatask's per-issue prompt, tests).
 #   2. state.json:metadata.milestone non-empty.
-#   3. workspace.json present at $WORKSPACE_ROOT or $PWD.
+#   3. state.json:tasks.PL0.metadata.megatask_group or .milestone non-empty — the keys
+#      /megatask's per-issue stamp carries, so the ledger answers even when the env is lost.
+#   4. workspace.json present at $WORKSPACE_ROOT or $PWD.
 is_milestone_mode() {
   [ "${MILESTONE_MODE:-0}" = "1" ] && return 0
   if [ -f "$STATE_FILE" ]; then
     local m
     m=$(jq -r '.metadata.milestone // ""' "$STATE_FILE" 2>/dev/null)
+    [ -n "$m" ] && [ "$m" != "null" ] && return 0
+    m=$(jq -r '.tasks.PL0.metadata // {} | .megatask_group // .milestone // ""' "$STATE_FILE" 2>/dev/null)
     [ -n "$m" ] && [ "$m" != "null" ] && return 0
   fi
   find_workspace_json >/dev/null 2>&1 && return 0
@@ -398,7 +402,7 @@ resolve_context_issue_search_for() {
 
 # ---------- label auto-provisioning -----------------------------------------
 # Color/description registry for canonical worktask labels (AC-1).
-# Per spec §4.1: worktask (blue), planning-approved (green), complexity:<tier>
+# worktask (blue), planning-approved (green), complexity:<tier>
 # (severity gradient), ticket:<prefix> (purple). Unknown labels fall back to
 # a neutral grey + generic description.
 label_color() {

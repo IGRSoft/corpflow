@@ -7,11 +7,10 @@
 //   2. Optionally uncomments the `.iOS(.v16)` platform line when `metadata.canvas_destination=ios-sim`.
 //   3. Appends `.target` dependencies for app modules whose Views are render targets.
 //
-// AR decisions referenced:
-//   ad1 — Package.swift platforms: .macOS(.v13) always; .iOS(.v16) conditional (uncommented by scaffolder)
-//   ad2 — swift-syntax dep lives in preview-ensurer's Package.swift, NOT here
-//   ad3 — @testable import boundary: leaf View modules only (enforced by scaffolder's
-//         dependency-graph walk; this file declares the target shape only)
+// Constraints:
+//   - platforms: .macOS(.v13) always; .iOS(.v16) conditional (uncommented by scaffolder)
+//   - the swift-syntax dep lives in preview-ensurer's Package.swift, not here
+//   - @testable import boundary: leaf View modules only (this file declares the target shape only)
 //
 // Once `tools/SnapshotHost/` is committed, it becomes a normal project artifact —
 // CI-reproducible (`swift build` / `swift run`) without re-scaffolding.
@@ -34,7 +33,7 @@ let package = Package(
         // Intentionally empty. SwiftSyntax is preview-ensurer's concern, not the host's.
         // Per-project Views are pulled in via `targets[].dependencies` appended by the
         // apple-canvas scaffolder (it uses `swift package show-dependencies --format json`
-        // to derive the minimal `@testable import` set — see ad3).
+        // to derive the minimal `@testable import` set).
     ],
 
     targets: [

@@ -5,7 +5,7 @@
 #
 #   One definition, two enforcers: a stub that passes one and fails the other is the class of
 #   disagreement this file exists to make impossible. Values are deduplicated here; the
-#   semantics are pinned by the parity table in architecture-0.md#test-architecture.
+#   semantics are pinned by the parity table in tests/shell/worktask/sweep-stub-lib.bats.
 #
 #   Sources nothing, sets no options, does no work at load. Consumers interpolate the
 #   constants into a yq expression or pass them to jq as --arg/--argjson — never splice a

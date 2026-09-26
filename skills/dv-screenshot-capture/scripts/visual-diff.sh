@@ -6,11 +6,11 @@
 # `magick compare -metric RMSE`. Emits a `visual_diff_run` audit row.
 #
 # Graceful-degrade: if `magick` is not on PATH, emits an audit row with
-# `imagemagick_not_found` and exits 0 (non-blocking — DV/QA must NOT fail
-# the worktask on missing imagemagick per coordination-0.md §risk-watch).
+# `imagemagick_not_found` and exits 0 (non-blocking — DV/QA do not fail
+# the worktask on missing imagemagick).
 #
-# Per PL pd2 (and coordination-0.md): the diff PNG is saved ONLY on a fail
-# verdict (5-screenshot budget hygiene). Pass verdicts emit no diff artifact.
+# The diff PNG is saved only on a fail verdict (5-screenshot budget
+# hygiene). Pass verdicts emit no diff artifact.
 #
 # Usage:
 #   visual-diff.sh

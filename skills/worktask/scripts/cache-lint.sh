@@ -582,7 +582,7 @@ plugin_root() {
 
 # canonical_model_block <alias> <root> -> the fenced `text` block under that
 # alias's H2 in model-prompting.md, or empty when the alias has none (haiku).
-# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5`,
+# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5.5`,
 # because the em-dash suffix is prose and is not part of the key.
 canonical_model_block() {
   local alias="$1" root="$2" canon="$2/skills/shared/model-prompting.md"

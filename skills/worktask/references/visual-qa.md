@@ -1,14 +1,14 @@
 # QA Design Comparison (Visual QA) Procedure
 
-Canonical registry-driven design-comparison procedure for the QA stage. **Read this file only when the visual gate is open** — `metadata.ui_visual_check: true` in `<plan_file>` AND design references exist in `.context/designs/` (equivalently, `requires_screenshots: true`). The gate check itself and the `testing-N.md § Visual Evidence` artifact schema stay in `agents/qa-engineer.md`.
+Registry-driven design-comparison procedure for the QA stage. Read it only when the visual gate is open: `metadata.ui_visual_check: true` in `<plan_file>` and design references in `.context/designs/` (equivalently, `requires_screenshots: true`). The gate check and the `testing-N.md § Visual Evidence` schema live in `agents/qa-engineer.md`.
 
 ## Registry-Driven Comparison (Primary Path)
 
-If `.context/designs/figma-registry.md` exists it is authoritative — parse its Entries table and compare row by row. QA **reuses the DV-captured result images** as the primary comparison source and runs the RMSE pixel diff (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) as an objective pre-pass **before** multimodal vision. Live capture is the fallback only, when no DV image maps to the row (§ Implementation Screenshot Capture (fallback only)).
+If `.context/designs/figma-registry.md` exists it is authoritative: parse its Entries table and compare row by row. The primary comparison source is the DV-captured result images, with the RMSE pixel diff (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) as an objective pre-pass before multimodal vision. Live capture is the fallback, only when no DV image maps to the row (§ Implementation Screenshot Capture (fallback only)).
 
 ### Join Key (Design Ref)
 
-Join `screenshots-*.md.Design Ref → figma-registry.md.ID` by explicit ID equality, over the optional **`Design Ref`** column on DV's per-task `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` manifests (every task's, plus a legacy `screenshots.md`). Missing column or value = `—` (no candidate → fallback). The two blocks below are ONE loop.
+Join `screenshots-*.md.Design Ref → figma-registry.md.ID` by explicit ID equality, over the optional `Design Ref` column on DV's per-task `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` manifests (every task's, plus a legacy `screenshots.md`). Missing column or value = `—` (no candidate → fallback). The two blocks below are one loop.
 
 ### Per-Row Algorithm — Skip, Overview, Join
 
@@ -19,7 +19,7 @@ for each registry row R:
   if R.State == "overview":                        # container layout only — vision, NO RMSE
       emit_row(R, multimodal_layout_check(R), rmse=None); continue
   candidates = screenshots-*.md rows where (Design Ref == R.ID) # absent col / all "—" → ∅
-  if candidates == ∅:                              # (d) live-capture fallback, byte-equivalent to R1
+  if candidates == ∅:                              # (d) live-capture fallback
       impl = build_run_sim → navigate(R.Target File(s)) → screenshot   # § fallback-only below
       emit_row(R, reconcile(None, multimodal_compare(R.Screenshot, impl)),
                source="live-capture"); continue
@@ -45,13 +45,13 @@ for each registry row R:
 
 ## Per-Frame Comparison
 
-When the registry contains **per-frame rows** — a container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (`skills/shared/figma-capture.md § Registry Generation`) — the `overview` row is the container reference, verified for layout completeness (all frames present), vision-only. Each child-frame row runs the standard per-row algorithm against **that row's own** `.context/designs/<Screenshot>` file, state by state (default/error/empty/loading/success/…), NOT against a single combined screenshot.
+A container produces one `State: overview` row plus one row per child frame, each keyed on its own `Figma Node` id (`skills/shared/figma-capture.md § Registry Generation`). The `overview` row is the container reference, checked vision-only for layout completeness (all frames present). Each child-frame row runs the per-row algorithm against its own `.context/designs/<Screenshot>` file, state by state (default/error/empty/loading/success/…), not against one combined screenshot.
 
-Emit one Design Comparison row per registry row, so an N-frame container yields N+1 rows and a mismatch on one frame never masks matches on the others. A leaf (single-screen) registry has no overview row and collapses to the normal one-row comparison — no regression.
+Emit one Design Comparison row per registry row, so an N-frame container yields N+1 rows and a mismatch on one frame never masks matches on the others. A leaf (single-screen) registry has no overview row and yields one row.
 
 ## Fallback: Glob Discovery (no registry)
 
-If the registry is missing, glob `.context/designs/figma-*.png` and compare what's there. Flag the missing registry in `testing-N.md § Design Comparison` as a process gap:
+No registry: glob `.context/designs/figma-*.png` and compare what's there. Flag the gap in `testing-N.md § Design Comparison`:
 
 > No `figma-registry.md` found; using glob fallback. Screen/state/target mapping inferred from filenames only.
 
@@ -59,12 +59,12 @@ Pencil `.pen` mockups (`.context/designs/mockup-*.pen`) are compared independent
 
 ## Implementation Screenshot Capture (fallback only)
 
-Runs **only** when no DV result image maps to a registry row (absent `Design Ref` column, all `—`, or no PNG candidate). `build_run_sim` past ~2 min auto-backgrounds — await the completion notification (not the returned handle) before navigating/screenshotting (`agent-coordination § MCP Auto-Background`).
+Runs only when no DV result image maps to a registry row (absent `Design Ref` column, all `—`, or no PNG candidate). `build_run_sim` past ~2 min auto-backgrounds: await the completion notification, not the returned handle, before navigating or screenshotting (`skills/agent-coordination/SKILL.md § MCP Auto-Background`).
 
 ### Per-platform capture
 
-| Platform | Worktask |
-|----------|----------|
+| Platform | Capture |
+|----------|---------|
 | Apple | `mcp__XcodeBuildMCP__build_run_sim` (or `build_run_macos`) → navigate to target screen → `mcp__XcodeBuildMCP__screenshot` |
 | Web | Load chrome tools via `ToolSearch({ query: "select:mcp__claude-in-chrome__computer" })` → screenshot |
 | Android | `adb devices` to confirm an attached emulator/device → launch the app → navigate to target screen → `adb exec-out screencap -p > <path>` |
@@ -82,16 +82,16 @@ Runs **only** when no DV result image maps to a registry row (absent `Design Ref
 
 ## Evidence integrity (direct-read before accepting)
 
-Caption and manifest metadata are self-reported: a stale, placeholder, or unrelated image can carry a plausible caption. Whenever a prior stage offers a screenshot as acceptance-criteria proof, QA MUST open the image with `Read` and confirm it shows the claimed state BEFORE marking the AC accepted — never accept on caption, filename, or manifest row alone.
+Captions and manifest rows are self-reported, and a stale, placeholder or unrelated image can carry a plausible caption. When a prior stage offers a screenshot as acceptance-criteria proof, open the image with `Read` and confirm it shows the claimed state before marking the AC accepted; a caption, filename or manifest row alone is not proof.
 
 ### High-risk artifacts
 
-- Scrutinize captures that assert their own validity — `dv-*-VERIFIED.*` names, remediation/re-capture images, any "fixed"/"after" pair — that is where a mislabeled or duplicated capture hides.
+- Captures that assert their own validity (`dv-*-VERIFIED.*` names, remediation/re-capture images, any "fixed"/"after" pair) are where a mislabeled or duplicated capture hides; check them closely.
 - Byte-identical captures for different states, or a capture showing an unrelated screen (home screen, springboard, wrong app) → `flagged`, not `accepted`, recorded in `testing-N.md § Notes`.
 
 ## Verdict reconciliation
 
-Reconcile a row's RMSE pre-pass and multimodal vision results with the matrix below. **RMSE is a one-way *escalator*: it may raise severity, never lower it.** It measures pixel distance only and is blind to copy/semantic errors, so it can never downgrade a vision-detected Mismatch — a green RMSE on a screen with the wrong button label is still a Mismatch.
+Reconcile a row's RMSE pre-pass and vision results with the matrix below. RMSE only escalates: it may raise severity, never lower it, because it measures pixel distance and is blind to copy and semantic errors (a green RMSE on a wrong button label is still a Mismatch).
 
 | RMSE | Vision | Verdict | Severity |
 |------|--------|---------|----------|
@@ -104,7 +104,7 @@ Reconcile a row's RMSE pre-pass and multimodal vision results with the matrix be
 
 ### Skipped/None Semantics and Threshold Caveat
 
-`skipped/None` covers overview rows (no RMSE), `.txt`/non-png placeholders, and the `magick`-absent self-degrade path — all fall through to the vision verdict alone. `fail+match → ≥ Major` may over-escalate on AA/DPR/scale noise between a Figma export and a canvas render (R3); the 8% threshold is generous and the RMSE % is recorded in the reporting table, so humans can spot borderline 8–12% noise vs a real break.
+`skipped/None` covers overview rows, `.txt`/non-png placeholders and the `magick`-absent path; all take the vision verdict alone. `fail+match → ≥ Major` can over-escalate on anti-aliasing, DPR or scale noise between a Figma export and a canvas render; the recorded RMSE % lets humans tell borderline 8–12% noise from a real break.
 
 ## Reporting
 
@@ -117,7 +117,7 @@ Document results in `testing-N.md § Design Comparison` using the canonical tabl
 | design-003 | login | overview | — (vision) | Match | — | container layout complete |
 | design-004 | login | empty   | n/a (live-capture) | Match | — | source=live-capture (no DV image mapped) |
 
-On the registry path, every registry row MUST appear as exactly one row in this table.
+On the registry path, every registry row appears as exactly one row in this table.
 
 ### RMSE Column Values and AC Summary
 

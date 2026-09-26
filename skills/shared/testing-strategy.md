@@ -5,7 +5,7 @@ version: 0.5.0
 
 # Testing Strategy
 
-Canonical testing reference for **every** platform a worktask routes to. Pyramid, AAA pattern, DV/QA
+Canonical testing reference for every platform a worktask routes to. Pyramid, AAA pattern, DV/QA
 boundary, and Test Selection Gate are platform-neutral; framework and syntax specifics are gated per
 platform in § Framework by platform — an Apple rule never applies off Apple, and vice versa.
 Platform→plugin routing: `skills/shared/platform-detection.md`.
@@ -20,9 +20,9 @@ Platform→plugin routing: `skills/shared/platform-detection.md`.
 
 ## Framework by platform
 
-Use the **project's established framework** — detect it (test layout, manifest dependencies, CI
+Use the project's established framework — detect it (test layout, manifest dependencies, CI
 config) before writing a test. Never add a second framework to a repo that has one; where a repo has
-none, pick from the matrix and record the choice in `<plan_file> § Test Strategy`.
+none, pick from the matrix and record the choice in `<plan_file> § test-strategy`.
 
 ### Framework matrix — app platforms
 
@@ -72,7 +72,7 @@ On Apple, unit tests use Swift Testing; XCTest/XCUITest is reserved for UI tests
 
 ## Test naming conventions
 
-The **runner's collection rule wins** — it is not a style choice. Where the runner is agnostic,
+The runner's collection rule wins — it is not a style choice. Where the runner is agnostic,
 prefer a sentence naming behavior and expected outcome, not the method called.
 
 ### Naming by framework
@@ -91,11 +91,10 @@ prefer a sentence naming behavior and expected outcome, not the method called.
 ## Mutation Testing
 
 A mutation test proves a guard is non-vacuous by breaking what it guards and requiring the guard to
-fail; its result carries no information unless the mutation landed. **Assert the mutation was applied
-before trusting the pass/fail it produced**: back the target up, mutate, byte-compare (`diff -q` must
-report the files differ), run the test, restore. A silently no-op mutation — a `sed` pattern written
-for `echo "…"` against a source that uses `printf '…'`, a shifted line number — yields a pass
-indistinguishable from a weak guard, so the reviewer concludes the opposite of the evidence.
+fail; its result carries no information unless the mutation landed. Assert the mutation was applied
+before trusting the pass/fail it produced: back the target up, mutate, byte-compare (`diff -q` must
+report the files differ), run the test, restore. A silently no-op mutation (a `sed` pattern that
+doesn't match, a shifted line number) yields a pass indistinguishable from a weak guard.
 
 ## Portable verification greps
 
@@ -103,7 +102,7 @@ A canon-sweep or acceptance-criteria count is evidence only if the command means
 every host: `grep` may be GNU grep, BSD grep or `ugrep`, which differ in ways that change a count
 silently instead of erroring.
 
-- Put `--include=`/`--exclude-dir=` **before** the pattern, and use `-e` for any pattern containing
+- Put `--include=`/`--exclude-dir=` before the pattern, and use `-e` for any pattern containing
   `--` — past a `--` terminator ugrep reads the filter as a filename.
 - Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./…` matches nothing and the
   exclusion silently does not apply.
@@ -112,8 +111,8 @@ silently instead of erroring.
 
 ## DV vs QA Boundary
 
-DV produces the **build artifact + Selected Tests list**; QA executes the **Selected Tests** plus
-visual checks if gated on. Keeps the DV loop fast while QA owns regression coverage.
+DV produces the build artifact + Selected Tests list; QA executes the Selected Tests plus visual
+checks if gated on, so the DV loop stays fast while QA owns regression coverage.
 
 | DV Stage (Developer) | QA Stage (QA Engineer) |
 |----------------------|------------------------|
@@ -121,13 +120,13 @@ visual checks if gated on. Keeps the DV loop fast while QA owns regression cover
 | Mock implementations for dependencies | Coverage gap analysis |
 | Happy path + known error cases | Boundary and stress tests |
 | Test data builders/fixtures | Test quality review |
-| **Build verification + parse markers + emit Selected Tests** | **Run only the Selected Tests list** (plus full suite if `test_mode=full`) |
+| Build verification + parse markers + emit Selected Tests | Run only the Selected Tests list (plus full suite if `test_mode=full`) |
 
 ## Test-Execution Authority
 
-Canonical, single-sourced statement of **who** may execute tests — orthogonal to `test_mode`
-(§ Test Selection Gate), which governs **how much** runs. Every agent file and skill points here;
-none restates the matrix or the runner list below. Authority is a property of the **stage**, never of
+Canonical, single-sourced statement of who may execute tests — orthogonal to `test_mode`
+(§ Test Selection Gate), which governs how much runs. Every agent file and skill points here;
+none restates the matrix or the runner list below. Authority is a property of the stage, never of
 the agent file: a support agent (`designer`, `ethics-reviewer`, `prompt-engineer`,
 `workflow-engineer`) inherits the authority of whichever stage it is dispatched into —
 `workflow-engineer` acting as DV0 for plugin-infrastructure scope holds DV's authority, not a fixed
@@ -144,8 +143,8 @@ repo; plus `/<plugin>:build-test` invoked *without* `--no-test`; plus delegating
 to another agent.
 
 **Build-only verification** — compile, link, type-check, lint, static analysis, and test *collection
-without execution* (`bats --count`, `pytest --collect-only`, `--dry-run`). **Allowed at every one of
-the 13 stages, always** — `/<plugin>:build-test --no-test` is the sanctioned delegated form. Only
+without execution* (`bats --count`, `pytest --collect-only`, `--dry-run`). Allowed at every one of
+the 13 stages, always — `/<plugin>:build-test --no-test` is the sanctioned delegated form. Only
 *reachable* where the stage holds a build path ("Reachable how" below); nominal elsewhere.
 
 ### Optional stages and authority
@@ -159,8 +158,8 @@ design ownership rule in `agents/developer.md § Architecture Ownership`.
 
 | Stage | Build-only | Reachable how | Scoped exec | Full exec | Note |
 |---|---|---|---|---|---|
-| DV | allowed | own Bash | **required** | **forbidden** | full-suite deny is mechanical (`hooks/test-execution-gate.sh`), covering the bare runner and invocations whose flags are all non-selecting; only a genuine selector classifies scoped — § DV full-suite deny |
-| QA | allowed | own Bash | allowed | **allowed — sole holder** | |
+| DV | allowed | own Bash | required | forbidden | full-suite deny is mechanical (`hooks/test-execution-gate.sh`), covering the bare runner and invocations whose flags are all non-selecting; only a genuine selector classifies scoped — § DV full-suite deny |
+| QA | allowed | own Bash | allowed | allowed — sole holder | |
 | AR | allowed | delegation only (no Bash grant) | forbidden | forbidden | |
 | DR | allowed | `/<plugin>:build-test --no-test` | forbidden | forbidden | compile-check carve-out preserved verbatim (`agents/technical-lead.md`) |
 
@@ -171,7 +170,7 @@ Fail-open by construction: a future unstripped flag degrades to an allow, never 
 - **Denied** — a bare runner, or an invocation whose arguments are *all* non-selecting. The classifier
   strips each runner's mandatory-but-non-selecting flags first, so configuration buys no escape:
   `xcodebuild test` with `-project`/`-workspace`/`-scheme`/`-destination`/`-sdk`/`-arch`/result-bundle
-  and derived-data paths, **including quoted multi-word values**; `dotnet test <solution|project>`;
+  and derived-data paths, including quoted multi-word values; `dotnet test <solution|project>`;
   `gradle test -p .` (task found order-independently); `npm`/`pnpm`/`yarn test` with
   `--ci`/`--watch`/`--silent`/bare `--`; `cargo test --release`.
 - **Scoped** — a genuine selector: `-only-testing:`, `--filter`, `-k`, `-t`, `-run`, or a real
@@ -180,24 +179,21 @@ Fail-open by construction: a future unstripped flag degrades to an allow, never 
 
 ##### The Node runner
 
-`node` is a runner **only with `--test`**. A bare `node <script>` is script execution and classifies
+`node` is a runner only with `--test`. A bare `node <script>` is script execution and classifies
 as not a test run, the same discrimination `gradle`/`./gradlew` get from their task name — without it
 every `node` invocation in a Node project would deny at a banned stage. `--test-reporter` and
 `--test-concurrency` are configuration, not selection; `--test-name-pattern` and `--test-only` are
-genuine selectors and classify scoped. **This gates Node suites that previously ran ungated at every
-stage**, which is a behaviour change for every Node project, not a no-op hardening.
+genuine selectors and classify scoped.
 
 ##### Known limits
 
 - **Whole-tree positionals** — `go test ./...` and `pytest tests/` are allowed at DV though they are
-  full runs. Deliberate policy limit, tracked separately: flipping the positional limb's polarity has
-  a different fail direction.
+  full runs. Deliberate policy limit: flipping the positional limb's polarity changes the fail
+  direction.
 - **Package-manager `-c` residual** — `npm test -- -c <spec>` is genuinely scoped and denies anyway
-  (`pnpm`/`yarn` share the arm). Moving `-c` to the valueless arm would strip the flag and leave its
-  value as a surviving positional, so every full run carrying a valueless flag before a positional
-  would classify scoped — reopening the hole this deny closes. The ambiguity is irreducible because
-  package managers hide the runner; `npm test -- <spec>` is unaffected, and the human-only
-  `CORPFLOW_TEST_GATE=off` covers the rest.
+  (`pnpm`/`yarn` share the arm), because treating `-c` as valueless would let full runs classify
+  scoped. Package managers hide the runner, so the ambiguity is irreducible; `npm test -- <spec>` is
+  unaffected, and the human-only `CORPFLOW_TEST_GATE=off` covers the rest.
 
 ### Authority matrix — all other stages
 
@@ -211,7 +207,7 @@ stage**, which is a behaviour change for every Node project, not a no-op hardeni
 
 ### Auto-promotion note
 
-**DV's no-handler auto-promotion never widens to `full`** (`test-selection-syntax.md § Auto-promotion
+DV's no-handler auto-promotion never widens to `full` (`test-selection-syntax.md § Auto-promotion
 when no handler`): the cap is `module-scope`, an execution-only value recorded in
 the DV artifact's `§ Decisions`, never a `test_mode` value — that vocabulary stays exactly
 `build-only | scoped | full`, unchanged and PL0-owned.
@@ -223,7 +219,7 @@ A stage brief's test invocation comes from `<plan_file>` frontmatter (`test_mode
 "core commands" section: those are full-suite-shaped by design and carry no selector, so a DV brief
 built from one makes DV pre-empt the regression gate QA exists to hold.
 
-Every DV/QA brief therefore states the **resolved mode** and the **exact selector** it implies
+Every DV/QA brief therefore states the resolved mode and the exact selector it implies
 (`-only-testing:…`, `--tests …`, a pytest nodeid — grammar in
 `skills/shared/test-selection-syntax.md`). Where `always_required_tests` is spelled in a different
 grammar than the platform's selector syntax, DV reconciles the two and records the resolved spelling
@@ -233,16 +229,16 @@ in its artifact's `§ Decisions`.
 
 A banned stage that believes runtime evidence is needed never self-serves. Ordered:
 
-1. **Non-blocking need** — record `requests_test_evidence: <what and why>` in the stage's own artifact
+1. Non-blocking need — record `requests_test_evidence: <what and why>` in the stage's own artifact
    (`§ Findings` / `§ Notes`); QA ingests and executes it like its own additions
    (`agents/qa-engineer.md § Q1 QA Additions`).
-2. **Blocking need** — return `verdict: blocked` with `error_escalated_to: "DV"`; the orchestrator
+2. Blocking need — return `verdict: blocked` with `error_escalated_to: "DV"`; the orchestrator
    re-opens DV through the existing error-handling loop (`skills/agent-coordination/SKILL.md § Error
    Handling`). No new machinery.
-3. **Incident reproduction is not test execution** — running the app, a repro script, or hitting a
+3. Incident reproduction is not test execution — running the app, a repro script, or hitting a
    failing endpoint is allowed for IR; its fix verification still routes through the emergency
    pipeline's own DV and QA stages.
-4. **Compile-only checks are unaffected** — `/<plugin>:build-test --no-test` stays available to every
+4. Compile-only checks are unaffected — `/<plugin>:build-test --no-test` stays available to every
    stage regardless of authority.
 
 ### Mechanical enforcement
@@ -250,12 +246,12 @@ A banned stage that believes runtime evidence is needed never self-serves. Order
 Three layers, cheapest first (`skills/worktask/SKILL.md` step 4.8b,
 `hooks/test-execution-gate.sh`):
 
-1. **Tool-grant narrowing** — `security-reviewer` and `release-engineer` drop bare `Bash` for scoped
+1. Tool-grant narrowing — `security-reviewer` and `release-engineer` drop bare `Bash` for scoped
    allow-lists (the `technical-lead`/`project-manager` idiom); `incident-responder`, `prompt-engineer`
    and `workflow-engineer` keep broad Bash as documented carve-outs.
-2. **Orchestrator step 4.8b** — a NO-TEST-EXECUTION banner + `stage_test_ban_enforced` audit row in
+2. Orchestrator step 4.8b — a NO-TEST-EXECUTION banner + `stage_test_ban_enforced` audit row in
    the composed prompt of every dispatched stage not in `{DV, QA}`.
-3. **The `PreToolUse` hook** — `hooks/test-execution-gate.sh`, fail-open on ambiguity, resolves the
+3. The `PreToolUse` hook — `hooks/test-execution-gate.sh`, fail-open on ambiguity, resolves the
    acting stage from `.context/state.json` (never agent/payload identity) and denies test-runner
    invocations outside `{DV, QA}`, plus DV full-suite runs. Exit code is always 0; the decision
    travels in `hookSpecificOutput.permissionDecision`. Only this layer covers delegated calls and the
@@ -266,7 +262,7 @@ Three layers, cheapest first (`skills/worktask/SKILL.md` step 4.8b,
 Authority answers *who*; this answers *again?*. Once a stage holding authority has been allowed a test
 invocation, the same invocation is denied while the tree is byte-identical — it can only reproduce the
 result already on record. Scope is `run_index`, so a run recorded by one stage covers a later stage's
-identical run within the same run. Denied callers are told to **cite** the prior run: its stage and
+identical run within the same run. Denied callers are told to cite the prior run: its stage and
 timestamp appear in the deny reason and in a `test_execution_deduped` audit row. Build-only
 verification is never suppressed.
 
@@ -274,22 +270,19 @@ verification is never suppressed.
 
 Suppression only makes sense against a result that could be cited instead. A prior whose evidence
 token is `tests:0`, `discovered:<n>` (the runner enumerated cases and executed none), `unrecorded`
-(a marker predating the evidence grammar), or any shape this grammar does not cover records **no
-result**, so the gate allows and writes a `test_dedupe_skipped_zero_prior` row instead of a denial.
-
-This is not a softening of the control. Denying against a zero-execution prior refuses the only run
-that could still produce evidence — the path by which one platform reached a merge decision with
-zero tests executed while every stage downstream read a verdict that said only "denied".
+(a marker predating the evidence grammar), or any shape this grammar does not cover records no
+result, so the gate allows and writes a `test_dedupe_skipped_zero_prior` row instead of a denial —
+denying would refuse the only run that could still produce evidence.
 
 #### Keyed on the tree, never on an outcome
 
 `PreToolUse` cannot know whether a run passed, so the key is the tree: HEAD plus
-`git status --porcelain` **and** `git diff HEAD`, the diff being load-bearing because porcelain
+`git status --porcelain` and `git diff HEAD`, the diff being load-bearing because porcelain
 reports only names and status letters. Any edit to tracked content changes the fingerprint and
-re-enables the command with no flag — **this is what keeps test → fix → retest working, and it is the
-property to protect in any change to the fingerprint.**
+re-enables the command with no flag — this is what keeps test → fix → retest working, and it is the
+property to protect in any change to the fingerprint.
 
-The one gap, and it is documented rather than closed: an **untracked** file's *content* is outside
+The one gap, documented rather than closed: an untracked file's *content* is outside
 the digest. Its creation shows in porcelain, so the first write moves the fingerprint; later edits
 to a file never `git add`ed do not. Staged content is inside the digest — `git diff HEAD` covers the
 index — so staging is not a way to re-enable a run, and neither is committing anything less than a
@@ -301,13 +294,13 @@ Every unresolvable input — no git, no `shasum`, no `run_index` on the ledger �
 allows, matching the hook's fail-open contract. `CORPFLOW_TEST_DEDUPE=off` in the process environment
 disables it for flake investigation; like `CORPFLOW_TEST_GATE=off` it is a human ask, not
 agent-serviceable, and is noted once per `.context/` in the audit trail. The gate keeps its own
-sentinels under `.context/logs/.test-runs/` and does **not** read `full_test_run`/`scoped_test_run`
+sentinels under `.context/logs/.test-runs/` and does not read `full_test_run`/`scoped_test_run`
 audit rows, which `skills/agent-coordination/SKILL.md` binds as audit-only, never a gate.
 
 ### SR/RE control layering
 
-**For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the only
-control.** Their platform-auditor delegates (e.g. `Task(system-developer:sys-security-auditor)`) hold
+For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the only
+control. Their platform-auditor delegates (e.g. `Task(system-developer:sys-security-auditor)`) hold
 test-capable Bash grants of their own (`ctest`, `make`, …) that narrowing SR's/RE's own grant does not
 touch; the hook denies the delegate's leaf call via the same state.json stage resolution. Correct by
 design — but it means a regression in stage resolution is a complete loss of enforcement for SR/RE,
@@ -316,7 +309,7 @@ not a degradation of a defense-in-depth layer.
 ### Escape-hatch honesty
 
 `CORPFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory with no
-`.context/state.json`) are both **agent-writable across sessions**, not agent-proof: any stage holding
+`.context/state.json`) are both agent-writable across sessions, not agent-proof: any stage holding
 `Write`/`Edit` can write `.claude/settings.json` `env`, effective on the next session or resume.
 Within a live session neither is reachable from a command string — the hook reads process env, not
 payload text — which is what makes the hatch a human relief valve rather than an agent-serviceable
@@ -326,39 +319,39 @@ disabled per `.context/`, so the disable is reviewable rather than silent.
 
 ## Test Selection Gate
 
-Tests are slow (especially UI/simulator bundles). The gate decides — per worktask run — **how much of
-the test pyramid runs and where**, so backend, refactor, and doc-only tasks do not pay
+Tests are slow (especially UI/simulator bundles). The gate decides, per worktask run, how much of
+the test pyramid runs and where, so backend, refactor, and doc-only tasks do not pay
 simulator-startup cost.
 
 ### Three test modes
 
 | Mode | DV behaviour | QA behaviour | When PL sets it |
 |------|--------------|--------------|-----------------|
-| `build-only` | Build + run **smoke set only** (`@test-required` ∪ `metadata.always_required_tests`). Parse `@depends-on:` markers. Emit Selected Tests list for QA. | Run **only Selected Tests** (always-required ∪ dependency-matched). Visual comparison gated on `ui_visual_check`. | **Opt-in** via explicit `test_mode: build-only`, in repos that completed marker migration: refactors without behavior change, dep updates, doc-only and internal-tool changes. |
+| `build-only` | Build; run no tests (`Executed at DV` empty), except the no-handler promotion in § Auto-promotion safety nets. Parse `@depends-on:` markers. Emit Selected Tests list for QA. | Run only Selected Tests (always-required ∪ dependency-matched). Visual comparison gated on `ui_visual_check`. | Opt-in via explicit `test_mode: build-only`, in repos that completed marker migration: refactors without behavior change, dep updates, doc-only and internal-tool changes. |
 
 #### `scoped` and `full` modes
 
 | Mode | DV behaviour | QA behaviour | When PL sets it |
 |------|--------------|--------------|-----------------|
 | `scoped` (effective default) | Build + run Selected Tests + tests in any module the diff touches. | Selected Tests + module-level tests + any QA-added edge-case tests. Visual comparison gated on `ui_visual_check`. | Bug fixes, features not spanning subsystems, diffs touching files with weak `@depends-on:` coverage (defensive). Default when `test_mode` is omitted (avoids silent coverage blackout on untagged repos). |
-| `full` | Build + run Selected Tests at DV. | **Full project test suite** as regression gate. Visual comparison gated on `ui_visual_check`. | Release candidates (RE prep), multi-module features (auth touching networking + UI + persistence), first run after a major dependency upgrade, stakeholder-requested regression. |
+| `full` | Build + run Selected Tests at DV. | Full project test suite as regression gate. Visual comparison gated on `ui_visual_check`. | Release candidates (RE prep), multi-module features (auth touching networking + UI + persistence), first run after a major dependency upgrade, stakeholder-requested regression. |
 
 #### Effective default
 
 Omitting `metadata.test_mode` resolves to `scoped`, not `build-only` — preserving "DV runs scoped
 tests, QA runs the unit+integration suite" for untagged repositories. The `build-only` speedup
-requires writing `test_mode: build-only` explicitly **and** meaningful marker coverage (the parser
+requires writing `test_mode: build-only` explicitly and meaningful marker coverage (the parser
 warns if `< 50%` of test files lack any marker).
 
 #### Comment/doc-only diffs — PL *selects* `build-only`
 
 When every hunk of the planned diff is a comment, a prose file (`docs/`, `*.md`), or a non-executable
 string, no test outcome can change: PL sets `test_mode: build-only` and says why in
-`<plan_file> § Test Strategy`. The one case where the marker-coverage precondition does not apply —
+`<plan_file> § test-strategy`. The one case where the marker-coverage precondition does not apply —
 the mode is chosen because nothing executable changed, not because markers stand in for a run. One
 executable hunk anywhere in the planned diff disqualifies it.
 
-Downstream: a doc-only change landing **after** QA (typically DC, which holds no execution authority)
+Downstream: a doc-only change landing after QA (typically DC, which holds no execution authority)
 does not re-trigger QA. FN commits on QA's existing evidence and records the post-QA diff as doc-only
 in `complete-summary-N.md`.
 
@@ -366,11 +359,11 @@ in `complete-summary-N.md`.
 
 DV/QA enforce these even if PL set a tighter mode:
 
-- Selected Tests empty AND `test_mode = build-only` → DV warns and runs the smoke set; QA promotes to
+- Selected Tests empty AND `test_mode = build-only` → DV warns and still runs no tests; QA promotes to
   `scoped` with a logged note in `testing-N.md § Notes`.
 - No wired marker-parser handler for the platform (every platform except Apple today —
   `test-selection-syntax.md § Identifier grammar by platform`) AND `test_mode ∈ {build-only, scoped}`
-  → DV auto-promotes to **module-scope** (never `full` — § Test-Execution Authority) with a logged
+  → DV auto-promotes to module-scope (never `full` — § Test-Execution Authority) with a logged
   warning. Metadata keeps the PL-declared mode; the promotion is recorded in
   the DV artifact's `§ Decisions` as `auto_promoted_mode: module-scope`. If module scope cannot be
   computed, DV runs the smoke set instead and records `deferred_to_qa: full_regression` — it does not
@@ -389,25 +382,28 @@ DV/QA enforce these even if PL set a tighter mode:
 
 #### Readers
 
-- DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs only when
-  `test_mode ∈ {scoped, full}`.
+- DV step D2 (`agents/developer.md`) — parses markers, computes Selected Tests, runs `Executed Tests
+  (DV)` only when `test_mode ∈ {scoped, full}`; under `build-only` it runs tests only through the
+  no-handler promotion (§ Auto-promotion safety nets). The mode is D2's rule, not a gate:
+  `hooks/test-execution-gate.sh` never reads `test_mode` and allows DV a selector-bearing run in
+  every mode.
 - QA step Q1 (`agents/qa-engineer.md`) — three-mode dispatcher.
 - QA Design Comparison (`agents/qa-engineer.md § Design Comparison`) — gated on `ui_visual_check=true`
-  (NOT `test_mode`).
-- **DR** (`agents/technical-lead.md`) does not run tests, so the gate does not apply; needing runtime
+  (not `test_mode`).
+- DR (`agents/technical-lead.md`) does not run tests, so the gate does not apply; needing runtime
   verification it records `requests_test_evidence:` for QA and never executes (authority is canonical
   in § Test-Execution Authority).
 
 ### DV Executed vs Selected (scope split)
 
-DV's `Selected Tests` is the **handoff artifact** consumed by QA; `Executed Tests (DV)` is the
-**subset DV actually runs**.
+DV's `Selected Tests` is the handoff artifact consumed by QA; `Executed Tests (DV)` is the
+subset DV actually runs.
 
-- **Selected Tests** = full algorithm output (smoke ∪ dependency-matched ∪ covers-changed-files ∪
+- Selected Tests = full algorithm output (smoke ∪ dependency-matched ∪ covers-changed-files ∪
   module-level ∪ `metadata.always_required_tests`). Always written to
   `§ Selected Tests` in each DV row's artifact. QA executes the union across every DV artifact
   (`refs.dev[]`).
-- **Executed Tests (DV)** = (Selected ∩ test files Added/Modified in
+- Executed Tests (DV) = (Selected ∩ test files Added/Modified in
   `git diff --diff-filter=AMR <base>...HEAD`) ∪ `metadata.always_required_tests`. Only this subset
   runs at DV.
 
@@ -459,10 +455,10 @@ QA reads this section verbatim; QA's edge-case additions go to an
 ### Design↔result image comparison (wired flow)
 
 With the Design Comparison gate open (`ui_visual_check: true` AND `.context/designs/` artifacts
-present), QA's **primary** comparison reuses DV-captured result images and runs an objective RMSE
+present), QA's primary comparison reuses DV-captured result images and runs an objective RMSE
 pixel-diff pre-pass before multimodal vision, rather than always re-capturing live. The per-row
 algorithm and the reporting `RMSE` column are canonical in
-`agents/qa-engineer.md § Design Comparison`.
+`skills/worktask/references/visual-qa.md`; the gate is `agents/qa-engineer.md § Design Comparison`.
 
 #### Join key (Option A)
 
@@ -475,7 +471,7 @@ re-capture is the fallback only — used when no DV image maps.
 
 #### Verdict reconciliation and degradation (by reference)
 
-- RMSE is a **one-way escalator**: it may raise severity, never lower it (RMSE is blind to
+- RMSE is a one-way escalator: it may raise severity, never lower it (RMSE is blind to
   copy/semantic errors). Full 6-row matrix:
   `skills/worktask/references/visual-qa.md § Verdict reconciliation`.
 - The reuse is strictly additive; the full invariant list (gate unchanged, absent DV images →
@@ -485,7 +481,7 @@ re-capture is the fallback only — used when no DV image maps.
 
 ### Skip mechanics — positive selection everywhere
 
-Every platform translates the Selected Tests list into **positive** include flags, never negative
+Every platform translates the Selected Tests list into positive include flags, never negative
 excludes: an exclude list silently grows stale as tests are added, an include list fails loudly.
 Per-platform flag syntax and identifier grammar are canonical in
 `test-selection-syntax.md § Platform handlers` — not restated here. Drop the filter entirely for
@@ -506,7 +502,7 @@ xcodebuild test -project MyApp.xcodeproj -scheme MyApp \
   -only-testing:MyAppTests/AppLaunchTests
 ```
 
-Identifiers are **suite-terminal** (`<Target>/<Suite>`) per `test-selection-syntax.md § Apple
+Identifiers are suite-terminal (`<Target>/<Suite>`) per `test-selection-syntax.md § Apple
 identifier grammar — suite-terminal`; a per-function segment selects nothing under Swift Testing.
 Under `test_mode=full` the whole suite runs without `-only-testing:`, and UI bundles run unless
 explicitly excluded (no implicit `-skip-testing:`).

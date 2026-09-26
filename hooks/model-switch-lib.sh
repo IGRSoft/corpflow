@@ -16,7 +16,7 @@
 #   Symbols: corpflow_workspace_root, corpflow_context_root, corpflow_active_stage,
 #   corpflow_resolve_pin, corpflow_stage_and_pin, corpflow_model_family,
 #   corpflow_switch_dest, corpflow_switch_origin, corpflow_switch_fields,
-#   corpflow_audit_task_id, corpflow_hook_audit_row.
+#   corpflow_audit_task_id, corpflow_hook_audit_row, corpflow_bind_payload.
 #
 # Minimum shell: bash 3.2+ (macOS default). Correct under the union of its
 # consumers' option sets, `set -euf -o pipefail`, while setting none of them.
@@ -58,6 +58,85 @@ _cf_rank6_owns() {
   return 1
 }
 
+# Cleared at load so an inherited environment value can never act as a global
+# override: only corpflow_bind_payload, inside this hook process, may set it.
+_CORPFLOW_ISSUE_ROOT=""
+
+# _cf_issue_root_of <path> — echoes the /megatask per-issue worktree
+# <base>/.worktrees/<group>/<issue#> holding <path>, or nothing. <base> must be a
+# declared root (WORKSPACE_ROOT or CLAUDE_PROJECT_DIR), so a payload can only
+# narrow the session's own root, never point a hook at an arbitrary tree; the
+# worktree must carry both workspace.json and its own ledger.
+_cf_issue_root_of() {
+  local _i_p _i_base _i_bp _i_rest _i_group _i_num _i_wt
+  [ -n "${1:-}" ] || return 0
+  _i_p="$(CDPATH='' cd -- "$1" 2> /dev/null && pwd -P)"
+  [ -n "$_i_p" ] || return 0
+  for _i_base in "${WORKSPACE_ROOT:-}" "${CLAUDE_PROJECT_DIR:-}"; do
+    [ -n "$_i_base" ] || continue
+    _i_bp="$(CDPATH='' cd -- "$_i_base" 2> /dev/null && pwd -P)"
+    [ -n "$_i_bp" ] && [ -d "$_i_bp/.worktrees" ] || continue
+    case "$_i_p/" in
+      "$_i_bp/.worktrees/"*/*/*) ;;
+      *) continue ;;
+    esac
+    _i_rest="${_i_p#"$_i_bp/.worktrees/"}/"
+    _i_group="${_i_rest%%/*}"
+    _i_rest="${_i_rest#*/}"
+    _i_num="${_i_rest%%/*}"
+    case "$_i_num" in '' | *[!0-9]*) continue ;; esac
+    _i_wt="$_i_bp/.worktrees/$_i_group/$_i_num"
+    if [ -f "$_i_wt/workspace.json" ] && [ -f "$_i_wt/.context/state.json" ]; then
+      printf '%s' "$_i_wt"
+      return 0
+    fi
+  done
+  return 0
+}
+
+# corpflow_bind_payload <hook-stdin-json> — binds THIS hook process to the
+# /megatask per-issue worktree the payload belongs to, so corpflow_workspace_root
+# answers the issue's ledger ahead of WORKSPACE_ROOT/CLAUDE_PROJECT_DIR, which a
+# hook inherits from the batch session, not from the per-issue Bash prefix.
+# Per-process by design: concurrent issues each get their own hook process, so no
+# shared mutable state can cross-bind them. Candidates, first match wins: the
+# payload's cwd, this process's cwd, then the `WORKSPACE_ROOT=` banner line of
+# the acting agent's own dispatch prompt (the first user record of its
+# transcript) — a subagent's cwd is the batch root, so the banner is what carries
+# its issue. No match leaves the ladder exactly as it was.
+corpflow_bind_payload() {
+  local _b_payload="${1:-}" _b_cand _b_tp _b_wt
+  _CORPFLOW_ISSUE_ROOT=""
+  # Cheap exit for every non-megatask session: no .worktrees under a declared
+  # root means no candidate can validate, so skip the jq and transcript reads.
+  if { [ -z "${WORKSPACE_ROOT:-}" ] || [ ! -d "${WORKSPACE_ROOT}/.worktrees" ]; } \
+    && { [ -z "${CLAUDE_PROJECT_DIR:-}" ] || [ ! -d "${CLAUDE_PROJECT_DIR}/.worktrees" ]; }; then
+    return 0
+  fi
+  _b_cand=""
+  if [ -n "$_b_payload" ] && command -v jq > /dev/null 2>&1; then
+    _b_cand=$(printf '%s' "$_b_payload" | jq -r '.cwd // empty | strings' 2> /dev/null) || _b_cand=""
+  fi
+  _b_wt=$(_cf_issue_root_of "$_b_cand")
+  [ -n "$_b_wt" ] || _b_wt=$(_cf_issue_root_of "${PWD:-}")
+  if [ -z "$_b_wt" ] && [ -n "$_b_payload" ] && command -v jq > /dev/null 2>&1; then
+    # SubagentStop names the stopping agent's transcript in agent_transcript_path;
+    # transcript_path there is the parent's. Tool events carry only the latter.
+    _b_tp=$(printf '%s' "$_b_payload" \
+      | jq -r '(.agent_transcript_path // .transcript_path) // empty | strings' 2> /dev/null) || _b_tp=""
+    if [ -n "$_b_tp" ] && [ -f "$_b_tp" ] && [ -r "$_b_tp" ]; then
+      _b_cand=$(head -n 40 "$_b_tp" 2> /dev/null | jq -rn '
+          first(inputs | select(.type? == "user")) | .message.content
+          | if type == "string" then . elif type == "array"
+            then (map(select(.type? == "text") | .text | strings) | join("\n")) else empty end
+        ' 2> /dev/null | sed -n 's/^WORKSPACE_ROOT=\(\/.*\)$/\1/p' | head -n 1) || _b_cand=""
+      _b_wt=$(_cf_issue_root_of "$_b_cand")
+    fi
+  fi
+  _CORPFLOW_ISSUE_ROOT="$_b_wt"
+  return 0
+}
+
 # corpflow_workspace_root — echoes the absolute workspace root and also
 # assigns it to _CORPFLOW_WS_ROOT, so a caller on a hot path can read the value
 # without paying for a command substitution. Arguments are ignored.
@@ -66,12 +145,18 @@ _cf_rank6_owns() {
 # these hooks cannot rely on finding it under cwd.
 #
 # Ranks 3-6 of the shared root-resolution ladder; ranks 1-2 are scripts-tree
-# only (see skills/shared/lib/state-read-lib.sh). Every rank demands
+# only (see skills/shared/lib/state-read-lib.sh). A per-issue worktree bound by
+# corpflow_bind_payload answers ahead of rank 3. Every rank demands
 # .context/state.json: a bare folder is what a stray mkdir leaves, and no hook
 # may create the first .context/ — only the seed does.
 corpflow_workspace_root() {
   local _cf_libdir _cf_resolver _cf_top _cf_root
   _CORPFLOW_WS_ROOT=""
+
+  if [ -n "${_CORPFLOW_ISSUE_ROOT:-}" ] && [ -f "${_CORPFLOW_ISSUE_ROOT}/.context/state.json" ]; then
+    _CORPFLOW_WS_ROOT="${_CORPFLOW_ISSUE_ROOT}"
+    printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
+  fi
 
   if [ -n "${WORKSPACE_ROOT:-}" ] && [ -f "${WORKSPACE_ROOT}/.context/state.json" ]; then
     _CORPFLOW_WS_ROOT="${WORKSPACE_ROOT}"
@@ -429,4 +514,5 @@ corpflow_hook_audit_row() {
 readonly -f corpflow_workspace_root corpflow_context_root corpflow_active_stage \
   corpflow_resolve_pin corpflow_stage_and_pin corpflow_model_family \
   corpflow_switch_dest corpflow_switch_origin corpflow_switch_fields \
-  corpflow_audit_task_id corpflow_hook_audit_row _cf_rank6_owns
+  corpflow_audit_task_id corpflow_hook_audit_row _cf_rank6_owns \
+  _cf_issue_root_of corpflow_bind_payload

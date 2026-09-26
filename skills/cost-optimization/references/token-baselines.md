@@ -2,29 +2,22 @@
 
 ## Per-Stage Token Baselines
 
-Per-stage typical token ranges are the **Typical tokens** column of `skills/context-compression/SKILL.md § Stage Budget Table`; price a row with the tier rate in `skills/shared/model-selection.md § Cost Tiers`.
+Per-stage typical token ranges are the **Typical tokens** column of `skills/context-compression/SKILL.md § Stage Budget Table`; price a row with `skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
 
-**Total Worktask Range**: 58,000-123,000 tokens (~$0.17-0.37 for sonnet).
+**Total Worktask Range**: 58,000-123,000 tokens (~$0.21-0.44 for sonnet at the default split, before retry and complexity multipliers).
 
 ## Context Window Efficiency Improvements
 
-Claude Code's context savings across 2.1.51–2.1.220 are overwhelmingly automatic — cache, compaction, memory, and transcript fixes that compound across a multi-stage worktask with no agent or worktask change. Those need no entry here. What follows is the residue that still carries a decision: a knob to set, a cap to plan against, a surface to read, or a correction that changes how older cost numbers compare. Versions are given so a report can be dated, not because the history matters.
+Most of Claude Code's context savings are automatic. Listed here is only what carries a decision: a knob to set, a cap to plan against, a surface to read, or a correction that changes how older cost numbers compare. Versions let a report be dated.
 
 ### Knobs
 
+Prompt-cache TTL knobs: `skills/cost-optimization/SKILL.md § Finer-grained TTL controls`.
+
 | Setting | Since | Effect |
 |---|---|---|
-| `ENABLE_PROMPT_CACHING_1H` | 2.1.108 | 1h prompt-cache TTL; since 2.1.129 it no longer silently downgrades to 5 min |
-| `promptCacheTtl` / `subagentPromptCacheTtl` | 2.1.243 | Separate TTLs for the main conversation and its subagents |
-| `experimental.cacheTtl` (agent frontmatter) | 2.1.248 | Per-agent TTL, used only when no subagent TTL setting is configured |
-| `effort:` on skills/commands | 2.1.80 | Per-invocation cost control; default is `high` on non-Pro since 2.1.94 — set `medium` to save |
 | `showThinkingSummaries: true` | 2.1.89 | Restores thinking summaries, off by default because they cost tokens |
 | `MCP_TOOL_TIMEOUT` | 2.1.142 | Honoured by remote HTTP/SSE servers — lifts the silent 60s cap that drove retry churn |
-
-#### Knobs (continued)
-
-| Setting | Since | Effect |
-|---|---|---|
 | `CLAUDE_CODE_ENABLE_AUTO_MODE=1` | 2.1.158 | Auto model/effort on Bedrock/Vertex/Foundry; explicit `--model`/`--effort` still win |
 | `--forward-subagent-text` | 2.1.219 | stream-json forwards depth-2+ spawns, so attribution stops folding Tier-2 into the parent |
 | `/recap`, `--recap` | 2.1.108 | Session recap, reusable as handoff context |
@@ -39,17 +32,18 @@ Claude Code's context savings across 2.1.51–2.1.220 are overwhelmingly automat
 | Skill `description:` | 2.1.86 | 250 characters |
 | Stalled subagent | 2.1.113 | Clear error after 10 min instead of silently burning budget |
 | Compaction loop guard | 2.1.76, 2.1.89 | Stops after 3 failed compactions or 3 immediate refills, with an actionable error |
-| 1M window | 2.1.128, 2.1.172 | Autocompact respects the 1M threshold, but a 1M session **without** usage credits compacts back under the standard limit — budget handoffs against the standard window unless credits are confirmed |
+| 1M window | 2.1.128, 2.1.172 | Autocompact respects the 1M threshold, but a 1M session without usage credits compacts back under the standard limit — budget handoffs against the standard window unless credits are confirmed |
 
 ### Cost-visibility surfaces
 
 | Surface | Since | Shows |
 |---|---|---|
-| `/cost` | 2.1.92 | Per-model and cache-hit breakdown; a per-session prompt-cache line (hit ratio, misses, tokens re-cached, warm/cold) plus a `prompt_cache` object for status-line scripts |
+| `/cost` | 2.1.92 | Per-model and cache-hit breakdown, plus the prompt-cache line (`skills/cost-optimization/SKILL.md § Verifying the hit rate`) |
 | `/stats` | 2.1.89 | Includes subagent usage |
 | `/context all` | 2.1.139 | Per-skill token estimates via the active model's tokenizer |
 | `/skills` (press `t`) | 2.1.111 | Sorts the skill list by token cost |
 | `claude plugin details <name>` | 2.1.139 | Inventory + token cost before install/enable |
+| `/skill-doctor` | 2.1.261 | Loaded skills that go unused and what each costs in context — use it to prune |
 
 ### Telemetry corrections
 
@@ -75,13 +69,11 @@ These change how pre-fix numbers compare to current ones.
 |---|---|---|
 | Failed read-only tool no longer cancels parallel siblings | 2.1.72, 2.1.128 | Read/Glob/WebFetch first, read-only Bash later — one failure no longer wastes the batch |
 | Subagents discover project + user + plugin skills | 2.1.133 | Stop inlining skill instructions into a delegation prompt; the child loads them itself |
-| Lean system prompt on the top Opus | 2.1.154 | Lower input cost per request (Haiku/Sonnet unchanged) |
-| Fast mode (`/fast`) | 2.1.154 | 2x rate for 2.5x speed |
 | `claude -p` keeps text produced before a mid-stream API error | 2.1.219 | A failed headless stage yields salvageable partial work instead of a full re-run |
 
 ### Canonical elsewhere
 
-Model defaults and aliases, 1M credit gates, fast-mode rates, and managed `availableModels`/`enforceAvailableModels` allowlists: `skills/shared/model-selection.md`. Spawn ceilings (depth 3, 20 concurrent — there is **no per-session total-spawn cap**, `skills/agent-coordination/SKILL.md § No total cap; concurrency is the one that bites`), `--max-budget-usd` halting *running* subagents, and `workflowSizeGuideline` fan-out sizing: `skills/agent-coordination/SKILL.md`.
+Model defaults and aliases, per-model effort defaults, 1M credit gates, fast mode and the lean system prompt, and managed `availableModels`/`enforceAvailableModels` allowlists: `skills/shared/model-selection.md`. Spawn ceilings (depth 3, 20 concurrent, no per-session total-spawn cap: `skills/agent-coordination/SKILL.md § No total cap; concurrency is the one that bites`), `--max-budget-usd` halting *running* subagents, and `workflowSizeGuideline` fan-out sizing: `skills/agent-coordination/SKILL.md`.
 
 ## Calendar Month Billing
 
@@ -91,7 +83,7 @@ Billing runs per calendar month and a partial month bills in full — the rate a
 
 ### Safety and Ethics Override Cost
 
-**IMPORTANT**: constitutional compliance always outranks cost optimization.
+Constitutional compliance outranks cost optimization. Don't optimize in these cases, nor when the ethics-reviewer asked for comprehensive analysis or the stakeholder flagged the task for ethics review:
 
 | Scenario | Action |
 |----------|--------|
@@ -100,21 +92,17 @@ Billing runs per calendar month and a partial month bills in full — the rate a
 | Safety-critical code | Prioritize thoroughness over review time |
 | User harm potential | Escalate to the stakeholder regardless of cost |
 
-### When NOT to Optimize
-
-Safety-critical code under review · possible user harm · hard constraints in play · ethics-reviewer asked for comprehensive analysis · stakeholder flagged the task for ethics review.
-
 ### Ethics Review Cost Budgeting
 
-Ethics work runs on opus.
+Ethics work runs on opus. Costs are the opus rate at the default split of `SKILL.md § Cost Estimation Formula`, before retry and complexity multipliers.
 
 | Ethics Activity | Typical Tokens | Est. Cost |
 |-----------------|----------------|-----------|
-| Quick ethics check | 2,000-5,000 | $0.03-0.075 |
-| Standard ethics review | 5,000-10,000 | $0.075-0.15 |
-| Comprehensive ethics audit | 15,000-30,000 | $0.225-0.45 |
-| Hard constraint analysis | 5,000-10,000 | $0.075-0.15 |
+| Quick ethics check | 2,000-5,000 | $0.014-0.036 |
+| Standard ethics review | 5,000-10,000 | $0.036-0.072 |
+| Comprehensive ethics audit | 15,000-30,000 | $0.108-0.216 |
+| Hard constraint analysis | 5,000-10,000 | $0.036-0.072 |
 
 ### Constitutional Budget Allocation
 
-Share of worktask budget to reserve for ethics: **standard 10%** (ad-hoc consultation) · **high-risk features 20%** (mandatory review) · **user data handling 15%** (privacy and consent) · **AI/ML features 25%** (fairness and bias).
+Share of worktask budget to reserve for ethics: standard 10% (ad-hoc consultation) · high-risk features 20% (mandatory review) · user data handling 15% (privacy and consent) · AI/ML features 25% (fairness and bias).

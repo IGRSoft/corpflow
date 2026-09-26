@@ -326,6 +326,11 @@ if [ -z "$REPO" ]; then
 fi
 [ -n "$REPO" ] || exit 0
 
+# Bind to the payload's /megatask issue before resolving: the inherited
+# CLAUDE_PROJECT_DIR names the batch, not the issue this agent worked.
+if command -v corpflow_bind_payload > /dev/null 2>&1; then
+  corpflow_bind_payload "$PAYLOAD"
+fi
 if command -v corpflow_context_root >/dev/null 2>&1; then
   CTX=$(corpflow_context_root)
 else
@@ -338,6 +343,10 @@ else
   fi
 fi
 [ -n "$CTX" ] || exit 0
+# A bound issue's diff lives in its own worktree, not the batch checkout.
+if [ -n "${_CORPFLOW_ISSUE_ROOT:-}" ]; then
+  REPO="$_CORPFLOW_ISSUE_ROOT"
+fi
 
 run_gate "$PAYLOAD" "$CTX" "$REPO"
 exit 0

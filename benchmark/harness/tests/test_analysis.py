@@ -372,7 +372,7 @@ if __name__ == "__main__":
 class EraComparability(unittest.TestCase):
     """Cross-era drift must surface without anyone remembering to pass --reference."""
 
-    def _era(self, harness="python-1", contract="scripted-cli-v1", dv="claude-opus-5"):
+    def _era(self, harness="python-1", contract="scripted-cli-v1", dv="claude-opus-5-5"):
         return {"harness": harness, "prompt_contract": contract,
                 "model_pins": {"DV": dv, "QA": "claude-sonnet-5"}}
 
@@ -403,7 +403,7 @@ class EraComparability(unittest.TestCase):
         current["era"] = self._era()
         previous = json.loads(json.dumps(_paired_live_record()))
         previous["run_id"] = "live-earlier"
-        previous["era"] = self._era(dv="claude-opus-4")
+        previous["era"] = self._era(dv="claude-opus-5")
 
         caveats = analysis.analyze(current, previous=previous)["caveats"]
         cross = [c for c in caveats if "cross-era vs previous run" in c]

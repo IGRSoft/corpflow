@@ -177,6 +177,45 @@
             "continueOnBlock": true
           }
         ]
+      },
+      {
+        "matcher": "^corpflow:product-manager$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "PL"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "^corpflow:project-manager$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "FN"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "^corpflow:stakeholder$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh",
+            "args": [
+              "--stage",
+              "ST"
+            ]
+          }
+        ]
       }
     ],
     "PreCompact": [
@@ -220,22 +259,6 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-denied.sh",
             "timeout": 5,
             "continueOnBlock": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": ".*corpflow:product-manager.*|.*corpflow:project-manager.*",
-        "hooks": [
-          {
-            "type": "mcp_tool",
-            "server": "conductor",
-            "tool": "PushNotification",
-            "args": {
-              "title": "corpflow worktask",
-              "message": "Approval gate ready for review"
-            }
           }
         ]
       }

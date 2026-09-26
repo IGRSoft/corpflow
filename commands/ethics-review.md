@@ -1,18 +1,21 @@
 ---
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
-argument-hint: <feature or decision to review> [--lens harm|full]
-allowed-tools: Read, Glob, Grep
+argument-hint: '[<target>] [--lens full|harm] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix]'
+allowed-tools: Read, Glob, Grep, Task(corpflow:ethics-reviewer)
 related:
   - agents/ethics-reviewer.md
   - skills/claude-constitution/SKILL.md
 ---
 
-> **When to use**: `/ethics-review` for constitutional compliance (`--lens full`, default). Add `--lens harm` for a specialized stakeholder-impact harm-avoidance deep-dive.
-
 # /ethics-review
 
-Review tasks, features, or code for alignment with Claude's constitutional principles including safety, honesty, harm avoidance, and ethical guidelines. Principles canon: `skills/claude-constitution/SKILL.md`; analysis is performed by `agents/ethics-reviewer.md`.
+Review a task, feature, or code for alignment with Claude's constitutional principles: safety,
+honesty, harm avoidance, user autonomy. Principles canon: `skills/claude-constitution/SKILL.md`.
+Dispatch `Task(corpflow:ethics-reviewer)` with the target and options, as a standalone review:
+it returns the report in this file's § Output shape for the chosen lens and writes nothing (no
+`ethics-review-N.md`, no state patch). The agent escalates complex or critical cases to
+human/stakeholder review.
 
 ## Lenses
 
@@ -21,59 +24,35 @@ Review tasks, features, or code for alignment with Claude's constitutional princ
 | `full` (default) | Standard constitutional review across Safety, Honesty, Harm, Autonomy |
 | `harm` | Harm-avoidance deep-dive: cost-benefit, stakeholder impact, harm matrix, mitigations |
 
-> **`--lens harm` ≠ `--focus harm`.** `--lens harm` selects the deep-dive mode
-> (stakeholder / probability / severity analysis). `--focus harm` merely scopes a
-> standard `--lens full` review to the Harm category — a much lighter pass.
-
-## Usage
-
-```
-/ethics-review [target] [options]
-/ethics-review [target] --lens harm [harm options]
-```
-
-## Arguments
-
-| Argument | Type | Required | Description |
-|----------|------|----------|-------------|
-| target | string | No (`--lens full`) / Yes (`--lens harm`) | Task, feature, file, or description to review |
+`--lens harm` selects the deep-dive mode (stakeholder / probability / severity analysis);
+`--focus harm` only scopes a standard `--lens full` review to the Harm category — a lighter pass.
 
 ## Options
 
-### Shared
+`target` — task, feature, file, or description. Optional under `--lens full` (the current
+task), required under `--lens harm`.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| --lens | enum | full | Review lens: `full` (constitutional) or `harm` (harm-avoidance deep-dive) |
-| --output | enum | summary | Output format: `summary`, `detailed`, `checklist`, `matrix`, `report` (`matrix` is harm-lens only) |
-
-### `--lens full` options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| --scope | enum | task | Review scope: `task`, `feature`, `architecture`, `code` |
-| --depth | enum | standard | Analysis depth: `quick`, `standard`, `comprehensive` |
-| --focus | enum | all | Focus category: `safety`, `honesty`, `harm`, `autonomy`, `all` |
-
-### `--lens harm` options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| --stakeholders | enum | all | Impact scope: `users`, `operators`, `society`, `all` |
-| --include-benefits | bool | true | Include benefits in the cost-benefit analysis |
-| --mitigation | bool | true | Include mitigation recommendations |
+| Option | Lens | Values | Default | Purpose |
+|---|---|---|---|---|
+| `--lens` | both | `full`, `harm` | `full` | Constitutional review or harm deep-dive |
+| `--output` | both | full: `summary`, `detailed`, `checklist`; harm: `summary`, `matrix` | `summary` | Output format |
+| `--focus` | full | `safety`, `honesty`, `harm`, `autonomy`, `all` | `all` | Focus category |
+| `--stakeholders` | harm | `users`, `operators`, `society`, `all` | `all` | Impact scope |
+| `--include-benefits` | harm | bool | `true` | Include benefits in the cost-benefit analysis |
+| `--mitigation` | harm | bool | `true` | Include mitigation recommendations |
 
 ## Examples
 
 ```
-/ethics-review --depth quick                                                  # current task
-/ethics-review "user authentication system" --scope feature --depth comprehensive
-/ethics-review src/payment.ts --scope code --focus safety --output checklist
-/ethics-review "recommendation algorithm" --focus harm --depth comprehensive  # scoped standard pass
+/ethics-review [<target>] [--lens full] [--focus safety|honesty|harm|autonomy|all] [--output summary|detailed|checklist]
+/ethics-review <target> --lens harm [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|matrix]
+/ethics-review  # current task
+/ethics-review "user authentication system" --output detailed
+/ethics-review src/payment.ts --focus safety --output checklist
+/ethics-review "recommendation algorithm" --focus harm  # scoped standard pass
 /ethics-review "AI-powered content recommendation" --lens harm
-/ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false
 /ethics-review "data collection expansion" --lens harm --output matrix --stakeholders all
-/ethics-review "targeted advertising" --lens harm --include-benefits false
+/ethics-review "auto-save feature" --lens harm --stakeholders users --mitigation false --include-benefits false
 ```
 
 ## Output (`--lens full`)
@@ -201,13 +180,12 @@ Very Likely (> 70%) │        │        │        │
 | Level | Icon | Meaning | Action |
 |-------|------|---------|--------|
 | Compliant | ✅ | Meets constitutional requirements | Proceed |
-| Advisory | 💡 | Could be improved | Consider improvements |
 | Concern | ⚠️ | Potential issues identified | Address before proceeding |
 | Violation | ❌ | Hard constraint violated | Must fix before proceeding |
 
 ## Hard Constraint Violations
 
-The following always result in ❌ Violation (never acceptable regardless of benefits):
+Always ❌ Violation, regardless of benefits:
 - Weapons of mass destruction assistance
 - CSAM generation or assistance
 - Critical infrastructure attacks
@@ -223,6 +201,3 @@ Invokable at any worktask stage — PL: planned features / harms before design �
 AR: architecture safety and harm implications · DV: implementation harm potential ·
 QA: ethics in quality criteria · ST: stakeholder review of the harm assessment
 (`--lens harm`).
-
-- Analysis runs through the `ethics-reviewer` agent; complex or critical cases
-  escalate to human/stakeholder review.

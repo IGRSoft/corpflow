@@ -3,27 +3,26 @@
 ## Conventions used in this document
 
 - **`planFile`** — the plan filename PL produced for the current worktask run (`planning-N.md`, e.g. `planning-0.md`, `planning-3.md`). Computed by PL0 per `skills/worktask/references/pl0-procedure.md § Plan File & Run Index Naming`. Every downstream task carries it as `metadata.plan_file`; the same value is interpolated into `context_refs`. Stage agents resolve the plan file from `task.metadata.plan_file` first, then newest `.context/planning-*.md`.
-- **handoff-protocol mode** — the metadata contract (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list). The ledger is mandatory, so there is no whole-file fallback list.
+- **handoff-protocol mode** — the metadata contract (per `skills/worktask/references/handoff-protocol.md`): tasks carry `state_file` + `context_refs` (anchor list). The ledger is mandatory; there is no whole-file fallback list.
 
 ## PL0 state.json Initialization (Phase 1)
 
-`commands/worktask.md` Phase 1 Step 3a creates `.context/state.json` right after `mkdir -p .context/` by running `skills/worktask/scripts/seed-state.sh`, the seed's only executable definition: the re-run-aware next free planning index `N` (`0` on a fresh `.context/`), `metadata.workspace_path`, `facts.goal`, and the atomic temp+fsync+rename write. `run_index` is a **required** schema field (`handoff-protocol.md#state-json-schema`). The script refuses (exit 3) when `state.json` already exists; `pl0-procedure.md § Step 4 — state.json reset` owns re-runs. Resulting JSON shape: `handoff-protocol.md#pl0-seed`.
+`commands/worktask.md` Phase 1 Step 3a creates `.context/state.json` right after `mkdir -p .context/` by running `skills/worktask/scripts/seed-state.sh`, the seed's only executable definition: the re-run-aware next free planning index `N` (`0` on a fresh `.context/`), `metadata.workspace_path`, `facts.goal`, and the atomic temp+fsync+rename write. `run_index` is a required schema field (`handoff-protocol.md#state-json-schema`). The script refuses (exit 3) when `state.json` already exists; `pl0-procedure.md § Step 4 — state.json reset` owns re-runs. Resulting JSON shape: `handoff-protocol.md#pl0-seed`.
 
 ### plan_file shape boundary
 
 Both shapes appear in this file: the state seed writes the **path** shape
 (`.context/planning-N.md`); every task-seed snippet below writes the **basename** shape
-(`planning-N.md`). Both are legal and every reader MUST accept either — rule and resolution
-order are canonical in `handoff-protocol.md § plan_file shape boundary`.
+(`planning-N.md`). Both are legal and every reader accepts either — rule and resolution order:
+`handoff-protocol.md § plan_file shape boundary`.
 
 ### Seeded goal
 
 `GOAL` is the task description, JSON-escaped and truncated to 240 chars
-(`handoff-protocol.md § facts.goal`). Seed it here rather than leaving it to PL0's state patch:
-nothing in the patch path writes the field, so a run where PL completed by any other route left it
-unset — and `publish-pl-issue.sh` then published a kebab-slug issue title with an empty Summary
-(issue #375). PM still refines it; the seed only guarantees it is never absent. Under `/megatask`
-the issue title is the goal.
+(`handoff-protocol.md § Field notes — goal`). It is seeded here because nothing in PL0's patch path
+writes it, and without it `publish-pl-issue.sh` publishes a slug title with an empty Summary. PM
+still refines it; the seed only guarantees it is never absent. Under `/megatask` the issue title is
+the goal.
 
 ### Seeded workspace_path
 
@@ -33,8 +32,8 @@ worktree path, but no run may leave it unset.
 
 #### Readers that silently no-op without it
 
-Three guards read it and every one *passes silently* when it is empty, so an unstamped ledger
-disables all three at once rather than failing loudly:
+Three guards read it and each passes silently when it is empty, so an unstamped ledger disables
+all three at once:
 
 | Reader | Behaviour when `workspace_path` is unset |
 |---|---|
@@ -42,9 +41,7 @@ disables all three at once rather than failing loudly:
 | `skills/worktask/scripts/dv-tree-preflight.sh` `resolve_assigned()` | resolves empty → warn, exit 0 (never blocks) |
 | `agents/developer.md § cwd discipline` path-prefix check | gated on "when set" → never runs |
 
-Not hypothetical: a DV stage once pinned itself to a stale worktree of a *different* clone, wrote
-nothing, and passed all three checks. Isolation is not assignment —
-`workspace-modes.md § Sibling-worktree hazard`.
+Isolation is not assignment: `workspace-modes.md § Sibling-worktree hazard`.
 
 ### Post-seed notes
 
@@ -54,7 +51,7 @@ Subsequent stage agents read `.context/state.json` first; its absence is a hard 
 
 ## Hook Installation
 
-PL0 (or `commands/worktask.md` Phase 1) MUST verify the `state-merge.sh` SubagentStop hook is installed first. It is the Layer 2 safety net: it patches `state.json` from artifact frontmatter when a stage agent forgets to self-patch (Layer 1) or the orchestrator's Step 6.5 check is skipped.
+PL0 (or `commands/worktask.md` Phase 1) first verifies the `state-merge.sh` SubagentStop hook is installed. It is the Layer 2 safety net: it patches `state.json` from artifact frontmatter when a stage agent forgets to self-patch (Layer 1) or the orchestrator's Step 6.5 check is skipped.
 
 ### Install snippet
 
@@ -83,14 +80,14 @@ Before seeding the stage chain, verify:
 2. `.claude/hooks/state-merge.sh` exists and is executable
 3. The plugin's `plugin.json` registers the SubagentStop hook (this is declarative — no project-local action needed)
 
-If hook source is not found (e.g. plugin root unresolved — the fallback line left unsubstituted), log a warning and continue — the plugin.json-registered hook will still fire via the plugin hook system. The project-local copy is a belt-and-suspenders fallback for environments where plugin hooks are not supported.
+If the hook source is not found (e.g. the plugin root is unresolved), log a warning and continue — the plugin.json-registered hook still fires. The project-local copy is a fallback for environments where plugin hooks are not supported.
 
 ## Multi-Issue Initialization → `/megatask`
 
-Single-issue setup is the only initialization this skill owns. **Multi-issue batches across a GitHub
-milestone or an explicit issue array are orchestrated by `/megatask`**, not by `/worktask` — including
-issue fetching, PR-skip detection, priority + dependency/blocker ordering, orchestrator.json, and
-per-issue worktree creation. `/megatask` launches one `/worktask` per ready issue (gates pre-bypassed),
+Single-issue setup is the only initialization this skill owns. Multi-issue batches across a GitHub
+milestone or an explicit issue array are orchestrated by `/megatask` — issue fetching, PR-skip
+detection, priority + dependency/blocker ordering, orchestrator.json, and per-issue worktree
+creation. `/megatask` launches one `/worktask` per ready issue (gates pre-bypassed),
 so the per-issue setup above still applies inside each worktree.
 
 See:
@@ -105,28 +102,32 @@ Only PL0 is created at startup. PL0 creates all subsequent stage tasks after pla
 
 ```bash
 WORKTASK_ID="dark-mode-2025"
+# Resolved like every stage's pair (commands/worktask.md § Step 4 — PL0's model and effort).
+IFS=$'\t' read -r MODEL EFFORT _ < <(model-matrix.sh --resolve product-manager)
 
 # The state.json seed already created PL0 as in_progress, so this attaches its
 # metadata — --task-create would early-exit as a no-op and drop the payload.
 state-patch.sh --task-meta PL0 --set "$(jq -n --arg wid "$WORKTASK_ID" \
-  '{stage:"PL", agent:"corpflow:product-manager", model:"opus",
+  --arg model "$MODEL" --arg effort "$EFFORT" \
+  '{stage:"PL", agent:"corpflow:product-manager", model:$model, effort:$effort,
     description:"Define requirements, assess complexity, seed stage tasks",
     worktask_id:$wid, priority:"medium"}')"
 ```
 
 ## Pre-Stage Exploration Cache
 
-Before creating PL0, the orchestrator SHOULD create `.context/exploration.md` when it has
-performed codebase exploration. This prevents stage agents from re-reading the same files.
+Before creating PL0, the orchestrator creates `.context/exploration.md` when it has explored the
+codebase, so stage agents do not re-read the same files.
 
 ### When to Create
 
 - Orchestrator launched Explore agents before PL0
 - User provided Figma URLs or external context
-  - When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and summarizes design context here
-
-> **Note**: Figma screenshot capture applies to ALL worktasks, including low-complexity runs where PL0 drops stages. For a run with no `.context/planning-N.md`, create `.context/designs/` and save screenshots anyway.
 - Task involves modifying existing code (not greenfield)
+
+When Figma URLs are provided, PL0 captures screenshots to `.context/designs/figma-*.png` and
+summarizes the design context here. This applies to every worktask, including low-complexity runs
+with no `.context/planning-N.md`: create `.context/designs/` and save the screenshots anyway.
 
 ### Template
 
@@ -190,7 +191,7 @@ enum FullScreenRoute: Hashable, Identifiable {
 
 ### Size Budget
 
-exploration.md SHOULD be 500-1500 tokens (roughly 50-150 lines).
+Keep exploration.md to 500-1500 tokens (roughly 50-150 lines).
 Include actual code snippets only for interfaces/enums that agents need to match.
 For implementation details, use `file:line` references.
 
@@ -200,17 +201,16 @@ After planning completes, PL0 creates stage tasks from the complexity score. Eac
 
 ### Canonical seed call
 
-Every stage seed is this one call with the per-stage values from the table below.
-`$PLAN_FILE` is the **basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is
-the boolean PL0 stamped on the plan frontmatter via
-`skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>` (fail-safe `true` on detector
-error), read back and propagated so the capture skill and `dv-screenshot-gate` fire
-deterministically.
+Every stage seed is this call with the values from the table below. `$PLAN_FILE` is the
+**basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is the plan-frontmatter
+boolean PL0 stamped via `skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>`
+(`true` on detector error), propagated so the capture skill and `dv-screenshot-gate` fire.
 
 ```bash
 state-patch.sh --task-create DV0 --metadata "$(jq -n \
   --arg plan "$PLAN_FILE" --arg wid "$WORKTASK_ID" --argjson shots "$REQUIRES_SCREENSHOTS" \
-  '{stage:"DV", agent:"corpflow:developer", model:"opus",
+  --arg model "$MODEL" --arg effort "$EFFORT" \
+  '{stage:"DV", agent:"corpflow:developer", model:$model, effort:$effort,
     description:"Implement dark mode theme system and color tokens",
     error_file:".context/errors/developer.md",
     context_refs:(["\($plan)#requirements","architecture-0.md#decisions","coordination-0.md#fan-out"]|tojson),
@@ -221,7 +221,8 @@ state-patch.sh --task-create DV0 --metadata "$(jq -n \
 
 `priority:"medium"`, `plan_file`, `worktask_id` and `error_file: ".context/errors/<agent>.md"` are
 the same on every row. Drop `--argjson shots` / `requires_screenshots` on rows that do not list it.
-`model` and `effort` come from the stage's row in `skills/shared/stage-codes.md`, not from this table.
+`$MODEL`/`$EFFORT` come from `model-matrix.sh --resolve <agent>` (`stage-codes.md § Model and
+Effort Lookup`).
 
 | Task | stage / agent | `context_refs` | `requires_screenshots` |
 |---|---|---|---|
@@ -237,9 +238,9 @@ AR0 is a tier default at score ≥11, not a mandate — PL0 resolves inclusion a
 outcome in `skipped_stages`/`added_stages`. When AR is excluded, skip its seed entirely and chain
 DV0 directly off PL0.
 
-**context_refs seeding rule**: an `architecture-${N}.md` anchor appears in DV0's `context_refs` if
-and only if AR0 was included. When AR is excluded it MUST NOT appear in any downstream
-`context_refs`, and no `metadata.architecture_ref` is stamped on DV0/DR0/QA0.
+context_refs seeding rule: an `architecture-${N}.md` anchor appears in DV0's `context_refs` if
+and only if AR0 was included. When AR is excluded, no downstream `context_refs` carries it and no
+`metadata.architecture_ref` is stamped on DV0/DR0/QA0.
 
 ### Dependency chain
 
@@ -256,40 +257,7 @@ state-patch.sh --task-status PL0 completed
 
 ## Task Execution Pattern
 
-When a task starts, the executor reads `metadata.agent` and spawns the agent. **Convention**: `metadata.agent` MUST be fully-qualified `plugin:agent` form (e.g., `corpflow:developer`, `apple-developer:ios-developer`). Bare names are not accepted.
-
-### Resolve agent & model
-
-```typescript
-const task = state.tasks[currentTaskId];
-const agentType = task.metadata.agent;  // e.g., "corpflow:developer" or "apple-developer:ios-developer"
-const model = task.metadata.model;      // e.g., "haiku"
-
-const subagentType = agentType;  // already fully-qualified `plugin:agent`
-```
-
-### Build prompt & dispatch
-
-```typescript
-// …continued: same execution flow
-// Build context-aware prompt
-const explorationExists = fileExists('.context/exploration.md');
-const previousArtifacts = getPreviousStageArtifacts(task.metadata.stage);
-
-let prompt = task.description;
-if (explorationExists) {
-  prompt += `\n\n## Shared Exploration Cache\nRead .context/exploration.md for pre-explored codebase context. Do NOT re-read files listed there unless you need to modify them.\n`;
-}
-for (const artifact of previousArtifacts) {
-  prompt += `\n## Previous Stage: Read .context/${artifact}\n`;
-}
-
-Task({
-  subagent_type: subagentType,           // qualified `plugin:agent`
-  model: model,                           // explicit model — do NOT rely on frontmatter inheritance
-  prompt: prompt                           // context-enriched instructions
-});
-```
+When a task starts, the executor reads `metadata.agent` and spawns the agent. `metadata.agent` is always the fully-qualified `plugin:agent` form (e.g., `corpflow:developer`, `apple-developer:ios-developer`); bare names are not accepted. The dispatch itself (prompt built by `brief-compose.sh`, explicit `model` and `effort` from the task metadata) is specified in `skills/worktask/SKILL.md § Orchestrator Execution Loop`.
 
 ## Stage Sub-Task Splitting
 
@@ -335,7 +303,7 @@ state-patch.sh --task-create DV1 --metadata "$(jq -n \
 state-patch.sh --task-block DV1 --on TL0
 state-patch.sh --task-block DV2 --on TL0
 
-# DR0 must wait for ALL DV tasks; --task-block unions with the existing DV0 edge.
+# DR0 waits for every DV task; --task-block unions with the existing DV0 edge.
 state-patch.sh --task-block DR0 --on DV1,DV2
 ```
 

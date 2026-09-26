@@ -1,46 +1,45 @@
 # preview-ensurer — heuristics summary (from dv-screenshot-capture POV)
 
-How `dv-screenshot-capture/apple-canvas` consumes `preview-ensurer`. The full skill lives at `../../preview-ensurer/SKILL.md`; the canonical cross-skill contract (call signature, result shape, invocation sequence) lives in `apple-canvas.md`.
+How `dv-screenshot-capture/apple-canvas` consumes `preview-ensurer`. The full skill lives at `../../preview-ensurer/SKILL.md`, which holds the canonical CLI and result shape; the invocation sequence lives in `apple-canvas.md`.
 
-> **One chokepoint** (v1): the apple-canvas adapter is the sole caller. Do not invoke preview-ensurer directly from DV outside `dv-screenshot-capture`.
+> One chokepoint: `scripts/apple-canvas.sh` is the sole caller, through `swift run … PreviewEnsurer`. The skill sets `disable-model-invocation`, so it is never reached through the `Skill` tool; do not run the executable from DV outside `dv-screenshot-capture`.
 
 ## What preview-ensurer does
 
-For each modified SwiftUI View file:
+For each modified `.swift` file outside `tools/SnapshotHost/`:
 
 1. Parse with SwiftSyntax (pinned `.upToNextMajor(from: "510.0.0")`).
-2. Detect View-conforming types (`struct X: View` / `class X: View` / extension conformance).
+2. Detect top-level View-conforming types (`struct X: View` / `class X: View` / `extension X: View`).
 3. Check for an existing `#Preview` macro OR `PreviewProvider` conformance.
-4. If absent and `auto_add: true`: synthesize a minimal `#Preview { TypeName(<mocked-args>) }`, append it, run a `swift -frontend -parse <file>` smoke check, and roll back on parse failure.
-5. Return `{views, errors}` and write `state.json → facts.previews_added[]`.
+4. If absent and `--auto-add true`: append a minimal `#Preview { TypeName(<mocked-args>) }` from a string template, run a `swift -frontend -parse <file>` smoke check, and on failure write the original text back from memory.
+5. Print `{views, errors}` as JSON; apple-canvas saves it to `.context/logs/preview-ensurer-<ts>.json`. Nothing goes to `state.json`.
 
-**A4 invariant**: NEVER overwrite an existing `#Preview` or `PreviewProvider` — pre-existing previews always win.
+Never overwrite an existing `#Preview` or `PreviewProvider` — pre-existing previews always win.
 
 ## Mock-arg derivation rules (priority order)
 
 | Parameter type | Generated arg | `mock_strategy` (audit) |
 |---|---|---|
-| `Binding<T>` (Bool / Int / String / Optional) | `.constant(<default>)` — `false`, `0`, `""`, `nil` | `binding-constant` |
+| `Binding<T>` (Bool / number / String / Optional / Array) | `.constant(<default>)` — `false`, `0`, `""`, `nil`, `[]` | `binding-constant` |
 | `Optional<T>` | `nil` | `optional-nil` |
-| Concrete protocol `P` with `Source/Mocks/Mock<P>.swift` (file + type named exactly `Mock<ProtocolName>`) | `Mock<P>()` | `mock-found` |
-| Concrete protocol `P`, no mock found | skip; emit `// preview-tbd: provide Mock<P>` (action=`skipped`, reason=`no_mock_for_<P>`) | `preview-tbd` |
-| Concrete class/struct with a no-arg init (SwiftSyntax `init()` member) | `<Type>()` | (concrete-init) |
-| Closures / generics / complex types | skip; emit `// preview-tbd:` (action=`skipped`, reason=`unsupported_init_signature`) | `preview-tbd` |
+| `T` with `Source/Mocks/Mock<T>.swift` (file + type named exactly `Mock<T>`) | `Mock<T>()` | `mock-found` |
+| Any other capitalized simple name, a protocol with no mock included | `<Type>()` | `concrete-init` |
+| Closures / `some` / `any` / other spellings | skip, nothing written to the file (action=`skipped`, reason `closure_unsupported`, `generic_unsupported` or `unsupported_init_signature:<T>`) | `preview-tbd` |
 
 ## Call and result (summary)
 
-apple-canvas calls `ensure_previews(modified_files, options={auto_add: true, write_mode: "in-source"})` — `in-source` is the only v1 mode (ad4) — and receives `{views: [{file, type, has_preview, action, reason?, mock_strategy?}], errors: [String]}`. Empty `errors` → continue to `swift run SnapshotHost`; non-empty → apple-canvas throws `missing_input` and the DV completion gate records it in `.context/errors/developer.md`. Field-level contract: `apple-canvas.md § Function signature (canonical)`.
+apple-canvas runs `swift run --package-path <plugin>/skills/preview-ensurer/references/reference-impl PreviewEnsurer --modified-files <list-file> --auto-add true --project-root <root>` and reads `{views: [{file, type, has_preview, action, reason?, mock_strategy?, lines_added?}], errors: [String]}`. Exit 0 (empty `errors`) → continue to `swift run SnapshotHost`; non-zero → apple-canvas appends `missing_input: preview-ensurer errors` to `.context/errors/developer.md` and exits 2. Field-level contract: `../../preview-ensurer/SKILL.md § Contract (canonical signature)`.
 
 ## Failure / escalation
 
 | Failure | Behavior |
 |---|---|
-| SwiftSyntax parse fails on an input file | Append `parse_failed: <file>` to `errors[]`; skip that file, continue with the others |
-| Post-edit `swift -frontend -parse` fails on the generated `#Preview` | Roll back (`git checkout -- <file>`); record skipped with reason `generated_preview_invalid`; never leave broken syntax |
-| swift-syntax API breakage on a toolchain bump | Surface as `errors[]` with `swift_syntax_api_break: <hint>`; escalates per coordination-0.md risk-watch row 1 (apple-developer:ios-developer) |
-| File contains 3+ View structs and `args.view` unspecified | Skip with reason `ambiguous_view_target`; user disambiguates via `metadata.canvas_view` |
+| Input file unreadable, or the write fails | `skipped` with `read_failed` / `write_failed`; the same text goes to `errors[]` |
+| Post-edit `swift -frontend -parse` fails on the generated `#Preview` | Roll back by rewriting the pre-edit text, so the developer's uncommitted edits survive; record skipped with reason `parse_failed_after_preview_add` and add `parse_failed_after_preview_add: <file>` to `errors[]`; never leave broken syntax |
+| swift-syntax API breakage on a toolchain bump | The `swift run` build fails, a non-zero exit; triage with `apple-developer:ios-developer` |
+| File contains 3+ View types | Skip with reason `ambiguous_view_target` — apple-canvas passes no `--view`, so `metadata.canvas_view` picks the render key, not the preview target |
 
-Each added preview emits one `preview_added` audit row (`file`, `view_type`, `mock_strategy`, `lines_added`).
+apple-canvas writes one `preview_added` audit row per added preview (`file`, `view_type`, `mock_strategy`, `lines_added`).
 
 ## Back-reference
 

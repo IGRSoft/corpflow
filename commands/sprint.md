@@ -1,41 +1,35 @@
 ---
 name: sprint
 description: Plan sprint with capacity analysis, task breakdown, and resource allocation
-argument-hint: <sprint name or number>
+argument-hint: '[<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--export]'
 allowed-tools: Read, Glob, Grep, Write
 related:
   - agents/project-manager.md
   - skills/estimation-methodology/references/estimate-review.md
   - commands/docs-release-notes.md
+  - commands/roadmap.md
+  - commands/estimate.md
 ---
 
 # Sprint Plan Command
 
 Plan sprint with capacity analysis, task breakdown, and resource allocation.
 
-## Usage
-
-```
-/sprint
-/sprint --capacity <points>
-/sprint --from-backlog <file>
-/sprint --duration [1|2|3|4] weeks
-```
-
 ## Options
 
-- `--capacity <points>` - Team capacity in story points
-- `--from-backlog <file>` - Import items from backlog file
-- `--duration <weeks>` - Sprint duration (default: 2)
-- `--include-debt` - Include tech debt allocation
-- `--export` - Export sprint plan
-
-## Examples
+| Option | Values | Purpose |
+|--------|--------|---------|
+| `<sprint name or number>` | text | Sprint ID for the plan title (`Sprint Plan: Sprint {ID}`) |
+| `--capacity <points>` | — | Team capacity in story points |
+| `--from-backlog <file>` | — | Import items from a backlog file |
+| `--duration <weeks>` | `1`, `2`, `3`, `4` | Sprint length in weeks (default: `2`) |
+| `--export` | — | Also write the plan to `.context/sprint-<ID>.md` (`<ID>` = the sprint name or number, else the start date `YYYYMMDD`), the only file this command creates |
 
 ```
+/sprint [<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--export]
 /sprint
-/sprint --capacity 40 --duration 2
-/sprint --from-backlog backlog.md --include-debt
+/sprint 14 --capacity 40 --duration 2
+/sprint --from-backlog backlog.md
 /sprint --capacity 30 --export
 ```
 
@@ -129,9 +123,3 @@ Who leads which workstream, who is pairing, who absorbs bugs and tech debt.
 | 3 devs | 18 pts | 30 pts | 3 pts |
 | 5 devs | 30 pts | 50 pts | 5 pts |
 | 7 devs | 42 pts | 70 pts | 7 pts |
-
-## Integration
-
-This command works with:
-- `/roadmap` - Break roadmap into sprints
-- `/estimate` - Estimate story points

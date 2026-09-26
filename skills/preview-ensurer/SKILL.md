@@ -1,131 +1,101 @@
 ---
 name: preview-ensurer
-description: Use when — and ONLY when — run from the `dv-screenshot-capture` `apple-canvas` adapter, BEFORE `swift run SnapshotHost`. Detect modified SwiftUI View files lacking `#Preview`/`PreviewProvider` and auto-add a minimal `#Preview` block via SwiftSyntax.
+description: Use when the `dv-screenshot-capture` apple-canvas adapter runs, before `swift run SnapshotHost`. Detects SwiftUI View types with SwiftSyntax and appends a minimal `#Preview` block to modified View files that have no `#Preview` or `PreviewProvider`.
 version: 1.1.0
-tools: Read, Edit, Write, Bash, Glob, Grep
 argument-hint: "<modified_files-newline-list> [--auto-add=true|false]"
-keep-coding-instructions: true
-# G3: no standalone value — it edits Swift sources mid-capture using an adapter's
-# modified-file argv, which a user outside a DV screenshot run does not have.
+# G3: no standalone value — it edits Swift sources mid-capture from an adapter's modified-file list, which a user outside a DV screenshot run does not have.
 disable-model-invocation: true
 ---
 
 # preview-ensurer
 
-Auto-add minimal `#Preview { TypeName(<mocked-args>) }` blocks to SwiftUI View files that lack them. Driven by SwiftSyntax (pinned `.upToNextMajor(from: "510.0.0")`). Invoked exclusively from `dv-screenshot-capture/apple-canvas` adapter in v1.
+Appends a minimal `#Preview { TypeName(<mocked-args>) }` block to SwiftUI View files that lack one. SwiftSyntax (pinned `.upToNextMajor(from: "510.0.0")`) detects the View types and existing previews; the block itself is a string template. The executable is `references/reference-impl` (`PreviewEnsurer`), and `dv-screenshot-capture/scripts/apple-canvas.sh` is its only caller, through `swift run`. `disable-model-invocation` keeps the Skill tool from loading this file, so no agent reaches it through `Skill`.
 
 ## Contract (canonical signature)
 
 ```
-ensure_previews(
-  modified_files: [Path],              # absolute paths from git diff --diff-filter=AMR
-  options: { auto_add: Bool,           # default true; false = dry-run (detect only)
-             write_mode: "in-source" } # OQ1 ratified; "staged-patch" not supported in v1
-) → {
-  views: [{ file: Path,
-            type: String,              # e.g. "ContentView"
-            has_preview: Bool,
+swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
+  --modified-files <newline list | path of a file with one path per line> \   # stdin when omitted
+  [--auto-add true|false] \   # default true; false = dry run, nothing written
+  [--view <TypeName>] \       # picks the target in a file with 3+ View types
+  [--project-root <dir>]      # where Mock<T>.swift is looked up; default: cwd
+→ stdout JSON, sorted keys, nil fields dropped:
+{ views: [{ file, type, has_preview: Bool,
             action: "found" | "added" | "skipped",
-            reason: String?,           # populated when action == "skipped"
-            mock_strategy: String? }], # populated when action == "added"
-  errors: [String]                     # non-empty → caller throws missing_input
-}
+            reason: String?,          # set on skipped
+            mock_strategy: String?,   # set on added, dry_run, and a preview-tbd skip
+            lines_added: Int? }],     # set on added
+  errors: [String] }                  # "<reason>: <file>", read/write/parse failures
+exit 0 when errors is empty, 1 otherwise
 ```
 
-## Heuristics (planning-0.md alignment)
+### How apple-canvas calls it
 
-Detail: `references/view-detection.md` (SwiftSyntax tree walks), `references/mock-data-strategy.md` (full mock derivation tree).
+apple-canvas passes `--modified-files <list-file> --auto-add true --project-root <root>` and no `--view`.
 
-### H1 — View-file filter
+## Heuristics
 
-Process a file only when it is path-filtered to a View location (`Sources/**/Views/*.swift`, `Sources/**/UI/*.swift`, `App/**/Views/*.swift`, …; configurable per project) AND declares a `SwiftUI.View` conformance detected via SwiftSyntax, NOT regex — extensions matter.
+### H1 — File filter
 
-Skip: test files (`*Tests.swift`, `*Test.swift`); anything under `tools/SnapshotHost/` (don't bootstrap on our own scaffold); any file already containing `#Preview` OR `PreviewProvider` ANYWHERE (A4 invariant — pre-existing wins always).
+Every `.swift` path in the list is processed except anything under `tools/SnapshotHost/` (the capture scaffold). There is no View-path filter and no test-file skip: a file with no top-level View type returns `skipped`, `reason: "no_view_type_detected"`. A file that already holds a preview returns `found` and is left untouched (H3).
 
 ### H2 — View-type detection
 
-A `struct` / `class` / `actor` whose inheritance clause includes `View` (bare or qualified `SwiftUI.View`), OR an `extension X: View {...}` where `X` is declared in the same file (cross-file extension resolution is out of scope in v1).
-
-If a single file contains 3+ View-conforming types, mark `action: "skipped"`, `reason: "ambiguous_view_target"` — the caller's `args.view` must disambiguate.
+A top-level `struct` or `class` whose inheritance clause names `View`, `SwiftUI.View` or any `*.View`, or a top-level `extension X: View` (registered by name with no parameters; `X` need not be declared in the file). Actors and nested types are not detected. With 3+ View types and no matching `--view`, the file is skipped with `reason: "ambiguous_view_target"`; with one or two, the first wins. apple-canvas passes no `--view`, so under it a 3+-View file is always skipped.
 
 ### H3 — Existing-preview detection
 
-A file "has preview" if it contains a `#Preview` macro invocation (`MacroExpansionExprSyntax` with identifier `Preview`, with or without arguments) or a type with `PreviewProvider` in its inheritance clause.
-
-**Critical**: detection runs BEFORE any edit. If positive, action=`"found"`, no edit attempted, no rollback risk. A4 satisfied.
+A `#Preview` macro anywhere in the tree (expression or declaration form, with or without arguments), or a `struct`/`class` with `PreviewProvider` in its inheritance clause. Detection runs before any edit; a hit returns `action: "found"`.
 
 ### H4 — Initializer-signature parsing
 
-Walk `MemberDeclListSyntax` for the target View's `InitializerDeclSyntax`. With no explicit init, infer Swift's synthesized memberwise init from the stored-property `VariableDeclSyntax` members. Record each parameter's name and type in declaration order.
+The target's first explicit `init` wins. Without one, the memberwise init is inferred from stored properties, leaving out `static`/`class`, computed and defaulted properties and anything wrapped in `@State`, `@StateObject`, `@EnvironmentObject`, `@Environment` or `@FocusState`; `@Binding var x: T` becomes `Binding<T>`.
 
-### H5 — Mock-arg derivation per parameter type
+### H5 — Mock-arg derivation
 
-| Parameter type pattern | Generated arg | `mock_strategy` |
-|---|---|---|
-| `Binding<Bool>` | `.constant(false)` | `binding-constant` |
-| `Binding<Int>` | `.constant(0)` | `binding-constant` |
-| `Binding<String>` | `.constant("")` | `binding-constant` |
-| `Binding<<Optional>>` | `.constant(nil)` | `binding-constant` |
-| `Optional<T>` / `T?` | `nil` | `optional-nil` |
-| Concrete protocol `P`; `Source/Mocks/MockP.swift` exists | `MockP()` | `mock-found` |
-| Concrete protocol `P`; no mock | skip view; emit `// preview-tbd: provide MockP` | `preview-tbd` |
-| Concrete struct/class with no-arg init | `TypeName()` | (treated as concrete-init) |
-| Closures / generics / complex / unknown | skip view; emit `// preview-tbd:` | `preview-tbd` |
+Per parameter: `Binding` of `Bool`, a number, `String`, an optional or an array → `.constant(<empty value>)` (`binding-constant`); optional → `nil` (`optional-nil`); `T` with a `Mock<T>.swift` file → `Mock<T>()` (`mock-found`); any other capitalized simple name → `T()` (`concrete-init`), a protocol without a mock included. Closures, `some`/`any`/`AnyView`, other `Binding` types and other spellings skip the view: `action: "skipped"`, `mock_strategy: "preview-tbd"`, a reason such as `closure_unsupported` or `unsupported_init_signature:<T>`. A skip writes nothing to the file. Full table: `references/mock-data-strategy.md`.
 
-Skipped view: `action: "skipped"`, `reason: "no_mock_for_<P>"` or `"unsupported_init_signature"`, plus a `// preview-tbd:` comment at end of file as a user-visible TODO.
+### H6 — Generation, verification, rollback
 
-### H6 — Generation + verification + rollback
+1. Build the block from the string template and append it at end of file.
+2. Write the file, then smoke it: `xcrun swift -frontend -parse <file>`.
+3. Non-zero → write the original text back from memory, so the developer's other uncommitted edits in the file survive; return `skipped` with `reason: "parse_failed_after_preview_add"`, add `parse_failed_after_preview_add: <file>` to `errors[]`, and do not retry.
+4. Zero → `action: "added"` with `lines_added`.
 
-1. Build the `#Preview` block via SwiftSyntax `MacroExpansionExprSyntax` (NOT string concat), appended at end of file through a `MemberDeclListSyntax` rewrite.
-2. Write the modified file, then smoke it: `swift -frontend -parse <file>` (or `swiftc -parse <file>`).
-3. Non-zero → `git checkout -- <file>` to revert; `errors[]` += `parse_failed_after_preview_add: <file>`; do NOT re-attempt.
-4. Zero → emit the `preview_added` audit row + state.json fact update.
+## Where results land
 
-## State.json registration
-
-`facts.previews_added[]` collects one entry per added preview:
-
-```json
-{ "file": "Sources/UI/ContentView.swift", "type": "ContentView",
-  "action": "added", "mock_strategy": "binding-constant" }
-```
-
-Array max bounded by `modified_files.length`. Eviction at worktask archival.
-
-## Audit row
-
-One `preview_added` row per added preview: `{actor: "preview-ensurer", action: "preview_added", subject: "<view_type>", result: "ok", metadata: {file, view_type, mock_strategy, lines_added}}`. Field canon: `../dv-screenshot-capture/references/apple-canvas.md § Audit row schema`.
+The executable writes only the source files and its stdout JSON; nothing goes to `state.json`. apple-canvas saves the JSON to `.context/logs/preview-ensurer-<ts>.json` and writes one `preview_added` audit row per `added` view: `{actor: "apple-canvas-adapter", action: "preview_added", subject: "<worktask_id>/<slug>", result: "ok", metadata: {file, view_type, mock_strategy, lines_added}}`. Field canon: `../dv-screenshot-capture/references/apple-canvas.md § Audit row schema`.
 
 ## Failure escalation
 
 | Failure | Behavior |
 |---|---|
-| SwiftSyntax parse fails on input file | `errors[]` += `parse_failed: <file>`; skip file; continue with others |
-| Post-edit `swift -frontend -parse` fails | Rollback (`git checkout -- <file>`); `errors[]` += `parse_failed_after_preview_add: <file>`; never leave broken syntax |
-| swift-syntax API broke on toolchain bump | `errors[]` += `swift_syntax_api_break: <method>`; escalate per coordination-0.md risk-watch row 1 |
-| File has 3+ View structs and no `args.view` | `action: "skipped"`, `reason: "ambiguous_view_target"`; surface for `metadata.canvas_view` selection |
-| `Source/Mocks/MockP.swift` exists but doesn't compile against host | Out of scope — preview-ensurer trusts file existence; broken mocks surface at `swift run SnapshotHost` time as exit code 3 |
+| File unreadable, or the write fails | `skipped` with `read_failed: …` / `write_failed: …`; the same text goes to `errors[]` |
+| Post-edit `swift -frontend -parse` fails | Original text written back from memory; `skipped`, `parse_failed_after_preview_add`; `errors[]` += `parse_failed_after_preview_add: <file>` |
+| File has 3+ View types and no `--view` | `skipped`, `reason: "ambiguous_view_target"` |
+| `Mock<T>.swift` or a `concrete-init` guess doesn't compile against the host | Not caught here — the parse smoke checks syntax only; it surfaces at `swift run SnapshotHost` |
 
-`errors[]` non-empty bubbles to apple-canvas, which throws `missing_input` to DV. DV records it in `.context/errors/developer.md`.
+### Non-zero exit
+
+`Parser.parse` recovers from syntax errors instead of throwing, so an unparseable input is not an error: it yields whatever types the recovered tree holds. A swift-syntax API break on a toolchain bump fails the `swift run` build itself. Either way a non-zero exit makes apple-canvas append `missing_input: preview-ensurer errors` to `.context/errors/developer.md`, write a `canvas_render` error row (`reason: "preview_ensurer_errors"`) and exit 2.
 
 ## Toolchain compatibility
 
-swift-syntax pin `.upToNextMajor(from: "510.0.0")` (ad2) covers Swift 5.10 (Xcode 15.4) and Swift 6.0+ (Xcode 16.x). Drift canary: the P6 fixture project pins known-good in `Package.resolved` and CI smokes it.
+The swift-syntax pin `.upToNextMajor(from: "510.0.0")` builds with Swift 5.10 (Xcode 15.4) and Swift 6.0+ (Xcode 16.x). To move to a newer swift-syntax major, bump the floor in `references/reference-impl/Package.swift` on a feature branch and run the fixture suite (`tests/ensurer-tests.md`): green → PR with a one-line CHANGELOG entry; red → an `apple-developer:ios-developer` triage task.
 
-Upgrade when Swift 6.x ships `602.x.x`: bump the `Package.swift` floor on a feature branch → run the fixture suite (`skills/preview-ensurer/tests/Fixtures/`) → green means PR with a one-line CHANGELOG, red means an `apple-developer:ios-developer` triage task.
+## Limitations
 
-## v1 limitations / future work
-
-- Single-file scope: cross-file extension resolution out of scope (rare in practice; documented for v2).
-- No matrix renders (dark/light/Dynamic-Type) — single shot only. Future: `args.trait_collections`.
-- No `staged-patch` write mode (OQ1 was ratified as in-source only).
-- SwiftUI `@Environment` / `@FocusState` parameters are not mocked — skipped with `preview-tbd:`.
+- Single-file scope: extensions of types declared in another file are not resolved.
+- One render per view; no dark/light/Dynamic Type matrix.
+- In-source writes only; no `staged-patch` mode.
+- `@State`, `@StateObject`, `@EnvironmentObject`, `@Environment` and `@FocusState` properties are left out of the call, not mocked; the view still gets a preview and renders with whatever the host environment supplies.
+- Nested View types and actors are not detected.
 
 ## See also
 
-- `references/view-detection.md` — SwiftSyntax patterns for View detection
-- `references/mock-data-strategy.md` — full mock derivation tree
-- `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift` — reference Swift implementation (executable)
+- `references/view-detection.md` — SwiftSyntax patterns for View and preview detection
+- `references/mock-data-strategy.md` — full mock derivation table
+- `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift` — the executable apple-canvas runs
 - `tests/ensurer-tests.md` — fixture test matrix
 - `../dv-screenshot-capture/references/apple-canvas.md` — caller contract (canonical)
 - `../dv-screenshot-capture/references/preview-ensurer.md` — caller-side summary

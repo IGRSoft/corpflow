@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # @description grant-lint.sh — the one checker for the anchored script-grant shape
-#   (`Bash(bash <token>/skills/<skill>/scripts/<name>.sh [<args>] *)`, where <token> is the
-#   literal `CORPFLOW_GRANT_TOKEN` text below and the optional <args> is a fixed,
-#   wildcard-free subcommand prefix such as `--consumer`) and, with `--invocations`, for the rule that a
-#   runnable body mention of a granted script
-#   must read the grant prefix byte for byte. `tests/shell/skills/plugin-root-refs.bats`
-#   sources this file for its arm-S path rule, so the rule is defined once.
+#   (`Bash(bash <token>/skills/<skill>/scripts/<name>.sh [<args>] *)`, where <token> is
+#   the literal `CORPFLOW_GRANT_TOKEN` text below and the optional <args> is a fixed,
+#   wildcard-free subcommand prefix such as `--consumer`) and, with `--invocations`,
+#   for the rule that a runnable body mention of a granted script must read the grant
+#   prefix byte for byte. `tests/shell/skills/plugin-root-refs.bats` sources this file
+#   for its arm-S path rule, so the rule is defined once.
 #
 #   Sourcing defines functions only and runs nothing:
 #     corpflow_grant_script_path_ok <path>       — 0 iff a well-formed script path
@@ -21,7 +21,7 @@
 #
 #   CLI (body scan): grant-lint.sh --invocations [--root <dir>]
 #     Same exit codes and finding shape, over runnable mentions of a script the
-#     SAME file's frontmatter grants. A file with no anchored grant is not scanned.
+#     same file's frontmatter grants. A file with no anchored grant is not scanned.
 #
 #   Scan set: `git ls-files agents/*.md commands/*.md skills/*/SKILL.md` under
 #   --root (default: the repo containing this script). A grant is read only from
@@ -52,7 +52,7 @@
 #
 # Minimum shell: bash 3.2+ (macOS default). Requires git.
 
-# CORPFLOW_GRANT_TOKEN is the ONLY place this file spells the placeholder: every
+# CORPFLOW_GRANT_TOKEN is the only place this file spells the placeholder: every
 # other function reads $CORPFLOW_GRANT_TOKEN, never the literal brace text, so the
 # arm-S "only mention" fixture in plugin-root-refs.bats has exactly one hit here.
 # shellcheck disable=SC2016  # deliberately unexpanded: this is the literal token text
@@ -183,8 +183,8 @@ _cf_gl_scan_tokens() {
   # every pattern here is ASCII, so byte semantics change nothing else.
   LC_ALL=C awk '
     function strip_cr(s) { sub(/\r$/, "", s); return s }
-    # A BOM used to leave line 1 unequal to `---`, silently skipping the whole file —
-    # a broad grant in a BOM-prefixed file passed this lint clean.
+    # Strip a BOM so line 1 still reads as `---`; otherwise a BOM-prefixed file skips
+    # the scan and any broad grant in it passes clean.
     FNR == 1 { s = strip_cr($0); sub(/^\357\273\277/, "", s); fm = (s == "---") ? 1 : 0 }
     {
       line = strip_cr($0)

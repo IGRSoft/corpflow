@@ -1,26 +1,22 @@
 # The corpflow Plugin Contract
 
-**This file is the sole normative source for integrating a plugin with corpflow.** `SKILL.md`,
-`plugin-protocols.md`, and the registry in `skills/shared/compatible-plugins.md` either implement it
-or record who has satisfied it; where any of them disagrees with this file, this file wins and the
-other is the bug.
+This file is the normative source for integrating a plugin with corpflow. `SKILL.md`,
+`plugin-protocols.md` and the registry in `skills/shared/compatible-plugins.md` implement it or
+record who satisfies it; where one of them disagrees with this file, the other file is the bug.
 
 ## The seam is one file
 
-An integrating plugin exposes **exactly one** corpflow-facing file: `CORPFLOW.md` at its repository
-root. Copy `../templates/CORPFLOW.md`, fill in the plugin-specific rows, and commit it. That file is
-the whole contract surface.
+An integrating plugin exposes one corpflow-facing file: `CORPFLOW.md` at its repository root.
+Copy `../templates/CORPFLOW.md`, fill in the plugin-specific rows, and commit it. That file is the
+whole contract surface.
 
 ### Why one file
 
-Nothing else in the plugin names corpflow — not the agents, commands, skills, or hooks. That is what
-makes the plugin *independent*: adopting it without corpflow leaves one inert file, deletable with no
-other edit, and a contract change then moves exactly one file per plugin (the diffuse coupling made
-the v4.0.0 and v4.0.13 renames sweep 20–40 files per sibling; here they touch six in total).
-
-Agents need no "if `.context/state.json` exists, load the integration guide" preamble, because
-**corpflow injects the instruction at dispatch time** (§ What corpflow guarantees). An agent carrying
-its own corpflow preamble is carrying a second seam, and the second seam is the one that rots.
+Nothing else in the plugin names corpflow — not the agents, commands, skills or hooks. Without
+corpflow the plugin carries one inert, deletable file, and a contract change moves one file per
+plugin. Agents need no "if `.context/state.json` exists" preamble because corpflow injects the
+instruction at dispatch time (§ B); an agent carrying its own corpflow preamble is a second seam,
+and the second seam is the one that rots.
 
 ## A. What the plugin must satisfy
 
@@ -38,7 +34,7 @@ ship a documented exception — `ai-engineer` is the precedent — recorded in t
   own specialists. The orchestrator targets the router when the specialist is ambiguous.
 - Four **functional-role agents**: architect (AR consultation), security auditor (SR), test generator
   (QA), code fixer (DR remediation).
-- Functional-role agents MUST carry a plugin-unique prefix (`sys-`, `and-`, `fe-`, `be-`, `ai-`). Bare
+- Functional-role agents carry a plugin-unique prefix (`sys-`, `and-`, `fe-`, `be-`, `ai-`). Bare
   names such as `test-generator` collide across plugins and break `error_file` derivation — see
   `compatible-plugins.md § Naming`.
 
@@ -54,9 +50,7 @@ and any other version is rejected.
 ### 4. A root `CORPFLOW.md`
 
 The plugin's single corpflow-facing file, from `../templates/CORPFLOW.md`, carrying the stage→agent
-table, the evidence declaration, and the artifact contract *from the plugin's side*. It replaces the
-former `workflow-integration` skill, whose skill-shaped packaging invited every agent in the plugin
-to reference it by name.
+table, the evidence declaration, and the artifact contract from the plugin's side.
 
 ### 5. Evidence declaration
 
@@ -94,29 +88,24 @@ file a bug against corpflow rather than working around any of them.
 
 A second file also carries the name `CORPFLOW.md`, with different semantics decided by
 location: at a *sibling plugin's* root it is that plugin's stage contract (§ A.4); at the
-*user project's* root it is project configuration, of which corpflow reads exactly one
-heading — `## Routing`, a `| Alias | Target |` table whose rows win over the defaults in
-`skills/shared/routing-matrix.md`. The heading `## Routing` is therefore **reserved**: a
-plugin-side `CORPFLOW.md` must never use it (guard note in `../templates/CORPFLOW.md`).
+*user project's* root it is project configuration, of which corpflow reads two headings:
+`## Routing`, a `| Alias | Target |` table whose rows win over the defaults in
+`skills/shared/routing-matrix.md`, and `## Models`, per-agent model/effort overrides. Both are
+reserved: a plugin-side `CORPFLOW.md` never uses them (guard note in `../templates/CORPFLOW.md`).
 Template and creation instructions: `../templates/PROJECT-CORPFLOW.md` and
 `routing-matrix.md § Project override`. Resolution happens once at worktask init and
 persists as `state.routing` (`skills/worktask/SKILL.md § Validation check 12`).
 
-An override replaces a platform's plugin wholesale — the replacement must still satisfy
-§ A; corpflow injects the same dispatch-time instruction and expects the same handoff
-schema from it.
+An override replaces a platform's plugin wholesale and must still satisfy § A: it gets the
+same dispatch injection and owes the same handoff schema.
 
 ## C. corpflow-side touchpoints when adding or swapping a plugin
 
 Every file below changes in the same commit. Ordered so later edits can reference earlier ones.
 
-> **Scope: adding or swapping a plugin.** Giving a plugin already in the registry a *new capability*
-> is a different, smaller change and does not owe the full checklist. The App Store move is the
-> worked example: two registered plugins gained a release engineer, so it touched rows 1 (matrix),
-> 2 (command sets), 13 (README) and 14 (manifests/CHANGELOG/MEMORY) and legitimately nothing else.
-> Read the rows, take the ones your change actually reaches, and say in the PR which you skipped and
-> why — the failure this note prevents is a reader either editing ten files that had no reason to
-> change or concluding the contract was violated.
+> Scope: adding or swapping a plugin. Giving a registered plugin a new capability is smaller —
+> take only the rows the change reaches (two plugins gaining a release engineer touched rows 1, 2, 13
+> and 14) and say in the PR which rows you skipped and why.
 
 ### Registry and routing
 
@@ -138,7 +127,7 @@ the test fails until each inline table matches the matrix.
 | 6 | `agents/security-reviewer.md` | Platform→auditor subsection and checklist |
 | 7 | `agents/qa-engineer.md` | Platform→generator list entry |
 | 8 | `skills/cross-plugin-handoff/references/plugin-protocols.md` | Per-plugin stage→agent handoff table |
-| 9 | `skills/worktask/scripts/publish-pl-issue.sh` | Plugin-prefix regex (both occurrences) **and** the leak-check greps — all four must stay byte-identical to each other and to the list in `compatible-plugins.md` |
+| 9 | `skills/worktask/scripts/publish-pl-issue-lib.sh`, `publish-pl-issue-selftest.sh` | Plugin-prefix regex (both occurrences in the lib) and the selftest's two leak-check greps — all four stay byte-identical to each other and to the list in `compatible-plugins.md` |
 
 ### Commands, scripts and release
 
@@ -155,26 +144,19 @@ their own `SKILL.md` are listed in `skills[]`.
 
 ### Packaging and validation
 
-- `claude plugin validate` also checks a bare `.claude/skills` directory and reports `SKILL.md` files
-  whose frontmatter fails to parse (CC 2.1.233). Run it before publishing — malformed frontmatter is
-  otherwise a silent no-load.
-- A plugin may declare `"."` as a `skills` path, meaning the plugin root itself (CC 2.1.221).
-- The `archive` source installs from a zip over HTTPS with no git or npm and accepts an optional
-  SHA-256 pin (CC 2.1.224). Pin the hash for any non-first-party marketplace entry.
-- `claude plugin validate --json` emits a machine-readable report (CC 2.1.259). Observed on this repo
-  at CLI 2.1.270: top-level keys `success`, `strict`, `target`, `manifest`, `contents`, with
-  `success: true`. Tooling reads `success` rather than scraping the text output.
+- Run `claude plugin validate` before publishing: it reports `SKILL.md` files whose frontmatter fails
+  to parse, which otherwise fail to load silently. Tooling reads `success` from `--json` rather than
+  scraping the text output.
+- A plugin may declare `"."` as a `skills` path, meaning the plugin root itself.
+- The `archive` source installs from a zip over HTTPS and accepts an optional SHA-256 pin. Pin the
+  hash for any non-first-party marketplace entry.
 
 #### Listing, loading and eval
 
 - `claude plugin list --json` rows carry `errorDetails`/`noteDetails`, which tell a sibling that is
-  installed but failed to load apart from one that is absent; `claude plugin install`, `uninstall`,
-  `update`, `enable` and `disable` accept `--json` too (CC 2.1.268).
-- `--plugin-dir` pointed at a folder of plugins loads every child folder with a manifest and picks up
-  children added or removed while running (CC 2.1.265) — one flag loads the siblings for local dev.
-- `claude plugin eval` runs a plugin eval suite (`<eval dir>/**/case.yaml`, or `prompt.md` +
-  `graders/*.md`; default dir `evals/`) with a no-plugin baseline arm (CC 2.1.269). corpflow's
-  `skills/request-plan/evals/evals.json` is not in that format — noted, not adopted.
+  installed but failed to load apart from one that is absent.
+- `--plugin-dir` pointed at a folder of plugins loads every child folder with a manifest — one flag
+  loads the siblings for local dev.
 - Component paths that are symlinks, contain a backslash, or escape the plugin root are refused;
   directory names beginning with two dots are accepted by both the loader and `validate`.
 

@@ -224,7 +224,6 @@ corpflow_path_scrub() (
         }
         EPATH[b + 1] = tp; EKIND[b + 1] = tk
       }
-      for (k = 1; k <= NE; k++) SEEN[EPATH[k]] = k
     }
     {
       line = $0

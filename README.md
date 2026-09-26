@@ -65,7 +65,7 @@ Tools listed below are organized by status (required, optional, platform-specifi
 | **make** | Required | `make test` (test suite entry point), `make coverage` (coverage gating), `make bootstrap` (dependency resolution) | Cannot run test suite or verify coverage | Installed with Xcode CLT | `apt-get install make` or `dnf install make` |
 | **jq** | **Split behavior** — see below | `state-patch.sh` (ledger writer) and `hooks/agent-stop.sh` (hook caller) use it for JSON manipulation | Ledger writers **fail and stop** (e.g., plan approval hangs); hooks **skip gracefully** with a message; the split is documented and intentional | `brew install jq` | `apt-get install jq` or `dnf install jq` |
 
-**The jq split behavior, explained:** `hooks/agent-stop.sh` (line 29) exits 0 when jq is missing — hook skips with "jq not found, skipping" message — so you can still run worktasks. `state-patch.sh` (line 1777, the main patch path at 1833) exits 2 when jq is missing — ledger write fails and blocks the entire stage — so the ledger stays unchanged. Both behaviors are correct for their context: hooks must never block the orchestrator; the ledger writer must never silently skip. If you see "jq required" errors in your logs, you cannot proceed until jq is installed.
+**The jq split behavior, explained:** `hooks/agent-stop.sh` (line 30) exits 0 when jq is missing — hook skips with "jq not found, skipping" message — so you can still run worktasks. `state-patch.sh` (line 1777, the main patch path at 1833) exits 2 when jq is missing — ledger write fails and blocks the entire stage — so the ledger stays unchanged. Both behaviors are correct for their context: hooks must never block the orchestrator; the ledger writer must never silently skip. If you see "jq required" errors in your logs, you cannot proceed until jq is installed.
 
 #### Strongly recommended — your worktask is slower or incomplete without these
 
@@ -469,9 +469,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `state-merge.sh` | SubagentStop | Merges artifact `handoff:` frontmatter into `.context/state.json` |
 | `megatask-monitor.sh` | SubagentStop | Drives the megatask completion loop (unblock dependents, progress) |
 | `precompact-checkpoint.sh` | PreCompact | Checkpoints `state.json` before auto-compaction |
-| `agent-stop.sh` | Stop (wired via agent frontmatter) | Stage-boundary audit row + PL/FN approval-gate notification |
-
-A `Stop` matcher on `product-manager`/`project-manager` also fires a `conductor` `PushNotification` when an approval gate is ready for review.
+| `agent-stop.sh` | SubagentStop (matched to the PL/FN/ST agents) | Stage-boundary audit row |
 
 ## Error Handling
 

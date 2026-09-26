@@ -3,7 +3,7 @@
 #
 # Reads `.context/logs/audit.jsonl` (or stdin) and emits a deduped stream:
 # for every group of rows sharing `metadata.dedupe_key`, prefer a hook-written
-# row (hook authority per skills/agent-coordination/SKILL.md § Writers).
+# row (skills/agent-coordination/SKILL.md § Hook authority + dedupe rule).
 # Agent-emitted rows for the same key are dropped.
 # Rows lacking `metadata.dedupe_key` pass through unchanged (one-shot events).
 #

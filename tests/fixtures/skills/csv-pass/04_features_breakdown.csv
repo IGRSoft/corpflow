@@ -1,3 +1,4 @@
 Feature Group;Feature;Subtask;Size;SP Min;SP Max;Hours Min;Hours Max;Priority;Phase
-Auth;Login;OAuth + tests;M;3;5;18;30;P0;1
-Auth;Logout;Session clear + tests;XS;1;2;6;12;P1;1
+Auth;Login;OAuth + tests;M;4;7;24;42;P0;1
+Auth;Logout;Session clear + tests;S;2;5;12;30;P1;1
+Profile;Edit;Profile form + tests;M;4;8;24;48;P1;2

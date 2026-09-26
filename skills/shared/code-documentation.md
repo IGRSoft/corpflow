@@ -4,22 +4,21 @@ name: code-comment-standard
 
 # Code Documentation Standard
 
-Single source of truth for **source-code** comments (inline `//` and doc `///`/docstrings).
+Single source of truth for source-code comments (inline `//` and doc `///`/docstrings).
 DV writes to it, DR flags violations against it, DC aligns its completion gate to it.
 
-> Scope: comments **inside source files**. Documentation *artifacts* (README, ADRs, API
-> reference, DocC pages) follow `agents/technical-writer.md` — see Reconciliation.
+Scope: comments inside source files only. Documentation artifacts (README, ADRs, API
+reference, DocC pages) must teach with examples and full rationale, and follow
+`agents/technical-writer.md`; source comments stay compact and contract-only.
 
 ## Principle
 
-Comment the **WHY** when it is non-obvious; never the **WHAT**. Document the **contract**
-(how to call it safely, units, invariants, gotchas), never the **history** of how the code
-got here. If a comment echoes the code, delete it.
+Comment the WHY when it is non-obvious, never the WHAT. Document the contract (how to call
+it safely, units, invariants, gotchas), never the history of how the code got here. If a
+comment echoes the code, delete it.
 
-A fact's single source of truth lives where the fact lives: a color in the asset catalog, a
-call-site list in "find usages", a design in the design spec, a rationale in the PR /
-`.context/development-N.md`. A comment that transcribes one is a copy that drifts and lies
-the moment the source changes.
+A comment that transcribes a fact owned elsewhere (see § Where rationale belongs instead)
+is a copy that drifts the moment the source changes.
 
 ## Write in source
 
@@ -44,7 +43,7 @@ Every entry is a review finding, not a preference.
 - Issue/ticket IDs as provenance — tag a function only where that issue materially changed
   its business logic; the link belongs in the PR.
 - Acceptance-criteria or requirement IDs (`AC-2`, `REQ-5`).
-- Any comment on a preview/story block, in any framework, ever (see Length budget).
+- Any comment on a preview/story block, in any framework (see Length budget).
 
 ## Length budget
 
@@ -53,9 +52,9 @@ Every entry is a review finding, not a preference.
 | Function doc block | 1–3-line info block; one line is the norm; only when the name/signature isn't already clear |
 | `- Parameters:` / Returns / Throws entries | One short sentence each; omit when the signature already says it |
 | Var / constant doc | One sentence, only when the name alone isn't clear; otherwise nothing |
-| Preview / story block — SwiftUI `#Preview`, Compose `@Preview`, Storybook story, snapshot fixture | Never commented — no doc line, no inline note, ever |
+| Preview / story block — SwiftUI `#Preview`, Compose `@Preview`, Storybook story, snapshot fixture | None — no doc line, no inline note |
 | Inline `//` rationale | One short trailing line per non-obvious literal |
-| Longer multi-line discussion | Strictly for a genuinely non-obvious **algorithm** — never for design, color, history, or callers |
+| Longer multi-line discussion | Only for a non-obvious algorithm — not for design, color, history, or callers |
 
 ### Density gate
 
@@ -105,14 +104,15 @@ fetch_manifest() { curl --retry 2 -fsSL "$1"; }
 
 | Content | Home |
 |---|---|
-| Change summary, migration scope, design provenance link | **PR description** |
-| Material/color/approach decision, rejected alternatives, DV verification evidence | **`.context/development-N.md` § Decisions** |
-| Durable architectural decision | **ADR** (`corpflow:arch-decision`) |
-| Design source (Figma board, rgba/hex) | **design spec / `.context/designs`** (`corpflow:design-specs`) |
-| `AC-n` / `REQ-n` traceability | **PR / `.context/` stage artifacts** — never source comments |
-| Resolved token value | **the asset catalog** — trust the semantic token |
-| Answer to a DR/SR finding; threshold derivation; calibration data | **`.context/development-N.md`** — source keeps a one-line WHY at most |
-| QA runbook ("if QA measures X, raise to Y") | **`docs/` runbook / QA checklist** |
+| Change summary, migration scope, design provenance link | PR description |
+| Material/color/approach decision, rejected alternatives, DV verification evidence | `.context/development-N.md` § Decisions |
+| Durable architectural decision | ADR (`corpflow:arch-decision`) |
+| Design source (Figma board, rgba/hex) | design spec / `.context/designs` (`corpflow:design-specs`) |
+| `AC-n` / `REQ-n` traceability | PR / `.context/` stage artifacts |
+| Call-site list | the compiler and "find usages" |
+| Resolved token value | the asset catalog — trust the semantic token |
+| Answer to a DR/SR finding; threshold derivation; calibration data | `.context/development-N.md` — source keeps a one-line WHY at most |
+| QA runbook ("if QA measures X, raise to Y") | `docs/` runbook / QA checklist |
 
 ## Canonical example (BEFORE → AFTER)
 
@@ -141,19 +141,9 @@ func openPersistedSkinMap(analysisID: AnalysisID) { … }
 
 Identical shape, identical fix — the bulk always moves to the PR or the run artifact:
 
-- **Swift property**: a 7-line block narrating every gradient stop, its hex, and the Figma
-  look → one `///` line ("Top-lit halo gradient: Border.stroke at the rim, fading to clear
-  past the bottom edge") plus `// endPoint y: 1.42 — >1.0: extend fade past bottom edge`.
 - **TSDoc**: `useCartTotal (added in PR #812, refactored from the old getTotal helper)` +
   `@param items The cart items.` → `/** Total in minor units; excludes shipping, quoted
   per-address at checkout. */`.
 - **Shell**: 4 lines citing `DR-3 / AC-6`, the reviewer exchange, and the staging
   measurement above `MAX_RETRIES=3` → `# Past 3 the retries never recovered — they only
   widened the partial-upload window.`
-
-## Reconciliation
-
-`technical-writer`'s "always include examples / explain why, not just what" governs
-**documentation artifacts** (README, ADR, API reference, DocC pages), which must teach and
-show working examples. This standard governs **source-code comments**, which stay compact
-and contract-only. Different surfaces, different rules — no conflict.

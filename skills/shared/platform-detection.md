@@ -2,12 +2,11 @@
 
 Read this on platform ambiguity, or when the common rows inline in `agents/developer.md`
 (§ Detection Rules) do not cover the specialist you need. Routing target = the qualified
-agent ID in the **Agent** column, passed as the Task `subagent_type`. Never keep a second
-copy of this map elsewhere. Plugin-level alias routing and project overrides live in
-`skills/shared/routing-matrix.md`; the specialist tables below apply only when the
-platform's entry alias resolves to its default plugin — on override, dispatch the override
-target and let it specialize internally. Plugin-level metadata — version floors, command
-sets, handoff defaults — lives in `skills/shared/compatible-plugins.md`.
+agent ID in the **Agent** column, passed as the Task `subagent_type`. Keep no second copy of
+this map elsewhere. Alias routing and project overrides: `skills/shared/routing-matrix.md`.
+The specialist tables below apply only when the platform's entry alias resolves to its default
+plugin — on override, dispatch the override target and let it specialize internally.
+Version floors, command sets and handoff defaults: `skills/shared/compatible-plugins.md`.
 
 ## Apple Platform Specialization
 
@@ -146,8 +145,8 @@ common rows inline and points here for the long tail.
 
 UI markers (apple/android/web) win when the task targets the app layer; systems markers win
 for native libraries, build tooling, or scripts; backend markers win for HTTP/RPC services,
-API contracts, or persistence. Ambiguous → ask (Priority Order rule 4). Three notes resolve
-the only non-trivial collisions.
+API contracts, or persistence. Ambiguous → ask (Priority Order rule 4). Three notes below
+resolve the non-trivial collisions.
 
 #### Precedence — Python: language vs web vs ML
 
@@ -156,8 +155,8 @@ Language depth (typing, asyncio internals, free-threading, packaging) →
 `backend-developer:python-backend-developer`. ML stack (training, inference, LLM
 orchestration, evals) → `ai-engineer:*`. Backend delegates language depth back to
 system-developer, so this is an entry point, not a fork. A FastAPI service that merely
-*calls* a model API is backend; one whose substance is the model, retrieval, or eval
-pipeline is ai.
+*calls* a model API is backend; one whose substance is the model, retrieval, or eval pipeline
+is ai.
 
 #### Precedence — front-end vs back-end `package.json`
 
@@ -170,9 +169,8 @@ frontend-developer plugins — keep them in sync. JVM Kotlin has the analogous c
 
 #### Precedence — web UI vs native (Apple)
 
-When web and native markers co-occur, the deciding question is which layer the change
-targets: UI/component/state/styling/build-tooling → `frontend-developer:frontend-developer`;
-a native module, bridging header, or platform-API binding → `apple-developer:*`. React
-Native / Expo splits the same way — JS/TS surface to the (optional) `react-native-developer`,
-native modules to `apple-developer:*`. Ambiguous pure-JS/TS web work defaults to
-`frontend-developer`.
+When web and native markers co-occur, the layer the change targets decides:
+UI/component/state/styling/build-tooling → `frontend-developer:frontend-developer`; a native
+module, bridging header, or platform-API binding → `apple-developer:*`. React Native / Expo
+splits the same way — JS/TS surface to `frontend-developer:frontend-developer`, native modules
+to `apple-developer:*`. Ambiguous pure-JS/TS web work defaults to `frontend-developer`.

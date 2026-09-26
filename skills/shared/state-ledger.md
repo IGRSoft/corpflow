@@ -9,28 +9,27 @@ Single source of truth for worktask stage state.
 
 ## The ledger is `state.json`
 
-`.context/state.json` `tasks{}` is the **only** stage ledger — authoritative for stage status,
+`.context/state.json` `tasks{}` is the only stage ledger — authoritative for stage status,
 dependencies, routing metadata, and results. It lives in the worktask folder, so it survives session
 end, compaction, and resume with no configuration. Full schema:
 `skills/worktask/references/handoff-protocol.md#state-json-schema`.
 
 ### Why not Claude Code's Task System
 
-corpflow does **not** use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
-`TaskList`) — not even where those tools are available. The Todo/task-tracking tools are offered only on Claude 3.x, Opus 4.0–4.7, Sonnet 4.0–4.6 and Haiku 4.5, so an orchestrator built on them cannot run on the opus-, sonnet- or fable-tier models this plugin dispatches. A haiku-tier stage (`corpflow:technical-writer`) does see them, and uses the ledger all the same. `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` offers them on other models; the plugin deliberately does not depend on it — one ledger, one code path. `CLAUDE_CODE_ENABLE_TASKS` is **not** that switch.
+corpflow does not use Claude Code's Task System (`TaskCreate` / `TaskUpdate` / `TaskGet` /
+`TaskList`), even on a model that offers it: most of the models this plugin dispatches do not, and
+one ledger keeps one code path.
 
 ## Ledger Keys
 
 `[STAGE][N]`, N 0-based and sequential per stage code: first `DV` created → `DV0`, second → `DV1`
 (`PL0`, `AR0`, `DV0`, `DV1`). The human-readable label lives in `tasks.<ID>.metadata.description`.
 
-**PL is always `PL0` only** (singleton — no splitting); other stages split into sub-tasks, which is
-what the numbered key exists to express: parallel DVN tracks are distinct keys. Handoff edges carry
-that same split: `handoffs["<PREV_CODE>→<TASK_ID>"]` — the source is a bare **stage code**, the
-destination is the **ledger id** of the task that wrote the edge (`PL→AR0`, `TL→DV1`). Keying the
-destination by bare code let four parallel DV tracks overwrite one another's edge; the source needs
-no id, because it answers only which stage this followed. **Breaking for in-flight ledgers**: no
-migration, no tolerant reader — an old-shape key reads as absent and forces a logged re-merge.
+PL is always the singleton `PL0`; other stages split into sub-tasks, so parallel DV tracks are
+distinct keys. Handoff edges carry the same split: `handoffs["<PREV_CODE>→<TASK_ID>"]` — the source
+is a bare stage code, the destination the ledger id of the task that wrote the edge (`PL→AR0`,
+`TL→DV1`), so parallel tracks never overwrite one another's edge. Old-shape keys:
+`skills/worktask/references/handoff-protocol.md § Field notes — handoffs (edge registry)`.
 
 ## Write Operations
 
@@ -60,7 +59,7 @@ exits, the consumer set and the cited-ref rule:
 ### Idempotency and key creation
 
 `--task-create` is idempotent (an existing key is left untouched), `--task-block` unions and
-`--task-unblock` subtracts — re-running a seed or a teardown is safe. `--task-create` is the ONLY
+`--task-unblock` subtracts — re-running a seed or a teardown is safe. `--task-create` is the only
 op that may introduce a key; status, block, unblock and meta refuse an id that does not exist yet,
 so create the task before wiring or annotating it.
 
@@ -74,12 +73,18 @@ only purpose and normative use.
 | Field | Purpose |
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
-| `agent` | Agent to execute this task. **MUST be fully-qualified `plugin:agent` form** (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are not accepted |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()` — never rely on frontmatter inheritance, which now falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
+| `agent` | Agent to execute this task, in fully-qualified `plugin:agent` form (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are rejected |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()`: frontmatter inheritance falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
 
 #### Model field details
 
-The `model` field uses an alias rather than pinning a full model id. A managed `availableModels`/`enforceAvailableModels` allowlist can silently resolve a valid alias to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides even the explicit alias, so `dispatched_agents[].model_resolved` diverges from the pin: Step 6.5b backfills it when the runtime surfaces the model that ran (`skills/worktask/SKILL.md § Step 6.5b — dispatch entry completed`), and PL0 raises a plan-gate sweep item (`skills/shared/model-selection.md § Forced subagent model overrides every pin`). See `skills/shared/model-selection.md § Default Subagent Model` for alias behavior.
+`model` is an alias, not a full model id, and the model that runs can differ from it. A managed
+`availableModels`/`enforceAvailableModels` allowlist can resolve a valid alias to another model
+(`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`
+overrides even the explicit alias: `skills/worktask/SKILL.md § Step 6.5b — dispatch entry completed`
+backfills `dispatched_agents[].model_resolved` when the runtime reports the model that ran, and PL0
+raises a plan-gate sweep item (`skills/shared/model-selection.md § Forced subagent model overrides
+every pin`). Alias behaviour: `skills/shared/model-selection.md § Default Subagent Model`.
 
 ### Run & context fields
 
@@ -97,7 +102,7 @@ The `model` field uses an alias rather than pinning a full model id. A managed `
 | `retry_count` | Incremented on retry; resets on escalation or success |
 | `fix_round` | Rounds of correction rework this task has been re-opened for. Written only by `state-patch.sh --task-reopen`; `> 0` re-arms the remediation brief for a target of any stage (`skills/worktask/SKILL.md § Step 4.6`). Distinct from `retry_count`, which counts this task's own failures |
 | `error_escalated_to` | Stage code the failure escalated to when `retry_count` reached 3 |
-| `escalation_counts` | Escalations attempted per edge, keyed by the **full task id** of the target (`{"AR0": 2}`) so a split stage's writers do not share a counter. Survives the escalation handoff that resets `retry_count`; at cap 2 the task is written `failed` with `last_error.class: "exhausted"` |
+| `escalation_counts` | Escalations attempted per edge, keyed by the full task id of the target (`{"AR0": 2}`) so a split stage's writers do not share a counter. Survives the escalation handoff that resets `retry_count`; at cap 2 the task is written `failed` with `last_error.class: "exhausted"` |
 
 ### Worktask & workspace fields
 
@@ -108,16 +113,28 @@ The `model` field uses an alias rather than pinning a full model id. A managed `
 | `milestone_number` | GitHub milestone (megatask mode) |
 | `issue_number` | GitHub issue being worked |
 | `track` | Parallel track number |
-| `workspace_path` | Absolute root of the tree this task is **assigned** to — see § workspace_path below |
+| `workspace_path` | Absolute root of the tree this task is assigned to — see § workspace_path below |
 | `isolation` | Always `"worktree"` on file-writing tasks (DV, and megatask per-issue AR/DR/QA); PL0 stamps it unconditionally and every reader treats it that way |
-| `worktree_branch` | Branch name in the worktree. ≠ `facts.branch`, the planned host-session branch — `skills/worktask/references/handoff-protocol.md § branch` |
+| `worktree_branch` | Branch name in the worktree. ≠ `facts.branch`, the planned host-session branch — `skills/worktask/references/handoff-protocol.md § Field notes — branch` |
 
 #### workspace_path
 
 Writers: `/worktask` steps 3a/4 and `/megatask`. Under `/megatask` it is the per-issue worktree,
 otherwise `git rev-parse --show-toplevel` at init
-(`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`). Never leave it
-unset: three assigned-tree guards read it and each degrades to a silent pass when it is absent.
+(`skills/worktask/references/initialization-patterns.md § Seeded workspace_path`). Always set it:
+three assigned-tree guards read it and each degrades to a silent pass when it is absent. Isolation
+is not assignment — a stale worktree satisfies `isolation` and still fails these guards.
+
+### PL0 option fields
+
+Stamped on `tasks.PL0.metadata` by `/worktask` Step 4 (`commands/worktask.md § Step 4 — option-flag
+stamping`); absent means the flag was not passed.
+
+| Field | Writer → Reader | Purpose |
+|-------|-----------------|---------|
+| `with_design` | `--with-design` → PM (`pl0-procedure.md § Designer Invocation`) | `true` lets PL0 invoke `corpflow:designer`; otherwise Designer is skipped |
+| `no_gh_issue` | `--no-gh-issue` → `publish-pl-issue.sh`, `mailbox.sh` | `true` suppresses GitHub issue publishing; PM copies it to every stage row |
+| `embedded_commands` | Step 2 detection → DV dispatch | Comma-separated `/plugin:command` ids (`commands/worktask.md § Embedded Command Detection`) |
 
 ### Fan-out fields (DV rows)
 
@@ -149,7 +166,7 @@ refusal reasons: `skills/worktask/references/handoff-protocol.md § Landing cons
 
 #### The landed set
 
-The paths landed into **one tree**: `landed_paths` from every row whose `landed_roots` holds that
+The paths landed into one tree: `landed_paths` from every row whose `landed_roots` holds that
 tree, so no reader has to decide which row is the consumer. Every reader computes it with this
 expression, byte for byte, always passing the tree as `--arg root`:
 
@@ -184,7 +201,7 @@ the artifact arm use it.
 
 ##### The landed set — subtracting it
 
-A reader subtracts the set from **untracked** entries only, enumerated file-level
+A reader subtracts the set from untracked entries only, enumerated file-level
 (`git status --porcelain --untracked-files=all` or `git ls-files --others --exclude-standard`),
 since default porcelain collapses a new directory to `?? dir/`. It never subtracts from `M`, `A` or
 `D` lines: a staged landed path is a consumer violation and stays visible. An empty set is normal;
@@ -195,30 +212,30 @@ only `land-artifacts.sh` writes it, and the producer's tree ships every landed f
 Optional, additive fields — `permission_mode`, `add_dirs`, `mcp_config_path`,
 `plugin_dir_overrides`, `dangerously_skip_permissions`, `settings_path` — each mapping 1:1 to a
 `claude agents run` flag; canonical per-field table (flag, type, in-process honouring, usage):
-`skills/agent-coordination/references/headless-dispatch.md § Translation table`. In-process the
-orchestrator honours `model` (always) and `permission_mode` (audited per `skills/worktask/SKILL.md
-§ Permission-Mode Pinning`); the rest are advisory, consumed only by external CLI dispatchers,
-except `dangerously_skip_permissions`, which the orchestrator MAY refuse.
+`skills/agent-coordination/references/headless-dispatch.md § Translation Table`. In-process the
+orchestrator honours `model` (always) and `permission_mode` (audited per
+`skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning (in-process)`);
+the rest are advisory, read only by external CLI dispatchers, and the orchestrator may refuse
+`dangerously_skip_permissions`.
 
 #### Dispatch writer rules
 
-PL0 SHOULD set `permission_mode: default` on SR/FN tasks under `--secure`/`--full` and MUST NOT set
+PL0 should set `permission_mode: default` on SR/FN tasks under `--secure`/`--full` and never sets
 `dangerously_skip_permissions` (CI batch only) on PL/SR/FN tasks; full rules:
 `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. `workspace_path` (always
 stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
 
 #### effort is mandatory, and still advisory as a flag
 
-`effort` left the optional set above when the Step C.0a resolver began reading it
-(`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`). The two axes are
-independent: as a **ledger record** it is required, because the resolver bumps it one rung and a
-per-stage override exists nowhere else; as a **dispatch flag** it stays advisory, since in-process
+As a ledger record `effort` is required: the Step C.0a resolver
+(`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`) bumps it one rung, and
+a per-stage override exists nowhere else. As a dispatch flag it is advisory, since in-process
 `Task()` takes no effort argument. `state-patch.sh` validates it against `EFFORT_ENUM` on
 `--task-create` and `--task-meta`.
 
 ### JSON Schema
 
-Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `effort`, `error_file`.
+The orchestrator should validate metadata before spawning the stage agent. Non-PL tasks require `stage`, `agent`, `model`, `effort`, `error_file`. The nine `json` blocks in this section are one schema, split for length; the last closes `properties`.
 
 ```json
 {
@@ -233,7 +250,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
       "pattern": "^([a-z0-9-]+:)?[a-z0-9-]+$"
     },
     "model": {
-      "enum": ["opus", "sonnet", "haiku"]
+      "enum": ["fable", "opus", "sonnet", "haiku"]
     },
     "effort": {
       "enum": ["low", "medium", "high", "xhigh", "max"]
@@ -241,7 +258,7 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
     "description": {
       "type": "string",
       "maxLength": 240,
-      "description": "Human-readable stage label (the retired Task System subject line). Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set. Capped: see below."
+      "description": "Human-readable stage label. Lives here, not top-level: state-patch.sh writes tasks.<ID> fields only through --metadata/--set."
     },
 ```
 
@@ -250,23 +267,22 @@ Orchestrator SHOULD validate metadata before spawning the stage agent. Non-PL ta
 Both writers — `--task-create --metadata` and `--task-meta --set` — truncate a longer value with an
 ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation.
 
-The orchestrator's **dispatch-time appends** (test scope, bans, the FN banner) are a different
-thing. They mutate an in-memory copy that is never written back, so they are transient and
-uncapped; capping post-append would silently strip those banners from the prompt that needs them.
+The orchestrator's dispatch-time appends (test scope, bans, the FN banner) mutate an in-memory copy
+that is never written back, so they stay uncapped — capping them would strip those banners from
+the prompt that needs them.
 
 #### Schema — run & context properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 2 of 9)
     "run_index": {
       "type": "integer",
       "minimum": 0,
       "default": 0,
-      "description": "Propagated by PL0. Same N as planning-N.md. Orchestrator uses it to resolve <stage>-N.md paths."
+      "description": "Stamped by PL0; same N as planning-N.md."
     },
     "context_refs": {
       "type": "string",
-      "description": "JSON-encoded array of anchor refs, e.g. '[\"architecture-N.md#decisions\",\"planning-N.md#requirements\"]'. Preferred (handoff-protocol mode)."
+      "description": "JSON-encoded array of anchor refs, e.g. '[\"architecture-N.md#decisions\",\"planning-N.md#requirements\"]'."
     },
     "state_file": {
       "type": "string",
@@ -278,7 +294,6 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — error & retry properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 3 of 9)
     "error_file": {
       "type": "string",
       "pattern": "^\\.context/errors/[a-z0-9-]+\\.md$"
@@ -301,7 +316,6 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — worktask properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 4 of 9)
     "track": {
       "type": "integer",
       "minimum": 1,
@@ -309,11 +323,11 @@ uncapped; capping post-append would silently strip those banners from the prompt
     },
     "isolation": {
       "enum": ["worktree"],
-      "description": "Always 'worktree' on file-writing tasks. PL0 stamps unconditionally; no other value is valid."
+      "description": "Always 'worktree' on file-writing tasks; no other value is valid."
     },
     "workspace_path": {
       "type": "string",
-      "description": "Absolute root of the assigned tree. Stamped on EVERY run (not megatask-only) and mirrored to state.json .metadata.workspace_path. Isolation is not assignment: a stale worktree satisfies 'isolation' and still fails this. Absent ⇒ three guards silently no-op."
+      "description": "Absolute root of the assigned tree. Stamped on every run and mirrored to state.json .metadata.workspace_path. See § workspace_path."
     },
     "priority": {
       "enum": ["high", "medium", "low"]
@@ -327,7 +341,6 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — the peer ask pointer
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 5 of 9)
     "ask_id": {
       "type": "string",
       "pattern": "^ask-[0-9]{8}t[0-9]{6}z-[0-9a-f]{12}$",
@@ -338,22 +351,20 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — DV fan-out properties
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 6 of 9)
     "stream": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-      "description": "DV rows only: kebab slug naming this row's artifact, unique among the run's DV rows. See § Fan-out fields (DV rows)."
+      "description": "DV rows only. See § Fan-out fields (DV rows)."
     },
     "artifact": {
       "type": "string",
-      "description": "DV rows only: the .context/ path this row writes. Planned value; tasks.<ID>.artifact outranks it once stamped at completion."
+      "description": "DV rows only. See § Fan-out fields (DV rows)."
     },
 ```
 
 #### Schema — landing declarations
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 7 of 9)
     "produces": {
       "type": "array",
       "items": { "type": "string" },
@@ -376,16 +387,15 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — landing results
 
 ```json
-// …continued: task.metadata JSON Schema "properties" (part 8 of 9)
     "landed_paths": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Written only by land-artifacts.sh: paths landed untracked into this row's tree. May be absent or empty."
+      "description": "Written only by land-artifacts.sh. See § Landing results."
     },
     "landed_roots": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Written only by land-artifacts.sh with landed_paths: every spelling (banner path, git toplevel, physical) of each tree it landed into. The landed set is scoped by it."
+      "description": "Written only by land-artifacts.sh, with landed_paths. See § Landing results."
     },
     "landing_error": {
       "type": ["object", "null"],
@@ -400,7 +410,6 @@ uncapped; capping post-append would silently strip those banners from the prompt
 #### Schema — requires_screenshots + required-fields rule
 
 ```json
-// …continued: task.metadata JSON Schema (part 9 of 9, closes "properties")
     "requires_screenshots": {
       "type": "boolean",
       "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
@@ -428,10 +437,9 @@ Orchestrator populates if absent — basename = last `:`-separated segment of `a
 
 #### Context delivery
 
-`metadata.context_refs` is the only context-delivery mechanism — no whole-file fallback list,
-because the ledger is mandatory and the degraded "state.json is absent" path it existed to serve
-cannot occur. On retry the stage agent also reads its own `error_file`, so it sees what it tried
-before and why it failed.
+`metadata.context_refs` is the only context-delivery mechanism; there is no whole-file fallback,
+because the ledger is mandatory. On retry the stage agent also reads its own `error_file`, so it
+sees what it tried before and why it failed.
 
 ## state.json Top-Level `metadata` Fields
 
@@ -441,10 +449,9 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 
 | Field | Writer → Reader | Description |
 |-------|-----------------|-------------|
-| `embedded_commands` | orchestrator at `/worktask` parse time → DV agent | Comma-separated `/plugin:command` identifiers detected on the trigger (e.g. `skill-creator`). See `commands/worktask.md § Embedded Command Detection` |
 | `preexisting_plan` | orchestrator → PL agent | Absolute path to a user-approved plan supplied at init; PL0 adopts it verbatim and reuses its anchors |
-| `no_gh_issue` | orchestrator, from `--no-gh-issue` → `skills/worktask/scripts/publish-pl-issue.sh` | When `true`, suppresses post-PL GitHub issue publishing |
-| `with_design` | `--with-design` → `skills/worktask/references/pl0-procedure.md § Designer Invocation` | When `true`, PL0 invokes `corpflow:designer`; otherwise Designer is skipped even for UI work and the keyword score stays advisory. No component stamps the field, so the gate reads absent on every run. |
+
+The `/worktask` option flags are not here: they land on PL0's task metadata (§ PL0 option fields).
 
 ### Release fields
 
@@ -454,13 +461,13 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 
 ### Issue publishing field
 
-`metadata.github_issue_url` — issue URL written by `publish-pl-issue.sh` on the run that CREATES the issue; it short-circuits (`already_published`) on a resume of that same run. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`.
+`metadata.github_issue_url` — issue URL written by `publish-pl-issue.sh` on the run that creates the issue; it short-circuits (`already_published`) on a resume of that same run. Readers: `publish-pl-issue.sh` (idempotency), FN PR-issue-link validator (rank-1). Pattern: `^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[0-9]+(#issuecomment-[0-9]+)?$`.
 
-**`state.json` is re-seeded on every fresh `/worktask`, so this field does NOT survive a `run_index` increment** — the run-independent anchor below carries the binding across runs, so a later run comments on the existing issue instead of duplicating it (`skills/gh-issue-dedup`).
+`state.json` is re-seeded on every fresh `/worktask`, so this field does not survive a `run_index` increment; the run-independent anchor below carries the binding across runs, so a later run comments on the existing issue instead of duplicating it (`skills/gh-issue-dedup`).
 
 ### Run-independent issue anchor
 
-> **`.context/gh-issue.json`** (a sibling FILE, not a `state.json` field): binds one `.context/` to one GitHub issue and survives `run_index` increments. Schema and protocol: `skills/gh-issue-dedup`; folder placement: `skills/task-folder-organization/SKILL.md`. Written/read by `publish-pl-issue.sh`; read by the FN PR-issue-link validator (rank-2).
+`.context/gh-issue.json` (a sibling file, not a `state.json` field) binds one `.context/` to one GitHub issue and survives `run_index` increments. Schema and protocol: `skills/gh-issue-dedup`; folder placement: `skills/task-folder-organization/SKILL.md`. Written/read by `publish-pl-issue.sh`; read by the FN PR-issue-link validator (rank-2).
 
 ## Status Values
 
@@ -476,33 +483,33 @@ Worktask-scoped fields at `state.json:$.metadata`, distinct from the `task.metad
 
 ### Status lifecycle — stale and correction semantics
 
-`stale` status holds a `completed` task while the work it consumed is being redone. Its verdict, artifact and handoff stand untouched — parked, never reset. The status moves the task back to `pending` or `completed` by `--task-settle-stale`. Neither ready (the loop filter takes `pending`) nor settled, so tasks blocked by it stay unready and the loop stays open.
+`stale` holds a `completed` task while the work it consumed is redone. Its verdict, artifact and handoff stay untouched — parked, never reset — until `--task-settle-stale` moves it to `pending` or `completed`. It is neither ready (the loop filter takes `pending`) nor settled, so tasks blocked by it stay unready and the loop stays open.
 
 ### `stale` names one thing only
 
-The status above is unrelated to two older uses of the word, and no code path joins them: the
-**liveness** sense in `skills/worktask/scripts/stale-check.sh`, which judges whether a dispatched
-agent has gone quiet and never writes a task status; and `--task-replay`'s `stale_dependents`
-survey field, which only *reports* completed dependents a replay may have invalidated and resets
-nothing. A row reads `stale` because a correction re-opened its input, for no other reason.
+A row reads `stale` only because a correction re-opened its input. Two other uses of the word are
+unrelated: the liveness check in `skills/worktask/scripts/stale-check.sh`, which never writes a task
+status, and `--task-replay`'s `stale_dependents` field, which only reports dependents a replay may
+have invalidated.
 
 ## Hook Events for Stage Monitoring
 
-Stage-monitoring hooks are configured in project `settings.json` or the agent frontmatter `hooks`
-field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, matchers, payloads,
+Stage-monitoring hooks are configured in the plugin's `.claude-plugin/plugin.json` or project
+`settings.json`; plugin agents ignore a frontmatter `hooks` field. Canonical event catalog (subagent lifecycle, agent-teams, elicitation, matchers, payloads,
 the conditional `if` field) and configuration examples:
 `skills/agent-coordination/references/hook-monitoring.md § Project-Level Configuration`.
 
-> `SessionEnd` is registered by the plugin to `hooks/session-end-finalize.sh`, which appends one `session_end_finalize` audit row naming every task still `in_progress` at teardown — the only completion record background work killed with the session otherwise gets. It reports and never mutates task status. Its manifest entry carries `"timeout": 5`, so the row does not depend on the operator exporting `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` — without a per-hook `timeout` a SessionEnd hook gets 1.5 s (`skills/agent-coordination/references/hook-monitoring.md § SessionEnd finalization`).
+The plugin's `SessionEnd` hook, `hooks/session-end-finalize.sh`, appends one `session_end_finalize`
+audit row naming every task still `in_progress` at teardown; it never mutates task status
+(`skills/agent-coordination/references/hook-monitoring.md § SessionEnd finalization`).
 
 ## Agent Teams Integration
 
-With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has **one implicit team** — spawn
-teammates via the **Agent tool's `name` parameter** (`Agent(name: …)`; `team_name` is accepted but
-ignored), and `SendMessage` remains the inter-teammate channel. Teammates coordinate through the
-same `.context/state.json` ledger as every other stage and can self-claim available work. Live
-teammates are now visible to `ListAgents`/`claude agents --json`, so a lead resuming mid-batch uses
-the same pre-check as the stage loop (`../worktask/references/resume.md § Step 0 notes — own-name &
-teammate visibility —
-agent discovery changes`). Megatask patterns: `../megatask/references/agent-teams.md`. Set `"autoMemoryDirectory": ".worktask-memory/"`
-in settings for worktask-specific auto-memory, separate from the default `~/.claude/`.
+With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has one implicit team: spawn teammates
+with the Agent tool's `name` parameter (`team_name` is ignored) and message them with `SendMessage`.
+Teammates coordinate through the same `.context/state.json` ledger as every other stage and can
+self-claim available work. Live teammates are visible to `ListAgents`/`claude agents --json`, so a
+lead resuming mid-batch uses the stage loop's pre-check
+(`skills/worktask/references/resume.md § Step 0 notes — own-name & teammate visibility — agent
+discovery changes`). Megatask does not use teams. Set
+`"autoMemoryDirectory": ".worktask-memory/"` in settings for worktask-specific auto-memory.

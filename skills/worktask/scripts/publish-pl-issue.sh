@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # publish-pl-issue.sh — auto-publish a sanitised GitHub issue after PL approval.
 #
-# Invoked by the orchestrator at Step 6.5 of skills/worktask/SKILL.md. NEVER blocks the
+# Invoked by the orchestrator after PL0 (skills/worktask/SKILL.md § PL Issue Publish). NEVER blocks the
 # worktask: operational outcomes are audit.jsonl rows (result + reason) and exit 0; only a
 # catastrophe (jq missing, audit dir unwritable, state corrupt) exits 1, and --self-test
 # failure exits 2. An unreachable sibling folds into those two: publish-pl-issue-lib.sh
@@ -14,7 +14,7 @@
 #     comment and milestone-mode: skills/gh-issue-dedup. Env: GH_ISSUE_ANCHOR (anchor path),
 #     GH_ISSUE_SEARCH=0 (disable the title search).
 #   - plan_file shape boundary (path in state.json, bare basename in task metadata; readers
-#     MUST accept either): handoff-protocol.md § state.json schema. The PLAN_FILE block below
+#     MUST accept either): handoff-protocol.md § plan_file shape boundary. The PLAN_FILE block below
 #     tries the value as given, then its basename against the state directory, and names both
 #     candidates on the fatal path.
 #   - {{asset:<basename>}} placeholder grammar and the .context/designs/-only lookup:
@@ -223,7 +223,7 @@ audit_row() {
   command -v jq >/dev/null 2>&1 || return 1
   corpflow_audit_row --file "$AUDIT_FILE" --actor orchestrator \
     --action github_issue_created --subject PL0 --result "$1" \
-    --task-id "${PL0_TASK_ID:-PL0}" --meta "$2"
+    --task-id PL0 --meta "$2"
   return "$CORPFLOW_AUDIT_LAST_RC"
 }
 
@@ -752,8 +752,12 @@ if [ "$STRICT" != "1" ] && [ "$STRICT" != "true" ]; then
   if [ "$STATE_STRICT" = "true" ]; then STRICT=1; fi
 fi
 
-# Guard 1: opt-out via task metadata or env override.
-NO_GH=$(jq -r '.metadata.no_gh_issue // false' "$STATE_FILE" 2>/dev/null)
+# Guard 1: opt-out via env override, or the flag on this run's PL task (where
+# /worktask Step 4 stamps it). The run-level key is read too, so a ledger that sets
+# it there still opts out.
+NO_GH=$(jq -r --arg pl "PL${RUN_INDEX:-0}" \
+  '(.tasks[$pl].metadata.no_gh_issue // .tasks.PL0.metadata.no_gh_issue // .metadata.no_gh_issue // false)' \
+  "$STATE_FILE" 2>/dev/null)
 if [ "${NO_GH_ISSUE:-${NO_GH}}" = "true" ]; then
   defer "opted_out"
 fi

@@ -1,9 +1,12 @@
 ---
 name: worktask
-description: Initialize a new worktask task with proper folder structure and state-ledger integration
-argument-hint: '<task description> [--secure] [--emergency] [--auto=[plan, decision, finalization]] [--accept-absent=<tool[,tool]>]'
+description: Run one task through the staged worktask pipeline (plan, build, review, test, docs, PR) with plan and finalization gates and a resumable state ledger
+argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.6.0
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Task(corpflow:product-manager), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *)
+# tools: bare Task because each stage row's metadata.agent may name a platform variant from any
+# plugin (`pl0-procedure.md § Stage → agent table`, a CORPFLOW.md § Routing override included), and
+# the Step C.0a resolver and Phase 3 re-dispatch those agents or `corpflow:prompt-engineer`.
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -15,33 +18,25 @@ related:
 
 > **Execution model** — every worktask is worktree-isolated, so the PR is the review
 > surface. Three orthogonal carriers on `PL0.metadata` drive the two human checkpoints and the
-> optional decision delegate; `/megatask` stamps them directly on each per-issue PL0.
+> optional decision delegate; `/megatask` sets them on each per-issue PL0 (§ Per-issue run under
+> `/megatask`).
 >
 > | Carrier | Default | Alternate | Meaning |
 > |---|---|---|---|
 > | `plan_gate` | `checkpoint` | `bypass` — `--auto=[plan]`, `--emergency` | Post-PL0 checkpoint: present the plan, wait for explicit `AskUserQuestion` approval before dispatching any implementation stage (AR/DV/…) |
 > | `decision_gate` | `user` | `auto` — `--auto=[decision]` | Who answers `open_questions[]`: the user, or a delegate. PL0's at the plan gate (§ Step A.4); every other stage's blocking items at their own boundary (§ Step C.0a); the FN-gate batch at § Step C.3. Escalation-class questions always fall back to the user |
-> | `fn_gate` | `checkpoint` | `bypass` — `--auto=[finalization]`, `--emergency` | Pre-FN checkpoint: STOP before the FN `Task()`, present a pre-FN summary, approve before any commit/push/PR |
+> | `fn_gate` | `checkpoint` | `bypass` — `--auto=[finalization]`, `--emergency` | Pre-FN checkpoint: stop before the FN `Task()`, present a pre-FN summary, approve before any commit/push/PR |
 
 # Worktask Command
 
-Initialize a new worktask task with proper folder structure and state-ledger integration.
+`/worktask` runs one issue through the staged pipeline; it has no `--milestone` flag. A milestone
+or an issue array with dependency ordering is `/megatask`. Three constraints bound every run:
 
-> **CRITICAL CONSTRAINTS**
-> - MUST use `.context/state.json` `tasks{}` for worktask state, written only via `state-patch.sh`. Do NOT use Claude Code's built-in plan mode.
-> - Every stage MUST have a ledger entry. Do NOT skip seeding one.
-> - If the ledger cannot be read or written, STOP and report. Do NOT fall back to alternative planning.
-
-## Usage
-
-```
-/worktask "Task Title" [options]     # Execute a single task through the staged pipeline
-```
-
-> **Multi-issue batches moved to `/megatask`.** `/worktask` is strictly single-issue and
-> milestone-agnostic — it has no `--milestone` flag. For a milestone or an issue array with
-> dependency ordering use `/megatask N` / `/megatask --issues 12,15,18` (`commands/megatask.md`,
-> `skills/megatask/SKILL.md`).
+- Worktask state lives in `.context/state.json` `tasks{}`, written only via `state-patch.sh`. Do
+  not use Claude Code's built-in plan mode.
+- Every stage has a ledger entry; never skip seeding one.
+- If the ledger cannot be read or written, stop and report. Never fall back to alternative
+  planning.
 
 ## Worktask Types
 
@@ -60,18 +55,17 @@ either way, TL is included only when PL0 splits work across ≥2 developers. Cri
 
 ### Gate automation flag (`--auto`)
 
-`--auto=[<values>]` takes an **array** — any non-empty subset of `plan`, `decision`,
-`finalization`, comma-separated. Brackets optional, inner whitespace tolerated
-(`--auto=[plan, decision]`, `--auto=plan,finalization` both valid). An unknown value is a parse
-error: reject the invocation and report; never drop it silently. Each value is an independent
-carrier on PL0.
+`--auto=[<values>]` takes any non-empty, comma-separated subset of `plan`, `decision`,
+`finalization`; brackets are optional and inner whitespace is tolerated (`--auto=[plan, decision]`,
+`--auto=plan,finalization`). An unknown value is a parse error: reject the invocation and report,
+never drop it silently. Each value is an independent carrier on PL0.
 
 #### Gate automation flag — values
 
 | Value | Stamps | Effect beyond the carrier table above |
 |-------|--------|---------------------------------------|
 | `plan` | `plan_gate: "bypass"` | Auto-proceeds into the stage loop. FN gate still checkpoints unless `finalization` is also set. |
-| `decision` | `decision_gate: "auto"` | Bypasses NO gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Also what enables the § Step C.0a resolver, so a blocking `decision` item from AR/TL/DV/DR/SR/QA/DC/RE/ET is answered a tier up instead of stopping the run. Escalation-class questions — irreversible, scope-expanding, security-posture, spend — always fall back to the user. |
+| `decision` | `decision_gate: "auto"` | Bypasses no gate by itself: under a `checkpoint` plan gate the auto-decisions are presented (marked) for approval. Also what enables the § Step C.0a resolver, so a blocking `decision` item from AR/TL/DV/DR/SR/QA/DC/RE/ET is answered a tier up instead of stopping the run. Escalation-class questions — irreversible, scope-expanding, security-posture, spend — always fall back to the user. |
 | `finalization` | `fn_gate: "bypass"` | Auto commit/push/PR. Plan gate still applies unless `plan` is also set. |
 
 #### Gate automation flag — `--accept-absent`
@@ -81,9 +75,8 @@ carrier on PL0.
 is the only way a missing tool stops counting as a preflight fail. Tools: `renderer` (backend,
 systems, ai, all; covers `silicon`, `magick` and `convert`, which may also be named one at a time),
 `playwright` and `playwright-browser` (web), `adb-device` (android), `simulator`
-and `xcodebuildmcp` (apple). Comma-separated; an unknown tool is a parse error that rejects the
-invocation, as for `--auto`. The orchestrator passes the list verbatim and never defaults, extends
-or infers it, so a tool nobody named stays a fail.
+and `xcodebuildmcp` (apple). An unknown tool is a parse error, as for `--auto`. Pass the list
+verbatim; never default, extend or infer it, so a tool nobody named stays a fail.
 
 ### Scope and pipeline flags
 
@@ -92,10 +85,10 @@ or infers it, so a tool nobody named stays a fail.
 | `--priority [High\|Medium\|Low]` | Task priority |
 | `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
 | `--ethics-review` | Add ET checkpoint after PL |
-| `--with-design` | Invoke `corpflow:designer` during PL. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
+| `--with-design` | Invoke `corpflow:designer` during PL. Sets `metadata.with_design: true` on PL0. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
 | `--sequential` | DC waits for QA |
 | `--secure` / `--full` | Use 11-stage worktask |
-| `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. Replaces the former `emergency:` prefix. |
+| `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. |
 | `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish. Sets `metadata.no_gh_issue: true` on PL0; `publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues. |
 
 ### Replay flags
@@ -108,25 +101,27 @@ or infers it, so a tool nobody named stays a fail.
 ## Examples
 
 ```bash
+/worktask "<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>]
+/worktask --resume <STAGE_ID> [--cascade]
 /worktask "Add dark mode support"                      # standard pipeline
-/worktask "Rotate the API token store" --secure        # 11-stage; --full is the same flag
+/worktask "Rotate the API token store" --secure        # 11-stage
 /worktask "Fix flaky sync test" --priority High --platform apple
 /worktask "Ship the referral banner" --ethics-review --sequential
 /worktask "Bump the SDK" --no-gh-issue --auto=[plan,finalization]
 /worktask "Add the export endpoint" --platform backend --auto=[plan,finalization] --accept-absent=renderer
 /worktask --emergency "Production login failing"       # IR→DV→DR→QA→RE→FN
 /worktask --resume DV1 --cascade                       # replay DV1 and its dependents
-# Multi-issue: /megatask 1   (milestone)   or   /megatask --issues 12,15,18   (array)
+# Multi-issue: /megatask 1 (milestone) or /megatask --issues 12,15,18 (array)
 ```
 
 ## Phase 0: Replay one stage (`--resume <STAGE_ID>`)
 
-Entered ONLY by `/worktask --resume <STAGE_ID> [--cascade]`. Unlike automatic reattach (first
-incomplete stage, retry ceiling honoured), a replay is *given* one ledger id by a human and may
+Entered only by `/worktask --resume <STAGE_ID> [--cascade]`. Unlike automatic reattach (first
+incomplete stage, retry ceiling honoured), a replay is given one ledger id by a human and may
 override that ceiling (`skills/worktask/references/resume.md § Explicit-replay row`).
 
-Phase 0 replaces Phase 1 entirely, then re-enters the existing stage loop, adding **no** dispatch
-route and **no** readiness rule: the replayed task becomes `pending` with its dependencies still
+Phase 0 replaces Phase 1 entirely, then re-enters the existing stage loop with no new dispatch
+route or readiness rule: the replayed task becomes `pending` with its dependencies still
 `completed`, so it is the first unblocked task and every other stage stays settled.
 
 ### Phase 0 — what runs
@@ -136,13 +131,13 @@ route and **no** readiness rule: the replayed task becomes `pending` with its de
 
 **Run** — Step 3b hook-install verification (idempotent; a resumed loop still needs
 SubagentStop), the `fn-preflight.sh branch-divergence` check (`resume.md § Branch-rename
-detection`), and the BINDING workspace-root cross-check before every `Task()`.
+detection`), and the workspace-root cross-check before every `Task()`.
 
 ### Phase 0 — procedure
 
 1. No `.context/state.json` in the working tree → error out: "no worktask here — use
    `/worktask <task>`". Do not seed one.
-2. Present the **pre-replay confirmation and STOP**, naming: the target id with its status,
+2. Present the pre-replay confirmation and stop, naming: the target id with its status,
    `retry_count`, `error_escalated_to`; whether the escalation cap is being overridden; any
    already-`completed` dependents, marked *these may now be stale* (warn only — never auto-reset);
    a plan-unapproved warning when no `approval_received` row exists for `PL<run_index>`; and under
@@ -153,7 +148,7 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
 4. **Exit 4** means a guard refused (target live or parked, liveness indeterminate, planning
    incomplete, or a blocked cascade member); `state.json` is byte-unchanged. Print the refusal line
-   verbatim and STOP — do NOT enter the stage loop. Exit 1 is an unknown id, exit 2 a malformed one.
+   verbatim and stop without entering the stage loop. Exit 1 is an unknown id, exit 2 a malformed one.
 5. Append the ordinary `resume` audit row (`resume.md` step 7) — it records session re-entry, while
    the primitive's `stage_replay` row records what changed in the ledger.
 6. Re-enter `§ After Step A — run the stage loop`, unchanged.
@@ -162,29 +157,26 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
 
 | Gate | Behaviour |
 |------|-----------|
-| `plan_gate` (Step A.5) | **Never re-fires.** It gates the Phase-1→Phase-2 transition; a replay reopens no planning and the `approval_received` row persists. Its absence is a warning at step 2, not a stop |
-| `fn_gate` | **Applies unchanged.** It is a property of the loop, not of the entry point — a resumed run must not slip a commit past the finalization checkpoint |
+| `plan_gate` (Step A.5) | Never re-fires. It gates the Phase-1→Phase-2 transition; a replay reopens no planning and the `approval_received` row persists. Its absence is a warning at step 2, not a stop |
+| `fn_gate` | Applies unchanged: it belongs to the loop, not the entry point, so a resumed run cannot slip a commit past the finalization checkpoint |
 
 ## Phase 1: Planning (execute immediately)
 
-> **BINDING 1 — Pre-work Prohibition**: create, edit, or modify NO project files during Phase 1
-> (localization, accessibility IDs, config, sources). Only
-> `mkdir -p .context/designs .context/images .context/errors`, `state-patch.sh` ledger writes,
-> the Step 3a `seed-state.sh` seed, the
-> Step 2a `.context/gh-issue.json` anchor (reuse path only), the Step 3a
-> `autonomy-preflight.sh --record` call, and the `mktemp` buffers under `$TMPDIR`
-> (`corpflow-preflight.*`, `corpflow-issue-scan.*`) that § Step 2a-pre and § Step 2a write outside
-> the project are permitted. ALL file modifications belong to DV or later.
+> **BINDING 1 — Pre-work Prohibition**: create, edit, or modify no project files during Phase 1
+> (localization, accessibility IDs, config, sources); file changes belong to DV or later. The only
+> writes permitted are the Step 3 `mkdir -p .context/…`, `state-patch.sh` ledger writes, the
+> Step 3a `seed-state.sh` seed, the Step 2a `.context/gh-issue.json` anchor (reuse path only), the
+> Step 3a `autonomy-preflight.sh --record` call, and the `mktemp` buffers under `$TMPDIR`
+> (`corpflow-preflight.*`, `corpflow-issue-scan.*`) that § Step 2a-pre and § Step 2a write.
 
 ### Phase 1 binding constraint 2 — Context-Interruption Recovery
 
 > **BINDING 2 — Context-Interruption Recovery**: after an interruption (auth flows, tool failures),
-> on resumption MUST verify PL0 exists with status `completed`; if not, restart from the appropriate
-> phase — **except** when PL0 is `in_progress` with stage tasks present and the audit tail has a
-> `plan_revision_dispatched` row with no later `approval_received` for `PL<run_index>`: that is a
-> plan revision in flight, resumed per § Plan-revision re-dispatch (re-dispatch PM with
-> `plan_revision: true`; never the fresh-run path). Both checkpoints still apply — the plan gate at
-> Step A.5 and the FN gate (`skills/worktask/SKILL.md § FN Gate`).
+> verify PL0 exists with status `completed`; if not, restart from the appropriate phase. The
+> exception: PL0 `in_progress` with stage tasks present and a `plan_revision_dispatched` audit row
+> with no later `approval_received` for `PL<run_index>` is a plan revision in flight — resume it per
+> § Plan-revision re-dispatch (`plan_revision: true`), never the fresh-run path. Both checkpoints
+> still apply: the plan gate at Step A.5 and the FN gate (`skills/worktask/SKILL.md § FN Gate`).
 
 ### Steps 1–2 — Parse flags and detect embedded commands
 
@@ -193,8 +185,33 @@ detection`), and the BINDING workspace-root cross-check before every `Task()`.
    `--accept-absent=` beside it (§ Gate automation flag — `--accept-absent`): keep the value
    verbatim for Step 2a-pre, and reject an unknown tool.
 2. **Detect embedded commands**: extract any `/plugin:command` or `/command` pattern into
-   `metadata.embedded_commands` (comma-separated), strip the prefix from the description passed to
-   PL0, preserve the arguments. See § Embedded Command Detection.
+   PL0's `metadata.embedded_commands` (comma-separated, stamped at Step 4), strip the prefix from
+   the description passed to PL0, preserve the arguments. See § Embedded Command Detection.
+
+### Per-issue run under `/megatask`
+
+`/megatask` Phase 2 Step 3 launches this command in a background subagent, one per issue, with
+`--auto=[plan,decision,finalization]`, a `PL0.metadata` stamp carrying `megatask_group`, and a run
+environment in which every Bash call opens with
+`cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`,
+`<wt>` being the issue's absolute worktree path. Keep that prefix on every call, the snippets
+below included. It is what makes the state scripts write `<wt>/.context/state.json` instead of
+megatask's own ledger, and what the scan, preflight, publish and branch scripts read as a
+per-issue run. Hooks never see that export: they bind to `<wt>` from the `WORKSPACE_ROOT=`
+banner line in the acting agent's prompt, so keep § Banner injection on every stage brief. No
+user is reachable.
+
+#### Per-issue run — what changes
+
+| Step | Under `/megatask` |
+|---|---|
+| 2a-pre, 2a | Both scripts print `result=skipped reason=milestone_mode`; no `AskUserQuestion` runs |
+| 3c | `branch-name.sh` self-disables; `init-worktree.sh` already named the branch |
+| 4 | The stamp overlays the payload (§ Step 4 — the /megatask stamp) |
+| A | `publish-pl-issue.sh` defers with `reason=milestone_mode` |
+| Any stop for the user | Settles the issue first (`skills/worktask/SKILL.md § USER under /megatask`) |
+| Phase 3 | Skipped |
+| `EnterWorktree` | Never called: the prefix already runs every call in `<wt>` |
 
 ### Step 2a-pre — Autonomy preflight (unattended runs)
 
@@ -226,7 +243,7 @@ else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f
 - **0**: continue to Step 2a. `accepted_absent=<tools>` names the missing tools the operator
   accepted. Keep the printed `PF_BUF` path for Step 3a, because shell variables do not survive
   between tool calls. On `result=skipped`, delete the buffer instead; Step 3a records nothing.
-- **1 or 2**: STOP before Step 2a and Step 3, in one message: every entry the snippet printed, each
+- **1 or 2**: stop before Step 2a and Step 3, reporting in one message every entry the snippet printed, each
   a failed grant, tool or toolchain check with its `fix:` line; for exit 2, the usage error on
   stderr (an unknown `--accept-absent` tool, say). The snippet has already deleted the buffer, no
   `.context/` exists, and nothing is recorded. The operator fixes the whole list, or relaunches
@@ -244,8 +261,8 @@ else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f
 
 ### Step 2a — Duplicate-issue pre-flight (advisory)
 
-Runs once the request is known and **strictly before** Step 3 creates `.context/`. The
-`skills/gh-issue-dedup` anchor guards *re-runs* only, so a first run of work already filed under
+Runs once the request is known and strictly before Step 3 creates `.context/`. The
+`skills/gh-issue-dedup` anchor guards re-runs only, so a first run of work already filed under
 different wording still opens a second issue — this step surfaces the candidates while the duplicate
 is still preventable. Append `--no-gh-issue` to the invocation when that flag was supplied. When
 `--auto` contains `plan`, nobody is there to answer the gate: run § Step 2a — unattended instead of
@@ -280,6 +297,9 @@ present each `candidate=<json>` line (number, title, url — at most three, most
   orphaned state.
 - **Use one of the existing issues** — Step 3, then bind this context to the chosen issue: after
   Step 3a seeds `state.json`, write the dedup anchor below.
+
+A `/megatask` per-issue run never asks: its `--auto` holds `plan`, so § Step 2a — unattended runs
+instead, and the scan skips itself there anyway (`reason=milestone_mode`).
 
 #### Step 2a — reusing an existing issue
 
@@ -321,11 +341,11 @@ taken, and the exact-title auto-bind in `publish-pl-issue.sh` still applies. Kee
 
 #### Step 2a invariants
 
-- The trailing `|| true` is mandatory — **non-blocking by contract**: no network/`gh`/auth/remote, an
+- The trailing `|| true` is required: the scan is non-blocking. No network/`gh`/auth/remote, an
   API error, a rate limit, a timeout, a malformed response, or zero hits each print
   `result=skipped`/`result=none` and Step 3 runs unchanged.
 - **Advisory only**: the scan never links, comments, closes, or writes (no audit row either: the
-  ledger does not exist yet, and the unattended row is Step 3a's write), and does NOT relax the
+  ledger does not exist yet, and the unattended row is Step 3a's write), and does not relax the
   exact-title auto-bind in `publish-pl-issue.sh` (`skills/gh-issue-dedup § Resolution order`).
 - **Self-skips**: `CORPFLOW_NONINTERACTIVE=1`, `/megatask` (`MILESTONE_MODE=1` or a
   `workspace.json`), and `--emergency` (`INCIDENT_MODE=1`); `PREFLIGHT_ISSUE_SCAN=0` disables it
@@ -362,17 +382,17 @@ fi
 - **3**: `state.json` already exists (a new run in an existing `.context/`); byte-unchanged, and the
   script has no overwrite path. The snippet has reopened PL0 so an interruption before Step 5
   cannot read the previous run's `completed` PL0 as this run's plan (BINDING 2). A non-zero from
-  that call is a ledger write failure: STOP and report. Otherwise continue as for 0;
+  that call is a ledger write failure: stop and report. Otherwise continue as for 0;
   `pl0-procedure.md § Step 4 — state.json reset` is the re-run writer.
-- **4**: no `.context/` resolves inside this worktree; nothing written. STOP and report.
-- **1 or 2**: write failure or usage error; nothing written. STOP and report, since there is no
+- **4**: no `.context/` resolves inside this worktree; nothing written. Stop and report.
+- **1 or 2**: write failure or usage error; nothing written. Stop and report, since there is no
   correct degraded mode.
 
-#### Step 3a — `metadata.workspace_path` (UNCONDITIONAL) and `facts.goal`
+#### Step 3a — `metadata.workspace_path` and `facts.goal`
 
-- **`workspace_path`**: `seed-state.sh` stamps it on every run. Not a megatask-only field:
+- **`workspace_path`**: `seed-state.sh` stamps it on every run, not only under `/megatask`.
   `dv-tree-preflight.sh`, the § Workspace-root cross-check, and `agents/developer.md`'s path-prefix
-  check all read it and each degrades to a **silent pass** when it is absent — omitting it disables
+  check all read it and each degrades to a silent pass when it is absent, so omitting it disables
   all three at once (`initialization-patterns.md § Seeded workspace_path`).
 - **`facts.goal`**: the `--goal` value, which `seed-state.sh` escapes and caps. It is the issue
   title and `## Summary` source for `publish-pl-issue.sh`, and nothing on the PL state-patch path
@@ -426,7 +446,7 @@ fi
 
 ### Step 3b — Verify SubagentStop hook installed
 
-3b. After the seed, verify `.claude/hooks/state-merge.sh` exists and is executable AND that the
+3b. After the seed, verify `.claude/hooks/state-merge.sh` exists and is executable and that the
 plugin's `plugin.json` registers the SubagentStop hook — the Layer 2 safety net that patches
 state.json when agents skip self-patching (`initialization-patterns.md#hook-installation`).
 
@@ -442,27 +462,26 @@ state.json when agents skip self-patching (`initialization-patterns.md#hook-inst
 
 #### Step 3b regression guard
 
-**Regression guard**: if neither the plugin-registered hook NOR the project-local copy exist, warn
-(`"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge
-(Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."`) and do NOT block.
+If neither the plugin-registered hook nor the project-local copy exists, warn without blocking:
+`"⚠ state-merge.sh hook not installed — state.json will only be patched if agents self-merge
+(Layer 1) or orchestrator Step 6.5 fires (Layer 3). Run hook-install.sh to fix."`
 
 ### Step 3c — Name the branch once (PL start)
 
-3c. **UNCONDITIONAL**, on every worktask with no precondition (Conductor workspaces and manual
-`git checkout -b` branches included): after the seed and before Step 4, run
-`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the ONLY
+3c. On every worktask, with no precondition (Conductor workspaces and manual `git checkout -b`
+branches included): after the seed and before Step 4, run
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"`. This is the only
 place a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch
-Naming`); the *planned* ledger name may be refined once more without git mutation (§ Step A.4b).
-Every outcome exits 0 — a naming problem must never stop planning — and the step self-disables
-**inside the script** under `/megatask` or `--emergency`. Its guard ladder has an "already
-conventional" no-op arm, so running it on a named branch costs one process and is the only correct
-way to establish that the name is in fact conventional.
+Naming`); the planned ledger name may be refined once more without git mutation (§ Step A.4b).
+Every outcome exits 0, so a naming problem never stops planning, and the script self-disables
+under `/megatask` or `--emergency`. Its guard ladder has an "already conventional" no-op arm, so
+run it on an already-named branch too: that is how the name is established as conventional.
 
 #### Step 3c — the input is a title, not the task description
 
-**Derive the title from the request; never pass the request verbatim.** A title is an imperative
+Derive the title from the request; never pass the request verbatim. A title is an imperative
 phrase of ≤60 characters naming the thing changed and the change; the goal is slugified into a
-48-character slug and the overflow is dropped **silently** (grammar and budget:
+48-character slug and the overflow is dropped silently (grammar and budget:
 `git-conventions.md § Branch Naming`).
 
 - good: `Replace in-house ZIP with upstream ZipArchive`
@@ -473,47 +492,47 @@ phrase of ≤60 characters naming the thing changed and the change; the goal is 
 writes no audit row. Preview before the one rename-mode run; that is how a poor title is caught while
 it is still free to change.
 
-#### Step 3c — who decides conventionality (BINDING)
+#### Step 3c — who decides conventionality
 
-> Never judge conventionality by eye. The sole authority is `branch_is_conventional()` from
-> `skills/worktask/scripts/branch-lib.sh`, reachable as
-> `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "<name>"`
-> (0 = conventional, 1 = not, 2 = internal fault). "This looks like a real branch name, skip" is how
-> `fix/catalog-image-blinking` reached `facts.branch` after `fix` left `BRANCH_TYPES`.
+Never judge conventionality by eye: a name can look conventional after its type left
+`BRANCH_TYPES`. The sole authority is `branch_is_conventional()` from
+`skills/worktask/scripts/branch-lib.sh`, reachable as
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "<name>"`
+(0 = conventional, 1 = not, 2 = internal fault).
 
-#### Step 3c — host-session authorization (BINDING)
+#### Step 3c — host-session authorization
 
-Invoking `/worktask` **satisfies** a host's "do not rename the current branch unless the user
-explicitly tells you to" session rule (Conductor injects exactly that): **never revert this step's
-rename, and never suspend the pipeline to re-ask** — worktrees included
+Invoking `/worktask` satisfies a host's "do not rename the current branch unless the user
+explicitly tells you to" session rule (Conductor injects exactly that): never revert this step's
+rename or suspend the pipeline to re-ask. That holds in worktrees too
 (`skills/worktask/references/workspace-modes.md § Host session authorization`), where the local
-branch is renamed too, so
-`branch=` and `target_branch=` agree and the host's branch↔workspace mapping moves with it.
+branch is renamed as well, so `branch=` and `target_branch=` agree and the host's
+branch↔workspace mapping moves with it.
 `BRANCH_NAME_WORKTREE_RENAME=0` restores the defer-to-host behaviour (local name kept, only
 `target_branch=` derived).
 
 #### Step 3c — validate before stamping
 
-Capture **both** stdout key=value lines: `target_branch=<name>` (the name the PR head should carry)
-and the final `branch=<name>` (the local branch as it stands). **Verify against
-`^[A-Za-z0-9._/-]+$` before stamping** — defence in depth alongside the script's emission validation
-and FN's re-validation (`agents/project-manager.md § Final FN steps`); a failing value MUST be
-stamped empty, never as-is. Stamp `state.json facts.branch` — the script never writes state.json
+Capture both stdout key=value lines: `target_branch=<name>` (the name the PR head should carry)
+and the final `branch=<name>` (the local branch as it stands). Verify against
+`^[A-Za-z0-9._/-]+$` before stamping, as defence in depth alongside the script's emission
+validation and FN's re-validation (`agents/project-manager.md § Final FN steps`); a failing value
+is stamped empty, never as-is. Stamp `state.json facts.branch` — the script never writes state.json
 (`handoff-protocol.md § branch`). Both lines come back empty rather than carrying a name that fails
 the predicate, so an empty stamp is the honest "no planned name" outcome (FN pushes plainly).
 
 #### Step 3c — which of the two names gets stamped
 
    ```bash
-   # A TITLE (≤60 chars), never the raw task description — the 48-char slug budget
+   # A title (≤60 chars), never the raw task description: the 48-char slug budget
    # drops the overflow silently.
    out=$(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>")
    local_branch=$(printf '%s\n' "$out" | sed -n 's/^branch=//p' | tail -n 1)
    target=$(printf '%s\n' "$out" | sed -n 's/^target_branch=//p' | tail -n 1)
    truncated=$(printf '%s\n' "$out" | sed -n 's/^slug_truncated=//p' | tail -n 1)
 
-   # target_branch wins whenever the local name is unusable as a PR head; falling back
-   # to the local name here is what shipped a `<city>-v<n>` branch as a PR head.
+   # target_branch wins whenever the local name (a host's `<city>-v<n>`, say) is
+   # unusable as a PR head.
    stamp="$local_branch"
    if [ -z "$stamp" ] || ! bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --check "$stamp"; then
      [ -n "$target" ] && stamp="$target"
@@ -522,8 +541,8 @@ the predicate, so an empty stamp is the honest "no planned name" outcome (FN pus
 
 #### Step 3c — post-check (non-blocking)
 
-After stamping, assert the stamped value against the predicate — not by eye. Reuse `$target`; never
-re-invoke in **rename mode** (that writes a second audit row). `BRANCH_NAME_PRINT=1`, `--check`, and
+After stamping, assert the stamped value against the predicate. Reuse `$target`; never
+re-invoke in rename mode (that writes a second audit row). `BRANCH_NAME_PRINT=1`, `--check`, and
 `--print-target` write none:
 
    ```bash
@@ -538,7 +557,7 @@ re-invoke in **rename mode** (that writes a second audit row). `BRANCH_NAME_PRIN
 
 #### Step 3c — post-check, the truncation row
 
-`slug_truncated=1` appears ONLY when the budget dropped content. Then append one row naming the input
+`slug_truncated=1` appears only when the budget dropped content. Then append one row naming the input
 length and the surviving slug — the evidence a human reads at the plan gate, and the
 incumbent-quality signal § Step A.4b reads (`$title` is the `--goal` title; `slug` is the
 post-`<type>/` remainder):
@@ -559,38 +578,67 @@ post-`<type>/` remainder):
 
 #### Step 3c — post-check invariants
 
-**The post-check MUST NOT block planning** — a warning row and nothing else: no STOP, no retry, no
-rename (a rename here would violate the once-only rule). The convention row MUST name **both** the
-stamped branch and the derived target, so the divergence is legible without re-deriving it. An empty
+The post-check never blocks planning: a warning row and nothing else — no stop, no retry, no
+rename (a rename here would break the once-only rule). The convention row names both the stamped
+branch and the derived target, so the divergence is legible without re-deriving it. An empty
 `facts.branch` is a documented outcome (detached HEAD, not a git repo), not a warning; an empty
 `derived_target` means a guard arm short-circuited before derivation. A non-empty `derived_target`
-there is a **bug report**: a conventional target existed and something stamped past it.
+there is a bug report: a conventional target existed and something stamped past it.
 
 ### Step 4 — attach PL0 metadata
 
-4. The Step 3a seed already created `tasks.PL0`, so this step MERGES metadata rather than creating
-the task — `--task-create` would hit the create op's idempotent early-exit and drop the payload
-silently. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"opus","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
-— `metadata.agent` MUST use fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
+4. The Step 3a seed already created `tasks.PL0`, so this step merges metadata rather than creating
+the task (`--task-create` would hit the create op's idempotent early-exit and drop the payload
+silently). `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"<model>","effort":"<effort>","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
+— `metadata.agent` is always the fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
+
+#### Step 4 — PL0's model and effort
+
+Resolve the pair the way every other stage row's is (`skills/shared/stage-codes.md § Model and
+Effort Lookup`), never type it: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve product-manager`
+prints `<model>`, `<effort>` and the source, tab-separated; paste the first two into the payload.
+It reads `state.models` first, then `CORPFLOW.md § Models`, then the matrix. No § Secure
+overrides row names PL.
+
+#### Step 4 — option-flag stamping
+
+Merge these into the same payload. A flag that was not passed leaves its key absent, and every
+reader treats an absent key as off.
+
+| Key | Stamp only when | Read by |
+|---|---|---|
+| `with_design: true` | `--with-design` | PM, `pl0-procedure.md § Designer Invocation` |
+| `no_gh_issue: true` | `--no-gh-issue` | `skills/worktask/SKILL.md § PL Issue Publish`, `publish-pl-issue.sh`, `mailbox.sh` |
+| `embedded_commands` | Step 2 found any | the DV dispatch, `skills/worktask/SKILL.md` loop step 5a |
 
 #### Step 4 — workspace_path stamping
 
-`workspace_path` carries the Step 3a value and is stamped on **every** run beside `isolation`, not
-only under `/megatask`; PM propagates it to every stage task. It tells a stage agent which tree it
-was *assigned* — a different claim from the tree it resolved (`workspace-modes.md § Sibling-worktree
+`workspace_path` carries the Step 3a value and is stamped on every run beside `isolation`; PM
+propagates it to every stage task. It tells a stage agent which tree it was assigned, a different
+claim from the tree it resolved (`workspace-modes.md § Sibling-worktree
 hazard`).
 
 #### Step 4 — gate stamping
 
 Gate defaults (`plan_gate: "checkpoint"`, `decision_gate: "user"`, `fn_gate: "checkpoint"`) stamp
 unless a flag overrides. They are the carriers resume logic branches on (`resume.md § State → Action
-Table`); `/megatask` stamps them directly per issue.
+Table`); `/megatask` sets them per issue through its flags and stamp (§ Step 4 — the /megatask
+stamp).
 
-| Alternate | Stamp ONLY when | Notes |
+| Alternate | Stamp only when | Notes |
 |---|---|---|
-| `plan_gate: "bypass"` | `--auto` contains `plan`, OR `--emergency` | Emergency runs unattended from IR |
-| `fn_gate: "bypass"` | `--auto` contains `finalization`, OR `--emergency` | `--auto=[plan]` MUST NEVER stamp this — orthogonal carriers. Enforced at SKILL.md loop step 4.9 |
+| `plan_gate: "bypass"` | `--auto` contains `plan`, or `--emergency` | Emergency runs unattended from IR |
+| `fn_gate: "bypass"` | `--auto` contains `finalization`, or `--emergency` | `--auto=[plan]` alone never stamps this (orthogonal carriers); enforced at SKILL.md loop step 4.9 |
 | `decision_gate: "auto"` | `--auto` contains `decision` | `--emergency` leaves it `"user"` (no PL stage, carrier inert) |
+
+#### Step 4 — the /megatask stamp
+
+Under a per-issue `/megatask` run the dispatch prompt carries a `PL0.metadata` stamp
+(`commands/megatask.md § Phase 2 loop · Step 3`). Overlay it on the payload above in the same
+`--task-meta PL0` call, the stamp winning on every shared key. Its `workspace_path` is the absolute
+worktree path, and its gates (`plan_gate: "bypass"`, `decision_gate: "auto"`, `fn_gate: "bypass"`)
+match what `--auto=[plan,decision,finalization]` stamps, so no default gate lands on that PL0. The
+stamp exists only in the prompt: megatask cannot write PL0 before Step 3a seeds the ledger.
 
 #### Step 4 — decision_gate readers
 
@@ -604,9 +652,9 @@ Batching`) and Step A.4.
 6. **Delegate**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
    — PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
    glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
-   creates stage tasks with `metadata.agent` AND `metadata.plan_file`. The seeded
+   creates stage tasks with `metadata.agent` and `metadata.plan_file`. The seeded
    `plan_file`/`run_index` are provisional — PM recomputes and is authoritative. Glob+increment
-   applies to a **new run** only: a plan-gate revision reuses the frozen index (§ Plan-revision
+   applies to a new run only: a plan-gate revision reuses the frozen index (§ Plan-revision
    re-dispatch).
 7. **PL0 → completed**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 completed`
 8. **Present the plan summary** (contents per § Plan gate checkpoint path), then continue to Phase 2.
@@ -620,7 +668,7 @@ a stage included beyond the tier default (AR0 at a low tier, TL0 at any tier) st
 
 ## Phase 2: Execute Stages (proceeds automatically)
 
-Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision_gate == "auto"` AND
+Phase 2 begins with the Auto-Decision Pre-Pass (Step A.4, no-op unless `decision_gate == "auto"` and
 PL0 left open questions), then the Plan Gate Check (Step A.5): on `checkpoint` present the plan and
 wait for approval before the stage loop; on `bypass` proceed directly.
 
@@ -630,13 +678,13 @@ Read `tasks.PL0.metadata.decision_gate` (default `"user"`) and, from `facts.open
 unresolved `sw-PL<N>-*` items — those whose `status` is not `"resolved"`
 (`pl0-procedure.md § Plan-Gate Open-Question Batching`). Resolve each item's question text and
 `options[]` from `planning-N.md#elicitation-sweep` exactly as § Step C.4 does; the stub carries
-neither. **No-op** when `decision_gate == "user"` or no such item exists — fall through to
+neither. No-op when `decision_gate == "user"` or no such item exists — fall through to
 Step A.5. Otherwise, run § Step A.4 — the delegate dispatch.
 
 #### Step A.4 — the delegate dispatch
 
 1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
-2. Re-dispatch PM as a decision delegate on the **Fable model**:
+2. Re-dispatch PM as a decision delegate on the Fable model:
    `Task({ subagent_type: "corpflow:product-manager", model: "fable", prompt: <decision prompt> })`,
    the prompt carrying the open-question list verbatim (each with its recommended default) and the
    plan file path. **Model fallback**: loop step 5f exactly — if
@@ -645,30 +693,28 @@ Step A.5. Otherwise, run § Step A.4 — the delegate dispatch.
 
 #### Step A.4 stamps no approval carrier
 
-The asymmetry with Step A.5 is deliberate: this pre-pass bypasses no gate. Resolving open questions
-answers plan content, it does not approve the plan, and every path out of here falls through to
-Step A.5, the sole stamping point. A stamp here would approve a run whose `plan_gate` is still
-`checkpoint`, before any human has seen the plan.
+This pre-pass bypasses no gate: resolving open questions answers plan content without approving
+the plan, and every path out of here falls through to Step A.5, the sole stamping point. A stamp
+here would approve a `checkpoint` run before any human has seen the plan.
 
 #### Auto-decision recording contract
 
 The delegate decides every non-escalation question (default-biased — deviate from PM's recommended
-default only with stated evidence), applies the amendments to the plan's EXISTING mandatory anchors
-(`## requirements` / `## acceptance-criteria` / `## scope`) in ONE batch pass, and returns each
+default only with stated evidence), applies the amendments to the plan's existing mandatory anchors
+(`## requirements` / `## acceptance-criteria` / `## scope`) in one batch pass, and returns each
 decision as a typed-return `key_decisions[]` entry prefixed `(auto-decided)`, plus any `escalate`
-items. It adds NO new anchor (`handoff-protocol.md § #anchor-allow-list`) and does NOT re-run
+items. It adds no new anchor (`handoff-protocol.md § #anchor-allow-list`) and does not run
 `state-patch.sh`: PL0 is already `completed`, so the plan amendments are its only writes.
 
 #### Auto-decision ledger merge (orchestrator)
 
-3. On return the ORCHESTRATOR — not the delegate — merges via `atomicMergeStateJson`: mark each
+3. On return the orchestrator, not the delegate, merges via `atomicMergeStateJson`: mark each
    answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` (the § Step C.5
-   write — the whole stub, never `{id, status, resolution}` alone). That write is the **only** one:
-   there is no second append to `facts.decisions[]`. § Step C.5 sends sweep answers to `resolution`
-   and nowhere else, and the record survives because every stage extracts `facts.open_questions[]`
-   on entry (`skills/shared/stage-contracts.md § Required Inputs`), so no downstream reader loses
-   the answer. Entries are marked resolved, **never removed** — a deleted item takes its `ref`
-   anchor and its answer with it.
+   write — the whole stub, never `{id, status, resolution}` alone). That is the only write; nothing
+   is appended to `facts.decisions[]`. The answer survives because every stage extracts
+   `facts.open_questions[]` on entry (`skills/shared/stage-contracts.md § Required Inputs`).
+   Entries are marked resolved, never removed — a deleted item takes its `ref` anchor and its
+   answer with it.
 
 ##### Auto-decision ledger merge — the audit row
 
@@ -678,10 +724,10 @@ items. It adds NO new anchor (`handoff-protocol.md § #anchor-allow-list`) and d
 
 #### Escalation guard (BINDING)
 
-The delegate MUST NOT auto-decide **escalation-class** questions: anything irreversible or
+The delegate never auto-decides escalation-class questions: anything irreversible or
 destructive (data deletion, force-push, external publication), scope-expanding beyond the task
 description, security-posture-weakening, or spend-authorizing. Those return as `escalate` items. If
-any exist, Step A.5 runs as a **`checkpoint`** gate for those items even under `plan_gate ==
+any exist, Step A.5 runs as a `checkpoint` gate for those items even under `plan_gate ==
 "bypass"` — the user answers only the escalated questions, the batch amendment pass applies their
 answers, then the bypass path resumes. Auto-decision never widens what runs unattended.
 
@@ -693,7 +739,7 @@ checkpoint-style render above, scoped to that boundary's escalate items: the use
 checkpoint stop (`/megatask` parks; § Plan gate bypass path — escalation exception). At a stage's own boundary
 (§ Step C.0) or the FN gate, the first matching lane wins:
 
-1. `/megatask` per-issue run (`PL0.metadata.megatask_group`): PARK, per § Escalation guard —
+1. `/megatask` per-issue run (`PL0.metadata.megatask_group`): park, per § Escalation guard —
    unattended `/megatask` per-issue runs (PARK).
 2. No reachable human (`CORPFLOW_NONINTERACTIVE=1`, or § Headless Dispatch): record each item and
    continue (§ Step C.5 — the unattended lanes). FN lists it atop the PR body, and the final
@@ -718,9 +764,9 @@ rule: `skills/shared/stage-contracts.md § Self-labels raise, never lower`.
 ##### Escalation guard — unattended `/megatask` per-issue runs (PARK)
 
 Under a `/megatask` per-issue run (detected by `PL0.metadata.megatask_group`) there is no user to
-stop for, so instead of holding the checkpoint, **PARK the issue**: write
+stop for, so instead of holding the checkpoint, park the issue: write
 `workspace.json.execution.status: "failed"` with `execution.reason: "parked_escalation"`, append an
-`escalation_parked` audit row (`subject:"PL<N>"`, `metadata.escalated: [<questions>]`), and STOP
+`escalation_parked` audit row (`subject:"PL<N>"`, `metadata.escalated: [<questions>]`), and stop
 without dispatching any stage. Parking rides the monitor's failure path
 (`hooks/megatask-monitor.sh` settles only `completed`/`failed`): the track is freed, dependents stay
 `blocked`, and the batch summary lists the issue with its unanswered questions for a follow-up
@@ -730,7 +776,7 @@ prompt — only the user answers).
 
 #### Presentation in the gate summary
 
-On a `checkpoint` plan gate the Step A.5 summary MUST list every auto-decided question with its
+On a `checkpoint` plan gate the Step A.5 summary lists every auto-decided question with its
 answer marked `(auto-decided by Fable — see facts.open_questions[].resolution / audit)`, so the user
 approves the decisions together with the plan. On `bypass`, the `auto_decision_resolved` audit rows
 plus each item's own `resolution` are the durable record.
@@ -738,9 +784,9 @@ plus each item's own `resolution` are the durable record.
 ### Step A.4b — Refine the branch target (after A.4, before A.5)
 
 The Step 3c name predates the plan. Now that the approved plan carries its own `title:`, re-derive
-the **planned remote target** from it — at most once per run, only while no commit exists to
-disagree. This step **performs no git mutation**: it rewrites `facts.branch` on the ledger and
-nothing else, leaving the once-only *rename* rule unaffected (`git-conventions.md § Once-only
+the planned remote target from it — at most once per run, only while no commit exists to
+disagree. This step performs no git mutation: it rewrites `facts.branch` on the ledger and
+nothing else, leaving the once-only rename rule unaffected (`git-conventions.md § Once-only
 rule`). Placed here so the Step A.5 summary carries the final name before anything is published.
 
 #### Step A.4b snippet — invoke the helper, non-blocking
@@ -751,11 +797,11 @@ rule`). Placed here so the Step A.5 summary carries the final name before anythi
 
 #### Step A.4b invariants
 
-- The trailing `|| true` is mandatory — non-blocking by contract, like the Step A publish helper. A
+- The trailing `|| true` is required: non-blocking, like the Step A publish helper. A
   helper failure, a missing helper (exit 127) included, does not fail the worktask.
-- **Self-guarding**: it scans `audit.jsonl` for a prior successful `branch_target_refined` row at
+- Self-guarding: it scans `audit.jsonl` for a prior successful `branch_target_refined` row at
   this run index, so a duplicate invocation after a resume is a `noop`, never a second refinement.
-- Exactly one audit row per invocation **whenever `jq` is available**; the `jq_unavailable` arm alone
+- Exactly one audit row per invocation whenever `jq` is available; the `jq_unavailable` arm alone
   writes none, announcing itself on stdout (matching `branch-lib.sh audit_fn`).
 - The row is `branch_target_refined`, `ok` or `noop` with a reason from its closed set. A `noop` is
   normal: the helper declines when a commit exists, an upstream is configured, the plan carries no
@@ -764,7 +810,7 @@ rule`). Placed here so the Step A.5 summary carries the final name before anythi
 
 #### Step A.4b — the returned value
 
-- `ledger_branch` is the value on the ledger **after** this step, refined or not. Use it in the Step
+- `ledger_branch` is the value on the ledger after this step, refined or not. Use it in the Step
   A.5 summary rather than re-reading `state.json`.
 - FN's re-validation of `facts.branch` against `^[A-Za-z0-9._/-]+$` is unchanged and still runs — the
   refined value passes the identical check because FN reads the ledger.
@@ -784,30 +830,29 @@ Read `tasks.PL0.metadata.plan_gate` (default `"checkpoint"`). Resolve the run in
 
 ##### Plan gate checkpoint path — the sweep render
 
-2b. Render PL's unresolved sweep items FIRST — every `facts.open_questions[]` item whose id matches
+2b. Render PL's unresolved sweep items first — every `facts.open_questions[]` item whose id matches
    `sw-PL<N>-*` and whose `status` is not `"resolved"` — through § Step C.4 (question text and
    `options[]` from `planning-N.md#elicitation-sweep`) and record the answers through § Step C.5,
    with `subject:"PL<N>"` on every audit row. These are separate `AskUserQuestion` calls; the
-   approve/reject call in step 3 fires **last and unmodified**, exactly as at the FN gate.
+   approve/reject call in step 3 fires last and unmodified, exactly as at the FN gate.
 
 ##### Plan gate checkpoint path — the approval call
 
 3. `AskUserQuestion`: *"Here is the generated plan for your worktask. Approve to begin
    implementation, or describe any changes you want first."* The gate holds until a human answers.
-   Keep the `/config` idle-timeout opt-in OFF on hosts running gated worktasks — an idle auto-answer
-   would count as an approval the operator never gave, and a background-task completion notification
-   (which states that no human input occurred) is never this approval either.
+   Keep the `/config` idle-timeout opt-in off on hosts running gated worktasks: an idle auto-answer
+   would count as an approval the operator never gave.
 
 ##### What counts as approval — and what does not
 
-The gate holds for an **explicit human answer to this call**. Three things that routinely look like
+The gate holds for an explicit human answer to this call. Three things that routinely look like
 approval are not:
 
 - **A subagent returning `verdict: ok`.** PL0 finishing means the plan exists, not that anyone
   accepted it. No agent can approve on the user's behalf, and no message from one is the user's
   consent.
 - **A background-task completion notification**, which states on its face that no human input
-  occurred (see the idle-timeout note in step 3).
+  occurred.
 - **A free-text reply that is a question.** "Wait, explain the AR exclusion first" is a question:
   answer it and re-present the gate. Same rule as `commands/megatask.md § R1 outcomes`.
 
@@ -817,7 +862,7 @@ a human saw the plan.
 
 ##### Stage-inclusion decisions in the gate summary
 
-The step-2 summary MUST show both decisions explicitly, each with its one-line reason drawn from
+The step-2 summary shows both decisions explicitly, each with its one-line reason drawn from
 `skipped_stages`/`added_stages`:
 
 - **AR** — included or excluded, and whether that deviates from the tier default (flag the
@@ -826,8 +871,8 @@ The step-2 summary MUST show both decisions explicitly, each with its one-line r
 
 ##### Branch name in the gate summary
 
-It MUST also show `Branch (PR head): <ledger_branch>` (the Step A.4b value), so the user sees the
-name the PR will carry before anything is published. An empty `ledger_branch=` means **unknown**, not
+It also shows `Branch (PR head): <ledger_branch>` (the Step A.4b value), so the user sees the
+name the PR will carry before anything is published. An empty `ledger_branch=` means unknown, not
 absent: the `jq_unavailable` arm prints it empty even when a good name is stamped — so on empty, read
 `facts.branch` directly and print `Branch (PR head): — (none planned)` only if that read is also
 empty.
@@ -847,7 +892,7 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
 
 #### Plan gate approval / rejection audit rows
 
-4. **On approval**, stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'` (stamp before row: crash between them leaves state approving with no row, resume re-prompts; the reverse order — row before stamp — resumes into the stage loop with the carrier unset, the block this stamp exists to prevent). Append to `.context/logs/audit.jsonl` and proceed to Step A:
+4. **On approval**, stamp the carrier: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append to `.context/logs/audit.jsonl` and proceed to Step A. Stamp before the row: a crash between them then re-prompts on resume, while row-first would resume into the stage loop with the carrier unset.
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_received","subject":"PL<N>","result":"ok"}
    ```
@@ -855,17 +900,17 @@ the plan revision path re-derives nothing (§ Plan-revision invariants row 5).
    ```json
    {"ts":"<ISO>","actor":"orchestrator","action":"approval_rejected","subject":"PL<N>","result":"rejected"}
    ```
-   STOP — do NOT enter stage loop. Surface user feedback. For revisions, re-dispatch PM per § Plan-revision re-dispatch (not a new run).
+   Stop without entering the stage loop and surface the user's feedback. For revisions, re-dispatch PM per § Plan-revision re-dispatch (not a new run).
 
 ##### Plan-revision re-dispatch (gate rejection only)
 
-A gate rejection revises the run **in flight**. `run_index` and `plan_file` are FROZEN for the life
-of a run — allocating `planning-<N+1>.md` forks the plan, wipes the `facts.decisions[]` the user just
+A gate rejection revises the run in flight. `run_index` and `plan_file` are frozen for the life
+of a run: allocating `planning-<N+1>.md` forks the plan, wipes the `facts.decisions[]` the user just
 supplied, strands the stage-task chain on the old index, and splits the published-issue record.
 Re-dispatch product-manager with `plan_revision: true` in the prompt, carrying the feedback verbatim.
 PM's own arm: `pl0-procedure.md § Revision of the run in flight`.
 
-##### Plan-revision invariants (BINDING)
+##### Plan-revision invariants
 
 | # | Do | Never |
 |---|---|---|
@@ -885,21 +930,21 @@ one audit row before dispatching:
 ```
 
 On PM's return, re-enter the plan gate at Step A.5 — the revised plan needs its own approval, and
-Step A still runs exactly once per run (the issue is published after the *approved* plan).
+Step A still runs exactly once per run (the issue is published after the approved plan).
 
 #### Plan gate bypass path — auto approval
 
-**If `plan_gate == "bypass"` AND no unresolved `escalate` items remain**: stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No prompt, no approval row, no audit row — the bypass carrier IS the approval. The escalation guard is a precondition — never stamp ahead of the stop: stamping first lets a crash resume into the stage loop with escalation-class questions unanswered and the check passing.
+**If `plan_gate == "bypass"` and no unresolved `escalate` items remain**: stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"auto"}'`, then proceed directly to Step A. No prompt and no audit row: the bypass carrier is the approval. The escalation guard is a precondition, so never stamp ahead of its stop — a crash would resume into the stage loop with escalation-class questions unanswered and the check passing.
 
 #### Plan gate bypass path — escalation exception
 
 Exception: unresolved `escalate` items force a `checkpoint`-style stop first (§ Escalation guard).
 Once answered, stamp `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"approved":"user"}'`, then append the
 standard `approval_received subject:"PL<N>"` row (required as the escalate resolution), then resume
-at Step A — NOT at the arm above, which this run can no longer reach: re-entering it would overwrite
-a real human approval with `auto`. Stamp before row, as in the approval arm.
+at Step A, not at the arm above: re-entering it would overwrite a real human approval with `auto`.
+Stamp before row, as in the approval arm.
 
-### Step A — Publish plan to GitHub (run BEFORE the stage loop)
+### Step A — Publish plan to GitHub (run before the stage loop)
 
     pub_rc=0
     bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh || pub_rc=$?
@@ -918,26 +963,25 @@ a real human approval with `auto`. Stamp before row, as in the approval arm.
 
 #### Step A publish invariants
 
-- The `|| pub_rc=$?` capture and the trailing `; true` are mandatory — non-blocking by contract. A
+- The `|| pub_rc=$?` capture and the trailing `; true` are required: non-blocking. A
   helper failure does not fail the worktask.
 - The helper self-skips (`--no-gh-issue`; megatask per-issue mode, detected via `workspace.json` /
   `metadata.milestone`; already published; missing `gh`/auth/remote) — each exits 0 and audits a
   `deferred` row. Sanitiser rules: `skills/worktask/SKILL.md § PL Issue Publish`.
 - One `.context/` ↔ one GitHub issue: a later run resolves the run-independent
   `.context/gh-issue.json` anchor and comments instead of duplicating (`skills/gh-issue-dedup`).
-- This step is NOT optional. Do not skip it because SKILL.md describes it — run the command as
-  written.
+- Run it here even though SKILL.md also describes it.
 
 #### After Step A — run the stage loop
 
 Execute the loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. Before the FN
-`Task()` delegation apply the FN gate check (STOP on `checkpoint`, proceed on `bypass`) —
+`Task()` delegation apply the FN gate check (stop on `checkpoint`, proceed on `bypass`) —
 `skills/worktask/SKILL.md § FN Gate`.
 
 ##### After Step A — scripts the loop runs directly
 
-The loop body lives in the skill, but these four run under THIS file's grants, so they are named
-here too: a grant invoked only in the skill reads as unused, and the next audit drops it.
+The loop body lives in the skill, but these four run under this file's grants, so they are named
+here too: a grant invoked only in the skill reads as unused to an audit.
 
 ```bash
 # Assigned root for a row, after any stream re-pin — SKILL.md § Step 4.8
@@ -952,12 +996,12 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-land
 
 A refused landing is reported, never worked around: SKILL.md § Step 6.5d.
 
-#### Workspace-root cross-check (BINDING)
+#### Workspace-root cross-check
 
 Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from
-the canonical plugin source repo. Before every `Task()` call in the stage loop the orchestrator MUST
-verify that the working tree matches the task's declared workspace, and MUST inject the resolved root
-into the stage prompt so the subagent targets the right directory.
+the canonical plugin source repo. Before every `Task()` call in the stage loop, verify that the
+working tree matches the task's declared workspace, and inject the resolved root into the stage
+prompt so the subagent targets the right directory.
 
 ##### Cross-check snippet
 
@@ -965,17 +1009,17 @@ into the stage prompt so the subagent targets the right directory.
 # Runs in the orchestrator turn, not in the subagent
 _orch_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
-# Unset is a DEFECT, not a mode: defaulting it to $_orch_root compares a value to itself,
+# Unset is a defect, not a mode: defaulting it to $_orch_root compares a value to itself,
 # so the check passes unconditionally and an unstamped ledger reads as clean — which also
 # leaves dv-tree-preflight.sh and developer.md's path-prefix check inert.
 if [ -z "$_task_root" ]; then
-  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Set it via state-patch.sh --ledger-meta." >&2
-  # Write audit row `workspace_path_unstamped` and STOP — do not call Task()
+  echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Stamp it with a --ledger-meta patch." >&2
+  # Write audit row `workspace_path_unstamped` and stop; do not call Task()
   exit 1
 fi
 if [ "$_orch_root" != "$_task_root" ]; then
   echo "⚠ cwd mismatch: orchestrator is at $_orch_root but task.metadata.workspace_path is $_task_root. Aborting delegation until resolved." >&2
-  # Write audit row and STOP — do not call Task()
+  # Write audit row and stop; do not call Task()
   exit 1
 fi
 ```
@@ -995,10 +1039,10 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh "<TASK_ID>" 
 
 Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
 
-#### Post-delegation state.json enforcement (BINDING)
+#### Post-delegation state.json enforcement
 
-After every `Task()` return (the *completed stage result* — under background-default subagents that
-is the completion notification, not the launch acknowledgement), before Step 7 settles the row:
+After every `Task()` return (the completed stage result — for a background subagent that is the
+completion notification, not the launch acknowledgement), before Step 7 settles the row:
 re-read `.context/state.json`; if `tasks.<ID>` does not already carry the artifact's
 `handoff.verdict` and the status it maps to (`handoff-protocol.md § tasks — verdict → status`), run
    ```bash
@@ -1012,11 +1056,10 @@ re-read `.context/state.json`; if `tasks.<ID>` does not already carry the artifa
 
 `STATE_MERGE_VIA=step6_5` stamps `tasks.<ID>.completed_via=step6_5` so this synchronous Layer-3 path
 is distinguishable from the SubagentStop-hook Layer-2 default (`hook`). Then re-read; if the row
-STILL does not match, apply the F3 fallback: it stamps the verdict-mapped status (plus
+still does not match, apply the F3 fallback: it stamps the verdict-mapped status (plus
 `metadata.gate_from_stage` when that status is `pending`) with `completed_via: "f3"`, and writes
 nothing for an absent handoff or an unmapped verdict — this covers environments where the
-SubagentStop hook never fired. Full
-three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
+SubagentStop hook never fired. Full three-layer logic: `skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6.5.
 
 ### Step B — AR-reference check at DV completion
 
@@ -1038,9 +1081,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate
 
 #### Step B rollout and opt-in
 
-**Rollout — warn-only in 3.42.0.** With no opt-in the harness emits `warn:` lines and exits 0. Record
-each as an audit row and carry it into the DR dispatch prompt so DR checks the linkage; a warning is
-**not** a `missing_input` block and never stops the transition.
+**Warn-only by default.** With no opt-in the harness emits `warn:` lines and exits 0. Record each as
+an audit row and carry it into the DR dispatch prompt so DR checks the linkage; a warning is not a
+`missing_input` block and never stops the transition.
 
 ```json
 {"ts":"<ISO>","actor":"orchestrator","action":"ar_ref_check","subject":"DV<k>","result":"warn"}
@@ -1048,17 +1091,15 @@ each as an audit row and carry it into the DR dispatch prompt so DR checks the l
 
 ##### Step B — what the sweep checks do to this rollout
 
-**The warn-only rollout covers the AR-reference check only.** The same invocation also runs the
-three closing-sweep checks (stub shape, `ref` anchor resolution, ledger parity), which **hard-fail
-regardless of `--strict`** — the sweep obligation is strict from its first release
-(`skills/shared/stage-contracts.md § Closing Elicitation Sweep`). A non-zero exit here is therefore
+Warn-only covers the AR-reference check alone. The same invocation also runs the three
+closing-sweep checks (stub shape, `ref` anchor resolution, ledger parity), which hard-fail
+regardless of `--strict` (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`). A non-zero exit here is therefore
 not necessarily an AR-reference failure; a sweep failure blocks the transition per § Step B.1 — on
 failure, and its `fail:` line names a `sw-` id.
 
-**Early opt-in — `CORPFLOW_AR_REF_STRICT=1`.** The orchestrator passes `--strict`; violations become
-`fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. Use it to shake out
-dangling references before the next minor flips `--strict` to the default. The inverse guard (an
-architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
+**Opt-in — `CORPFLOW_AR_REF_STRICT=1`.** The orchestrator passes `--strict`; violations become
+`fail:` lines with exit 1 and block the DR dispatch until DV fixes the reference. The inverse guard
+(an architecture reference with no `tasks.AR0` entry) warns in both modes and never fails.
 
 ##### Step B — the legacy tests_executed opt-in
 
@@ -1069,13 +1110,12 @@ LEGACY_TE_FLAG=""
 
 **`CORPFLOW_LEGACY_TESTS_EXECUTED=1`** makes the orchestrator pass `--legacy-tests-executed`, so an
 artifact written before per-runner entries (a legacy scalar count) validates under the old integer
-rules with one deprecation `warn:`. Use it only to land in-flight legacy artifacts: it never relaxes a
-list, and it is removed in the next minor release. Without it a scalar `tests_executed` fails and
-routes per § Step B.1 — on failure.
+rules with one deprecation `warn:`. Use it only to land in-flight legacy artifacts; it never relaxes
+a list. Without it a scalar `tests_executed` fails and routes per § Step B.1 — on failure.
 
 ### Step B.1 — Sweep checks at every stage completion
 
-The harness is not a DV-only tool. After **any** stage `<CODE><N>` lands its `completed` patch (loop
+The harness is not a DV-only tool. After any stage `<CODE><N>` lands its `completed` patch (loop
 step 6.5) and before § Step C.0 renders its blocking items or the next stage is dispatched, run:
 
 ```bash
@@ -1087,7 +1127,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh --validate
 
 `$STRICT_FLAG` from § Step B may be appended; it affects only the AR-reference arm, which fires for DV
 alone. `$LEGACY_TE_FLAG` (§ Step B — the legacy tests_executed opt-in) affects only the
-`tests_executed` arm of DV and QA. For DV this **is** the § Step B invocation — run it once, not
+`tests_executed` arm of DV and QA. For DV this is the § Step B invocation — run it once, not
 twice. An artifact whose `open_questions` is the empty array passes untouched; any item in it must
 be a full sweep stub.
 
@@ -1097,15 +1137,14 @@ Exit 0 → append `{"action":"sweep_check","subject":"<CODE><N>","result":"ok"}`
 § Step C.0.
 
 **Any non-zero exit** → append the same row with `result:"fail"` and every `fail:` line as
-`reason`, then treat it as a `missing_input` contract violation on `<CODE><N>`: do **not** run Step
-C.0, do **not** dispatch the next stage; re-dispatch the stage with the `fail:` lines verbatim so it
-writes what it owes. There is no advisory tier here — the unreadable-ledger case fails too.
+`reason`, then treat it as a `missing_input` contract violation on `<CODE><N>`: skip Step C.0,
+dispatch no next stage, and re-dispatch the stage with the `fail:` lines verbatim so it writes what
+it owes. There is no advisory tier here — the unreadable-ledger case fails too.
 
 ##### Step B.1 — the routing default, and why it is a default
 
-The default is the rule, not a fallback: a shape absent from the routing table routes like every row
-in it. An earlier version routed only the first three, so one run's boundary stalled four times on
-lines that each named a real defect and had no branch to take.
+The default is the rule, not a fallback: a line shape absent from the routing table routes like
+every row in it, so no real defect is left without a branch to take.
 
 ###### Step B.1 — the routing table
 
@@ -1130,30 +1169,24 @@ summary against the same id's entry in the artifact body and fails with
 fail: decision <id> disagrees across transports — frontmatter says "…" but the <artifact> body says "…"
 ```
 
-which names a **decision** id and mentions neither a sweep id nor ledger parity. It has its own row
-in the table above, and would route correctly on the default arm even without one — but the fix it
-asks for differs from every other row's, which is what the next section is for.
+which names a decision id, not a sweep id or ledger parity. It routes like any other line; what
+differs is the fix the stage owes.
 
 ###### Step B.1 — routing the divergence failure
 
-Routing is the default: `result:"fail"` with the line as `reason`, no Step C.0, no next stage,
-re-dispatch with the `fail:` line verbatim. What differs is the fix the stage owes — the two transports are reconciled to **one** statement, and the artifact body is the author's
-copy. Never settle it by deleting the body entry: that removes the reader's only expansion of the
-id.
+The stage reconciles the two transports to one statement; the artifact body is the author's copy.
+Never settle it by deleting the body entry: that removes the reader's only expansion of the id.
 
 The harness collects every failure it can reach in one invocation, so a single re-dispatch may carry
-a sweep line and a decision line together. Pass **every** `fail:` line, not the first.
+a sweep line and a decision line together. Pass every `fail:` line, not the first.
 
 ###### Step B.1 — shape failures short-circuit
 
 "Every failure" is bounded by what stays parseable. A non-sequence `open_questions`, a missing
 `handoff:` block and an unknown stage each stop the checks at that point, because every later check
-reads the structure the failed one was validating.
-
-So a re-dispatch that fixes a shape line can legitimately return new failures that were always
-present and unreachable. That is the check working, not the stage regressing. Do not treat the
-second round as a new defect, and do not promise a stage one-shot batching when its first line is a
-shape line.
+reads the structure the failed one was validating. A re-dispatch that fixes a shape line can
+therefore return failures that were present but unreachable: the check working, not a regression.
+Do not promise one-shot batching when the first line is a shape line.
 
 ### Step C — Closing-sweep collection and render (loop step 4.9)
 
@@ -1161,11 +1194,11 @@ Step C is to the FN gate what Step A.4 is to the plan gate: it resolves question
 nothing, and every path out of it falls through to the gate's own approve/reject call. Contract:
 `skills/shared/stage-contracts.md § Closing Elicitation Sweep`.
 
-It has **two firing points**, selected per item by `blocks_next_stage`, never by stage:
+It fires at two points, selected per item by `blocks_next_stage`, never by stage:
 
-- **C.0a** runs first at every stage boundary *except* PL/FN/ST/IR, resolving that stage's
+- **C.0a** runs first at every stage boundary except PL/FN/ST/IR, resolving that stage's
   blocking `decision` items through a sub-agent so the run does not stop for them at all.
-- **C.0** runs at *every* stage boundary, immediately after that stage's `completed` patch and
+- **C.0** runs at every stage boundary, immediately after that stage's `completed` patch and
   before the next stage is dispatched, over whatever blocking items C.0a did not settle.
 - **C.1–C.5** run once, immediately before the FN `Task()` delegation, over everything else.
 
@@ -1173,8 +1206,8 @@ It has **two firing points**, selected per item by `blocks_next_stage`, never by
 
 Contract: `skills/shared/stage-contracts.md § Blocking items are resolved, not asked`.
 
-After any stage `<CODE><N>` completes, and **before** § Step C.0, collect the items it just wrote
-that satisfy **all four**:
+After any stage `<CODE><N>` completes, and before § Step C.0, collect the items it just wrote
+that satisfy all four:
 
 1. `<CODE>` ∉ {PL, FN, ST, IR} — the four exception stages keep their own surfacing
    (`stage-contracts.md § Exceptions — PL, FN, ST, IR`), so there is nothing here to unblock.
@@ -1191,36 +1224,33 @@ Empty set ⇒ no-op, fall through to § Step C.0 unchanged.
 1. Compute the tier. Read `tasks.<CODE><N>.metadata.effort` and `.model` — the ledger, never the
    agent's frontmatter, because a stage dispatched at an override runs at a tier its frontmatter
    never mentions. Source `skills/worktask/scripts/effort-ladder.sh` and call
-   `effort_for_resolver "<effort>" "<model>"`; it bumps one rung and applies the non-Opus clamp.
-   A stage row with no `metadata.effort` is a **contract violation, not a default** — fall through
-   to § Step C.0 and audit `resolver_skipped` with `reason: "effort_unstamped"` rather than
-   guessing a tier.
+   `effort_for_resolver "<effort>" "<model>"`; it bumps one rung and applies the model clamp.
+   A stage row with no `metadata.effort` is a contract violation: fall through to § Step C.0 and
+   audit `resolver_skipped` with `reason: "effort_unstamped"` rather than guessing a tier.
 2. Append `auto_decision_dispatched` (`subject:"<CODE><N>"`, `metadata: { questions: <count>,
    effort_requested: <tier>, effort_clamped: <bool> }`).
-3. Dispatch **the emitting stage's own agent** on **its own model** at the computed tier. One
-   dispatch per boundary over the whole set (≤4 by the per-stage cap) — never one per item.
+3. Dispatch the emitting stage's own agent on its own model at the computed tier: one dispatch per
+   boundary over the whole set (≤4 by the per-stage cap), never one per item.
 
 ##### Step C.0a — the tier only reaches some dispatch surfaces
 
-`metadata.effort` is **not** honoured in-process — `headless-dispatch.md § Translation table —
+`metadata.effort` is not honoured in-process — `headless-dispatch.md § Translation table —
 model & effort` marks `model` "Yes (passed to `Task()`)" and `effort` "Advisory". The audit row
-must say which surface it got:
+says which surface it got:
 
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
 | headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
 | in-process `Task()` | nothing — `Task()` carries no effort parameter and the sub-agent's frontmatter carries no `effort:` to fall back to | `none` |
 
-In-process the tier is **recorded, not applied**, and the resolver still runs: the row's
+In-process the tier is recorded, not applied, and the resolver still runs: the row's
 `effort_resolved` is the literal `"requested, not applied"`, never a tier the session did not run
-at. This holds until upstream ask U7 (per-Task effort transport) lands; U7 is tracked outside this milestone.
+at.
 
 ###### Step C.0a — do not reach the tier another way
 
 Never substitute a different agent believed to run at a higher tier: that trades the domain
-expertise answering the question for a guess. `Task()` gains no `effort` parameter here and
-none is invented; if one lands later, the table above and the `none` literal in
-step 4 are the only places that change.
+expertise answering the question for a guess. Invent no `effort` parameter for `Task()` either.
 
 ##### Step C.0a — what the prompt carries
 
@@ -1230,13 +1260,13 @@ enumerated once, in `stage-contracts.md § What the resolver is given`, and are 
 
 The delegate answers each item default-biased — deviate from the stage's own `recommended` entry
 only with stated evidence — and returns one entry per item plus any it declines. It declares its
-full reads through `deep_reads` (exempt from the B4 tripwire, per that section) and runs
-`state-patch.sh` **not at all**: the stage is already `completed`, so the orchestrator owns every
-write, exactly as at Step A.4.
+full reads through `deep_reads` (exempt from the B4 tripwire, per that section) and does not run
+`state-patch.sh`: the stage is already `completed`, so the orchestrator owns every write, exactly
+as at Step A.4.
 
 ##### Step C.0a — record, then fall through
 
-4. The ORCHESTRATOR merges each answer through the § Step C.5 write — the whole stub, resolution
+4. The orchestrator merges each answer through the § Step C.5 write — the whole stub, resolution
    marked `(auto-decided)` — and appends one `auto_decision_resolved` row (`subject:"<CODE><N>"`,
    `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
    effort_transport, decisions: [{question, answer, rationale}] }`). `effort_requested` is the
@@ -1248,32 +1278,30 @@ write, exactly as at Step A.4.
 ###### Step C.0a — reading the two effort fields
 
 The comparison applies only under `effort_transport: "dispatch-flag"`. There,
-`effort_requested` != `effort_resolved` means the tier evaporated in transit — thinking disabled
-downgrades `xhigh`/`max` to `high` silently (`model-selection.md § xhigh routing`). Recorded, not
-enforced: the answer stands, it just was not reached at the tier asked for. Under
+`effort_requested` != `effort_resolved` means the tier evaporated in transit — a managed or user
+`maxEffortLevel` below the requested tier runs the session at the cap with no error
+(`model-selection.md § Effort frontmatter and caps`). Recorded, not enforced: the answer
+stands, it just was not reached at the tier asked for. Under
 `none` the request never left the orchestrator, so `effort_resolved` reads
 `"requested, not applied"` and the pair says nothing about the session.
 
 ##### Step C.0a stamps no approval carrier
 
-Same asymmetry as Step A.4 and Step C: resolving an item settles implementation content, it
-approves nothing. Nothing here writes an approval carrier, and both gates keep their existing
-firing conditions.
+As at Step A.4: resolving an item settles implementation content and approves nothing. Nothing
+here writes an approval carrier, and both gates keep their firing conditions.
 
 #### Step C.0 — blocking items, at their own boundary
 
 After any stage `<CODE><N>` completes, read the items it just wrote whose `blocks_next_stage` is
 true and whose `status` is not `"resolved"` — after § Step C.0a has had its pass, so on the nine
 non-exception stages this set is what a resolver could not or must not settle. If none, Step C.0 is
-a no-op and the loop proceeds unchanged. Do not assume that is the common case: a single observed
-run raised 16 sweep items across four stages, 7 of them blocking, which is what Step C.0a exists
-to absorb. Otherwise run C.2 through C.5 on exactly those items, with
-`subject:"<CODE><N>"` on every audit row, and only then dispatch the next stage. The next stage would
-otherwise build on a guess, which is the whole reason the flag exists.
+a no-op and the loop proceeds unchanged. Otherwise run C.2 through C.5 on exactly those items, with
+`subject:"<CODE><N>"` on every audit row, and only then dispatch the next stage, which would
+otherwise build on a guess.
 
 ##### Step C.0 — no new gate, and no deadlock
 
-This creates **no new gate**: it is the same render the FN gate performs, moved earlier for items
+This creates no new gate: it is the same render the FN gate performs, moved earlier for items
 whose answers the next stage needs. Under a bypassed gate it follows § Step C.5 — the unattended
 lanes, and nothing deadlocks: a lane with nobody to answer parks or records, and every other lane
 has a user to stop for.
@@ -1294,7 +1322,7 @@ render. Answer handling, including the wait for the user's own run, and the step
 
 Granting is security posture, so no delegate answers a parked need under any `decision_gate`, and a
 bypassed `plan_gate` or `fn_gate` does not silence the prompt. A `/megatask` per-issue run has no
-user: `batch` asks nothing and PARKs the issue through § Escalation guard — unattended `/megatask`
+user: `batch` asks nothing and parks the issue through § Escalation guard — unattended `/megatask`
 per-issue runs (PARK), with `execution.reason: "parked_escalation"` and one `escalation_parked` row
 whose `metadata.escalated[]` holds each need's redacted `{tool, command_head, truncated}`; the full
 command stays in `blocked_on`. Nothing is granted. When `park.workspace_written` is false,
@@ -1318,58 +1346,58 @@ with the stage's detail fenced as data, a `!` line only on a native `user_action
 not cut, and the options "done" and "stop here". A `user_decision` is the exception: it is asked
 with the stage's own question and options, and the stage is resumed with the hook row's `ud-` id.
 Its `payloads[]` are asked in the same round as the permission ones, only the user answers them
-under any gate setting, and a `/megatask` per-issue run parks them the same way. Answers and resume: `skills/worktask/SKILL.md § Step 7a — the typed-need
-answers`.
+under any gate setting, and a `/megatask` per-issue run parks them the same way. Answers and
+resume: `skills/worktask/SKILL.md § Step 7a — the typed-need answers`.
 
 #### Step C.1 — collect everything not already answered
 
-1. **C.1 — Collect.** Read `facts.open_questions[]` **unioned with the eviction spill** (below) and
-   keep the items whose `status` is not `"resolved"`. That status test is the whole filter: an item already answered at its own
-   boundary (C.0) or at the plan gate is resolved, so it is excluded by the same rule that excludes
-   PL's. Do **not** filter on stage — under `blocks_next_stage` any stage can be answered at its own
-   boundary, so a stage-name exclusion would be both wrong and incomplete. **Derive the stage from
-   the item id**, whose `sw-<TASK_ID>-<n>` shape is pinned by the schema, for *grouping* — an
-   explicit `stage` field takes precedence when present, but it is optional and absent from every
-   template, so nothing may depend on it. Resolve each item's `ref` anchor to its full `options[]`
+1. **C.1 — Collect.** Read `facts.open_questions[]` unioned with the eviction spill (below) and
+   keep the items whose `status` is not `"resolved"`. That status test is the whole filter: an item
+   already answered at its own boundary (C.0) or at the plan gate is resolved, so it is excluded by
+   the same rule that excludes PL's. Do **not** filter on stage — under `blocks_next_stage` any
+   stage can be answered at its own boundary. Derive the stage from the item id, whose
+   `sw-<TASK_ID>-<n>` shape is pinned by the schema, for grouping; an explicit `stage` field
+   takes precedence when present, but it is optional and absent from every template, so nothing
+   may depend on it. Resolve each item's `ref` anchor to its full `options[]`
    body in the emitting stage's artifact.
 
 ##### Step C.1 — the collection is ledger ∪ spill
 
 The ledger is not the whole record. `state-patch.sh` clamps `facts.open_questions[]` to the newest
 four per task and appends every evicted item to `.context/open-questions-<run_index>.jsonl`
-(`stage-contracts.md § Ledger bounds — the overflow spill`), so an item reachable **only** through
-the spill is an item this gate would otherwise never render — silently, with no error anywhere.
+(`stage-contracts.md § Ledger bounds — the overflow spill`), so an item reachable only through
+the spill is one this gate would otherwise never render, silently.
 
 ###### Step C.1 — how the two sources are unioned
 
-Union both sources by `.id`, with the **ledger winning on conflict**: a spill line is a snapshot
+Union both sources by `.id`, with the ledger winning on conflict: a spill line is a snapshot
 taken at eviction time and is necessarily staler than an item the ledger later resolved. A missing
-spill file is the empty set. A spill that exists but cannot be parsed is a **failure**, never an
-empty set — degrading a parse error to "nothing to collect" is how this gate goes quiet in exactly
-the case it exists for. `handoff-harness.sh` checks parity against the same union.
+spill file is the empty set. A spill that exists but cannot be parsed is a failure, never an
+empty set, or this gate goes quiet in exactly the case it exists for. `handoff-harness.sh` checks parity against the same union.
 
 ###### Step C.1 — the decisions spill is a different reader
 
-`.context/decisions-<run_index>.jsonl` is **not** read here: this gate renders questions. It is no
-longer readerless, though —
-`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --read-decisions` returns
-`facts.decisions[] ∪ spill` under the same union rule, and that is the path for anything asking what this run decided. Reading
-`facts.decisions[]` alone under-reports the moment one task records more than eight.
+`.context/decisions-<run_index>.jsonl` is not read here: this gate renders questions. Anything
+asking what this run decided uses
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --read-decisions`, which returns
+`facts.decisions[] ∪ spill` under the same union rule; `facts.decisions[]` alone under-reports once
+one task records more than eight.
 
 ##### Step C.1 — the artifact fallback and its warning
 
-Both machine-readable transports — `handoff.open_questions[]` and `facts.open_questions[]` — can still under-report, so count what the artifacts claim. Every `.context/*-N.md`
-carries a `## elicitation-sweep` section and its frontmatter carries the stubs. When the collected
-count is **below** the number of sweep stubs on disk, render the collected items and warn, naming
-the shortfall and the ids that are missing:
+Both machine-readable transports — `handoff.open_questions[]` and `facts.open_questions[]` — can
+still under-report, so count what the artifacts claim. Every `.context/*-N.md` carries a
+`## elicitation-sweep` section and its frontmatter carries the stubs. When the collected count is
+below the number of sweep stubs on disk, render the collected items and warn, naming the shortfall
+and the missing ids:
 
 ```
 warn: FN gate collected 9 sweep items; 11 stubs exist on disk (missing: sw-DV1-2, sw-DR0-1)
 ```
 
-The warning does not block the gate and does not change what is rendered. It is the tripwire for a
-transport that lost an item, and the whole point is that it names the loss instead of leaving a
-count nobody compares. Read the stubs from artifact frontmatter, never by re-parsing bodies.
+The warning does not block the gate or change what is rendered; it names a transport's loss
+instead of leaving a count nobody compares. Read the stubs from artifact frontmatter, never by
+re-parsing bodies.
 
 #### Step C.2 — classify before anything answers
 
@@ -1378,35 +1406,35 @@ count nobody compares. Read the stubs from artifact frontmatter, never by re-par
 
 #### Step C stamps no approval carrier
 
-The asymmetry with the FN gate itself is deliberate and mirrors Step A.4: answering a sweep item
-settles plan or implementation content, it does not approve finalization. Nothing here writes an
-approval carrier, and the gate's own `AskUserQuestion` still fires last and unmodified.
+As at Step A.4: answering a sweep item settles content and does not approve finalization. Nothing
+here writes an approval carrier, and the gate's own `AskUserQuestion` still fires last and
+unmodified.
 
 #### Step C.3–C.4 — auto-answer, then render
 
 3. **C.3 — Auto-answer.** Only when `decision_gate == "auto"`: resolve the
-   `effective_class == "decision"` items on the § Step C.0a rule — each item's **own emitting
-   stage's** agent and model, at `effort_for_resolver` of that stage's ledger effort — grouping the
-   batch by originating stage and issuing one dispatch per group. This step and C.0a share one
-   resolver contract: the fable-plus-credit-fallback path C.3 used to carry is gone, and with it
-   the `fable_dispatch == "credit_blocked"` branch. Audit `auto_decision_dispatched` →
+   `effective_class == "decision"` items on the § Step C.0a rule — each item's own emitting
+   stage's agent and model, at `effort_for_resolver` of that stage's ledger effort — grouping the
+   batch by originating stage and issuing one dispatch per group; C.3 and C.0a share one resolver
+   contract. Audit `auto_decision_dispatched` →
    `auto_decision_resolved`, `subject:"FN<N>"`, carrying the same effort fields C.0a records. A
    stage row with no `metadata.effort` is skipped exactly as at C.0a (`resolver_skipped`,
    `reason: "effort_unstamped"`) and its items render at C.4.
+
 ##### Step C.3 — why Step A.4 is not folded in
 
-A.4 answers PL's items at the plan gate. PL is an exception stage whose boundary *is* that gate,
+A.4 answers PL's items at the plan gate. PL is an exception stage whose boundary is that gate,
 and under `checkpoint` a user is already present, so it keeps its own PM-on-fable dispatch rather
 than joining the resolver contract.
 
 ##### Step C.4 — where the question text comes from
 
 4. **C.4 — Render.** Present the remaining items through `AskUserQuestion`, grouped by originating
-   stage, in calls of **at most 4 questions** (the tool's per-call ceiling). The question text comes
-   from the **resolved `ref` anchor body**, not from the stub — the stub carries no `summary`, and
-   `handoff-harness.sh check_sweep_ref_anchor` is what guarantees that anchor exists. Options are
-   `options[]` with the `recommended: true` entry marked, and the `rationale` is shown with them. These calls **precede** the gate's approve/reject call and never
-   merge into it: a merged call overflows at four-plus items and entangles sweep answers with the
+   stage, in calls of at most 4 questions (the tool's per-call ceiling). The question text comes
+   from the resolved `ref` anchor body, not from the stub — the stub carries no `summary`, and
+   `handoff-harness.sh check_sweep_ref_anchor` guarantees that anchor exists. Options are
+   `options[]` with the `recommended: true` entry marked, shown with the `rationale`. These calls
+   precede the gate's approve/reject call and never merge into it: a merged call overflows at four-plus items and entangles sweep answers with the
    gate's reject/resume path. Each question's `header` is the item's `id` (`sw-<TASK_ID>-<n>`), so
    the user-decision hook scopes the recorded answer to the emitting task
    (`hooks/references/user-decision-ledger.md § Scope ladder`).
@@ -1417,18 +1445,18 @@ than joining the resolver contract.
    `facts.open_questions[].status = "resolved"` and `facts.open_questions[].resolution = "<answer>"`,
    plus a `sweep_resolved` audit row whose subject is the boundary that rendered it — `FN<N>` from
    C.1–C.5, `<CODE><N>` from C.0. The union refuses a later downgrade of either field, so recording
-   once is enough. Answers do **not** go to
-   `facts.decisions[]` — see `skills/shared/stage-contracts.md § Closing Elicitation Sweep` for why
-   that destination is refused.
+   once is enough. Answers do **not** go to `facts.decisions[]`
+   (`skills/shared/stage-contracts.md § Closing Elicitation Sweep` says why).
 
 ##### Step C.5 — the write-back is a whole stub
 
 The write goes through `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts`
-as the **complete** item — `id`, `class`, `ref` and `blocks_next_stage` alongside `status` and `resolution` — never as `{id, status, resolution}`. The
-union REPLACES the incumbent object for that id, so a partial item would drop the very anchor C.4
-resolves its question text from; `--facts` now rejects one by name rather than persisting it.
+as the complete item — `id`, `class`, `ref` and `blocks_next_stage` alongside `status` and
+`resolution` — never as `{id, status, resolution}`. The union replaces the incumbent object for
+that id, so a partial item would drop the very anchor C.4 resolves its question text from;
+`--facts` rejects one by name.
 
-Where C.2 **raised** either axis, write the raised value to **both** transports — the ledger stub
+Where C.2 raised either axis, write the raised value to both transports — the ledger stub
 here, and the emitting stage's artifact frontmatter stub. The two copies have one author and
 `check_sweep_ledger` refuses a divergence between them, so a ledger-only write leaves the next
 `--validate-frontmatter` failing on a value this step itself created.
@@ -1438,7 +1466,7 @@ here, and the emitting stage's artifact frontmatter stub. The two copies have on
 Recording never stops; only prompting does. Under `fn_gate: "bypass"` or any bypassed gate, skip C.4
 for effective-`decision` items and audit `sweep_recorded` for them. Effective-`escalate` items take
 the lane § Escalation guard — escalate stops at every boundary picks. A stop renders them at C.4 and
-records the answers here. A `/megatask` per-issue run PARKS the issue exactly as § Escalation
+records the answers here. A `/megatask` per-issue run parks the issue exactly as § Escalation
 guard — unattended `/megatask` per-issue runs (PARK) specifies. Only a lane with no reachable human
 records them unanswered: one `sweep_escalation_unprompted` audit row per item, with
 `metadata: {id, stage, ref}`, and the run continues. Every one of those audit subjects is
@@ -1448,11 +1476,12 @@ blocking one. Full carrier table: `skills/shared/stage-contracts.md § Unattende
 ## Phase 3: Post-Worktask Self-Improvement
 
 After the loop exits (ST completed), run `skills/worktask/SKILL.md § Post-Worktask
-Self-Improvement`:
+Self-Improvement`. A `/megatask` per-issue run skips this phase: nobody is there to check the
+boxes, so the run ends at ST and any `.context/learnings.md` stays in the worktree for review.
 
 1. If `.context/learnings.md` is absent → worktask done, terminate.
-2. If present → display it and **STOP** until the user checks the boxes of proposals they approve
-   (`- [ ]` → `- [x]`). Orchestrator MUST NOT auto-check or assume.
+2. If present → display it and stop until the user checks the boxes of proposals they approve
+   (`- [ ]` → `- [x]`).
 3. On the user's approval reply, re-read `learnings.md`, parse the checked items, and delegate to
    `corpflow:prompt-engineer` (`agents/prompt-engineer.md § Self-Improvement Patch Application`).
 4. Each applied proposal becomes its own commit with a `version:` bump on the target frontmatter
@@ -1460,7 +1489,7 @@ Self-Improvement`:
 
 ### Phase 3 key invariants
 
-- Never auto-apply — the user must explicitly check boxes AND signal approval.
+- Never auto-apply or auto-check: the user checks the boxes and signals approval.
 - Proposals are scoped to agents/skills/commands that actually participated in this worktask's
   context (`skills/self-improvement/SKILL.md § Step 4`).
 - Post-ST audit entry in `.context/logs/audit.jsonl` records `applied_count` and `skipped_count`.
@@ -1468,8 +1497,8 @@ Self-Improvement`:
 ## Embedded Command Detection
 
 Slash commands in the task description (e.g. `/skill-creator`,
-`/apple-developer:fix-refactor src/Views/SettingsView.swift`) are **embedded commands** that must be
-executed during the appropriate worktask stage.
+`/apple-developer:fix-refactor src/Views/SettingsView.swift`) are embedded commands, executed
+during the appropriate worktask stage.
 
 ### Detection and execution
 
@@ -1487,16 +1516,15 @@ Example: `/worktask /skill-creator deep analyze /path/to/source` → task
 
 ### Leading stacked skills
 
-> When the user stacks slash commands (`/worktask /skill-a do XYZ`), Claude Code itself loads up to 5
-> **leading** skills before the turn runs — the embedded command's SKILL instructions may already be
-> in context at PL0 time. Extraction into `metadata.embedded_commands` is unchanged, and the DV-stage
-> `Skill()` invocation stays mandatory (it is the execution trigger, not a context load). Re-invoking
-> an already-loaded skill appends no duplicate copy, so the DV invocation is token-safe.
+When the user stacks slash commands (`/worktask /skill-a do XYZ`), Claude Code loads up to 5
+leading skills before the turn runs, so the embedded command's instructions may already be in
+context at PL0. Extraction is unchanged and the DV-stage `Skill()` invocation is still required: it
+is the execution trigger, not a context load, and re-invoking a loaded skill adds no duplicate.
 
 ### Error Handling
 
-Embedded command execution MUST NOT silently fall back to generic DV work. On failure the DV stage
-records it and escalates — otherwise the user's intent is lost.
+An embedded command that fails never falls back silently to generic DV work: the user asked for
+that command, so the DV stage records the failure and escalates.
 
 | Failure | Detection | Required Behavior |
 |---------|-----------|-------------------|
@@ -1507,24 +1535,19 @@ records it and escalates — otherwise the user's intent is lost.
 
 #### Prohibited fallback and escalation target
 
-> DV MUST NOT proceed with generic implementation when the embedded command fails. The user
-> explicitly requested that worktask by embedding the command; ignoring it is a silent deviation from
-> their intent.
-
-The DV agent's prompt template enforces this: on Skill failure it halts and writes an error entry
-with `metadata.embedded_command_failure: true` before returning. Escalation target: **TL0 if it
-exists** (retry, split the work, or revise approach), otherwise **PL**, which may add TL0, revise the
-embedded command choice, or remove the embedding.
+On Skill failure the DV agent halts, appends the entry the table above names to
+`.context/errors/developer.md` (its `retry_count` and, at the ceiling, `error_escalated_to` go on
+the DV task's ledger row as for any retry), and returns without marking DV complete. Escalation
+target: TL0 if it exists (retry, split the work, or revise approach), otherwise PL, which may add
+TL0, revise the embedded command choice, or remove the embedding.
 
 ## Headless Dispatch (external runners)
 
 External orchestrators (CI, cron, the user's shell) can invoke a single stage via
 `claude agents run …` instead of the in-process `Task()` path. PL0 populates the optional dispatch
-fields documented in `skills/shared/state-ledger.md § Dispatch metadata`; the runner reads them and
-builds the flag string. The copy-paste one-liner (task `task.json` metadata + rendered `prompt.txt`),
-the `sonnet`-alias / `--permission-mode manual`↔`default` equivalence, the mandatory
-`external_dispatch` audit line, and the CI-only `--dangerously-skip-permissions` caveat live in
-`skills/agent-coordination/references/headless-dispatch.md`.
+fields in `skills/shared/state-ledger.md § Dispatch metadata`, and the runner builds its flags from
+them. The runner recipe, the required `external_dispatch` audit line and the permission-mode
+caveats: `skills/agent-coordination/references/headless-dispatch.md`.
 
 ## Output Format
 
@@ -1551,11 +1574,3 @@ non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN w
 the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
 nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the
 scrub is what keeps host paths out of it.
-
-## See Also
-
-- `skills/worktask/SKILL.md` — execution loop, dynamic sizing, worktask modes
-- `commands/megatask.md` / `skills/megatask/SKILL.md` — multi-issue milestone/array orchestration (the former `--milestone` surface)
-- `skills/shared/stage-codes.md` — stage codes and track IDs
-- `skills/agent-coordination/references/headless-dispatch.md` — `task.metadata` → `claude agents` flag bridge
-- `agents/workflow-engineer.md` — troubleshooting

@@ -4,38 +4,30 @@ name: model-prompting
 
 # Model-Conditioned Prompting
 
-Canonical for **how to write for** a model. `skills/shared/model-selection.md` is canonical
-for **which** model and effort tier a stage gets; the two never restate each other.
+How to write for a model; `skills/shared/model-selection.md` owns which model and effort tier a
+stage gets.
 
-Each alias below carries a **discipline block**: the literal text the orchestrator injects into
-a delegation prompt at slot `[4b]`, selected by `task.metadata.model`
-(`skills/worktask/references/handoff-protocol.md#cache-prefix`). The fenced block holds the
-section **body** only — the `<<<model-discipline>>>` marker belongs to the envelope, and
-`cache-lint.sh` compares the two accordingly.
+Each alias carries a discipline block: the literal text the orchestrator injects at preamble slot
+`[4b]`, selected by `task.metadata.model` (`skills/worktask/references/handoff-protocol.md#cache-prefix`).
+The fenced block is the section body only — the `<<<model-discipline>>>` marker belongs to the
+envelope — and `cache-lint.sh` and `brief-compose.sh` read it byte for byte.
 
-The block is the enforcement surface. The table above each one records the behaviour it counters
-and the vendor page that documents it, so a later reader re-checks the block against the docs
-rather than against taste.
+Blocks are counter-instructions: each line exists because the model's default on that axis is
+wrong for this pipeline, and an axis the model already gets right carries no text
+(`agents/prompt-engineer.md § No-op pruning`). The table above each block names the behaviour it
+counters and the vendor page documenting it, so the block is re-checked against the docs.
 
 ## Why this lives at dispatch and not in the agent files
 
-`Task()` accepts `model` but **not** `effort` (`commands/worktask.md § Dispatch model &
-effort`). On the in-process path the effort tier is advisory, which leaves prompt text as the
-only lever that reaches the model's behaviour. A block in an agent file would also be wrong
-twice over: the same agent can be re-tiered, and a block that is right for `opus` is
-counter-productive for `fable` — narration is the clean example, damped on one and raised on
-the other.
+`Task()` carries `model` but no effort (`commands/worktask.md § Step C.0a — the tier only reaches
+some dispatch surfaces`), so in-process prompt text is the only lever on the model's behaviour.
+An agent file is the wrong home: the same agent can be re-tiered, and a block right for `opus`
+is wrong for `fable` — narration is damped on one and raised on the other.
 
-## Reading these blocks
+## opus — Claude Opus 5.5
 
-They are **counter-instructions**, not general advice: each one exists because the model's
-default on that axis is wrong for this pipeline. An axis a model already gets right carries no
-text — a block that says nothing pays context to say nothing
-(`agents/prompt-engineer.md § No-op pruning`).
-
-## opus — Claude Opus 5
-
-Sources are anchors on [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5).
+Anchors are on [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5),
+which the Opus 5.5 guide keeps as the starting point for its prompts.
 
 | Behaviour to counter | Anchor |
 |---|---|
@@ -45,46 +37,37 @@ Sources are anchors on [Prompting Claude Opus 5](https://platform.claude.com/doc
 | Files written to disk run long; effort does not shorten them | `#written-deliverable-length` |
 | Narrates readily during agentic work | `#user-facing-progress-updates` |
 | Narrates corrections to its own earlier statements | `#self-correction` |
+| Ends a turn on a progress report with work still open | [5.5 guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5#unattended-agentic-runs) |
 
 ### opus — the block
 
 ```text
 Deliver what the stage contract asks for, at the scope it intends. Make routine judgment calls
-yourself; check in only when two readings would mean materially different work. If the task
-looks mistaken, say so in a sentence in your artifact and continue as asked rather than
-narrowing, widening, or transforming it.
+yourself; ask only when two readings mean materially different work. If the task looks
+mistaken, say so in one line of your artifact and do it as asked, without narrowing, widening,
+or transforming it.
 
-Match the artifact's length to what the stage needs: cover the substance, do not pad with filler
-sections or redundant summaries.
+Cover what the stage needs; no filler sections or recaps.
 
-Delegate only for work that is genuinely independent, or needs expertise this stage lacks. Never
-delegate what you can finish in a handful of tool calls, or spawn a subagent to check your own
-work. Where one delegate suffices, use one.
+Delegate only independent work or work needing expertise you lack; never a few tool calls'
+worth or a check of your own work. One delegate if one suffices.
 
-Before your first tool call, say in one sentence what you are about to do. While working, report
-only findings and changes of direction. Lead your final message with the outcome.
+Say in a sentence what you will do before your first tool call, then report only findings and
+changes of direction. Lead your final message with the outcome.
 
-Correct an earlier statement only when the error changes the next stage's decisions, then
-continue.
+Correct an earlier statement only if it changes the next stage's decisions.
+
+A reply without a tool call ends the stage: never end on an announced next step or an offer to
+continue; put status with your next tool call. Stop when the contract is met or only the
+orchestrator can unblock you.
 ```
 
 ### The verification line is narrower than it looks
 
-"Do not verify your own work" governs **re-checking reasoning**. It does not reach a
-completion criterion that names an artifact — "the screenshot manifest exists on disk", "the
-audit row is present", "`git status` is clean". Those are
-`agents/prompt-engineer.md § Completion criteria`, and removing them lowers demand on exactly
-the axis that doctrine raises. Keep the artifact gates; drop the re-reads.
-
-### xhigh with thinking disabled
-
-`model-selection.md § xhigh routing` records that `xhigh`/`max` is silently sent as `high`
-when thinking is off. On Opus 5 two further artifacts appear in that configuration: a tool
-call written into visible text instead of a `tool_use` block — which then sits in history and
-never runs — and internal XML tags leaking into the response. The pinned-`xhigh` agents
-(`ethics-reviewer`, `prompt-engineer`, `security-reviewer`) are the exposure. The mitigation
-is to keep thinking on and lower the tier rather than disable it; do not add a rule telling
-the model not to think, which increases tag leakage rather than reducing it.
+The over-verification row covers re-checking reasoning ("double-check", "verify before
+responding"). It does not reach a completion criterion that names an artifact — "the screenshot
+manifest exists on disk", "`git status` is clean" (`agents/prompt-engineer.md § Completion
+criteria`). Keep the artifact gates; drop the re-reads.
 
 ## sonnet — Claude Sonnet 5
 
@@ -105,12 +88,10 @@ answer from the prompt alone. A claim about code you have not opened is a findin
 not made.
 ```
 
-Sonnet 5's literalism is also why a review prompt that says "only report high-severity
-issues" or "be conservative" loses recall: the model finds the bug and then declines to report
-it. corpflow already prompts the other way — `commands/tech-code-review.md` decouples
-detection from filtering and states that over-inclusion at the detection phase is correct.
-**Apply that rule; do not restate it here**, and do not add a confidence bar to a detection
-step anywhere in the pipeline.
+The same literalism makes a review prompt that says "only report high-severity issues" or "be
+conservative" lose recall: the model finds the bug, then declines to report it. Put no confidence
+bar on a detection step anywhere in the pipeline; `commands/tech-code-review.md § Phase 1 —
+Detection` is the rule.
 
 ## fable — Claude Fable 5
 
@@ -119,6 +100,7 @@ step anywhere in the pipeline.
 | Writes fewer user-facing updates during long tool chains | [Ask for user-facing progress updates](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#ask-for-user-facing-progress-updates) |
 | Ends a turn describing the next step instead of taking it; asks permission for work already requested | [Finish the whole task](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#finish-the-whole-task) |
 | Rewrites a whole file for a small change | [Prefer targeted edits](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#prefer-targeted-edits-over-whole-file-rewrites) |
+| Writes a long output twice at `xhigh`+ | [Long outputs](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-1#leave-room-for-long-outputs-at-xhigh-and-max-effort) |
 
 ### fable — the block
 
@@ -136,32 +118,27 @@ Say in a line what you are about to do, and give brief updates as you work. Clos
 that stands on its own.
 
 When it will not affect the result, edit a file surgically rather than rewriting it.
+
+Reasoning and reply share one output limit: settle a long artifact's structure and hard calls
+in reasoning, then write it once, not twice.
 ```
 
 ### Version sensitivity
 
-`model-selection.md § Aliases` resolves `fable` to **Fable 5**, and the page cited above
-documents Fable **5.1** — its content is a set of deltas *from* Fable 5, so some of it
-describes behaviour Fable 5 does not have. The blocks above are the subset that is safe either
-way: each one is a counter-instruction whose worst case on the model that lacks the behaviour
-is a no-op, never a regression.
-
-**Re-check trigger:** when `model-selection.md` advances the `fable` alias past Fable 5,
-re-read the 5.1 page in full and revisit this section — in particular the
-`max_tokens` headroom note for `xhigh`/`max`, which is 5.1-specific and deliberately omitted
-here. The live consumer today is the `--auto=[decision]` pass
-(`skills/worktask/SKILL.md § Auto-Decision Delegation (decision_gate)`).
+`model-selection.md § Aliases` resolves `fable` to Fable 5.1, but Claude apps gateway sessions
+still get Fable 5. The block is safe on both: each line is a counter-instruction whose worst
+case on a model without the behaviour is a no-op. The long-output line carries the prompt half
+of the 5.1 page's `#leave-room-for-long-outputs-at-xhigh-and-max-effort`; the `max_tokens` half
+belongs to Claude Code (`model-selection.md § Output headroom at xhigh and max`). The live
+consumer is the `--auto=[decision]` pass (`skills/worktask/SKILL.md § Auto-Decision Delegation
+(decision_gate)`).
 
 ## haiku
 
-No block. Haiku's defaults are the ones corpflow's existing explicitness rules were written
-against, so a discipline block here would be the no-op case
-`agents/prompt-engineer.md § No-op pruning` describes — and the same sentence that is
-load-bearing on Opus is waste here.
+No block: corpflow's explicitness rules were written against Haiku's defaults, so a block here
+would be a no-op (`agents/prompt-engineer.md § No-op pruning`).
 
 ## Related
 
-- `skills/shared/model-selection.md` — tiers, alias resolution, effort ladder, allowlists
-- `skills/worktask/references/handoff-protocol.md#cache-prefix` — slot `[4b]` and the markers
 - `agents/prompt-engineer.md § Prompt-body doctrine` — the doctrine these blocks are audited under
 - `commands/prompt-audit.md § Body Rules` — the audit that enforces them per asset

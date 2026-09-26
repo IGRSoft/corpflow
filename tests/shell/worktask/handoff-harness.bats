@@ -475,7 +475,7 @@ mk_te_legacy() {
   mk_te_legacy "$WD/te-legacy.md" DV 12 '"12 tests, 0 failures"' '12 tests, 0 failures'
   run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-legacy.md" --legacy-tests-executed
   assert_success
-  assert_output --partial "warn: stage=DV tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated, removed in the next minor release; rewrite it as tests_executed: [{runner, count, summary_line}]"
+  assert_output --partial "warn: stage=DV tests_executed is a legacy scalar, validated under --legacy-tests-executed — deprecated; rewrite it as tests_executed: [{runner, count, summary_line}]"
   [ "$(printf '%s\n' "$output" | grep -c '^warn:.*is a legacy scalar')" -eq 1 ] || fail "$output"
 }
 
@@ -1635,7 +1635,8 @@ _dv_blocked_artifact() {
   } > "$1"
 }
 
-# _bo_from_fixture <name> — the fixture's need as one JSON flow line, which YAML reads as-is.
+# _bo_from_fixture <name> — the fixture's blocked_on (or, for the legacy fixture, its
+# cross_session_ask) as one JSON flow line, which YAML reads as-is.
 _bo_from_fixture() {
   if jq -e 'has("blocked_on")' "$BO_FIX/$1.handoff.json" > /dev/null; then
     printf '  blocked_on: %s' "$(jq -c '.blocked_on' "$BO_FIX/$1.handoff.json")"
@@ -1686,22 +1687,21 @@ _bo_from_fixture() {
   assert_failure 1
 }
 
-@test "--read-blocked-on: the legacy alias reads as peer_session with source cross_session_ask" {
-  _dv_blocked_artifact "$WD/alias.md" '  cross_session_ask:
-    to: backend-session
-    question: "Which base branch does the API change target?"'
-  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/alias.md"
+@test "--read-blocked-on: cross_session_ask is not a need — the gate ignores it and the reader finds none" {
+  _dv_blocked_artifact "$WD/old-name.md" "$(_bo_from_fixture legacy-cross-session-ask)"
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --validate-frontmatter "$WD/old-name.md"
   assert_success
-  [ "${#lines[@]}" -eq 2 ]
-  jq -e '. == {kind: "peer_session", detail: {to: "backend-session",
-    question: "Which base branch does the API change target?"}, resume_with: "reply_ref"}' <<< "${lines[0]}"
-  [ "${lines[1]}" = "source: cross_session_ask" ]
-  run_script_env --separate-stderr "$SCRIPT" --read-blocked-on "$WD/alias.md"
+  run_script_env --separate-stderr "$SCRIPT" --validate-frontmatter "$WD/old-name.md"
   assert_success
-  [ "${lines[1]}" = "source: cross_session_ask" ]
+  run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/old-name.md"
+  assert_failure 1
+  [[ "$stderr" == *"no blocked_on in"* ]]
+  run_script_env --separate-stderr "$SCRIPT" --read-blocked-on "$WD/old-name.md"
+  assert_failure 1
+  [[ "$stderr" == *"no blocked_on in"* ]]
 }
 
-@test "--read-blocked-on: blocked_on wins over the alias, and neither present exits 1" {
+@test "--read-blocked-on: blocked_on is read beside an unrelated key, and none present exits 1" {
   _dv_blocked_artifact "$WD/both.md" "$(_bo_from_fixture artifact)
 $(_bo_from_fixture legacy-cross-session-ask)"
   run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/both.md"
@@ -1711,7 +1711,7 @@ $(_bo_from_fixture legacy-cross-session-ask)"
   _dv_test_evidence_artifact "$WD/none.md" 3
   run_script_env --separate-stderr --hide yq "$SCRIPT" --read-blocked-on "$WD/none.md"
   assert_failure 1
-  [[ "$stderr" == *"no blocked_on or cross_session_ask"* ]]
+  [[ "$stderr" == *"no blocked_on in"* ]]
 }
 
 @test "--read-blocked-on: the no-yq reader parses block style, flow style and a block sequence alike" {
@@ -1770,7 +1770,7 @@ $(_bo_from_fixture legacy-cross-session-ask)"
   grep -qF '_bo_case "unknown-kind" 1' "$st" || fail "no unknown-kind case asserting exit 1"
   grep -qF '_bo_case "unknown-resume_with" 1' "$st" || fail "no unknown resume_with case asserting exit 1"
   grep -qF '_bo_case "missing-detail" 1' "$st" || fail "no missing-detail case asserting exit 1"
-  grep -qF 'legacy-alias/reads-as-peer_session' "$st" || fail "no legacy alias read case"
+  grep -qF 'old-name/reads-as-absent' "$st" || fail "no case reading cross_session_ask as absent"
   grep -qF 'skills/worktask/scripts/blocked-on-lib.sh' "$BATS_TEST_FILENAME"
 }
 

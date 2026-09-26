@@ -1,23 +1,18 @@
 ---
 name: docs-readme
 description: Update README files based on code changes, keeping documentation in sync with implementation
-argument-hint: '[--path README.md]'
+argument-hint: '[--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate]'
 allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git log:*)
 related:
   - agents/technical-writer.md
   - commands/docs-audit.md
+  - commands/docs-release-notes.md
   - commands/worktask.md
 ---
 
 # README Update Command
 
 Update README files based on code changes, keeping documentation in sync with implementation.
-
-## Usage
-
-```
-/docs-readme [--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate] [--platform <target>]
-```
 
 ## Options
 
@@ -27,15 +22,13 @@ Update README files based on code changes, keeping documentation in sync with im
 | `--section <name>` | `installation`, `usage`, `api`, `contributing` | Update that section only |
 | `--from-changes` | — | Derive updates from recent git history instead of the current tree |
 | `--validate` | — | Report accuracy issues only; write nothing |
-| `--platform <target>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Platform context (default: `all`) |
-
-## Examples
 
 ```
+/docs-readme [--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate]
 /docs-readme
 /docs-readme --path packages/auth
 /docs-readme --section installation --from-changes
-/docs-readme --validate --platform apple
+/docs-readme --validate --section api
 ```
 
 ## Output Format
@@ -55,17 +48,11 @@ Sections in this order, each regenerated from its source rather than hand-writte
 
 | Section | Generated from |
 |---------|----------------|
-| Title + one-line description | package.json, repo metadata |
-| Installation (command + required env setup) | package.json dependencies |
+| Title + one-line description | Package manifest (package.json, Package.swift, Gradle, pyproject.toml, …), repo metadata |
+| Installation (command + required env setup) | Package manifest dependencies |
 | Quick Start / Usage (smallest runnable snippet) | Code examples in tests |
 | Features | Shipped capabilities |
-| API Reference — per symbol: description, `Name \| Type \| Default \| Description` table, **Returns**, example | JSDoc comments |
+| API Reference — per symbol: description, `Name \| Type \| Default \| Description` table, **Returns**, example | Public doc comments (JSDoc, DocC, KDoc, docstrings, …) |
 | Configuration — `Option \| Type \| Default \| Description` | Config schema/types |
 | Contributing | CONTRIBUTING.md template |
 | License | LICENSE file |
-
-## Integration
-
-- `/docs-audit` — find the README issues this command fixes
-- `/docs-release-notes` — release-time documentation pass
-- `agents/technical-writer.md` — owning agent

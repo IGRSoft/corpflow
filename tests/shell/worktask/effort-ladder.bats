@@ -19,9 +19,9 @@ ladder() { # <shell body>
 # --- library authoring rules -------------------------------------------------
 
 @test "the library defines its three constants" {
-  run ladder "printf '%s|%s|%s' \"\$EFFORT_ENUM\" \"\$EFFORT_NON_OPUS_CEILING\" \"\$EFFORT_OPUS_FAMILY_RE\""
+  run ladder "printf '%s|%s|%s' \"\$EFFORT_ENUM\" \"\$EFFORT_CAPPED_CEILING\" \"\$EFFORT_FULL_LADDER_RE\""
   assert_success
-  assert_output 'low medium high xhigh max|high|^(opus|fable)$'
+  assert_output 'low medium high xhigh max|high|^(opus|sonnet|fable)$'
 }
 
 @test "executing the library directly is refused" {
@@ -70,7 +70,7 @@ ladder() { # <shell body>
     IFS=\$'\\n\\t'
     . '$PLUGIN_ROOT/$LIB'
     printf '%s %s %s' \"\$(effort_plus_one high)\" \"\$(effort_rank max)\" \
-      \"\$(effort_for_resolver high sonnet)\""
+      \"\$(effort_for_resolver high haiku)\""
   assert_success
   assert_output "xhigh 4 high"
 }
@@ -83,9 +83,9 @@ ladder() { # <shell body>
 
 # --- the tier/model clamp ----------------------------------------------------
 #
-# xhigh requires Opus 5 or Fable 5; Sonnet silently downgrades the thinking budget rather
-# than failing. The clamp is what keeps a resolver from running two rungs below what its
-# audit row claims.
+# xhigh runs on Opus 4.7+, Sonnet 5 and Fable 5.x; any other model runs it at the highest level
+# it supports, with no error. The clamp is what keeps a resolver from running two rungs below
+# what its audit row claims.
 
 @test "opus carries every bumped rung uncapped" {
   run ladder 'printf "%s %s %s" "$(effort_for_resolver high opus)" \
@@ -94,37 +94,38 @@ ladder() { # <shell body>
   assert_output "xhigh max max"
 }
 
-@test "fable is opus-family for clamp purposes" {
+@test "fable carries every bumped rung uncapped" {
   run ladder 'effort_for_resolver xhigh fable'
   assert_success
   assert_output "max"
 }
 
-@test "sonnet at high clamps to high instead of dispatching an evaporating xhigh" {
-  run ladder 'effort_for_resolver high sonnet'
+@test "sonnet (Sonnet 5) carries xhigh and max uncapped" {
+  run ladder 'printf "%s %s %s" "$(effort_for_resolver high sonnet)" \
+    "$(effort_for_resolver xhigh sonnet)" "$(effort_for_resolver max sonnet)"'
+  assert_success
+  assert_output "xhigh max max"
+}
+
+@test "haiku at high clamps to high instead of dispatching an evaporating xhigh" {
+  run ladder 'effort_for_resolver high haiku'
   assert_success
   assert_output "high"
 }
 
-@test "the clamp lowers only — a sonnet stage below the ceiling still gets its bump" {
-  run ladder 'printf "%s %s" "$(effort_for_resolver low sonnet)" \
-    "$(effort_for_resolver medium sonnet)"'
-  assert_success
-  assert_output "medium high"
-}
-
-@test "haiku is clamped on the same ceiling as sonnet" {
+@test "the clamp lowers only — a haiku stage below the ceiling still gets its bump" {
   run ladder 'printf "%s %s" "$(effort_for_resolver low haiku)" \
-    "$(effort_for_resolver high haiku)"'
+    "$(effort_for_resolver medium haiku)"'
   assert_success
   assert_output "medium high"
 }
 
 @test "an unrecognized model alias clamps rather than assuming opus" {
   # The safe direction: a full model id or a typo must not buy an uncarryable tier.
-  run ladder 'effort_for_resolver high claude-opus-5'
+  run ladder 'printf "%s %s" "$(effort_for_resolver high claude-opus-5-5)" \
+    "$(effort_for_resolver high claude-sonnet-4-6)"'
   assert_success
-  assert_output "high"
+  assert_output "high high"
 }
 
 @test "effort_for_resolver propagates an off-ladder tier as a failure" {
@@ -352,8 +353,10 @@ EOF
   assert_success
 }
 
-@test "the non-opus ceiling is the tier model-selection.md says Sonnet downgrades from" {
-  run grep -qE 'xhigh` requires \*\*Opus 5 or Fable 5(\.x)?\*\*' "$PLUGIN_ROOT/$MODEL_SELECTION"
+@test "the uncapped aliases are the ones model-selection.md says carry xhigh" {
+  run grep -qF '`xhigh` runs on **Opus 4.7 and later, Sonnet 5 and Fable 5.x**, so the `opus`, `sonnet` and' "$PLUGIN_ROOT/$MODEL_SELECTION"
+  assert_success
+  run grep -qF '`fable` aliases all carry it' "$PLUGIN_ROOT/$MODEL_SELECTION"
   assert_success
 }
 

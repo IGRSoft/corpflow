@@ -105,7 +105,7 @@ enum SnapshotHostMain {
         //   templates/SnapshotHost-template/Sources/SnapshotHost/PreviewBridge.swift
         //
         // In a free-floating analysis context (no SPM module), the symbol is
-        // unresolved — that is expected. The scaffolder builds them together.
+        // unresolved — that is expected. The scaffold builds them together.
         let registry = Self.lookupRegistry()
 
         guard let view = registry[args.view] else {
@@ -162,16 +162,16 @@ enum SnapshotHostMain {
     }
 
     /// Indirect access to `PreviewBridge.viewRegistry`. Indirection keeps this
-    /// reference-template file analyzable standalone — the scaffolder rewrites
-    /// the body to `return PreviewBridge.viewRegistry` after copying the file.
+    /// reference-template file analyzable standalone. apple-canvas.sh copies it
+    /// to main.swift unchanged, so the project copy must be edited by hand to
+    /// `return PreviewBridge.viewRegistry` before any --view key resolves.
     static func lookupRegistry() -> [String: AnyView] {
-        // Scaffolder replaces this body with: `return PreviewBridge.viewRegistry`
         return [:]
     }
 
     // MARK: Entry point
     //
-    // The scaffolder renames this file to `main.swift` and the call below runs
+    // apple-canvas.sh copies this file to `main.swift` and the call below runs
     // at module top-level. Until then, `runMain()` is a no-op unless invoked
     // explicitly — keeps SourceKit happy without an `@main` conflict.
 

@@ -696,7 +696,7 @@ A missing sweep is warn-only until the next minor.')"
 @test "P2-6 twin: an unrelated warn-only rollout elsewhere in the same file does not false-positive" {
   # The AR-reference check (§ Step B) legitimately says warn-only/--strict in this
   # same file; the widened guard must key on the sweep functions specifically.
-  run bash -c "grep -q 'warn-only in 3.42.0' '$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh'"
+  run bash -c "grep -q 'is warn-only by default and blocks only under --strict' '$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh'"
   assert_success
   run check_no_sweep_escape_hatch_wide "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh"
   assert_success

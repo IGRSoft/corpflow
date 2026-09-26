@@ -23,15 +23,7 @@ related:
 
 # Improve Yourself Command
 
-Manual entry point for the `self-improvement` skill — run the retrospective **outside** a full worktask (after ad-hoc edits, between worktasks, or to iterate on proposals). `skills/self-improvement/SKILL.md` does the work; this command is the CLI surface and wires user approval through to `prompt-engineer`.
-
-## Usage
-
-```
-/improve-yourself
-/improve-yourself [--since <ref>] [--target agents|skills|commands|all]
-/improve-yourself [--dry-run] [--no-scope-filter] [--apply]
-```
+Manual entry point for the `self-improvement` skill — run the retrospective **outside** a full worktask (after ad-hoc edits, between worktasks, or to iterate on proposals). The ST-stage invocation is the production path; both run the same pipeline and write the same `.context/learnings.md`. `skills/self-improvement/SKILL.md` does the work; this command is the CLI surface and wires user approval through to `prompt-engineer`.
 
 ## Options
 
@@ -40,12 +32,13 @@ Manual entry point for the `self-improvement` skill — run the retrospective **
 | `--since <ref>` | Git ref used as diff baseline (`HEAD~N`, SHA, tag, branch) | Last commit with `Agent:` trailer; fallback HEAD |
 | `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to those target types. Comma-separated for multiple. | `all` |
 | `--dry-run` | Write `.context/learnings.md` but never enter the apply phase, even if the user checks boxes. Review only. | off |
-| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill): surface all mapped proposals regardless of whether the target participated in any worktask. **Advanced — higher noise.** | off |
+| `--no-scope-filter` | Skip the used-in-context filter (Step 4 of the skill): surface all mapped proposals regardless of whether the target participated in any worktask. **Advanced — for diagnostics and edge cases, not production worktasks; higher noise.** | off |
 | `--apply` | After presenting `learnings.md`, block until the user checks boxes and explicitly approves, then delegate checked items to `corpflow:prompt-engineer`. | off |
 
 ## Examples
 
 ```bash
+/improve-yourself [--since <ref>] [--target agents|skills|commands|all] [--dry-run] [--no-scope-filter] [--apply]
 /improve-yourself                                  # manual retrospective after a burst of edits
 /improve-yourself --since v4.0.0 --dry-run         # review since the last release tag, don't apply
 /improve-yourself --target skills --apply          # skills only, apply after review
@@ -59,18 +52,17 @@ The skill owns the pipeline; this command wires flags around it:
 1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution).
 2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
-4. **Step 5b — append labels** (see below).
+4. **Append labels** — § Label Append (the skill's Step 5b).
 5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended, and the `self-improve-counts:` line.
-6. **Apply phase** — see below.
+6. **Apply** — § Apply Phase.
 
-### Step 4 — Label Append
+### Label Append
 
-Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`. Appends one row per kept change to the label dataset under plugin data. Falls back to `evals/failure-labels.jsonl` with stderr notice if no plugin data dir exists. Skipping this discards all labels the pipeline produced.
+Runs `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/append-labels.sh` with `--plugin-data=${CLAUDE_PLUGIN_DATA}` per `skills/self-improvement/SKILL.md § Step 5b`, which carries the dataset-resolution ladder and the fallback notice. Skipping this discards all labels the pipeline produced.
 
 #### Invocation options
 
 - `--worktask-id` from `.context/state.json`; outside worktask, pass `--since`, uses `manual-<YYYYMMDD-HHMMSS>`.
-- Runs whether or not the user approves proposals — rejected proposals are still evidence of needed changes.
 - `--dry-run` is read-only; reports row count that *would* append. Re-run without `--dry-run` to record.
 - `SELF_IMPROVE_LABELS=0` makes this step a no-op.
 
@@ -80,9 +72,9 @@ The closing `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline
 
 #### Aggregating the dataset
 
-Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories). It resolves the dataset the same way, fallback included.
+Aggregate the accumulated dataset with `bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/label-stats.sh --plugin-data=${CLAUDE_PLUGIN_DATA}` (`--min-count=<n>` flags repeatedly-corrected targets and categories).
 
-### Step 6 — Apply Phase
+### Apply Phase
 
 Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`- [ ]` → `- [x]`) + explicit approval message → re-read checked items → delegate to `corpflow:prompt-engineer` per `agents/prompt-engineer.md § Self-Improvement Patch Application` (one commit + `version:` bump per proposal) → append audit line:
 
@@ -111,14 +103,8 @@ Runs only with `--apply`, never under `--dry-run`: STOP for user box-checking (`
 - Re-run with `--apply` (or reply "apply" if the current call used --apply)
 ```
 
-## Relationship to Automatic ST Invocation
-
-Same skill, same `.context/learnings.md`. The ST-stage invocation is the production path; use this command outside a full worktask, to iterate on proposals (`--since`/`--target`), or to `--dry-run` the proposal set before applying.
-
 ## Constraints (DO NOT)
 
-- DO NOT apply proposals without `--apply` and explicit user box-checking + approval message.
-- DO NOT use `--no-scope-filter` in production worktasks; it exists for diagnostics and edge cases.
 - DO NOT run this command while a worktask is active (ST not yet complete) — wait for that worktask's own ST-triggered retrospective.
 - DO NOT expect `learnings.md` to accumulate runs: it is single-slot per workspace and a re-run overwrites it.
 

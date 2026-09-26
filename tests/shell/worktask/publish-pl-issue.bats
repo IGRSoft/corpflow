@@ -47,9 +47,33 @@ setup() {
   assert_output "deferred"
 }
 
+@test "happy: /megatask's PL0 stamp alone defers milestone_mode, env and workspace.json absent" {
+  cd "$WD"
+  # The per-issue stamp (commands/megatask.md Phase 2 Step 3) carries megatask_group; with
+  # milestone:null (an --issues batch) the group alone must still read as a batch run.
+  jq '.tasks.PL0.metadata.megatask_group = "issues-ab12" | .tasks.PL0.metadata.milestone = null' \
+    .context/state.json > s && mv s .context/state.json
+  run env -u MILESTONE_MODE GH_BIN=/nonexistent/gh-tripwire WORKSPACE_ROOT="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
+  assert_output "milestone_mode"
+}
+
 @test "happy: opt-out (NO_GH_ISSUE=true) defers reason=opted_out exit 0" {
   cd "$WD"
   run env NO_GH_ISSUE=true WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
+  assert_output "opted_out"
+}
+
+@test "happy: opt-out stamped on PL0's task metadata (the /worktask Step 4 site) defers opted_out" {
+  cd "$WD"
+  # /worktask Step 4 writes the flag on tasks.PL0.metadata, never on run-level
+  # .metadata; a reader of the run-level key alone would publish anyway.
+  jq '.tasks.PL0.metadata.no_gh_issue = true' .context/state.json > s2 && mv s2 .context/state.json
+  run env GH_BIN=/nonexistent/gh-tripwire WORKSPACE_ROOT="$WD" bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   run jq -r '.metadata.reason' <(tail -1 "$WD/.context/logs/audit.jsonl")
   assert_output "opted_out"

@@ -20,7 +20,7 @@ _BENCH_PAIR = os.path.join(_HARNESS, "bin", "bench-pair")
 _ERA = {
     "harness": "python-1",
     "prompt_contract": "scripted-cli-v3",
-    "model_pins": {"PL": "claude-opus-5", "DV": "claude-opus-5"},
+    "model_pins": {"PL": "claude-opus-5-5", "DV": "claude-opus-5-5"},
 }
 _DIGEST = "sha256:" + "1" * 64
 _OTHER_DIGEST = "sha256:" + "2" * 64
@@ -74,7 +74,7 @@ class GateAxes(unittest.TestCase):
         self.assertIn("scripted-cli-v4", refusals[0])
 
     def test_model_repin_refuses(self):
-        repinned = dict(_ERA, model_pins={"PL": "claude-opus-6", "DV": "claude-opus-5"})
+        repinned = dict(_ERA, model_pins={"PL": "claude-opus-6", "DV": "claude-opus-5-5"})
         refusals = pairing.comparability_refusals(
             arm_record("with"), arm_record("without", era=repinned))
         self.assertTrue(any("model_pins" in r for r in refusals))

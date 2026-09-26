@@ -69,25 +69,19 @@ test-generator | code-fixer. One subsection per platform.
 
 ### Release-engineer aliases (publishing — apple and android only)
 
-These targets are **RE-stage consultation**: corpflow's own `agents/release-engineer.md` retains the
-stage and every `state.json` write, exactly as AR works. Only platforms with a store have a row —
-there is no web, backend, systems, or ai release-engineer alias, and adding one would promise a
-target that does not exist.
+These targets are **RE-stage consultation**: corpflow's own `agents/release-engineer.md` keeps the
+stage and every `state.json` write, exactly as AR works. Only a platform with a store gets a row —
+a web, backend, systems, or ai alias would name a target that does not exist.
 
 | Alias | Default target | Role | Platform |
 |-------|----------------|------|----------|
 | `corpflow:apple-release-engineer` | `apple-developer:apple-release-engineer` | release-engineer | apple |
 | `corpflow:android-release-engineer` | `android-developer:and-release-engineer` | release-engineer | android |
 
-#### Why these are a section of their own
-
-A separate section rather than rows inside § Functional-role aliases: that section's grammar is
-`role ∈ architect | security-auditor | test-generator | code-fixer` and its test loops all six
-platforms × four roles, so a fifth role there would demand a web/backend/systems/ai row apiece.
-
-There is deliberately **no bare `corpflow:release-engineer` alias** — corpflow ships an agent with
-that exact `name:`, and an alias basename colliding with a real agent is what the no-collision test
-in `routing-matrix.bats` exists to catch.
+Their own section, not rows in § Functional-role aliases: that section's test loops six platforms ×
+four roles, so a fifth role would demand a row per platform. There is also no bare
+`corpflow:release-engineer` alias — corpflow ships an agent with that `name:`, and the no-collision
+test in `routing-matrix.bats` rejects the clash.
 
 ### UI-verifier aliases (native UI legs — apple and android only)
 
@@ -100,10 +94,10 @@ every `state.json` write; the delegate returns logs and images (`§ Native UI le
 | `corpflow:apple-ui-verifier` | `apple-developer:ios-developer` | apple |
 | `corpflow:android-ui-verifier` | `android-developer:android-developer` | android |
 
-#### Why only two rows, and the non-iOS Apple pick
+#### The non-iOS Apple pick
 
-A section of its own for the release-engineer reason above. Only Apple and Android have a native
-runtime to drive, so there is no systems, web, backend, or ai row; a browser leg is not native.
+Only Apple and Android have a native runtime to drive; a browser leg is not native, so there is no
+systems, web, backend, or ai row.
 
 The apple default names the iOS agent. When no override applies and the target is macOS, tvOS,
 watchOS, or visionOS, QA dispatches the matching `apple-developer:<os>-developer` instead, the
@@ -158,14 +152,12 @@ so `state.routing` re-resolves. Overrides never take effect mid-worktask.
 Location decides semantics: at a *sibling plugin's* root it is that plugin's stage
 contract (`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`); at the
 *user project's* root it is project configuration, of which corpflow reads only
-`## Routing`. A project that is itself an integrating plugin holds both semantics in one
-file; the headings are disjoint (`## Routing` is reserved for the override —
-`templates/CORPFLOW.md` guard note).
+`## Routing`. A project that is itself an integrating plugin holds both in one file — the
+headings are disjoint, and `## Routing` is reserved for the override.
 
 ## Grants
 
 Stage-dispatching agents (`developer`, `software-architector`, `security-reviewer`,
-`qa-engineer`) carry a bare `Task` grant so any override target dispatches. This matrix —
-not the frontmatter — is the canonical record of intended targets; the guardrail for the
-wider spawn surface is the mandatory routing audit row on every delegation
-(`agents/developer.md § Routing Audit`).
+`qa-engineer`) carry a bare `Task` grant so any override target dispatches. This matrix, not the
+frontmatter, is the canonical record of intended targets; the guardrail for the wider spawn surface
+is the mandatory routing audit row on every delegation (`agents/developer.md § Routing Audit`).

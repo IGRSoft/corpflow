@@ -76,11 +76,11 @@ Files in `shared/` are referenced by skills/agents, not loaded directly — **ex
 | File | Purpose |
 |------|---------|
 | [code-documentation.md](shared/code-documentation.md) | Comment standard (name code-comment-standard) — /// and // budgets, doc-block shapes |
-| [constitutional-base.md](shared/constitutional-base.md) | Base constitutional principles |
 | [five-whys.md](shared/five-whys.md) | Five Whys root-cause analysis |
 | [git-conventions.md](shared/git-conventions.md) | Conventional Commits, PR template, git safety |
 | [pandoc-ingestion.md](shared/pandoc-ingestion.md) | Rich local documents and document URLs as markdown |
 | [three-stage-planning.md](shared/three-stage-planning.md) | 3-stage planning model, stage budgets, gate criteria |
+| [technical-consult.md](shared/technical-consult.md) | Technical-lead TC consults: technology evaluation, debt scoring, risk categories |
 
 ### Testing, routing & resolution
 

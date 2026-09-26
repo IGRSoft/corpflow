@@ -1,8 +1,7 @@
 # Plan Template
 
-Fill these sections in this exact order. Keep it tight — a scannable one-screen plan beats an
-exhaustive document. Cut a section to one line when the request is small; never drop a section
-header, so the shape stays predictable.
+Fill these sections in this exact order. Keep it to one scannable screen: cut a section to one line
+when the request is small, but never drop a section header, so the shape stays predictable.
 
 #### Template — context, goal, scope, phases
 
@@ -32,19 +31,16 @@ tests included inside the phase, not split out.
 | P2 — v1.1 | … | … |
 ```
 
-All three rows are required. With nothing deferrable, write `P2 — v1.1: none` rather than
-omitting the row.
-
 #### Template — effort, risks, next step
 
 ```markdown
 <!-- …continued: Plan template — effort, risks, recommended next step -->
 
 ## Effort (rough)
-T-shirt size + 5-factor complexity (0–25) per `skills/estimation-methodology/SKILL.md`. A range, not a point.
+T-shirt size + factor score (0–25, 5 factors) per `skills/estimation-methodology/SKILL.md`. A range, not a point.
 
-| Size | Complexity (0–25) | Notes |
-|------|-------------------|-------|
+| Size | Factor score (0–25) | Notes |
+|------|---------------------|-------|
 | <XS–XL> | <score> | key drivers (new tech, integration points, unknowns) |
 
 ## Risks & Dependencies
@@ -61,19 +57,14 @@ A single ready-to-paste worktask trigger line + one sentence of rationale. See `
 
 ##### Why the surface-check line is required
 
-Required the same way `P2 — v1.1: none` is: it forces an existing check to produce visible output.
-The tier rules in `skills/estimation-methodology/SKILL.md` are precise and were still skipped
-silently, because skipping them cost nothing. A verdict that has to be written is a verdict that has
-to be reached, and a wrong one is visible to a reviewer instead of inferable only from the flag.
-
-It must agree with the flag on the trigger line — see `handoff.md` § "The flag must match what the
-plan body argues".
+Because the tier rules were otherwise skipped silently: a
+verdict that has to be written has to be reached, and a wrong one is visible to a reviewer. It must
+agree with the flag on the trigger line — see `handoff.md` § "The flag must match what the plan body
+argues".
 
 ## Notes on filling it
 
-- **Context must be grounded.** A generic "this improves the product" line means the
-  context-gathering step was skipped. Reference something real from the repo.
-- **Phases sequence risk and value**, they don't chop the work into thirds. P0 is the smallest thing
+- **Phases sequence risk and value**; they don't chop the work into thirds. P0 is the smallest thing
   delivering the core outcome; P1/P2 are genuinely deferrable.
 - **Effort is a rough cut.** Hours, budget, or CSV export are `/estimate`'s job — say so in the
   Recommended next step rather than over-computing here.

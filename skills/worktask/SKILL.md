@@ -1,17 +1,15 @@
 ---
 name: worktask
-description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Complete staged worktask system with dynamic sizing, task initialization, and stage management.
+description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Holds dynamic sizing, the orchestrator loop, and stage handoff rules.
 version: 0.6.0
 ---
 
-> **INVOCATION GATE**: reaching this file by a direct Read/Task/Grep instead of
-> `Skill({skill:"corpflow:worktask"})` or `/worktask` violates the BLOCKING rule in
-> `../shared/worktask-invocation.md § BLOCKING`. Do NOT silently continue — surface the error to
-> the user, then restart through the canonical entry point.
+> **INVOCATION GATE**: a worktask the user asked for runs through `/worktask` or
+> `Skill({skill:"corpflow:worktask"})` (`../shared/worktask-invocation.md § BLOCKING`). If you
+> reached this file by a direct Read/Task/Grep to run one, tell the user and restart through that
+> entry point instead of continuing.
 
 # Worktask System
-
-Single source of truth for task worktask management using the state ledger.
 
 ## Pipelines
 
@@ -68,7 +66,7 @@ ledger: `../shared/state-ledger.md`.
 
 ## Dynamic Worktask Sizing
 
-PL0 assesses complexity and creates only the stages needed. No pre-creation or deletion — PL builds the task list from scratch.
+PL0 assesses complexity and builds the task list from scratch, creating only the stages needed.
 
 ### Complexity Assessment
 
@@ -84,43 +82,34 @@ PL0 assesses complexity and creates only the stages needed. No pre-creation or d
 
 ### Decision Rules
 
-| Score | Complexity | PL0 Creates |
-|-------|------------|-------------|
-| 0-10 | Low | DV0, DR0, QA0 |
-| 11-20 | Medium | AR0*, DV0, DR0, QA0 |
-| 21-30 | Moderate | AR0*, DV0, DR0, QA0 |
-| 31-40 | High | AR0*, DV0, DR0, QA0, DC0, FN0, ST0 |
-| 41-50 | Critical | AR0*, DV0, DR0, SR0, QA0, DC0, RE0, FN0, ST0 |
-
-`AR0*` = tier default, PL0 may override in either direction. `+ TL0` only when PL0 splits the work
-across ≥2 developers. Criteria canon: `skills/estimation-methodology/SKILL.md § Stage Inclusion
-Criteria (PL0 authority)`.
+The score picks the stage set from the tier table in `skills/estimation-methodology/SKILL.md § PL0
+Stage-Set & Test-Mode by Complexity Score`; its `§ Stage Inclusion Criteria (PL0 authority)` owns the
+AR0/TL0 overrides.
 
 #### Recording skipped and added stages
 
-**Record both directions**: whenever the resolved stage set omits any stage of the full 9-stage
-pipeline (`PL→AR→TL→DV→DR→QA→DC→FN→ST`), PL0 MUST stamp `metadata.skipped_stages` — a list of
-`{ "stage": "<CODE>", "reason": "<short reason>" }` — and MUST stamp the symmetric
-`metadata.added_stages` (identical shape) for every stage included beyond the tier default, so
-`state.json` is self-documenting in both directions.
+PL0 stamps `metadata.skipped_stages` (`{stage, reason}`) for every stage of the full 9-stage
+pipeline it omits and `metadata.added_stages` (same shape) for every stage beyond the tier default
+(`references/pl0-procedure.md § Dynamic Worktask Sizing (PL0 Stage)`); check 3b validates them.
 
-**Security-sensitive features** auto-include SR0:
-- Authentication/authorization, payment processing, PII handling
-- Cryptographic operations, external API secrets, file uploads
+Security-sensitive features auto-include SR0: authentication/authorization, payment processing, PII
+handling, cryptographic operations, external API secrets, file uploads.
 
-Each task includes `metadata.agent` for executor resolution. See `initialization-patterns.md § PL Creates Subsequent Tasks`.
+Each task carries `metadata.agent` for executor resolution
+(`references/initialization-patterns.md § PL Creates Subsequent Tasks`).
 
 #### Mid-run escalation — the orchestrator is the consumer
 
 A stage may return `requests_stage_escalation` in its artifact `handoff:` frontmatter, and
-**nothing else reads it**. At Step 6.5, after `Task()` returns and before the `completed` patch,
-the orchestrator MUST: read the object; validate it against the four fire conditions, the
+nothing else reads it. At Step 6.5, after `Task()` returns and before the `completed` patch,
+the orchestrator reads the object; validate it against the four fire conditions, the
 stage-validity list, and the structural caps — canonical in
 `skills/estimation-methodology/SKILL.md § Mid-run re-sizing`, never restated here; on accept,
 create the stage with `state-patch.sh --task-create` / `--task-block` and record `{stage, reason}`
 in the existing `metadata.added_stages`; on reject, name the failed condition and continue the run
-unchanged. **One accepted per run** — a second means the plan itself is wrong, so stop at the
-human gate instead of growing the pipeline. ST0 audits `added_stages` for escalation entries.
+unchanged. One accepted per run — a second means the plan itself is wrong, so stop at the
+human gate instead of growing the pipeline (under `/megatask`, § USER under /megatask). ST0 audits
+`added_stages` for escalation entries.
 
 ## Workspace Mode
 
@@ -131,7 +120,7 @@ Megatask (per-issue) tickets run in isolated workspaces. `.context/` base by mod
 | Standard | `.context/` (main checkout — orchestrator + non-isolated stages) |
 | Worktree | `.worktrees/milestone-{N}/{issue#}/.context/` |
 
-**WHEN in megatask per-issue/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch: Read `references/workspace-modes.md`** (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Binding enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full megatask docs: `../megatask/SKILL.md`.
+In megatask per-issue/worktree mode, inside a Conductor workspace clone, or on any cwd↔workspace_path mismatch, read `references/workspace-modes.md` (detection snippet, Conductor sibling-repo rule, task-ID namespacing). Enforcement (workspace-root cross-check + `WORKSPACE_ROOT` banner injection) lives in `commands/worktask.md` Phase 2. Full megatask docs: `../megatask/SKILL.md`.
 
 ## Parallel Execution
 
@@ -148,7 +137,7 @@ Use `--sequential` when DC requires test results.
 
 ### Monitor Tool Integration
 
-`Monitor` streams events from background processes (build output, test progress, logs) instead of polling — available to any agent with Bash access. Persist raw stream output to `.context/logs/<kind>-<scope>-<timestamp>.log` per the `logging-conventions` skill.
+Use `Monitor` to stream background-process events (builds, tests, logs) instead of polling. Persist raw stream output to `.context/logs/<kind>-<scope>-<timestamp>.log` per the `logging-conventions` skill.
 
 ### Never Parallelize
 
@@ -175,6 +164,24 @@ Emergency: FN → RE → QA → DR → DV → IR → USER
 
 Stages absent from the plan drop out of the chain — escalation from DV goes to TL if TL ran, else
 AR if AR ran, else PL.
+
+### USER under /megatask
+
+A `/megatask` per-issue run (`PL0.metadata.megatask_group`) has no user. Every path that ends at
+USER first settles the issue, then stops: the last link of a chain above, a stop per § Error
+Handling, `escalate()`, a Step 7 `blocked` row, a refused landing (§ Step 6.5d), a second mid-run
+escalation, and `stopForUser`.
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh --subject <ID> --detail "<one line: why>"
+```
+
+It writes `workspace.json` `execution.status: "failed"`, `execution.reason: "escalated_to_user"`
+and one `megatask_escalated` row, so `hooks/megatask-monitor.sh` frees the track and keeps the
+dependents blocked. Outside `/megatask` it prints `result=skipped` and writes nothing, and it never
+overwrites a settled status, so a PARK (§ Step 7a — the megatask arm) keeps its
+`parked_escalation`. Exit 1 (`result=refused`) leaves the track held: report the issue, the path
+and the reason, and stop.
 
 ## Rule Checks
 
@@ -203,8 +210,7 @@ AR if AR ran, else PL.
 
 Build stages — **AR, DV, QA, SR, RE** — accumulate `.build/` and DerivedData across runs, and an
 exhausted filesystem kills the build harness mid-stage. Assert free space before delegating any of
-the five. Canonical implementation: `scripts/state-patch.sh --disk-check <root>`; the snippet is
-the spec.
+the five. Implementation: `scripts/state-patch.sh --disk-check <root>`.
 
 ```bash
 MIN_GB="${DISK_MIN_GB:-5}"; WARN_GB="${DISK_WARN_GB:-8}"   # hard halt / hygiene warn
@@ -215,7 +221,7 @@ AVAIL_GB=$(df -Pg "${WORKSPACE_ROOT:-.}" 2>/dev/null | awk 'NR==2 {print $4+0}')
 
 - **Hard halt** (`AVAIL_GB < MIN_GB`): audit `pre_stage_disk_halt result=blocked` with
   `metadata={"stage":"$CODE","avail_gb":…,"min_gb":…}`, print the remediation (`swift package
-  clean`; `rm -rf ~/Library/Developer/Xcode/DerivedData/*`), do NOT delegate — a halted run is
+  clean`; `rm -rf ~/Library/Developer/Xcode/DerivedData/*`), and don't delegate — a halted run is
   recoverable, an ENOSPC-killed harness is not.
 - **Warn** (`AVAIL_GB < WARN_GB`): audit `pre_stage_disk_warn result=ok` with the same shape
   (`warn_gb` instead of `min_gb`), proceed, run `swift package clean` as pre-DV hygiene.
@@ -229,11 +235,9 @@ AVAIL_GB=$(df -Pg "${WORKSPACE_ROOT:-.}" 2>/dev/null | awk 'NR==2 {print $4+0}')
 - Validate artifacts created
 - `PostCompact` hook fires after auto-compaction — use to re-inject critical worktask state
 
-> Opus 5 / Sonnet 5 / Fable 5 carry a 1M context window; compress at stage boundaries anyway for cost efficiency.
-
 ## Pre-Stage Validation
 
-Before executing any worktask stage, the orchestrator MUST validate:
+Before executing any worktask stage, the orchestrator validates:
 
 ### Validation checks 1–5
 
@@ -246,33 +250,33 @@ Before executing any worktask stage, the orchestrator MUST validate:
 
 ### Validation checks 6–7
 
-6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (it constrains subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; do NOT hard-block
-6a. **Effort tier check**: `metadata.effort ∈ EFFORT_ENUM` (`scripts/effort-ladder.sh`), which `state-patch.sh` enforces at the write. Absent is NOT fatal — Step C.0a skips the stage (`resolver_skipped`/`effort_unstamped`), costing a round-trip rather than the run
+6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (it constrains subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; don't block
+6a. **Effort tier check**: `metadata.effort ∈ EFFORT_ENUM` (`scripts/effort-ladder.sh`), which `state-patch.sh` enforces at the write. Absent is not fatal — Step C.0a skips the stage (`resolver_skipped`/`effort_unstamped`), costing a round-trip rather than the run
 7. **Workspace existence** (megatask per-issue/worktree mode only): `metadata.workspace_path` directory exists and `workspace.json` is readable
 
 ### Validation check 8
 
-8. **Artifact path resolution** (non-blocking): resolve the upstream artifact for the next task's `metadata.run_index` via `stageArtifactPath()` below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, miss}` and `metadata.resolved_path`. `miss` = upstream produced no artifact, handled by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift (PL0 ↔ stage-task off-by-one) before downstream stages burn tokens on fallback reads.
+8. **Artifact path resolution** (non-blocking): resolve the upstream artifact for the next task's `metadata.run_index` via `stageArtifactPath()` below. Emit one `artifact_path_resolved` audit row with `result ∈ {ok, fallback_glob, miss}` and `metadata.resolved_path`. `miss` = upstream produced no artifact, handled by F3 in `references/handoff-protocol.md#fallback-paths` — warn but proceed. Catches run_index drift (PL0 ↔ stage-task off-by-one) early.
 
 ### Validation check 9
 
-9. **Hook installation** (first stage only): either `.claude/hooks/state-merge.sh` exists and is executable, or the plugin's `plugin.json` registers the SubagentStop hook entry. Neither → warn `"⚠ state-merge.sh hook not installed — run hook-install.sh"`. Do NOT block — Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
+9. **Hook installation** (first stage only): either `.claude/hooks/state-merge.sh` exists and is executable, or the plugin's `plugin.json` registers the SubagentStop hook entry. Neither → warn `"⚠ state-merge.sh hook not installed — run hook-install.sh"` without blocking — Step 6.5 provides Layer 3 coverage. See `references/initialization-patterns.md#hook-installation`.
 
 ### Validation check 10
 
-10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the ONLY point in the pipeline a worktask branch is ever renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). **Unconditional**: the "already conventional" arm is a no-op, so always running it is free and is the only correct way to decide — never skip because the branch looks fine, never judge conventionality by eye (sole authority: `branch_is_conventional()`, queryable as `--check <name>`). A branch created outside the pipeline is covered by exactly this rule. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
+10. **Branch naming** (first stage only, after the state.json seed and before seeding PL0): run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh --goal "<concise imperative title>"` — the only point in the pipeline a worktask branch is renamed (once-only rule, `skills/shared/git-conventions.md § Branch Naming`). Always run it, including for branches created outside the pipeline: the "already conventional" arm is a no-op, and only `branch_is_conventional()` (queryable as `--check <name>`) decides conventionality, not the eye. Every outcome exits 0; the step self-disables under `/megatask`/`--emergency` routing.
 
 ### Validation check 10 — pass a title, preview freely
 
-**Pass a title, never the raw task description**: the goal becomes a 48-character slug and the overflow is dropped silently, so a multi-sentence description ends mid-phrase (`commands/worktask.md § Step 3c — the input is a title`). Preview with `BRANCH_NAME_PRINT=1` — renames nothing, writes no audit row; `--check`/`--print-types`/`--print-target` are free for the same reason. The *planned* ledger name may later be refined once, without any git mutation (`commands/worktask.md § Step A.4b`).
+Pass a title, not the raw task description: the goal becomes a 48-character slug and the overflow is dropped silently, so a multi-sentence description ends mid-phrase (`commands/worktask.md § Step 3c — the input is a title`). Preview with `BRANCH_NAME_PRINT=1` — renames nothing, writes no audit row; `--check`/`--print-types`/`--print-target` are free for the same reason. The *planned* ledger name may later be refined once, without any git mutation (`commands/worktask.md § Step A.4b`).
 
 ### Validation check 10 — stamping and post-check
 
-Capture **both** stdout key=value lines — `target_branch=<name>` (the name the PR head should carry) and the final `branch=<name>` (the local branch as it stands) — **verify the value matches `^[A-Za-z0-9._/-]+$` before stamping** (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script never writes state.json — `references/handoff-protocol.md § branch`). **When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target** — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name.
+Capture both stdout key=value lines — `target_branch=<name>` (the name the PR head should carry) and the final `branch=<name>` (the local branch as it stands) — verify the value matches `^[A-Za-z0-9._/-]+$` before stamping (a failing value is stamped empty, not as-is), and stamp `facts.branch` on the ledger (the script never writes state.json — `references/handoff-protocol.md § branch`). When `branch=` is empty or fails `--check` but `target_branch=` is non-empty, stamp the target — the local name may be blocked from changing (upstream tracked, target exists) while the PR head is still ours to name.
 
 ### Validation check 10 — post-check and the host rule
 
-Run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — never revert it, never re-ask (`references/workspace-modes.md § Host session authorization`).
+Run the non-blocking post-check (`commands/worktask.md § Step 3c — post-check`): a stamped name failing `--check` emits one `branch_convention_check` warning row naming the actual and derived target, and never blocks planning. Invoking `/worktask` authorizes the rename against a host's no-rename session rule — don't revert it or re-ask (`references/workspace-modes.md § Host session authorization`).
 
 ### Validation check 11
 
@@ -290,11 +294,11 @@ Emit one `dispatch_depth_projected` audit row with `metadata: {projected_depth, 
 
 ### Validation check 11 — what warns, and what stays quiet
 
-**Warn on the console only when `headroom < 0`.** At `headroom >= 0` the row is written and nothing prints. Deliberate: the canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands on **exactly** the cap with zero headroom, so warning at `headroom == 0` would fire on every DV stage and teach the operator to skip the line that matters. The zero-headroom fact still reaches `metadata.headroom`, where incident review looks. A projection that does not compute `3` for that chain is wrong regardless of whether it prints.
+Warn on the console only when `headroom < 0`; at `headroom >= 0` the row is written and nothing prints. The canonical DV chain — session → `developer` (1) → platform router (2) → Tier-2 specialist (3) — lands exactly on the cap, so warning at zero headroom would fire on every DV stage. A projection that does not compute `3` for that chain is wrong.
 
 #### Never blocks; forecast, not observation
 
-A hard gate would fail that same legal chain (precedent: check 8's `artifact_path_resolved`, and `commands/megatask.md § R1 spawn-budget projections` — "warn-and-continue, never a hard gate"). When it warns, name megatask's two remediations: raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`). An unanticipated hop lands past the cap unseen by this check and is caught after the fact by the refused agent's own `dispatch_flattened` row (`agent-coordination § Depth-refusal self-report`) — complements, not redundancy.
+A hard gate would fail that same legal chain. When it warns, name megatask's two remediations: raise the env var, or flatten Tier-2 dispatch (`skills/megatask/SKILL.md § Depth remediations`). An unanticipated hop past the cap is caught after the fact by the refused agent's own `dispatch_flattened` row (`skills/agent-coordination/SKILL.md § Depth-refusal self-report`).
 
 ### Validation check 12 — Routing resolution
 
@@ -303,33 +307,31 @@ A hard gate would fail that same legal chain (precedent: check 8's `artifact_pat
 ### Validation check 13 — Model/effort resolution
 
 13. **Model/effort resolution** (first stage only, right after check 12): run `state-patch.sh
-    --resolve-models` before PL0 is dispatched. Merges `CORPFLOW.md § Models`, fail-open per row
-    (`#ad5`), over the built-in matrix, via `model-matrix-lib.sh`. Stamps `state.models` for
-    **all sixteen** agents (diverging from check 12's differences-only map, `#ad4`) plus
-    `state.models_source`. PL0 reads this map itself: `model-matrix.sh --resolve <agent>`
-    (`product-manager.md`'s dedicated Bash grant) checks `state.models` first, then
-    `CORPFLOW.md`, then the matrix, and PL0 pastes the pair into `--task-create`'s `--metadata`
-    (`sw-AR0-1` reversed `--task-create`'s own auto-fill — it no longer reads the map for PL0,
-    re-permitting a hand-copied value). No `CORPFLOW.md`/`## Models` → all rows `"matrix"`.
+    --resolve-models` before PL0 is dispatched. Merges `CORPFLOW.md § Models`, fail-open per row,
+    over the built-in matrix, via `model-matrix-lib.sh`. Stamps `state.models` for all sixteen
+    agents (unlike check 12's differences-only map) plus `state.models_source`. PL0 reads this
+    map itself: `model-matrix.sh --resolve <agent>` (`product-manager.md`'s dedicated Bash grant)
+    checks `state.models` first, then `CORPFLOW.md`, then the matrix, and PL0 pastes the pair into
+    `--task-create`'s `--metadata`; `--task-create` does not fill it from the map. No
+    `CORPFLOW.md`/`## Models` → all rows `"matrix"`.
 
 ### On validation failure
 
 - No tasks exist → not initialized. Re-run initialization (seed PL0)
 - PL0 exists but no subsequent tasks → PL0 did not complete. Re-run PL0
 - Tasks orphaned (no worktask_id) → log a warning, match by subject pattern
-- Contract violation → do NOT transition. Append a `missing_input` entry to the next stage's `.context/errors/<agent>.md` and block.
+- Contract violation → don't transition. Append a `missing_input` entry to the next stage's `.context/errors/<agent>.md` and block.
 
 ## Orchestrator Execution Loop
 
-> **This loop dispatches one `Task()` per ready stage in-process.** It runs the full pipeline from the
-> PL0 precondition (below) through the FN gate (§ FN Gate), advancing stages as their `blockedBy`
-> dependencies resolve.
+This loop dispatches one `Task()` per ready stage in-process, from the PL0 precondition (below)
+through the FN gate (§ FN Gate), advancing stages as their `blockedBy` dependencies resolve.
 
-> **Figma asset persistence is NOT an orchestrator step.** Screenshots are captured AND persisted to
-> `.context/designs/` inside the PL turn (Phase 1) by the product-manager via its narrowly-scoped
-> `Bash(curl:*)` grant, because `get_screenshot` returns a short-lived URL. NEVER add a post-PL0
-> download step — it collides with the Phase-1 Bash prohibition in `commands/worktask.md` and races
-> the expiring URL. See `skills/shared/figma-capture.md § Capture Workflow`.
+Figma asset persistence is not an orchestrator step: the product-manager captures and persists
+screenshots to `.context/designs/` inside the PL turn via its `Bash(curl:*)` grant, because
+`get_screenshot` returns a short-lived URL. Don't add a post-PL0 download step — it collides with
+the Phase-1 Bash prohibition in `commands/worktask.md` and races the expiring URL
+(`skills/shared/figma-capture.md § Capture Workflow`).
 
 ### Before this loop — autonomy preflight (Phase 1)
 
@@ -341,37 +343,32 @@ single message, before anything is seeded; a pass is recorded after the Step 3a 
 runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a scan:
 `commands/worktask.md § Step 2a-pre` and `§ Step 3a — record the autonomy preflight`.
 
-### Delegation-only (BINDING)
+### Delegation-only
 
-> **The orchestrator never writes code, tests or docs during a worktask.** Every change is made by
-> the stage agent that owns it, through `Task()`. "It is a one-line fix" is the case this rule
-> exists for: an orchestrator edit lands in no stage's `files_touched`, is reviewed by no DR or SR,
-> and appears in no artifact — so the run's own record says nobody made it. Reading is unrestricted;
-> writing is delegated.
-
-> **This is not a tooling restriction, so it cannot be satisfied by tooling.** The orchestrator can
-> Edit; it declines to. When a stage returns work that is nearly right, the fix is a re-dispatch with
-> the correction, not a patch applied here.
+The orchestrator never writes code, tests or docs during a worktask, and never runs build commands
+or marks a task completed without delegating. Every change is made by the stage agent that owns it,
+through `Task()` — including one-line fixes, because an orchestrator edit lands in no stage's
+`files_touched`, is reviewed by no DR or SR, and appears in no artifact. Reading is unrestricted.
+When a stage returns work that is nearly right, re-dispatch it with the correction instead of
+patching it here. The orchestrator's job is the loop: read tasks, resolve agents, delegate, track
+status.
 
 #### Delegation-only — the build-tooling corollary
 
-> Build and test tooling is a separate prohibition with its own section: the orchestrator holds
-> none, and DV/DR/QA delegate to the detected platform's `/<plugin>:build-test`
-> (§ Platform tooling ownership). Never re-add a platform's MCP grants — `mcp__XcodeBuildMCP__*` and
-> friends — to a stage agent to work around it; the plugin that owns the toolchain owns its
-> lifecycle.
+The orchestrator holds no build or test tooling; DV/DR/QA delegate to the detected platform's
+`/<plugin>:build-test` (§ Platform tooling ownership). Don't re-add a platform's MCP grants
+(`mcp__XcodeBuildMCP__*` and the like) to a stage agent to work around this; the plugin that owns the
+toolchain owns its lifecycle.
 
-### Dispatch on the same turn (BINDING)
+### Dispatch on the same turn
 
-> **Verify a boundary and dispatch the next ready stage in the SAME turn.** Report after dispatching,
-> never instead of. A running background `Task` does **not** block the orchestrator — its turn stays
-> free, so "an agent is working" is never a reason to stop, and that misconception is what makes an
-> idle turn feel justified from the inside. Ending a turn with "next: DC → RE → FN" when those stages
-> are dispatchable is idle time, not a handoff: the pipeline sits until a human asks whether anything
-> is happening. Exactly four things justify stopping mid-pipeline — the plan gate
-> (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the prompt for a parked
-> permission denial or typed need (§ Step 7a, asked only after every ready stage is dispatched), and the FN gate
-> (§ FN Gate). Nothing else does.
+Verify a boundary and dispatch the next ready stage in the same turn; report after dispatching, not
+instead of it. A running background `Task` does not block the orchestrator, so "an agent is working"
+is no reason to stop, and ending a turn with "next: DC → RE → FN" while those stages are
+dispatchable leaves the pipeline idle until a human asks. Exactly four things justify stopping
+mid-pipeline: the plan gate (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the
+prompt for a parked permission denial or typed need (§ Step 7a, asked only after every ready stage
+is dispatched), and the FN gate (§ FN Gate).
 
 #### Readiness is mechanical, not a judgement call
 
@@ -388,21 +385,20 @@ runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a
 > `completed`, so a row blocked by it is not returned either. It leaves that query only when
 > § Step 6.5d settles it (`skills/shared/state-ledger.md § Status Values`).
 >
-> A name returned with nothing live means there is work to do — dispatch it. The trap bites hardest
-> after a **headline milestone**: a big green result makes the summary feel like a completion, and it
-> is not. The boundary is a handoff, and the handoff is the deliverable.
+> A name returned with nothing live means there is work to do — dispatch it, including right after a
+> big green result, which is a handoff, not a completion.
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
-Every delegation prompt is built in a **binding** order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
+Every delegation prompt is built in a fixed order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
 Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
 
-#### Composing the brief (binding)
+#### Composing the brief
 
 Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
-#### Preamble layout (binding)
+#### Preamble layout
 
 ```
 [1] Contract reminder (references/contract-reminder.md) ← stable across ALL stages (cacheable)
@@ -467,9 +463,9 @@ function stageArtifactPath(code: string, runIndex: number, row?: TaskRow): strin
 }
 ```
 
-#### Step 6.5 — After Task() returns, enforce state.json patch (MANDATORY)
+#### Step 6.5 — After Task() returns, enforce state.json patch
 
-After every `Task()` return and BEFORE Step 7 settles the row, first read any
+After every `Task()` return and before Step 7 settles the row, first read any
 `requests_stage_escalation` in the artifact frontmatter (§ Mid-run escalation — the orchestrator
 is the consumer), then run the three-layer check: Layer 1 (agent self-patch) → Layer 2
 (`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and semantics: loop § Step 6.5
@@ -477,7 +473,7 @@ below.
 
 ##### Completion signal (subagents run in the background by default)
 
-> "`Task()` return" means the **completed stage result**, not the launch acknowledgement. Under background-default dispatch the orchestrator keeps its turn while the stage runs and receives the result as a completion notification. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. NEVER fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a still-running stage. Errored returns propagate honestly — a rate-limit or API cut-off reports the error with any partial work preserved, never a successful-looking empty result: classify per `agent-coordination § Retry / Escalate Matrix` (`transient`) and do NOT run the completion patch.
+"`Task()` return" means the completed stage result, not the launch acknowledgement: the result arrives as a completion notification while the orchestrator keeps its turn. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. Don't fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a running stage. An errored return (rate limit, API cut-off) reports the error with partial work preserved: classify it per `skills/agent-coordination/SKILL.md § Retry / Escalate Matrix` (`transient`) and skip the completion patch.
 
 ###### Dispatch-tracking helpers (steps 6a/6.5 — ledger writes; [3] only points at the ledger)
 
@@ -499,24 +495,20 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 
 ###### Banner relocation & cache-prefix hygiene
 
-**Banner relocation (R3)**: stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended AFTER `full.description` (suffix), never prepended, so prefixes [1][2][3][4] stay byte-identical across stages and the cache prefix boundary stretches as far as possible.
+Stage-specific banners (DR Skill, FN Conductor, MCP fallback warning) are appended after `full.description` (suffix), never prepended, so prefixes [1][2][3][4] stay byte-identical across stages.
 
-The preamble assembler MUST exclude forbidden tokens from sections [1][2][4][4b]: timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`. CI runs it in `--self-test` mode on every PR (`.github/workflows/test.yml`); asserting a real captured prompt-log is still a manual run.
-
-### CRITICAL: Delegation-Only Rule
-
-The orchestrator NEVER writes implementation code. ALL stage work is delegated to stage agents via the Agent tool; Edit/Write on source files, running build commands, or marking a task completed without delegating are violations. Its job is the loop — read tasks, resolve agents, delegate, track status. Editing source code → STOP and delegate to the stage agent.
+Sections [1][2][4][4b] carry no timestamps, per-call ENV expansions, random IDs, retry counters, file mtimes, or agent names beyond `worktask_id`. `scripts/cache-lint.sh` asserts that byte-stability across consecutive stages of one `worktask_id`.
 
 ### PRECONDITION CHECK
 Before entering this loop, verify:
 
 #### Signals 1–3 (incl. 2b)
 
-- **Signal 1 (ledger audit)**: `tasks.PL0` in `.context/state.json` has status `completed`. Missing or incomplete → STOP: worktask not initialized, or planning incomplete.
+- **Signal 1 (ledger audit)**: `tasks.PL0` in `.context/state.json` has status `completed`. Missing or incomplete → stop: worktask not initialized, or planning incomplete.
 
 **Signal 2 (plan gate)**: `PL0.metadata.plan_gate` (default `"checkpoint"`).
-- `"checkpoint"` (default): require BOTH PL0 `completed` AND an `approval_received` audit line with
-  `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. Line absent → STOP,
+- `"checkpoint"` (default): require both PL0 `completed` and an `approval_received` audit line with
+  `subject:"PL<run_index>"` in `.context/logs/audit.jsonl` before loop entry. Line absent → stop and
   return to `commands/worktask.md § Step A.5` to fulfil the gate.
 - `"bypass"` (`--auto=[plan]` / `--emergency`, or stamped per-issue by the `/megatask` batch orchestrator): PL0 `completed` alone suffices, no approval line — except for Signal 2b escalated items, whose `approval_received` row is still required.
 
@@ -526,21 +518,20 @@ Before entering this loop, verify:
 plan gate; `"auto"` (stamped by `--auto=[decision]`) routes them through the Fable-model
 auto-decision pre-pass (`commands/worktask.md § Step A.4` is canon). Verify before loop entry: when
 `decision_gate == "auto"` and `facts.open_questions[]` holds any `sw-PL<N>-*` item with
-`status != "resolved"`, an `auto_decision_resolved` audit row with `subject:"PL<run_index>"` MUST
-exist, and any `escalate` items MUST have an `approval_received` resolution — absent → STOP and
-return to Step A.4. The
-carrier bypasses neither `plan_gate` nor `fn_gate`.
+`status != "resolved"`, an `auto_decision_resolved` audit row with `subject:"PL<run_index>"` must
+exist, and any `escalate` items need an `approval_received` resolution — absent → stop and return to
+Step A.4. The carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
 
-FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`): STOP immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`): stop immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
 
 #### After PL0 — steps 1–3
 
-After PL0 completes and creates stage tasks, the orchestrator MUST:
+After PL0 completes and creates stage tasks, the orchestrator:
 
 1. **Present PL0 results** to the user: complexity score, stages created (with agents), dependency chain, key planning decisions (at the Step A.5 plan gate; on a `checkpoint` gate execution proceeds only after approval).
-2. **Re-validate before executing**: re-read `tasks{}`; verify `metadata.agent` and `metadata.model` are set on each. This re-grounds the orchestrator in the delegation rules before any stage runs.
+2. **Re-validate before executing**: re-read `tasks{}`; verify `metadata.agent` and `metadata.model` are set on each.
 3. **Publish plan to GitHub** (before stage loop). Run:
 
 ##### Step 3 — publish snippet
@@ -566,7 +557,7 @@ After PL0 completes and creates stage tasks, the orchestrator MUST:
 
 ##### Step 3 — non-blocking & skip rules
 
-     The `|| pub_rc=$?` capture and the trailing `; true` mask the helper's exit code — a helper failure (catastrophic exit 1, deferred exit 0, network error) MUST NEVER propagate as orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
+     The `|| pub_rc=$?` capture and the trailing `; true` mask the helper's exit code, so a helper failure (catastrophic exit 1, deferred exit 0, network error) never becomes an orchestrator failure. Skip the step entirely when `--no-gh-issue` was supplied (PL0 stamps `task.metadata.no_gh_issue: true`; the helper also short-circuits internally). The helper self-gates the rest: megatask per-issue mode skips every `gh` call, and a second-or-later run in the same `.context/` comments instead of opening a duplicate. Semantics, sanitiser rules and the non-blocking guarantee: § PL Issue Publish.
 
 #### Steps 1–3
 
@@ -682,14 +673,11 @@ while (tasks.some(t => !SETTLED.has(t.status))) {
 
 #### Prompt-injection steps 4.6–4.8b — shared rules
 
-These steps mutate ONLY `full.description`: remediation/resume blocks are PREPENDED (dynamic
-section [6]), enforcement banners APPENDED (suffix [7]) — cache prefix [1][2][4][4b] is never touched.
-Each fires one `appendAudit` row, and that row is what makes the injection observable: its absence
-for a dispatch proves the loop was bypassed. Readers (DR, TL) surface a missing row as an
-**advisory** finding, never a hard fail — the orchestrator writes it, so a stale version-keyed
-plugin cache serving an older loop would otherwise block a blameless DV. The banners exist because
-prose loses to the dispatch surface: every rule here already lived in an agent file and was still
-violated until it was injected at dispatch.
+These steps mutate only `full.description`: remediation/resume blocks are prepended (dynamic
+section [6]), enforcement banners appended (suffix [7]) — cache prefix [1][2][4][4b] is never touched.
+Each fires one `appendAudit` row, whose absence for a dispatch shows the loop was bypassed. Readers
+(DR, TL) surface a missing row as an advisory finding, not a hard fail, because a stale plugin cache
+serving an older loop would otherwise block a blameless DV.
 
 #### Step 4.6
 
@@ -712,7 +700,7 @@ Correction re-opens a task of any stage; gate loop-back reaches DV. When `fix_ro
 ###### Remediation injection code
 
 ```typescript
-    // The stage code that raised it: "DR" | "QA" copied by the Step 7 loop-back from the gate
+    // The stage code that raised it: "DR" | "QA" | "ST" copied by the Step 7 loop-back from the gate
     // row, or the correcting stage's own code written by --task-reopen. state-patch.sh writes both.
     const fromStage = full.metadata.gate_from_stage;
     const blockers = full.metadata.gate_blockers ?? []; // blockers[] | blocking_defects[] | [finding]
@@ -766,12 +754,10 @@ Correction re-opens a task of any stage; gate loop-back reaches DV. When `fix_ro
 
 #### Step 4.7a
 
-AR writes design outputs — an OpenAPI contract, a schema, a generated header — into the **shared
-checkout**, untracked. DV then forks its worktree from `task.metadata.base_ref`, a committed ref, so
-those files are absent at the path every architecture reference cites.
-
-No stage can fix it: AR holds no git grant, DV is inside the broken tree, FN runs last. Reproduced
-across three runs, always cleared by the same manual step — this codifies that step.
+AR writes design outputs — an OpenAPI contract, a schema, a generated header — into the shared
+checkout, untracked. DV then forks its worktree from `task.metadata.base_ref`, a committed ref, so
+those files would be absent at the path every architecture reference cites. No stage can fix it: AR
+holds no git grant, DV is inside the broken tree, FN runs last.
 
 ```typescript
     // 4.7a. AR contract landing — runs when the NEXT stage is DV and AR left untracked or
@@ -813,17 +799,15 @@ across three runs, always cleared by the same manual step — this codifies that
 
 ##### Step 4.7a — why the orchestrator, and not a stash
 
-**Land, never stash**: a stash leaves the files invisible to a worktree forked from the ref, which
-is the failure being fixed. **Never widen AR's grants instead** — an agent that can commit can
-commit anything, and the narrow version of that grant does not exist. If the landing fails, return
-`blocked` naming the paths: a DV dispatched into a tree missing its contract cannot succeed and
-takes a full budget to discover it.
+Land, don't stash: a stash leaves the files invisible to a worktree forked from the ref. Don't
+widen AR's grants instead — no narrow commit grant exists. If the landing fails, return `blocked`
+naming the paths: a DV dispatched into a tree missing its contract cannot succeed.
 
 #### Step 4.8
 
-Two banners, because isolation and assignment are two claims: a stale worktree of a *different*
-clone is perfectly isolated, satisfies D0.0, and still cannot receive a single edit.
-`dv-tree-preflight.sh` exists for exactly that case. Neither banner is the `WORKSPACE_ROOT=` line:
+Two banners, because isolation and assignment are two claims: a stale worktree of a different
+clone is isolated, satisfies D0.0, and is still the wrong tree — the case `dv-tree-preflight.sh`
+catches. Neither banner is the `WORKSPACE_ROOT=` line:
 Step 6's composer emits that as [7]'s first line from the same script, after the re-stamp below.
 
 ```typescript
@@ -839,11 +823,15 @@ Step 6's composer emits that as [7]'s first line from the same script, after the
 
 ```typescript
     if (full.metadata.stage === "DV") {
-      const enforce =
-        `WORKTREE ISOLATION REQUIRED (always): ` +
-        `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
-        `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
-        `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
+      // /megatask: the tree is init-worktree.sh's linked worktree, outside .claude/worktrees/,
+      // where EnterWorktree would wait on a confirmation no one can give.
+      const enforce = state.tasks.PL0?.metadata?.megatask_group
+        ? `WORKTREE ISOLATION: WORKSPACE_ROOT is already an isolated worktree. Never call ` +
+          `EnterWorktree; work it in absolute-path mode (D0.0). Set \`worktree: true\`.`
+        : `WORKTREE ISOLATION REQUIRED (always): ` +
+          `confirm you are in an isolated worktree before any Edit/Write (D0.0). ` +
+          `If not, EnterWorktree and proceed, or flag worktree_isolation_missing and ` +
+          `return verdict:blocked. Set handoff frontmatter \`worktree: true\` (false is a hard DR fail).`;
       full.description = full.description + "\n\n" + enforce;
 ```
 
@@ -912,7 +900,7 @@ re-dispatched every pass. It runs `state-patch.sh --task-meta <ID> --set '{"land
 then `--task-status <ID> blocked`; if either write fails, stop per § Error Handling. Exit 1 needs
 neither, since the script already blocked the row. `queueLandingBlock` reports it as § Step 6.5d does.
 
-**Release**, once the cause is fixed: `state-patch.sh --task-meta <ID> --set '{"landing_error":null}'`,
+Release, once the cause is fixed: `state-patch.sh --task-meta <ID> --set '{"landing_error":null}'`,
 then `--task-status <ID> pending`. The next ready pass reaches this gate, which re-lands every pair.
 
 ##### Step 4.8 — assigned-tree banner & audit
@@ -1148,7 +1136,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     // 5e. Permission-Mode Pinning — when PL0 set `permission_mode: "default"` (typically SR/FN
-    //     under --secure/--full), NEVER propagate --dangerously-skip-permissions into this
+    //     under --secure/--full), don't propagate --dangerously-skip-permissions into this
     //     stage's descendant Task()/Bash calls, and audit the boundary. Subagents natively
     //     inherit the parent session's mode (Task()'s deprecated `mode` param is ignored), so
     //     pinning = not widening the inherited mode and the row records that it held. See
@@ -1159,7 +1147,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     }
 ```
 
-#### Step 6 — typed-schema dispatch (P0-1)
+#### Step 6 — typed-schema dispatch
 
 ```typescript
     // 6. Delegate to the stage agent. Pass the stage's `<CODE>Handoff` schema
@@ -1169,19 +1157,15 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
     //     (stage-contracts.md § Validation Protocol step 2 + Step 6.5 below).
 ```
 
-##### Step 6 — degrade path & cache-prefix (binding)
+##### Step 6 — degrade path & cache-prefix
 
 ```typescript
-    //     STRICT-SUPERSET / DEGRADE (binding): `schema` is OPTIONAL on the wire. If the runtime
-    //     Task() primitive does not accept it, behavior degrades to EXACTLY today's — the agent
-    //     still writes its artifact with `handoff:` frontmatter, the Step-6.5 scrape runs, F3
-    //     remains the fallback; no migration, no breakage. Artifact + frontmatter are ALWAYS
-    //     written either way (durability/compression + F4 source); the typed return never
-    //     replaces them. Structured-output dispatch is reliable: no indefinite StructuredOutput
-    //     re-call after success, and schema-validation failures abort after 5 attempts.
-    //     CACHE-PREFIX (binding, PRESERVE §4.1): `schema` is a Task() ARGUMENT, not preamble
-    //     text — never in [1][2][4][4b] nor `full.description` — so byte-identity of the
-    //     cacheable prefix is untouched and no per-call varying token enters it.
+    //     DEGRADE: `schema` is optional on the wire. If the runtime Task() primitive does not
+    //     accept it, the agent still writes its artifact with `handoff:` frontmatter, the
+    //     Step-6.5 scrape runs, and F3 remains the fallback. Artifact + frontmatter are written
+    //     either way (durability/compression + F4 source); the typed return never replaces them.
+    //     CACHE-PREFIX: `schema` is a Task() argument, not preamble text — never in
+    //     [1][2][4][4b] nor `full.description` — so the cacheable prefix stays byte-identical.
 ```
 
 ##### Step 5f — model resolution
@@ -1189,7 +1173,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 ```typescript
     // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch. Fable 5
     //     dispatch fails hard without 1M credits (model-selection.md); a prior hard-fail is
-    //     cached there, so skip re-hitting it and fall back to "opus" (Opus 5: 1M, ungated),
+    //     cached there, so skip re-hitting it and fall back to "opus" (Opus 5.5: 1M, ungated),
     //     recording model_requested/model_resolved on the dispatch entry below.
     const modelRequested = model;
     let effectiveModel = model;
@@ -1459,33 +1443,31 @@ edited. Same branch as a parked agent in `references/resume.md § State → Acti
 
 A stage that cannot continue without something it cannot produce returns `verdict: "blocked"` with
 one `handoff.blocked_on` (`references/handoff-protocol.md § Schema — blocked_on`). Read as an
-ordinary blocked verdict, that return burns a retry on a stage that never failed. Left to judgement,
-it takes a new improvised route each time: one run met a screenshot need, a host file, a merge
-denial and a cross-session ask, and routed all four by hand. So every kind goes through one table
-and one router, and each writes a fixed set of audit legs.
+ordinary blocked verdict, that return burns a retry on a stage that never failed, and routed by
+judgement it takes a new improvised route each time. So every kind goes through one table and one
+router, and each writes a fixed set of audit legs.
 
 ##### Step 6.5a3 — the dispatch table — kinds and routing
 
-Route every `blocked` return by `kind`; each kind is landed so no row routes to a fallback for want of owner.
+Route every `blocked` return by `kind`.
 
 ###### Dispatch table
 
-| kind | Orchestrator action | Audit legs | Owner | Fallback |
-|---|---|---|---|---|
-| `user_decision` | ask `question` with `options` at § Step 7a; resume with hook row's `ud-` id | asked / answered / resumed | #395, landed | none |
-| `user_action` | show `request` and `!` line at § Step 7a | requested / verified | #394, landed | none |
-| `permission` | park through § Step 6.5a4 | denied / granted / resumed | #393, landed | none |
-| `peer_session` | write request, send pointer, relay validated reply | sent / delivered / answered / relayed / expired | #405, landed | `user_action` (mailbox unavailable); `user_decision` (expiry) |
-| `artifact` | resume once `path` in stage tree's landed set | landed | #399, landed | `user_action` until `path` lands |
-| `correction` | re-open `target_task`, park consumers `stale` | opened / closed | #404, landed | none |
-| `host_environment` | re-probe `check` | probed | #390, landed | `user_action` while failing |
+| kind | Orchestrator action | Audit legs | Fallback |
+|---|---|---|---|
+| `user_decision` | ask `question` with `options` at § Step 7a; resume with hook row's `ud-` id | asked / answered / resumed | none |
+| `user_action` | show `request` and `!` line at § Step 7a | requested / verified | none |
+| `permission` | park through § Step 6.5a4 | denied / granted / resumed | none |
+| `peer_session` | write request, send pointer, relay validated reply | sent / delivered / answered / relayed / expired | `user_action` (mailbox unavailable); `user_decision` (expiry) |
+| `artifact` | resume once `path` in stage tree's landed set | landed | `user_action` until `path` lands |
+| `correction` | re-open `target_task`, park consumers `stale` | opened / closed | none |
+| `host_environment` | re-probe `check` | probed | `user_action` while failing |
 
 ###### Step 6.5a3 — landing an arm
 
-Every kind above is landed, so no row routes to a fallback for want of its owner. A kind added later
-starts pending: it routes to its fallback until its owner lands, its own legs start at that landing,
-and landing it changes its row here and its landed flag in `scripts/blocked-on-lib.sh` in the same
-PR.
+Every kind is landed (owner issues: § blocked-on-lib.sh — the arm table). A kind added later starts
+pending and routes to its fallback until its owner lands; landing it changes its row here and its
+landed flag in `scripts/blocked-on-lib.sh` together.
 
 ##### Step 6.5a3 — route every typed blocked return
 
@@ -1493,7 +1475,7 @@ PR.
       // …continued: after the 6.5a2 block; ROUTER = scripts/blocked-on-dispatch.sh. No branch
       // picks an arm by hand: the router reads the table above from blocked-on-lib.sh.
       const typedNeed = !incomplete && incHandoff?.verdict === "blocked"
-        && Boolean(incHandoff?.blocked_on ?? incHandoff?.cross_session_ask);   // legacy alias
+        && Boolean(incHandoff?.blocked_on);
       const routed = !typedNeed ? null : spawnSync("bash", [ROUTER, "route", "--task-id", task.id,
         "--payload", JSON.stringify(incHandoff)], { encoding: "utf8" });
 ```
@@ -1563,7 +1545,7 @@ A miss on either check below parks the need as a `user_action` with `fallback_fr
 
 ###### Step 6.5a3 — the correction arm — invocation
 
-A `correction` names a defect in work another task owns. Route re-opens target **and** parks source. Orchestrator makes one `route` call; `route` makes one `state-patch.sh --task-reopen <target> --from <source>` call carrying every mutation, then parks source and writes `opened` leg (§ blocked-on-dispatch.sh — route, the correction arm — invocation).
+A `correction` names a defect in work another task owns. Route re-opens target and parks source. Orchestrator makes one `route` call; `route` makes one `state-patch.sh --task-reopen <target> --from <source>` call carrying every mutation, then parks source and writes `opened` leg (`references/scripts.md § blocked-on-dispatch.sh — route, the correction arm — invocation`).
 
 ###### Step 6.5a3 — the correction arm — guards and mutations
 
@@ -1587,9 +1569,8 @@ its first tool call and names the message it followed in `handoff.acted_on_msg_i
 (`skills/shared/stage-contracts.md § Orchestrator messages — ack first`). `ack-check.sh` joins the
 send rows, the `message_ack` rows and that field.
 
-**Never assume the latest amendment won.** The instruction a stage followed is the one its ack rows
-and `acted_on_msg_id` prove; message order proves nothing. Send rows without a `msg_id` predate the
-check and are exempt. Exit → action: `references/resume.md § Reattach rows — one resend, then
+The instruction a stage followed is the one its ack rows and `acted_on_msg_id` prove, not the latest
+amendment; message order proves nothing. Send rows without a `msg_id` are exempt. Exit → action: `references/resume.md § Reattach rows — one resend, then
 escalate`.
 
 ##### Step 6.5a4 — message ack check
@@ -1613,8 +1594,7 @@ escalate`.
 An auto-mode classifier denial is not a stage failure: the stage stopped where it should, and the
 session's permission posture said no. Read as an ordinary blocked or errored return it spends a
 retry or escalates a stage that never failed; left to the orchestrator it becomes an ad-hoc stop
-and a hand-landed command that no stage, review or audit row records. One observed run met three
-denials that way and logged none of them. This arm parks the task, § Step 7a asks the user once
+and a hand-landed command that no stage, review or audit row records. This arm parks the task, § Step 7a asks the user once
 per boundary, and only the denied step resumes.
 
 ##### Step 6.5a4 — detect and park (permission denial)
@@ -1860,7 +1840,8 @@ The boundary pass skips a `blocked` consumer, so `resume --leg landed` succeeds 
 ##### Step 6.5d — reporting a refused landing
 
 `queueLandingBlock` reports each blocked consumer's `metadata.landing_error` (`reason`, `path`,
-`producer`) to the user per § Escalation Chains → USER, after the other ready rows are dispatched.
+`producer`) to the user per § Escalation Chains → USER (§ USER under /megatask settles first),
+after the other ready rows are dispatched.
 Step 7 cannot surface it: it reads the returning producer's row, which stays `completed`.
 
 On any status other than 0 or 1 (exit 2 for usage, ledger, missing tool or failed ledger write; or a
@@ -1874,7 +1855,7 @@ that row untouched and exits 0 with one `warn` `contract_landed` row whose reaso
 
 ##### Step 6.5d — settle the consumers of a re-opened task
 
-At re-opened target's **own** completion boundary (after landing pass, before next ready-filter). The correcting stage resumed earlier when corrected artifact did not exist. Any stage, not just DV.
+At re-opened target's own completion boundary (after landing pass, before next ready-filter). The correcting stage resumed earlier when corrected artifact did not exist. Any stage, not just DV.
 
 ###### Step 6.5d — settle invocation
 
@@ -1927,8 +1908,8 @@ Corrected artifact exists only now; source resumes here not at route that parked
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
     //      The bump is a dispatch flag headlessly, advisory in-process: audit effort_transport
     //      ("none" in-process, since no in-process effort transport exists) either way.
-    //      In-process the row records effort_resolved "requested, not applied" until
-    //      upstream U7 lands. Never swap in a different agent to make it real.
+    //      In-process the row records effort_resolved "requested, not applied". Never swap
+    //      in a different agent to make it real.
 ```
 
 ##### Step 6.6b — render the remainder
@@ -1951,8 +1932,9 @@ Corrected artifact exists only now; source resumes here not at route that parked
     const ledger = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));
     const row = ledger.tasks[task.id];
     if (row.status === "blocked") {
-      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp. A
-      // typed or permission park never reaches here: 6.5a3 or 6.5a4 continued, § Step 7a asks.
+      // blocked | escalate needs outside input: surface per § Escalation Chains, no stamp
+      // (/megatask: § USER under /megatask). A typed or permission park never reaches here:
+      // 6.5a3 or 6.5a4 continued, § Step 7a asks.
     } else if (row.status === "pending" && row.metadata?.gate_from_stage) {
       loopBackToDV(ledger, task.id, row);  // fail | reject | no-go: the loop-back arm below
     } else if (row.status !== "completed") {
@@ -2210,7 +2192,7 @@ function ingestReply(askId, answer, kind, session) {   // kind: "peer" (message)
 // depends on go back first; Step 4.6 then injects the gate's findings into their prompt.
 function loopBackToDV(ledger, gateId, gateRow) {
   const h = parseFrontmatter(gateRow.artifact);
-  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR shape | QA shape
+  const blockers = h?.blockers ?? h?.blocking_defects ?? [];  // DR/ST shape | QA shape
   const deps = new Set(), stack = [...(gateRow.blocked_by ?? [])];
   while (stack.length) {
     const id = stack.pop();
@@ -2240,139 +2222,57 @@ function loopBackToDV(ledger, gateId, gateRow) {
 
 #### Key rules
 
-- NEVER skip a status patch (in_progress at claim, the verdict-mapped status at completion)
-- NEVER execute a stage before its `blocked_by` dependencies have settled
-- ALWAYS pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); omitting or mismatching is a violation — never rely on frontmatter inheritance
-- ALWAYS stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
+- Patch status at every transition (in_progress at claim, the verdict-mapped status at completion)
+- Execute a stage only after its `blocked_by` dependencies have settled
+- Pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); don't rely on frontmatter inheritance
+- Stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
 - `metadata.agent`: always fully-qualified `plugin:agent` (`corpflow:developer`, `apple-developer:ios-developer`)
 - A stage agent failing after 3 retries escalates per the error handling chain
 
 ##### Key rules — completion & tooling
 
-- NEVER mark a task `completed` without first delegating and receiving results — the most common violation. Launch-ack ≠ results: with background-default subagents the completion notification (or `subagent_stopped` audit row) is the "results received" signal; an errored return (rate-limit/API error, propagated with partial work) routes to the retry/escalate matrix, never to completion
-- Drive the loop with the `state.json` ledger (read directly, written only via `state-patch.sh`) and the Agent tool — Edit/Write/Bash on source files belong to stage agents
+- Mark a task `completed` only after delegating it and receiving its result (§ Completion signal); an errored return routes to the retry/escalate matrix, never to completion
+- Drive the loop with the `state.json` ledger (read directly, written only via `state-patch.sh`) and the Agent tool
 - Re-read the ledger at loop entry, after TL/DV stages (which may add tasks), and every 3rd iteration: at ≤500 tokens a re-read beats reasoning about staleness
 
 ###### Do not reintroduce the Task System
 
-- corpflow does NOT use `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList`. Those tools are absent on every model this plugin dispatches — see `skills/shared/state-ledger.md` for why.
+- corpflow does not use `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` (`skills/shared/state-ledger.md`).
 
 ### PL Issue Publish
 
-`scripts/publish-pl-issue.sh` runs between PL0 completion and stage-loop entry (§ After PL0 — steps 1–3, step 3).
-
-#### Outcome & audit vocabulary
-
-**Non-blocking by contract** (default): the orchestrator wraps the call in `; true`, and the helper itself returns `0` for every operational outcome (success, deferred, network error, sanitiser abort) — only catastrophic bugs (`jq` missing, `audit_dir_unwritable`, `state_corrupt`, `plan_unreadable`) raise `1`. Each outcome writes one `github_issue_created` row to `.context/logs/audit.jsonl` with `result ∈ {ok, deferred, failed, error}`, `metadata.reason` from the table below, and dedupe key `<worktask_id>:<run_index>:gh_issue`. On success `metadata.mode ∈ {create, comment}`: the FIRST run in a `.context/` creates the issue, a LATER run comments on it (cross-run dedup — `skills/gh-issue-dedup`; milestone mode skips both).
-
-#### Reason enum
-
-| `metadata.reason` | Notes |
-|---|---|
-| `gh_not_installed`, `auth_missing`, `no_remote` | environment preflight failures |
-| `network_error` | genuine transport-failure stderr only (`could not resolve host`, `connection refused`, `timeout`); label/auth/api failures map to their specific reason instead |
-| `sanitiser_aborted` | >50% strip-ratio abort (§ Strip-ratio abort) |
-| `already_published`, `comment_already_present` | cross-run dedup outcomes |
-| `opted_out` | `--no-gh-issue` |
-| `milestone_mode` | megatask per-issue skip |
-| `helper_not_found` | emitted by the orchestrator, not the helper, when the helper file is unreachable |
-| `label_create_failed`, `gh_api_error`, `gh_timeout`, `permission_denied`, `repo_not_found` | `gh`-side failures |
-
-##### Reason enum — advisory rows
-
-`title_fallback_worktask_id` is advisory, not an outcome (§ Title and Summary resolution): every prose title source was empty, so the published title is the kebab worktask id. It carries `metadata.title_source`, uses the `<dedupe_key>:title_source` suffix so it never masks the canonical outcome row, and never blocks.
-
-#### Strict mode
-
-`--strict`, or `metadata.gh_issue.strict: true` on state.json, flips operational failures from non-blocking `result: "deferred"` to blocking `result: "failed"` with `exit 1`. Use when an unpublished issue is unacceptable (compliance-tracked runs). Default behaviour is unchanged.
-
-#### Title and Summary resolution
-
-`facts.goal` is OPTIONAL — it exists only once the PM agent patches state.json, so an orchestrator-inline seed, a hand-authored `.context/`, or a regenerated state leaves it unset. Title and Summary therefore resolve independently, first non-empty wins:
-
-| | Chain |
-|---|---|
-| **Title** | `facts.goal` → plan frontmatter `title:` → plan first `# ` H1 → first sentence of `## summary`/`## problem` → `worktask_id` |
-| **Summary** | `facts.goal` → `## summary` → `## problem` |
-
-##### Title and Summary resolution — invariants
-
-`worktask_id` is deliberately absent from the Summary chain — an empty section is honest, a slug posing as prose is not. Reaching the `worktask_id` title rank emits the advisory `title_fallback_worktask_id` row, so the degradation is visible rather than silent; it never blocks. At every rank the title is reduced to its first line, sanitised, then capped at 100 characters on the last word boundary with `…` counted inside the budget, so a multi-line frontmatter value cannot break the title. `resolve_context_issue_search()` recovers a lost `.context` ↔ issue binding by exact-title search against the current title, and also probes the legacy fixed-100 title when it differs, so an issue published under the older scheme is still recovered rather than duplicated.
-
-#### External-ticket extraction
-
-The helper extracts a `^[A-Z][A-Z0-9]+-[0-9]+` prefix from `facts.goal`, then the winning title source, then the plan frontmatter's `issue:`, then upper-cased `worktask_id`. On match it (a) ensures the issue title starts with the prefix without double-prefixing, (b) appends a `ticket:<PREFIX>` label (auto-provisioned via the same `ensure_labels()` path as the canonical set), (c) persists the prefix to `state.json:metadata.external_ticket`, (d) includes `external_ticket` in the success audit row. A canonical or ticket label `ensure_labels()` cannot create is dropped from the `--label` argument and recorded in `metadata.labels_dropped` (array).
-
-#### Sanitiser pass 1 — line drops (L1–L9)
-
-Drops entire lines matching any of nine rules: `.context/` paths; absolute paths (`/Users/`, `/home/`, `/tmp/`, `/var/`, `/opt/`, `/etc/`, `/root/`); `~/`-prefixed paths; `conductor/workspaces/<id>` directories; the literal tokens `workspace_path`/`plan_file`/`run_index`/`artifact_path`; every numbered artifact filename (`planning-N.md`, `architecture-N.md`, `coordination-N.md`, `development-N.md`, `developer-review-N.md`, `testing-N.md`, `documentation-N.md`, `release-N.md`, `complete-summary-N.md`, `retrospective-N.md`, `incident-N.md`, `ethics-review-N.md`); `./` and `../` relative paths.
-
-#### Sanitiser pass 2 — filename tokens (A1–A5)
-
-Strips filename-shaped tokens (`MyClass.swift`) UNLESS an allow-list rule fires — A1: inside a fenced code block; A2: inside inline-code backticks; A3: follows a `symbol:` prefix; A4: on a narrative-bullet line labelled `class`/`type`/`protocol`/`struct`/`enum`/`function`/`fn`/`func`/`method`; A5: extension outside the deny-list `.md/.json/.jsonl/.swift/.ts/.py/.yml/.yaml/.sh/.bash/.go/.rs/.kt/.java/.rb/.cpp/.c/.h/.hpp/.m/.mm`.
-
-#### Strip-ratio abort
-
-If the sanitiser removes more than 50% of the body length, the helper refuses to publish, persists the (still partially-sanitised) body to `.context/logs/issue-body-<run_index>.aborted.tmp` for operator inspection, and audits `result: "deferred"`, `reason: "sanitiser_aborted"`, `metadata.strip_ratio: <int>`. Operators amend the plan's `## requirements`/`## acceptance-criteria`/`## scope`/`## complexity` anchors to reduce path-like noise.
-
-#### Skip paths: opt-out and megatask
-
-- **`--no-gh-issue`**: PL0 stamps `metadata.no_gh_issue: true` on its own task and propagates it. The helper exits `0` immediately with `result: "deferred"`, `reason: "opted_out"` — no `gh` API call. Stage-loop entry proceeds unchanged.
-- **Megatask per-issue**: exits `0` immediately with `result: "deferred"`, `reason: "milestone_mode"` — **no `gh issue create`, no `gh issue comment`, no API call of any kind**, because the parent milestone issue is the canonical record and auto-posted plan comments fragment the review surface; PR linkage ties the implementation back. Detection (highest priority first): `MILESTONE_MODE=1` env override (tests), non-empty `state.json:metadata.milestone`, `workspace.json` present at `$PWD` or `$WORKSPACE_ROOT`.
-
-#### Cross-run dedup (one `.context/` ↔ one issue)
-
-`state.json` is re-seeded on every fresh `/worktask` (its `metadata` is wiped), so the canonical issue reference lives in the run-independent `.context/gh-issue.json` anchor. Guard order: opt-out → **cross-run resolve** → milestone skip → `gh`/auth/remote. The helper resolves the anchor, or — anchor lost — an exact-title **single-hit** `gh issue list --state open --search` (`GH_ISSUE_SEARCH=0` disables; ambiguous multi-hit results are refused): created **this** run → `already_published`; created in an **earlier** run → one marker-deduped follow-up comment (`result: "ok"`, `metadata.mode: "comment"`, `metadata.resolved_via ∈ {anchor, search}`) instead of a duplicate; re-posting in the same run defers `comment_already_present`. Full protocol: `skills/gh-issue-dedup`.
-
-#### Hard guarantee
-
-**HARD GUARANTEE** — no local-file paths, no `.context/` references, no `planning-N.md` or any other artifact filename, no absolute or relative source paths, no Conductor workspace IDs, and no `workspace_path`/`plan_file`/`run_index`/`artifact_path` literals are EVER written to the published GitHub issue body, under any circumstances. Defence-in-depth: PL0 authoring hygiene is primary (`references/pl0-procedure.md § Anchor-content hygiene`), the two-pass sanitiser is the runtime safety net, the >50% strip-ratio abort is the final brake.
-
-#### Non-blocking guarantee
-
-Helper exit 1 (catastrophic), exit 0 with `result: "deferred"` (any reason), a `gh` hang past `GH_TIMEOUT` (default 30s), or a `state.json` write failure after a successful `gh` call — none cause the orchestrator to halt, retry the publish step, or branch. Its only post-helper action is to read one optional `published_url=<url>` line from stdout (terminal UX) and continue unconditionally to stage-loop entry.
+`scripts/publish-pl-issue.sh` runs between PL0 completion and stage-loop entry (§ After PL0 — steps 1–3, step 3). It never blocks the run: every operational outcome exits 0 and writes one `github_issue_created` audit row. The published body carries no local paths, `.context/` references or artifact filenames (PL0 authoring hygiene first, then a two-pass sanitiser and a >50% strip-ratio abort). Outcome vocabulary, reason enum, strict mode, title resolution, sanitiser rules, skip paths and cross-run dedup: `references/pl-issue-publish.md`.
 
 ### Platform tooling ownership
 
-The orchestrator holds **no platform build or test tooling**. DV, DR, and QA each delegate to the
+The orchestrator holds no platform build or test tooling. DV, DR, and QA each delegate to the
 detected platform's `/<plugin>:build-test`, and every dev plugin owns its own toolchain: build-system
 detection, MCP servers, cold-start handling, and the raw-CLI fallback when its MCP server is absent.
 Plugin resolution: `skills/shared/compatible-plugins.md § Registry`.
 
 #### No pre-warm, and what to expect
 
-The orchestrator used to warm XcodeBuildMCP so Apple DV/DR/QA children would inherit a live server
-(a lazy-spawn stdio server is inherited only if already running at delegation time —
-`agent-coordination § MCP Tool Inheritance`). That required Apple tool grants at the orchestrator,
-making one platform structurally privileged inside a platform-neutral pipeline; the grants are gone
-and the warm-up with them.
-
-Consequence: the first delegated build may pay a cold-start retry inside the plugin or take its CLI
-fallback path — both reported by the plugin, neither aborts the stage. A missing plugin falls back
-to the project's own build command with a `plugin_unavailable` audit row.
+The orchestrator does not warm platform MCP servers, since that would need platform tool grants at
+the orchestrator (`skills/agent-coordination/SKILL.md § MCP Tool Inheritance`). The first delegated
+build may pay a cold-start retry inside the plugin or take its CLI fallback path — both reported by
+the plugin, neither aborts the stage. A missing plugin falls back to the project's own build command
+with a `plugin_unavailable` audit row.
 
 ### DV Batch Checkpointing
 
-When one DV agent executes multiple non-separable batches in a single run (a multi-batch
-coordination plan with no separable file ownership — e.g. a 6-batch / 49-file refactor), it MUST
-append a one-line checkpoint to its row's artifact (`metadata.artifact`; or a scratch `.context/dv-checkpoint-N.log`)
-immediately after EACH completed batch and BEFORE starting the next: batch id, files-touched count,
-and the gate result if one ran (e.g. a residual-grep). Append-only, one entry per batch boundary.
-
-Why: a DV agent that dies or stalls *after* the edits are applied but before the completion protocol
-(API ConnectionRefused, stream-watchdog timeout) leaves F3 recovery (§ Step 6.5 Layer 3) able to
-resume verification from the last checkpointed boundary instead of re-deriving the whole diff. Pairs
-with loop step 4.7, which carries the recorded checkpoint forward on re-dispatch.
+A DV agent running several non-separable batches records each finished batch in
+`tasks.<ID>.progress` (`agents/developer.md § Budget-Aware Checkpointing`); loop step 4.7 reads it
+on re-dispatch so the run resumes from `next_batch`.
 
 ## Auto-Decision Delegation (decision_gate)
 
 Carried by `PL0.metadata.decision_gate` — `"user"` (default) or `"auto"` (`--auto=[decision]`, or
-per-issue by `/megatask`). Bypasses no gate. Drives **three** delegations:
+per-issue by `/megatask`). Bypasses no gate. Drives three delegations:
 
 | Items | Delegate | Procedure |
 |---|---|---|
 | PL0's, at the plan gate | PM on `model: "fable"` (loop step 5f's `"opus"` capability fallback applies) | `commands/worktask.md § Step A.4` |
-| any other stage's **blocking** `decision` items, at that stage's own boundary | that stage's own agent and model, at `effort_for_resolver(metadata.effort, metadata.model)` | `§ Step C.0a`, loop step 6.6a |
+| any other stage's blocking `decision` items, at that stage's own boundary | that stage's own agent and model, at `effort_for_resolver(metadata.effort, metadata.model)` | `§ Step C.0a`, loop step 6.6a |
 | the non-blocking batch, at the FN gate | same rule as C.0a, grouped by originating stage | `§ Step C.3` |
 
 PL keeps its own delegate because it is an exception stage (`stage-contracts.md § Exceptions — PL,
@@ -2380,9 +2280,8 @@ FN, ST, IR`) whose boundary *is* the plan gate. Precondition: § PRECONDITION CH
 
 ### decision_gate — what none of the three may touch
 
-Escalation-class items reach no delegate — `commands/worktask.md § Escalation guard (BINDING)`.
-Unchanged by the C.0a work, and what keeps `--auto=[decision]` from widening what a run may do
-unattended.
+Escalation-class items reach no delegate — `commands/worktask.md § Escalation guard (BINDING)` —
+which keeps `--auto=[decision]` from widening what a run may do unattended.
 
 ### Delegate duties
 
@@ -2395,7 +2294,7 @@ already `completed`; the plan amendments are its only writes.
 
 ### Orchestrator ledger merge
 
-On the delegate's return the ORCHESTRATOR atomic-merges the ledger: each answered
+On the delegate's return the orchestrator atomic-merges the ledger: each answered
 `facts.open_questions[]` item marked `status: "resolved"` with its `resolution` — never dropped —
 and decided items also appended to `state.json facts.decisions[]` marked `(auto-decided)`, which is
 what makes them visible to AR/TL/DV, which read those two fields on stage entry
@@ -2412,7 +2311,7 @@ reused with an FN subject: `auto_decision_dispatched` → `auto_decision_resolve
 ### Escalation class
 
 Escalation-class questions (irreversible/destructive, scope-expanding, security-posture-weakening,
-spend-authorizing) are NEVER auto-decided — they return as `escalate` items and force a user stop
+spend-authorizing) are never auto-decided — they return as `escalate` items and force a user stop
 even under `plan_gate: "bypass"`, resolved by an `approval_received subject:"PL<N>"` row. An
 unattended `/megatask` per-issue run has no user, so the issue PARKS instead: settled
 `execution.status: "failed"` + `execution.reason: "parked_escalation"` with an `escalation_parked`
@@ -2424,11 +2323,11 @@ meet it.
 
 ## FN Gate
 
-The **pre-finalization human checkpoint**, carried by `PL0.metadata.fn_gate` (default `"checkpoint"`). It sits **before the FN `Task()` delegation**, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`). With the PL gate (`commands/worktask.md § Step A.5`, § PRECONDITION CHECK Signal 2) it forms the pipeline's two human checkpoints; all file-writing work is worktree-isolated, so finalization is reviewable as a PR.
+The pre-finalization human checkpoint, carried by `PL0.metadata.fn_gate` (default `"checkpoint"`). It sits before the FN `Task()` delegation, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`). With the PL gate (`commands/worktask.md § Step A.5`, § PRECONDITION CHECK Signal 2) it forms the pipeline's two human checkpoints; all file-writing work is worktree-isolated, so finalization is reviewable as a PR.
 
 ### FN gate paths
 
-- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), renders the batched closing sweep — the items NOT marked `blocks_next_stage`, which were answered at their own boundary in loop step 6.6 — in calls of ≤4 questions (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), and then calls `AskUserQuestion` for approve/reject — the sweep precedes that call and never merges into it. Approve → `approval_received subject:"FN<N>"`, then delegate FN (commit/push/PR). Reject → `approval_rejected subject:"FN<N>"` and STOP (do NOT delegate FN), then resume per § FN gate rejection — resume path.
+- **`checkpoint`** (default): loop step 4.9 runs the Pre-gate Conductor-attachments writer (local-only), emits `fn_gate_waiting subject:"FN<N>"`, presents the pre-FN summary (branch, resolved base branch, commit type, changed-file count, DR/QA verdicts, PR target + `Closes #<issue>`), renders the batched closing sweep — the items NOT marked `blocks_next_stage`, which were answered at their own boundary in loop step 6.6 — in calls of ≤4 questions (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`), and then calls `AskUserQuestion` for approve/reject — the sweep precedes that call and never merges into it. Approve → `approval_received subject:"FN<N>"`, then delegate FN (commit/push/PR). Reject → `approval_rejected subject:"FN<N>"` and stop without delegating FN, then resume per § FN gate rejection — resume path.
 
 #### FN gate paths — bypass
 
@@ -2436,7 +2335,7 @@ The **pre-finalization human checkpoint**, carried by `PL0.metadata.fn_gate` (de
 
 ### FN gate rejection — resume path
 
-A rejection is a **fix round inside the run in flight**, symmetric with the plan gate's revision
+A rejection is a fix round inside the run in flight, symmetric with the plan gate's revision
 path (`commands/worktask.md § Plan-revision re-dispatch`) — not a new run, not a restart. Surface
 the feedback verbatim, then route each item to the stage that owns it:
 
@@ -2456,11 +2355,11 @@ the pre-FN summary and re-present the gate — approval is per presentation, nev
 
 ### At the FN stage
 
-**At the FN stage — Read `references/fn-gate.md`** for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the five audit lines.
+At the FN stage, read `references/fn-gate.md` for the full procedure: the Pre-gate Conductor-attachments writer (run on both paths so Conductor's *Create PR* / *Request Review* actions inherit worktask context) and the five audit lines.
 
 ## Post-capture issue update (Visual evidence)
 
-After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does, so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. **Non-blocking by contract**, same invocation discipline as the PL publish helper (`; true`; the helper exits 0 on every operational outcome):
+After the execution loop exits (all stage tasks completed — this runs whether or not the stage set includes FN, and after the FN push when it does, so the raw asset tier sees a reachable ref): post the DV screenshot captures to the GitHub issue as a marker-deduped comment. Non-blocking by contract, same invocation discipline as the PL publish helper (`; true`; the helper exits 0 on every operational outcome):
 
 ### Post-capture publish snippet
 
@@ -2496,7 +2395,7 @@ After the post-capture issue update above (and after FN has created/merged the P
 
 ### Completion snippet
 
-Run § Post-capture publish snippet and § Post-capture fallback audit (helper_not_found) verbatim with three substitutions — `--post completion` instead of `--post issue`, `action:"completion_summary_commented"` instead of `action:"visual_evidence_issue_commented"`, and the dedupe-key suffix `completion:all` instead of `visual_evidence:issue`. Same **non-blocking by contract** discipline (`; true`; the helper exits 0 on every operational outcome).
+Run § Post-capture publish snippet and § Post-capture fallback audit (helper_not_found) verbatim with three substitutions — `--post completion` instead of `--post issue`, `action:"completion_summary_commented"` instead of `action:"visual_evidence_issue_commented"`, and the dedupe-key suffix `completion:all` instead of `visual_evidence:issue`. Same non-blocking discipline (`; true`; the helper exits 0 on every operational outcome).
 
 ### Completion resolver & summary sourcing
 
@@ -2508,253 +2407,24 @@ Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:
 
 ## Post-Worktask Self-Improvement
 
-After the execution loop exits (all tasks completed, including ST): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
+After the execution loop exits (all tasks completed, including ST), except in a `/megatask` per-issue run, which ends at ST (`commands/worktask.md § Phase 3`): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
 
 ## Resume After Interruption
 
-The orchestrator loop is restartable. **WHEN reattaching** (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start): **Read `references/resume.md` FIRST** — it maps ledger shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Never re-delegate before consulting it. Compaction-specific flow: `context-compression.md § PostCompact Recovery`.
+The orchestrator loop is restartable. When reattaching (PostCompact, session crash, `--resume`, or stale `in_progress` tasks found at session start), read `references/resume.md` before re-delegating anything — it maps ledger shape + audit tail → exact action, including the live-agent `claude agents --json --all` pre-check that forbids blind re-delegation of a live, busy, or parked subagent. Compaction-specific flow: `skills/context-compression/SKILL.md § PostCompact Recovery`.
 
 ## Scripts
 
-Executable helpers (never read into context — invoke via `bash`):
+Invoke via `bash`; never read into context.
 
 | Script | One-line invocation | Purpose |
 |--------|---------------------|---------|
-| `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | **Canonical** state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
+| `scripts/state-patch.sh` | `--stage <CODE> --prev <PREV>` | Canonical state.json patch; `hooks/state-merge.sh` delegates here. Self-test: `--self-test`. |
 | `scripts/permission-park.sh` | `classify\|park\|batch\|resume` | Parks an auto-mode permission denial without spending a retry, batches the user question, builds the step-only resume (§ Step 6.5a4, § Step 7a). Self-test: `--self-test`. |
 | `scripts/land-artifacts.sh` | `--producer <ID>` / `--consumer <ID>` / `--list-landed --tree <path>` | Copies a DV producer's staged `produces` into each consumer's tree, fail closed (§ Step 6.5d, § Step 4.8). Self-test: `--self-test`. |
 
-### state-patch.sh — exit codes
-
-Exits **3** (Layer-1 self-patch signature) when unresolved AND `--prev` given AND `--via` absent,
-and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refused`); otherwise
-exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
-`references/handoff-protocol.md#layer-1-fallback`.
-
-### permission-park.sh — CLI
-
-```
-permission-park.sh classify [--payload <json|text>] [--tool <t>] [--command <c>]   # stdin when --payload absent
-permission-park.sh park     --task-id <ID> --detail <json> [--state <state.json>]
-permission-park.sh batch    [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
-permission-park.sh resume   --task-id <ID> --answer grant|manual [--state <state.json>]
-permission-park.sh --self-test
-```
-
-Exit `0` success (for classify, the payload is a permission denial); `1` classify found no denial
-or no recoverable tool, or park/resume had a ledger write refused or a task not parked; `2` usage
-error, missing or unparseable ledger, or broken install. On the text path `--tool`/`--command` are
-optional: classify recovers both from the last `Tool(...)` line at or before the classifier-denial
-line. It grants nothing, writes no Claude Code configuration, and emits no retry decision.
-
-### permission-park.sh — stdout
-
-| Subcommand | stdout (one JSON line) |
-|---|---|
-| `classify` | `{"tool","command","classifier_reason","allow_rule"}` |
-| `park` | `{"blocked_on":{"kind":"permission","detail":{…4 keys},"resume_with":"decision_ref"},"dedupe_key":"<16 hex>","truncated":true\|false,"audit_row_written":true\|false}` |
-| `batch` | `{"mode":"ask","needs":[{"task_id","tool","command","classifier_reason","allow_rule","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`; megatask per-issue run: `{"mode":"megatask_park","needs":[…],"payloads":[],"park":{"boundary","execution","escalated":[{"tool","command_head","truncated"}],"workspace_written","workspace_reason","audit_row_written"}}`, `"park":null` when nothing is parked |
-| `resume` | `{"resume_block":{"task_id","tool","command","answer","truncated","do_not_rerun":true,"decision_ref","instruction"},"cleared":true,"audit_row_written":true\|false}` |
-
-### permission-park.sh — the resume audit row
-
-`resume` appends one `permission_resumed` row per successful resume and none on a refusal:
-`actor: "orchestrator"`, `subject: <task_id>`, `result: "ok"`,
-`metadata.{tool, dedupe_key, command_head, truncated, answer, decision_ref}`. `decision_ref` is
-`permission_resumed:<task_id>:<dedupe_key>:<n>`, where `n` is 1 plus the earlier rows with that
-subject and key. It is the record `blocked_on.resume_with: decision_ref` points at, and it comes
-back as `resume_block.decision_ref` (§ Step 7a). The row never holds the command:
-`command_head` is the redacted head every committed row carries (at most 4 tokens, masked,
-path-scrubbed, at most 120 characters), `truncated` marks a head showing less than the whole
-command, and an unavailable scrub gives `[redacted]` with `redaction: "scrub_unavailable"`. `resume_block.truncated` is a different flag:
-the stored command was cut at 512 characters.
-
-### land-artifacts.sh — CLI
-
-```
-land-artifacts.sh --producer <ID> [--consumer <ID>] [--state <p>] [--orch-root <p>] [--dry-run]
-land-artifacts.sh --consumer <ID> [--state <p>] [--orch-root <p>] [--dry-run]
-land-artifacts.sh --list-landed --tree <path> [--strict] [--state <p>]
-land-artifacts.sh --check-path <path>
-land-artifacts.sh --self-test | -h | --help
-```
-
-Any call with `--producer` is the boundary pass (§ Step 6.5d); `--consumer` alone is the dispatch
-gate (§ Step 4.8 — land consumed artifacts). `--dry-run` checks every path and writes nothing.
-`--list-landed --tree <path>` prints the landed set scoped to that tree
-(`skills/shared/state-ledger.md § The landed set`) one path per line; empty output is exit 0, and
-no `--tree` is exit 2.
-
-#### land-artifacts.sh — the fail-closed modes
-
-`--strict` prints the same set, but exits 1 with empty stdout and one stderr line that never echoes
-the entry when any raw `landed_paths` entry scoped to that tree fails the path ladder or the
-alphabet. This script never writes such an entry, so one means a hand-edited ledger.
-`--check-path <path>` runs the path ladder alone, with no ledger: silent exit 0 when safe, exit 1
-printing `reason=<token>` when refused. The orchestrator's grant admits a call only when its first
-argument is `--producer`, `--consumer` or `--list-landed`, so every call leads with that argument.
-Scripts make the other calls: `fn-stream-merge.sh` and `blocked-on-dispatch.sh` pass `--strict`, and
-only the router calls `--check-path`.
-
-### land-artifacts.sh — exits
-
-Exits are 0, 1 or 2 only: an interrupting signal (INT, TERM, HUP) or an unexpected command failure
-rolls back what the run wrote and exits 2, so 1 is never a stray status. Exit `0`: landed, same
-tree, already present, a gate no-op, nothing selected, or a consumer a boundary pass skips — a
-`blocked` one silently, any other non-`pending` one with one `warn` `contract_landed` row
-(`consumer_not_pending`). `1`: a consumer failed, and is now `blocked` with
-`metadata.landing_error {reason, path, producer}` and one fail `contract_landed` row; the gate
-refuses a consumer that is no longer `pending` this way (`consumer_already_dispatched`). Exit 1 is
-also a refused `--check-path` or an unsafe entry under `--strict`; neither writes. `2`: usage, a
-malformed id, a bad ledger, an invalid tree, a missing tool, a failed ledger write, or that signal
-or failure. Refusal reasons and the audit rows:
-`references/handoff-protocol.md § Landing consumed artifacts`.
-
-### blocked-on-dispatch.sh and blocked-on-lib.sh
-
-| Script | One-line invocation | Purpose |
-|--------|---------------------|---------|
-| `scripts/blocked-on-dispatch.sh` | `route\|batch\|resume` | Routes a typed `blocked_on` return to its arm or its `user_action` fallback, batches those needs and builds the resume (§ Step 6.5a3, § Step 7a). Self-test: `--self-test`. |
-| `scripts/blocked-on-lib.sh` | sourced, never run | The one definition of the `blocked_on` enums, the arm table, the alias normalize step and `validate`. `handoff-harness.sh` and the router both source it. |
-
-### blocked-on-dispatch.sh — CLI
-
-```
-blocked-on-dispatch.sh route  --task-id <ID> --payload <handoff json> [--state <state.json>]
-blocked-on-dispatch.sh batch  [--tasks <ID,ID...>] [--boundary <ID>] [--workspace-json <path>] [--state <state.json>]
-blocked-on-dispatch.sh resume --task-id <ID> --leg <leg> [--decision-ref <ud-id>] [--state <state.json>]
-blocked-on-dispatch.sh --self-test
-```
-
-Exit `0` success. `1`: for `route`, an invalid need, with one `fail:` line on stderr naming the
-unknown kind or `resume_with`, the missing `detail` or key, or the wrong pairing, and nothing
-written; for `resume`, a task not parked on a non-permission `blocked_on`, a `--leg` that is not
-its arm's closing leg, a `user_decision` with no verified ledger row to resume with, or `--leg landed`
-on an artifact `path` that the path ladder refuses or that has not landed. `2`: usage error, missing
-or unparseable ledger, broken install, or a ledger write refused. Requires jq; bash 3.2+.
-
-### blocked-on-dispatch.sh — route
-
-Normalizes and validates `--payload` through the lib, then acts on the arm the lib's table names:
-
-- `permission`: writes nothing; § Step 6.5a4 parks it.
-- `user_action`, or a kind whose owner has not landed — none today: `state-patch.sh --task-meta`
-  with the stage's original `blocked_on` (under `--log /dev/null`), then `--task-status blocked`,
-  then one `requested` row.
-- `user_decision`: the same park, then one `asked` row with no fallback fields. It is queued for
-  the next boundary's question, as `requested` is.
-- `host_environment`: `autonomy-preflight.sh --auto plan --platform <metadata.preflight.platforms>`
-  in check mode, `--harness` added when `check` is `git-reset-hard`, then one `probed` row. Only a
-  `checks[]` entry with that `id` reading `pass` clears it: `--claim`, `blocked_on` set to `null`,
-  and `decision_ref` on the row. A fail, a skip or an absent id parks it as a `user_action`.
-
-#### blocked-on-dispatch.sh — route, the artifact arm
-
-- `artifact`: parks first. When `detail.producer_task` is a task id, `detail.path` passes
-  `land-artifacts.sh --check-path`, and the landed set of the task's `metadata.workspace_path` tree
-  (`--list-landed --tree <workspace_path> --strict`) holds `detail.path` exactly, it claims, clears
-  `blocked_on`, writes one ok `landed` row with `decision_ref` `blocked_on:<ID>:artifact:<n>`, and
-  prints `resume_block` with `artifact_path` set to `detail.path`. No `workspace_path`, a failed
-  read, a refused path or a non-member leaves it parked as a `user_action`: a `requested` row with `fallback_from: artifact`
-  and no `owner_issue`. `BLOCKED_ON_LAND` swaps the landing script, a test seam.
-
-#### blocked-on-dispatch.sh — route, the correction arm — invocation
-
-`correction` guards first: `detail.target_task` exists, not source, is `completed`; miss exits 1 with `fail:` line and unchanged ledger (§ Step 6.5a3 re-dispatches). Then `state-patch.sh --task-reopen <target> --from <source> --finding-file -` with rework text on stdin, source park, one `opened` row (`result: blocked`). Re-opening before parking deliberate: op can refuse under its lock; park ahead would leave source blocked with no row. Op input-bounds refusal (empty finding, byte cap, control byte) exits 1 with `fail:`, not escalation.
-
-#### blocked-on-dispatch.sh — route, the correction arm — re-route idempotency
-
-Re-route of same still-open need detected by `opened` leg, not status guard (now reads `pending` after first route). Router re-parks source, writes no second `opened`, calls no op, so `fix_round` moves once per correction. Rework text on stdin: finding byte-for-byte, `evidence_ref:`, `source_task:` lines; lands as `gate_blockers[0]` (`references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`).
-
-#### blocked-on-dispatch.sh — route stdout
-
-One JSON line: `{"task_id","kind","arm","leg","source","parked","audit_row_written"}`, plus
-`fallback_from` and `owner_issue` on a fallback, and `decision_ref` and `resume_block` on a passing
-re-probe or an artifact already landed. `leg` is `null` for `permission`. `source` names the key the need came from:
-`blocked_on`, or `cross_session_ask` for the legacy alias.
-
-### blocked-on-dispatch.sh — batch
-
-Selects every `blocked` task whose `metadata.blocked_on.kind` is not `permission`. Interactive:
-`{"mode":"ask","needs":[{"task_id","kind","arm":"user_action","resume_leg","request","command",
-"verify","truncated","cwd"}…],"payloads":[{"questions":[…≤4]}]}`, a fallback need adding
-`fallback_from` and `owner_issue`. A fallback's `request` is its kind's lead line and its `command`
-is `""`. Each question has the task id as `header`, the lead line, then every `detail` key as
-`key: value` data and `cwd:` from the ledger's `workspace_path`, inside a fence one backtick longer
-than its longest run. Options: "done" and "stop here".
-
-#### blocked-on-dispatch.sh — batch, a user decision
-
-`user_decision` needs sharing one `(question, options, item)` become one question:
-
-- `header` is the lowest task id, and `multiSelect` is false.
-- `question` is `detail.question` verbatim and unfenced, because the hook matches its exact bytes.
-- Each option is `{label: <option>, description: "Recommended" | "Offered by <header>"}`.
-- Two questions with the same text never share a call, since the answers are keyed by that text.
-
-Each need is `{task_id, kind, arm: "user_decision", resume_leg: "resumed", header}`. The megatask
-park adds `{kind: "user_decision"}` to `escalated[]`.
-
-#### blocked-on-dispatch.sh — batch, the `!` line and the megatask park
-
-A `! <command>` line, in its own fence, appears only on a native `user_action` whose `command` is
-non-empty and not cut at 512 characters. Under a megatask per-issue run it asks nothing and prints
-`permission-park.sh batch`'s `megatask_park` shape: the same `workspace.json` write and symlink
-refusal, and one `escalation_parked` row with `metadata.kind: "user_action"` whose `escalated[]`
-entries are `{kind, command_head, truncated}`.
-
-### blocked-on-dispatch.sh — resume — general flow
-
-`--claim`, `blocked_on` → `null`, one closing-leg row with `decision_ref` (`references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`). Prints `{"resume_block":{"task_id","kind","arm","leg","decision_ref","resume_with","do_not_rerun":true,"instruction"},"cleared":true,"audit_row_written"}`, with `artifact_path` in `resume_block` when the kind resumes with one. `instruction` restates need (detail fenced) and forbids re-running completed steps.
-
-#### blocked-on-dispatch.sh — resume — artifact leg
-
-`--leg landed` resumes `artifact` need: re-checks `path` safety and landed-set membership, exits 1 if not landed, otherwise claims, clears, writes ok `landed` row with `decision_ref`, prints same stdout. `--leg verified` (user's "done") still resumes through fallback.
-
-#### blocked-on-dispatch.sh — resume — correction leg
-
-`--leg closed` resumes `correction` need: claim, clear, ok `closed` row with `decision_ref`, `artifact_path` = target's `artifact` or `metadata.artifact` (recorded-else-planned). Checks target status **not at all** — orchestrator calls at target's completion boundary (§ Step 6.5d). `--leg verified` (user's "done") resumes through fallback with same path. Settling `stale` dependents not part of either resume; keys on target, not parked need; runs own op at boundary.
-
-#### blocked-on-dispatch.sh — resume, a user decision
-
-`resume` first finds the ledger row: `--decision-ref <ud-id>` names it, and without the flag it is
-the newest valid row covering the task that no earlier `blocked_on` row for the task carries. A
-refused or missing row exits 1 with nothing written. Otherwise the `resumed` row and
-`resume_block.decision_ref` carry that `ud-` id. `instruction` names the verify command,
-`state-patch.sh --verify-decision`, and carries no answer text
-(`hooks/references/user-decision-ledger.md`).
-
-#### blocked-on-dispatch.sh — the lead lines
-
-Fixed strings, with `<ID>` the only substitution:
-
-- `user_decision`: "<ID> needs your decision. Answer with one of the options below, or your own."
-- `user_action`: "<ID> needs you to do the request below, then answer done."
-- `peer_session`: "<ID> needs an answer from the session below. Ask it, then answer with its reply."
-- `artifact`: "<ID> waits on the file below from another task. Answer done once it exists."
-- `correction`: "<ID> found the defect below in another task's work. Answer done once it is fixed."
-- `host_environment`: "<ID> is blocked by the host check below, which still fails. Answer done
-  once it passes."
-
-#### blocked-on-dispatch.sh — the blocked_on row
-
-`actor: "orchestrator"`, `action: "blocked_on"`, `subject` and `task_id` both the task id. `result`
-is `blocked` on a leg that leaves the task parked and `ok` on the closing leg. `metadata` is
-`{kind, arm, leg}` plus `fallback_from` and `owner_issue` on a fallback, `command_head` and
-`truncated` on a need with a command, and `decision_ref` on the closing leg. The redaction rule and
-the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on rows`.
-
-### blocked-on-lib.sh — the sourced interface
-
-- `BLOCKED_ON_KINDS`, `BLOCKED_ON_RESUME_WITH`: both enums, in registry order.
-- `blocked_on_arm <kind>`: prints the kind's row as `required|optional|resume_with|legs|closing_leg|owner_issue|landed`,
-  comma-separated within a field. Exit 1 on an unknown kind.
-- `blocked_on_normalize <handoff json>`: prints `{"blocked_on":{…},"source":…}`. `blocked_on` wins;
-  otherwise the legacy alias `cross_session_ask` becomes `peer_session`. Exit 1 when neither is present.
-- `blocked_on_validate <blocked_on json>`: kind and `resume_with` in their enums and `detail` a
-  non-empty object; exit 1 with one `fail:` line. The harness stops here.
-- `blocked_on_validate_arm <blocked_on json>`: adds the arm's required keys and its `resume_with`,
-  and on `user_decision` the question, option, `recommended` and `item` bounds.
+CLI, stdout and exit contracts for these, the `blocked_on` router and lib, and the mailbox helpers:
+`references/scripts.md`.
 
 #### blocked-on-lib.sh — the arm table
 
@@ -2771,65 +2441,14 @@ the head ladder: `skills/agent-coordination/SKILL.md § Writers — blocked_on r
 Every fallback closes on `verified`; an `artifact` need also closes on `landed`. Required and optional keys and `resume_with` are
 `references/handoff-protocol.md § Schema — blocked_on, the seven arms at a glance`.
 
-### mailbox.sh, mailbox-reply.sh and mailbox-lib.sh
-
-| Script | One-line invocation | Purpose |
-|--------|---------------------|---------|
-| `scripts/mailbox.sh` | `show\|leg\|comment\|ingest-comments\|scan\|sweep\|wait` | The orchestrator side of the durable ask: the message transport's legs, the comment transport, reply ingestion, and the run's own scan and deadline sweep (§ Step 6.5a3, § Step 7a). |
-| `scripts/mailbox-reply.sh` | `--ask-id … --answer-file …` | The only writer of `mailbox/replies/<ask_id>.json`. Self-test: `--self-test`. |
-| `scripts/mailbox-lib.sh` | sourced, never run | The ask_id grammar, the mailbox root and its mode checks, the no-clobber write, the sha256 input, reply verification and the leg metadata. The router and both CLIs source it. |
-
-#### mailbox.sh — CLI
-
-```
-mailbox.sh show    --ask-id <id>
-mailbox.sh leg     --task-id <ID> --ask-id <id> --leg sent|delivered --transport message
-                   [--result ok|queued|refused|dropped|oversized|burst_limited]
-mailbox.sh comment --task-id <ID> [--render-only]
-mailbox.sh ingest-comments | scan | sweep | wait [--max-seconds N]      # all take [--state <state.json>]
-```
-
-Exit `0` ok; `1` refused — not an open ask, an invalid leg, or a bad `ask_id`; `2` usage error,
-missing or unparseable ledger, or a broken install. Requires jq; bash 3.2+.
-
-#### mailbox.sh — stdout
-
-| Subcommand | stdout (one JSON line) |
-|---|---|
-| `show` | the request JSON verbatim, for a same-repo peer reading `mailbox ask <ask_id>` |
-| `leg` | `{"written"}` — `false` when that `(task, ask_id, leg)` was already recorded |
-| `comment` | `{"posted","result"}`, result `posted\|post_failed\|opted_out\|unavailable\|scrub_failed`; `{"body"}` under `--render-only`, which posts nothing and writes no leg |
-| `ingest-comments` | `{"ingested","ignored"}` |
-| `scan` | `{"replied":[{task_id,ask_id}],"open":[{task_id,ask_id,deadline}]}` |
-| `sweep` | `{"expired":[{task_id,ask_id,routed}]}` |
-| `wait` | `{"reason":"reply\|deadline\|timeout\|none"}` |
-
-#### mailbox.sh — what scan, sweep and wait cover
-
-`scan`, `sweep` and `wait` iterate **this run's ledger**, never the mailbox directory: the box is
-shared across worktrees, and no run relays or expires another run's ask. `wait` polls every
-`MAILBOX_POLL_SECONDS` (15), runs `ingest-comments` at most once a minute while a posted ask is
-open, and stops at the first verified reply, at `min(deadline)+5`, or at `--max-seconds` (3600).
-
-#### mailbox-reply.sh — CLI
-
-```
-mailbox-reply.sh --ask-id <id> --answer-file <path|-> --kind peer|user --session <s> [--mailbox-dir <dir>]
-mailbox-reply.sh --self-test
-```
-
-Prints `{"ask_id","reply_ref","sha256"}`. Exit `0` written; `1` refused, with one
-`fail: <reason>: <detail>` line on stderr and nothing written, reason one of `invalid_ask_id`,
-`bad_session`, `too_long`, `unknown_ask`, `bad_request`, `late`, `schema_invalid`, `duplicate`;
-`2` usage error, mailbox unavailable, or no sha256 tool. The answer arrives only through
-`--answer-file` (`-` for stdin), so untrusted text never reaches an argv (§ Step 7a — ingestReply).
-
 ## Related
 
 - `references/fn-gate.md` - FN gate full procedure + post-worktask self-improvement (Read at gate time)
 - `references/resume.md` - Resume-after-interruption state table + procedure (Read on reattach)
 - `references/workspace-modes.md` - Megatask per-issue/worktree/Conductor workspace rules (Read in workspace modes)
+- `references/scripts.md` - Helper CLI, stdout and exit contracts
+- `references/pl-issue-publish.md` - PL issue publish semantics and sanitiser rules
 - `../megatask/SKILL.md` - GitHub milestone batch execution
-- `agent-coordination.md` - Multi-agent coordination
-- `cost-optimization.md` - Budget management
-- `context-compression.md` - Context compression
+- `../agent-coordination/SKILL.md` - Multi-agent coordination
+- `../cost-optimization/SKILL.md` - Budget management
+- `../context-compression/SKILL.md` - Context compression
