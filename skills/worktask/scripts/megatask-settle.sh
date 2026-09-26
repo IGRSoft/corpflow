@@ -110,6 +110,12 @@ refuse() {
 [ -f "$WS" ] || refuse not_regular_file
 body=$(cat -- "$WS" 2> /dev/null) || refuse unreadable
 [ ! -L "$WS" ] || refuse symlink
+# jq exits 0 on empty input and runs per document on a stream, and null takes the update as
+# an object; any of these would report settled over a file the monitor still cannot read.
+one_object() { # <json text>
+  printf '%s' "$1" | jq -e -s 'length == 1 and (.[0] | type == "object")' > /dev/null 2>&1
+}
+one_object "$body" || refuse malformed
 current=$(printf '%s' "$body" | jq -r '.execution.status // "in_progress"' 2> /dev/null) || refuse malformed
 case "$current" in
   completed | failed)
@@ -120,6 +126,7 @@ esac
 body=$(printf '%s' "$body" \
   | jq '.execution = ((.execution // {}) + {status: "failed", reason: "escalated_to_user"})' 2> /dev/null) \
   || refuse malformed
+one_object "$body" || refuse malformed
 tmp=$(mktemp "$(dirname -- "$WS")/.workspace.json.XXXXXX" 2> /dev/null) || refuse write_failed
 if ! { printf '%s\n' "$body" > "$tmp" && [ ! -L "$WS" ] && mv -f -- "$tmp" "$WS"; }; then
   rm -f -- "$tmp"

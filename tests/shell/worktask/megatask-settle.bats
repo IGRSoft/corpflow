@@ -8,6 +8,8 @@
 #     root and CLAUDE_PROJECT_DIR names megatask's own ledger, which it never touches;
 #   - outside /megatask, or over an already settled status, it writes nothing;
 #   - a symlinked or missing workspace.json is refused (exit 1), never written through;
+#   - one that is not exactly one JSON object (empty, blank, array, null, a stream) is refused
+#     as malformed and left as it was;
 #   - hooks/megatask-monitor.sh then frees the track and keeps the dependent blocked;
 #   - the SKILL.md sites that end at USER point at the rule, and /worktask holds the grant.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
@@ -123,6 +125,21 @@ settle() {
   settle --subject DV0 --detail "x"
   assert_failure 1
   assert_line "reason=missing"
+}
+
+@test "a workspace.json that is not exactly one JSON object is refused as malformed, untouched" {
+  local body
+  for body in '' $' \n\t\n' '[]' '"x"' 'null' '{"a":1}{"b":2}'; do
+    printf '%s' "$body" > "$WT/workspace.json"
+    cp "$WT/workspace.json" "$WT/ws.before"
+    settle --subject DV0 --detail "x"
+    assert_failure 1
+    assert_line "result=refused"
+    assert_line "reason=malformed"
+    refute_line "result=settled"
+    cmp -s "$WT/workspace.json" "$WT/ws.before" || fail "malformed workspace.json rewritten: $body"
+  done
+  [ ! -e "$WT/.context/logs/audit.jsonl" ]
 }
 
 @test "usage: a bad subject or an empty detail exits 2 and writes nothing" {
