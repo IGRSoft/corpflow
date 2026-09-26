@@ -41,12 +41,12 @@ _DISPATCH_ROW = re.compile(
     re.MULTILINE,
 )
 
-_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5", "claude-sonnet-5"}
+_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5"}
 _EFFORT_TERMS = {"low", "medium", "high", "xhigh", "max"}
 
 
 def _family(model_id: str) -> str:
-    # "claude-opus-5" -> "opus"
+    # "claude-opus-5-5" -> "opus"
     return model_id.split("-")[1]
 
 

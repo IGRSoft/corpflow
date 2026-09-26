@@ -69,16 +69,6 @@ responding"). It does not reach a completion criterion that names an artifact �
 manifest exists on disk", "`git status` is clean" (`agents/prompt-engineer.md § Completion
 criteria`). Keep the artifact gates; drop the re-reads.
 
-### xhigh with thinking disabled
-
-Opus 5.5 does not accept thinking disabled, so this bites only a session still on Opus 5. There,
-thinking off can put a tool call in visible text instead of a `tool_use` block — it never runs
-and stays in history — and leak internal XML tags
-([`#running-with-thinking-disabled`](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5#running-with-thinking-disabled)).
-The pinned-`xhigh` agents (`ethics-reviewer`, `prompt-engineer`, `security-reviewer`) are the
-exposure. Keep thinking on and lower the tier instead. Add no rule telling the model not to
-think: it increases tag leakage.
-
 ## sonnet — Claude Sonnet 5
 
 | Behaviour to counter | Source |

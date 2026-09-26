@@ -256,7 +256,7 @@ _ledger() {
 @test "model_family: ANTI-VACUITY — alias and resolved id collapse to one family" {
   run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "opus"
   assert_output "opus"
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-opus-5-20260615"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-opus-5-5"
   assert_output "opus"
   run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "OPUS"
   assert_output "opus"

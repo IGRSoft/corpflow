@@ -161,7 +161,7 @@ file cites, not the auditor's judgement.
 
 Run against the asset body (kept out of a table so the `|` alternations copy verbatim):
 
-- `opus` — over-verification; Opus 5 already does this, and the instruction compounds it:
+- `opus` — over-verification; Opus 5.5 already does this, and the instruction compounds it:
 
   ```
   grep -niE 'double.?check|re-?verify|verify (your|the) (answer|work|reasoning)|final verification step' <asset>

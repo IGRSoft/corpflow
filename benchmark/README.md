@@ -372,7 +372,7 @@ pins read straight from `STAGE_TABLE`:
 
 ```json
 "era": {"harness": "python-1", "prompt_contract": "scripted-cli-v2",
-        "model_pins": {"PL": "claude-opus-5", "DC": "claude-haiku-4-5", …}}
+        "model_pins": {"PL": "claude-opus-5-5", "DC": "claude-haiku-4-5", …}}
 ```
 
 `bench-analyze` compares the analyzed record's era against the previous live
@@ -405,6 +405,13 @@ change invalidates comparisons just as surely as a model repin.
   into `specified`** — the five cases added alongside them were filed `implied`
   and stayed there until 2026-09-10, which is how the discriminating tier came to
   read 11 cases while only 5 discriminated.
+- **Opus 5.5 pins** — the five Opus stages in `STAGE_TABLE` (PL, AR, DV, DR, SR)
+  repinned from `claude-opus-5` to `claude-opus-5-5`, the model the `opus` alias
+  resolves to. Runs from this change on are **not comparable** to any earlier
+  record. The new pins travel in every record's `era.model_pins`, so the pairing
+  gate refuses mixed pairs and `bench-analyze` caveats the first new run against
+  the last `claude-opus-5` one on its own; no entry in `results/history.json` is
+  edited. The Sonnet and Haiku stages are unchanged.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.

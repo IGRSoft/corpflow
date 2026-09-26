@@ -183,7 +183,7 @@ cheapest part of what it costs.
 
 No-op pruning has a second rung. An instruction can be worse than inert: it can collide with
 behaviour the asset's model already has and amplify it. "Double-check your answer" on an `opus`
-asset is the canonical case — Opus 5 verifies its own work unprompted, and the instruction compounds
+asset is the canonical case — Opus 5.5 verifies its own work unprompted, and the instruction compounds
 into over-verification.
 
 The test extends no-op pruning's: strike the sentence and ask whether the model would behave

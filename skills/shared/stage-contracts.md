@@ -571,7 +571,7 @@ Under `none` the `auto_decision_resolved` row records `effort_resolved: "request
 
 `xhigh` runs on Opus 4.7 and later, Sonnet 5 and Fable 5.x; any other model runs it at the highest level it supports at or below, with no error (`model-selection.md § xhigh routing`). A bump above `high` on a model other than the `opus`, `sonnet` and `fable` aliases is clamped to `high` and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp (the only `haiku` stage sits at `low`), which is why it is enforced in code: nothing in a run would show it if it started happening.
 
-A second silent path cannot be clamped and is read from the audit row instead: a session still on Opus 5 with thinking turned off runs `xhigh`/`max` as `high`; Opus 5.5 and Fable cannot turn thinking off (`model-selection.md § Thinking off above high`). Resolvers therefore audit both `effort_requested` and `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
+A second silent path cannot be clamped and is read from the audit row instead: a managed or user `maxEffortLevel` below the requested tier runs the session at the cap with no error (`model-selection.md § Effort frontmatter and caps`). Resolvers therefore audit both `effort_requested` and `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
 
 ## Per-Stage Frontmatter Templates
 

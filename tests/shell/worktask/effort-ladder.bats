@@ -122,7 +122,7 @@ ladder() { # <shell body>
 
 @test "an unrecognized model alias clamps rather than assuming opus" {
   # The safe direction: a full model id or a typo must not buy an uncarryable tier.
-  run ladder 'printf "%s %s" "$(effort_for_resolver high claude-opus-5)" \
+  run ladder 'printf "%s %s" "$(effort_for_resolver high claude-opus-5-5)" \
     "$(effort_for_resolver high claude-sonnet-4-6)"'
   assert_success
   assert_output "high high"

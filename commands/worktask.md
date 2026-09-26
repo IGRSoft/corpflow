@@ -1276,9 +1276,9 @@ as at Step A.4.
 ###### Step C.0a — reading the two effort fields
 
 The comparison applies only under `effort_transport: "dispatch-flag"`. There,
-`effort_requested` != `effort_resolved` means the tier evaporated in transit — a session still on
-Opus 5 with thinking turned off runs `xhigh`/`max` as `high` (`model-selection.md § Thinking off
-above high`; Opus 5.5 and Fable cannot turn thinking off). Recorded, not enforced: the answer
+`effort_requested` != `effort_resolved` means the tier evaporated in transit — a managed or user
+`maxEffortLevel` below the requested tier runs the session at the cap with no error
+(`model-selection.md § Effort frontmatter and caps`). Recorded, not enforced: the answer
 stands, it just was not reached at the tier asked for. Under
 `none` the request never left the orchestrator, so `effort_resolved` reads
 `"requested, not applied"` and the pair says nothing about the session.

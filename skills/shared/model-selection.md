@@ -81,14 +81,8 @@ resolver bump on it, or on a pinned id, at `high`. `fable` carries the credit ga
 
 Opus 5.5 and the Fable models cannot have thinking turned off: `alwaysThinkingEnabled: false`,
 `MAX_THINKING_TOKENS=0` and the session toggle have no effect there, so `opus` and `fable` run
-`xhigh`/`max` as asked. Opus 5 rejects `xhigh`/`max` with thinking off (a 400 at the API), so on
-the Anthropic API Claude Code sends `high` instead. A session still on Opus 5 (a pinned id, or a
-provider whose newest Opus is Opus 5, § Provider Defaults) then runs a stage pinned to `xhigh`
-(`agents/ethics-reviewer.md`, `agents/prompt-engineer.md`, `agents/security-reviewer.md`) one
-tier down with no error; the step-6 audit row is the only place it shows. A model Claude Code
-does not know rejects the pair fails the request with `Effort 'xhigh' isn't available with
-thinking turned off`. Output artifacts of thinking off on Opus 5:
-`skills/shared/model-prompting.md § xhigh with thinking disabled`.
+`xhigh`/`max` as asked. When a model Claude Code does not know rejects `xhigh` with thinking
+off, the request fails with `Effort 'xhigh' isn't available with thinking turned off`.
 
 ### Output headroom at xhigh and max
 
@@ -162,7 +156,7 @@ session model.
 
 ## Context-Window Accounting
 
-`/context` percentages are computed against the full 1M window on models that have one (Opus 5.x,
+`/context` percentages are computed against the full 1M window on models that have one (Opus 5.5,
 Sonnet 5, Fable 5.x). How the extended window changes stage handoff budgets, plus the fable
 without-credits caveat: `skills/context-compression/SKILL.md`.
 

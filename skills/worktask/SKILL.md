@@ -1173,7 +1173,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 ```typescript
     // 5f. Model resolution — consult facts.capabilities BEFORE a fable-tier dispatch. Fable 5
     //     dispatch fails hard without 1M credits (model-selection.md); a prior hard-fail is
-    //     cached there, so skip re-hitting it and fall back to "opus" (Opus 5: 1M, ungated),
+    //     cached there, so skip re-hitting it and fall back to "opus" (Opus 5.5: 1M, ungated),
     //     recording model_requested/model_resolved on the dispatch entry below.
     const modelRequested = model;
     let effectiveModel = model;

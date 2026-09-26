@@ -77,7 +77,7 @@ Neither `claude agents run` nor a top-level `--cwd` exists on the CLI as last pr
 
 ### Alias note
 
-Benchmark-parity pins: `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. They sit deliberately behind the aliases (`opus` resolves to Opus 5.5, `skills/shared/model-selection.md § Aliases`) because they match `STAGE_TABLE` in `benchmark/harness/benchmarklive/stage_table.py`, whose per-stage pins stamp every record's comparability era. Moving them opens a new era that is not comparable to the stored baselines (`benchmark/README.md § Comparability eras`), so they move only with a benchmark re-baseline, never as a docs refresh. Everywhere else, including a production headless dispatch, pass the alias.
+Benchmark-parity pins: `opus` → `claude-opus-5-5`, `sonnet` → `claude-sonnet-5`, the models the aliases resolve to today (`skills/shared/model-selection.md § Aliases`). They are ids rather than aliases because they match `STAGE_TABLE` in `benchmark/harness/benchmarklive/stage_table.py`, whose per-stage pins stamp every record's comparability era: an alias that moved under a run would change the model without changing the stamp. Moving them opens a new era that is not comparable to the stored baselines (`benchmark/README.md § Comparability eras`), so they move only with a benchmark re-baseline, never as a docs refresh. Everywhere else, including a production headless dispatch, pass the alias.
 
 ### Runner-side reliability
 

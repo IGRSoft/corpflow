@@ -112,7 +112,7 @@ What each handoff carries into the stage it feeds:
 Use the extended inbound figure only on a live 1M window and a genuinely complex run; standard budgets stay preferred for cost.
 
 - **Credit gate**: a 1M session on an account without 1M usage credits auto-compacts back under the standard limit, so plan against the standard column unless credits are confirmed. **Fable 5.x** (Fable 5.1 is the default Fable model) is 1M by default but credit-gated: fable-tier dispatch fails outright without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M under the same account caveat.
-- **Opus 5 is the exception**: its 1M window is ungated, so opus-tier stages on the `opus` alias plan against the extended column unconditionally.
+- **Opus 5.5 is the exception**: its 1M window is ungated, so opus-tier stages on the `opus` alias plan against the extended column unconditionally.
 - **`--fallback-model`**: compaction honors it, so a credit-gated 1M Fable compaction degrades to the fallback (e.g. `claude-sonnet-5`) instead of failing.
 
 ## Exploration Cache Budget
