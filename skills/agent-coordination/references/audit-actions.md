@@ -36,9 +36,9 @@ actions: `fn_attachments_preseed_failed`, `visual_evidence_degraded`, `visual_ev
 
 ## Megatask
 
-Writers: `commands/megatask.md` R1, `hook:megatask-monitor`.
+Writers: `commands/megatask.md` R1, `hook:megatask-monitor`, `megatask-settle.sh`.
 
-actions: `batch_approved`, `batch_rejected`, `megatask_progress`
+actions: `batch_approved`, `batch_rejected`, `megatask_progress`, `megatask_escalated`
 
 ## Stage agents
 
