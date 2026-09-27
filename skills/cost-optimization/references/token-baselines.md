@@ -20,7 +20,16 @@ Prompt-cache TTL knobs: `skills/cost-optimization/SKILL.md § Finer-grained TTL 
 | `MCP_TOOL_TIMEOUT` | 2.1.142 | Honoured by remote HTTP/SSE servers — lifts the silent 60s cap that drove retry churn |
 | `CLAUDE_CODE_ENABLE_AUTO_MODE=1` | 2.1.158 | Auto model/effort on Bedrock/Vertex/Foundry; explicit `--model`/`--effort` still win |
 | `--forward-subagent-text` | 2.1.219 | stream-json forwards depth-2+ spawns, so attribution stops folding Tier-2 into the parent |
+| `BASH_MAX_OUTPUT_LENGTH` | — | Environment variable capping how much Bash output is kept in context; the rest is truncated |
+
+#### Session commands
+
+| Setting | Since | Effect |
+|---|---|---|
 | `/recap`, `--recap` | 2.1.108 | Session recap, reusable as handoff context |
+| `/autocompact <N>` | 2.1.221 | Sets the auto-compaction threshold for the session; `200k` is a safety net on 1M models |
+| `/mcp` | — | Disables MCP servers the session does not use, dropping their tool definitions from context |
+| `/rewind` vs `/compact` | — | `/rewind` drops the most recent turns and keeps the rest verbatim; `/compact` rewrites the whole conversation into a summary |
 
 ### Caps to plan against
 
@@ -41,6 +50,7 @@ Prompt-cache TTL knobs: `skills/cost-optimization/SKILL.md § Finer-grained TTL 
 | `/cost` | 2.1.92 | Per-model and cache-hit breakdown, plus the prompt-cache line (`skills/cost-optimization/SKILL.md § Verifying the hit rate`) |
 | `/stats` | 2.1.89 | Includes subagent usage |
 | `/context all` | 2.1.139 | Per-skill token estimates via the active model's tokenizer |
+| `/context` in a fresh session | — | The baseline every turn pays before any work: system prompt, tools, MCP servers, memory, skills |
 | `/skills` (press `t`) | 2.1.111 | Sorts the skill list by token cost |
 | `claude plugin details <name>` | 2.1.139 | Inventory + token cost before install/enable |
 | `/skill-doctor` | 2.1.261 | Loaded skills that go unused and what each costs in context — use it to prune |

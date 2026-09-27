@@ -109,11 +109,12 @@ What each handoff carries into the stage it feeds:
 
 ### Extended Context Budget (1M Window)
 
-Use the extended inbound figure only on a live 1M window and a genuinely complex run; standard budgets stay preferred for cost.
+Use the extended inbound figure only on a live 1M window for a genuinely complex run; standard budgets cost less.
 
-- **Credit gate**: a 1M session on an account without 1M usage credits auto-compacts back under the standard limit, so plan against the standard column unless credits are confirmed. **Fable 5.x** (Fable 5.1 is the default Fable model) is 1M by default but credit-gated: fable-tier dispatch fails outright without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M under the same account caveat.
-- **Opus 5.5 is the exception**: its 1M window is ungated, so opus-tier stages on the `opus` alias plan against the extended column unconditionally.
+- **Credit gate**: without 1M usage credits a 1M session auto-compacts back under the standard limit, so plan against the standard column unless credits are confirmed. **Fable 5.x** (default Fable 5.1) is 1M by default but credit-gated: fable-tier dispatch fails without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M, same caveat.
+- **Opus 5.5 is the exception**: its 1M window is ungated, so opus-tier stages on the `opus` alias always plan against the extended column.
 - **`--fallback-model`**: compaction honors it, so a credit-gated 1M Fable compaction degrades to the fallback (e.g. `claude-sonnet-5`) instead of failing.
+- **Long orchestrator sessions**: set `/autocompact 200k` so a 1M session compacts before the window fills (`skills/cost-optimization/references/token-baselines.md § Session commands`).
 
 ## Exploration Cache Budget
 
@@ -145,6 +146,19 @@ Over budget, cut in this order:
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
 | Post-compaction | Deferred tool schemas preserved — no re-fetch needed |
+| Last few turns are noise | `/rewind`, not `/compact` (`skills/cost-optimization/references/token-baselines.md § Session commands`) |
+
+## Compact Instructions
+
+Compaction follows a "Compact instructions" block in CLAUDE.md when one exists. Copy this one into the project CLAUDE.md so a worktask survives the summary:
+
+```markdown
+# Compact instructions
+
+Preserve: the worktask_id, the ledger path (.context/state.json), the current stage and task id,
+any open gate, and every pending user decision with its options.
+Drop: raw tool output, build and test logs, and file contents that can be re-read.
+```
 
 ## PostCompact Recovery
 

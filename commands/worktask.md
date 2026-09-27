@@ -114,6 +114,13 @@ verbatim; never default, extend or infer it, so a tool nobody named stays a fail
 # Multi-issue: /megatask 1 (milestone) or /megatask --issues 12,15,18 (array)
 ```
 
+### Session hygiene
+
+Start each `/worktask` or `/megatask` in a fresh session. Between tasks, `/rename` the session and
+then `/clear`; the ledger, not the conversation, carries a task forward
+(`skills/worktask/references/resume.md § State → Action Table`). Run `/loop` jobs in a separate
+session so their output does not pile up in the orchestrator's context.
+
 ## Phase 0: Replay one stage (`--resume <STAGE_ID>`)
 
 Entered only by `/worktask --resume <STAGE_ID> [--cascade]`. Unlike automatic reattach (first

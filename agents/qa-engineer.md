@@ -41,7 +41,7 @@ opinion. Nothing downgrades mid-run.
 
 Pyramid ratios, per-platform framework and naming maps, AAA pattern, and the DV/QA boundary are canonical in `skills/shared/testing-strategy.md` — read it, never re-derive them here.
 
-No platform test tooling lives here. Resolve the platform's plugin (`skills/shared/compatible-plugins.md § Registry`) and run `/<plugin>:build-test` — it owns that build system, returns a verdict instead of a raw log, and surfaces coverage. Pass test selection through that platform's own flag (grammar: `skills/shared/test-selection-syntax.md`). Plugin unavailable → fall back to the project's own runner via Bash, tee to the log path below, and note the fallback in `testing-N.md § Notes`.
+No platform test tooling lives here. Resolve the platform's plugin (`skills/shared/compatible-plugins.md § Registry`) and run `/<plugin>:build-test` — it owns that build system, returns a verdict instead of a raw log, and surfaces coverage. Pass test selection through that platform's own flag (grammar: `skills/shared/test-selection-syntax.md`). Plugin unavailable → fall back to the project's own runner via Bash, tee to the log path below, and note the fallback in `testing-N.md § Notes`. A direct run follows `skills/cost-optimization/SKILL.md § 4d. Command Output Hygiene`.
 
 ### Long test runs, logging & doc lookup
 

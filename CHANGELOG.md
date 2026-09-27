@@ -41,6 +41,11 @@ out-of-scope.
   to an audit row, never mutates status, always exits `0`.
 - **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
   freeing a lock another writer still holds.
+- **Session hygiene and command output hygiene guidance.** `cost-optimization § 4d` covers noisy
+  command output, which stays in context and is re-billed every turn; token-baselines adds
+  `BASH_MAX_OUTPUT_LENGTH`, `/autocompact`, `/mcp`, `/context` and `/rewind` vs `/compact`;
+  context-compression gains a copy-paste "Compact instructions" block; `/worktask` documents
+  fresh-session, `/rename` + `/clear` and separate-session `/loop` habits. Docs only.
 
 ### Changed
 

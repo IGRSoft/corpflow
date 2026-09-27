@@ -71,6 +71,10 @@ Combine related patterns with `|` alternation — `Grep("dismissCompleted|comple
 
 Above 200 lines, read a known location with `offset`/`limit` instead of the whole file; after a Grep hit at line N, `offset: max(1, N-10), limit: 30`.
 
+### 4d. Command Output Hygiene
+
+Command output stays in context for the rest of the session, like an appended file, and is re-billed on every later turn. Run noisy commands with their quiet flag (`-quiet`, `--silent`, `-q`) or trim them (`| tail -n 50`). Send builds and tests to the platform's `/<plugin>:build-test` or its builder subagent, which returns a verdict instead of the raw log. The session-wide output cap: `${CLAUDE_SKILL_DIR}/references/token-baselines.md § Knobs`.
+
 ### 5. Early Termination
 
 | Scenario | Action |
@@ -135,5 +139,5 @@ Estimated Cost = (Input Tokens × Input Rate + Output Tokens × Output Rate)
 ## Optimization Checklist
 
 - **Before**: confirm PL0 sizing dropped unneeded stages · set a budget limit if applicable · verify per-stage model assignments
-- **During**: watch token use at stage transitions · compress at handoffs · push sub-tasks to haiku where possible
+- **During**: watch token use at stage transitions · compress at handoffs · push sub-tasks to haiku where possible · keep command output quiet or trimmed (§ 4d)
 - **After**: review the per-stage cost breakdown · record optimization opportunities · update baselines if they drifted

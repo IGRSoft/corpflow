@@ -255,6 +255,8 @@ All `Executed Tests (DV)` pass (tests Added/Modified this run + `always_required
 
 All DV operations run in the isolated worktree (§ D0.0). Use `EnterWorktree`/`ExitWorktree`; git with `git -C {workdir}`. Point build/test at the worktree with the toolchain's own directory flag rather than `cd`-chaining — `--package-path` (SwiftPM), `-p`/`--project-dir` (Gradle), `--prefix` (npm), `-C` (make), `--rootdir` (pytest); `/<plugin>:build-test` takes the path directly. Base-ref resolution, background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle: `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
 
+A direct build or test run follows `skills/cost-optimization/SKILL.md § 4d. Command Output Hygiene`.
+
 #### cwd discipline
 
 Every `Write`/`Edit` targets a path under `task.metadata.workspace_path` while a worktree is active. Reading context from outside it is fine; writing back to those external paths is not. Verify the prefix before each write — a path under `.../conductor/workspaces/<repo>/<workspace>/…` proceeds; one under `.../Projects/…` (plugin source repo / canonical clone) is a stop: rebase onto `workspace_path`. When in doubt prefer `Bash: pwd` plus a relative path over an absolute path inherited from an outside `Read`.
