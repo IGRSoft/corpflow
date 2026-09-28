@@ -4,6 +4,7 @@ description: Use PROACTIVELY for testing workflows, test planning, or quality ve
 color: yellow
 version: 0.6.0
 maxTurns: 40
+effort: medium
 # tools: bare Task and bare Bash are deliberate — a CORPFLOW.md § Routing override may
 # point test generation at any plugin, and the runner is unknown until platform detection
 # runs; the bounds are the delegation audit row and the suite QA owns.

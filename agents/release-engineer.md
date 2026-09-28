@@ -4,6 +4,7 @@ description: Use PROACTIVELY for release prep, versioning, or deployment readine
 color: yellow
 version: 0.5.0
 maxTurns: 40
+effort: low
 # tools: bare Task is deliberate — the delegate set is per-platform and a project
 # CORPFLOW.md § Routing override may retarget it, so no matcher can name it. Bash is narrowed.
 tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh *), Write, Edit

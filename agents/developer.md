@@ -4,6 +4,7 @@ description: Use for DV stage development, code implementation, debugging, and r
 color: magenta
 version: 0.9.2
 maxTurns: 80
+effort: high
 # isolation: deliberately absent — frontmatter isolation cuts a fresh worktree before this agent
 # runs, discarding the dispatcher's pinned `workspace_path`; § D0.0 enters the assigned tree instead.
 # tools: Skill runs dv-screenshot-capture (§ Screenshot Capture); without it DV hand-rolls the adapters.

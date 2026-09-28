@@ -4,6 +4,7 @@ description: Use PROACTIVELY for deep technical reviews, tech evaluation, or qua
 color: magenta
 version: 0.8.0
 maxTurns: 60
+effort: high
 tools: Read, Glob, Grep, Write, Edit, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)
 ---
 

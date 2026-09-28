@@ -19,10 +19,13 @@ counters and the vendor page documenting it, so the block is re-checked against 
 
 ## Why this lives at dispatch and not in the agent files
 
-`Task()` carries `model` but no effort (`commands/worktask.md § Step C.0a — the tier only reaches
-some dispatch surfaces`), so in-process prompt text is the only lever on the model's behaviour.
-An agent file is the wrong home: the same agent can be re-tiered, and a block right for `opus`
-is wrong for `fable` — narration is damped on one and raised on the other.
+`Task()` carries `model` but no per-dispatch effort argument (`commands/worktask.md § Step C.0a —
+the tier only reaches some dispatch surfaces`). An agent's `effort:` frontmatter
+(`skills/shared/stage-codes.md § Model alias notes`) fixes only that agent's static tier, never a
+per-dispatch raise or lowering, so in-process prompt text is still the only lever on the rest of
+the model's behaviour. An agent file is the wrong home for that lever anyway: the same agent can
+be re-tiered, and a block right for `opus` is wrong for `fable` — narration is damped on one and
+raised on the other.
 
 ## opus — Claude Opus 5.5
 
