@@ -1,6 +1,6 @@
 # Headless Dispatch — `claude agents` Flag Bridge
 
-The contract mapping `task.metadata` to `claude agents run` CLI flags, for external orchestrators (CI runners, batch schedulers, the user's shell) invoking a worktask stage outside the in-process `Task()` path.
+The contract mapping `task.metadata` to `claude -p --agent` CLI flags, for external orchestrators (CI runners, batch schedulers, the user's shell, and the corpflow orchestrator's own headless route) invoking a worktask stage outside the in-process `Task()` path.
 
 The corpflow orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })`; the flags below are honoured only by a CLI dispatch. PL0 populates the fields anyway, so every dispatcher — in-process or CLI — reads one source of truth.
 
@@ -29,6 +29,8 @@ A managed `availableModels` allowlist also constrains subagent overrides, and `e
 
 `claude agents --effort` also accepts `ultracode`, which is not a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max`. A managed or user `maxEffortLevel` caps effort on every provider — a tier pinned above the cap runs at the cap with no error.
 
+The route decision that chooses whether a tier reaches this surface at all lives in `skills/worktask/scripts/effort-route.sh` (architecture-1.md ADR-3): headless iff the stamped tier differs from the target agent's own `effort:` frontmatter tier, in either direction. Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. `effort_transport` carries which of three surfaces actually applied the tier — `dispatch-flag` (this CLI surface), `frontmatter` (in-process, the agent's own file), or `none` (in-process, no frontmatter to fall back to). `commands/worktask.md § Step C.0a` is the one canonical table.
+
 ### Translation table — permission, workspace & MCP
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
@@ -52,14 +54,18 @@ A managed `availableModels` allowlist also constrains subagent overrides, and `e
 
 ## Per-Stage Recommended Flag Sets
 
-One canonical invocation; substitute the per-stage row plus concrete IDs from `task.metadata` at call time.
+One canonical invocation; substitute the per-stage row plus concrete IDs from `task.metadata` at call time. `claude agents run` is not a subcommand and there is no top-level `--cwd` (§ Dispatch surface drift), so the real recipe `cd`s into the worktree first and dispatches through the top-level print-mode surface — re-derived and implemented in `skills/worktask/scripts/headless-dispatch.sh`, which validates every field against a closed allowlist before building this argv array. The tier is carried by BOTH `--effort` and the child's own `CLAUDE_CODE_EFFORT_LEVEL` env var — the env var is what the documented precedence actually honours, the flag is there for audit readability — and `WORKSPACE_ROOT` names the orchestrator's ledger root, never the worktree the child's cwd points at:
 
 ```bash
-claude agents run --cwd "$WORKTREE" --model "$MODEL" --effort "$EFFORT" \
-  --permission-mode "$MODE" -- "$AGENT" < "$PROMPT"
+cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
+  claude -p --agent "$AGENT" --model "$MODEL" --effort "$EFFORT" \
+  --permission-mode "$MODE" --permission-prompts none \
+  --output-format stream-json --verbose < "$PROMPT"
 ```
 
-Neither `claude agents run` nor a top-level `--cwd` exists on the CLI as last probed (§ Dispatch surface drift): read the one-liner as the flag mapping, not a runnable command, until it is re-derived.
+`--permission-prompts none` denies instead of hanging on anything that would otherwise prompt. Never `--bg` (it auto-commits and opens a draft PR, racing the FN gate) and never `--dangerously-skip-permissions`/`--allow-dangerously-skip-permissions` — `headless-dispatch.sh` has no code path that can add either.
+
+`$MODE` is never applied verbatim: `headless-dispatch.sh --parent-mode <mode>` caps it at the orchestrator's own session mode (narrower of the two on a fixed order — a headless child can never run wider than the same stage would in-process), and PL/SR/FN/RE additionally never exceed `manual` regardless of that cap. An omitted `--parent-mode` defaults to `manual`, never "no cap"; an unrecognized one is refused (exit 2, nothing spawned) — failing closed, not silently defaulting. `--effort`/`--permission-mode`/`--workspace`/`--artifact` are all optional on the CLI: when left out, the script reads them itself from `<ledger-root>/.context/state.json`, so a caller dispatching through a shell string (the orchestrator's own `Bash` tool call, for one) need not carry those ledger values through it at all.
 
 | Stage | `$AGENT` | `$MODE` |
 |---|---|---|
@@ -155,7 +161,7 @@ Unconfirmed whether rows with `kind` ≠ `interactive` keep the snake_case basel
 
 #### Dispatch surface drift
 
-`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.280). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-deriving the external one-liner is an open follow-up.
+`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.280). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
 
 #### Defensive jq pattern
 
