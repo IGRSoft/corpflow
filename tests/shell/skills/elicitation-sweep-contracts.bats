@@ -1821,16 +1821,25 @@ resolver_body() {
 
 AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
 
-@test "the resolver-effort fixture pairs with the C.0a effort_resolved prose" {
-  local fm_resolved dispatch_resolved c0a
-  fm_resolved=$(jq -r 'select(.metadata.effort_transport == "none") | .metadata.effort_resolved' \
+@test "the resolver-effort fixture has one row per transport, pairing with C.0a's prose" {
+  local none_resolved dispatch_resolved frontmatter_resolved c0a
+  none_resolved=$(jq -r 'select(.metadata.effort_transport == "none") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
   dispatch_resolved=$(jq -r 'select(.metadata.effort_transport == "dispatch-flag") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
-  [ "$fm_resolved" = "requested, not applied" ]
+  frontmatter_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  [ "$none_resolved" = "requested, not applied" ]
   [[ "$dispatch_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
+  [[ "$frontmatter_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
 
-  # The "none" literal must be the same one C.0a documents, not a fixture-only string.
+  # Every literal above must be the one C.0a documents, not a fixture-only string.
   c0a=$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")
-  grep -qF "$fm_resolved" <<< "$c0a"
+  grep -qF "$none_resolved" <<< "$c0a"
+  grep -qF '`dispatch-flag`' <<< "$c0a"
+  # A bare `frontmatter` substring passes on almost any prose (it also occurs inside
+  # "frontmatter tier", "agent's own frontmatter", etc.) — require the backtick-quoted
+  # table-cell form the other two transports are also checked against.
+  grep -qF '`frontmatter`' <<< "$c0a"
+  grep -qF '`none`' <<< "$c0a"
 }
