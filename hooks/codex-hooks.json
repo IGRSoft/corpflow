@@ -1,0 +1,138 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|spawn_agent|mcp__.*test.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode tool --target hooks/test-execution-gate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode patch-pre --target hooks/anchor-preflight.sh -- --event pre"
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode tool --target hooks/user-decision-record.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode tool --target hooks/audit-tooluse.sh -- --kind tool"
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode patch-post --target hooks/anchor-preflight.sh -- --event post"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode patch-post --target hooks/comment-standard-context.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|spawn_agent|mcp__.*test.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode tool --target hooks/test-execution-promote.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "request_user_input",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode decision --target hooks/user-decision-record.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode subagent --target hooks/audit-subagent.sh"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode subagent --target hooks/dv-screenshot-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode subagent --target hooks/dv-comment-density-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode subagent --target hooks/state-merge.sh"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --mode subagent --target hooks/megatask-monitor.sh"
+          },
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-agent-stop.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --target hooks/precompact-checkpoint.sh"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --target skills/context-compression/scripts/post-compact-recovery.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${PLUGIN_ROOT}/hooks/codex-adapter.sh --target hooks/session-end-finalize.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

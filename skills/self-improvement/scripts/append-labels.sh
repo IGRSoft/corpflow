@@ -25,8 +25,8 @@
 # @arg --self-test         Run internal test suite; exit 0/non-zero
 #
 # @env SELF_IMPROVE_LABELS  Set to 0 to opt out — the step becomes a no-op.
-# @env CLAUDE_PROJECT_DIR   Passed through to plugin-data-lib.sh's fallback rung.
-# @env CLAUDE_PLUGIN_DATA   Passed through to plugin-data-lib.sh's env rung.
+# @env WORKSPACE_ROOT       Passed through to plugin-data-lib.sh's fallback rung.
+# @env BASE_PLUGIN_DATA     Host-neutral plugin data directory.
 #
 # @exitcode 0  success (including opt-out and zero-row input)
 # @exitcode 1  usage/environment error
@@ -185,7 +185,7 @@ fi
 
 [ -n "$WORKTASK_ID" ] || usage
 
-si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
+si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${BASE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
 DATASET="$SI_DATASET_PATH"
 
 if [ -n "$CHANGES" ]; then

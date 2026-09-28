@@ -1,0 +1,29 @@
+{
+  "name": "corpflow",
+  "version": "4.1.0",
+  "description": "Staged worktask pipeline with a durable state ledger, cross-plugin delegation, and dependency-DAG orchestration.",
+  "author": {
+    "name": "IGRSoft",
+    "email": "support@igrsoft.com",
+    "url": "https://github.com/IGRSoft"
+  },
+  "homepage": "https://github.com/IGRSoft/corpflow",
+  "repository": "https://github.com/IGRSoft/corpflow",
+  "license": "Apache-2.0",
+  "keywords": ["worktask", "agent-orchestration", "state-ledger", "project-management"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Corpflow",
+    "shortDescription": "Staged engineering worktasks for Codex",
+    "longDescription": "Plan, implement, review, test, document, and finalize engineering work through a durable multi-agent workflow.",
+    "developerName": "IGRSoft",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "websiteURL": "https://github.com/IGRSoft/corpflow",
+    "defaultPrompt": [
+      "Use Corpflow to plan this engineering task.",
+      "Run a Corpflow worktask for this change.",
+      "Review this repository with Corpflow."
+    ]
+  }
+}

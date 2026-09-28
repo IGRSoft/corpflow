@@ -21,6 +21,7 @@ setup() {
   WD="$(mk_tmpworkdir)"
   mkdir -p "$WD/agents" "$WD/.claude-plugin"
   printf '{"name":"corpflow"}\n' > "$WD/.claude-plugin/plugin.json"
+  export BASE_PLUGIN_ROOT="$WD"
   export CLAUDE_PLUGIN_ROOT="$WD"
   : > "$WD/agents/developer.md"
   : > "$WD/agents/qa-engineer.md"
@@ -242,7 +243,7 @@ mk_plugin_root() {   # a scratch plugin root, deliberately NOT the cwd
 {"tasks":{"DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}}}}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
+  BASE_PLUGIN_ROOT="$ROOT" LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
     run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output "agents/developer.md"
@@ -259,7 +260,7 @@ JSON
 {"tasks":{"DV0":{"status":"completed","metadata":{"agent":"corpflow:developer"}}}}
 JSON
   [ -f "$PLUGIN_ROOT/agents/developer.md" ]
-  CLAUDE_PLUGIN_ROOT= LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
+  BASE_PLUGIN_ROOT= PLUGIN_ROOT= CLAUDE_PLUGIN_ROOT= LEDGER_JSON="$WD/tasks.json" CONTEXT_DIR="$WD/nope" \
     run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output --partial "agents/developer.md"
@@ -272,7 +273,7 @@ JSON
 {"actor":"hook:audit-tooluse","action":"tool_invoked","subject":"Edit"}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output "hooks/audit-tooluse.sh"
 }
@@ -284,7 +285,7 @@ JSON
 {"actor":"android-developer:hook:audit-tooluse","action":"tool_invoked"}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output "hooks/audit-tooluse.sh"
 }
@@ -298,7 +299,7 @@ JSON
 {"actor":"x","action":"y","metadata":{"tool":"state-patch.sh"}}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_line "skills/worktask/scripts/state-patch.sh"
 }
@@ -310,7 +311,7 @@ JSON
 {"actor":"hook:not-a-real-hook","action":"tool_invoked"}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   assert_output ""
 }
@@ -325,7 +326,7 @@ not json at all
 {"actor":"hook:audit-tooluse","action":"tool_invoked"}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT"
   assert_success
   # `--partial`, not an exact match: the malformed rows are now also COUNTED on stderr,
   # which bats merges into $output. The next case asserts that count.
@@ -343,7 +344,7 @@ not json at all
 {"actor":"hook:audit-tooluse","action":"tool_invoked"}
 JSON
   cd "$WD/elsewhere"
-  CLAUDE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT" 2>&1
+  BASE_PLUGIN_ROOT="$ROOT" CONTEXT_DIR="$WD/ctx" run bash "$PLUGIN_ROOT/$SCRIPT" 2>&1
   assert_success
   assert_output --partial "2 unparseable audit row(s) skipped"
   assert_output --partial "hooks/audit-tooluse.sh"

@@ -2,10 +2,11 @@
 
 [![OS](https://img.shields.io/badge/OS-macOS%20%7C%20Linux-2f81f7)](#requirements)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.270%2B-d97757)](#requirements)
+[![Codex](https://img.shields.io/badge/Codex-0.156.1%20verified-10a37f)](#requirements)
 
-A staged worktask system for Claude Code — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
+A staged worktask system for Claude Code and Codex — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.0.32 · Requires Claude Code 2.1.280+**
+**Plugin 4.1.0 · Requires Claude Code 2.1.280+ · Verified with Codex CLI 0.156.1**
 
 ## Features
 
@@ -58,7 +59,7 @@ Tools listed below are organized by status (required, optional, platform-specifi
 | Tool | Status | Needed for | Degradation | macOS | Linux |
 |------|--------|-----------|-------------|-------|-------|
 | **bash 3.2+** | Required | Plugin scripts run on bash; 3.2 is the declared floor on macOS | No worktask will start | Installed by default | `apt-get install bash` or `dnf install bash` |
-| **Claude Code 2.1.280+** | Required | Ledger worktree resume loop; task-tracking fallback when CC tools unavailable; `/megatask` session coordination; cross-session `SendMessage` delivery notice for permission-mode-held recipients | No worktask will start | N/A | N/A |
+| **Claude Code 2.1.280+ or Codex CLI 0.156.1+** | Required | Host runtime for commands/skills, subagents, hooks, and user decisions | No worktask will start | N/A | N/A |
 | **git** | Required | Worktask isolation via git worktree; worktask state from branch tracking | No worktask will start | Installed with Xcode CLT | `apt-get install git` or `dnf install git` |
 | **POSIX text toolchain** — `awk`, `sed`, `grep`, `find`, `tr`, `mktemp`, `cut`, `sort`, `comm` | Required | Core shell scripting throughout hooks, skills, tests | No worktask will start | Installed by default (BSD variants) | `apt-get install gawk sed grep findutils coreutils` or `dnf install gawk sed grep findutils coreutils` |
 | **Hash tools** — `md5`, `md5sum`, `sha256sum`, `shasum` | Required | File integrity checks; used unguarded in tests and build | No worktask will start | Stock macOS ships `md5` and `shasum` (Perl-shipped). `sha1sum` and `sha256sum` are not available by default; dual-path code handles this (uses `shasum` instead) | `apt-get install coreutils` or `dnf install coreutils` |
@@ -97,7 +98,7 @@ Screenshot capture at the DV stage pulls in per-platform tooling on demand (Imag
 | **`portability-lint.sh`** | New CI gate that enforces portable shell (dual-path file-stat/hashing, bash 3.2 floor, no BSD/GNU divergences) | Included, no install needed | Runs in the lint job; exits 0 on this repository. 8 rules (P001–P008) cover `mktemp -t`, `sed -i` without suffix, single-path hash/stat/date tools, unguarded platform binaries, bash 4+ syntax, and `mapfile`/`readarray` |
 | **`host-os-lib.sh`** | Shared helper for host operating system detection; centralizes `uname` branching logic | Included, no install needed | Sourced from `skills/worktask/scripts/host-os-lib.sh`. Exported vocab: `macos`, `linux`, `bsd`, `windows`, `unknown`. Three consumers: `autonomy-preflight.sh`, `portability-lint.sh`, `portability-lint-selftest.sh` |
 
-### Install
+### Install with Claude Code
 
 This repository is both a Claude Code marketplace (`igrsoft`) and the plugin it publishes
 (`corpflow`). From inside Claude Code:
@@ -111,13 +112,29 @@ The plugin activates as soon as it is safe to do so; if the commands do not appe
 `/reload-plugins`. Hooks — including the `SubagentStop` state-merge safety net — are registered
 by `.claude-plugin/plugin.json` on install. There is no manual hook step.
 
+### Install with Codex
+
+```bash
+codex plugin marketplace add https://github.com/IGRSoft/corpflow.git
+codex plugin add corpflow@igrsoft
+```
+
+Start a new Codex thread after installation, review and trust the bundled hooks, then invoke
+workflows as skills: `$request-plan`, `$worktask`, `$arch-review`, and the other command names.
+Codex hooks use its native `PLUGIN_ROOT`/`PLUGIN_DATA` environment; Corpflow normalizes those to
+`BASE_PLUGIN_ROOT`/`BASE_PLUGIN_DATA` before shared logic runs.
+
 ### Verify
 
-`/plugin` should list **corpflow** as enabled, and `/worktask` should autocomplete. Then:
+Claude Code's `/plugin` or Codex's `codex plugin list` should show **corpflow**. `/worktask`
+should autocomplete in Claude Code and `$worktask` should be available in Codex. Then run the
+host-native planning entrypoint:
 
 ```
 /request-plan "add a dark mode toggle to settings"
 ```
+
+In Codex, use `$request-plan "add a dark mode toggle to settings"` instead.
 
 A plan comes back without touching the repo — the cheapest end-to-end check that agents,
 skills, and routing all resolved.

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.0] — 2026-09-28
+
+### Added
+
+- Portable Agent Plugins and Codex compatibility manifests, Codex-native hook registration, and
+  same-named `$skill` adapters for all 28 existing slash-command workflows.
+- A Codex runtime contract mapping Corpflow agent orchestration and model tiers to Codex controls:
+  haiku → `gpt-6-luna`, sonnet/opus → `gpt-6-sol`, and fable → `gpt-6-astra`.
+- Provider-neutral `BASE_PLUGIN_ROOT` and `BASE_PLUGIN_DATA` resolution, including safe plugin-path
+  joining and support for portable, Codex, and Claude package markers.
+
+### Compatibility
+
+- Claude Code commands, agents, hook registration, and legacy `CLAUDE_*` boundary inputs remain
+  supported. Codex-specific behavior is isolated in additive manifests, adapters, skills, and
+  hook configuration.
+
 ## [4.0.32] — 2026-09-11
 
 A control that fails silently is indistinguishable from a control that passed, and an evidence

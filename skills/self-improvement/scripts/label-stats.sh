@@ -143,7 +143,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
-si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
+si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${BASE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
 DATASET="$SI_DATASET_PATH"
 [ -f "$DATASET" ] || { printf 'no labels yet (%s)\n' "$DATASET"; exit 0; }
 render "$DATASET" "$FORMAT" "$MIN_COUNT"

@@ -1,6 +1,7 @@
 ---
 name: megatask
 description: Use for /megatask, multi-issue batches, or any dependency-ordered fan-out of worktasks. Meta-orchestration of many worktasks across a GitHub milestone or explicit issue array — dependency/blocker DAG, priority ordering, isolated per-issue worktrees.
+argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.5.0
 related:
   - ../../commands/megatask.md
@@ -17,6 +18,10 @@ scripts:
   - scripts/init-worktree.sh
   - scripts/resolve-pbxproj-membership.sh
 ---
+
+> **Codex host:** read `skills/shared/codex-runtime.md` before launching issue worktasks. Use Codex
+> agent controls for the fan-out and `$worktask` for host-native handoffs; the DAG and ledger
+> contracts below remain unchanged.
 
 # Megatask
 

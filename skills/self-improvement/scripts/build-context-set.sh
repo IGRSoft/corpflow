@@ -8,9 +8,8 @@
 #   BASELINE_SHA     If present, scan `git log $BASELINE_SHA..HEAD` for `Agent:` trailers.
 #   AUDIT_LOG        Audit log scanned for hook/script participation.
 #                    Defaults to "$CONTEXT_DIR/logs/audit.jsonl".
-#   CLAUDE_PLUGIN_ROOT
-#                    Plugin root candidates are resolved against. Auto-discovered when
-#                    unset (skills/shared/plugin-root-resolution.md).
+#   BASE_PLUGIN_ROOT Plugin root candidate. Host-native values are normalized by
+#                    corpflow-base.sh (skills/shared/plugin-root-resolution.md).
 #
 # Output to stdout: newline-delimited, deduped, sorted list of PLUGIN-ROOT-relative file
 # paths that exist on disk. Paths follow these patterns:
@@ -52,7 +51,7 @@ fi
 # cwd is the last rung and is taken whether or not it validates: aborting the retrospective
 # is worse than profiling the wrong tree. It is only WARNED about when it too lacks the
 # marker, so an empty set is never mistaken for "the user made no edits".
-if ! PLUGIN_ROOT="$(corpflow_plugin_root "${CLAUDE_PLUGIN_ROOT:-}")"; then
+if ! PLUGIN_ROOT="$(corpflow_plugin_root)"; then
   PLUGIN_ROOT="$PWD"
   [ -f "$PWD/.claude-plugin/plugin.json" ] \
     || printf >&2 'build-context-set: plugin root unresolved — falling back to cwd (%s)\n' "$PWD"

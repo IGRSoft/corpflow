@@ -1,0 +1,16 @@
+---
+name: appstore
+description: Use when the user invokes $appstore or asks for the canonical Corpflow appstore workflow.
+argument-hint: "--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run] [--bundle <id>] [--apple-platform ios|macos|tvos|watchos] [--android-form-factor <factor>]"
+---
+
+# appstore (Codex adapter)
+
+This skill is the Codex entry point for the canonical Corpflow command.
+
+1. Resolve the plugin root as two directories above this `SKILL.md` and treat it as
+   `BASE_PLUGIN_ROOT`.
+2. Read `skills/shared/codex-runtime.md` and `commands/appstore.md` from that root completely.
+3. Apply the command's argument grammar, workflow, write boundaries, and output contract to the
+   user's request. Translate Claude-only operations through the Codex runtime adapter.
+4. Use `$appstore` for Codex-facing follow-ups. Do not edit the canonical command while running it.

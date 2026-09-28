@@ -1,10 +1,15 @@
 ---
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
+argument-hint: '"<request>" [--save]'
 version: 0.4.1
 ---
 
 # Request Plan
+
+> **Codex host:** read `skills/shared/codex-runtime.md` and keep
+> `commands/request-plan.md` as the canonical workflow; recommend `$worktask` in the final handoff.
+> Claude Code continues to receive `/worktask`.
 
 Produce a lightweight, grounded plan from a free-form request plus current repository context, then
 hand off to the worktask system — lighter than a PRD (`/product-requirements`), broader than a

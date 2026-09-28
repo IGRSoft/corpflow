@@ -185,7 +185,8 @@
 #                                             settlement decision, not a claim.
 # @arg --dispatch <ID> <agent_id> <status>   Exactly 3 args. status is launched|completed|
 #                                             failed; agent_id matches
-#                                             ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$; the row
+#                                             ^/?[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$; the row
+#                                             accepts Claude ids and Codex canonical task names.
 #                                             must carry non-empty metadata.agent — else exit 2.
 #                                             Upserts facts.dispatched_agents[] by task_id: no
 #                                             entry appends {stage, task_id,
@@ -2697,7 +2698,7 @@ if [[ -n "$TASK_OP" ]]; then
           usage
           ;;
       esac
-      if ! [[ "$DISPATCH_AGENT_ID" =~ ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
+      if ! [[ "$DISPATCH_AGENT_ID" =~ ^/?[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
         printf >&2 'invalid --dispatch agent_id: %s\n' "$DISPATCH_AGENT_ID"
         usage
       fi
@@ -2773,7 +2774,7 @@ if [[ -n "$TASK_OP" ]]; then
         printf >&2 'invalid --ack: expected exactly 2 args <ID> <msg_id>\n'
         usage
       fi
-      if ! [[ "$ACK_MSG_ID" =~ ^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
+      if ! [[ "$ACK_MSG_ID" =~ ^/?[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,199}$ ]]; then
         printf >&2 'invalid --ack msg_id: %q\n' "$ACK_MSG_ID"
         usage
       fi
