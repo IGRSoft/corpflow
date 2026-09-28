@@ -121,15 +121,24 @@ list: `commands/create-agent.md § Handoff Protocol`.
 ### Model alias notes
 
 The Model column uses aliases (`opus`, `sonnet`, `haiku`); a full model id would also be valid,
-but aliases stay portable across providers. No agent file carries its own `model:`/`effort:`;
-the matrix row is the only place either is set. Alias resolution, the Fable 5 credit gate,
-managed-allowlist resolution and the default effort tier are canonical in
-`skills/shared/model-selection.md`.
+but aliases stay portable across providers. No agent file carries its own `model:` key — model
+selection stays a per-dispatch `Task()` argument (sw-PL1-1, `planning-1.md#elicitation-sweep`).
+Every agent file carries an `effort:` key next to `maxTurns:`, equal to this row's Effort cell;
+the matrix stays the only place a tier is *decided*, the file is where Claude Code reads the
+static one from, and a parity test holds the two together
+(`tests/shell/worktask/agent-effort-frontmatter.bats`). A per-dispatch deviation from that static
+tier (a default-writer stamp, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override)
+routes headless instead of relying on an in-process advisory flag —
+`skills/agent-coordination/references/headless-dispatch.md § Translation table — model & effort`.
+Alias resolution, the Fable 5 credit gate, managed-allowlist resolution and the effort
+precedence chain are canonical in `skills/shared/model-selection.md § Effort frontmatter and
+caps`.
 
 ## Agent Frontmatter Fields
 
 | Field | Type | Purpose |
 |-------|------|---------|
+| `effort` | enum (`EFFORT_ENUM`) | Static per-agent tier Claude Code applies while this agent is active; equal to the matrix row below, enforced by `tests/shell/worktask/agent-effort-frontmatter.bats` |
 | `maxTurns` | number | Limit agent turn count |
 | `disallowedTools` | comma-separated | Block specific tools from the agent |
 | `initialPrompt` | string | Auto-submitted first turn when the agent runs as the main session (`--agent`) |

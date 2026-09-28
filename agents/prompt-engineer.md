@@ -4,6 +4,7 @@ description: Use when optimizing agents, commands, or skills, auditing prompt qu
 color: yellow
 version: 0.3.0
 maxTurns: 50
+effort: xhigh
 # tools: bare Bash is deliberate — lint and grep targets vary per audited asset (any agent,
 # command or skill in any plugin under audit), so no matcher can name them; the bound is that
 # the commands read and lint prompt assets, never mutate a repository's source.

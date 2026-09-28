@@ -4,6 +4,7 @@ description: Use PROACTIVELY for team management, sprint planning, or in-team re
 color: cyan
 version: 0.5.0
 maxTurns: 30
+effort: medium
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task(corpflow:technical-lead)
 ---
 

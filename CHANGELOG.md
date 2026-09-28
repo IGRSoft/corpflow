@@ -41,8 +41,27 @@ out-of-scope.
   to an audit row, never mutates status, always exits `0`.
 - **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
   freeing a lock another writer still holds.
+- **Session hygiene and command output hygiene guidance.** `cost-optimization § 4d` covers noisy
+  command output, which stays in context and is re-billed every turn; token-baselines adds
+  `BASH_MAX_OUTPUT_LENGTH`, `/autocompact`, `/mcp`, `/context` and `/rewind` vs `/compact`;
+  context-compression gains a copy-paste "Compact instructions" block; `/worktask` documents
+  fresh-session, `/rename` + `/clear` and separate-session `/loop` habits. Docs only.
 
 ### Changed
+
+- **A per-dispatch effort raise or lowering now reaches the session, instead of staying an
+  advisory audit field.** `skills/worktask/scripts/effort-route.sh` decides, per dispatch,
+  whether the stamped tier differs from the target agent's own `effort:` frontmatter tier; a
+  difference routes headless through the new `skills/worktask/scripts/headless-dispatch.sh`
+  (`claude -p --agent … --effort`, argv built from an allowlist, never a shell string), and
+  `skills/worktask/scripts/headless-poststop.sh` replays the installed `plugin.json`
+  `SubagentStop` hooks the headless child never fires itself, so a headless DV row gets the
+  same gates, state merge and audit trail an in-process one would. `effort_transport` gains a
+  fourth value, `env`, for an operator `CLAUDE_CODE_EFFORT_LEVEL` pin that outranks a routed
+  raise (`skills/shared/stage-contracts.md § Resolver Effort Tier`,
+  `commands/worktask.md § Step C.0a`). Some stages now run at a raised or lowered tier where
+  they previously ran at the session default; no version-floor change (`--agent`, `--effort`
+  and `--permission-prompts` already exist at 2.1.280).
 
 - **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
   cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next

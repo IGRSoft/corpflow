@@ -4,6 +4,7 @@ description: Use PROACTIVELY for product planning, feature definition, or strate
 color: blue
 version: 0.12.0
 maxTurns: 40
+effort: high
 # tools: every Bash grant is scoped to one binary or script, never bare Bash, because
 # `commands/worktask.md` BINDING 1 forbids bare-Bash pre-approval during Phase 1.
 # Bash(curl:*) lets PL0 persist Figma screenshots in the same PL turn — get_screenshot

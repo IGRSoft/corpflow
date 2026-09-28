@@ -166,7 +166,7 @@ template anchor that changed.
 ## Ledger Field Review
 
 Every new CLI flag, agent-frontmatter key, tool parameter, or `claude agents --json` row key is a
-candidate for the workflow state: the `task.metadata` → `claude agents run` flag bridge
+candidate for the workflow state: the `task.metadata` → `claude -p --agent` flag bridge
 (`headless-dispatch.md § Translation Table`), the `task.metadata` schema (`shared/state-ledger.md`),
 `facts.dispatched_agents[]` and `facts.capabilities{}` (`handoff-protocol.md § state-json-schema`),
 and the megatask `orchestrator.json` / `workspace.json` (`megatask/references/schemas.md`). Decide

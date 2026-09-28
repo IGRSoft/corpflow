@@ -4,6 +4,7 @@ description: Use PROACTIVELY for worktask initialization, state management, or d
 color: green
 version: 0.4.0
 maxTurns: 40
+effort: medium
 # tools: bare Bash is deliberate — ledger and worktree repair spans arbitrary repo tooling
 # (git plumbing, jq, the project's own scripts) chosen from the failure in hand, so no
 # matcher can enumerate it. The bound is § Constraints: state.json only via state-patch.sh.

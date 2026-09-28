@@ -136,8 +136,8 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp e
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Task()`; never inherited from frontmatter — no agent file carries one. |
-| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it, and no agent file carries an `effort:` key. A row without it is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
+| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Task()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
+| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Every agent file also carries a static `effort:` key next to `maxTurns:`, held equal to its matrix row by `tests/shell/worktask/agent-effort-frontmatter.bats` (`skills/shared/stage-codes.md § Model alias notes`) — that key fixes the in-process tier. A row's stamped `metadata.effort` deviating from that static tier is the condition the effort router acts on. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
 
 ##### Propagation fields — gates
 
@@ -193,7 +193,7 @@ Full propagation contract: `skills/agent-coordination/SKILL.md § metadata.skip_
 
 #### Optional dispatch metadata
 
-PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to `claude agents run` flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above), though only advisory as a dispatch flag because in-process `Task()` has no effort parameter.
+PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to the headless `claude -p --agent` recipe's flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above). Every agent file also carries a static `effort:` key next to `maxTurns:` (`skills/shared/stage-codes.md § Model alias notes`), which Claude Code applies in-process, so a stamped `metadata.effort` equal to that key needs no dispatch flag. A stamped value that differs from it is exactly the condition that routes the dispatch headless, since in-process `Task()` still has no effort parameter to carry a deviation.
 
 ##### Default writer rules
 

@@ -98,15 +98,22 @@ SUMMARY=$(jq -c '{
 }' "$STATE_FILE" 2> /dev/null) || SUMMARY=""
 [ -n "$SUMMARY" ] || SUMMARY='{"run_index":"unknown","unsettled":[],"status_counts":{}}'
 
+# A headless child's own in_progress row is real, ongoing stage work, not a session that
+# died unnoticed — CORPFLOW_HEADLESS_CHILD (set by headless-dispatch.sh's spawn env) tags
+# the row instead of leaving it read as an ordinary unsettled teardown.
+HEADLESS_CHILD="${CORPFLOW_HEADLESS_CHILD:-}"
+
 jq -cn \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg reason "$REASON" \
+  --arg headless_child "$HEADLESS_CHILD" \
   --argjson summary "$SUMMARY" '{
     ts: $ts,
     actor: "hook:session-end",
     action: "session_end_finalize",
     result: (if ($summary.unsettled | length) > 0 then "warn" else "ok" end),
-    metadata: ($summary + { session_end_reason: $reason })
+    metadata: ($summary + { session_end_reason: $reason }
+      + (if $headless_child == "" then {} else { headless_child: $headless_child } end))
   }' >> "$LOG_DIR/audit.jsonl" || true
 
 exit 0

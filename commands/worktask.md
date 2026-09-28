@@ -114,6 +114,13 @@ verbatim; never default, extend or infer it, so a tool nobody named stays a fail
 # Multi-issue: /megatask 1 (milestone) or /megatask --issues 12,15,18 (array)
 ```
 
+### Session hygiene
+
+Start each `/worktask` or `/megatask` in a fresh session. Between tasks, `/rename` the session and
+then `/clear`; the ledger, not the conversation, carries a task forward
+(`skills/worktask/references/resume.md § State → Action Table`). Run `/loop` jobs in a separate
+session so their output does not pile up in the orchestrator's context.
+
 ## Phase 0: Replay one stage (`--resume <STAGE_ID>`)
 
 Entered only by `/worktask --resume <STAGE_ID> [--cascade]`. Unlike automatic reattach (first
@@ -1234,18 +1241,71 @@ Empty set ⇒ no-op, fall through to § Step C.0 unchanged.
 
 ##### Step C.0a — the tier only reaches some dispatch surfaces
 
-`metadata.effort` is not honoured in-process — `headless-dispatch.md § Translation table —
-model & effort` marks `model` "Yes (passed to `Task()`)" and `effort` "Advisory". The audit row
-says which surface it got:
+`metadata.effort` is not honoured in-process by `Task()` itself — `headless-dispatch.md
+§ Translation table — model & effort` marks `model` "Yes (passed to `Task()`)" and `effort`
+"Advisory". Whether the computed tier reaches the emitting stage's own agent at all is a route
+decision, `skills/worktask/scripts/effort-route.sh`: headless iff the computed tier differs from
+that agent's own `effort:` frontmatter tier (or its `--role-baseline`) — call it, then dispatch
+through `skills/worktask/scripts/headless-dispatch.sh` on `headless`, or the plain in-process
+dispatch on `inproc`. Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL`
+(sw-AR0-1): the pin no longer short-circuits the route, and a headless child's own env still
+carries `CLAUDE_CODE_EFFORT_LEVEL=<stamped tier>` regardless. The audit row's `effort_transport`
+says which of three surfaces applied:
 
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
-| headless `claude agents run` | `--effort <tier>` | `dispatch-flag` |
-| in-process `Task()` | nothing — `Task()` carries no effort parameter and the sub-agent's frontmatter carries no `effort:` to fall back to | `none` |
+| headless `claude -p --agent` | `--effort <tier>` AND `CLAUDE_CODE_EFFORT_LEVEL=<tier>` in the child's env (the env var is the carrier the documented precedence honours; the flag is there for audit readability) | `dispatch-flag` |
+| in-process, tier equals the agent's own frontmatter | the frontmatter itself | `frontmatter` |
+| in-process, the agent has no `effort:` key in its own frontmatter | nothing — `Task()` carries no effort parameter and there is no frontmatter to fall back to | `none` |
 
-In-process the tier is recorded, not applied, and the resolver still runs: the row's
-`effort_resolved` is the literal `"requested, not applied"`, never a tier the session did not run
-at.
+This same call happens at every stage-dispatch surface, not only here: the main loop's own
+Step 6 `Task()` dispatch, a headless-eligible DV row's fan-out dispatch, and Step C.3's batch
+resolver all call `effort-route.sh` before choosing a surface, and each writes its own
+`effort_route` audit row (`action: "effort_route"`) carrying the route line's fields plus
+`effort_resolved`/`effort_resolved_reason`, `session_id`, `argv[]` and the cost/usage fields —
+this section is not a special case, it is the one place the shared contract is spelled out.
+
+Only `none` records the unapplied literal: the row's `effort_resolved` is
+`"requested, not applied"`, never a tier the session did not run at. Under `dispatch-flag`, the
+tier the child actually ran at is read from ITS OWN hook rows — the child's PreToolUse/PostToolUse
+hooks write those rows live, into the ledger root's `audit.jsonl` (not the child's worktree,
+per `--ledger-root`), while it runs. `headless-dispatch.sh` looks them up itself once the child
+exits, matching on the row's `metadata.dedupe_key` prefix (`"<session_id>:"`) — never on
+`headless-poststop.sh`'s replay, which has no lookup role here at all. Only when no row matches
+(the child ran no tool call that wrote one) does `effort_resolved` stay `null` with
+`effort_resolved_reason: "no_hook_rows"`, never a value copied from the request. The resolver's
+own bumped tier almost always differs from the emitting agent's
+baseline frontmatter tier (that is the bump's point), so the resolver dispatch routes headless
+in the common case — `frontmatter`/`none` cover the tier-equal and frontmatter-less cases, not
+the usual one.
+
+##### Step C.0a — after a headless child exits
+
+A `warn` result (`cli_missing`, `cli_below_floor`, `opted_out`, `exit_before_artifact`,
+`auth_failed` or `agent_unresolved`) never reaches this step at all: the stage ran no headless
+work, so the orchestrator dispatches it in-process via `Task()` at the frontmatter baseline and
+skips the replay below entirely — there is no `SubagentStop` chain for a stage that never ran
+headless. A refused value (exit 2 — a usage error or a validation refusal, e.g. a workspace path
+that is not a worktree this ledger pins) is not a `warn` either: it prints no result line at all,
+so it is checked for by exit code alone, before any
+`result` field is read, and escalates rather than being recorded as a launch a replay would then
+run against a child that never started. Everything that follows applies only to a `result:"ok"`
+(or `result:"error"` handled above at the spawn) return.
+
+A `headless` route does not end at the spawn: once `headless-dispatch.sh` returns, the
+orchestrator calls `skills/worktask/scripts/headless-poststop.sh` to replay the installed
+`plugin.json`'s `SubagentStop` hooks (state-merge, the DV gates, megatask-monitor, and the
+PL/FN/ST `agent-stop` matchers) against a synthesized payload, because a `claude -p --agent`
+main session never fires `SubagentStop` on itself. `blocked:true` in the reply resumes the
+child with `claude -p --resume <uuid>` (same argv and env, the block reason plus
+`additionalContext` on stdin, `--attempt` incremented) — up to the cap of 2 resumes
+(`--attempt` 1, 2, 3). The resume argv carries `--resume <uuid>` alone, never paired with
+`--session-id`: the CLI refuses that combination unless `--fork-session` is also passed, and
+this is a true resume of the same child, never a fork. Still blocked at `--attempt 3`
+(`escalate:true`) hands the stage to § Error Handling exactly as an in-process blocked return
+would, never a fourth replay. A resume that itself comes back `warn` or refused (exit 2)
+escalates too — ADR-2's no-in-process-fallback rule applies to the resume round-trip exactly as
+it does to the first attempt, since side effects already exist either way.
 
 ###### Step C.0a — do not reach the tier another way
 
@@ -1544,10 +1604,11 @@ TL0, revise the embedded command choice, or remove the embedding.
 ## Headless Dispatch (external runners)
 
 External orchestrators (CI, cron, the user's shell) can invoke a single stage via
-`claude agents run …` instead of the in-process `Task()` path. PL0 populates the optional dispatch
-fields in `skills/shared/state-ledger.md § Dispatch metadata`, and the runner builds its flags from
-them. The runner recipe, the required `external_dispatch` audit line and the permission-mode
-caveats: `skills/agent-coordination/references/headless-dispatch.md`.
+`claude -p --agent <plugin:agent> …` (`skills/worktask/scripts/headless-dispatch.sh`) instead of
+the in-process `Task()` path — `claude agents run` is not a subcommand. PL0 populates the
+optional dispatch fields in `skills/shared/state-ledger.md § Dispatch metadata`, and the runner
+builds its flags from them. The runner recipe, the required `external_dispatch` audit line and
+the permission-mode caveats: `skills/agent-coordination/references/headless-dispatch.md`.
 
 ## Output Format
 

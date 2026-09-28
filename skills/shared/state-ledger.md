@@ -211,7 +211,7 @@ only `land-artifacts.sh` writes it, and the producer's tree ships every landed f
 
 Optional, additive fields — `permission_mode`, `add_dirs`, `mcp_config_path`,
 `plugin_dir_overrides`, `dangerously_skip_permissions`, `settings_path` — each mapping 1:1 to a
-`claude agents run` flag; canonical per-field table (flag, type, in-process honouring, usage):
+`claude -p --agent` recipe flag; canonical per-field table (flag, type, in-process honouring, usage):
 `skills/agent-coordination/references/headless-dispatch.md § Translation Table`. In-process the
 orchestrator honours `model` (always) and `permission_mode` (audited per
 `skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning (in-process)`);
@@ -223,15 +223,21 @@ the rest are advisory, read only by external CLI dispatchers, and the orchestrat
 PL0 should set `permission_mode: default` on SR/FN tasks under `--secure`/`--full` and never sets
 `dangerously_skip_permissions` (CI batch only) on PL/SR/FN tasks; full rules:
 `skills/worktask/references/pl0-procedure.md § Optional dispatch metadata`. `workspace_path` (always
-stamped, not dispatch-optional) doubles as the `--cwd` source for headless dispatchers.
+stamped, not dispatch-optional) names the worktree a headless dispatcher `cd`s into before running
+`claude -p --agent` — there is no top-level `--cwd` flag to carry it instead.
 
-#### effort is mandatory, and still advisory as a flag
+#### effort is mandatory, and a deviation from the agent's own tier routes headless
 
 As a ledger record `effort` is required: the Step C.0a resolver
 (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`) bumps it one rung, and
-a per-stage override exists nowhere else. As a dispatch flag it is advisory, since in-process
-`Task()` takes no effort argument. `state-patch.sh` validates it against `EFFORT_ENUM` on
-`--task-create` and `--task-meta`.
+a per-stage override exists nowhere else. Every agent file also carries a static `effort:` key
+next to `maxTurns:`, held equal to its `skills/shared/stage-codes.md § Agent Model Matrix` row by
+`tests/shell/worktask/agent-effort-frontmatter.bats`; Claude Code applies that key in-process, so a
+stamped `metadata.effort` equal to it needs no dispatch flag. In-process `Task()` still takes no
+effort argument, so a stamped value that *differs* from the agent's frontmatter tier — a
+default-writer raise, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override — is the
+condition the effort router acts on rather than leaving advisory. `state-patch.sh` validates
+`effort` against `EFFORT_ENUM` on `--task-create` and `--task-meta` either way.
 
 ### JSON Schema
 

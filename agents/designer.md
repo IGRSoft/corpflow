@@ -4,6 +4,7 @@ description: Use PROACTIVELY for design decisions, UX planning, or visual direct
 color: blue
 version: 0.2.0
 maxTurns: 30
+effort: medium
 # tools: no Bash grant — DS is a nested consult (`pl0-procedure.md § Designer Invocation`), not a
 # seeded ledger task, so it never runs state-patch.sh. Write covers its only artifact,
 # `.context/designs/mockup-*.pen`. ToolSearch resolves the deferred `mcp__pencil__*` tools

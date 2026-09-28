@@ -4,6 +4,7 @@ description: Use PROACTIVELY for architectural decisions, system design, or arch
 color: green
 version: 0.4.0
 maxTurns: 60
+effort: high
 # tools: bare Task because a CORPFLOW.md § Routing override may point the architect at any plugin.
 # The model-matrix.sh --resolve grant backs § Model Selection (AR): a stage row AR creates needs
 # the resolved model/effort pair, and neither the orchestrator nor --task-create fills one.

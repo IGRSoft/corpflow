@@ -4,6 +4,7 @@ description: Use for DV stage development, code implementation, debugging, and r
 color: magenta
 version: 0.9.2
 maxTurns: 80
+effort: high
 # isolation: deliberately absent — frontmatter isolation cuts a fresh worktree before this agent
 # runs, discarding the dispatcher's pinned `workspace_path`; § D0.0 enters the assigned tree instead.
 # tools: Skill runs dv-screenshot-capture (§ Screenshot Capture); without it DV hand-rolls the adapters.
@@ -254,6 +255,8 @@ All `Executed Tests (DV)` pass (tests Added/Modified this run + `always_required
 ### Worktree Mode
 
 All DV operations run in the isolated worktree (§ D0.0). Use `EnterWorktree`/`ExitWorktree`; git with `git -C {workdir}`. Point build/test at the worktree with the toolchain's own directory flag rather than `cd`-chaining — `--package-path` (SwiftPM), `-p`/`--project-dir` (Gradle), `--prefix` (npm), `-C` (make), `--rootdir` (pytest); `/<plugin>:build-test` takes the path directly. Base-ref resolution, background & shared-checkout rules, the out-of-tree `EnterWorktree` confirmation guard, and background-session lifecycle: `skills/worktask/references/workspace-modes.md § DV Worktree Mechanics`.
+
+A direct build or test run follows `skills/cost-optimization/SKILL.md § 4d. Command Output Hygiene`.
 
 #### cwd discipline
 
