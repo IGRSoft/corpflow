@@ -102,12 +102,23 @@ and compaction inherit the session's extended-thinking config; pass per-stage `m
 
 ### Effort frontmatter and caps
 
-`effort:` frontmatter on subagents, commands and skills works on every model, but no corpflow
-agent, command or skill sets it: `skills/shared/stage-codes.md § Agent Model Matrix` is the sole
-source for a stage agent's tier. A managed or user `maxEffortLevel` (top-level, or per model
-under `modelSettings`) caps effort on every provider: a stage pinned above the cap runs at the
-cap with no error. `metadata.effort` keeps the requested tier, so read the hook-reported
-`effort.level` before trusting a stage's depth.
+Every corpflow agent file carries an `effort:` key next to `maxTurns:`, equal to that agent's
+Effort cell in `skills/shared/stage-codes.md § Agent Model Matrix` — the matrix stays the sole
+place a tier is decided, and `tests/shell/worktask/agent-effort-frontmatter.bats` holds the two
+in parity. No `model:` key exists on any agent file (sw-PL1-1); model selection stays a
+per-dispatch `Task()` argument.
+
+Precedence, documented order: `CLAUDE_CODE_EFFORT_LEVEL`, when set in the process environment
+(the operator's own pin, or a headless child's inherited one), outranks every other source.
+Below that, an active subagent's `effort:` frontmatter beats the session level (`--effort`,
+`effortLevel` in project/managed/`--settings`, `/effort`), which beats a model's launch default.
+A managed or user `maxEffortLevel` (top-level, or per model under `modelSettings`) still clamps
+the resolved tier on top of either source, silently and with no error. A tier the target model
+does not support falls back downward to the highest one it does (§ xhigh routing above); Haiku
+is not on Claude Code's effort list at all, so its frontmatter `effort:` (and any resolver bump)
+never applies. `metadata.effort` keeps the requested tier regardless of any of this, so read the
+hook-reported `effort.level` — never a stage's own frontmatter or request — before trusting what
+tier it actually ran at.
 
 ## Managed Allowlists and Org Restrictions
 

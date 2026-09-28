@@ -4,6 +4,7 @@ description: Use PROACTIVELY for production incidents, outages, or emergency hot
 color: red
 version: 0.3.0
 maxTurns: 50
+effort: high
 # tools: bare Bash is deliberate — triage commands are unknown before the incident (whatever
 # reads the failing system's logs, processes and state), so no matcher can enumerate them;
 # the bound is the incident's own scope and the hotfix branch.

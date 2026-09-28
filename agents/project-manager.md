@@ -4,6 +4,7 @@ description: Use PROACTIVELY for project planning, task management, or cross-sta
 color: cyan
 version: 0.6.0
 maxTurns: 40
+effort: medium
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh *), EnterWorktree, ExitWorktree
 ---
 

@@ -4,6 +4,7 @@ description: Use PROACTIVELY for strategic business decisions, budget approval, 
 color: white
 version: 0.3.0
 maxTurns: 20
+effort: low
 # tools: Skill because § Step 4's self-improvement retrospective has no non-Skill path.
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write, Skill
 ---

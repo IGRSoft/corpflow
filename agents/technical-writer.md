@@ -4,6 +4,7 @@ description: Use PROACTIVELY for documentation tasks, API docs, or architecture 
 color: white
 version: 0.3.0
 maxTurns: 25
+effort: low
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/doc-option-check.sh *), Write, Edit
 ---
 

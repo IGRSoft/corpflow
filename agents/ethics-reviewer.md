@@ -4,6 +4,7 @@ description: Use PROACTIVELY for high-risk decisions, potential harm scenarios, 
 color: white
 version: 0.3.0
 maxTurns: 25
+effort: xhigh
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Edit, Write
 ---
 
