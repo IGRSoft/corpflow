@@ -567,15 +567,19 @@ extract_section() {
   ' <<< "$body"
 }
 
-# Resolves the plugin root: $CLAUDE_PLUGIN_ROOT when set, else three levels up
-# from this script (skills/worktask/scripts/ -> root). Full ladder:
-# skills/shared/plugin-root-resolution.md.
+# Resolves the plugin root through the shared host-neutral ladder, then falls back to the
+# script's fixed location (skills/worktask/scripts/ -> root).
 plugin_root() {
-  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" ]]; then
-    printf '%s' "$CLAUDE_PLUGIN_ROOT"
-    return 0
+  local d lib
+  lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../shared/lib" && pwd)/corpflow-base.sh"
+  if [[ -r "$lib" ]]; then
+    # shellcheck source=skills/shared/lib/corpflow-base.sh
+    . "$lib"
+    if d=$(corpflow_plugin_root); then
+      printf '%s' "$d"
+      return 0
+    fi
   fi
-  local d
   d=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
   printf '%s' "$d"
 }

@@ -1,0 +1,16 @@
+---
+name: milestone
+description: Use when the user invokes $milestone or asks for the canonical Corpflow milestone workflow.
+argument-hint: "\"<description>\" | --from-prd <path> [--milestone N] [--platform apple|android|web|systems|backend|ai|all] [--dry-run] [--secure] [--labels <extra>]"
+---
+
+# milestone (Codex adapter)
+
+This skill is the Codex entry point for the canonical Corpflow command.
+
+1. Resolve the plugin root as two directories above this `SKILL.md` and treat it as
+   `BASE_PLUGIN_ROOT`.
+2. Read `skills/shared/codex-runtime.md` and `commands/milestone.md` from that root completely.
+3. Apply the command's argument grammar, workflow, write boundaries, and output contract to the
+   user's request. Translate Claude-only operations through the Codex runtime adapter.
+4. Use `$milestone` for Codex-facing follow-ups. Do not edit the canonical command while running it.

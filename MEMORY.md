@@ -4,7 +4,7 @@ Repository-tracked memory (lean rolling format). Narratives live in git history,
 
 ## Version Tracking
 
-- Plugin version: **4.0.32** (released 2026-09-11; carried while develop is in progress. Unreleased on develop: correctness pass, `/cc-update` 0.3.0 passes, CC 2.1.252→2.1.270 band, CC 2.1.271→2.1.280 band. Version bumps only at release.)
+- Plugin version: **4.1.0** (2026-09-28; Codex compatibility with portable packaging, skill adapters, hooks, model translation, and host-neutral path resolution.)
 - Claude Code min required: **2.1.280** (README.md is authoritative; load-bearing: 2.1.271 closes the silent-failure class for cross-session messages held by the receiver's own permission-mode policy — headless senders now get a delivery notice, matching the 2.1.238 precedent this floor already tracks)
 - Claude Code latest integrated band: **2.1.271→2.1.280**
 

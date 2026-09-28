@@ -1,0 +1,16 @@
+---
+name: design-specs
+description: Use when the user invokes $design-specs or asks for the canonical Corpflow design-specs workflow.
+argument-hint: "<component or screen name> [--platform apple|android|web|all] [--include-assets]"
+---
+
+# design-specs (Codex adapter)
+
+This skill is the Codex entry point for the canonical Corpflow command.
+
+1. Resolve the plugin root as two directories above this `SKILL.md` and treat it as
+   `BASE_PLUGIN_ROOT`.
+2. Read `skills/shared/codex-runtime.md` and `commands/design-specs.md` from that root completely.
+3. Apply the command's argument grammar, workflow, write boundaries, and output contract to the
+   user's request. Translate Claude-only operations through the Codex runtime adapter.
+4. Use `$design-specs` for Codex-facing follow-ups. Do not edit the canonical command while running it.

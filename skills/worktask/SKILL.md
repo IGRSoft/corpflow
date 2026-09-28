@@ -1,15 +1,25 @@
 ---
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Holds dynamic sizing, the orchestrator loop, and stage handoff rules.
+argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.6.0
 ---
 
-> **INVOCATION GATE**: a worktask the user asked for runs through `/worktask` or
-> `Skill({skill:"corpflow:worktask"})` (`../shared/worktask-invocation.md § BLOCKING`). If you
+> **INVOCATION GATE**: a worktask the user asked for runs through `/worktask` in Claude Code,
+> `$worktask` in Codex, or `Skill({skill:"corpflow:worktask"})`
+> (`../shared/worktask-invocation.md § BLOCKING`). If you
 > reached this file by a direct Read/Task/Grep to run one, tell the user and restart through that
 > entry point instead of continuing.
 
 # Worktask System
+
+> **Codex host:** read `skills/shared/codex-runtime.md` before dispatching any stage. It translates
+> the canonical Claude operations in this skill to Codex agent controls while preserving this
+> skill's ledger, gates, and stage contracts; `commands/worktask.md` remains the canonical entry
+> workflow. A Codex stage is not launched until `spawn_agent` returns a real id: never write a
+> synthetic dispatch row and never call `wait_agent` with no live spawned agent. Persist the
+> returned `agent_id`; when Codex returns only `/root/...` canonical `task_name`, persist that exact
+> value in the existing `agent_id` field.
 
 ## Pipelines
 

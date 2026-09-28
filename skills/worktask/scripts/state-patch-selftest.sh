@@ -1389,6 +1389,15 @@ EOART
     printf 'T31: agent_id replacement: FAIL\n' >&2
     exit 1
   fi
+  bash "$SELF" --dispatch DV0 /root/cf_dv0_1 launched > /dev/null
+  if jq -e '(.facts.dispatched_agents | length) == 1
+            and .facts.dispatched_agents[0].agent_id == "/root/cf_dv0_1"' \
+    .context/state.json > /dev/null; then
+    printf 'T31: a Codex canonical task name is a valid dispatch identifier: ok\n'
+  else
+    printf 'T31: Codex canonical dispatch identifier: FAIL\n' >&2
+    exit 1
+  fi
 
   make_state
   for t31_i in 0 1 2 3 4 5 6; do

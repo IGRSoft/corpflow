@@ -4,12 +4,12 @@
 #              Precedence (skills/self-improvement/SKILL.md § Where the dataset lives):
 #                1. --dataset as given                              -> explicit
 #                2. --plugin-data dir: non-empty, "$"-free, absolute -> plugin-data
-#                3. CLAUDE_PLUGIN_DATA value passed in, same checks  -> env
-#                4. ${CLAUDE_PROJECT_DIR:-.}/evals/<basename>        -> fallback
+#                3. BASE_PLUGIN_DATA value passed in, same checks    -> env
+#                4. ${WORKSPACE_ROOT:-.}/evals/<basename>            -> fallback
 #              Rungs 2-3 resolve to <dir>/self-improvement/<basename>, created with
 #              (umask 077; mkdir -p) so the dir is never briefly laxer than 0700.
 #
-# @usage       si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" failure-labels.jsonl
+# @usage       si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${BASE_PLUGIN_DATA:-}" failure-labels.jsonl
 # @output      Globals SI_DATASET_PATH and SI_DATASET_SOURCE; stdout stays free
 #              because callers use it as their data channel.
 # @return      0 resolved; 1 relative --plugin-data or mkdir failure. An invalid
@@ -24,6 +24,15 @@ fi
 
 [ -n "${_SI_PLUGIN_DATA_LIB:-}" ] && return 0
 _SI_PLUGIN_DATA_LIB=1
+
+# Normalize Codex and Claude host inputs once at the compatibility resolver boundary. The
+# dataset resolver below consumes provider-neutral values only.
+_SI_BASE_LIB="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
+if [ -r "$_SI_BASE_LIB" ]; then
+  # shellcheck source=skills/shared/lib/corpflow-base.sh
+  . "$_SI_BASE_LIB"
+  corpflow_init_base_paths >/dev/null 2>&1 || true
+fi
 
 # 0 absolute, 1 unset, 2 relative. A "$" means the placeholder was never substituted.
 _si_dir_valid() {
@@ -81,7 +90,7 @@ si_resolve_dataset() {
     return 0
   fi
 
-  SI_DATASET_PATH="${CLAUDE_PROJECT_DIR:-.}/evals/$basename"
+  SI_DATASET_PATH="${WORKSPACE_ROOT:-.}/evals/$basename"
   # shellcheck disable=SC2034 # read by the sourcing caller
   SI_DATASET_SOURCE="fallback"
   printf >&2 'self-improvement: plugin data dir unavailable; using fallback dataset %s\n' \

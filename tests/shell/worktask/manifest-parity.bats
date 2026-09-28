@@ -4,6 +4,17 @@
 # plugin.json / marketplace.json / README.md (AC-4).
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
+_claude_skill_dirs() {
+  cd "$PLUGIN_ROOT" || return 1
+  find skills -name SKILL.md | sed 's#/SKILL\.md$##' | while IFS= read -r skill; do
+    name="${skill#skills/}"
+    if [ -f "commands/$name.md" ]; then
+      case "$name" in megatask|request-plan|worktask) ;; *) continue ;; esac
+    fi
+    printf '%s\n' "$skill"
+  done | sort
+}
+
 @test "AC-3: marketplace.json commands[] matches commands/*.md filesystem set exactly" {
   local manifest_list fs_list
   manifest_list="$(jq -r '.plugins[0].commands[]' "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
@@ -30,7 +41,7 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   # Carrying a SKILL.md is what makes a directory a skill, so discovery is by that
   # file rather than by depth: it admits skills/shared/milestone-helpers and excludes
   # skills/shared and skills/shared/lib, which are reference material and libraries.
-  fs_list="$(cd "$PLUGIN_ROOT" && find skills -name SKILL.md | sed 's#/SKILL\.md$##' | sort)"
+  fs_list="$(_claude_skill_dirs)"
   diff <(printf '%s\n' "$manifest_list") <(printf '%s\n' "$fs_list")
 }
 
@@ -167,13 +178,20 @@ _expected_registered_handlers() {
 }
 
 @test "plugin.json hooks: every hook handler on disk is registered (inverse parity)" {
-  local registered handler count=0
-  registered="$(jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  local registered handler marker count=0
+  registered="$({
+    jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+    jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/hooks/codex-hooks.json"
+  })"
 
   while IFS= read -r handler; do
     [ -n "$handler" ] || continue
     [ -f "$PLUGIN_ROOT/$handler" ] || fail "expected handler missing on disk: $handler"
-    printf '%s\n' "$registered" | grep -Fq -- "\${CLAUDE_PLUGIN_ROOT}/$handler" \
+    case "$handler" in
+      hooks/codex-*.sh) marker="\${PLUGIN_ROOT}/$handler" ;;
+      *) marker="\${CLAUDE_PLUGIN_ROOT}/$handler" ;;
+    esac
+    printf '%s\n' "$registered" | grep -Fq -- "$marker" \
       || fail "handler exists on disk but is registered in no plugin.json hook event: $handler"
     count=$((count + 1))
   done < <(_expected_registered_handlers)

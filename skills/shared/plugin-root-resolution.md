@@ -4,13 +4,21 @@ name: plugin-root-resolution
 
 # Plugin-Root Resolution (provider-agnostic)
 
-**Definition**: the directory containing `.claude-plugin/plugin.json` for the corpflow
-plugin. Known layouts: the Claude Code cache
+**Definition**: the directory containing the Corpflow portable `plugin.json`,
+`.codex-plugin/plugin.json`, or `.claude-plugin/plugin.json` manifest. Known layouts include the
+Claude Code cache
 `~/.claude/plugins/cache/igrsoft/corpflow/<version>/` (version-keyed, so never hardcode
 it); a plain git clone, where it is the repository root; or wherever another harness
 installed the plugin directory.
 
-## Why `CLAUDE_PLUGIN_ROOT` alone is not enough
+## Canonical names
+
+Shared Corpflow code uses `BASE_PLUGIN_ROOT` and `BASE_PLUGIN_DATA`. The mirrored
+`corpflow-base.sh` utility initializes them from host inputs. Codex hooks provide `PLUGIN_ROOT` and
+`PLUGIN_DATA`; Claude Code provides `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`. Do not invent a
+`CODEX_PLUGIN_ROOT` variable.
+
+## Why a host variable alone is not enough
 
 `CLAUDE_PLUGIN_ROOT` is Claude Code-only, with two behaviors:
 
@@ -27,18 +35,18 @@ literal prose.
 
 ## Resolution ladder
 
-1. **`$CLAUDE_PLUGIN_ROOT` when set in the executing shell** — hook subprocesses and tests
-   that export it. An explicitly set value always wins (tests rely on this override).
-2. **Skill base directory, minus `/skills/<name>`** — every agent-skills harness announces
+1. **`$BASE_PLUGIN_ROOT` when already initialized** — explicit host-neutral override.
+2. **`$PLUGIN_ROOT` in Codex hooks**, then **`$CLAUDE_PLUGIN_ROOT` in Claude hooks**.
+3. **Skill base directory, minus `/skills/<name>`** — agent-skills harnesses expose the loaded
    "Base directory for this skill: `<path>`" on load; for a corpflow skill the root is two
    levels up.
-3. **Read-path derivation** — from the absolute path of a file you `Read`, walk up to the
-   nearest ancestor containing `.claude-plugin/plugin.json`.
-4. **Claude Code cache, last resort** (CC installs only):
+4. **Read-path derivation** — from the absolute path of a file you read, walk up to the nearest
+   ancestor containing any supported manifest marker.
+5. **Claude Code cache, last resort** (CC installs only):
    `ls -d ~/.claude/plugins/cache/igrsoft/corpflow/*/ 2>/dev/null | sort -V | tail -1`
    — may be stale if an older version is pinned.
 
-Validate every candidate: `[ -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]`.
+Validate every candidate with `corpflow_is_plugin_root`.
 
 ## Canonical executable-snippet shape (markdown)
 
@@ -53,6 +61,12 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"  # Claude Code substitutes this token when l
 [ -d "$PLUGIN_ROOT" ] || PLUGIN_ROOT="<plugin-root>"
 HELPER="$PLUGIN_ROOT/skills/<skill>/scripts/<helper>.sh"
 ```
+
+## Host-boundary behavior
+
+The snippet above is intentionally a Claude boundary because its permission matcher performs
+textual substitution. Codex skill adapters instead resolve `BASE_PLUGIN_ROOT` from their own base
+directory and follow `skills/shared/codex-runtime.md`.
 
 Under Claude Code the first line is substituted and the fallback is dead code. Elsewhere
 the variable expands to empty, the `-d` test fails, and the executor substitutes
@@ -143,9 +157,10 @@ rule is defined once. `grant-lint.sh` also checks frontmatter grants and, with
   `hooks/megatask-monitor.sh`) followed by: "(plugin root: `${CLAUDE_PLUGIN_ROOT}` if
   available, else resolve per `skills/shared/plugin-root-resolution.md`)".
 - **Shell scripts** (executed, never load-substituted) source
-  `skills/shared/lib/corpflow-base.sh` and call `corpflow_plugin_root` (env first, then a
-  self-location walk validated against the `.claude-plugin/plugin.json` marker) instead of
-  reimplementing it. `hooks/lib/corpflow-base.sh` is a byte-identical mirror, checked by
+  `skills/shared/lib/corpflow-base.sh`, call `corpflow_init_base_paths`, and construct bundled
+  paths with `corpflow_plugin_path`. The resolver uses `BASE_PLUGIN_ROOT`, `PLUGIN_ROOT`, then
+  `CLAUDE_PLUGIN_ROOT`, followed by a self-location walk over all supported markers.
+  `hooks/lib/corpflow-base.sh` is a byte-identical mirror, checked by
   `tests/shell/skills/corpflow-base.bats`.
 - **Tests** may set or unset the env var to exercise the override and fallback contracts
   (`tests/shell/worktask/hook-install.bats`, `tests/shell/dv-screenshot/apple-canvas.bats`,
