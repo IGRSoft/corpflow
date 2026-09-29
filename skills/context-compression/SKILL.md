@@ -111,9 +111,11 @@ What each handoff carries into the stage it feeds:
 
 Use the extended inbound figure only on a live 1M window for a genuinely complex run; standard budgets cost less.
 
-- **Credit gate**: without 1M usage credits a 1M session auto-compacts back under the standard limit, so plan against the standard column unless credits are confirmed. **Fable 5.x** (default Fable 5.1) is 1M by default but credit-gated: fable-tier dispatch fails without credits (`skills/shared/model-selection.md`). **Sonnet 5** is natively 1M, same caveat.
+- **Credit gate**: without 1M usage credits a 1M session auto-compacts back under the standard limit, so plan against the standard column unless credits are confirmed. **Fable 5.x** (default Fable 5.1) is 1M by default but credit-gated: fable-tier dispatch fails without credits (`skills/shared/model-selection.md`). **Sonnet 5.5** is natively 1M; the release notes do not say whether that window is credit-gated, so the standard column applies until credits are confirmed.
 - **Opus 5.5 is the exception**: its 1M window is ungated, so opus-tier stages on the `opus` alias always plan against the extended column.
-- **`--fallback-model`**: compaction honors it, so a credit-gated 1M Fable compaction degrades to the fallback (e.g. `claude-sonnet-5`) instead of failing.
+#### Extended Context Budget — fallback and long sessions
+
+- **`--fallback-model`**: compaction honors it, so a credit-gated 1M Fable compaction degrades to the fallback (e.g. `claude-sonnet-5-5`) instead of failing.
 - **Long orchestrator sessions**: set `/autocompact 200k` so a 1M session compacts before the window fills (`skills/cost-optimization/references/token-baselines.md § Session commands`).
 
 ## Exploration Cache Budget

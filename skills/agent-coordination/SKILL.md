@@ -369,7 +369,7 @@ On platform projects `software-architector` consults that platform's architect d
 
 The table says who takes a sub-task, not that every sub-task needs one. There is no per-session total-spawn cap, so nothing stops a stage spending its budget on spawns a direct tool call would have answered.
 
-Delegate work that is genuinely independent and parallelizable, or needs expertise this stage lacks: a wide multi-file investigation, a platform specialist, a per-stream DV split. Do not delegate what a grep and two reads would settle, do not spawn a subagent to double-check your own output, and use one delegate where one suffices. The `opus` stages reach for delegation most readily; brief section `[4b]` carries the same rule at dispatch (`skills/shared/model-prompting.md § opus`).
+Delegate work that is genuinely independent and parallelizable, or needs expertise this stage lacks: a wide multi-file investigation, a platform specialist, a per-stream DV split. Do not delegate what a grep and two reads would settle, do not spawn a subagent to double-check your own output, and use one delegate where one suffices. A `sonnet` stage at `xhigh` or `max` can start reviewer subagents on its own; brief section `[4b]` counters that at dispatch (`skills/shared/model-prompting.md § sonnet`).
 
 #### Nested delegation
 
@@ -450,6 +450,10 @@ Agent-team teammates use the lead session's model unless overridden. Aliases (`f
 #### Cross-session reach & SendMessage authority
 
 `SendMessage` reaches sessions on other machines. `ListAgents` discovers them — labelling disconnected Remote Control rows `offline` and cloud rows `cloud` — and also lists live teammates and the session's own name (the `name` key), the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value holds messages (user settings) or refuses them (managed settings) rather than being ignored. A message held by the receiving session's own permission-mode policy reaches the sender as a delivery notice. Its exact string is unconfirmed, so treat it as a `blocked`-class result (§ Delivery is reported, so check it).
+
+##### Sessions without SendMessage & cloud restarts
+
+A session launched without the `SendMessage` tool, as Claude Desktop launches some, is not told to message other sessions, so expect no outbound message from it. A cloud session tells Claude about background agents that finished just before a worker restart, so a completion there survives the restart.
 
 ##### Authority does not relay
 

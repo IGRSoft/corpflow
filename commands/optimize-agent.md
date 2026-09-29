@@ -175,6 +175,7 @@ Where a class recurs, fix it in the form that class takes — `agents/prompt-eng
 REQUIRED slot in the template being filled in.
 
 Don't answer a recurring class with a generic self-check block ("Before responding, verify:
-output matches format…"): `skills/shared/model-prompting.md § opus` names it as compounding into
-over-verification, and half the agents resolve to `opus`. A criterion that names an artifact stays —
+output matches format…"): `skills/shared/model-prompting.md § The verification line is narrower
+than it looks` makes it a deletion on `opus`, where effort rather than prompt text sets how much the
+model thinks, and half the agents resolve to `opus`. A criterion that names an artifact stays —
 that is the completion-criteria row.

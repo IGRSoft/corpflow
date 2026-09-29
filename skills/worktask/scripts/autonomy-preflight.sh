@@ -18,9 +18,10 @@
 #
 #   Rules are read with precedence user < project < project-local < managed. Deny and
 #   ask rules fail any check they match (an ask rule is a prompt nobody will answer).
-#   An allow rule matches in the forms `Bash`, `Bash(*)`, `Bash(<prefix>:*)` and
-#   `Bash(<glob with *>)`, tested against a representative invocation carrying
-#   arguments, so an exact `Bash(gh pr merge)` rule does not count.
+#   An allow rule matches in the forms `Bash`, `Bash(*)`, `Bash(<prefix>:*)`,
+#   `Bash(<glob with *>)`, `Bash(<glob with *>:*)` and `Bash(<a>:* <b>)` (a mid-pattern
+#   `:*` read as `*`), tested against a representative invocation carrying arguments,
+#   so an exact `Bash(gh pr merge)` rule does not count.
 #
 # @arg --auto <list>              Resolved /worktask --auto values (comma list, brackets ok).
 #                                 Neither plan nor finalization => result=skipped.
@@ -231,14 +232,24 @@ _rule_matches() { # <rule> <invocation>
     *) return 1 ;;
   esac
   [ -n "$body" ] || return 1
+  # A mid-pattern `:*` is deliberately read as a bare `*`: a deny or ask rule of that form fails
+  # closed, and an allow rule may pass here while Claude Code still prompts.
   case "$body" in
     *:\*)
       body="${body%:\*}"
+      case "$body" in
+        *\**)
+          body="${body//:\*/*}"
+          _star_glob "$body" "$inv" || _star_glob "$body *" "$inv"
+          return
+          ;;
+      esac
       [ "$inv" = "$body" ] && return 0
       case "$inv" in "$body "*) return 0 ;; esac
       return 1
       ;;
   esac
+  body="${body//:\*/*}"
   _star_glob "$body" "$inv"
 }
 
@@ -966,10 +977,12 @@ self_test() {
   }
 
   for r in 'Bash(gh pr merge:*)' 'Bash(gh pr merge *)' 'Bash(gh pr:*)' 'Bash(gh:*)' \
-    'Bash(gh *)' 'Bash' 'Bash(*)' 'Bash(gh pr m*)'; do
+    'Bash(gh *)' 'Bash' 'Bash(*)' 'Bash(gh pr m*)' 'Bash(gh pr:* --squash)' 'Bash(gh:* merge:*)' \
+    'Bash(gh * merge:*)'; do
     if _rule_matches "$r" "gh pr merge 1 --squash"; then ok "rule $r matches"; else bad "rule $r should match"; fi
   done
-  for r in 'Bash(gh pr merge)' 'Bash(gh pr list:*)' 'Bash(ghx:*)' 'Read' 'Bash(gh pr *merge-queue)'; do
+  for r in 'Bash(gh pr merge)' 'Bash(gh pr list:*)' 'Bash(ghx:*)' 'Read' 'Bash(gh pr *merge-queue)' \
+    'Bash(gh pr:* --rebase)' 'Bash(gh:* close:*)'; do
     if _rule_matches "$r" "gh pr merge 1 --squash"; then bad "rule $r should not match"; else ok "rule $r does not match"; fi
   done
 
@@ -1027,6 +1040,15 @@ EOS
     && [ ! -e "$t/proj/.context" ]; then
     ok "READ permission and missing merge rule fail in one block, no .context"
   else bad "fail run rc=$rc"; fi
+
+  for r in 'Bash(gh:* merge:*)' 'Bash(gh * merge:*)'; do
+    printf '{"permissions":{"allow":["Bash(gh pr merge:*)"],"deny":["%s"]}}' "$r" > "$t/cfg/deny.json"
+    out=$(_st_run "$t/cfg/deny.json" WRITE --auto plan --platform backend 2> /dev/null)
+    rc=$?
+    if [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF "deny rule \\\"$r\\\""; then
+      ok "deny rule $r blocks gh pr merge despite the allow rule"
+    else bad "deny rule $r run rc=$rc"; fi
+  done
 
   out=$(_st_run "$t/cfg/allow.json" WRITE --auto finalization --platform web --accept-absent playwright 2> /dev/null)
   rc=$?

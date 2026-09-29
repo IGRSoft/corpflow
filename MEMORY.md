@@ -5,8 +5,8 @@ Repository-tracked memory (lean rolling format). Narratives live in git history,
 ## Version Tracking
 
 - Plugin version: **4.1.0** (2026-09-28; Codex compatibility with portable packaging, skill adapters, hooks, model translation, and host-neutral path resolution.)
-- Claude Code min required: **2.1.280** (README.md is authoritative; load-bearing: 2.1.271 closes the silent-failure class for cross-session messages held by the receiver's own permission-mode policy — headless senders now get a delivery notice, matching the 2.1.238 precedent this floor already tracks)
-- Claude Code latest integrated band: **2.1.271→2.1.280**
+- Claude Code min required: **2.1.284** (README.md is authoritative; load-bearing: 2.1.282 settings honor mid-pattern `:*` Bash rules that preflight now matches, and 2.1.284 makes Sonnet 5.5 the `sonnet` alias target on the Anthropic API)
+- Claude Code latest integrated band: **2.1.281→2.1.284**
 
 ## CC Feature Band Index
 
@@ -14,6 +14,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 | Band | Canonical file | Plugin release |
 |------|----------------|----------------|
+| 2.1.281→2.1.284 | cc-features-2.1.281-284.md | v4.1.0 develop (Sonnet 5.5 repin, mid-pattern :* preflight parity, ultracode toggle; min CC → 2.1.284) |
 | 2.1.271→2.1.280 | cc-features-2.1.271-280.md | v4.0.32 develop (Opus 5.5 default, workflow-size 15→10, TaskOutput removal, held-message delivery notice; min CC → 2.1.280) |
 | 2.1.252→2.1.270 | cc-features-2.1.252-270.md | v4.0.32 develop (queued reattach, SessionEnd timeout, FORCE preflight; min CC → 2.1.270) |
 | 2.1.234→2.1.251 | cc-features-2.1.234-251.md | v4.0.27 (cross-session comms, delivery-checked reattach, PreModelSwitch gate; min CC → 2.1.251) |
@@ -42,6 +43,7 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-09-29: v4.1.0 (develop) — Claude Code 2.1.284 update (33 files, min CC → 2.1.284, Opus/Sonnet 5.5-only guidance, preflight mid-pattern :* parity).
 - 2026-09-23: v4.0.32 (develop) — Claude Code 2.1.280 update (6 files, min CC → 2.1.280, Opus 5.5 default, workflow-size 15→10, TaskOutput removal, held-message delivery notice).
 - 2026-09-13: v4.0.32 (develop) — Claude Code 2.1.270 update (18 files, min CC → 2.1.270, queued reattach row, SessionEnd hook timeout, FORCE preflight).
 - 2026-09-09: v4.0.31 — leaderboard V1 fix plan phases A–E: discovered-vs-executed evidence, sweep transport for five agents, AR contract before DV fan-out.
@@ -53,4 +55,3 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-08-26: v4.0.26 — command-surface reorganization: 38 → 28 commands, 26 → 23 skills; cost observability retired.
 - 2026-08-24: v4.0.25 — plan-approval carrier `PL0.metadata.approved` gets writers at all three approval arms.
 - 2026-08-22: v4.0.23 — CI pipeline from scratch with pipefail gate; POSIX `df -Pk` ENOSPC guard.
-- 2026-08-21: v4.0.22 — trigger-first descriptions, rationalization tables, desc-lint G1–G6, proactive PL sizing.

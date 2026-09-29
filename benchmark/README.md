@@ -412,6 +412,13 @@ change invalidates comparisons just as surely as a model repin.
   gate refuses mixed pairs and `bench-analyze` caveats the first new run against
   the last `claude-opus-5` one on its own; no entry in `results/history.json` is
   edited. The Sonnet and Haiku stages are unchanged.
+- **Sonnet 5.5 pins** — the four Sonnet stages in `STAGE_TABLE` (TL, QA, FN, ST)
+  repinned from `claude-sonnet-5` to `claude-sonnet-5-5`, the model the `sonnet`
+  alias resolves to. Runs from this change on are **not comparable** to any earlier
+  record. The new pins travel in every record's `era.model_pins`, so the pairing
+  gate refuses mixed pairs and `bench-analyze` caveats the first new run against
+  the last `claude-sonnet-5` one on its own; no entry in `results/history.json` is
+  edited. The Opus and Haiku stages are unchanged.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.

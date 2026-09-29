@@ -62,9 +62,9 @@ CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 
 # A fixed id, not an alias and not the shipped model: /request-plan sets no
 # `model:` and runs on the caller's session default, which varies by account and
-# moves with Claude Code releases. Every evals/findings/ capture ran on this id,
-# so moving it re-baselines the series; pass --model to measure another model.
-DEFAULT_MODEL = "claude-sonnet-5"
+# moves with Claude Code releases. Captures compare only within one id, so moving
+# it re-baselines the evals/findings/ series; pass --model to measure another model.
+DEFAULT_MODEL = "claude-sonnet-5-5"
 DEFAULT_TIMEOUT = 300.0
 DEFAULT_RETRIES = 2
 RETRY_BACKOFF_S = 20.0

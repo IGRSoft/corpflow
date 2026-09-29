@@ -67,7 +67,7 @@ opinion. Nothing downgrades mid-run.
 
 ## Platform Detection
 
-Priority order: (1) explicit `--platform apple|android|web|systems|backend|ai`; (2) file context — extension and project markers; (3) project structure — build files, manifests, configs; (4) ask the user if ambiguous.
+Priority order: (1) explicit `--platform apple|android|web|systems|backend|ai`; (2) file context — extension and project markers; (3) project structure — build files, manifests, configs; (4) still ambiguous: with `metadata.worktask_id` present, write a `## Blockers` row (`kind: ambiguous_requirements`, `escalate_to: USER`) and return `verdict: blocked`; without it (an ad-hoc task), ask the user.
 
 When that order and the common rows below don't resolve the target, read `skills/shared/platform-detection.md § Detection Rules (markers → platform)`.
 

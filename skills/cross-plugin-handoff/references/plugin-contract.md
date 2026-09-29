@@ -154,7 +154,16 @@ their own `SKILL.md` are listed in `skills[]`.
 #### Listing, loading and eval
 
 - `claude plugin list --json` rows carry `errorDetails`/`noteDetails`, which tell a sibling that is
-  installed but failed to load apart from one that is absent.
+  installed but failed to load apart from one that is absent. The Skill tool draws the same line:
+  a skill whose plugin failed to load is reported as a load failure, not as uninstalled. Under
+  `-p`, the stream-json `system/init` `plugin_errors` entries carry `path`, naming the
+  `--plugin-dir` that did not load.
+#### Managed-only permission rules
+
+- Under managed `allowManagedPermissionRulesOnly`, a sibling installed from a marketplace,
+  claude.ai or npm loses its `allowed-tools` pre-approval; only a plugin from an official Anthropic
+  source, or a source managed settings vouch for, keeps it. The sibling's tool calls then fall to
+  the managed rules alone.
 - `--plugin-dir` pointed at a folder of plugins loads every child folder with a manifest — one flag
   loads the siblings for local dev.
 - Component paths that are symlinks, contain a backslash, or escape the plugin root are refused;

@@ -70,8 +70,8 @@ Cheapest-first when only the verdict/decisions/refs or delta is needed: (1) read
 
 ### QA Stage (QA Testing)
 
-- **Q0**: analyze requirements, review DV's unit tests, identify coverage gaps.
-- **Q1**: add missing edge-case tests, then dispatch execution per the **Test Selection Gate** (`testing-strategy.md § Test Selection Gate`); sub-sections below.
+- **Q0**: analyze requirements, review DV's unit tests, and list each coverage gap in `testing-N.md § Notes`.
+- **Q1**: add one test per `<plan_file>` edge case with no covering test, plus one per gap Q0 listed in `testing-N.md § Notes`, then dispatch execution per the **Test Selection Gate** (`testing-strategy.md § Test Selection Gate`); sub-sections below.
 - **Mutation evidence**: confirm a mutation actually applied (byte-diff against a backup) before trusting the result it produced — `testing-strategy.md § Mutation Testing`.
 
 QA is the sole holder of full-suite execution authority in this pipeline (`testing-strategy.md § Test-Execution Authority`). Escalate to a full run when any of: `test_mode: full`; DV recorded `deferred_to_qa`; Selected Tests is empty; a banned stage filed `requests_test_evidence`. Under `test_mode: full`, DV executes only its `Executed Tests (DV)` subset; QA runs the full suite.
@@ -246,7 +246,7 @@ Each native UI leg is one row of a `### Native UI Legs` table under `## results`
 
 ### Test coverage and quality
 
-- [ ] Developer's unit tests reviewed for quality; edge-case tests added where needed
+- [ ] Developer's unit tests reviewed for quality; one test added per `<plan_file>` edge case with no covering test, plus one per gap Q0 listed in `testing-N.md § Notes`
 - [ ] All tests pass (zero failures); coverage meets threshold for changed code
 - [ ] Every edge case from `<plan_file>` is covered
 - [ ] `testing-N.md` written to `.context/` (N = `task.metadata.run_index`); test files created or updated

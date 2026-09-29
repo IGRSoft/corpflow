@@ -68,16 +68,16 @@ class PromptAssembly(_Fixture):
     def test_argv_pins_model_and_stream_json_output(self):
         """stream-json, not json: the plain envelope drops every assistant message but
         the last, which is how a written plan reached disk as its own follow-up."""
-        argv = capture.build_argv("claude-sonnet-5", None)
+        argv = capture.build_argv("claude-sonnet-5-5", None)
         self.assertEqual(argv[:2], ["claude", "-p"])
         self.assertIn("--output-format", argv)
         self.assertEqual(argv[argv.index("--output-format") + 1], "stream-json")
         self.assertIn("--verbose", argv)  # stream-json under -p requires it
-        self.assertEqual(argv[argv.index("--model") + 1], "claude-sonnet-5")
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-sonnet-5-5")
         self.assertNotIn("--settings", argv)
 
     def test_settings_path_is_appended_when_given(self):
-        argv = capture.build_argv("claude-sonnet-5", "/tmp/s.json")
+        argv = capture.build_argv("claude-sonnet-5-5", "/tmp/s.json")
         self.assertEqual(argv[argv.index("--settings") + 1], "/tmp/s.json")
 
 
@@ -259,7 +259,7 @@ class OfflineGrading(_Fixture):
         rec = {"case_id": 1, "response": response,
                "prompt_digest": engine.prompt_digest(self.eval_set, 1),
                "assertions_digest": engine.assertions_digest(self.eval_set, 1),
-               "model": "claude-sonnet-5", "captured_at": "2026-08-16T00:00:00Z"}
+               "model": "claude-sonnet-5-5", "captured_at": "2026-08-16T00:00:00Z"}
         rec.update(overrides)
         return rec
 

@@ -17,14 +17,14 @@ from typing import Optional
 STAGE_TABLE = {
     "PL": ("corpflow:product-manager", "claude-opus-5-5", "high"),
     "AR": ("corpflow:software-architector", "claude-opus-5-5", "high"),
-    "TL": ("corpflow:team-lead", "claude-sonnet-5", "medium"),
+    "TL": ("corpflow:team-lead", "claude-sonnet-5-5", "medium"),
     "DV": ("corpflow:developer", "claude-opus-5-5", "high"),
     "DR": ("corpflow:technical-lead", "claude-opus-5-5", "high"),
     "SR": ("corpflow:security-reviewer", "claude-opus-5-5", "xhigh"),
-    "QA": ("corpflow:qa-engineer", "claude-sonnet-5", "medium"),
+    "QA": ("corpflow:qa-engineer", "claude-sonnet-5-5", "medium"),
     "DC": ("corpflow:technical-writer", "claude-haiku-4-5", "low"),
-    "FN": ("corpflow:project-manager", "claude-sonnet-5", "medium"),
-    "ST": ("corpflow:stakeholder", "claude-sonnet-5", "low"),
+    "FN": ("corpflow:project-manager", "claude-sonnet-5-5", "medium"),
+    "ST": ("corpflow:stakeholder", "claude-sonnet-5-5", "low"),
 }
 
 CAPTURE_JSON = "json"

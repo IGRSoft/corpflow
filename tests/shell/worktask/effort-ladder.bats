@@ -83,9 +83,9 @@ ladder() { # <shell body>
 
 # --- the tier/model clamp ----------------------------------------------------
 #
-# xhigh runs on Opus 4.7+, Sonnet 5 and Fable 5.x; any other model runs it at the highest level
-# it supports, with no error. The clamp is what keeps a resolver from running two rungs below
-# what its audit row claims.
+# xhigh runs on Opus 5.5, Sonnet 5.5 and Fable 5.x; a pinned id outside those runs it at the
+# highest level it supports, with no error. The clamp is what keeps a resolver from running two
+# rungs below what its audit row claims.
 
 @test "opus carries every bumped rung uncapped" {
   run ladder 'printf "%s %s %s" "$(effort_for_resolver high opus)" \
@@ -100,7 +100,7 @@ ladder() { # <shell body>
   assert_output "max"
 }
 
-@test "sonnet (Sonnet 5) carries xhigh and max uncapped" {
+@test "sonnet (Sonnet 5.5) carries xhigh and max uncapped" {
   run ladder 'printf "%s %s %s" "$(effort_for_resolver high sonnet)" \
     "$(effort_for_resolver xhigh sonnet)" "$(effort_for_resolver max sonnet)"'
   assert_success
@@ -123,7 +123,7 @@ ladder() { # <shell body>
 @test "an unrecognized model alias clamps rather than assuming opus" {
   # The safe direction: a full model id or a typo must not buy an uncarryable tier.
   run ladder 'printf "%s %s" "$(effort_for_resolver high claude-opus-5-5)" \
-    "$(effort_for_resolver high claude-sonnet-4-6)"'
+    "$(effort_for_resolver high claude-sonnet-5-5)"'
   assert_success
   assert_output "high high"
 }
@@ -354,9 +354,9 @@ EOF
 }
 
 @test "the uncapped aliases are the ones model-selection.md says carry xhigh" {
-  run grep -qF '`xhigh` runs on **Opus 4.7 and later, Sonnet 5 and Fable 5.x**, so the `opus`, `sonnet` and' "$PLUGIN_ROOT/$MODEL_SELECTION"
+  run grep -qF '`xhigh` runs on **Opus 5.5, Sonnet 5.5 and Fable 5.x** (the `opus`, `sonnet` and `fable`' "$PLUGIN_ROOT/$MODEL_SELECTION"
   assert_success
-  run grep -qF '`fable` aliases all carry it' "$PLUGIN_ROOT/$MODEL_SELECTION"
+  run grep -qF 'targets), so those aliases all carry it' "$PLUGIN_ROOT/$MODEL_SELECTION"
   assert_success
 }
 

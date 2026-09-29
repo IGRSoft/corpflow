@@ -140,7 +140,7 @@ Re-score with the complexity table in `skills/worktask/SKILL.md § Dynamic Workt
 validates PL's score with deeper technical insight, adjusts it when warranted, then checks PL0
 created the stages the validated score calls for. Missing stages → create them
 (`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-create <ID> --metadata '{"agent":…}'`). Scores differing by >10 points →
-create the missing stages or flag to the user before proceeding.
+create the missing stages and record the divergence in `open_questions[]`.
 
 #### Model Selection (AR)
 
@@ -196,7 +196,7 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
-**Skip-exploration short-circuit**: `task.metadata.skip_exploration === true` makes `metadata.exploration_anchors` (`<file>#<anchor>` refs) the authoritative pre-explored set — don't re-Glob/Grep the source tree for files it covers; read only those anchors and start from their facts (`skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`).
+**Skip-exploration short-circuit**: `task.metadata.skip_exploration === true` makes `metadata.exploration_anchors` (`<file>#<anchor>` refs) the authoritative pre-explored set — don't re-Glob/Grep the source tree for files it covers; start from their facts (`skills/agent-coordination/SKILL.md § Orchestrator → PL0 Handoff`).
 
 ### next_stage_focus and key_decisions
 

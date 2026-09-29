@@ -203,7 +203,7 @@ A TC consult returns advice, not a stage handoff, so it carries its own machine-
 tc_review:
   tc_verdict: approve          # approve / reject / conditional
   summary: "<=160 chars — the recommendation itself, not a restatement of the question>"
-  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the reasoning
+  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the decision and its evidence
   conditions: []               # required and non-empty when tc_verdict: conditional
   confidence: high             # high / medium / low
 ```

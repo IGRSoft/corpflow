@@ -41,7 +41,7 @@ _DISPATCH_ROW = re.compile(
     re.MULTILINE,
 )
 
-_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5"}
+_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5"}
 _EFFORT_TERMS = {"low", "medium", "high", "xhigh", "max"}
 
 
