@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from benchmarklive import credentials
 from benchmarklive.dispatch import dispatch
@@ -61,6 +62,36 @@ class CredentialProbe(unittest.TestCase):
         except credentials.CredentialError as e:
             self.assertEqual(str(e), credentials.MISSING_CREDENTIAL_MESSAGE)
             self.assertNotIn("sk-", str(e))
+
+
+class AuthProbeUsesTheEvalConfigDir(unittest.TestCase):
+    def _probe(self, config_dir):
+        seen = {}
+        real = credentials.Subprocess.run
+
+        def fake(argv, env=None, **_kw):
+            seen["argv"], seen["env"] = argv, env
+            return SimpleNamespace(exit_code=0, stdout=json.dumps({"loggedIn": True}), stderr="")
+
+        credentials.Subprocess.run = staticmethod(fake)
+        try:
+            self.assertTrue(credentials.has_cli_login(config_dir=config_dir))
+        finally:
+            credentials.Subprocess.run = staticmethod(real)
+        return seen
+
+    def test_probe_runs_under_the_given_config_dir(self):
+        seen = self._probe("/cfg/eval")
+        self.assertEqual(seen["argv"], ["claude", "auth", "status", "--json"])
+        self.assertEqual(seen["env"]["CLAUDE_CONFIG_DIR"], "/cfg/eval")
+
+    def test_probe_without_a_config_dir_inherits_the_environment(self):
+        self.assertIsNone(self._probe(None)["env"])
+
+    def test_message_contract_is_unchanged(self):
+        self.assertEqual(
+            credentials.MISSING_CREDENTIAL_MESSAGE,
+            "live mode requires credentials; set ANTHROPIC_API_KEY or run claude login")
 
 
 class DispatchCredentialGate(unittest.TestCase):

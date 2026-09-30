@@ -2,7 +2,7 @@
 name: developer
 description: Use for DV stage development, code implementation, debugging, and refactoring. Dynamic platform developer that routes to specialized agents (apple, android, web, systems, backend, ai) based on platform context.
 color: magenta
-version: 0.9.2
+version: 0.10.0
 maxTurns: 80
 effort: high
 # isolation: deliberately absent — frontmatter isolation cuts a fresh worktree before this agent
@@ -188,16 +188,27 @@ Exit 1 = resolved ≠ assigned: stop, do not edit, log `workspace_path_mismatch`
 ### D0.0b — Claim the ledger before you implement
 
 Your first write after the worktree pin, before D1: claim your own ledger row (`DV0`, `DV1`…),
-moving `pending` or `blocked` to `in_progress` and stamping `claimed_at`:
+moving `pending` or `blocked` to `in_progress` and stamping `claimed_at`. Open every Bash call that
+runs a plugin script with the first two lines below: when cwd is not a git root, the root ladder
+can resolve another checkout's `.context/`.
 
 ```bash
-state-patch.sh --claim <TASK_ID>
+export CONTEXT_DIR=<abs path of the .context/ holding your state.json>
+SP="$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh"
+bash "$SP" --claim <TASK_ID>
 ```
 
 Re-claiming an `in_progress` row is a no-op. Exit 4 means the row is already settled: stop and
 return `verdict: blocked` naming it — replaying a row is the orchestrator's call. The completion
 patch stays at § State Patch. Claiming first matters because a stage cannot see its remaining
 budget: a run that exhausts it mid-work still leaves a recoverable `in_progress` record.
+
+#### Claim exit 1 — your row was never seeded
+
+`unknown task id` means the orchestrator (or the benchmark harness) never seeded your row. Seeding
+is theirs, not yours: never run `--task-create` yourself. Write a `## Blockers` row
+(`kind: ledger_row_missing`, `escalate_to: ORCHESTRATOR`) naming the task id and the `state.json`
+path you claimed against, make no edits, and return `verdict: blocked`.
 
 ### D0.1 — Requirements & environment
 
@@ -211,6 +222,25 @@ Analyze requirements, set up the development environment, read test specs from `
 4. **Fix-up cycle**: on failure, diagnose every error in the log in one pass, apply all fixes, then rebuild.
 
 Every build attempt is tee'd → `.context/logs/build-developer-<ts>.log` (grammar: `logging-conventions`). A build past ~2 min auto-backgrounds, so step 4 waits for the completion notification, not the returned handle (`agent-coordination § MCP Auto-Background`).
+
+#### New files: one Bash call per module
+
+When D1 or D1.5 creates more than 5 new files, write them module by module: one Bash call per
+source or test folder, each file in its own quoted heredoc, so 30 new files land in 5–7 calls.
+
+```bash
+D="$WORKSPACE_ROOT/Sources/Kit/Engine"; mkdir -p "$D"
+cat > "$D/Board.swift" <<'EOF'
+…
+EOF
+cat > "$D/Player.swift" <<'EOF'
+…
+EOF
+```
+
+Edits to existing files stay on `Edit`, and `<your artifact>` stays on `Write`, which the
+anchor-preflight hook checks. Batched files follow `corpflow:code-comment-standard` like any other;
+the density gate reads them at SubagentStop.
 
 ### D1.5 — Write unit tests
 
@@ -317,9 +347,10 @@ The skill normally writes the manifest, but you own the outcome. If you patch or
 
 ### State.json registration
 
-After captures complete, merge them into state.json. Schema: `[{slug, path, bytes, platform, ok, design_ref?}, …]`; `design_ref` mirrors the manifest's `Design Ref` column. QA joins via the manifest, not `facts`.
+After captures complete, merge them into state.json. Schema: `[{slug, path, bytes, platform, ok, design_ref?}, …]`; `design_ref` mirrors the manifest's `Design Ref` column. QA joins via the manifest, not `facts`. `macos-window-capture.sh` prints this array as its `facts_screenshots=` line.
 
 ```bash
+_sf="$CONTEXT_DIR/state.json"; _tmp="${_sf}.tmp.$$"
 jq --argjson sc '<the captures array from skill output>' \
    '.facts.screenshots = ((.facts.screenshots // []) + $sc)' \
    "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
@@ -389,7 +420,7 @@ QA reads Always Required / Dependency-Matched / Excluded and executes the full S
 
 | id | kind | description | escalate_to |
 | -- | ---- | ----------- | ----------- |
-| b1 | missing_input \| design_flaw \| hard_constraint \| ambiguous_requirements | <text> | PL \| AR \| TL \| USER |
+| b1 | missing_input \| design_flaw \| hard_constraint \| ambiguous_requirements \| ledger_row_missing | <text> | PL \| AR \| TL \| USER \| ORCHESTRATOR |
 
 Retry Log (an H3 under `## deviations`; omit if `metadata.retry_count == 0`) mirrors the `errors/developer.md` headings — one bullet per retry: `DV[N] Retry [X] — <classification> — <one-line outcome>`. `## DV Completion Checklist`: verbatim copy of the § Completion Verification list with `[x]` boxes ticked; required by validation.
 
@@ -444,7 +475,7 @@ Before marking DV stage complete, verify:
 ### Completion checks — screenshots
 
 - [ ] `dv-screenshot-capture` invoked OR `metadata.requires_screenshots == false` documented in `<your artifact> § Decisions`
-- [ ] When `requires_screenshots ≠ false`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID>` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3 or 4 passes only on `backend`/`systems`) — hook-enforced at SubagentStop
+- [ ] When `requires_screenshots ≠ false`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID> --state "$CONTEXT_DIR/state.json"` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3 or 4 passes only on `backend`/`systems`) — hook-enforced at SubagentStop
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 
@@ -609,7 +640,7 @@ Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev 
 Pass `--facts` in the same call to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --task-id <ID> --prev <PREV> --facts '{
+bash "$SP" --stage DV --task-id <ID> --artifact "$CONTEXT_DIR/development-<N>.md" --prev <PREV> --facts '{
   "files_modified": ["Sources/Foo.swift"],
   "tests_added": ["Tests/FooTests.swift"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
@@ -618,14 +649,22 @@ state-patch.sh --stage DV --task-id <ID> --prev <PREV> --facts '{
 
 Union by `.id` (last writer wins, newest at the tail): it never clobbers an upstream stage's entries and a re-run is byte-identical. Omitting it loses the fact silently. Canonical rule: `handoff-protocol.md#facts-union`.
 
-### Files Read Registry (token optimization)
+#### Then validate the frontmatter, after the patch
 
-Before returning, merge into `state.json → facts.files_read` an entry per source file Read during this stage: `{path: "<relative>", stage: "DV", lines: "all" | "<start>-<end>"}`. Cap at 30 entries (most recent wins on collision by path). Downstream DR/QA then use `git diff` instead of full file reads.
+`handoff-harness.sh` fails a sweep stub that sits in your frontmatter but not in
+`facts.open_questions[]`, so run it once the `--facts` call above has landed them:
 
 ```bash
-jq --argjson fr '[{"path":"Sources/Foo.swift","stage":"DV","lines":"all"},{"path":"Sources/Bar.swift","stage":"DV","lines":"1-150"}]' \
-   '.facts.files_read = (($fr + (.facts.files_read // [])) | unique_by(.path) | .[-30:])' \
-   "$_sf" > "$_tmp" && sync "$_tmp" && mv -f "$_tmp" "$_sf"
+bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" --validate-frontmatter \
+  "$CONTEXT_DIR/development-<N>.md" --state "$CONTEXT_DIR/state.json"
+```
+
+### Files Read Registry (token optimization)
+
+Before returning, merge into `state.json → facts.files_read` an entry per source file Read during this stage. `--files-read` writes `{path, stage: "DV", lines: "all"}` per path, replaces an existing same-path entry and keeps the newest 30. Downstream DR/QA then use `git diff` instead of full file reads.
+
+```bash
+bash "$SP" --files-read <TASK_ID> .context/planning-0.md Sources/Foo.swift Sources/Bar.swift
 ```
 
 <!-- output-sections:begin stage=DV -->

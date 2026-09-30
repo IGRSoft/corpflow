@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# The four capture adapters inline _task_id_ok, _field_ok and _next_nn instead of sharing a lib;
+# The five capture adapters inline _task_id_ok, _field_ok and _next_nn instead of sharing a lib;
 # this suite keeps the copies identical and pins _next_nn's numbering rules once.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
@@ -8,6 +8,7 @@ ADAPTERS=(
   skills/dv-screenshot-capture/scripts/android-capture.sh
   skills/dv-screenshot-capture/scripts/apple-canvas.sh
   skills/dv-screenshot-capture/scripts/cli-fallback.sh
+  skills/dv-screenshot-capture/scripts/macos-window-capture.sh
 )
 LADDER_SCRIPTS=(
   "${ADAPTERS[@]}"
@@ -19,7 +20,7 @@ fn_body() { # <script> <function>
   awk -v fn="$2" '$0 == fn "() {" { p = 1 } p { print } p && $0 == "}" { exit }' "$PLUGIN_ROOT/$1"
 }
 
-@test "each helper is present and byte-identical across the four adapters" {
+@test "each helper is present and byte-identical across the five adapters" {
   local fn first a body
   for fn in _task_id_ok _field_ok _next_nn; do
     first="$(fn_body "${ADAPTERS[0]}" "$fn")"

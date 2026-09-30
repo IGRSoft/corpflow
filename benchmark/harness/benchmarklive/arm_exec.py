@@ -12,6 +12,7 @@ from typing import Optional, Protocol
 from benchmarkkit.genlib import Subprocess
 
 from . import baseline as baseline_mod
+from .plugin_load import LoadedPlugin
 
 # Production dispatcher per-stage ceiling (D5); a hung child never blocks a run forever.
 STAGE_TIMEOUT_S = 3600.0
@@ -19,13 +20,20 @@ STAGE_TIMEOUT_S = 3600.0
 
 @dataclass
 class ArmSpec:
-    """The sole legitimate A/B difference: ``bind_agent`` (→ --agent) and ``cwd``.
-    Everything else (prompts, budget, capture shape) is shared by construction."""
+    """The sole legitimate A/B differences: ``bind_agent`` (→ --agent), ``plugin_dir``
+    (→ --plugin-dir), the sibling plugins enabled in ``enabled_plugins`` and ``cwd``.
+    Everything else (prompts, budget, capture shape, config dir) is shared by construction.
+
+    ``plugin_dir`` is set only on the WITH arm. An arm with ``enabled_plugins`` and no
+    ``plugin_dir`` is the plugin-free baseline: its stages must report zero plugins in
+    ``system/init``. ``enabled_plugins=None`` leaves plugin config untouched."""
 
     name: str            # "with" | "without"
     bind_agent: bool
     cwd: str
     audit_path: str
+    plugin_dir: Optional[str] = None   # verified against system/init when capture is stream-json
+    enabled_plugins: Optional[dict] = None   # settings enabledPlugins; None = no isolation
 
 
 @dataclass
@@ -36,6 +44,9 @@ class ArmResult:
     partial: bool = False
     dv_gated: bool = False
     app: Optional[baseline_mod.AppMeasure] = None
+    plugin: Optional[LoadedPlugin] = None   # corpflow tree the CLI reported; None if unobserved
+    plugin_error: Optional[str] = None      # set when the loaded plugins break the arm's contract
+    plugins: Optional[list] = None          # every plugin the CLI reported, name@version; None if unobserved
 
 
 class Dispatching(Protocol):
@@ -50,12 +61,15 @@ class DispatchFailure(Exception):
 class SubprocessDispatcher:
     """Production dispatcher: shell out to headless `claude -p`, prompt on stdin."""
 
-    def __init__(self, workdir: Optional[str] = None, timeout: Optional[float] = STAGE_TIMEOUT_S) -> None:
+    def __init__(self, workdir: Optional[str] = None, timeout: Optional[float] = STAGE_TIMEOUT_S,
+                 env: Optional[dict] = None) -> None:
         self.workdir = workdir
         self.timeout = timeout
+        self.env = env   # None inherits; the live path pins CLAUDE_CONFIG_DIR here
 
     def run(self, argv: list, prompt_text: str) -> str:
-        r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, timeout=self.timeout)
+        r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, env=self.env,
+                           timeout=self.timeout)
         if r.exit_code != 0:
             snippet = r.stderr.strip()[:400]
             # Under --output-format json the CLI reports API failures on stdout, not

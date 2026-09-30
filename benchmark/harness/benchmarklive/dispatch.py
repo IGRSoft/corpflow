@@ -4,12 +4,15 @@ Runs PL→AR→TL→DV→DR→SR→QA→DC→FN→ST one stage per headless ``cl
 REAL tokens/cost, budget-gated, credential-gated. Real dispatch hides behind the
 Dispatching protocol; tests inject fakes so NO real LLM call / spend happens. Exit
 codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach or
-degradation (partial record written FIRST, D6).
+degradation (partial record written FIRST, D6) / 5 an arm's loaded plugins broke its
+contract: WITH loaded a corpflow tree other than the one under test, or WITHOUT loaded
+any plugin (partial record written, never rotated into history).
 
 Paired arms (U3/U4): the WITHOUT arm no longer runs a single-shot baseline — both
 arms execute the SAME ordered 10-stage prompt sequence over the SAME shared prompt
-bytes, differing ONLY by ``--agent`` binding (WITH) vs bare (WITHOUT) and by cwd
-(``workdirs/<id>/{with,without}/``). ``without_arm="skip"`` (the mechanism default
+bytes, differing ONLY by ``--agent`` binding, ``--plugin-dir`` and the sibling plugins (WITH)
+vs bare (WITHOUT) and by cwd (``workdirs/<id>/{with,without}/``). Both run against one
+isolated config dir (``isolation``); the WITHOUT arm must load zero plugins. ``without_arm="skip"`` (the mechanism default
 and every ``--stages`` subset) runs the WITH arm alone and keeps the WITHOUT
 placeholder byte-stable for every pre-existing caller.
 
@@ -20,6 +23,7 @@ shapes in records. Every one of their names stays reachable as ``dispatch.<name>
 
 from __future__ import annotations
 
+import functools
 import os
 import sys
 from datetime import datetime, timezone
@@ -31,6 +35,9 @@ from benchmarkkit.metrics import BenchmarkRecord, write_record
 
 from . import baseline as baseline_mod
 from . import budget as budget_mod
+from . import isolation
+from . import ledger_seed
+from . import plugin_load
 from . import preamble
 
 # Re-export shim: callers and tests address these as ``dispatch.<name>``.
@@ -134,12 +141,17 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             capture_mode: str = CAPTURE_JSON, settings_path: Optional[str] = None,
             captures_dir: Optional[str] = None,
             persist_partial: Optional[Callable[["ArmResult"], None]] = None,
-            now_fn: Optional[Callable[[], float]] = None) -> ArmResult:
+            now_fn: Optional[Callable[[], float]] = None,
+            ledger_seeder: Optional[Callable[[str], None]] = None) -> ArmResult:
     """Dispatch one arm's ordered stage sequence under its own running-tally gate.
 
-    Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``
-    and ``arm.cwd`` differ. Gate (b) aborts before a breaching dispatch; A3 persists
-    each raw stdout before parsing; A5 stops the arm if the DV stage lands no Swift.
+    Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``,
+    ``arm.plugin_dir``, ``arm.enabled_plugins`` and ``arm.cwd`` differ. Gate (b) aborts
+    before a breaching dispatch; A3 persists each raw stdout before parsing; A5 stops the
+    arm if the DV stage lands no Swift. An arm stops at the first stage whose
+    ``system/init`` breaks its plugin contract (wrong corpflow tree, or any plugin on the
+    baseline), so a bad run spends one stage rather than ten (stream-json capture only;
+    json emits no init event). ``ledger_seeder`` runs just before each dispatch.
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
@@ -149,8 +161,12 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             result.partial = True
             break
         prompt_text = prompts_by_stage[stage]
+        if ledger_seeder is not None:
+            ledger_seeder(stage)
         argv = build_arm_stage_argv(stage, bind_agent=arm.bind_agent,
-                                    capture_mode=capture_mode, settings_path=settings_path)
+                                    capture_mode=capture_mode, settings_path=settings_path,
+                                    plugin_dir=arm.plugin_dir,
+                                    enabled_plugins=arm.enabled_plugins)
         timer = Timer()
         timer.start()
         # A throw here propagates with prior stages' partial ALREADY on disk (OI-2).
@@ -163,8 +179,23 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
         if usage.capture_layer is None:
             result.partial = True
         tally.add(usage.cost_usd)
+        if capture_mode == CAPTURE_STREAM_JSON and (
+                arm.plugin_dir is not None or arm.enabled_plugins is not None):
+            if arm.plugin_dir is not None:
+                check = plugin_load.check_stage_plugin(stdout, arm.plugin_dir)
+            else:
+                check = plugin_load.check_stage_bare(stdout)
+            if check.loaded is not None:
+                result.plugin = check.loaded
+            if check.plugins is not None:
+                result.plugins = check.plugins
+            if check.error is not None:
+                result.plugin_error = f"stage {stage}: {check.error}"
+                result.partial = True
         if persist_partial is not None:
             persist_partial(result)
+        if result.plugin_error is not None:
+            break
         if stage == "DV" and not dv_produced_swift(arm.cwd):
             result.dv_gated = True
             result.partial = True
@@ -222,8 +253,13 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              git_sha_runner: Optional[Callable[[str], str]] = None,
              without_arm: str = baseline_mod.ARM_SKIP,
              selection: Optional[baseline_mod.ArmSelection] = None,
-             now_fn: Optional[Callable[[], float]] = None) -> int:
+             now_fn: Optional[Callable[[], float]] = None,
+             config_dir: Optional[str] = None,
+             seed_runner: Optional[ledger_seed.SeedRunner] = None) -> int:
     """Run the live pipeline end-to-end and write the BenchmarkRecord.
+
+    ``config_dir`` (else ``BENCH_CONFIG_DIR``, else ``~/.claude-eval``) is the
+    ``CLAUDE_CONFIG_DIR`` both arms and the credential probe run under.
 
     ``selection`` drives which arms dispatch and what shape is recorded; when omitted
     it is derived from ``without_arm`` so every pre-existing caller keeps its exact
@@ -249,10 +285,12 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             None, without_arm,
             baseline_mod.stages_subset(stages, budget_mod.PIPELINE_STAGES))
 
-    with_spec = ArmSpec(name="with", bind_agent=True,
+    with_spec = ArmSpec(name="with", bind_agent=True, plugin_dir=os.path.realpath(plugin_root),
+                        enabled_plugins=isolation.enabled_plugins(with_siblings=True),
                         cwd=os.path.join(workdir_path, "with"),
                         audit_path=os.path.join(workdir_path, "with", ".context", "logs", "audit.jsonl"))
     without_spec = ArmSpec(name="without", bind_agent=False,
+                           enabled_plugins=isolation.enabled_plugins(with_siblings=False),
                            cwd=os.path.join(workdir_path, "without"),
                            audit_path=os.path.join(workdir_path, "without", ".context", "logs", "audit.jsonl"))
     for spec in (with_spec, without_spec):
@@ -261,12 +299,15 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     run_id = workdir
     timestamp_utc = now_iso()
     git_sha = git_sha_runner(plugin_root) if git_sha_runner else git_sha7(plugin_root)
-    with_dispatcher = dispatcher or SubprocessDispatcher(workdir=with_spec.cwd)
-    without_dispatcher = dispatcher or SubprocessDispatcher(workdir=without_spec.cwd)
+    config_dir = isolation.resolve_config_dir(config_dir, env)
+    child_env = isolation.claude_env(config_dir)
+    with_dispatcher = dispatcher or SubprocessDispatcher(workdir=with_spec.cwd, env=child_env)
+    without_dispatcher = dispatcher or SubprocessDispatcher(workdir=without_spec.cwd, env=child_env)
 
     # 1. Credential probe — before ANY dispatch.
     try:
-        credentials.require_credential(env=env, cli_login_runner=cli_login_runner)
+        credentials.require_credential(env=env, cli_login_runner=cli_login_runner,
+                                       config_dir=config_dir)
     except credentials.CredentialError as e:
         warn(str(e))
         return 3
@@ -298,12 +339,14 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     apps: dict = {}
 
     def _compose(partial: bool) -> BenchmarkRecord:
+        arm_plugins = {n: r.plugins for n, r in results.items() if r.plugins is not None}
         if selection.record_shape == baseline_mod.SHAPE_ARM:
             arm = selection.arm
             res = results.get(arm) or ArmResult(name=arm)
             return build_arm_record(run_id, timestamp_utc, git_sha, budget, arm,
                                     res.usages, res.dispatched, arm_partial=partial,
-                                    app=apps.get(arm))
+                                    app=apps.get(arm), plugin=res.plugin,
+                                    arm_plugins=arm_plugins)
         with_res = results.get("with") or ArmResult(name="with")
         wo_res = results.get("without")
         return build_live_record(
@@ -312,10 +355,15 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             without_usages=wo_res.usages if wo_res is not None else None,
             without_dispatched=wo_res.dispatched if wo_res is not None else 0,
             without_partial=wo_res.partial if wo_res is not None else False,
-            with_partial=with_res.partial)
+            with_partial=with_res.partial, plugin=with_res.plugin, arm_plugins=arm_plugins)
 
     def _flush(partial: bool) -> None:
         write_record(_compose(partial), record_path)
+
+    if capture_mode != CAPTURE_STREAM_JSON:
+        warn("plugin load unverified: --capture json emits no system/init event, so "
+             "era.plugin_path and era.plugins_* are not stamped and the baseline's "
+             "zero-plugin claim is unchecked; use stream-json")
 
     for name in selection.dispatch:
         def _persist(res: ArmResult, _name: str = name) -> None:
@@ -329,9 +377,20 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
             estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir,
-            persist_partial=_persist, now_fn=now_fn)
+            persist_partial=_persist, now_fn=now_fn,
+            ledger_seeder=(functools.partial(ledger_seed.seed_stage, arm_cwd=specs[name].cwd,
+                                             plugin_root=plugin_root, warn=warn,
+                                             runner=seed_runner)
+                           if name == "with" else None))
         # Flush as each arm completes so a later arm's breach cannot lose it.
         _flush(partial=True)
+        if results[name].plugin_error is not None:
+            # Return before measuring: a wrong-tree run must not spend oracle build time
+            # or reach the caller's history rotation, which keys off a zero exit.
+            warn(f"live run refused: {name} arm broke its plugin contract: "
+                 f"{results[name].plugin_error}; partial record at {record_path} "
+                 "is not a measurement of this commit")
+            return 5
 
     # Every dispatched arm is measured and graded, including a single-arm run: an arm
     # with no oracle payload carries no quality signal to compare against.

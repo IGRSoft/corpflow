@@ -6,7 +6,7 @@ Three `source`-only libraries. None is an entry point; executing one exits 2.
 |---|---|---|
 | `corpflow-base.sh` | `corpflow_script_dir`, `corpflow_plugin_root` | Yes, byte-identical — see below |
 | `audit-lib.sh` | `corpflow_audit_row` | No — the hook tree has its own appender, `hooks/model-switch-lib.sh`'s `corpflow_hook_audit_row`. The two take incompatible flags and both ignore unknown ones, so they are named apart |
-| `state-read-lib.sh` | `corpflow_state_str`, `corpflow_worktask_id`, `corpflow_run_index`, `corpflow_context_dir` | No — `.context/state.json` is only reachable once a plugin root and workspace are resolved, which is a skills-tree concern |
+| `state-read-lib.sh` | `corpflow_state_str`, `corpflow_worktask_id`, `corpflow_run_index`, `corpflow_context_dir`, `corpflow_context_dir_write` | No — `.context/state.json` is only reachable once a plugin root and workspace are resolved, which is a skills-tree concern |
 
 ## `corpflow-base.sh` is mirrored, not shared
 

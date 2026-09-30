@@ -102,6 +102,42 @@ def collect_tool_uses(event: dict, agents: set, skills: set, commands: set,
     return tool_calls
 
 
+@dataclass
+class InitPlugins:
+    """The plugin facts a stream-json ``system/init`` event reports."""
+
+    corpflow: list      # every plugins[] entry named "corpflow" (a shadow failure yields two)
+    errors: list        # plugin_errors[] as reported; absent from init when nothing failed
+    plugins: list       # every plugins[] entry, whatever its name
+
+
+def parse_init_plugins(stdout: str) -> Optional[InitPlugins]:
+    """Read the first ``system/init`` event's plugin list; None when the stream has none.
+
+    ``--output-format json`` emits no init event, so None there means "unobservable",
+    not "no plugin loaded".
+    """
+    for line in stdout.split("\n"):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") != "system" or event.get("subtype") != "init":
+            continue
+        plugins = event.get("plugins")
+        errors = event.get("plugin_errors")
+        entries = [p for p in plugins if isinstance(p, dict)] if isinstance(plugins, list) else []
+        return InitPlugins(
+            corpflow=[p for p in entries if p.get("name") == "corpflow"],
+            errors=[e for e in errors if isinstance(e, dict)] if isinstance(errors, list) else [],
+            plugins=entries)
+    return None
+
+
 def parse(stdout: str) -> Optional[ParsedCapture]:
     """Dual-mode: stream-json NDJSON first; single-object fallback. None when nothing real."""
     lines = [ln for ln in stdout.split("\n") if ln.strip()]

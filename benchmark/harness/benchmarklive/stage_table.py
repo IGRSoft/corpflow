@@ -11,7 +11,7 @@ import functools
 import json
 import os
 import subprocess
-from typing import Optional
+from typing import Any, Optional
 
 # Per-stage dispatch table: stage -> (agent, model_id, effort).
 STAGE_TABLE = {
@@ -33,7 +33,7 @@ CAPTURE_STREAM_JSON = "stream-json"
 # Bumped by hand whenever the graded task text changes; a workload change makes
 # token and quality figures incomparable just as surely as a model repin does.
 PROMPT_CONTRACT = "scripted-cli-v3"
-HARNESS_GENERATION = "python-1"
+HARNESS_GENERATION = "python-2"
 
 # Pins the contract text this version names, so editing the contract without
 # bumping above fails a test instead of stamping stale records. Re-pin and bump
@@ -45,7 +45,8 @@ CLI_CONTRACT_DIGEST = "sha256:3e4ef30ed12839248d4e3acce8cb73d41c610d141adddd41f3
 @functools.lru_cache(maxsize=1)
 def _plugin_version() -> Optional[str]:
     """Version of the plugin tree under measurement, or None if unreadable."""
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # <root>/benchmark/harness/benchmarklive/stage_table.py — four levels up is the plugin root.
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     try:
         with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
             version = json.load(f).get("version")
@@ -69,7 +70,7 @@ def _cli_version() -> Optional[str]:
     return done.stdout.strip() or None if done.returncode == 0 else None
 
 
-def build_era() -> dict:
+def build_era(plugin: Optional[Any] = None, arm_plugins: Optional[dict] = None) -> dict:
     """Stamp what this run's numbers are comparable against.
 
     Model pins are the axis that silently invalidated the stored baselines at
@@ -77,10 +78,22 @@ def build_era() -> dict:
     The two version fields close the axis that had no stamp at all: a CLI or plugin
     upgrade changes the thing being measured without touching anything else here.
     """
-    return {
+    era = {
         "harness": HARNESS_GENERATION,
         "prompt_contract": PROMPT_CONTRACT,
         "model_pins": {stage: model for stage, (_agent, model, _effort) in STAGE_TABLE.items()},
         "cli_version": _cli_version(),
         "plugin_version": _plugin_version(),
     }
+    if plugin is not None:
+        # What the CLI reported loading, not what was requested. The path is arm-scoped
+        # (the WITHOUT arm has none), so the pairing gate excludes it from era equality.
+        era["plugin_path"] = plugin.path
+        if plugin.version:
+            era["plugin_version"] = plugin.version
+    for arm in ("with", "without"):
+        # Everything the arm's stages loaded, not just corpflow: the baseline's claim is
+        # the empty list, and the WITH arm's siblings are part of what was measured.
+        if arm_plugins and arm_plugins.get(arm) is not None:
+            era[f"plugins_{arm}"] = list(arm_plugins[arm])
+    return era

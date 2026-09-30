@@ -261,7 +261,11 @@
 #               resolves to more than one open instance with nothing to disambiguate it; or
 #               --claim on a settled (completed|skipped|failed) row or on a parked `stale` one;
 #               or a --task-reopen whose target is the source or is not `completed`.
-#               Unknown ids stay 1 and malformed ids stay 2.
+#               Unknown ids stay 1 and malformed ids stay 2.  Also: the ledger directory
+#               was INFERRED from the cwd (no --state, CONTEXT_DIR, WORKSPACE_ROOT or
+#               CLAUDE_PROJECT_DIR) and lies inside the plugin root (this script's own tree
+#               or CLAUDE_PLUGIN_ROOT) with the cwd not the git toplevel — nothing is read
+#               or written.
 # @exitcode 5   --verify-decision only: the row (or the chain it sits in) is refused — forged,
 #               edited, out of scope, uncorroborated or answer-mismatched.  Every other op in
 #               this file never returns 5.
@@ -274,8 +278,11 @@
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
 #   DISK_WARN_GB        (default 8)   — hygiene warn threshold in GiB
 #   RUN_INDEX           — override run_index (for callers that know it without reading state.json)
-#   CONTEXT_DIR         rank 2 of the root ladder (see state-read-lib.sh); the audit log
-#                       and every derived path otherwise follow dirname(STATE_PATH)
+#   CONTEXT_DIR         rank 2 of the root ladder; the audit log and every derived path
+#                       otherwise follow dirname(STATE_PATH).  Without --state the ladder is
+#                       CONTEXT_DIR, WORKSPACE_ROOT/.context, CLAUDE_PROJECT_DIR/.context,
+#                       <git toplevel of $PWD>/.context, $PWD/.context
+#                       (corpflow_context_dir_write in state-read-lib.sh).
 #   STATE_LOCK_TIMEOUT_S (default 5)  — max seconds to wait for the merge lock before
 #                                       proceeding UNLOCKED + WARN (never a silent no-op)
 #   STATE_LOCK_STALE_S  (default 60)  — a lock dir older than this (by mtime) is treated
@@ -1725,11 +1732,74 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ---------- Root ladder (rank 1 here; ranks 2-6 in state-read-lib.sh) ----------
-# --state is verbatim, caller-trusted. Its absence sources the shared ladder rather than
-# defaulting to a path relative to cwd: a bare relative default is exactly the "patched the
-# wrong worktree's ledger" hazard the shared root ladder exists to close.
-STATE_UNRESOLVED=""
+# ---------- Root ladder ----------
+# --state is verbatim and caller-trusted. Without it the writer ladder in state-read-lib.sh
+# (CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel of $PWD, $PWD/.context)
+# picks the directory. Nothing derives from this script's own location, and no
+# main-worktree recovery is tried: a workdir nested inside another checkout, such as a
+# benchmark arm under the plugin's own repo, would otherwise be handed that checkout's live
+# ledger.
+#
+# Only the inferred ranks are policed against the plugin root. --state, CONTEXT_DIR,
+# WORKSPACE_ROOT and CLAUDE_PROJECT_DIR are explicit caller signals and are trusted even when
+# they point inside it: a plugin developed with itself, run from its own checkout, legitimately
+# keeps its ledger there.
+
+# _sp_physical <path> — physical form of a path whose tail may not exist yet. The deepest
+# existing ancestor is resolved with `pwd -P` and the missing tail re-appended; without
+# that a symlinked tmp root (macOS /var -> /private/var) defeats the prefix comparison
+# below.
+_sp_physical() {
+  local p="$1" tail="" head base
+  case "$p" in
+    /*) ;;
+    *) p="$PWD/$p" ;;
+  esac
+  head="$p"
+  while [[ -n "$head" && ! -d "$head" ]]; do
+    base="${head##*/}"
+    tail="/${base}${tail}"
+    head="${head%/*}"
+  done
+  [[ -n "$head" ]] || head="/"
+  head="$(CDPATH='' cd -P -- "$head" 2> /dev/null && pwd -P)" || head=""
+  [[ -n "$head" ]] || {
+    printf '%s' "$p"
+    return 0
+  }
+  printf '%s%s' "${head%/}" "$tail"
+}
+
+# _sp_refuse_plugin_root <ctx-dir> — exit 4 when a ledger dir INFERRED from the cwd lies
+# inside the plugin's own install/checkout, unless the caller is standing at the git toplevel
+# itself (running the plugin from its own repo root). A nested subdirectory such as a benchmark
+# workdir would otherwise be handed the checkout's live ledger, and a non-git cwd under the
+# plugin root would write into the plugin tree; failing loudly beats a silent write into the
+# wrong project. Both the root this script lives in and CLAUDE_PLUGIN_ROOT count, because a dev
+# checkout and an installed copy are different trees.
+_sp_refuse_plugin_root() {
+  local ctx_phys root root_phys top top_phys pwd_phys
+  ctx_phys="$(_sp_physical "$1")"
+  top="$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)"
+  top_phys=""
+  [[ -z "$top" ]] || top_phys="$(_sp_physical "$top")"
+  pwd_phys="$(_sp_physical "$PWD")"
+  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "${CLAUDE_PLUGIN_ROOT:-}"; do
+    [[ -n "$root" && -d "$root" ]] || continue
+    root_phys="$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P)" || continue
+    [[ -n "$root_phys" && "$root_phys" != "/" ]] || continue
+    case "$ctx_phys/" in
+      "$root_phys/"*)
+        # Rank 5 landing here with the caller at the toplevel is the self-hosted case.
+        [[ -n "$top_phys" && "$pwd_phys" == "$top_phys" ]] && continue
+        printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root %s\n' "$ctx_phys" "$root_phys"
+        printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
+        exit 4
+        ;;
+    esac
+  done
+}
+
 if [[ -z "$STATE_ARG_GIVEN" ]]; then
   _SRL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/state-read-lib.sh"
   if [ ! -r "$_SRL_LIB" ]; then
@@ -1738,18 +1808,11 @@ if [[ -z "$STATE_ARG_GIVEN" ]]; then
   fi
   # shellcheck source=../../shared/lib/state-read-lib.sh
   . "$_SRL_LIB"
-  _CTX_RC=0
-  _CTX_DIR=$(corpflow_context_dir) || _CTX_RC=$?
-  if [[ "$_CTX_RC" -eq 2 ]]; then
-    printf >&2 'state-patch.sh: root resolver unreachable\n'
-    exit 2
-  elif [[ "$_CTX_RC" -eq 0 ]]; then
-    STATE_PATH="${_CTX_DIR}/state.json"
-  else
-    # Unresolved: leave STATE_PATH empty. Every `-f "$STATE_PATH"` check below then reads
-    # false, which is precisely today's "state absent" behaviour — never a cwd fallback.
-    STATE_UNRESOLVED="1"
+  _CTX_DIR="$(corpflow_context_dir_write)"
+  if [[ -z "${CONTEXT_DIR:-}" && -z "${WORKSPACE_ROOT:-}" && -z "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    _sp_refuse_plugin_root "$_CTX_DIR"
   fi
+  STATE_PATH="${_CTX_DIR}/state.json"
 fi
 
 if [[ -z "$STATE_PATH" ]]; then
@@ -1759,19 +1822,15 @@ else
   [[ "$CTX" == "$STATE_PATH" ]] && CTX="."
 fi
 
+# The default log follows the ledger, but only once that directory exists or this call is
+# the one that seeds it: the ladder now always resolves, so an unconditional default would
+# leave a stray .context/logs behind every no-op call made from an arbitrary cwd.
 if [[ -z "$LOG_ARG_GIVEN" ]]; then
-  if [[ -n "$STATE_UNRESOLVED" ]]; then
-    LOG_FILE="/dev/null"
-  else
+  if [[ -d "$CTX" || "$TASK_OP" == "create" ]]; then
     LOG_FILE="${CTX}/logs/state-merge.log"
+  else
+    LOG_FILE="/dev/null"
   fi
-fi
-
-# A self-patch (the documented `--prev` present, `--via` absent signature) gets a loud,
-# distinct warning: every other caller quietly no-ops on an unresolved root, but an agent
-# calling this on its own artifact needs to know its ledger write landed nowhere.
-if [[ -n "$STATE_UNRESOLVED" && -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
-  printf >&2 'warn: no ledger resolved (checked --state, CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — refusing cwd\n'
 fi
 
 # ---------- --verify-decision (read-only; dispatched before pre-flight so this op takes no

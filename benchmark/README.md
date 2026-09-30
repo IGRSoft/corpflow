@@ -133,7 +133,8 @@ make benchmark-live
 **Credentials — machine `claude` login is the PREFERRED source;
 `ANTHROPIC_API_KEY` is an optional override.** The credential gate accepts
 EITHER: (1) an active `claude` login on the machine (checked via
-`claude auth status --json`, cheap and non-interactive — no key export needed),
+`claude auth status --json` under the eval `CLAUDE_CONFIG_DIR`, cheap and
+non-interactive — no key export needed),
 or (2) `ANTHROPIC_API_KEY` in the environment, checked FIRST when present.
 **Pitfall:** an `ANTHROPIC_API_KEY` that is actually an OAuth-token-shaped value
 (not a real `sk-ant-api…` key) will 401 when used as an API key AND overrides a
@@ -191,8 +192,14 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   (`benchmark/live/prompts/{pl,ar,tl,dv,dr,sr,qa,dc,fn,st}.txt`). Plugin-surface leakage
   (e.g. agent IDs like `apple-developer:ios-developer` or commands like `/swiftui-review`) is
   neutralized from the prompt text so the bare WITHOUT arm sees a fair identical ask
-- **Dispatch difference**: WITH arm adds `--agent <stage_name>` to each stage dispatch; WITHOUT
-  arm dispatches each stage bare (no `--agent`, no plugin dir) — otherwise frozen argv is identical
+- **Dispatch difference**: WITH adds `--agent`, `--plugin-dir <plugin root>` and enables its
+  sibling plugins (apple-developer); WITHOUT adds none and must load **zero** plugins. Both run
+  under `CLAUDE_CONFIG_DIR` = `--config-dir` / `BENCH_CONFIG_DIR` / `~/.claude-eval`, with
+  `--setting-sources ""` (repo and account-synced plugins would otherwise leak in) and the
+  builtin plugins switched off. `system/init` `plugins[]` is checked every stage; a violation
+  is rc 5. Stamped as `era.plugins_with` / `era.plugins_without`
+- **Ledger seeding**: the harness plays the orchestrator for the WITH arm: before DV and QA it
+  stamps `PL0.approved="auto"` and creates and claims `DV0` / `QA0` through `state-patch.sh`
 - **Policy default**: `real` on a full pipeline run, `skip` on a `--stages` subset — `--without-arm real|skip`
   (`run-benchmark.sh --live` or `bench-live`) overrides the default either way
 - **Dispatch order**: the WITHOUT arm is dispatched **FIRST** (all 10 stages), followed by the WITH arm;
@@ -371,7 +378,7 @@ against — harness generation, prompt-contract version, and the per-stage model
 pins read straight from `STAGE_TABLE`:
 
 ```json
-"era": {"harness": "python-1", "prompt_contract": "scripted-cli-v2",
+"era": {"harness": "python-2", "prompt_contract": "scripted-cli-v2",
         "model_pins": {"PL": "claude-opus-5-5", "DC": "claude-haiku-4-5", …}}
 ```
 
@@ -419,6 +426,12 @@ change invalidates comparisons just as surely as a model repin.
   gate refuses mixed pairs and `bench-analyze` caveats the first new run against
   the last `claude-sonnet-5` one on its own; no entry in `results/history.json` is
   edited. The Opus and Haiku stages are unchanged.
+- **Plugin-free baseline + isolated config dir** — the WITHOUT arm used to load
+  whatever the machine had installed; it now loads zero plugins, and both arms run under
+  `~/.claude-eval` with no settings layers. WITH also gains an enabled `apple-developer` and
+  seeded `DV0`/`QA0` ledger rows. Records from here on are **not comparable** with earlier
+  ones: `era.harness` moves `python-1` → `python-2`, so the pairing gate refuses mixed
+  pairs. `era.plugins_with` / `era.plugins_without` are arm-scoped and ignored by it.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.
@@ -429,6 +442,17 @@ retiring a case refuses old-vs-new pairings without any contract change. The
 2026-09-10 tier audit moved the digest to `sha256:80652591…` while leaving
 `scripted-cli-v3` intact, so records either side of it compare on era but refuse
 on digest.
+
+### Plugin under test (`era.plugin_path`)
+
+The WITH arm runs `--plugin-dir <plugin root>` and the stream-json `system/init`
+event is read back: `era.plugin_path` (realpath) and `era.plugin_version` are what the
+CLI **reported loading**, not what was requested. If corpflow resolves anywhere else,
+or two copies load because `--plugin-dir` failed to shadow the installed one, the
+run stops after that stage with **rc 5**, names both paths plus any `plugin_errors`,
+and is never rotated into history. `--capture json` has no init event, so it warns
+and stamps no `plugin_path`. The pairing gate ignores `plugin_path`, which only the
+WITH arm carries.
 
 ## Held-out oracle (quality metric)
 
@@ -756,3 +780,4 @@ excluded from the denominator).
 - `benchmark/harness/benchmarklive/preamble.py` — cache-prefix assembly ([1]-[5])
 - `benchmark/harness/benchmarklive/dispatch.py` — headless `claude -p` dispatcher + STAGE_TABLE
 - `benchmark/harness/benchmarklive/capture.py` — dual-mode stream-json/json capture parser
+- `benchmark/harness/benchmarklive/plugin_load.py` — checks the corpflow tree a stage loaded against the tree under test
