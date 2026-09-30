@@ -142,9 +142,14 @@ def make_live_sandbox(tmp: str, run_id: str = "live-test", state_json: str = "{}
     with open(os.path.join(settings_dir, "benchmark-settings.json"), "w", encoding="utf-8") as f:
         f.write('{"permissions": {"deny": []}}')
     record_path = os.path.join(benchmark_dir, "results", "runs", "live", f"{run_id}.json")
+    # Arms run outside the benchmark tree; every dispatch under test is handed this root
+    # so no test ever writes into the real ${TMPDIR}/corpflow-bench.
+    workdir_root = os.path.join(tmp, "arms")
     return SimpleNamespace(
         benchmark_dir=benchmark_dir, workdir_path=workdir_path,
-        prompts_dir=prompts_dir, record_path=record_path, run_id=run_id)
+        prompts_dir=prompts_dir, record_path=record_path, run_id=run_id,
+        workdir_root=workdir_root,
+        arm_dir=lambda arm: os.path.join(workdir_root, run_id, arm))
 
 
 def section(label: str) -> str:

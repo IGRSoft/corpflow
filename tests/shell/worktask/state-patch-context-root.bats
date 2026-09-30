@@ -204,8 +204,13 @@ _fake_plugin() {
 }
 
 @test "refuse: CLAUDE_PLUGIN_ROOT counts as the plugin root even for another copy of the script" {
-  mkdir -p "$WD/installed/sub"
+  # The manifest makes it a root corpflow_plugin_root accepts; a bare directory is not one.
+  mkdir -p "$WD/installed/sub" "$WD/installed/.claude-plugin"
+  : > "$WD/installed/.claude-plugin/plugin.json"
   export CLAUDE_PLUGIN_ROOT="$WD/installed"
+  # The helper's exported PLUGIN_ROOT is also Codex's host variable, which the resolver ranks
+  # above CLAUDE_PLUGIN_ROOT; the child must see only the Claude one.
+  export -n PLUGIN_ROOT
   _sp "$WD/installed/sub" "$PLUGIN_ROOT/$SCRIPT" --task-create DV7 --metadata "$META"
   assert_failure 4
   [[ "$output" == *"inside the plugin root"* ]] || fail "$output"

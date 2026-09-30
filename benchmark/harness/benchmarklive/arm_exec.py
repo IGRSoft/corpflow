@@ -47,6 +47,7 @@ class ArmResult:
     plugin: Optional[LoadedPlugin] = None   # corpflow tree the CLI reported; None if unobserved
     plugin_error: Optional[str] = None      # set when the loaded plugins break the arm's contract
     plugins: Optional[list] = None          # every plugin the CLI reported, name@version; None if unobserved
+    config_leaks: Optional[list] = None     # plugin-cache prefixes read outside the config dir; None if unscanned
 
 
 class Dispatching(Protocol):

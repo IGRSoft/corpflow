@@ -163,7 +163,7 @@ class DispatchVerifiesLoadedPlugin(unittest.TestCase):
         warnings = []
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=list(stages),
             git_sha_runner=stub_git_sha, without_arm=without_arm,
             capture_mode=capture_mode, stderr=warnings.append)
@@ -239,7 +239,7 @@ class BaselineIsPluginFree(unittest.TestCase):
         warnings = []
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=list(stages),
             git_sha_runner=stub_git_sha, without_arm="real",
             capture_mode=CAPTURE_STREAM_JSON, stderr=warnings.append)
@@ -333,7 +333,7 @@ class ConfigDir(unittest.TestCase):
         try:
             sb = make_live_sandbox(tmp)
             dispatch(workdir=sb.run_id, budget=100.0, record_path=sb.record_path,
-                     benchmark_dir=sb.benchmark_dir, dispatcher=RecordingFakeDispatcher(),
+                     benchmark_dir=sb.benchmark_dir, workdir_root=sb.workdir_root, dispatcher=RecordingFakeDispatcher(),
                      env={}, estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
                      git_sha_runner=stub_git_sha, config_dir="/tmp/eval-cfg",
                      stderr=lambda _m: None)
@@ -365,10 +365,10 @@ class EraAndPairing(unittest.TestCase):
         without_era = {k: v for k, v in with_era.items() if k != "plugin_path"}
         self.assertIsNone(pairing._era_refusal(with_era, without_era))
 
-    def test_current_generation_is_python_2_and_refuses_a_python_1_pair(self):
-        # The plugin-free baseline moved the era boundary; python-1 records must not pair.
-        self.assertEqual(build_era()["harness"], "python-2")
-        old = {"harness": "python-1", "prompt_contract": "scripted-cli-v3", "model_pins": {}}
+    def test_current_generation_is_python_3_and_refuses_a_python_2_pair(self):
+        # Out-of-repo workdirs and sub-agent-inclusive tokens moved the era boundary.
+        self.assertEqual(build_era()["harness"], "python-3")
+        old = {"harness": "python-2", "prompt_contract": "scripted-cli-v3", "model_pins": {}}
         new = dict(old, harness=HARNESS_GENERATION)
         self.assertIn("harness", pairing._era_refusal(old, new))
 

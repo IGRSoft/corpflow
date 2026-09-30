@@ -379,7 +379,11 @@ fi
 # ---------------------------------------------------------------------------
 _LIB_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../shared/lib" 2> /dev/null && pwd -P)"
 _TEMPLATE="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../templates" 2> /dev/null && pwd -P)/window-capture-host.swift"
-if [ ! -r "$_LIB_DIR/audit-lib.sh" ] || [ ! -r "$_LIB_DIR/state-read-lib.sh" ] || [ ! -r "$_TEMPLATE" ]; then
+# Required: without the probe a macOS host would read as unsupported and every capture
+# would silently route to cli_fallback.
+_HOST_OS_LIB="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../../worktask/scripts" 2> /dev/null && pwd -P)/host-os-lib.sh"
+if [ ! -r "$_LIB_DIR/audit-lib.sh" ] || [ ! -r "$_LIB_DIR/state-read-lib.sh" ] || [ ! -r "$_TEMPLATE" ] \
+  || [ ! -r "$_HOST_OS_LIB" ]; then
   printf >&2 'macos-window-capture: plugin install broken — shared lib or host template not found\n'
   exit 2
 fi
@@ -387,6 +391,8 @@ fi
 . "$_LIB_DIR/audit-lib.sh"
 # shellcheck source=../../shared/lib/state-read-lib.sh
 . "$_LIB_DIR/state-read-lib.sh"
+# shellcheck source=../../worktask/scripts/host-os-lib.sh
+. "$_HOST_OS_LIB"
 
 # A ledger for another worktask refuses the write, so a worktree capture never lands in the
 # main checkout; without a ledger only an explicit CONTEXT_DIR may capture.
@@ -449,7 +455,7 @@ fallback_exit() { # <reason> <error> <code>
 # ---------------------------------------------------------------------------
 # Toolchain, package facts, host scaffold and build
 # ---------------------------------------------------------------------------
-if [[ "$(uname -s)" != "Darwin" ]] || ! command -v swift > /dev/null 2>&1; then
+if [[ "$(host_os)" != macos ]] || ! command -v swift > /dev/null 2>&1; then
   printf >&2 'warn: needs macOS with a Swift toolchain; routing to cli_fallback\n'
   fallback_exit "swift_unavailable" "tool_missing" 2
 fi

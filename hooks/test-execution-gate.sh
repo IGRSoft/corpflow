@@ -250,11 +250,12 @@ _gradle_subcmd() {
   # before tasks (`gradle -p . test`), where a first-token read sees `-p` and
   # lets a full run through as scoped. `-p` values are skipped so a dir named
   # `test-utils` is not mistaken for the task; an unlisted flag's value still
-  # can be — the allow direction.
+  # can be — the allow direction. The value-taking options of the strip below are
+  # skipped here too, or `--console plain test` reads `plain` as the task.
   for _tok in $_rest; do
     if [ "$_skipv" -eq 1 ]; then _skipv=0; continue; fi
     case "$_tok" in
-      -p|--project-dir) _skipv=1 ;;
+      -p|--project-dir|--console|--max-workers|--warning-mode|-g|--gradle-user-home|-b|--build-file|-c|--settings-file|-I|--init-script|--project-cache-dir) _skipv=1 ;;
       -*) : ;;
       *) _task="$_tok"; break ;;
     esac
@@ -367,6 +368,136 @@ tokenize_quoted() {
 }
 
 # ---------------------------------------------------------------------------
+# _gate_redirect <token> -> rc 0 when <token> is a shell redirection
+# (`2>&1`, `>f`, `2>/dev/null`, `&>f`, `>>f`, `<f`, `<<<x`). Sets
+# _GATE_REDIR_TARGET to 0 when the operator stands alone (`>` `f`), so the NEXT
+# token is its target, and to 1 when the target is attached.
+#
+# The segment splitter keeps `>&`/`&>` inside one segment on purpose, so a
+# redirect reaches the selector check as an ordinary word; without this it reads
+# as a positional and `swift test 2>&1` classifies as scoped. Runner-independent:
+# no test runner takes a redirect as an argument.
+# ---------------------------------------------------------------------------
+_GATE_REDIR_RE='^([0-9]*(>>?|<<?<?|>&|<&)|&>{1,2})(.*)$'
+_gate_redirect() {
+  [[ $1 =~ $_GATE_REDIR_RE ]] || return 1
+  if [ -z "${BASH_REMATCH[3]}" ]; then _GATE_REDIR_TARGET=0; else _GATE_REDIR_TARGET=1; fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# _gate_runner_flag <head> <token> -> how strip_nonselecting_flags treats a flag
+# that configures a run and never narrows it. rc:
+#   0  drop the token alone (valueless flag, or `--flag=value`)
+#   1  drop the token and its value, unless that value starts with `-`
+#   3  drop the token and its value unconditionally (`-Xswiftc -warn...`)
+#   2  not listed: keep it
+#
+# Only a flag whose runner-side meaning is "how to run" belongs here. A flag that
+# narrows the run (`--filter`, `-k`, `-m`, `--tests`, `-p <package>` on cargo,
+# `--shard`) must stay out so its value survives as the selector. An unlisted
+# flag keeps the allow direction: it survives, classifies scoped, never denies.
+# ---------------------------------------------------------------------------
+_gate_runner_flag() {
+  local _h="$1" _t="$2" _n _v=1
+  _n="${_t%%=*}"
+  [ "$_n" = "$_t" ] || _v=0
+  case "$_h" in
+    swift)
+      case "$_n" in
+        -Xswiftc|-Xcc|-Xcxx|-Xlinker) [ "$_v" -eq 1 ] && return 3; return 0 ;;
+        --package-path|--scratch-path|--build-path|--cache-path|-j|--jobs|--sanitize|--triple|--sdk|--toolchain|--arch|--num-workers|--build-system|--xunit-output|--swift-sdk)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        -j?*) return 0 ;;
+        --parallel|--no-parallel|--enable-code-coverage|--skip-build|--verbose|-v|--vv|--disable-sandbox|--enable-swift-testing|--disable-swift-testing|--enable-xctest|--disable-xctest)
+          return 0 ;;
+      esac
+      ;;
+    cargo)
+      # The positional is a test-name filter, so it stays; `-p/--package`,
+      # `--lib`, `--test`, `--bins`, `--doc` and `--exclude` narrow the run.
+      case "$_n" in
+        --manifest-path|--target-dir|--profile|--target|--features|-F|-j|--jobs|--color|--message-format|--test-threads|--config)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        -j?*) return 0 ;;
+        --|--workspace|--all|--all-features|--no-default-features|--no-fail-fast|--locked|--offline|--frozen|--keep-going|-q|--quiet|-v|-vv|--verbose|--nocapture|--show-output)
+          return 0 ;;
+      esac
+      ;;
+    go)
+      # A package pattern (`./pkg`, `./...`) is a positional selector and stays.
+      # Every value below is a number, duration or path, and would otherwise
+      # read as one: `go test -count 1` is the whole suite.
+      case "$_n" in
+        -count|-timeout|-parallel|-p|-cpu|-tags|-mod|-coverprofile|-covermode|-coverpkg|-exec|-vet|-shuffle|-o|-outputdir|-ldflags|-gcflags)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        -v|-race|-cover|-short|-failfast|-json|-x|-a|-trimpath|-work) return 0 ;;
+      esac
+      ;;
+    pytest|"python -m pytest")
+      # A positional path or node id is a selector and stays; `-m <expr>` and
+      # `-k` narrow the run and stay out of this list.
+      case "$_n" in
+        -p|-o|--override-ini|-n|--numprocesses|--maxfail|--tb|--color|--junitxml|--junit-xml|--basetemp|--rootdir|--confcutdir|--durations|--durations-min|--log-level|--log-cli-level|--capture|--show-capture|--dist|--import-mode|--cache-dir|-W|--timeout|-r|--cov-report|--cov-config|--html|--randomly-seed|--report-log)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        -r?*) return 0 ;;
+        -x|-q|-qq|-v|-vv|-vvv|-s|-l|--showlocals|--exitfirst|--quiet|--verbose|--disable-warnings|--no-header|--no-summary|--strict-markers|--strict-config)
+          return 0 ;;
+      esac
+      ;;
+    jest|vitest|npm|pnpm|yarn)
+      # `npm test -- <jest flags>`: the flags after `--` belong to the runner.
+      case "$_n" in
+        --maxWorkers|-w|--workers|--testTimeout|--reporters|--reporter|--outputFile|--coverageDirectory|--rootDir|--cacheDirectory|--testEnvironment|--environment|--env)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        --ci|--coverage|--runInBand|-i|--colors|--no-colors|--color|--no-color|--verbose|--silent|--forceExit|--detectOpenHandles|--passWithNoTests|--no-cache|--no-watch|--globals|--useStderr)
+          return 0 ;;
+        # `vitest run` is the non-watch spelling of the same suite, not a file.
+        run|--run) [ "$_h" = vitest ] && return 0 ;;
+      esac
+      ;;
+    bats)
+      case "$_n" in -j|--jobs) return "$_v" ;; esac
+      case "$_t" in --tap|-T|--timing|--print-output-on-failure) return 0 ;; esac
+      ;;
+    gradle|gradlew)
+      # -D<prop> is a JVM system property, like -P<prop> already stripped.
+      case "$_n" in
+        --console|--max-workers|--warning-mode|-g|--gradle-user-home|-b|--build-file|--settings-file|-I|--init-script|--project-cache-dir)
+          return "$_v" ;;
+      esac
+      case "$_t" in
+        -D?*) return 0 ;;
+        --info|--debug|--warn|--quiet|-q|-i|-d|-w|-s|-S|--stacktrace|--full-stacktrace|--no-daemon|--daemon|--parallel|--no-parallel|--offline|--continue|--rerun-tasks|--build-cache|--no-build-cache|--configuration-cache|--no-configuration-cache|--refresh-dependencies|--scan|--no-scan|--watch-fs|--no-watch-fs)
+          return 0 ;;
+      esac
+      ;;
+    xcodebuild)
+      # `KEY=VALUE` is a build setting (CODE_SIGNING_ALLOWED=NO), never a
+      # selector; `-only-testing:X` has no `=` and cannot match.
+      case "$_t" in
+        [A-Za-z_]*=*) return 0 ;;
+        -disableAutomaticPackageResolution|-skipPackagePluginValidation|-skipMacroValidation|-onlyUsePackageVersionsFromResolvedFile|-retry-tests-on-failure|-hideShellScriptEnvironment|-allowProvisioningDeviceRegistration)
+          return 0 ;;
+        -jobs|-parallel-testing-worker-count|-enableCodeCoverage|-test-iterations|-testLanguage|-testRegion|-clonedSourcePackagesDirPath|-archivePath|-target|-destination-timeout|-test-timeouts-enabled|-enableAddressSanitizer|-enableThreadSanitizer|-enableUndefinedBehaviorSanitizer)
+          return 1 ;;
+      esac
+      ;;
+  esac
+  return 2
+}
+
+# ---------------------------------------------------------------------------
 # strip_nonselecting_flags <head> <rest> -> <rest> minus the flags the runner
 # carries on every invocation, so a surviving positional means the caller
 # narrowed the run rather than that the runner needs flags to start at all.
@@ -378,12 +509,23 @@ tokenize_quoted() {
 # guard, keep a quoted value whole, or match adjacent switches on one pass.
 # ---------------------------------------------------------------------------
 strip_nonselecting_flags() {
-  local _h="$1" _in="$2" _out="" _tok _skip=0
+  local _h="$1" _in="$2" _out="" _tok _skip=0 _rskip=0 _sk
   # Unbalanced quoting -> strip nothing, which classifies scoped and allows.
   tokenize_quoted "$_in" || { printf '%s' "$_in"; return; }
   for _tok in ${TOKENIZED_ARGV[@]+"${TOKENIZED_ARGV[@]}"}; do
-    if [ "$_skip" -eq 1 ]; then
+    # A redirect is not an argument, and neither is its target. Checked ahead of
+    # the value skip below, and leaving it pending: a redirect between a flag and
+    # its value must not consume the value.
+    if [ "$_rskip" -eq 1 ]; then _rskip=0; continue; fi
+    if _gate_redirect "$_tok"; then
+      [ "$_GATE_REDIR_TARGET" -eq 0 ] && _rskip=1
+      continue
+    fi
+    if [ "$_skip" -ne 0 ]; then
+      _sk="$_skip"
       _skip=0
+      # 2 = the flag takes a value that may itself start with `-`.
+      [ "$_sk" -eq 2 ] && continue
       case "$_tok" in
         -*) : ;;
         *) continue ;;
@@ -442,6 +584,13 @@ strip_nonselecting_flags() {
         esac
         ;;
     esac
+    # Configuration flags and their values, per runner (see _gate_runner_flag).
+    _gate_runner_flag "$_h" "$_tok"
+    case "$?" in
+      0) continue ;;
+      1) _skip=1; continue ;;
+      3) _skip=2; continue ;;
+    esac
     # Runner-independent: a build configuration is not a test selection.
     #
     # `-c` takes a value on swift/pytest/jest/vitest/gradle/dotnet but is
@@ -462,24 +611,20 @@ strip_nonselecting_flags() {
 }
 
 # ---------------------------------------------------------------------------
-# classify_cmd <command string> -> echoes: full_test_run | scoped_test_run |
-#                                          build_only | not_test
-# Pure function of the command string. No I/O.
+# _gate_split_legacy <command> -> fills GATE_SEGS, splitting on EVERY separator
+# byte with no regard for quoting. Kept as the fail-closed fallback for a
+# command _gate_split_segments cannot parse: an over-split can only surface a
+# runner (deny direction), never hide one.
+#
+# Fork-free: bash substitution patterns are globs, where & ; | are all literal,
+# so literal passes replace one alternation regex. Order matters — && and ||
+# are consumed before the single-character passes can split them. A bare `&`
+# (background) splits too, as in the scanner; the redirect forms `>&`, `<&`
+# and `&>` are parked on control bytes first so `2>&1` stays one segment.
 # ---------------------------------------------------------------------------
-classify_cmd() {
-  local _cmd="$1" _old_ifs _result _norm _seg _class
-
-  _old_ifs="$IFS"
-  _result="not_test"
-  # Segment split on && || ; | & and newline. Command substitution, backticks,
-  # and here-docs are NOT split — a documented, accepted hole (see the
-  # bypass note above RUNNERS).
-  # Fork-free: bash substitution patterns are globs, where & ; | are all literal,
-  # so literal passes replace one alternation regex. Order matters — && and ||
-  # are consumed before the single-character passes can split them. A bare `&`
-  # (background) splits too, as in the scanner; the redirect forms `>&`, `<&`
-  # and `&>` are parked on control bytes first so `2>&1` stays one segment.
-  _norm="${_cmd//&&/$'\n'}"
+_gate_split_legacy() {
+  local _norm="$1" _seg
+  _norm="${_norm//&&/$'\n'}"
   _norm="${_norm//||/$'\n'}"
   _norm="${_norm//;/$'\n'}"
   _norm="${_norm//|/$'\n'}"
@@ -490,18 +635,142 @@ classify_cmd() {
   _norm="${_norm//$'\001'/>&}"
   _norm="${_norm//$'\002'/<&}"
   _norm="${_norm//$'\003'/&>}"
+  GATE_SEGS=()
   while IFS= read -r _seg; do
     [ -n "$_seg" ] || continue
-    _class=$(classify_segment "$_seg")
+    GATE_SEGS[${#GATE_SEGS[@]}]="$_seg"
+  done <<EOF
+$_norm
+EOF
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# _gate_split_segments <command> -> fills GATE_SEGS with the command split on
+# UNQUOTED, UNESCAPED separators only: && || ; | & and newline. A separator
+# inside '...' or "..." or after a backslash belongs to the surrounding word,
+# so `grep "a|swift test|b" f` is one segment, not three.
+#
+# Returns 1 on an unterminated quote and leaves GATE_SEGS empty; the caller MUST
+# then fall back to _gate_split_legacy, because a half-parsed command may hide
+# a runner behind a quote that never closes. Not parsed, deliberately: command
+# substitution, backticks, here-docs (see the bypass note above RUNNERS).
+#
+# Backslash-newline is NOT swallowed as a continuation: the backslash is kept
+# and the newline still splits, exactly as the legacy split did, so a
+# continued runner line keeps classifying the way it always has.
+# ---------------------------------------------------------------------------
+# One run of characters that cannot change parser state, per quote context.
+# A backslash is literal inside a bracket expression.
+_GATE_SPLIT_PLAIN_RE=$'^[^\\\'";|&\n]+'
+_GATE_SPLIT_SQ_RE="^[^']+"
+_GATE_SPLIT_DQ_RE='^[^"\]+'
+_gate_split_segments() {
+  local _s="$1" _n=${#1} _i=0 _ch _nx _q="" _seg="" _redir
+  GATE_SEGS=()
+  while [ "$_i" -lt "$_n" ]; do
+    if [ "$_q" = "'" ]; then
+      if [[ ${_s:$_i} =~ $_GATE_SPLIT_SQ_RE ]]; then
+        _seg="$_seg${BASH_REMATCH[0]}"
+        _i=$((_i + ${#BASH_REMATCH[0]}))
+      else
+        _seg="$_seg'"; _q=""; _i=$((_i + 1))
+      fi
+      continue
+    fi
+    if [ "$_q" = '"' ]; then
+      if [[ ${_s:$_i} =~ $_GATE_SPLIT_DQ_RE ]]; then
+        _seg="$_seg${BASH_REMATCH[0]}"
+        _i=$((_i + ${#BASH_REMATCH[0]}))
+      elif [ "${_s:$_i:1}" = '"' ]; then
+        _seg="$_seg\""; _q=""; _i=$((_i + 1))
+      else
+        # A backslash escapes the next character in double quotes, so `\"`
+        # does not close the string.
+        _seg="$_seg${_s:$_i:2}"; _i=$((_i + 2))
+      fi
+      continue
+    fi
+    if [[ ${_s:$_i} =~ $_GATE_SPLIT_PLAIN_RE ]]; then
+      _seg="$_seg${BASH_REMATCH[0]}"
+      _i=$((_i + ${#BASH_REMATCH[0]}))
+      continue
+    fi
+    _ch="${_s:$_i:1}"
+    _nx="${_s:$((_i + 1)):1}"
+    _i=$((_i + 1))
+    case "$_ch" in
+      \\)
+        if [ -z "$_nx" ] || [ "$_nx" = $'\n' ]; then
+          _seg="$_seg$_ch"
+        else
+          _seg="$_seg$_ch$_nx"; _i=$((_i + 1))
+        fi
+        ;;
+      \'|\") _q="$_ch"; _seg="$_seg$_ch" ;;
+      '&')
+        # `>&`, `<&` and `&>` are redirections, but `&&` still separates even
+        # after a redirect byte — the legacy split's pass order.
+        _redir=0
+        if [ "$_nx" != '&' ]; then
+          [ "$_nx" = '>' ] && _redir=1
+          case "$_seg" in *'>'|*'<') _redir=1 ;; esac
+        fi
+        if [ "$_redir" -eq 1 ]; then
+          _seg="$_seg$_ch"
+        else
+          [ -z "$_seg" ] || GATE_SEGS[${#GATE_SEGS[@]}]="$_seg"
+          _seg=""
+          [ "$_nx" = '&' ] && _i=$((_i + 1))
+        fi
+        ;;
+      *)
+        # ; | newline
+        [ -z "$_seg" ] || GATE_SEGS[${#GATE_SEGS[@]}]="$_seg"
+        _seg=""
+        ;;
+    esac
+  done
+  if [ -n "$_q" ]; then
+    GATE_SEGS=()
+    return 1
+  fi
+  [ -z "$_seg" ] || GATE_SEGS[${#GATE_SEGS[@]}]="$_seg"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# classify_cmd <command string> -> echoes: full_test_run | scoped_test_run |
+#                                          build_only | not_test
+# Pure function of the command string. No I/O.
+# ---------------------------------------------------------------------------
+classify_cmd() {
+  _classify_cmd_at "$1" 0
+}
+
+# _classify_cmd_at <command> <depth>: split, classify each segment at <depth>,
+# keep the strongest verdict. Also the entry for the inner string of `bash -c`,
+# itself a whole command line: a runner after a separator inside it must still
+# surface now that the outer split no longer cuts through the quotes around it.
+_classify_cmd_at() {
+  local _cmd="$1" _depth="$2" _old_ifs _result _seg _class
+
+  _old_ifs="$IFS"
+  _result="not_test"
+  # Command substitution, backticks, and here-docs are NOT split — a documented,
+  # accepted hole (see the bypass note above RUNNERS).
+  _gate_split_segments "$_cmd" || _gate_split_legacy "$_cmd"
+  # The list is expanded once, before the loop, so the recursion below
+  # overwriting GATE_SEGS cannot disturb this iteration.
+  for _seg in ${GATE_SEGS[@]+"${GATE_SEGS[@]}"}; do
+    _class=$(classify_segment "$_seg" "$_depth")
     case "$_class" in
       full_test_run) _result="full_test_run" ;;
       scoped_test_run) [ "$_result" = "not_test" ] || [ "$_result" = "build_only" ] && _result="scoped_test_run" ;;
       build_only) [ "$_result" = "not_test" ] && _result="build_only" ;;
     esac
     [ "$_result" = "full_test_run" ] && break
-  done <<EOF
-$_norm
-EOF
+  done
   IFS="$_old_ifs"
   printf '%s' "$_result"
 }
@@ -551,7 +820,7 @@ classify_segment() {
           _inner="${_inner%\'}"
           _inner="${_inner#\"}"
           _inner="${_inner%\"}"
-          classify_segment "$_inner" "$((_depth + 1))"
+          _classify_cmd_at "$_inner" "$((_depth + 1))"
           return
           ;;
       esac

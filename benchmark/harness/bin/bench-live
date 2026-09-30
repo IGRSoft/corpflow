@@ -4,7 +4,9 @@
 Frozen seam argv (run-benchmark.sh --live):
   bench-live --workdir <run_id> --budget <usd> --record <path>
   [--stages CODE[,CODE...]] [--capture json|stream-json] [--benchmark-dir D] [--prompts-dir D]
-  [--without-arm real|skip] [--arm with|without|both] [--config-dir D]
+  [--without-arm real|skip] [--arm with|without|both] [--config-dir D] [--workdir-root D]
+--workdir-root (else BENCH_WORKDIR_ROOT, else ${TMPDIR:-/tmp}/corpflow-bench) holds the
+per-arm workdirs <root>/<run_id>/{with,without}, kept outside the repo, one git repo per arm.
 --config-dir (else BENCH_CONFIG_DIR, else ~/.claude-eval) is the CLAUDE_CONFIG_DIR both
 arms and the login probe run under; the operator's own config never reaches a run.
 --without-arm overrides the default WITHOUT-baseline policy (real on a full run,
@@ -14,7 +16,8 @@ see benchmarklive.baseline.resolve_arm_mode).
 Left unset it defers to the --without-arm policy, which is what keeps the
 pre-existing default byte-stable.
 Exit codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach
-(partial written first) / 5 an arm's loaded plugins broke its contract / 64 bad usage.
+(partial written first) / 5 an arm's loaded plugins broke its contract, or either arm
+read a plugin cache outside its config dir / 64 bad usage.
 """
 
 import os
@@ -34,7 +37,7 @@ def die(message, code):
 
 def main(argv):
     workdir = record = stages_arg = benchmark_dir_arg = prompts_dir_arg = None
-    without_arm_arg = arm_arg = config_dir_arg = None
+    without_arm_arg = arm_arg = config_dir_arg = workdir_root_arg = None
     budget = None
     capture_arg = "stream-json"
 
@@ -45,10 +48,12 @@ def main(argv):
             print("bench-live --workdir <run_id> --budget <usd> --record <path> "
                   "[--stages CODE[,CODE...]] [--capture json|stream-json] "
                   "[--benchmark-dir <dir>] [--prompts-dir <dir>] "
-                  "[--without-arm real|skip] [--arm with|without|both] [--config-dir <dir>]")
+                  "[--without-arm real|skip] [--arm with|without|both] [--config-dir <dir>] "
+                  "[--workdir-root <dir>]")
             sys.exit(0)
         if a in ("--workdir", "--budget", "--record", "--stages", "--capture",
-                 "--benchmark-dir", "--prompts-dir", "--without-arm", "--arm", "--config-dir"):
+                 "--benchmark-dir", "--prompts-dir", "--without-arm", "--arm", "--config-dir",
+                 "--workdir-root"):
             if i + 1 >= len(argv):
                 die(f"bench-live: {a} needs a value", 64)
             value = argv[i + 1]
@@ -74,6 +79,8 @@ def main(argv):
                 arm_arg = value
             elif a == "--config-dir":
                 config_dir_arg = value
+            elif a == "--workdir-root":
+                workdir_root_arg = value
             else:
                 prompts_dir_arg = value
         else:
@@ -118,7 +125,8 @@ def main(argv):
         rc = dispatch_mod.dispatch(
             workdir=workdir, budget=budget, record_path=record, benchmark_dir=benchmark_dir,
             prompts_dir=prompts_dir_arg, stages=stages, capture_mode=capture_arg,
-            selection=selection, config_dir=config_dir_arg)
+            selection=selection, config_dir=config_dir_arg,
+            workdir_root=workdir_root_arg)
     except Exception as exc:  # noqa: BLE001 — top-level CLI guard
         die(f"bench-live: dispatch failed: {exc}", 1)
     sys.exit(rc)

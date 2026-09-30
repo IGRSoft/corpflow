@@ -24,7 +24,7 @@ setup() {
 # writes a real PNG signature for every `shot <name>` step it reads, so the script's own
 # signature check and manifest writer run for real.
 stub_swift() { # [build-exit]
-  stub_cmd uname --stdout Darwin
+  export CORPFLOW_HOST_OS=macos
   stub_cmd swift --body '
     case "$1" in
       package)

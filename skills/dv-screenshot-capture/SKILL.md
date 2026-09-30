@@ -199,9 +199,11 @@ bash "${CLAUDE_SKILL_DIR}/scripts/macos-window-capture.sh" --worktask-id <workta
 
 ##### macos-window recipe, steps 2–4
 
+One `--probe`, then one capture; re-probe only on a missed click.
+
 2. Read the `probe=` PNG. It is 1x with the title bar included, so a pixel is a click point.
 3. Rewrite `steps.txt` — `click <x> <y>`, `wait <s>`, `shot <slug> <caption>`, at most 5 shots, one per AC state — and rerun without `--probe`. That run writes the PNGs, the manifest rows and the `screenshot_captured` rows, and prints `facts_screenshots=<json>` for the `facts.screenshots` merge.
-4. `--check` the gate (§ Completion gate). A wrong click shows in the PNG; fix its coordinates and rerun.
+4. `--check` the gate (§ Completion gate). A missed click shows as the wrong screen in its PNG: re-probe with the steps up to that click, fix its coordinates, and rerun the capture.
 
 #### apple-canvas adapter
 

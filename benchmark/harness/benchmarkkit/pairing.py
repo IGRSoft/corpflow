@@ -88,9 +88,11 @@ def _own_digest(record: dict) -> Optional[str]:
     return analysis.oracle_cases_digests(record).get(arm)
 
 
-# Each names what ONE arm loaded (the WITHOUT arm passes no --plugin-dir and loads
-# nothing), so demanding a match would refuse every honest pair.
-_ARM_SCOPED_ERA_KEYS = frozenset({"plugin_path", "plugins_with", "plugins_without"})
+# Each names what ONE arm loaded or touched (the WITHOUT arm passes no --plugin-dir and
+# loads nothing; ``config_leaks`` is keyed by the arm that was scanned), so demanding a
+# match would refuse every honest pair.
+_ARM_SCOPED_ERA_KEYS = frozenset(
+    {"plugin_path", "plugins_with", "plugins_without", "config_leaks"})
 
 
 def _join_era(with_era, without_era):
@@ -101,6 +103,10 @@ def _join_era(with_era, without_era):
     for key in sorted(_ARM_SCOPED_ERA_KEYS):
         if key not in joined and key in without_era:
             joined[key] = without_era[key]
+        elif (key == "config_leaks" and isinstance(joined.get(key), dict)
+              and isinstance(without_era.get(key), dict)):
+            # Each single-arm record carries only its own arm's entry.
+            joined[key] = {**without_era[key], **joined[key]}
     return joined
 
 

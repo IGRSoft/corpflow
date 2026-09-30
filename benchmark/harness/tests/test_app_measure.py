@@ -116,22 +116,22 @@ class DispatchFillsAppMetrics(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage(cost=0.01)])
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha, without_arm="real")
         return rc
 
     def test_fills_with_app_from_arm_folder(self):
         # Per-arm folders: each arm is measured in its own with/ or without/ dir.
-        _write_min_package(os.path.join(self.sb.workdir_path, "with"), n_lines=3)
-        _write_min_package(os.path.join(self.sb.workdir_path, "without"), n_lines=50)
+        _write_min_package(self.sb.arm_dir("with"), n_lines=3)
+        _write_min_package(self.sb.arm_dir("without"), n_lines=50)
         self._dispatch()
         rec = load_json(self.sb.record_path)
         self.assertEqual(rec["paths"]["with"]["loc_produced"], 4)  # Main.swift(3) + Package.swift(1)
 
     def test_fills_without_app(self):
-        _write_min_package(os.path.join(self.sb.workdir_path, "with"), n_lines=1)
-        _write_min_package(os.path.join(self.sb.workdir_path, "without"), n_lines=4)
+        _write_min_package(self.sb.arm_dir("with"), n_lines=1)
+        _write_min_package(self.sb.arm_dir("without"), n_lines=4)
         self._dispatch()
         rec = load_json(self.sb.record_path)
         self.assertEqual(rec["paths"]["without"]["loc_produced"], 5)  # Main.swift(4) + Package.swift(1)

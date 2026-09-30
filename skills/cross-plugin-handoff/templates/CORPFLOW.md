@@ -7,8 +7,8 @@ project* root (override template: corpflow templates/PROJECT-CORPFLOW.md). -->
 # corpflow Integration — <PLUGIN>
 
 The only file in <PLUGIN> that knows corpflow exists — delete it and the plugin is
-standalone. Nothing in `agents/`, `commands/`, `skills/`, or `hooks/` may reference corpflow;
-dispatch injects `Read CORPFLOW.md and follow it` into every delegation prompt.
+standalone. Nothing in `agents/`, `commands/`, `skills/`, or `hooks/` may reference corpflow.
+Dispatch names <PLUGIN>'s loaded install root in every prompt: resolve paths under it, never search.
 
 ## Are we in a worktask?
 

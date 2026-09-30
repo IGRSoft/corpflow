@@ -575,7 +575,7 @@ A second silent path cannot be clamped and is read from the audit row instead: a
 
 ## Per-Stage Frontmatter Templates
 
-Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
+Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy. `#tpl-pl` has one more copy to mirror: the top of `skills/worktask/templates/planning.md`, which PL0 copies.
 
 ### Typed-return equivalent
 

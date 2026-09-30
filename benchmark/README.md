@@ -186,8 +186,11 @@ realized figure off the record.
 A live run dispatches **both a WITH-agent arm and a WITHOUT-agent arm**, each executing
 the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→FN→ST) in parallel:
 
-- **Symmetric arm folders**: each arm runs under its own dedicated `benchmark/workdirs/<run_id>/{with,without}/`
-  directory; generated app, test results, and stage-context logs live inside each arm's folder
+- **Symmetric arm folders**: each arm runs in its own dir `<workdir root>/<run_id>/{with,without}/`, outside
+  the repo and its own `git init`ed repo (`master`, one empty commit), so a stage cannot read the harness or the
+  oracle and `git rev-parse --show-toplevel` resolves to the arm. The root is `--workdir-root` /
+  `BENCH_WORKDIR_ROOT` / `${TMPDIR:-/tmp}/corpflow-bench`. Captures stay in
+  `benchmark/workdirs/<run_id>/captures/`, beside a symlink per arm, so report and analyzer paths hold
 - **Shared prompt files**: both arms consume the identical ordered 10-stage prompt files
   (`benchmark/live/prompts/{pl,ar,tl,dv,dr,sr,qa,dc,fn,st}.txt`). Plugin-surface leakage
   (e.g. agent IDs like `apple-developer:ios-developer` or commands like `/swiftui-review`) is
@@ -198,6 +201,10 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   `--setting-sources ""` (repo and account-synced plugins would otherwise leak in) and the
   builtin plugins switched off. `system/init` `plugins[]` is checked every stage; a violation
   is rc 5. Stamped as `era.plugins_with` / `era.plugins_without`
+- **Config-leak guard**: each stage's tool inputs, in both arms (sub-agents included), are scanned for
+  `…/plugins/cache/` or `…/plugins/marketplaces/` paths outside the config dir (tool results do not
+  count). The distinct prefixes are stamped per arm as `era.config_leaks` (`{"with": [], "without": []}`
+  when clean; arm-scoped); a leak in either arm is rc 5. Stream-json only
 - **Ledger seeding**: the harness plays the orchestrator for the WITH arm: before DV and QA it
   stamps `PL0.approved="auto"` and creates and claims `DV0` / `QA0` through `state-patch.sh`
 - **Policy default**: `real` on a full pipeline run, `skip` on a `--stages` subset — `--without-arm real|skip`
@@ -432,6 +439,18 @@ change invalidates comparisons just as surely as a model repin.
   seeded `DV0`/`QA0` ledger rows. Records from here on are **not comparable** with earlier
   ones: `era.harness` moves `python-1` → `python-2`, so the pairing gate refuses mixed
   pairs. `era.plugins_with` / `era.plugins_without` are arm-scoped and ignored by it.
+- **Out-of-repo workdirs + sub-agent-inclusive tokens (python-3)** — arms now run under
+  `--workdir-root` (default `${TMPDIR:-/tmp}/corpflow-bench`), each its own git repo, and a stage's
+  `fresh_in`/`out`/`cache_*` sum `result.modelUsage` over every model, sub-agents included; they
+  were parent-only `result.usage`. The parent-only figures stay as `parent_fresh_in`, `parent_out`,
+  `parent_cache_read`, `parent_cache_creation`. `cost_usd` is unchanged, so cost compares across
+  python-2 and python-3 while tokens do not. `era.harness` moves `python-2` → `python-3`, so the
+  pairing gate refuses mixed pairs. `era.config_leaks` is arm-scoped and ignored by it.
+  The shared stage preamble also stops telling agents to "set `stages.<CODE>` completed" in
+  `state.json`: the ledger has no `stages{}` map, and python-2 WITH runs hand-edited one with `jq`
+  instead of closing their task through `state-patch.sh`. Both arms get the same shortened
+  reminder (five items, not six). `PROMPT_CONTRACT` stays `scripted-cli-v3`: it stamps the graded
+  CLI contract, and this change rides the same `python-2` → `python-3` boundary.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.
@@ -612,7 +631,8 @@ benchmark/
     runs/live-arm/              # Single-arm records (--arm with|without): half a
                                 # comparison, NEVER rotated into history.json;
                                 # join two of them with bin/bench-pair
-  workdirs/<run_id>/{with,without}/   # Generated apps per run (gitignored)
+  workdirs/<run_id>/{captures/,with,without}   # captures + links to the arm dirs (gitignored);
+                                               # the arms live under --workdir-root
 ```
 
 ## Metric Schema (on-disk, key-for-key)
@@ -732,8 +752,9 @@ _total LOC: 91_
 | Sources/TicTacToeKit/Board.swift | 40 |
 ```
 
-The arm folder path (`workdirs/<run_id>/{with,without}`) is the canonical location to inspect
-the full generated source and test suite post-run. A zero-spend fixture-driven test sample is
+The arm folder path (`workdirs/<run_id>/{with,without}`, a link into `--workdir-root`) is the
+canonical location to inspect the full generated source and test suite post-run, while the
+scratch root survives. A zero-spend fixture-driven test sample is
 committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating the rendering.
 
 ## Test suites
@@ -771,6 +792,7 @@ excluded from the denominator).
   below predates this floor and should be re-read against it.
 - `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
 - `benchmark/results/token-findings-2.md` — live A/B measurement (n=1, honesty rule)
+- `benchmark/results/token-findings-4.md` — era python-2 per-stage attribution (n=3, 89500e0); AR and PL diagnosis, ranked levers
 - `benchmark/results/runs/live/` — raw per-stage live records (token attribution + coverage manifests)
 - `benchmark/results/KNOWN-BAD-RECORDS.md` — stored records that must be excluded from comparisons
 

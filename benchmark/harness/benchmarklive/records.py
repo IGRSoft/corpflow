@@ -37,7 +37,11 @@ def _stage_attributions(usages: list, arm: Optional[str]) -> list:
     return [
         StageAttribution(stage=name, fresh_in=u.input_tokens, cache_creation=u.cache_creation,
                          cache_read=u.cache_read, out=u.output_tokens, cost_usd=u.cost_usd,
-                         coverage=u.coverage, arm=arm)
+                         coverage=u.coverage, arm=arm,
+                         parent_fresh_in=u.parent_input_tokens,
+                         parent_cache_creation=u.parent_cache_creation,
+                         parent_cache_read=u.parent_cache_read,
+                         parent_out=u.parent_output_tokens)
         for name, u in usages
     ]
 
@@ -81,14 +85,16 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
                       without_partial: bool = False,
                       with_partial: Optional[bool] = None,
                       plugin: Optional[LoadedPlugin] = None,
-                      arm_plugins: Optional[dict] = None) -> BenchmarkRecord:
+                      arm_plugins: Optional[dict] = None,
+                      config_leaks: Optional[dict] = None) -> BenchmarkRecord:
     """Build the record. Skip mode (``without_usages=None``) keeps the WITHOUT
     placeholder byte-identical; its WITH block reflects whatever measurement and grading
     produced, which since AD-5 runs for every dispatched arm — so that block gains a real
     ``app_path`` and an ``oracle`` key it did not carry before. Paired mode aggregates the
     WITHOUT arm's own 10-stage tokens and tags every stage row with its arm (both
     additive/emit-only). ``plugin`` is the corpflow tree the WITH arm reported loading;
-    it is stamped into ``era`` only when observed, as are the ``arm_plugins`` lists."""
+    it is stamped into ``era`` only when observed, as are the ``arm_plugins`` lists and
+    the per-arm ``config_leaks``."""
     paired = without_usages is not None
     # Live coverage is never measured; None marks it absent so renderers tell it apart
     # from a real 0.0. Skip mode keeps the byte-stable 0.0 placeholder (asserted by test).
@@ -115,7 +121,7 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
                            git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                            without_pm=without_p, live_partial=live_partial,
                            stages=_stage_attributions(usages, arm=None),
-                           era=build_era(plugin, arm_plugins))
+                           era=build_era(plugin, arm_plugins, config_leaks))
 
     (o_in, o_out, o_tok, o_cost, o_cr, o_cc, o_wall) = _arm_tokens(without_usages)
     (without_pass, without_loc, without_test,
@@ -132,14 +138,15 @@ def build_live_record(run_id: str, timestamp_utc: str, git_sha: str, budget: flo
     return make_record(run_id=run_id, timestamp_utc=timestamp_utc, mode="live",
                        git_sha=git_sha, budget_usd=budget, with_pm=with_p,
                        without_pm=without_p, live_partial=live_partial, stages=stages_all,
-                       era=build_era(plugin, arm_plugins))
+                       era=build_era(plugin, arm_plugins, config_leaks))
 
 
 def build_arm_record(run_id: str, timestamp_utc: str, git_sha: str, budget: float,
                      arm: str, usages: list, stages_dispatched: int, arm_partial: bool,
                      app: Optional[baseline_mod.AppMeasure] = None,
                      plugin: Optional[LoadedPlugin] = None,
-                     arm_plugins: Optional[dict] = None) -> BenchmarkRecord:
+                     arm_plugins: Optional[dict] = None,
+                     config_leaks: Optional[dict] = None) -> BenchmarkRecord:
     """Build a single-arm record carrying only the arm that ran.
 
     A sibling of :func:`build_live_record`, which keeps both legacy byte shapes verbatim.
@@ -156,4 +163,4 @@ def build_arm_record(run_id: str, timestamp_utc: str, git_sha: str, budget: floa
     return make_arm_record(
         run_id=run_id, timestamp_utc=timestamp_utc, mode="live", git_sha=git_sha,
         budget_usd=budget, arm=arm, pm=pm, live_partial=arm_partial,
-        stages=_stage_attributions(usages, arm=arm), era=build_era(plugin, arm_plugins))
+        stages=_stage_attributions(usages, arm=arm), era=build_era(plugin, arm_plugins, config_leaks))

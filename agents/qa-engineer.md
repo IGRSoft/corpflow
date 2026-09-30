@@ -159,9 +159,13 @@ Delegate generation of the coverage gaps found in Q0–Q1 to the platform's test
 
 ### Delegation rules
 
-0. **Dispatch injection (BINDING)** — open every `Task(<plugin>:<test-generator>)` prompt with
-   `Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.`
+0. **Dispatch injection (BINDING)** — before every `Task(<plugin>:<test-generator>)`, run
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>`
+   (`<plugin>` is the id before `:`; its stdout line is `<ROOT>`) and open the prompt with
+   `Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.`
    Without it the generator has no stage contract and returns tests with no `handoff:` frontmatter.
+   Exit 1 → dispatch nothing to that plugin; the stderr line is the `reason` of a
+   `plugin_unavailable` audit row and a `testing-N.md § Notes` line (UI legs: § Leg not delegated).
 1. QA retains test-strategy ownership — the generator writes tests, QA validates quality and completeness
 2. Execute and measure through the platform's `/<plugin>:build-test` and its coverage tooling
 

@@ -33,7 +33,7 @@ CAPTURE_STREAM_JSON = "stream-json"
 # Bumped by hand whenever the graded task text changes; a workload change makes
 # token and quality figures incomparable just as surely as a model repin does.
 PROMPT_CONTRACT = "scripted-cli-v3"
-HARNESS_GENERATION = "python-2"
+HARNESS_GENERATION = "python-3"
 
 # Pins the contract text this version names, so editing the contract without
 # bumping above fails a test instead of stamping stale records. Re-pin and bump
@@ -70,7 +70,8 @@ def _cli_version() -> Optional[str]:
     return done.stdout.strip() or None if done.returncode == 0 else None
 
 
-def build_era(plugin: Optional[Any] = None, arm_plugins: Optional[dict] = None) -> dict:
+def build_era(plugin: Optional[Any] = None, arm_plugins: Optional[dict] = None,
+              config_leaks: Optional[dict] = None) -> dict:
     """Stamp what this run's numbers are comparable against.
 
     Model pins are the axis that silently invalidated the stored baselines at
@@ -96,4 +97,9 @@ def build_era(plugin: Optional[Any] = None, arm_plugins: Optional[dict] = None) 
         # the empty list, and the WITH arm's siblings are part of what was measured.
         if arm_plugins and arm_plugins.get(arm) is not None:
             era[f"plugins_{arm}"] = list(arm_plugins[arm])
+    if config_leaks:
+        # ``{arm: [prefix, ...]}`` for each arm that was scanned, `[]` when clean: a clean
+        # guard is a claim the record makes, and an absent arm means it did not run
+        # (json capture, or a pre-python-3 run).
+        era["config_leaks"] = {arm: list(found) for arm, found in sorted(config_leaks.items())}
     return era

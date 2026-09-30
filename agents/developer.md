@@ -270,6 +270,26 @@ Pass each Executed test through the platform's own selection flag; the grammar, 
 
 **Apple caveat**: identifiers are suite-terminal — `-only-testing:<Target>/<Suite>`. Per-function forms (`/testFoo`, `/testFoo()`) are forbidden: a Swift Testing `@Test` id carries the function's parentheses and `@Test(arguments:)` a per-argument suffix, so the per-function form matches zero tests and silently degrades to a full run. Nested `@Suite` types legitimately yield three segments — the rule is suite-*terminal*, not two-segment.
 
+#### The Executed-subset run — SwiftPM recipe
+
+The grammar is canonical in `test-selection-syntax.md § Grammar — app platforms`; this is the
+SwiftPM instance, run as its own Bash call:
+
+```bash
+swift test --filter '<SuiteA>|<SuiteB>' 2>&1 | tee .context/logs/test-developer-<ts>.log
+```
+
+`hooks/test-execution-gate.sh` classifies it as scoped, with or without `--package-path`. A bare
+`swift test` is a full run, and the gate denies it at DV.
+
+#### What the test gate checks, on every platform
+
+- Your D0.0b `--claim` row is `in_progress`; a ledger with no row in progress denies every run.
+- The command carries a selector naming the Executed suites (`--filter`, `-only-testing:`, …).
+- The tree changed since you last ran the same command; an identical re-run is denied.
+- The test command sits alone in its Bash call: a denial refuses the whole call, so a `grep` or
+  build chained beside it is lost with it.
+
 #### Test-run counters
 
 Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape — `action: "scoped_test_run"` when it carries ≥1 test-selection flag or a trailing positional test-target argument (e.g. `bats tests/foo.bats`, `cargo test foo`; a bare runner name with no argument at all is `full_test_run` instead), `action: "full_test_run"` otherwise. `metadata: {stage: "DV", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. `build-only` invokes no tests outside the no-handler promotion, so it usually emits no row. Audit-only: a missing or unexpected counter row never blocks a stage.
@@ -310,7 +330,7 @@ All stdout/stderr captured via the tee pattern (`logging-conventions § Bash Pat
 
 ### Audit triggers
 
-Append one JSONL line each to `.context/logs/audit.jsonl` per `agent-coordination § Audit Trail`. Skip these for ad-hoc tasks with no `metadata.worktask_id` (e.g. direct `/skill` invocations).
+Append one row each to `.context/logs/audit.jsonl` (schema: `agent-coordination § Audit Trail`) with § Writing an audit row — these and every other `audit.jsonl` row this file names. Skip these for ad-hoc tasks with no `metadata.worktask_id` (e.g. direct `/skill` invocations).
 
 | `action` | When | Required `metadata` keys |
 |----------|------|--------------------------|
@@ -319,6 +339,24 @@ Append one JSONL line each to `.context/logs/audit.jsonl` per `agent-coordinatio
 | `delegation` | When invoking `Task(specialist)` | `to_agent`, `platform`, `markers`, `reason`, `task_id` |
 | `retry_attempt` | D2 failure, before retry | `retry`, `classification`, `log_path` |
 | `artifact_created` | After `development.md` write | `artifact` |
+
+#### Writing an audit row
+
+Source the shared appender, then call it once per row; one Bash call can carry several rows.
+`PLUGIN_ROOT` resolves per § Plugin paths; `ART` is the basename of `<your artifact>`.
+
+```bash
+export CONTEXT_DIR=<abs path of the .context/ holding your state.json>; ART=<your artifact>
+. "$PLUGIN_ROOT/skills/shared/lib/audit-lib.sh" &&
+corpflow_audit_row --file "$CONTEXT_DIR/logs/audit.jsonl" --actor corpflow:developer \
+  --action artifact_created --result ok --subject "$ART" --task-id <ID> \
+  --meta-kv artifact=".context/$ART"
+```
+
+Other metadata goes in one `--meta '<json>'`, or one `--meta-kv key=value` per string key.
+
+It stamps `ts`, fixes the key order, and always returns 0. `--subject` and `--task-id` are
+required: a row missing either is not written, and only a stderr line says so.
 
 ## Screenshot Capture (DV completion gate)
 
@@ -437,13 +475,19 @@ Route with the Task tool. The `subagent_type` is the qualified agent ID from § 
 
 ### Dispatch Injection (BINDING)
 
-Every `Task(<plugin>:<agent>)` prompt opens with:
+Before every `Task(<plugin>:<agent>)`, resolve the sibling's root; `<plugin>` is the id before `:` and the one stdout line is `<ROOT>`:
 
 ```
-Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
 ```
 
-A sibling plugin's agents carry no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`); without the line the specialist returns an artifact with no `handoff:` frontmatter.
+Open the prompt with:
+
+```
+Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
+```
+
+Exit 1 → dispatch nothing to that plugin; take § Plugin unavailable with the stderr line as `reason`. A sibling plugin's agents carry no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`): without the line the specialist returns an artifact with no `handoff:` frontmatter, and without `<ROOT>` it searches the disk and can load another config's install.
 
 ### Context Passing
 
@@ -629,7 +673,7 @@ empty or all-zero list with no `test_suite_compiles`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did, `IR` on the emergency pipeline (`IR→DV→DR→QA→RE→FN`, which has no PL/AR/TL stage at all) — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. It atomically patches `tasks.<ID>` + the corresponding handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): `IR` when an `IR<N>` row exists (the emergency pipeline `IR→DV→DR→QA→RE→FN` has no PL/AR/TL), else the first of `TL`, `AR`, `PL` whose row is not `skipped`. It atomically patches `tasks.<ID>` + the corresponding handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Name the row id and the path, every time (state patch)
 

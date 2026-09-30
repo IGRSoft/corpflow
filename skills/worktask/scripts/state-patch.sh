@@ -264,8 +264,8 @@
 #               Unknown ids stay 1 and malformed ids stay 2.  Also: the ledger directory
 #               was INFERRED from the cwd (no --state, CONTEXT_DIR, WORKSPACE_ROOT or
 #               CLAUDE_PROJECT_DIR) and lies inside the plugin root (this script's own tree
-#               or CLAUDE_PLUGIN_ROOT) with the cwd not the git toplevel — nothing is read
-#               or written.
+#               or the host root corpflow_plugin_root reports) with the cwd not the git
+#               toplevel — nothing is read or written.
 # @exitcode 5   --verify-decision only: the row (or the chain it sits in) is refused — forged,
 #               edited, out of scope, uncorroborated or answer-mismatched.  Every other op in
 #               this file never returns 5.
@@ -1775,16 +1775,24 @@ _sp_physical() {
 # itself (running the plugin from its own repo root). A nested subdirectory such as a benchmark
 # workdir would otherwise be handed the checkout's live ledger, and a non-git cwd under the
 # plugin root would write into the plugin tree; failing loudly beats a silent write into the
-# wrong project. Both the root this script lives in and CLAUDE_PLUGIN_ROOT count, because a dev
-# checkout and an installed copy are different trees.
+# wrong project. Both the root this script lives in and the host-reported root count, because a
+# dev checkout and an installed copy are different trees.
 _sp_refuse_plugin_root() {
-  local ctx_phys root root_phys top top_phys pwd_phys
+  local ctx_phys root root_phys top top_phys pwd_phys host_root="" base_lib
   ctx_phys="$(_sp_physical "$1")"
   top="$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)"
   top_phys=""
   [[ -z "$top" ]] || top_phys="$(_sp_physical "$top")"
   pwd_phys="$(_sp_physical "$PWD")"
-  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "${CLAUDE_PLUGIN_ROOT:-}"; do
+  # The shared resolver owns the host env ladder; a missing lib only narrows the guard to
+  # this script's own tree, which still covers a dev checkout.
+  base_lib="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
+  if [[ -r "$base_lib" ]]; then
+    # shellcheck source=skills/shared/lib/corpflow-base.sh
+    . "$base_lib"
+    host_root="$(corpflow_plugin_root 2> /dev/null || true)"
+  fi
+  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "$host_root"; do
     [[ -n "$root" && -d "$root" ]] || continue
     root_phys="$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P)" || continue
     [[ -n "$root_phys" && "$root_phys" != "/" ]] || continue

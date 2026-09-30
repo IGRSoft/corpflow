@@ -19,11 +19,21 @@ When an external plugin command (`apple-developer:debug`, `apple-developer:revie
 
 ## Dispatch Injection
 
-A sibling plugin's only corpflow-facing file is `CORPFLOW.md` at its repository root; nothing else in it names corpflow. So every delegation to an external plugin agent opens its prompt with:
+A sibling plugin's only corpflow-facing file is `CORPFLOW.md` at its repository root; nothing else in it names corpflow. Before every delegation to an external plugin agent, resolve that root — `<plugin>` is the target id before `:`, and the one stdout line is `<ROOT>`:
 
 ```
-Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
 ```
+
+Then open the prompt with:
+
+```
+Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
+```
+
+Given no path, a sibling searched the disk for its contract and loaded another config's install. Exit 1 → dispatch nothing; record its stderr line on the dispatcher's skip path. A root with no `CORPFLOW.md` → `skills/shared/routing-matrix.md § Resolution`, step 4.
+
+### Model discipline block
 
 The same prompt carries section `[4b]`, the model discipline block for `task.metadata.model`, copied verbatim from `skills/shared/model-prompting.md` (`handoff-protocol.md#cache-prefix`). The sibling cannot tell which model it was dispatched on, so the delegating stage supplies the block.
 
@@ -56,6 +66,8 @@ AR consults; ownership does not transfer. `software-architector` settles system-
 ### Delegation Prompt Template
 
 ```
+{injection line — § Dispatch Injection, with <ROOT> resolved}
+
 Provide Swift app architecture for the corpflow worktask AR stage:
 
 ## Task
@@ -95,6 +107,8 @@ Pass compressed summaries, not documents: from `.context/<plan_file>` the featur
 ### Delegation Prompt Template
 
 ```
+{injection line — § Dispatch Injection, with <ROOT> resolved}
+
 Implement the following for the corpflow worktask DV stage:
 
 ## Task

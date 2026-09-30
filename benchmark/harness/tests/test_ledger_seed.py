@@ -172,7 +172,7 @@ class DispatchSeedsWithArmOnly(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, stages):
-        write_ledger(os.path.join(self.sb.workdir_path, "with"))
+        write_ledger(self.sb.arm_dir("with"))
         order = []
         runner = RecordingRunner()
 
@@ -183,7 +183,7 @@ class DispatchSeedsWithArmOnly(unittest.TestCase):
                                    "total_cost_usd": 0.01})
 
         dispatch(workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-                 benchmark_dir=self.sb.benchmark_dir, dispatcher=Dispatcher(), env={"ANTHROPIC_API_KEY": "k"},
+                 benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=Dispatcher(), env={"ANTHROPIC_API_KEY": "k"},
                  estimate_runner=fake_estimate_runner(0.001), stages=stages,
                  git_sha_runner=stub_git_sha, without_arm="real",
                  stderr=lambda _m: None, seed_runner=runner)

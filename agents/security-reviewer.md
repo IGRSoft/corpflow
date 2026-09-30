@@ -5,7 +5,7 @@ color: red
 version: 0.4.0
 maxTurns: 50
 effort: xhigh
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *)
 # tools: bare Task because a CORPFLOW.md § Routing override may point the auditor at any plugin.
 ---
 
@@ -128,20 +128,31 @@ No material threat surface: [what the diff changes and why nothing crosses a bou
 
 ### Invocation
 
-**Dispatch injection (BINDING).** Every `Task(<plugin>:<security-auditor>)` prompt opens with:
-
-```
-Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
-```
-
-The sibling auditor carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
-omit the line and its findings come back without the closing `consultant-return.v1` json fence.
-
 | Invocation | SR Stage Behavior |
 |------------|-------------------|
 | `/worktask --secure` / `--full` | SR stage mandatory |
 | `/worktask` (standard) | Skipped unless security-sensitive |
 | Security-sensitive — auth/authz, payments, PII, crypto, external APIs with secrets, uploads/UGC | SR auto-included regardless of complexity |
+
+### Dispatch Injection (BINDING)
+
+Before every `Task(<plugin>:<security-auditor>)`, resolve the auditor's root; `<plugin>` is the id
+before `:` and the one stdout line is `<ROOT>`:
+
+```
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
+```
+
+Open the prompt with:
+
+```
+Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
+```
+
+The sibling auditor carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
+omit the line and its findings come back without the closing `consultant-return.v1` json fence.
+Exit 1 → no consult: review that platform's § Auditor routing domains yourself, open its subsection
+with `auditor not consulted — <stderr line>`, and append one `plugin_unavailable` audit row.
 
 ## Platform Security Consultation
 

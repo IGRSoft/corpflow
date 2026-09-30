@@ -338,6 +338,11 @@ class TestBenchLiveArmWiring(unittest.TestCase):
         kwargs = self._run("--stages", "PL", "--without-arm", "real")
         self.assertEqual(kwargs["selection"].dispatch, ("without", "with"))
 
+    def test_workdir_root_flag_reaches_dispatch_and_defaults_to_none(self):
+        self.assertIsNone(self._run()["workdir_root"])
+        self.assertEqual(self._run("--workdir-root", "/scratch/arms")["workdir_root"],
+                         "/scratch/arms")
+
 
 # ---------------------------------------------------------------------------
 # bench-deterministic — ARGV VALIDATION ONLY. A complete argv would build two

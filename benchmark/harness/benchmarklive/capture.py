@@ -4,7 +4,9 @@ tool clash).
 stream-json: NDJSON, one object per line — collect the coverage manifest (Task
 subagent_type → agents, Skill names → skills, slash-commands → commands, tool_use
 count) and read usage from the terminal ``result`` line. json: today's single result
-object with usage + total_cost_usd; coverage manifest = None. NEVER fabricate: any
+object with usage + total_cost_usd; coverage manifest = None. Token totals sum
+``modelUsage`` over every model (sub-agents included) and fall back to the parent-only
+``usage`` when it is absent. NEVER fabricate: any
 field the output doesn't yield → None; the whole coverage object is None when no
 event data exists.
 """
@@ -36,6 +38,12 @@ class ParsedCapture:
     cache_creation: Optional[int] = None
     cost_usd: Optional[float] = None
     coverage: Optional[StageCoverage] = None
+    # Parent-session figures from ``result.usage``. Set only when the totals above came
+    # from ``modelUsage`` (sub-agents included), so their absence means the two agree.
+    parent_input_tokens: Optional[int] = None
+    parent_output_tokens: Optional[int] = None
+    parent_cache_read: Optional[int] = None
+    parent_cache_creation: Optional[int] = None
 
     @property
     def has_usage(self) -> bool:
@@ -48,6 +56,34 @@ class ParsedCapture:
         return not self.has_usage and self.coverage is None
 
 
+# result.modelUsage[<model>] key -> ParsedCapture field it sums into.
+_MODEL_USAGE_KEYS = {
+    "inputTokens": "input_tokens",
+    "outputTokens": "output_tokens",
+    "cacheReadInputTokens": "cache_read",
+    "cacheCreationInputTokens": "cache_creation",
+}
+
+
+def _model_usage_totals(model_usage) -> dict:
+    """Sum each token key across every model the run used, sub-agents included.
+
+    ``result.usage`` covers the parent session only, while ``total_cost_usd`` prices all
+    of it, so a token figure read from ``usage`` understates what the cost paid for. A key
+    no model reports is left out rather than summed to a fabricated zero.
+    """
+    if not isinstance(model_usage, dict):
+        return {}
+    totals = {}
+    for key, field in _MODEL_USAGE_KEYS.items():
+        values = [m[key] for m in model_usage.values()
+                  if isinstance(m, dict) and isinstance(m.get(key), int)
+                  and not isinstance(m.get(key), bool)]
+        if values:
+            totals[field] = sum(values)
+    return totals
+
+
 def parse_single_object(text: str) -> Optional[ParsedCapture]:
     """Layer-1 single-object parse (today's --output-format json result)."""
     try:
@@ -57,19 +93,34 @@ def parse_single_object(text: str) -> Optional[ParsedCapture]:
     if not isinstance(obj, dict):
         return None
     usage = obj.get("usage")
+    totals = _model_usage_totals(obj.get("modelUsage"))
     if not isinstance(usage, dict):
-        return None
-    in_tok = usage.get("input_tokens")
-    out_tok = usage.get("output_tokens")
-    cr = usage.get("cache_read_input_tokens")
-    cc = usage.get("cache_creation_input_tokens")
+        if not totals:
+            return None
+        usage = {}
+    parent = {
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "cache_read": usage.get("cache_read_input_tokens"),
+        "cache_creation": usage.get("cache_creation_input_tokens"),
+    }
+    # A field modelUsage did not report still falls back to the parent figure.
+    merged = {field: totals.get(field, parent[field]) for field in parent}
     cost = obj.get("total_cost_usd")
     if cost is None:
         cost = usage.get("total_cost_usd")
-    if in_tok is None and out_tok is None and cost is None and cr is None and cc is None:
+    if cost is None and all(v is None for v in merged.values()):
         return None
-    return ParsedCapture(input_tokens=in_tok, output_tokens=out_tok,
-                         cache_read=cr, cache_creation=cc, cost_usd=cost)
+    parsed = ParsedCapture(
+        input_tokens=merged["input_tokens"], output_tokens=merged["output_tokens"],
+        cache_read=merged["cache_read"], cache_creation=merged["cache_creation"],
+        cost_usd=cost)
+    if totals:
+        parsed.parent_input_tokens = parent["input_tokens"]
+        parsed.parent_output_tokens = parent["output_tokens"]
+        parsed.parent_cache_read = parent["cache_read"]
+        parsed.parent_cache_creation = parent["cache_creation"]
+    return parsed
 
 
 def collect_tool_uses(event: dict, agents: set, skills: set, commands: set,

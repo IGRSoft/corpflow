@@ -73,7 +73,7 @@ file a bug against corpflow rather than working around any of them.
 
 | Guarantee | Detail |
 |---|---|
-| **Dispatch-time injection** | Every corpflow agent delegating to a plugin agent injects `Read <plugin-root>/CORPFLOW.md and follow it` into the prompt — the plugin's agents never have to remember. |
+| **Dispatch-time injection** | Every corpflow agent delegating to a plugin agent opens the prompt with `Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; …` (full line: `../SKILL.md § Dispatch Injection`). `<ROOT>` is the install this session loaded, from `../scripts/resolve-sibling-root.sh` — the plugin's agents never have to remember or search for it. |
 | **`.context/` ownership** | corpflow creates and owns `.context/`. The plugin writes its stage artifact and its own `errors/<agent>.md`, nothing else. |
 | **`state.json` is orchestrator-owned** | The plugin patches only via `state-patch.sh` when its path is supplied, never a hand-rolled `jq` merge. If the patch fails it proceeds anyway — the `SubagentStop` hook repairs from the artifact frontmatter. |
 

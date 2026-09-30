@@ -29,7 +29,7 @@ class TokenAccounting(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage(input_tokens=11, output_tokens=7)])
         dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL", "AR"],
             git_sha_runner=stub_git_sha, without_arm="real")
         rec = load_json(self.sb.record_path)
@@ -43,7 +43,7 @@ class TokenAccounting(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage(input_tokens=42, output_tokens=9)])
         dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha, without_arm="real")
         captures = os.path.join(self.sb.workdir_path, "captures")
@@ -56,7 +56,7 @@ class TokenAccounting(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage(input_tokens=5, output_tokens=3)])
         dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha)  # skip
         rec = load_json(self.sb.record_path)

@@ -173,7 +173,7 @@ syntax a future handler will need.
 
 | Platform / runner | Selection syntax | Handler status |
 |-------------------|------------------|----------------|
-| Apple (Swift Testing / XCTest) | `-only-testing:<Target>/<Suite>` — suite-terminal [^apple] | Wired [^divergence] |
+| Apple (Swift Testing / XCTest) | xcodebuild `-only-testing:<Target>/<Suite>`; SwiftPM `swift test --filter '<Suite>'` — suite-terminal [^apple] | Wired [^divergence] |
 | Android (Gradle + JUnit) | `--tests '<package>.<ClassName>'`, optionally `.<methodName>` [^android] | Documented, not wired |
 | Web (Vitest / Jest) | `<file path>` positional + `-t '<name pattern>'` | Documented, not wired |
 | Web E2E (Playwright) | `<file path>` positional + `-g '<title pattern>'` | Documented, not wired |
@@ -215,6 +215,9 @@ the other rows are ordinary filter syntax.
 [^apple]: The identifier ends at a type, never at a function. `<SuiteName>` is an
 `XCTestCase` subclass or a Swift Testing suite type, spelled as in source. Nested suites
 legitimately add a segment (`Target/Outer/Inner`) — the terminal segment is still a type.
+SwiftPM's `--filter` is a regular expression over `<Target>.<Suite>/<test>` identifiers, so
+several suites share one flag as an alternation: `swift test --filter '<SuiteA>|<SuiteB>'`.
+`hooks/test-execution-gate.sh` reads `--filter` and `-only-testing:` as selectors.
 
 #### Why per-function forms are forbidden
 

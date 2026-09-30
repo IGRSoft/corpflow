@@ -106,7 +106,7 @@ class DispatchCredentialGate(unittest.TestCase):
         captured = []
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=TripwireDispatcher(),
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=TripwireDispatcher(),
             env={}, cli_login_runner=logged_out_runner,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL", "AR"],
             git_sha_runner=stub_git_sha, stderr=captured.append)

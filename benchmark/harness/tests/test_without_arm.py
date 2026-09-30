@@ -79,7 +79,7 @@ class PairedDispatch(unittest.TestCase):
     def _dispatch(self, dispatcher, budget_usd=100.0, stages=None, without_arm="real", est_cost=0.001):
         return dispatch(
             workdir=self.sb.run_id, budget=budget_usd, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=dispatcher, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=dispatcher, env=_ENV,
             estimate_runner=fake_estimate_runner(est_cost), stages=stages or ["PL"],
             git_sha_runner=stub_git_sha, without_arm=without_arm)
 
@@ -124,7 +124,7 @@ class PairedDispatch(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage()])
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha)  # without_arm defaults to "skip"
         self.assertEqual(rc, 0)
@@ -158,7 +158,7 @@ class PairedDispatch(unittest.TestCase):
 
     def test_policy_fallback_pairs_when_the_stage_list_is_the_whole_pipeline(self):
         for arm in ("with", "without"):
-            d = os.path.join(self.sb.workdir_path, arm, "Sources")
+            d = os.path.join(self.sb.arm_dir(arm), "Sources")
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, "App.swift"), "w", encoding="utf-8") as f:
                 f.write("let x = 1\n")  # clears the DV gate so every stage dispatches

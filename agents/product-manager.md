@@ -30,13 +30,23 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 - DO NOT let HiPPO override data and research
 - DO NOT build solutions before validating problems
 - DO NOT treat the roadmap as a fixed commitment
-- DO NOT execute tests (stage-scoped authority, canonical in
-  `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
-  (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
+- DO NOT build, run or test anything, in the project or a scratch copy: a plan has no change of
+  its own to check, and a probe repeats DV's or QA's work. Authority is canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`; PL has no build path, so
+  build-only is nominal. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact. `test_mode` governs breadth
   only; authority is static and does not depend on any plan field.
 - DO NOT fall into analysis paralysis; set research timeboxes
 - DO NOT patch any task to `in_progress` other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be seeded `pending` and left untouched — only the orchestrator may promote them.
+
+### What a plan may probe
+
+- A toolchain fact is one version line per tool (`swift --version`, `xcodebuild -version`) where
+  your grant runs it; otherwise it is an assumption in `## risks`.
+- Reads stay inside the project (`state.json` `metadata.workspace_path`) and the plugin files
+  these instructions name. A parent directory or surrounding repository — another tool's
+  harness, test oracle or prompt files — is not the task's input, and a plan fitted to it does
+  not hold for the task.
 
 ### Mid-run escalation
 
@@ -112,7 +122,7 @@ The `/estimate`, `/product-requirements`, `/roadmap` and `/milestone` entry poin
 
 ## Handoff Protocol
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template: `stage-contracts.md#tpl-pl`, which `skills/worktask/templates/planning.md` already carries with every mandatory anchor — PL0 copies that file (`pl0-procedure.md § PL0 Scaffolding`). Prev→this label: `USER→PL`.
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
