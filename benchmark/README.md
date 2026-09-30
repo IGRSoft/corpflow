@@ -178,8 +178,18 @@ realized figure off the record.
   granularity from `results/runs/live/*.json`, not from the shell exit
   (run-benchmark.sh collapses any non-zero adapter rc to exit 1 cosmetically)
 
-**bench-live exit codes:** 0 success · 2 pre-flight decline · 3 no credential ·
-4 running-tally breach/degraded (partial record on disk) · 64 bad usage.
+**Usage limit.** A stage that dies on the account's rolling limit ("You've hit your session limit
+· resets 7pm (Europe/Kiev)", or `api_error_status` 429) is classified from its full stdout. With
+`--wait-on-limit` (the default; `--no-wait-on-limit` turns it off) the harness sleeps until the
+reset plus 2 minutes (polling every 15 min when no time is printed; 6h cap, cumulative) and
+re-dispatches that stage only. The failed attempt is not in the record, and only spend it really
+reported counts against the budget. Off, or over the cap, the run writes its partial record and exits
+**6**, naming the reset. Any failed stage's full stdout is kept as
+`workdirs/<run_id>/captures/<arm>-<STAGE>.failed.jsonl`.
+
+**bench-live exit codes:** 0 success · 1 WITH ledger seed refused · 2 pre-flight decline ·
+3 no credential · 4 running-tally breach/degraded (partial record on disk) · 5 plugin contract
+broken · 6 usage limit (waiting off or over the cap; partial record on disk) · 64 bad usage.
 
 ## Paired ±agent runner (live)
 
@@ -205,8 +215,11 @@ the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→F
   `…/plugins/cache/` or `…/plugins/marketplaces/` paths outside the config dir (tool results do not
   count). The distinct prefixes are stamped per arm as `era.config_leaks` (`{"with": [], "without": []}`
   when clean; arm-scoped); a leak in either arm is rc 5. Stream-json only
-- **Ledger seeding**: the harness plays the orchestrator for the WITH arm: before DV and QA it
-  stamps `PL0.approved="auto"` and creates and claims `DV0` / `QA0` through `state-patch.sh`
+- **Ledger seeding**: the harness plays the orchestrator for the WITH arm only. Before its first
+  stage it runs the production `seed-state.sh` (`--worktask-id <run_id>`, `--goal` from the PL prompt's
+  TASK paragraph, `--context-dir`/`--workspace-path` on the arm); a failure refuses the run (rc 1)
+  before any dispatch. Before DV and QA it closes PL0, stamps `PL0.approved="auto"` and creates and
+  claims `DV0` / `QA0` through `state-patch.sh`. The WITHOUT arm has no ledger
 - **Policy default**: `real` on a full pipeline run, `skip` on a `--stages` subset — `--without-arm real|skip`
   (`run-benchmark.sh --live` or `bench-live`) overrides the default either way
 - **Dispatch order**: the WITHOUT arm is dispatched **FIRST** (all 10 stages), followed by the WITH arm;

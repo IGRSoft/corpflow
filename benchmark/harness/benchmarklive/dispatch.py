@@ -7,7 +7,9 @@ codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach or
 degradation (partial record written FIRST, D6) / 5 an arm's loaded plugins broke its
 contract: WITH loaded a corpflow tree other than the one under test, WITHOUT loaded
 any plugin, or either arm read a plugin cache outside the config dir (partial record
-written, never rotated into history).
+written, never rotated into history) / 6 a stage hit the account usage limit and waiting
+was off or over its cap (partial record written; the reset time is in the message) /
+1 the WITH arm's ledger could not be seeded (nothing dispatched).
 
 Paired arms (U3/U4): the WITHOUT arm no longer runs a single-shot baseline — both
 arms execute the SAME ordered 10-stage prompt sequence over the SAME shared prompt
@@ -37,11 +39,13 @@ from benchmarkkit.metrics import BenchmarkRecord, write_record
 
 from . import baseline as baseline_mod
 from . import budget as budget_mod
+from . import capture as capture_mod
 from . import config_leak
 from . import isolation
 from . import ledger_seed
 from . import plugin_load
 from . import preamble
+from . import usage_limit
 from . import workdirs
 
 # Re-export shim: callers and tests address these as ``dispatch.<name>``.
@@ -96,24 +100,37 @@ from .stage_usage import (  # noqa: F401
 CAPTURE_TRUNCATE_BYTES = 25 * 1024 * 1024
 
 
-def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: str) -> None:
-    """Persist raw stage stdout BEFORE parsing (A3). ``captures_dir=None`` is a no-op,
-    keeping existing callers byte-stable; any failure is swallowed — persistence never
-    kills a run. Over-cap payloads are written truncated with a marker."""
-    if captures_dir is None:
-        return
+def _write_capture(captures_dir: str, filename: str, stdout: str) -> None:
     try:
         os.makedirs(captures_dir, exist_ok=True)
-        path = os.path.join(captures_dir, f"{arm}-{stage}.jsonl")
         raw = stdout.encode("utf-8")
         truncated = len(raw) > CAPTURE_TRUNCATE_BYTES
         body = raw[:CAPTURE_TRUNCATE_BYTES].decode("utf-8", "ignore") if truncated else stdout
-        with open(path, "w", encoding="utf-8") as f:
+        with open(os.path.join(captures_dir, filename), "w", encoding="utf-8") as f:
             f.write(body)
             if truncated:
                 f.write(f"\n<<<TRUNCATED at {CAPTURE_TRUNCATE_BYTES} bytes>>>\n")
     except OSError:
         pass
+
+
+def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: str) -> None:
+    """Persist raw stage stdout BEFORE parsing (A3). ``captures_dir=None`` is a no-op,
+    keeping existing callers byte-stable; any failure is swallowed — persistence never
+    kills a run. Over-cap payloads are written truncated with a marker."""
+    if captures_dir is not None:
+        _write_capture(captures_dir, f"{arm}-{stage}.jsonl", stdout)
+
+
+def persist_failed_capture(captures_dir: Optional[str], arm: str, stage: str,
+                           stdout: str) -> None:
+    """Keep a failed stage's full stdout as ``<arm>-<STAGE>.failed.jsonl``.
+
+    Apart from the success capture, so a retry's ``<arm>-<STAGE>.jsonl`` is never mixed
+    with the attempt that died. An empty stdout has nothing to keep.
+    """
+    if captures_dir is not None and stdout:
+        _write_capture(captures_dir, f"{arm}-{stage}.failed.jsonl", stdout)
 
 
 def read_state_json_text(workdir_path: str) -> str:
@@ -139,6 +156,39 @@ def assemble_prompts(prompts_dir: str, stages: list, state_json_text: str,
     return out
 
 
+def _failed_attempt_cost(stdout: str) -> Optional[float]:
+    """Spend a failed attempt reported (a limit that struck mid-stage); None when none."""
+    parsed = capture_mod.parse(stdout)
+    return parsed.cost_usd if parsed is not None else None
+
+
+def _dispatch_stage(dispatcher: Dispatching, argv: list, prompt_text: str, arm: str,
+                    stage: str, captures_dir: Optional[str],
+                    tally: "budget_mod.RunningTally",
+                    limit_policy: Optional[usage_limit.LimitPolicy]) -> tuple:
+    """Dispatch one stage; returns ``(stdout, seconds)`` of the attempt that succeeded.
+
+    A failure is always persisted in full. One that is the account's usage limit is waited
+    out and the SAME stage re-dispatched: the failed attempt never reaches the record, its
+    wall time is excluded, and only spend it really reported (none, normally) is charged
+    to the tally. Anything else propagates unchanged; a limit that cannot be waited out
+    raises ``UsageLimitHit``.
+    """
+    while True:
+        timer = Timer()
+        timer.start()
+        try:
+            return dispatcher.run(argv, prompt_text), timer.elapsed
+        except DispatchFailure as exc:
+            persist_failed_capture(captures_dir, arm, stage, exc.stdout)
+            policy = limit_policy or usage_limit.LimitPolicy(wait=False)
+            limit = usage_limit.detect(exc.stdout, policy.now())
+            if limit is None:
+                raise
+            tally.add(_failed_attempt_cost(exc.stdout))
+            policy.wait_out(limit, f"{arm} {stage}")
+
+
 def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             tally: "budget_mod.RunningTally", estimate_calc_path: str,
             stages: list, estimate_runner: Optional[Callable[[list], str]] = None,
@@ -147,7 +197,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             persist_partial: Optional[Callable[["ArmResult"], None]] = None,
             now_fn: Optional[Callable[[], float]] = None,
             ledger_seeder: Optional[Callable[[str], None]] = None,
-            config_dir: Optional[str] = None) -> ArmResult:
+            config_dir: Optional[str] = None,
+            limit_policy: Optional[usage_limit.LimitPolicy] = None) -> ArmResult:
     """Dispatch one arm's ordered stage sequence under its own running-tally gate.
 
     Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``,
@@ -159,6 +210,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
     json emits no init event). ``ledger_seeder`` runs just before each dispatch. With
     ``config_dir`` set, either arm also stops at the first stage whose tool inputs name a
     plugin cache outside it (``config_leak``); stream-json only, like the load check.
+    A stage that dies on the account usage limit is re-dispatched per ``limit_policy``
+    (``_dispatch_stage``); when it cannot be, the arm stops with ``usage_limit`` set.
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
@@ -174,13 +227,17 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
                                     capture_mode=capture_mode, settings_path=settings_path,
                                     plugin_dir=arm.plugin_dir,
                                     enabled_plugins=arm.enabled_plugins)
-        timer = Timer()
-        timer.start()
         # A throw here propagates with prior stages' partial ALREADY on disk (OI-2).
-        stdout = dispatcher.run(argv, prompt_text)
+        try:
+            stdout, elapsed = _dispatch_stage(dispatcher, argv, prompt_text, arm.name, stage,
+                                              captures_dir, tally, limit_policy)
+        except usage_limit.UsageLimitHit as hit:
+            result.usage_limit = hit
+            result.partial = True
+            break
         persist_capture(captures_dir, arm.name, stage, stdout)
         usage = capture_stage_usage(stdout, arm.audit_path, stage, now_fn=now_fn)
-        usage.duration_s = timer.elapsed
+        usage.duration_s = elapsed
         result.usages.append((stage, usage))
         result.dispatched += 1
         if usage.capture_layer is None:
@@ -265,6 +322,17 @@ def _measure_arm(arm_cwd: str, plugin_root: str, dispatched: int,
     return app
 
 
+def _run_goal(prompts_dir: str, stages: list) -> str:
+    """The seeded ``facts.goal``: the PL prompt's task, else the first run stage's."""
+    for code in ["PL"] + list(stages):
+        try:
+            with open(os.path.join(prompts_dir, f"{code.lower()}.txt"), encoding="utf-8") as f:
+                return ledger_seed.goal_from_prompt(f.read())
+        except OSError:
+            continue
+    return ""
+
+
 def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              dispatcher: Optional[Dispatching] = None, env: Optional[dict] = None,
              estimate_runner: Optional[Callable[[list], str]] = None,
@@ -279,7 +347,9 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              config_dir: Optional[str] = None,
              seed_runner: Optional[ledger_seed.SeedRunner] = None,
              workdir_root: Optional[str] = None,
-             git_runner: Optional[workdirs.GitRunner] = None) -> int:
+             git_runner: Optional[workdirs.GitRunner] = None,
+             wait_on_limit: bool = False,
+             limit_policy: Optional[usage_limit.LimitPolicy] = None) -> int:
     """Run the live pipeline end-to-end and write the BenchmarkRecord.
 
     ``config_dir`` (else ``BENCH_CONFIG_DIR``, else ``~/.claude-eval``) is the
@@ -288,6 +358,13 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     ``workdir_root`` (else ``BENCH_WORKDIR_ROOT``, else ``${TMPDIR:-/tmp}/corpflow-bench``)
     holds ``<run_id>/{with,without}``, one git repo per arm. Captures stay under
     ``<benchmark_dir>/workdirs/<run_id>/``, which also links each arm.
+
+    The WITH arm's ledger is seeded with the real ``seed-state.sh`` before anything is
+    dispatched (``seed_runner`` stands in for every script call under test); a failure
+    refuses the run with rc 1. ``wait_on_limit`` sleeps through the account usage limit
+    and re-dispatches the stage; off, or over the cap, the run ends with rc 6.
+    ``limit_policy`` replaces the policy ``wait_on_limit`` would build (tests inject a
+    fake clock and sleep).
 
     ``selection`` drives which arms dispatch and what shape is recorded; when omitted
     it is derived from ``without_arm`` so every pre-existing caller keeps its exact
@@ -362,6 +439,19 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     if record_dir:
         os.makedirs(record_dir, exist_ok=True)
 
+    # Before any dispatch, so a refusal spends nothing. The WITHOUT arm stays plugin-free
+    # and ledger-free.
+    if "with" in selection.dispatch:
+        try:
+            outcome = ledger_seed.seed_run(
+                with_spec.cwd, plugin_root, run_id,
+                _run_goal(prompts, stages), runner=seed_runner)
+        except ledger_seed.LedgerSeedError as exc:
+            warn(f"live run refused: {exc}; nothing was dispatched")
+            return 1
+        warn(f"ledger {outcome} at {with_spec.cwd}/.context/state.json")
+    policy = limit_policy or usage_limit.LimitPolicy(wait=wait_on_limit, log=warn)
+
     state_json_text = read_state_json_text(workdir_path)
     prompts_by_stage = assemble_prompts(prompts, stages, state_json_text, run_id,
                                         ".context/planning-0.md")
@@ -417,12 +507,18 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir,
             persist_partial=_persist, now_fn=now_fn, config_dir=config_dir,
+            limit_policy=policy,
             ledger_seeder=(functools.partial(ledger_seed.seed_stage, arm_cwd=specs[name].cwd,
                                              plugin_root=plugin_root, warn=warn,
                                              runner=seed_runner)
                            if name == "with" else None))
         # Flush as each arm completes so a later arm's breach cannot lose it.
         _flush(partial=True)
+        if results[name].usage_limit is not None:
+            warn(f"live run stopped: {name} arm hit the usage limit: "
+                 f"{usage_limit.describe(results[name].usage_limit)}; partial record at "
+                 f"{record_path}; completed stages are kept, rerun after the reset")
+            return 6
         if results[name].plugin_error is not None:
             # Return before measuring: a wrong-tree run must not spend oracle build time
             # or reach the caller's history rotation, which keys off a zero exit.

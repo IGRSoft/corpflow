@@ -1,5 +1,8 @@
 """Seed the WITH arm's ledger the way the production orchestrator leaves it.
 
+``seed_run`` is ``/worktask`` Step 3-3a: it runs the real ``seed-state.sh`` once, before the
+arm's first stage. Without it there is no ``state.json`` at all and nothing below can work.
+
 In a real worktask the orchestrator seeds the ledger, PL0 seeds every downstream stage
 row (``state-patch.sh --task-create``) and the plan gate stamps the approval carrier
 before any stage is dispatched. The harness dispatches bare ``claude -p`` stages, so
@@ -36,9 +39,68 @@ _DEFAULT_BASE_REF = "master"
 # (argv, env, cwd) -> object with .exit_code / .stderr. Injected by tests.
 SeedRunner = Callable[[list, dict, str], Any]
 
+# Step 3 of commands/worktask.md.
+_CONTEXT_SUBDIRS = ("designs", "images", "errors", "logs")
+
+# seed-state.sh exits: 0 seeded, 3 a ledger is already there (byte-unchanged).
+_SEEDED, _EXISTS = 0, 3
+
+
+class LedgerSeedError(RuntimeError):
+    """The WITH arm's ledger could not be seeded; the run must not dispatch."""
+
 
 def default_runner(argv: list, env: dict, cwd: str) -> Any:
     return Subprocess.run(argv, cwd=cwd, env=env)
+
+
+def goal_from_prompt(text: str) -> str:
+    """The task sentence of a stage prompt, as ``--goal`` wants it: one line.
+
+    Takes the paragraph after ``TASK:`` (whole text when absent), up to the first blank
+    line or bullet. ``seed-state.sh`` owns escaping and the 240-char cap.
+    """
+    marker = text.find("TASK:")
+    body = text[marker + len("TASK:"):] if marker >= 0 else text
+    lines: list = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("- "):
+            if lines:
+                break
+            continue
+        lines.append(stripped)
+    return " ".join(lines)
+
+
+def seed_run(arm_cwd: str, plugin_root: str, worktask_id: str, goal: str,
+             runner: Optional[SeedRunner] = None) -> str:
+    """Seed ``<arm_cwd>/.context/state.json`` with the production ``seed-state.sh``.
+
+    Returns ``"seeded"`` or ``"exists"``. An existing ledger is left byte-unchanged and is
+    not reopened the way ``/worktask`` reopens PL0: a second ``in_progress`` row beside
+    the claimed stage makes the test-execution gate's acting stage ambiguous. Raises
+    ``LedgerSeedError`` on any other outcome. ``/worktask``'s ``--platform`` is not
+    passed (the harness has none, so the seed's default applies); the seed takes no
+    base_ref or test_mode, which ``seed_stage`` stamps per row.
+    """
+    context_dir = os.path.join(arm_cwd, ".context")
+    for sub in _CONTEXT_SUBDIRS:
+        os.makedirs(os.path.join(context_dir, sub), exist_ok=True)
+    if not goal:
+        raise LedgerSeedError("ledger seed refused: the task prompt yielded no goal")
+    script = os.path.join(plugin_root, "skills", "worktask", "scripts", "seed-state.sh")
+    argv = ["bash", script, "--worktask-id", worktask_id, "--goal", goal,
+            "--context-dir", context_dir, "--workspace-path", os.path.realpath(arm_cwd)]
+    # CONTEXT_DIR beside --context-dir: the script's ladder must not reach the enclosing checkout.
+    env = dict(os.environ, CONTEXT_DIR=context_dir)
+    result = (runner or default_runner)(argv, env, arm_cwd)
+    if result.exit_code == _SEEDED:
+        return "seeded"
+    if result.exit_code == _EXISTS:
+        return "exists"
+    raise LedgerSeedError(f"ledger seed refused: seed-state.sh rc={result.exit_code} "
+                          f"{(result.stderr or '').strip()[:200]}")
 
 
 def _read_ledger(state_path: str) -> Optional[dict]:
@@ -115,6 +177,10 @@ def seed_stage(stage: str, arm_cwd: str, plugin_root: str,
             done.append(label)
 
     pl0 = tasks.get("PL0")
+    if isinstance(pl0, dict) and pl0.get("status") == "in_progress":
+        # seed-state.sh leaves PL0 open. A run that starts at DV (``--stages``), or a PL
+        # agent that never closed its row, would otherwise give the gate two acting stages.
+        call("PL0 completed", ["--task-status", "PL0", "completed"])
     if isinstance(pl0, dict):
         meta = pl0.get("metadata") if isinstance(pl0.get("metadata"), dict) else {}
         if meta.get("approved") not in _APPROVED:

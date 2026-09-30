@@ -13,6 +13,7 @@ from benchmarkkit.genlib import Subprocess
 
 from . import baseline as baseline_mod
 from .plugin_load import LoadedPlugin
+from .usage_limit import UsageLimitHit
 
 # Production dispatcher per-stage ceiling (D5); a hung child never blocks a run forever.
 STAGE_TIMEOUT_S = 3600.0
@@ -48,6 +49,7 @@ class ArmResult:
     plugin_error: Optional[str] = None      # set when the loaded plugins break the arm's contract
     plugins: Optional[list] = None          # every plugin the CLI reported, name@version; None if unobserved
     config_leaks: Optional[list] = None     # plugin-cache prefixes read outside the config dir; None if unscanned
+    usage_limit: Optional[UsageLimitHit] = None   # set when a stage could not run for the account limit
 
 
 class Dispatching(Protocol):
@@ -56,7 +58,15 @@ class Dispatching(Protocol):
 
 
 class DispatchFailure(Exception):
-    pass
+    """A stage's ``claude -p`` failed. ``stdout`` is the FULL output, never truncated:
+    the usage-limit classifier and the ``.failed.jsonl`` capture read it from here."""
+
+    def __init__(self, message: str = "", *, stdout: str = "", stderr: str = "",
+                 returncode: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
 
 
 class SubprocessDispatcher:
@@ -75,11 +85,13 @@ class SubprocessDispatcher:
             snippet = r.stderr.strip()[:400]
             # Under --output-format json the CLI reports API failures on stdout, not
             # stderr; without this the diagnostic is recoverable only from CLI transcripts.
-            out_snippet = r.stdout.strip()[:400]
+            # The tail: the failure (a synthetic message, the result event) is emitted last.
+            out_snippet = r.stdout.strip()[-400:]
             raise DispatchFailure(
                 f"claude -p failed (rc={r.exit_code}) for argv {argv[:6]}…"
                 + (f" stderr: {snippet}" if snippet else "")
-                + (f" stdout: {out_snippet}" if out_snippet else "")
+                + (f" stdout tail: {out_snippet}" if out_snippet else ""),
+                stdout=r.stdout, stderr=r.stderr, returncode=r.exit_code,
             )
         return r.stdout
 

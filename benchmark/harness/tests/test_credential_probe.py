@@ -22,6 +22,7 @@ from _helpers import (
     logged_in_runner,
     logged_out_runner,
     make_live_sandbox,
+    scrub_env,
     stub_git_sha,
     tripwire_runner,
 )
@@ -70,7 +71,7 @@ class AuthProbeUsesTheEvalConfigDir(unittest.TestCase):
         real = credentials.Subprocess.run
 
         def fake(argv, env=None, **_kw):
-            seen["argv"], seen["env"] = argv, env
+            seen["argv"], seen["env"] = argv, scrub_env(env)
             return SimpleNamespace(exit_code=0, stdout=json.dumps({"loggedIn": True}), stderr="")
 
         credentials.Subprocess.run = staticmethod(fake)
