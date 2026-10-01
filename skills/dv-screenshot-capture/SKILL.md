@@ -244,7 +244,7 @@ With `silicon`, `magick` and `convert` all absent, `cli-fallback.sh` writes no i
 
 ## Scripts (canonical executables)
 
-Eight shipped executables. The five capture scripts (web, android, apple-canvas, macos-window-capture, cli-fallback) take `--worktask-id`, a required `--task-id` and a slug (`--slug`, or a `shot` step in `macos-window-capture.sh`), resolve the next `NN` for that task themselves, and write to `.context/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png`, printing its absolute path. `resolve-worktask.sh` is § Worktask guard; `size-budget.sh` and `visual-diff.sh` are helpers.
+Nine shipped executables. The five capture scripts (web, android, apple-canvas, macos-window-capture, cli-fallback) take `--worktask-id`, a required `--task-id` and a slug (`--slug`, or a `shot` step in `macos-window-capture.sh`), resolve the next `NN` for that task themselves, and write to `.context/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png`, printing its absolute path. `capture.sh` runs them for DV in one call (§ Script usage — one call). `resolve-worktask.sh` is § Worktask guard; `size-budget.sh` and `visual-diff.sh` are helpers.
 
 ### Script usage
 
@@ -271,6 +271,17 @@ bash scripts/macos-window-capture.sh --worktask-id <id> --task-id <ID> --product
   --root-file <swift> --steps <file> [--package-path <dir>] [--size WxH] \
   [--timeout <s>] [--probe] [--platform <p>] [--run-index <N>]
 ```
+
+#### Script usage — one call
+
+```bash
+bash scripts/capture.sh --task-id <ID> --capture <slug>[:<arg>] ... (1..5) \
+  [--platform <p>] [--worktask-id <id>] [--context-dir <dir>] [--base-ref <ref>] \
+  [--viewport WxH] [--product <P> --root-file <swift> [--package-path <dir>] [--size WxH]] \
+  [--canvas-files <list>]
+```
+
+Runs § Worktask guard, the dispatch table, the ladder to the tool_missing floor, the size budget and the manifest rewrite. `<arg>` belongs to the primary adapter: web URL, android serial, macos_window click/wait steps file, apple_canvas `Module.Type`, cli_fallback file list. Apple with neither `--product` nor `--canvas-files` goes to cli_fallback (`delegation_unavailable`). Prints `NN slug adapter bytes|tool_missing|…`, `manifest=` and `facts_screenshots=`; exit 0 written, 1 internal, 2 usage, 3 a capture got no row.
 
 ### Per-script behavior
 

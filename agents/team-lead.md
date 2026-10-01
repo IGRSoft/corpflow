@@ -186,15 +186,17 @@ Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage T
 
 #### Union this stage's facts in the same call
 
-Pass `--facts` in the same call to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is not derived from the frontmatter; this is its second transport:
+Pass `--facts` in the same call to union this stage's facts into `state.json → facts.*` — the channel downstream stages read first, and its only scripted writer. Your sweep stub is not derived from the frontmatter; this is its second transport:
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage TL --prev <PREV> --facts '{
   "decisions": [{"id":"tl1","summary":"≤160 chars","ref":"coordination-0.md#fan-out"}],
-  "open_questions": [{"id":"sw-TL0-1","class":"decision","ref":"coordination-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  "open_questions": [{"id":"sw-TL0-1","class":"decision","ref":"coordination-0.md#elicitation-sweep","blocks_next_stage":false}]}' --digest
 ```
 
-Omitting it loses the fact silently: a stub that reaches only the frontmatter never reaches the FN gate's render, so the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+Omit it and the stub reaches only the frontmatter, never the FN gate's render: the question is never asked. Union by `.id`, last writer wins. Canonical: `handoff-protocol.md#facts-union`.
+
+`--digest` prints the rows it wrote — that is the confirmation; never `cat`/`jq` `state.json` afterwards.
 
 <!-- output-sections:begin stage=TL -->
 ### Artifact anchors

@@ -5,8 +5,9 @@ color: red
 version: 0.4.0
 maxTurns: 50
 effort: xhigh
-tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *)
-# tools: bare Task because a CORPFLOW.md § Routing override may point the auditor at any plugin.
+tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task(apple-developer:security-auditor), Task(system-developer:sys-security-auditor), Task(android-developer:and-security-auditor), Task(frontend-developer:fe-security-auditor), Task(backend-developer:be-security-auditor), Task(ai-engineer:ai-security-auditor), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *)
+# tools: Task lists the six matrix security auditors instead of bare Task, which loads the whole
+# agent directory into every turn; an override outside the list takes the no-consult path.
 ---
 
 You are the security reviewer: you own the worktask pipeline's SR stage.
@@ -56,7 +57,7 @@ The diff is `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh -
 ### Threat Model (SR0)
 
 Scope is the diff, not the system — model only the boundaries it crosses. Procedure (trust boundaries →
-attack surface → STRIDE): `skills/security-review-process/references/threat-model.md`, read at SR0. Each
+attack surface → STRIDE): § SR runbook, digest of `skills/security-review-process/references/threat-model.md`. Each
 threat gets a `T<n>` row in `## threat-model`; every finding cites the threat it realizes. Two rules it
 does not own alone:
 
@@ -67,6 +68,55 @@ does not own alone:
 ### Diff-Only Read Rule (SR)
 
 Cheapest-first when only a judgment on the delta is needed (full reads stay available): frontmatter-first, then diff-only — a path listed in `state.json → facts.files_read` is read as `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller SR<N> -- <path>`, not `Read`; anchor-scoped `Read` for a single `## anchor`. Full-read only when the diff cannot support the assessment (say why in `security-review-N.md § findings`; `offset`/`limit` above 200 lines). No `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
+
+### SR runbook
+
+Steady-path digest of `skills/security-review-process/references/threat-model.md`, `owasp-checklist.md` beside it and `skills/shared/stage-contracts.md#tpl-sr`; all stay canonical and win any disagreement. Read a reference only for a check this digest lacks (a lockfile change: `owasp-checklist.md § A06`). The dispatch prompt carries the ledger (digest, `refs.dev[]`, task metadata): never `cat`, `jq` or `Read` `.context/state.json`. Source: the § Diff input (SR0) hunks, plus offset-limited reads of their callers — never every module.
+
+#### SR runbook — threat model (SR0)
+
+1. Boundaries the diff crosses — process/privilege, network, storage, supply chain, model (untrusted content ↔ prompt or execution): both sides and the asset.
+2. Entry points it adds or widens per boundary (endpoint, URL scheme, parsed format, CLI flag, exported component, dependency, agent tool), and who controls each input. No attacker-controlled input ⇒ not surface.
+3. STRIDE per entry point, only with a plausible attacker and a reachable path; severity stays § Severity Classification.
+4. One `T<n>` row each. Every finding opens `**[T<n>]**` (`**[—]**` without one); every Critical/High threat is answered by a finding or a named mitigation. Nothing crossed ⇒ the single `No material threat surface:` line.
+
+#### SR runbook — OWASP pass (SR1)
+
+Over the SR0 surface only:
+
+- A01 deny by default, server-side checks, ownership before access, no traversal or escalation path. A02 no cleartext secrets, TLS 1.2+, bcrypt/Argon2, no hardcoded or unrotatable keys.
+- A03 parameterized queries; no SQL, shell, LDAP, XPath or NoSQL built from input; allowlist validation; context encoding; validated uploads. A04 the threat model complete; fail closed; least privilege.
+- A05 no debug mode, default credentials, verbose errors or open storage. A06 lockfile committed; advisories triaged for reachability; new deps vetted (typosquat, maintainer, age).
+- A07 brute-force limits, session expiry, safe recovery. A08 signatures and updates verified, safe deserialization, trusted CI/CD and plugins.
+- A09 security events logged, no secrets or PII in logs. A10 user URLs allowlisted, no internal or metadata endpoints, scheme restricted.
+
+#### SR runbook — secrets scan
+
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (add `--format json` for NDJSON). It uses gitleaks when installed, else six built-in patterns, and prints `file:line:severity:pattern` with no excerpt. Exit 0: no Critical/High; 1: Critical/High found — triage each line on reachability and rotation cost; 2: usage error. Never Read or grep the script source: this is its whole contract.
+
+#### SR runbook — frontmatter, verbatim from `#tpl-sr`
+
+```yaml
+---
+handoff:
+  stage: SR
+  verdict: pass                # pass / fail
+  summary: "<N files reviewed. M security findings>"
+  key_decisions:
+    - { id: sr1, summary: "<security finding>", anchor: "security-review-N.md#findings" }
+  open_questions:
+    - { id: sw-SR0-1, class: decision, ref: "security-review-N.md#elicitation-sweep", blocks_next_stage: false }
+  refs:
+    dev:                                   # always a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
+    findings: security-review-N.md#findings
+---
+```
+
+#### SR runbook — the one ledger call
+
+The `artifact_created` audit row rides the single closing call, with no state.json read-back: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage SR --prev DR --facts '{"decisions":[…],"open_questions":[…]}' --audit-row '{"action":"artifact_created","result":"ok","subject":"security-review-N.md"}' --digest`.
 
 ### Output Artifact
 
@@ -167,7 +217,9 @@ Hand the auditor its platform's domains below, then verify each came back covere
 The default ids below copy `skills/shared/routing-matrix.md § Functional-role aliases`
 (security-auditor rows; bats-checked). Resolve before delegating: `state.routing` in
 `.context/state.json`, else project-root `CORPFLOW.md § Routing`, else the defaults — an override
-target replaces the subsection's agent but still receives that platform's domain checklist.
+target replaces the subsection's agent but still receives that platform's domain checklist. An
+override target missing from `tools:` cannot be dispatched: run that platform's checklist
+yourself and note `override <id> not granted` in the artifact.
 
 #### apple — `apple-developer:security-auditor`
 
@@ -231,14 +283,14 @@ merged, hand-edited, or retyped into shape, because hand-normalizing hides which
 
 ## SR1 Checklist
 
-Run `skills/security-review-process/references/owasp-checklist.md` (A01–A10) at SR1 over the surface
-SR0 scoped. Platform domains: § Auditor routing.
+Run the A01–A10 pass in § SR runbook (digest of `skills/security-review-process/references/owasp-checklist.md`)
+at SR1 over the surface SR0 scoped. Platform domains: § Auditor routing.
 
 ### Always-on passes
 
 Run whether or not a boundary was crossed.
 
-- **Secrets** — `bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (`skills/security-review-process/SKILL.md § Secrets Scanner`): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
+- **Secrets** — `bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (CLI in § SR runbook — secrets scan): a first-pass filter feeding triage, never an authoritative finding. Verify every line.
 - **Dependencies** — run the platform's native audit against the committed lockfile (SwiftPM: `Package.resolved`) and triage per `owasp-checklist.md § A06`.
 
 ## Severity Classification
@@ -264,7 +316,7 @@ manifests, review it against `skills/security-review-process/references/claude-c
 
 ## Handoff Protocol
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic writes: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Frontmatter template to paste verbatim at artifact top: `stage-contracts.md#tpl-sr`. Prev→this label: `DR→SR`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic writes: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Frontmatter template to paste verbatim at artifact top: `stage-contracts.md#tpl-sr`, inlined in § SR runbook. Prev→this label: `DR→SR`.
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 

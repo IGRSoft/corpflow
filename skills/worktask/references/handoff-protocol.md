@@ -2325,8 +2325,8 @@ Allowed in that stage's artifact only, required in none; title-case entries are 
 |-------|---------------------|
 | AR | `## <Platform> App Architecture`, `## Test Architecture` |
 | TL | `## Blockers` |
-| DV | `## verification-command`, `## decisions`, `## Blockers`, `## DV Completion Checklist` |
-| QA | `## Visual Evidence`, `## Design Comparison` |
+| DV | `## verification-command`, `## acceptance-commands`, `## decisions`, `## Blockers`, `## DV Completion Checklist` |
+| QA | `## acceptance-commands`, `## Visual Evidence`, `## Design Comparison` |
 | RE | `## Release Preparation Summary` |
 | ST | `## Self-Improvement` |
 | IR | `## Incident Report` |

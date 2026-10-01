@@ -32,7 +32,7 @@ CAPTURE_STREAM_JSON = "stream-json"
 
 # Bumped by hand whenever the graded task text changes; a workload change makes
 # token and quality figures incomparable just as surely as a model repin does.
-PROMPT_CONTRACT = "scripted-cli-v3"
+PROMPT_CONTRACT = "scripted-cli-v4"
 HARNESS_GENERATION = "python-3"
 
 # Pins the contract text this version names, so editing the contract without

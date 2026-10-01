@@ -83,9 +83,10 @@ Carve-out the marker tables don't express: a `Package.swift` with no UI imports 
 
 ### Delegation Flow
 
+0. Pass § Consult Gate (AR); a closed gate skips steps 2–4
 1. Settle system-level decisions first
-2. Delegate to the platform's architect (§ Architect routing) with planning context and system constraints
-3. It writes its routing-row artifact and returns a compressed summary
+2. Delegate to the platform's architect (§ Architect routing) with `model: "sonnet"`, planning context and system constraints
+3. It writes its routing-row artifact (≤80 lines, decisions only) and returns ≤300 tokens
 4. Read that artifact; merge into `architecture-N.md` under `## <Platform> App Architecture` (apple: `## Swift App Architecture`)
 5. Resolve system-vs-app conflicts for the system constraint; document the trade-off in an ADR
 
@@ -161,14 +162,21 @@ a row without `effort`. Resolve the pair as PL0 does, never from memory:
 effort and source, tab-separated; paste the first two. The stage's reasoning tier rides on that
 field alone — no prompt keyword raises it past the resolved default.
 
-#### Low-Complexity Gate (AR)
+#### Consult Gate (AR)
 
-Validated score in the Low band (0–10 per
-`skills/estimation-methodology/SKILL.md § PL0 Stage-Set`): don't delegate to the platform's
-architect, on any platform. Pick the app pattern straight from that platform's playbook and write
-a compact `architecture-N.md` (≤150 lines — pattern choice + DI/navigation + test boundaries, no
-full ADR set). Delegate only at Medium+ (score ≥ 11), where deeper platform-architecture review
-earns its cost.
+Consult the platform's architect only when the validated score is Moderate+ (≥ 21 per
+`skills/estimation-methodology/SKILL.md § PL0 Stage-Set`) or an explicit trigger holds:
+
+- the plan brings in a framework or library absent from the repo
+- the plan needs an app pattern absent from both the repo and the platform playbook (first
+  navigation stack, first concurrency model, a pattern migration)
+- PL0 or the user names app architecture as a risk in `open_questions[]`
+
+Otherwise pick the app pattern from the platform's playbook and write a compact
+`architecture-N.md` (≤150 lines: pattern, DI/navigation, test boundaries, no full ADR set). Below
+Moderate a consult costs more than the rest of AR and adds no score. Record the outcome in
+`key_decisions` (`consult: skipped, score 17` or `consult: <trigger>`). An open gate dispatches
+per § Delegation Flow.
 
 ### Output Budget (AR)
 
@@ -207,7 +215,7 @@ Before marking AR stage complete, verify:
 - [ ] Component dependencies mapped
 - [ ] PL complexity score validated or adjusted
 - [ ] No unresolved technical risks blocking DV stage
-- [ ] Platform detected at Medium+ → its architect consulted, its App Architecture section merged in
+- [ ] § Consult Gate (AR) open → its architect consulted, its App Architecture section merged in; closed → outcome in `key_decisions`
 - [ ] System-vs-app architecture conflicts resolved and documented
 
 ## Handoff Protocol
@@ -245,10 +253,10 @@ Pass `--facts` in the same call to union this stage's compressed facts into `sta
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage AR --prev PL --facts '{
   "decisions": [{"id":"ar-1","summary":"≤160 chars","ref":"architecture-0.md#decisions"}],
-  "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  "open_questions": [{"id":"sw-AR0-1","class":"decision","ref":"architecture-0.md#elicitation-sweep","blocks_next_stage":false}]}' --digest
 ```
 
-Union by `.id` (last writer wins, newest at the tail): never clobbers PL's entries, and a re-run is byte-identical. Omitting it loses the decision silently — the orchestrator does not digest it for you. Canonical rule: `handoff-protocol.md#facts-union`.
+Union by `.id` (last writer wins, newest at the tail): never clobbers PL's entries, and a re-run is byte-identical. Omitting it loses the decision silently — the orchestrator does not digest it for you. Canonical rule: `handoff-protocol.md#facts-union`. `--digest` prints the rows it wrote — that is the confirmation; never `cat`/`jq` `state.json` afterwards.
 
 #### One call, no jq edits to `state.json`
 

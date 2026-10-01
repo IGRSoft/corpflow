@@ -201,10 +201,10 @@ Pass `--facts` in the same call to union this stage's compressed facts into `sta
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --prev QA --facts '{
   "files_modified": ["README.md"],
-  "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  "open_questions": [{"id":"sw-DC0-1","class":"decision","ref":"documentation-0.md#elicitation-sweep","blocks_next_stage":false}]}' --digest
 ```
 
-`files_modified` unions on the path string, first-seen order kept, so it never clobbers DV's entries and a re-run is byte-identical. Omitting it loses the file silently. Canonical rule: `handoff-protocol.md#facts-union`.
+`files_modified` unions on the path string, first-seen order kept, so it never clobbers DV's entries and a re-run is byte-identical. Omitting it loses the file silently. Canonical rule: `handoff-protocol.md#facts-union`. `--digest` prints the rows it wrote — that is the confirmation; never `cat`/`jq` `state.json` afterwards.
 
 #### Mandatory Close (DC)
 

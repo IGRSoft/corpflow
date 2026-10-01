@@ -5,10 +5,11 @@ color: yellow
 version: 0.6.0
 maxTurns: 40
 effort: medium
-# tools: bare Task and bare Bash are deliberate — a CORPFLOW.md § Routing override may
-# point test generation at any plugin, and the runner is unknown until platform detection
-# runs; the bounds are the delegation audit row and the suite QA owns.
-tools: Read, Glob, Grep, Write, Edit, Bash, Task, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+# tools: bare Bash is deliberate — the runner is unknown until platform detection runs; the
+# bound is the suite QA owns. Task lists the six test generators and the UI-verifier targets
+# instead of bare Task, which loads the whole agent directory into every turn; an override
+# outside the list takes § Leg not delegated / runs in-process.
+tools: Read, Glob, Grep, Write, Edit, Bash, Task(apple-developer:test-generator), Task(system-developer:sys-test-generator), Task(android-developer:and-test-generator), Task(frontend-developer:fe-test-generator), Task(backend-developer:be-test-generator), Task(ai-engineer:ai-test-generator), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(apple-developer:tvos-developer), Task(apple-developer:watchos-developer), Task(apple-developer:visionos-developer), Task(android-developer:android-developer), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are the QA engineer: you own the QA stage — test review and gap-filling, the full-suite regression gate, and visual-evidence checks.
@@ -94,6 +95,18 @@ Selection syntax differs per platform — `test-selection-syntax.md § Platform 
 
 Per test invocation, emit exactly one `audit.jsonl` line keyed on the invocation's shape: `action: "scoped_test_run"` when it carries ≥1 test-selection flag or a trailing positional test-target argument, `action: "full_test_run"` when it carries neither (the `full` row above). `metadata: {stage: "QA", plan_mode: <test_mode>, suites_selected: <int>, run_index: N}`. Audit-only per `agent-coordination § Writers` — a missing or unexpected counter row never blocks QA and belongs in no completion checklist.
 
+#### Q1 Acceptance commands
+
+Execute every command in each DV artifact's `## acceptance-commands` block, verbatim, from the
+DV tree, and every `<plan_file>` acceptance criterion that quotes exact output (byte-compare with
+`cmp`). Record each as `- exit=<n> <command>` under `testing-N.md § acceptance-commands`, then:
+
+```bash
+bash "$PLUGIN_ROOT/skills/worktask/scripts/acceptance-check.sh" --qa <testing-N.md> --dv <each DV artifact>
+```
+
+Exit 1 → `verdict: no-go` naming each `missing:`/`failed:` line; never pass on unit tests alone.
+
 #### Q1 QA Additions and Warnings
 
 Append QA-authored edge-case tests to `testing-N.md § Selected Tests (QA additions)` using DV's schema, and include them in the test-run invocation.
@@ -113,7 +126,7 @@ Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a
 #### Q2–Q3 Completion
 
 - **Q2**: handle failures — retry or escalate to DV. On `environmental_contention` (`agent-coordination § Retry / Escalate Matrix — environmental contention`), re-baseline once on a quiet machine and record the outcome in `testing-N.md § Notes` — no blocking defect, no DV escalation. If the re-baseline fails with the same members, that classification is void: reclassify as `logic` and escalate normally.
-- **Q3**: all tests pass — document results and metrics in testing.md.
+- **Q3**: all tests pass and `acceptance-check.sh` exits 0 — document results and metrics in testing.md.
 
 **State ledger**: Stage QA, Owner: qa-engineer. See `skills/shared/state-ledger.md`.
 
@@ -296,6 +309,6 @@ Omitting it loses the fact silently: a stub that reaches only the frontmatter ne
 `testing-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
 
 - Required: `## results`, `## coverage`, `## regressions`, `## verdict`, `## elicitation-sweep`
-- Optional for QA: `## Visual Evidence`, `## Design Comparison`
+- Optional for QA: `## acceptance-commands`, `## Visual Evidence`, `## Design Comparison`
 - Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`
 <!-- output-sections:end stage=QA -->

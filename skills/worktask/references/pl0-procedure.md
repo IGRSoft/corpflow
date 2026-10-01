@@ -1,9 +1,11 @@
 # PL0 Procedure — the complete planning-stage worktask integration
 
-Read this file first, before any other action, when `corpflow:product-manager` is dispatched as the
-PL stage agent (PL0). It is the whole planning procedure; the agent file carries identity and a
-pointer here. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`)
-never need it.
+The whole planning procedure for `corpflow:product-manager` dispatched as the PL stage agent (PL0),
+and its canonical source. The agent file carries a steady-path digest (`agents/product-manager.md
+§ PL0 runbook`) and a trigger list naming the sections here to Read; this file wins any
+disagreement, and a change here that alters the steady path updates that runbook in the same
+change. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`) never
+need it.
 
 Every `skills/…` and `commands/…` path below is relative to the corpflow plugin root, not the
 worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
@@ -409,6 +411,14 @@ Required anchors (kebab-case, no underscores, no spaces):
 | `## stages` | Per-stage task list | TL, FN |
 | `## summary` | Complexity/tier line, vetoable assumptions, gate-question preview | user (plan gate), FN (recap) |
 | `## elicitation-sweep` | The plan-gate sweep items, or the explicit empty statement | orchestrator (§ Step C.4) |
+
+#### Exact-output criteria are byte-exact
+
+Every exact-output rule in the goal — CLI flags, output formats, byte-level examples, leading and
+trailing spaces — becomes an acceptance criterion whose expected bytes are quoted verbatim in a
+fenced block under `## acceptance-criteria`. Never paraphrase, reflow, trim or re-quote them: DV
+builds and QA checks against those bytes, and a paraphrase drops exactly the whitespace and
+punctuation the rule exists for.
 
 #### Anchor-lint enforcement
 

@@ -19,7 +19,7 @@ Single source of truth for what each stage consumes, produces, and how the orche
 
 Every stage agent reads inputs in this order, anchor-first:
 
-1. Read `.context/state.json` (the worktask ledger): `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and your stage's `tasks` entries.
+1. Take the ledger (`facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, your `tasks` rows) from the prompt's state block; read `.context/state.json` only when the prompt carries none. Never `cat`/`jq` it to confirm a write: `state-patch.sh --digest` prints the rows it wrote.
 2. Resolve `N` per [#run-index-resolution](#run-index-resolution). This run's stage artifacts are `<basename>-${N}.md`.
 3. Read only the listed anchors in upstream artifacts (e.g. `architecture-N.md#decisions`); read a whole file only when an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`), or when the frontmatter `next_stage_focus` names a non-anchored section.
@@ -783,6 +783,16 @@ and `{runner: pytest, count: 589, summary_line: "589 passed in 41.2s"}`. The sam
 scopes is two entries. A rework round writes only its own entries: the ledger keeps earlier rounds
 under `tasks.<ID>.rework_runs` (`handoff-protocol.md § Field notes — tests_executed, rework_runs`),
 so no artifact copies one forward.
+
+#### Acceptance commands are replayed, not trusted (tpl-dv, tpl-qa)
+
+DV lists one self-checking command per exact-output rule (CLI flags, output format, byte-level
+example) under `## acceptance-commands`: a fenced `bash` block, one command per line, each
+comparing real output to the expected bytes with `cmp` or `diff`. QA executes every line verbatim
+and records it as `- exit=<n> <command>` under its own `## acceptance-commands`;
+`skills/worktask/scripts/acceptance-check.sh` then decides — a listed command that was not
+executed, or exited non-zero, is `verdict: no-go`. A green unit suite does not stand in for it:
+the contract is exactly what a paraphrase between agents loses.
 
 #### Zero executed tests must say whether the suite compiles (tpl-dv)
 

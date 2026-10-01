@@ -465,6 +465,11 @@ change invalidates comparisons just as surely as a model repin.
   reminder (five items, not six). `PROMPT_CONTRACT` stays `scripted-cli-v3`: it stamps the graded
   CLI contract, and this change rides the same `python-2` → `python-3` boundary.
 
+- **`scripted-cli-v4`** — `pl.txt` now embeds the same contract, so the WITH arm's PL stage can
+  write it into `planning-0.md` as byte-exact acceptance criteria, as a production `/worktask`
+  would from the user's goal. The contract text and `CLI_CONTRACT_DIGEST` are unchanged; the
+  WITHOUT arm's prompt is unchanged. Bumped because the graded task text one arm sees changed.
+
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.
 
