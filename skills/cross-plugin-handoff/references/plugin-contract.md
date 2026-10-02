@@ -63,7 +63,7 @@ capture adapter; non-UI platforms default `false` with `cli_fallback_adapter` tr
 The architect agent is consulted, not handed ownership: it writes
 `.context/<platform>-architecture.md` and returns a summary of ≤500 tokens.
 `corpflow:software-architector` retains the stage and merges the result. It consults only past its
-§ Consult Gate (AR) — complexity ≥21 or an explicit trigger — so most Medium runs never reach
+§ Consult Gate (AR) — complexity ≥31 or an explicit trigger — so most Medium and Moderate runs never reach
 the architect.
 
 ## B. What corpflow guarantees in return

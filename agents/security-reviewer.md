@@ -90,6 +90,8 @@ Over the SR0 surface only:
 - A07 brute-force limits, session expiry, safe recovery. A08 signatures and updates verified, safe deserialization, trusted CI/CD and plugins.
 - A09 security events logged, no secrets or PII in logs. A10 user URLs allowlisted, no internal or metadata endpoints, scheme restricted.
 
+Platform domains: § Consult Gate (SR) — auditor, or you cover § Auditor routing.
+
 #### SR runbook — secrets scan
 
 `bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh --path <repo-root>` (add `--format json` for NDJSON). It uses gitleaks when installed, else six built-in patterns, and prints `file:line:severity:pattern` with no excerpt. Exit 0: no Critical/High; 1: Critical/High found — triage each line on reachability and rotation cost; 2: usage error. Never Read or grep the script source: this is its whole contract.
@@ -186,7 +188,7 @@ No material threat surface: [what the diff changes and why nothing crosses a bou
 
 ### Dispatch Injection (BINDING)
 
-Before every `Task(<plugin>:<security-auditor>)`, resolve the auditor's root; `<plugin>` is the id
+Only past § Consult Gate (SR). Before every `Task(<plugin>:<security-auditor>)`, resolve the auditor's root; `<plugin>` is the id
 before `:` and the one stdout line is `<ROOT>`:
 
 ```
@@ -209,6 +211,17 @@ with `auditor not consulted — <stderr line>`, and append one `plugin_unavailab
 SR keeps ownership and sign-off in every case; auditor findings merge into `security-review-N.md` under
 a per-platform subsection. Detection markers: `skills/shared/platform-detection.md § Detection Rules`;
 availability: `skills/shared/compatible-plugins.md`.
+
+### Consult Gate (SR)
+
+Consult the platform's auditor only when SR0's threat model finds a sensitive surface in the
+diff (auth/authz, payments, PII, crypto, keychain/keystore or secrets, entitlements and permissions,
+external network APIs, uploads/UGC, IPC, deep links, WebView) or the validated score is High+
+(≥ 31 per `skills/estimation-methodology/SKILL.md § PL0 Stage-Set`). `--secure` alone does not open it.
+
+Otherwise review the platform's § Auditor routing domains yourself, open its subsection with
+`auditor not consulted — consult gate closed (<reason>)`, and record `consult: skipped, <reason>` in
+`key_decisions`. A closed gate is not a finding and not a blocker: the verdict rests on your own pass.
 
 ### Auditor routing
 

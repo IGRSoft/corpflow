@@ -251,7 +251,7 @@ class DispatchRetries(unittest.TestCase):
         self.assertGreater(self.sleeps[0], 120)
         self.assertTrue(any("usage limit at with AR" in w for w in self.warnings))
 
-    def test_the_failed_attempt_is_not_counted_in_the_record_or_the_budget(self):
+    def test_a_failed_attempt_that_reported_no_spend_adds_nothing(self):
         ok = single_object_usage(cost=0.05)
         rc = self.run_dispatch(ScriptedDispatcher(ok, limit_failure(), ok), ["PL", "AR"])
         self.assertEqual(rc, 0)
@@ -259,7 +259,7 @@ class DispatchRetries(unittest.TestCase):
         self.assertEqual(arm["stage_count"], 2)
         self.assertAlmostEqual(arm["cost_usd"], 0.10)
 
-    def test_a_spend_the_limit_interrupted_is_charged_to_the_tally_only(self):
+    def test_a_spend_the_limit_interrupted_is_charged_to_the_tally_and_the_stage(self):
         stdout = limit_stdout() + json.dumps({"type": "result", "total_cost_usd": 1.0,
                                               "usage": {"input_tokens": 1, "output_tokens": 1}})
         failing = DispatchFailure("x", stdout=stdout, returncode=1)
@@ -276,7 +276,11 @@ class DispatchRetries(unittest.TestCase):
         arm = load_json(self.sb.record_path)["paths"]["with"]
         self.assertEqual(rc, 4)
         self.assertEqual(arm["stage_count"], 1)
-        self.assertAlmostEqual(arm["cost_usd"], 0.05)
+        # Real spend: the re-dispatch built on the interrupted attempt's files.
+        self.assertAlmostEqual(arm["cost_usd"], 1.05)
+        stage = load_json(self.sb.record_path)["stages"][0]
+        self.assertAlmostEqual(stage["cost_usd"], 1.05)
+        self.assertEqual(stage["out"], 50 + 1)  # re-dispatch + interrupted attempt
 
     def test_the_arm_ledger_seeding_survives_the_retry(self):
         arm = self.sb.arm_dir("with")

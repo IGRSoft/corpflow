@@ -164,7 +164,7 @@ field alone — no prompt keyword raises it past the resolved default.
 
 #### Consult Gate (AR)
 
-Consult the platform's architect only when the validated score is Moderate+ (≥ 21 per
+Consult the platform's architect only when the validated score is High+ (≥ 31 per
 `skills/estimation-methodology/SKILL.md § PL0 Stage-Set`) or an explicit trigger holds:
 
 - the plan brings in a framework or library absent from the repo
@@ -174,7 +174,7 @@ Consult the platform's architect only when the validated score is Moderate+ (≥
 
 Otherwise pick the app pattern from the platform's playbook and write a compact
 `architecture-N.md` (≤150 lines: pattern, DI/navigation, test boundaries, no full ADR set). Below
-Moderate a consult costs more than the rest of AR and adds no score. Record the outcome in
+High a consult costs more than the rest of AR and adds no score. Record the outcome in
 `key_decisions` (`consult: skipped, score 17` or `consult: <trigger>`). An open gate dispatches
 per § Delegation Flow.
 

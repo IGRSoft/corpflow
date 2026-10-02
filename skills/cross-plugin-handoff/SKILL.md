@@ -61,7 +61,7 @@ Deferred: cross-plugin agents use the full schema. If a relaxed profile is ever 
 
 ## When AR Stage Collaborates with Platform Architects
 
-AR consults; ownership does not transfer, and only past `agents/software-architector.md § Consult Gate (AR)` (score ≥21 or an explicit trigger). Dispatch with `model: "sonnet"`. `software-architector` settles system-level architecture (API, backend, infra, data), consults the platform architect, and merges the result into `architecture.md`. Written below for `apple-developer:apple-architector`; for another platform substitute its architect and artifact from `agents/software-architector.md § Architect routing`.
+AR consults; ownership does not transfer, and only past `agents/software-architector.md § Consult Gate (AR)` (score ≥31 or an explicit trigger). Dispatch with `model: "sonnet"`. `software-architector` settles system-level architecture (API, backend, infra, data), consults the platform architect, and merges the result into `architecture.md`. Written below for `apple-developer:apple-architector`; for another platform substitute its architect and artifact from `agents/software-architector.md § Architect routing`.
 
 ### Delegation Prompt Template
 

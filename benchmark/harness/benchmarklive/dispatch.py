@@ -166,19 +166,22 @@ def _dispatch_stage(dispatcher: Dispatching, argv: list, prompt_text: str, arm: 
                     stage: str, captures_dir: Optional[str],
                     tally: "budget_mod.RunningTally",
                     limit_policy: Optional[usage_limit.LimitPolicy]) -> tuple:
-    """Dispatch one stage; returns ``(stdout, seconds)`` of the attempt that succeeded.
+    """Dispatch one stage; returns ``(stdout, seconds, interrupted)``.
 
-    A failure is always persisted in full. One that is the account's usage limit is waited
-    out and the SAME stage re-dispatched: the failed attempt never reaches the record, its
-    wall time is excluded, and only spend it really reported (none, normally) is charged
-    to the tally. Anything else propagates unchanged; a limit that cannot be waited out
-    raises ``UsageLimitHit``.
+    ``stdout`` and ``seconds`` are the attempt that succeeded. A failure is always persisted
+    in full. One that is the account's usage limit is waited out and the SAME stage
+    re-dispatched; its wall time is excluded, but the spend it reported is real and the
+    re-dispatch builds on its files, so its parsed usage is returned in ``interrupted`` for
+    the caller to fold into the stage, and its cost is charged to the tally at once.
+    Anything else propagates unchanged; a limit that cannot be waited out raises
+    ``UsageLimitHit``.
     """
+    interrupted = []
     while True:
         timer = Timer()
         timer.start()
         try:
-            return dispatcher.run(argv, prompt_text), timer.elapsed
+            return dispatcher.run(argv, prompt_text), timer.elapsed, interrupted
         except DispatchFailure as exc:
             persist_failed_capture(captures_dir, arm, stage, exc.stdout)
             policy = limit_policy or usage_limit.LimitPolicy(wait=False)
@@ -186,7 +189,30 @@ def _dispatch_stage(dispatcher: Dispatching, argv: list, prompt_text: str, arm: 
             if limit is None:
                 raise
             tally.add(_failed_attempt_cost(exc.stdout))
+            parsed = capture_mod.parse(exc.stdout)
+            if parsed is not None:
+                interrupted.append(parsed)
             policy.wait_out(limit, f"{arm} {stage}")
+
+
+_FOLDED_FIELDS = ("input_tokens", "output_tokens", "cost_usd", "cache_read", "cache_creation",
+                  "parent_input_tokens", "parent_output_tokens", "parent_cache_read",
+                  "parent_cache_creation")
+
+
+def fold_interrupted(usage: StageUsage, interrupted: list) -> None:
+    """Add each interrupted attempt's figures to the stage's, field by field.
+
+    A field stays None only when neither side reported it: a stage whose re-dispatch
+    reported nothing still shows what the interrupted attempt spent.
+    """
+    for parsed in interrupted:
+        for name in _FOLDED_FIELDS:
+            extra = getattr(parsed, name, None)
+            if extra is None:
+                continue
+            current = getattr(usage, name)
+            setattr(usage, name, extra if current is None else current + extra)
 
 
 def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
@@ -229,8 +255,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
                                     enabled_plugins=arm.enabled_plugins)
         # A throw here propagates with prior stages' partial ALREADY on disk (OI-2).
         try:
-            stdout, elapsed = _dispatch_stage(dispatcher, argv, prompt_text, arm.name, stage,
-                                              captures_dir, tally, limit_policy)
+            stdout, elapsed, interrupted = _dispatch_stage(
+                dispatcher, argv, prompt_text, arm.name, stage, captures_dir, tally, limit_policy)
         except usage_limit.UsageLimitHit as hit:
             result.usage_limit = hit
             result.partial = True
@@ -238,11 +264,13 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
         persist_capture(captures_dir, arm.name, stage, stdout)
         usage = capture_stage_usage(stdout, arm.audit_path, stage, now_fn=now_fn)
         usage.duration_s = elapsed
+        # The tally already holds the interrupted attempts' cost; charge only this one.
+        tally.add(usage.cost_usd)
+        fold_interrupted(usage, interrupted)
         result.usages.append((stage, usage))
         result.dispatched += 1
         if usage.capture_layer is None:
             result.partial = True
-        tally.add(usage.cost_usd)
         if capture_mode == CAPTURE_STREAM_JSON and (
                 arm.plugin_dir is not None or arm.enabled_plugins is not None):
             if arm.plugin_dir is not None:

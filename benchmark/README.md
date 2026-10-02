@@ -182,8 +182,10 @@ realized figure off the record.
 · resets 7pm (Europe/Kiev)", or `api_error_status` 429) is classified from its full stdout. With
 `--wait-on-limit` (the default; `--no-wait-on-limit` turns it off) the harness sleeps until the
 reset plus 2 minutes (polling every 15 min when no time is printed; 6h cap, cumulative) and
-re-dispatches that stage only. The failed attempt is not in the record, and only spend it really
-reported counts against the budget. Off, or over the cap, the run writes its partial record and exits
+re-dispatches that stage only. Spend and tokens the interrupted attempt reported are added to
+that stage in the record and charged to the budget: the re-dispatch builds on its files, so
+leaving it out understates the stage (`KNOWN-BAD-RECORDS.md`, `live-20261001T085738Z`). Its wall
+time stays out. Off, or over the cap, the run writes its partial record and exits
 **6**, naming the reset. Any failed stage's full stdout is kept as
 `workdirs/<run_id>/captures/<arm>-<STAGE>.failed.jsonl`.
 
