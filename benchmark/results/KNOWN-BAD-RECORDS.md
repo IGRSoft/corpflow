@@ -107,6 +107,23 @@ the installed corpflow, unbound — which is what it did here too.
 **Excluding it:** by `run_id`. Every earlier live record also lacks `era.plugin_path`,
 so none of their WITH arms was ever verified against the commit they are stamped with.
 
+## `live-20261001T085738Z-69a0947` — WITH `cost_usd` misses an interrupted DV attempt
+
+**In:** `results/history.json` (`live`) and `results/runs/live/`
+
+The WITH DV stage stopped on the account usage limit. The harness waited out the reset
+and re-dispatched DV, and the record keeps only the re-dispatch: WITH DV $2.27, WITH total
+$7.49. The interrupted attempt spent $2.56 over 21 turns
+(`workdirs/live-20261001T085738Z-69a0947/captures/with-DV.failed.jsonl`, `result.total_cost_usd`)
+and is in neither `cost_usd` nor the token sums. The re-dispatch also started from the
+first attempt's files, so neither $2.27 nor $4.83 is a clean single-attempt DV cost.
+
+The WITHOUT arm, the oracle (42/42 both arms) and every other stage are unaffected.
+
+**Reading it:** add $2.56 to WITH `cost_usd` (≈$10.05, premium ≈+41.5%) or exclude the run
+from cost means; never quote its +5.6% premium. **Since fixed:** the usage-limit retry
+adds the interrupted attempt's usage to the stage it re-dispatches.
+
 ## Reading `without_arm="skip"` placeholders
 
 A WITHOUT arm run in `skip` mode is a byte-stable placeholder, not a measurement:

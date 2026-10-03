@@ -1,5 +1,51 @@
 # Variance envelope
 
+## Era python-3, `scripted-cli-v4` (n=3)
+
+Three complete paired runs, commit `69a0947`, era `python-3`, prompt contract
+`scripted-cli-v4` (`pl.txt` now carries the CLI contract). Not comparable with the python-2
+set below: harness generation and prompt contract both moved. `era.config_leaks` is empty in
+all six arm-runs.
+
+| run | run_id | WITH | WITHOUT |
+|---|---|---|---|
+| 1 | `live-20261001T075458Z-69a0947` | $10.17 | $6.58 |
+| 2 | `live-20261001T085738Z-69a0947` | $7.49 recorded (≈$10.05 spent) | $7.10 |
+| 3 | `live-20261001T104654Z-69a0947` | $9.81 | $6.23 |
+
+Run 2's WITH DV stage hit the account usage limit; the harness waited out the reset and
+re-dispatched DV, and the record keeps only the second attempt. The first attempt's $2.56
+(`captures/with-DV.failed.jsonl`) is real spend missing from `cost_usd`
+(`KNOWN-BAD-RECORDS.md`). Figures marked *corrected* add it back.
+
+### The measurement
+
+| metric | WITHOUT min–max (spread) | WITH min–max (spread) | effect 1 | effect 2 | effect 3 |
+|---|---|---|---|---|---|
+| `cost_usd` | 6.23–7.10 (14.0%) | 7.49–10.17 (35.8%); corrected 9.81–10.17 (3.7%) | +54.7% | +5.6% (corrected +41.5%) | +57.4% |
+| `tokens` (total) | 167,331–190,752 (14.0%) | 185,133–254,479 (37.5%) | +33.4% | −2.9% | +52.1% |
+| `wall_clock_s` | 1472–2224 (51.1%) | 1652–2303 (39.4%) | +27.1% | −25.7% | +56.5% |
+| `loc_produced` | 2406–2755 (14.5%) | 2086–2173 (4.2%) | −20.2% | −24.3% | −9.7% |
+| `test_count` | 82–94 (14.6%) | 56–59 (5.4%) | −37.2% | −30.1% | −31.7% |
+| oracle `cases_passed` | 42–42 (0%) | 42–42 (0%) | 0 | 0 | 0 |
+
+### What survives its own noise floor
+
+- **`cost_usd` — survives, smaller.** Mean premium +38% as recorded, ≈+51% corrected
+  (WITH ≈$10.01 vs WITHOUT $6.64). Every effect is positive; runs 1 and 3 (+55%, +57%) sit
+  well above the 14% WITHOUT floor. Down from +80–143% at `89500e0` and +86% at `c638dc2`.
+- **`tokens`, `wall_clock_s` — do not survive.** Run 2 flips sign on both; run 2's WITH
+  tokens also miss the interrupted DV attempt.
+- **`loc_produced`, `test_count` — survive, negative.** WITH writes 10–24% less code and
+  ~31–37% fewer tests in every run, same sign, outside both floors. The oracle cannot
+  see either difference.
+- **Oracle — saturated.** 42/42 in all six arm-runs, including WITH after the DV contract
+  guard; run 1 at `c638dc2` had scored 13/42.
+
+Per-stage deltas and causes: `token-findings-5.md`.
+
+---
+
 ## Era python-2 (n=3)
 
 Three complete paired runs, commit `89500e0`, era `python-2`. WITH = corpflow 4.1.0 +
