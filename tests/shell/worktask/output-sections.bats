@@ -47,7 +47,7 @@ gen() { run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/repo" "$@"; }
 @test "print: optional lines appear only for stages with an optional row" {
   run bash "$PLUGIN_ROOT/$SCRIPT" --print --stage QA
   assert_success
-  assert_output --partial '- Optional for QA: `## Visual Evidence`, `## Design Comparison`'
+  assert_output --partial '- Optional for QA: `## acceptance-commands`, `## Visual Evidence`, `## Design Comparison`'
   run bash "$PLUGIN_ROOT/$SCRIPT" --print --stage DR
   assert_success
   refute_output --partial "Optional for DR"

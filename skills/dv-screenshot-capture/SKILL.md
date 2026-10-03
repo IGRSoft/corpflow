@@ -1,7 +1,7 @@
 ---
 name: dv-screenshot-capture
 description: Use when DV is about to complete and `metadata.requires_screenshots` is true (the default) — the completion gate blocks otherwise. Captures DV screenshots (or an annotated diff for meta-work) as visual evidence for QA, DR and the PR.
-version: 1.0.1
+version: 1.1.0
 argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
 ---
 
@@ -97,7 +97,7 @@ Same rule instantiated per platform; the left column is never sufficient alone.
 
 | Platform | Not sufficient alone | Required |
 |----------|---------------------|----------|
-| apple | `#Preview` / `ImageRenderer` canvas render (the `apple-canvas` adapter) | app running on a booted simulator or device |
+| apple | `#Preview` / `ImageRenderer` canvas render (the `apple-canvas` adapter) | app running on a booted simulator or device; a SwiftPM macOS app's root view clicked through in a real window (§ macos-window adapter) |
 | web | a Storybook or other static component render | the page driven in a real browser session |
 | android | a Compose `@Preview` render | app running on an emulator or device |
 
@@ -166,7 +166,7 @@ These three delegate the capture to the platform's own agent — corpflow holds 
 
 | Adapter | Delegate to | Requested behavior | `reason` |
 |---------|-------------|--------------------|----------|
-| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. | `xcodebuildmcp_unavailable` |
+| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. A SwiftPM macOS app skips this row: § macos-window adapter. | `xcodebuildmcp_unavailable` |
 | `web` | `Task(frontend-developer:frontend-developer)` | Run `scripts/web-capture.sh --task-id <task_id> --url <args.url> --viewport <args.viewport>`. | `playwright_unavailable` |
 | `android` | `Task(android-developer:android-developer)` | Run `scripts/android-capture.sh --task-id <task_id> [--serial <args.serial>]`. | `adb_unavailable` |
 
@@ -176,6 +176,34 @@ The delegate's prose reply is never the evidence — the file is. After the `Tas
 
 - Non-empty file → `{path, bytes: <stat>, ok: true, error: null}`; apply the size budget.
 - No file, empty file, or an errored `Task` → fall through to `cli_fallback` exactly as a missing tool did, emitting `screenshot_platform_fallback` with the table's `reason` (or `"delegation_unavailable"` when the agent was unreachable). The enum is unchanged: the capture still surfaces as `"capture_failed"`, or `"tool_missing"` once `cli_fallback` also bottoms out.
+
+#### macos-window adapter
+
+For `apple` when the app is a SwiftPM package with a macOS platform and a library product that exports its root view, run `scripts/macos-window-capture.sh` yourself instead of delegating. It hosts that view in a real `NSWindow`, clicks through the real transitions and renders each `shot`, all in-process, so it needs no simulator, no XcodeBuildMCP grant, and none of the Screen Recording or Accessibility permissions that `screencapture` and a launched binary need. It satisfies `ui_visual_check`; a canvas render does not.
+
+##### macos-window recipe
+
+1. From the package root, write the root file and a one-shot step list, then probe:
+
+```bash
+export CONTEXT_DIR=<abs .context>; T="$CONTEXT_DIR/tools"; mkdir -p "$T"
+cat > "$T/capture-root.swift" <<'EOF'
+import SwiftUI
+import <Product>
+@MainActor func captureRoot() -> some View { <RootView>() /* + test-store deps */ }
+EOF
+printf 'shot menu\n' > "$T/steps.txt"
+bash "${CLAUDE_SKILL_DIR}/scripts/macos-window-capture.sh" --worktask-id <worktask_id> \
+  --task-id <TASK_ID> --product <Product> --root-file "$T/capture-root.swift" --steps "$T/steps.txt" --probe
+```
+
+##### macos-window recipe, steps 2–4
+
+One `--probe`, then one capture; re-probe only on a missed click.
+
+2. Read the `probe=` PNG. It is 1x with the title bar included, so a pixel is a click point.
+3. Rewrite `steps.txt` — `click <x> <y>`, `wait <s>`, `shot <slug> <caption>`, at most 5 shots, one per AC state — and rerun without `--probe`. That run writes the PNGs, the manifest rows and the `screenshot_captured` rows, and prints `facts_screenshots=<json>` for the `facts.screenshots` merge.
+4. `--check` the gate (§ Completion gate). A missed click shows as the wrong screen in its PNG: re-probe with the steps up to that click, fix its coordinates, and rerun the capture.
 
 #### apple-canvas adapter
 
@@ -216,7 +244,7 @@ With `silicon`, `magick` and `convert` all absent, `cli-fallback.sh` writes no i
 
 ## Scripts (canonical executables)
 
-Seven shipped executables. The four capture scripts (web, android, apple-canvas, cli-fallback) take `--worktask-id`, a required `--task-id` and `--slug`, resolve the next `NN` for that task themselves, and write to `.context/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png`, printing its absolute path. `resolve-worktask.sh` is § Worktask guard; `size-budget.sh` and `visual-diff.sh` are helpers.
+Nine shipped executables. The five capture scripts (web, android, apple-canvas, macos-window-capture, cli-fallback) take `--worktask-id`, a required `--task-id` and a slug (`--slug`, or a `shot` step in `macos-window-capture.sh`), resolve the next `NN` for that task themselves, and write to `.context/images/<worktask_id>/dv-<TASK_ID>-NN-<slug>.png`, printing its absolute path. `capture.sh` runs them for DV in one call (§ Script usage — one call). `resolve-worktask.sh` is § Worktask guard; `size-budget.sh` and `visual-diff.sh` are helpers.
 
 ### Script usage
 
@@ -236,6 +264,25 @@ bash scripts/size-budget.sh --path <file> --worktask-id <id> \
   [--slug <kebab>] [--project-root <dir>]
 ```
 
+#### Script usage — macOS window
+
+```bash
+bash scripts/macos-window-capture.sh --worktask-id <id> --task-id <ID> --product <Product> \
+  --root-file <swift> --steps <file> [--package-path <dir>] [--size WxH] \
+  [--timeout <s>] [--probe] [--platform <p>] [--run-index <N>]
+```
+
+#### Script usage — one call
+
+```bash
+bash scripts/capture.sh --task-id <ID> --capture <slug>[:<arg>] ... (1..5) \
+  [--platform <p>] [--worktask-id <id>] [--context-dir <dir>] [--base-ref <ref>] \
+  [--viewport WxH] [--product <P> --root-file <swift> [--package-path <dir>] [--size WxH]] \
+  [--canvas-files <list>]
+```
+
+Runs § Worktask guard, the dispatch table, the ladder to the tool_missing floor, the size budget and the manifest rewrite. `<arg>` belongs to the primary adapter: web URL, android serial, macos_window click/wait steps file, apple_canvas `Module.Type`, cli_fallback file list. Apple with neither `--product` nor `--canvas-files` goes to cli_fallback (`delegation_unavailable`). Prints `NN slug adapter bytes|tool_missing|…`, `manifest=` and `facts_screenshots=`; exit 0 written, 1 internal, 2 usage, 3 a capture got no row.
+
 ### Per-script behavior
 
 | Script | Does | Failure detail |
@@ -243,6 +290,10 @@ bash scripts/size-budget.sh --path <file> --worktask-id <id> \
 | `web-capture.sh` | Drives Playwright's `screenshot` CLI | exit 2 `playwright_unavailable`; exit 3 `playwright_navigation_failed` / `playwright_timeout` |
 | `android-capture.sh` | Resolves exactly one online device from `adb devices`, then `adb exec-out screencap -p` | exit 2 `adb_unavailable`; exit 3 `no_device_attached`, `multiple_devices` (pass `--serial`), `serial_not_found`, `screencap_failed`, `screencap_corrupt` |
 | `apple-canvas.sh` | Scaffolds `tools/SnapshotHost/`, invokes `preview-ensurer`, renders via `swift run SnapshotHost`, prints the PNG path | 1 = no resolved root or a ledger mismatch, 2 = preview-ensurer errors (`missing_input`) or a broken install, 3 = render failed (escalate to the sim adapter), 4 = scaffold failed, 5 = argument error, incl. a task the ledger lacks or no git toplevel |
+
+#### macos-window-capture.sh
+
+Scaffolds a unique `<ctx>/tools/WindowCaptureHost/<TASK_ID>.<run>/` package per invocation from `templates/window-capture-host.swift` plus `--root-file`, builds it against `--product`, feeds it the steps, then moves the PNGs into `images/` and appends their manifest rows. Host sources, build output, staging/probe artifacts, and logs are isolated across parallel DV tasks and repeated invocations. Exit 1 = bad arguments or step grammar, more than 5 shots, a non-library `--product` (the library products are listed), or a ledger mismatch; 2 `swift_unavailable` (not macOS, or no `swift`); 3 `package_unreadable`, `host_build_failed` (the compiler's first errors go to stderr), `host_run_failed` or `shot_missing`, with nothing moved into `images/`.
 
 #### Helper scripts
 
@@ -262,11 +313,11 @@ Playwright resolves as a `playwright` binary on PATH, else the local package via
 
 All but `apple-canvas.sh` implement `--self-test` — fixture-driven, needing no network, git, browser, or device. Exit codes and the stdout contract live in each script's shdoc header.
 
-The three capture scripts share one exit-code grammar: 0 success, 1 bad arguments, an unresolved root, a ledger mismatch or a task the ledger lacks, 2 `tool_missing`, 3 `capture_failed` (`render_failed` in `cli-fallback.sh`, which has no lower rung to route to). Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
+The four capture scripts other than `apple-canvas.sh` share one exit-code grammar: 0 success, 1 bad arguments, an unresolved root, a ledger mismatch or a task the ledger lacks, 2 `tool_missing`, 3 `capture_failed` (`render_failed` in `cli-fallback.sh`, which has no lower rung to route to). Exits 2 and 3 still print a well-formed contract line carrying the intended `path` with `bytes=0`, and emit a `screenshot_platform_fallback` audit row — a missing tool degrades down the ladder, it never hard-fails DV.
 
 ### Adapter maturity
 
-`apple` is the one prose-only adapter — driving a simulator needs the XcodeBuildMCP grant this skill does not hold — so an `apple` failure falls through to `cli_fallback`. Every other adapter ships a self-tested script.
+`apple`'s simulator path is the one prose-only route — driving a simulator needs the XcodeBuildMCP grant this skill does not hold — so its failure falls through to `cli_fallback`. A SwiftPM macOS app takes the scripted § macos-window adapter, and every other adapter ships a self-tested script too.
 
 ## Attachment
 

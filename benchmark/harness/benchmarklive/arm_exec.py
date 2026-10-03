@@ -12,6 +12,8 @@ from typing import Optional, Protocol
 from benchmarkkit.genlib import Subprocess
 
 from . import baseline as baseline_mod
+from .plugin_load import LoadedPlugin
+from .usage_limit import UsageLimitHit
 
 # Production dispatcher per-stage ceiling (D5); a hung child never blocks a run forever.
 STAGE_TIMEOUT_S = 3600.0
@@ -19,13 +21,20 @@ STAGE_TIMEOUT_S = 3600.0
 
 @dataclass
 class ArmSpec:
-    """The sole legitimate A/B difference: ``bind_agent`` (→ --agent) and ``cwd``.
-    Everything else (prompts, budget, capture shape) is shared by construction."""
+    """The sole legitimate A/B differences: ``bind_agent`` (→ --agent), ``plugin_dir``
+    (→ --plugin-dir), the sibling plugins enabled in ``enabled_plugins`` and ``cwd``.
+    Everything else (prompts, budget, capture shape, config dir) is shared by construction.
+
+    ``plugin_dir`` is set only on the WITH arm. An arm with ``enabled_plugins`` and no
+    ``plugin_dir`` is the plugin-free baseline: its stages must report zero plugins in
+    ``system/init``. ``enabled_plugins=None`` leaves plugin config untouched."""
 
     name: str            # "with" | "without"
     bind_agent: bool
     cwd: str
     audit_path: str
+    plugin_dir: Optional[str] = None   # verified against system/init when capture is stream-json
+    enabled_plugins: Optional[dict] = None   # settings enabledPlugins; None = no isolation
 
 
 @dataclass
@@ -36,6 +45,11 @@ class ArmResult:
     partial: bool = False
     dv_gated: bool = False
     app: Optional[baseline_mod.AppMeasure] = None
+    plugin: Optional[LoadedPlugin] = None   # corpflow tree the CLI reported; None if unobserved
+    plugin_error: Optional[str] = None      # set when the loaded plugins break the arm's contract
+    plugins: Optional[list] = None          # every plugin the CLI reported, name@version; None if unobserved
+    config_leaks: Optional[list] = None     # plugin-cache prefixes read outside the config dir; None if unscanned
+    usage_limit: Optional[UsageLimitHit] = None   # set when a stage could not run for the account limit
 
 
 class Dispatching(Protocol):
@@ -44,27 +58,40 @@ class Dispatching(Protocol):
 
 
 class DispatchFailure(Exception):
-    pass
+    """A stage's ``claude -p`` failed. ``stdout`` is the FULL output, never truncated:
+    the usage-limit classifier and the ``.failed.jsonl`` capture read it from here."""
+
+    def __init__(self, message: str = "", *, stdout: str = "", stderr: str = "",
+                 returncode: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
 
 
 class SubprocessDispatcher:
     """Production dispatcher: shell out to headless `claude -p`, prompt on stdin."""
 
-    def __init__(self, workdir: Optional[str] = None, timeout: Optional[float] = STAGE_TIMEOUT_S) -> None:
+    def __init__(self, workdir: Optional[str] = None, timeout: Optional[float] = STAGE_TIMEOUT_S,
+                 env: Optional[dict] = None) -> None:
         self.workdir = workdir
         self.timeout = timeout
+        self.env = env   # None inherits; the live path pins CLAUDE_CONFIG_DIR here
 
     def run(self, argv: list, prompt_text: str) -> str:
-        r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, timeout=self.timeout)
+        r = Subprocess.run(argv, cwd=self.workdir, input=prompt_text, env=self.env,
+                           timeout=self.timeout)
         if r.exit_code != 0:
             snippet = r.stderr.strip()[:400]
             # Under --output-format json the CLI reports API failures on stdout, not
             # stderr; without this the diagnostic is recoverable only from CLI transcripts.
-            out_snippet = r.stdout.strip()[:400]
+            # The tail: the failure (a synthetic message, the result event) is emitted last.
+            out_snippet = r.stdout.strip()[-400:]
             raise DispatchFailure(
                 f"claude -p failed (rc={r.exit_code}) for argv {argv[:6]}…"
                 + (f" stderr: {snippet}" if snippet else "")
-                + (f" stdout: {out_snippet}" if out_snippet else "")
+                + (f" stdout tail: {out_snippet}" if out_snippet else ""),
+                stdout=r.stdout, stderr=r.stderr, returncode=r.exit_code,
             )
         return r.stdout
 

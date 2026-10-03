@@ -14,6 +14,11 @@ related:
 
 Audit agents, commands, and skill manifests against § Audit Rules and report each finding with a fix.
 
+Claude Code's built-in `/doctor prompt-audit` (also `/checkup prompt-audit`) is a complementary
+check, not a replacement: it leads with stale paths, stale commands and contradicting instruction
+files and flags patterns written for older models, while § Audit Rules check this plugin's own
+doctrine.
+
 ## Options
 
 With no scope flag, all three asset classes are audited.
@@ -161,7 +166,9 @@ file cites, not the auditor's judgement.
 
 Run against the asset body (kept out of a table so the `|` alternations copy verbatim):
 
-- `opus` — over-verification; Opus 5.5 already does this, and the instruction compounds it:
+- `opus` — an instruction to re-check or deliberate more; effort, not prompt text, is Opus 5.5's
+  lever on thinking (`skills/shared/model-prompting.md § The verification line is narrower than it
+  looks`):
 
   ```
   grep -niE 'double.?check|re-?verify|verify (your|the) (answer|work|reasoning)|final verification step' <asset>
@@ -171,6 +178,15 @@ Run against the asset body (kept out of a table so the `|` alternations copy ver
 
   ```
   grep -niE 'use a subagent to (verify|double)|delegate.*verif' <asset>
+  ```
+
+##### Body rule 5 — the reliable greps (continued)
+
+- `opus`, `sonnet` — an instruction to write the model's reasoning into its reply; both 5.5 models
+  can decline it as `reasoning_extraction`, so the Fix line is deletion:
+
+  ```
+  grep -niE 'show your (reasoning|thinking)|write out your (reasoning|thinking)|think out loud|reasoning in (the|your) (response|reply|output)' <asset>
   ```
 
 - any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 2`:
@@ -193,9 +209,12 @@ Skip either and the rule manufactures findings:
 #### Body rule 6 — scope explicitness
 
 On an agent whose resolved model is `sonnet`, flag an instruction that names one item where the
-asset's own scope covers a set, with no statement of which. Sonnet 5 does not generalise from one
-item to the next, so "add a verdict line to the finding" leaves the other findings unverdicted.
-The Fix line states the scope, never the emphasis: `every`, `each`, `all N`, or the named set.
+asset's own scope covers a set, with no statement of which. Sonnet 5.5 sets its scope from effort
+and instructions (`#steer-initiative-and-scope`, cited in `skills/shared/model-prompting.md
+§ sonnet`): at `low` and `medium` it can stop and check in before a multipart task is done, and it
+adds work nobody asked for at any level, so "add a verdict line to the finding" leaves the stopping
+point to the model. The Fix line states the stopping point or the named set, never the emphasis:
+`every`, `each`, `all N`, or the set by name.
 
 #### Body rule 7 — emphasis inflation
 

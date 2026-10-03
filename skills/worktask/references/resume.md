@@ -371,6 +371,7 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 
    - **Stopped means stopped**: an operator-killed agent never auto-respawns or re-runs a stale prompt; a daemon-restart-killed worker auto-resumes when the agents view next opens. Re-delegate only when the pre-check shows the agent truly absent.
    - **Work preservation**: waking a background job never deletes its transcript or re-runs the prompt; returning to `claude agents` carries running work over; long-running commands survive session restarts. A running background session holds its worktree's lock, so cleanup leaves it alone. Stale-worktree cleanup is not a resume chore.
+   - **Interrupted calls**: a session that ended mid-tool-call resumes with that call marked outcome unknown and no hidden "Continue" message, so check its effect before repeating it. MCP calls in a resumed session wait up to 10s for a reconnecting server.
 
 #### Reattach, cross-spawn & inspection
 

@@ -374,7 +374,7 @@ class EraComparability(unittest.TestCase):
 
     def _era(self, harness="python-1", contract="scripted-cli-v1", dv="claude-opus-5-5"):
         return {"harness": harness, "prompt_contract": contract,
-                "model_pins": {"DV": dv, "QA": "claude-sonnet-5"}}
+                "model_pins": {"DV": dv, "QA": "claude-sonnet-5-5"}}
 
     def test_identical_eras_have_no_differences(self):
         self.assertEqual(analysis.era_differences(self._era(), self._era()), [])

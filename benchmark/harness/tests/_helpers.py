@@ -19,6 +19,18 @@ from benchmarklive.dispatch import DispatchFailure
 
 _STAGE_FILES = ["pl", "ar", "tl", "dv", "dr", "sr", "qa", "dc", "fn", "st"]
 
+# Keys the suite asserts on. Anything else in a captured env is dropped so a failing
+# assertion's repr cannot print inherited secrets (tokens, API keys) into test output.
+ASSERTED_ENV_KEYS = frozenset(
+    {"CONTEXT_DIR", "CLAUDE_CONFIG_DIR", "CLAUDE_PROJECT_DIR", "WORKSPACE_ROOT"})
+
+
+def scrub_env(env):
+    """Keep only ASSERTED_ENV_KEYS of ``env``; ``None`` (inherit) passes through."""
+    if env is None:
+        return None
+    return {k: v for k, v in env.items() if k in ASSERTED_ENV_KEYS}
+
 
 # ----- capture stdout builders --------------------------------------------
 
@@ -141,10 +153,23 @@ def make_live_sandbox(tmp: str, run_id: str = "live-test", state_json: str = "{}
     os.makedirs(settings_dir, exist_ok=True)
     with open(os.path.join(settings_dir, "benchmark-settings.json"), "w", encoding="utf-8") as f:
         f.write('{"permissions": {"deny": []}}')
+    # dispatch() seeds the WITH ledger with the plugin's own seed-state.sh, found at
+    # <benchmark_dir>/../skills/worktask/scripts. The sandbox is not the repo, so it gets
+    # a script that accepts any argv and writes nothing; tests of the real script use
+    # the repo's (test_ledger_seed).
+    seed_dir = os.path.join(tmp, "skills", "worktask", "scripts")
+    os.makedirs(seed_dir, exist_ok=True)
+    with open(os.path.join(seed_dir, "seed-state.sh"), "w", encoding="utf-8") as f:
+        f.write("#!/usr/bin/env bash\nexit 0\n")
     record_path = os.path.join(benchmark_dir, "results", "runs", "live", f"{run_id}.json")
+    # Arms run outside the benchmark tree; every dispatch under test is handed this root
+    # so no test ever writes into the real ${TMPDIR}/corpflow-bench.
+    workdir_root = os.path.join(tmp, "arms")
     return SimpleNamespace(
         benchmark_dir=benchmark_dir, workdir_path=workdir_path,
-        prompts_dir=prompts_dir, record_path=record_path, run_id=run_id)
+        prompts_dir=prompts_dir, record_path=record_path, run_id=run_id,
+        workdir_root=workdir_root,
+        arm_dir=lambda arm: os.path.join(workdir_root, run_id, arm))
 
 
 def section(label: str) -> str:

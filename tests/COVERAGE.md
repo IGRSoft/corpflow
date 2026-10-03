@@ -171,6 +171,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/dv-screenshot-capture/scripts/visual-diff.sh` | `tests/shell/dv-screenshot/visual-diff.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/web-capture.sh` | `tests/shell/dv-screenshot/web-capture.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/android-capture.sh` | `tests/shell/dv-screenshot/android-capture.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/macos-window-capture.sh` | `tests/shell/dv-screenshot/macos-window-capture.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/capture.sh` | `tests/shell/dv-screenshot/capture-entry.bats` (aliased) | — | — | — |
 
 ### Shell scripts — worktask-core (DV0a, kcov)
 

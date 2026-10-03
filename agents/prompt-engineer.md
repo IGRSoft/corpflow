@@ -183,9 +183,10 @@ cheapest part of what it costs.
 #### Counter-productive instructions
 
 No-op pruning has a second rung. An instruction can be worse than inert: it can collide with
-behaviour the asset's model already has and amplify it. "Double-check your answer" on an `opus`
-asset is the canonical case — Opus 5.5 verifies its own work unprompted, and the instruction compounds
-into over-verification.
+how the asset's model already behaves. "Double-check your answer" on an `opus` asset is the
+canonical case — Opus 5.5 decides for itself how much to think, effort moves that more reliably
+than prompt text, and the line adds thinking and latency with no documented gain
+(`skills/shared/model-prompting.md § The verification line is narrower than it looks`).
 
 The test extends no-op pruning's: strike the sentence and ask whether the model would behave
 *better*, not merely *differently*. A yes is a deletion, not a rewrite.

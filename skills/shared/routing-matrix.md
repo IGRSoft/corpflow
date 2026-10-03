@@ -125,9 +125,9 @@ The `claude-code-workflows` family doubles its slug in invocation ids
 2. Else read `CORPFLOW.md § Routing` at the **user project root**; its rows win over this
    matrix, alias by alias.
 3. Else (or for aliases not overridden) use the Default target column above.
-4. Dispatch injection is unchanged: if the target plugin ships a root `CORPFLOW.md`
-   contract, open the prompt with the standard `Read CORPFLOW.md at the root of your
-   plugin and follow it` line; otherwise point the target at
+4. Dispatch injection is unchanged: resolve the target's root per
+   `skills/cross-plugin-handoff/SKILL.md § Dispatch Injection`; if it ships a root
+   `CORPFLOW.md`, open the prompt with that section's line, otherwise point the target at
    `skills/worktask/references/handoff-protocol.md § frontmatter-schema` inline.
 5. Target uninstalled or unknown → the `plugin_unavailable` degrade path
    (`agents/developer.md § Plugin unavailable`) with `alias` and `override_target` in the

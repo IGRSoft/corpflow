@@ -187,7 +187,7 @@ DEAD_PIN_RE='![[:space:]]*full\.metadata\??\.workspace_path|workspace_path[[:spa
   cat > "$allow" << 'EOF'
 agents/developer.md:- "Implement the DV0 task described in `development-0.md`"
 agents/developer.md:  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
-agents/developer.md:  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+agents/developer.md:  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
 skills/worktask/references/handoff-protocol.md:| DV | `development-N.md` (per DV ledger task: `development-N-<stream>.md`) | yes |
 EOF
   files=(agents/developer.md skills/task-folder-organization/SKILL.md

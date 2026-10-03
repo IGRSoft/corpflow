@@ -18,21 +18,24 @@ MARK_CONTRACT_STAGE = "<<<stage-contract>>>"
 MARK_TASK = "<<<task>>>"
 
 # [1] contract-reminder — byte-identical for EVERY stage of EVERY worktask.
+#
+# Deliberately silent on how a stage is recorded in state.json. The prompt is shared
+# by both arms, so any shape named here reaches the plugin-free WITHOUT arm too, and
+# the one it used to name (`stages.<CODE>`) is not the ledger's: the WITH arm's bound
+# agent closes its task through state-patch.sh and hand-edited that map instead.
+# Nothing in the harness reads stage completion from either arm's state.json.
 CONTRACT_REMINDER = (
     "You are a stage agent inside a corpflow staged worktask. Binding contract:\n"
     "1. Read your required inputs from .context/ (paths per the task metadata).\n"
     "2. Produce your stage artifact at the required .context/ path; the first\n"
     "   block MUST be YAML frontmatter (`---` / `handoff:`) per your stage\n"
     "   template, and the body MUST use the mandatory kebab-case H2 anchors.\n"
-    "3. Before returning, patch .context/state.json (read, merge, rewrite —\n"
-    "   preserve all existing keys): set stages.<CODE> completed + append facts\n"
-    "   and the handoff summary.\n"
-    "4. On unrecoverable failure: append a classified entry to your\n"
+    "3. On unrecoverable failure: append a classified entry to your\n"
     "   .context/errors/<agent>.md and set verdict blocked/escalate — never\n"
     "   fabricate results.\n"
-    "5. Write only files your stage owns. No commit/push unless your contract\n"
+    "4. Write only files your stage owns. No commit/push unless your contract\n"
     "   says so. Never print or commit secrets.\n"
-    "6. Return a concise handoff summary (verdict, key decisions,\n"
+    "5. Return a concise handoff summary (verdict, key decisions,\n"
     "   next_stage_focus) as your final message."
 )
 

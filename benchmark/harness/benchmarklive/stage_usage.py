@@ -29,6 +29,11 @@ class StageUsage:
     cache_creation: Optional[int] = None
     coverage: Optional[StageCoverage] = None
     duration_s: float = 0.0  # wall-clock of this dispatch; not part of the on-disk schema
+    # Parent-session-only token figures, set when the totals above are sub-agent-inclusive.
+    parent_input_tokens: Optional[int] = None
+    parent_output_tokens: Optional[int] = None
+    parent_cache_read: Optional[int] = None
+    parent_cache_creation: Optional[int] = None
 
 
 def dv_produced_swift(arm_cwd: str) -> bool:
@@ -132,7 +137,11 @@ def capture_stage_usage(stdout: str, audit_path: str, stage: str,
         return StageUsage(input_tokens=parsed.input_tokens, output_tokens=parsed.output_tokens,
                           cost_usd=parsed.cost_usd, capture_layer=1,
                           cache_read=parsed.cache_read, cache_creation=parsed.cache_creation,
-                          coverage=coverage)
+                          coverage=coverage,
+                          parent_input_tokens=parsed.parent_input_tokens,
+                          parent_output_tokens=parsed.parent_output_tokens,
+                          parent_cache_read=parsed.parent_cache_read,
+                          parent_cache_creation=parsed.parent_cache_creation)
     layer2 = capture_layer2(audit_path, stage)
     if layer2 is not None:
         layer2.coverage = coverage

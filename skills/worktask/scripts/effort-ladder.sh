@@ -45,7 +45,7 @@ EFFORT_CAPPED_CEILING='high'
 # Alias-level test, matching what `metadata.model` actually carries. `model-selection.md
 # § Prefer the alias over a pinned id` makes the alias the only value the pipeline writes, so
 # matching ids here would encode a form no stage emits. These three aliases resolve to models
-# that carry every rung (Opus 5.5, Sonnet 5, Fable 5.1); `haiku` is not on Claude Code's effort
+# that carry every rung (Opus 5.5, Sonnet 5.5, Fable 5.x); `haiku` is not on Claude Code's effort
 # list. A full id that slipped through is capped — the safe direction, since the clamp only
 # ever lowers.
 EFFORT_FULL_LADDER_RE='^(opus|sonnet|fable)$'

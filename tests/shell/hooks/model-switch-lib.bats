@@ -263,7 +263,7 @@ _ledger() {
 }
 
 @test "model_family: ANTI-VACUITY — different tiers stay different" {
-  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-sonnet-5"
+  run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "claude-sonnet-5-5"
   assert_output "sonnet"
   run_script_env --cwd "$WD" --source "$LIB" corpflow_model_family "haiku"
   assert_output "haiku"

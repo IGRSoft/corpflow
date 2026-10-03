@@ -15,7 +15,7 @@ Standard API rates, USD per million tokens, for the model each alias resolves to
 | Alias | Model | Input $/Mtok | Output $/Mtok | Cache read $/Mtok | Relative cost | Use For |
 |-------|-------|--------------|---------------|-------------------|---------------|---------|
 | **haiku** | Haiku 4.5 | 1.00 | 5.00 | 0.10 | 1x (baseline) | Formatting, routing, checklists, status checks |
-| **sonnet** | Sonnet 5 | 2.00 | 10.00 | 0.20 | 2x haiku | Implementation, analysis, test design, coordination |
+| **sonnet** | Sonnet 5.5 | 2.00 | 10.00 | 0.20 | 2x haiku | Implementation, analysis, test design, coordination |
 | **opus** | Opus 5.5 | 4.00 | 20.00 | 0.20 | 4x haiku | Architecture decisions, review gates, complex reasoning, meta-optimization |
 | **fable** | Fable 5.1 | 10.00 | 50.00 | 0.25 | 10x haiku | Operator override only, never a stage default |
 
@@ -34,7 +34,7 @@ Re-check the rates against the `claude-api` skill whenever an alias moves to a n
 | Alias | Resolves to | Context | Pricing |
 |-------|-------------|---------|---------|
 | `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus and Claude Code's default model outside Foundry | 1M by default, no usage-credit gate | § Cost Tiers; fast mode multiplier on top |
-| `sonnet` | Sonnet 5 | native 1M | § Cost Tiers |
+| `sonnet` | Sonnet 5.5 (`claude-sonnet-5-5`), the default Sonnet on the Anthropic API | native 1M | § Cost Tiers |
 | `fable` | Fable 5.1 (`claude-fable-5-1`), Mythos-class top reasoning. Claude apps gateway sessions still resolve `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | § Cost Tiers |
 | `haiku` | current Haiku | standard | § Cost Tiers |
 
@@ -56,9 +56,9 @@ Degrade via a session `fallbackModel` (`--fallback-model`) or a `Task({ model })
 
 ### Fast mode and the lean system prompt
 
-`/fast` applies to Opus: higher token rate and price multiplier, pinned via `/model`. Every
-model except Haiku, Sonnet and Opus 4.7 and earlier gets Claude Code's lean system prompt by
-default, so `opus` and `fable` stages carry a small standing input-token saving.
+`/fast` applies to Opus: higher token rate and price multiplier, pinned via `/model`. The `opus`
+(Opus 5.5) and `fable` targets get Claude Code's lean system prompt by default and `sonnet` and
+`haiku` do not, so `opus` and `fable` stages carry a small standing input-token saving.
 
 ## Effort Levels
 
@@ -71,11 +71,12 @@ is under the pipeline's control, so every stage passes `effort` explicitly.
 
 ### xhigh routing
 
-`xhigh` runs on **Opus 4.7 and later, Sonnet 5 and Fable 5.x**, so the `opus`, `sonnet` and
-`fable` aliases all carry it, and `max` too. A model without it (Opus 4.6, Sonnet 4.6) runs `xhigh`
-as `high` with no error: Claude Code falls back to the highest level the model supports at or
-below the one set. `haiku` is not on Claude Code's effort list, so `effort-ladder.sh` caps a
-resolver bump on it, or on a pinned id, at `high`. `fable` carries the credit gate above.
+`xhigh` runs on **Opus 5.5, Sonnet 5.5 and Fable 5.x** (the `opus`, `sonnet` and `fable`
+targets), so those aliases all carry it, and `max` too. A pinned id outside those runs `xhigh` at
+the highest level it supports, with no error: Claude Code falls back to the highest level the
+model supports at or below the one set. `haiku` is not on Claude Code's effort list, so
+`effort-ladder.sh` caps a resolver bump on it, or on a pinned id, at `high`. `fable` carries the
+credit gate above.
 
 ### Thinking off above high
 
@@ -133,6 +134,8 @@ dispatch.
 | `availableModels` | Constrains subagent model overrides and the dispatch model picker; `enforceAvailableModels` extends it to the Default model. User/project settings cannot widen a managed list. |
 | Alias outside the list | Redirects deterministically to an allowed model rather than leaking the disallowed id. |
 | `/fast` | Refused when fast mode resolves to a non-allowlisted model, never a silent switch. |
+| `availableModelsMatch: "exact"` | An `availableModels` entry allows only the model version it names, so the model an alias newly resolves to stays blocked until it is listed. |
+| `deniedModels` | Blocks the named models even when `availableModels` allows them. |
 
 ### Restriction signals and fallbacks
 
@@ -161,14 +164,14 @@ runners need no region env.
 
 ### Auto-mode permission classifier
 
-The small model classifying permission decisions in auto mode defaults to Sonnet 5 for external
-sessions, validated on the first request and then pinned for the session. It is unrelated to the
-session model.
+The small model classifying permission decisions in auto mode defaults to a Sonnet-tier model for
+external sessions, validated on the first request and then pinned for the session. It is unrelated
+to the session model.
 
 ## Context-Window Accounting
 
 `/context` percentages are computed against the full 1M window on models that have one (Opus 5.5,
-Sonnet 5, Fable 5.x). How the extended window changes stage handoff budgets, plus the fable
+Sonnet 5.5, Fable 5.x). How the extended window changes stage handoff budgets, plus the fable
 without-credits caveat: `skills/context-compression/SKILL.md`.
 
 ## Selection Criteria
@@ -199,7 +202,9 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
   `--effort`. There is no default-teammate-model setting, so a lane's tier is pinned at
   `Agent(name: …, model: …)` or not at all.
 - The built-in `Explore` agent inherits the session model capped at opus, not haiku: budget
-  fan-outs at sonnet/opus rates or pass an explicit `model`.
+  fan-outs at sonnet/opus rates or pass an explicit `model`. A session model id Claude Code does
+  not recognize, such as a custom model behind a proxy, is inherited as is rather than switched to
+  Opus.
 
 #### Persistence across resume and auto mode
 
@@ -219,7 +224,8 @@ Matrix`, and passes it as a short alias — `Task({ model: "opus" })`. No corpfl
 
 A dispatch that skips this fails silently: the stage runs on the parent session's model,
 `model_requested` and `model_resolved` disagree in `dispatched_agents[]`, and the sized effort
-tier is lost (an inherited Haiku or 4.6-generation model runs `xhigh` as `high`, § xhigh routing).
+tier is lost (an inherited Haiku, or any pinned id outside the `xhigh` targets, may run `xhigh`
+below the tier asked for, § xhigh routing).
 
 ## Default Subagent Model (`CLAUDE_CODE_SUBAGENT_MODEL`)
 

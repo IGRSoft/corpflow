@@ -130,6 +130,7 @@ Metadata only: the `dedupe_key` shape is unchanged.
 - `OTEL_RESOURCE_ATTRIBUTES` values surface as metric-datapoint labels, not only span attributes: tag `worktask_id` / `stage` there to slice dashboards per stage without parsing spans.
 - `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution pairs with the tier split in `skills/shared/stage-codes.md`.
 - `OTEL_METRICS_INCLUDE_REPOSITORY` tags metrics and events with `vcs.*` repository attributes, so a collector shared across repositories slices per repo.
+- Project and local settings ignore the variables that turn on export, set its endpoint or capture content, so a repo's committed `.claude/settings.json` cannot start a per-stage dashboard on its own.
 
 #### Log correlation, limits & trace nesting
 
@@ -179,7 +180,7 @@ One `settings.json` block covering every hook shape — `matcher`, the condition
 #### Hook entry shapes
 
 - `args: string[]` next to `command` avoids shell-string quoting issues for paths with spaces.
-- `type: "mcp_tool"` lets a hook call an MCP server action (elicitations, tool searches) without shelling out.
+- `type: "mcp_tool"` lets a hook call an MCP server action (elicitations, tool searches) without shelling out. On a blocking event (`PreToolUse` and similar) it waits for a still-connecting server, up to the MCP connect timeout, instead of being skipped.
 - `continueOnBlock: true` keeps later hooks in the same matcher group running when an earlier one blocks — use it when independent observers (audit + cost) must both run.
 
 ## Conditional Hook Execution
@@ -216,7 +217,8 @@ Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries th
 
 ### Error, config & compatibility semantics
 
-- Hook errors include the first line of stderr in the transcript, so `--debug` is not needed; `SessionStart`, `Setup` and `SubagentStart` hooks exiting with code 2 also show their stderr.
+- Hook errors include the first line of stderr in the transcript, so `--debug` is not needed; `SessionStart`, `Setup` and `SubagentStart` hooks exiting with code 2 also show their stderr. The debug log keeps a failed hook's stderr even when it also wrote stdout, and records its status code.
+- `{"decision":"block"}` from an `Elicitation` or `ElicitationResult` hook declines the MCP elicitation, as exit code 2 does.
 - A hook-callback timeout is reported as a timeout and infrastructure errors as such, never as a user rejection: route them as transient failures, not refusals.
 - Unrecognized hook event names in `settings.json` do not break the file, so forward-compatible configs survive CC downgrades.
 

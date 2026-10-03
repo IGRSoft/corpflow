@@ -1695,6 +1695,26 @@ EOART
     exit 1
   fi
 
+  # ---- T-batch: batched --task-create lands in one merge, --digest reads it back, and one
+  # bad row refuses the batch byte-identically with no audit row appended ----
+  make_state
+  rm -f .context/logs/audit.jsonl
+  tbatch_out=$(bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"agent":"corpflow:developer"}')" \
+    --task-create DR0 --metadata "$(_r9_meta)" --digest \
+    --audit-row '{"action":"seed","result":"ok","subject":"plan"}' 2> /dev/null || true)
+  cp .context/state.json .context/state.json.snapb
+  bash "$SELF" --task-create QA0 --metadata "$(_r9_meta)" --task-create DC0 \
+    --audit-row '{"action":"seed","result":"ok","subject":"plan"}' > /dev/null 2>&1 && tbatch_rc=0 || tbatch_rc=$?
+  if [[ "$tbatch_out" == $'state-patch ok\nDV0 pending agent=corpflow:developer\nDR0 pending\naudit +1' ]] \
+    && [[ "$tbatch_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snapb > /dev/null \
+    && [[ "$(wc -l < .context/logs/audit.jsonl | tr -d ' ')" == "1" ]]; then
+    printf 'T-batch: batched create + digest + audit-row, bad row refuses whole batch: ok\n'
+  else
+    printf 'T-batch: FAIL (rc=%s)\n%s\n' "$tbatch_rc" "$tbatch_out" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapb
+
   printf 'self-test: ALL PASS\n'
   exit 0
 }

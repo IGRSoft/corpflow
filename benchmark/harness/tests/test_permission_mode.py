@@ -129,7 +129,7 @@ class FailClosed(unittest.TestCase):
         with self.assertRaises(BenchmarkSettingsMissing):
             dispatch(
                 workdir=sb.run_id, budget=100.0, record_path=sb.record_path,
-                benchmark_dir=sb.benchmark_dir, dispatcher=TripwireDispatcher(),
+                benchmark_dir=sb.benchmark_dir, workdir_root=sb.workdir_root, dispatcher=TripwireDispatcher(),
                 env={"ANTHROPIC_API_KEY": "k"}, estimate_runner=fake_estimate_runner(0.001),
                 stages=["PL"], git_sha_runner=stub_git_sha)
 

@@ -60,7 +60,7 @@ Stage owner DR (Developer Review, 5/11); support agent TC (Technical Review, on-
 
 ### DR Stage Owner
 
-Run the review by reading and following `commands/tech-code-review.md` (resolve per `## Plugin paths`), the canonical methodology for this gate: read-only and recall-first (no fixes; DV applies them), P0/P1/P2 severity routing, and the Escalation-to-DV loop. The checks below are DR-specific additions on top.
+Run the review per § DR runbook, the steady-path digest of `commands/tech-code-review.md` (resolve per `## Plugin paths`) — the canonical methodology for this gate: read-only and recall-first (no fixes; DV applies them), P0/P1/P2 severity routing, and the Escalation-to-DV loop. The checks below are DR-specific additions on top.
 
 #### Reading the DV tasks
 
@@ -171,6 +171,57 @@ hand-edits, or retypes a rejected return into shape.
 - At `-a1` the orchestrator re-dispatches the consultant once with that line, then re-runs DR on the
   `-a2` path. A block at `-a2` is final.
 
+### DR runbook
+
+Steady-path digest of `commands/tech-code-review.md` (surface depth) and `skills/shared/stage-contracts.md#tpl-dr`; both stay canonical and win any disagreement. The § DR Stage Owner checks still run. Read the command file only for `--depth deep`, `--pr`, `--ethics` or a dependency-manifest change (its § Dependency Upgrade Review); never Read `stage-contracts.md` or `skills/agent-coordination/references/audit-actions.md`.
+
+#### DR runbook — inputs
+
+- Ledger: the dispatch prompt carries it (digest, `refs.dev[]`, task metadata). Never `cat`, `jq` or `Read` `.context/state.json`; the one exception is the landed-set query on a rework round (§ No untracked files outside the landed set).
+- Upstream artifacts: the `handoff:` frontmatter first, then one `## anchor` range at most.
+- Source: run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh --caller DR<N>` once and review its hunks. Beyond them, `Read` only with `offset`/`limit`: the enclosing function of a non-trivial hunk, its definitions, and the consumers a grep names. Never `cat -n` or full-Read every module; a full read needs a one-line reason in `## findings`.
+
+#### DR runbook — review pass
+
+Per hunk: what it should do; the main path plus one error, empty, boundary or concurrency path; what it assumes of callers. Sweep 13 classes: 1 correctness vs intent (each `planning-N.md#acceptance-criteria` item met — unmet is P1), 2 edge cases, 3 nil/unwraps, 4 error paths, 5 concurrency, 6 resource leaks, 7 off-by-one/overflow, 8 input validation/security, 9 API contract incl. string-literal and dynamic-dispatch uses of a renamed symbol, 10 state/persistence/migration, 11 performance cliffs, 12 regressions to untouched consumers of a changed default or constant, 13 hallucinated imports or symbols. Small diff (≤15 lines, one file): one sweep plus "other classes: n/a". Drop a candidate only when disproved or trivial style; doubt lowers severity, never drops it; unverifiable ⇒ keep, tagged `[verify-later]`. A pre-existing weakness blocks only when this diff newly reaches it.
+
+#### DR runbook — severity and verdict
+
+- P0: crash, data loss, security hole, broken build or contract, core regression — high confidence.
+- P1: likely-wrong behavior, unhandled error or edge, concurrency hazard, leak, contract risk, unmet criterion — with a read-confirmed trigger, or a hard-to-test class you are somewhat sure of.
+- P2: lower impact, a located but unproven suspicion (`[verify-later]`), minor maintainability or over-documentation.
+- Finding: `### #n [P1] <title>`, why it breaks, the trigger, `File: <path:line-range>`; one paragraph.
+- `## verdict`: `Decision: changes-requested` (verdict `fail`) on any open P0/P1, else `Decision: pass`; `Coverage: N files, M hunks reviewed`; one `Source: task=… stream=… source=… reason=…` line per stream-diff block. A re-review keeps each earlier P0/P1 open until fixed or answered.
+
+#### DR runbook — frontmatter, verbatim from `#tpl-dr`
+
+```yaml
+---
+handoff:
+  stage: DR
+  verdict: pass                # pass / fail
+  summary: "<N files reviewed. M findings, all addressed / K blockers remain>"
+  key_decisions:
+    - { id: dr1, summary: "<finding or approval>", anchor: "developer-review-N.md#findings" }
+  open_questions:
+    - { id: sw-DR0-1, class: decision, ref: "developer-review-N.md#elicitation-sweep", blocks_next_stage: false }
+  refs:
+    dev:                                   # always a list, one element per DV ledger row
+      - development-0-service.md#files-changed
+      - development-0-web.md#files-changed
+    findings: developer-review-N.md#findings
+---
+```
+
+#### DR runbook — audit rows and the one ledger call
+
+Audit actions: `artifact_created` once `developer-review-N.md` is written; `error_recorded` when you append a `## DR[N] Retry` block to `.context/errors/developer.md`. Both ride the single closing call — no separate audit write, no state.json read-back:
+
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DR --prev DV --facts '{"decisions":[…],"open_questions":[…]}' \
+  --audit-row '{"action":"artifact_created","result":"ok","subject":"developer-review-N.md"}' --digest
+```
+
 ### Bash Scope (DR)
 
 Bash serves only: atomic `.context/state.json` writes (`mv -f`, `sync`, `cat`); read-only git; `stream-diff.sh` for each DV task's diff (§ Reading the DV diffs — fetch and process) and `validate-consultant-return.sh` (§ Sibling Consultant Returns); `jq` for the landed-set query; `pandoc` for document ingestion; `cat`/`head`/`tail` where dedicated tools fall short. Running tests, mutating the working tree, executing the product or spawning long-running processes violates § Test-Execution Prohibitions (DR).
@@ -203,7 +254,7 @@ A TC consult returns advice, not a stage handoff, so it carries its own machine-
 tc_review:
   tc_verdict: approve          # approve / reject / conditional
   summary: "<=160 chars — the recommendation itself, not a restatement of the question>"
-  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the reasoning
+  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the decision and its evidence
   conditions: []               # required and non-empty when tc_verdict: conditional
   confidence: high             # high / medium / low
 ```
@@ -276,7 +327,7 @@ Before marking DR complete, verify (supplement to `stage-contracts.md § Complet
 
 ## Handoff Protocol
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`. Prev→this label: `DV→DR`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-dr`, inlined in § DR runbook. Prev→this label: `DV→DR`.
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 

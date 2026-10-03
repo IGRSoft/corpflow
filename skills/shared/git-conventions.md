@@ -76,7 +76,9 @@ A commit or PR body carries no `Generated with …` line and no `Co-Authored-By:
 authorship is the human operator's, and the footer would propagate into release notes and blame.
 Setting `attribution.sessionUrl` also omits the session link, enforcing the rule at the tooling
 layer. The harness's attribution reminder yields to this rule (lines set by managed settings
-still apply).
+still apply). `"attribution": false` in `settings.json` hides all commit and PR attribution, but
+an older Claude Code skips the whole settings file that holds it, so a settings file shared
+across versions keeps the object form.
 
 ## No issue anchor
 
@@ -115,7 +117,13 @@ In auto mode the runtime enforces these guards on its own:
 | Destructive git — `git reset --hard`, `git checkout -- .`, `git clean -fd`, `git stash drop` | Refused unless the prompt explicitly asks to discard those changes |
 | `commit --amend` | Refused unless the agent made that commit this session — after a failed hook the commit did not happen, so amend would destroy prior work |
 | IaC `destroy` | Bare `destroy` refused; the target stack must be named |
+
+#### Auto-mode Git Safety — removals, transcripts and flags
+
+| Guard | Behavior |
+|---|---|
 | `rm -rf` on an unresolvable variable | Prompts; catastrophic removals inside `$(…)`/backticks/`<(…)` prompt even under `--dangerously-skip-permissions` |
+| Recursive `rm` whose target is only command-substitution output (`rm -rf "$(pwd)"`) | Prompts in auto and `--dangerously-skip-permissions` mode even with a Bash allow rule, unless `CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT=1` |
 | Session transcript files | Tampering blocked |
 | `--force`, `--amend`, `--no-verify` on git/gh | No longer auto-approved by `/commit-push-pr` — they prompt |
 
@@ -127,6 +135,9 @@ In auto mode the runtime enforces these guards on its own:
   an unresolved variable into an `rm` target.
 - Under an unattended run (`--auto=[finalization]`, `/megatask`) a prompt on a dangerous flag is
   a stage failure to route through the retry matrix, not something to work around.
+- In auto and `--dangerously-skip-permissions` mode a dangerous-`rm` prompt waits 2 minutes, then
+  denies the command with a rewrite hint, so an unattended stage sees a denial instead of hanging
+  (`CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT=1` turns the timeout off).
 - Background sessions follow the repo's `CLAUDE.md`, so these rules apply there too.
 
 ## Pull Request Format

@@ -79,6 +79,51 @@ from it — use `live-20260814T102001Z-cce3984`, the complete run at the same sh
 **Sizing:** DV has ranged $7.54–$18.16 across five observed arm-runs, so a
 per-arm share must clear `spend_through_DV + DV_cost`. $50/arm is the floor.
 
+## `live-20260929T204447Z-d8d8392` — WITH arm did not run the stamped commit
+
+**In:** `results/history.json` (`live`) and `results/runs/live/`
+
+| field | value |
+|---|---|
+| `git_sha` | `d8d8392` (the worktree) |
+| WITH `system/init` corpflow path | `/Volumes/internal/Projects/igrsoft/ai-agents/corpflow` |
+| corpflow loaded, both arms | 4.1.0 at `612bb0c5` (installed copy, `develop`) |
+| `era.plugin_path` | absent (not yet stamped) |
+
+Headless `claude -p` resolved corpflow from the installed copy, not the worktree the
+record is stamped with; the harness passed no `--plugin-dir`. The WITH arm is therefore
+**not a measurement of d8d8392's prompts, agents or skills** — it measured `612bb0c5`.
+Evidence is the `system/init` event in `workdirs/live-20260929T204447Z-d8d8392/captures/with-DV.jsonl`.
+
+The model pins are unaffected and correct: Opus 5.5 (PL, AR, DV, DR, SR), Sonnet 5.5
+(TL, QA, FN, ST), Haiku 4.5 (DC). Cost, tokens and oracle scores are real for what ran;
+they must not be attributed to d8d8392.
+
+Since fixed: the WITH arm now passes `--plugin-dir`, and a run whose `system/init` names a
+different corpflow tree is refused (rc 5) and never rotated. Records carrying
+`era.plugin_path` are attributable; this one predates it. The WITHOUT arm still loads
+the installed corpflow, unbound — which is what it did here too.
+
+**Excluding it:** by `run_id`. Every earlier live record also lacks `era.plugin_path`,
+so none of their WITH arms was ever verified against the commit they are stamped with.
+
+## `live-20261001T085738Z-69a0947` — WITH `cost_usd` misses an interrupted DV attempt
+
+**In:** `results/history.json` (`live`) and `results/runs/live/`
+
+The WITH DV stage stopped on the account usage limit. The harness waited out the reset
+and re-dispatched DV, and the record keeps only the re-dispatch: WITH DV $2.27, WITH total
+$7.49. The interrupted attempt spent $2.56 over 21 turns
+(`workdirs/live-20261001T085738Z-69a0947/captures/with-DV.failed.jsonl`, `result.total_cost_usd`)
+and is in neither `cost_usd` nor the token sums. The re-dispatch also started from the
+first attempt's files, so neither $2.27 nor $4.83 is a clean single-attempt DV cost.
+
+The WITHOUT arm, the oracle (42/42 both arms) and every other stage are unaffected.
+
+**Reading it:** add $2.56 to WITH `cost_usd` (≈$10.05, premium ≈+41.5%) or exclude the run
+from cost means; never quote its +5.6% premium. **Since fixed:** the usage-limit retry
+adds the interrupted attempt's usage to the stage it re-dispatches.
+
 ## Reading `without_arm="skip"` placeholders
 
 A WITHOUT arm run in `skip` mode is a byte-stable placeholder, not a measurement:

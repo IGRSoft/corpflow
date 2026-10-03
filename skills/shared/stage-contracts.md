@@ -19,7 +19,7 @@ Single source of truth for what each stage consumes, produces, and how the orche
 
 Every stage agent reads inputs in this order, anchor-first:
 
-1. Read `.context/state.json` (the worktask ledger): `facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, and your stage's `tasks` entries.
+1. Take the ledger (`facts.decisions`, `facts.open_questions`, `handoffs`, `run_index`, your `tasks` rows) from the prompt's state block; read `.context/state.json` only when the prompt carries none. Never `cat`/`jq` it to confirm a write: `state-patch.sh --digest` prints the rows it wrote.
 2. Resolve `N` per [#run-index-resolution](#run-index-resolution). This run's stage artifacts are `<basename>-${N}.md`.
 3. Read only the listed anchors in upstream artifacts (e.g. `architecture-N.md#decisions`); read a whole file only when an anchor is absent.
 4. Deep-read a full artifact only on retry (`retry_count > 0`), or when the frontmatter `next_stage_focus` names a non-anchored section.
@@ -569,13 +569,13 @@ Under `none` (in-process, no frontmatter to fall back to) the `auto_decision_res
 
 ### The tier the model can actually carry
 
-`xhigh` runs on Opus 4.7 and later, Sonnet 5 and Fable 5.x; any other model runs it at the highest level it supports at or below, with no error (`model-selection.md § xhigh routing`). A bump above `high` on a model other than the `opus`, `sonnet` and `fable` aliases is clamped to `high` and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp (the only `haiku` stage sits at `low`), which is why it is enforced in code: nothing in a run would show it if it started happening.
+`xhigh` runs on Opus 5.5, Sonnet 5.5 and Fable 5.x (the `opus`, `sonnet` and `fable` targets); a pinned id outside those runs it at the highest level it supports at or below, with no error (`model-selection.md § xhigh routing`). A bump above `high` on a model other than the `opus`, `sonnet` and `fable` aliases is clamped to `high` and audited `effort_clamped`, never dispatched as a tier that evaporates in transit. No current stage hits the clamp (the only `haiku` stage sits at `low`), which is why it is enforced in code: nothing in a run would show it if it started happening.
 
 A second silent path cannot be clamped and is read from the audit row instead: a managed or user `maxEffortLevel` below the requested tier runs the session at the cap with no error (`model-selection.md § Effort frontmatter and caps`). Resolvers therefore audit both `effort_requested` and `effort_resolved`, the same reason `dispatched_agents[].model_resolved` exists.
 
 ## Per-Stage Frontmatter Templates
 
-Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy.
+Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy. `#tpl-pl` has one more copy to mirror: the top of `skills/worktask/templates/planning.md`, which PL0 copies.
 
 ### Typed-return equivalent
 
@@ -783,6 +783,16 @@ and `{runner: pytest, count: 589, summary_line: "589 passed in 41.2s"}`. The sam
 scopes is two entries. A rework round writes only its own entries: the ledger keeps earlier rounds
 under `tasks.<ID>.rework_runs` (`handoff-protocol.md § Field notes — tests_executed, rework_runs`),
 so no artifact copies one forward.
+
+#### Acceptance commands are replayed, not trusted (tpl-dv, tpl-qa)
+
+DV lists one self-checking command per exact-output rule (CLI flags, output format, byte-level
+example) under `## acceptance-commands`: a fenced `bash` block, one command per line, each
+comparing real output to the expected bytes with `cmp` or `diff`. QA executes every line verbatim
+and records it as `- exit=<n> <command>` under its own `## acceptance-commands`;
+`skills/worktask/scripts/acceptance-check.sh` then decides — a listed command that was not
+executed, or exited non-zero, is `verdict: no-go`. A green unit suite does not stand in for it:
+the contract is exactly what a paraphrase between agents loses.
 
 #### Zero executed tests must say whether the suite compiles (tpl-dv)
 

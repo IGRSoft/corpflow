@@ -59,7 +59,9 @@ class ScriptedCLIContract(unittest.TestCase):
             self.canonical = f.read().rstrip("\n")
 
     def test_both_arms_embed_the_canonical_contract_verbatim(self):
-        for name in ("dv", "without"):
+        # pl carries it too: PL turns exact-output rules into byte-exact acceptance criteria,
+        # as a production /worktask would from the user's goal text.
+        for name in ("pl", "dv", "without"):
             self.assertIn(self.canonical, _read(name),
                           f"{name}.txt drifted from _cli-contract.txt")
 

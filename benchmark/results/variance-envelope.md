@@ -1,4 +1,105 @@
-# Variance envelope — first measurement (n=2)
+# Variance envelope
+
+## Era python-3, `scripted-cli-v4` (n=3)
+
+Three complete paired runs, commit `69a0947`, era `python-3`, prompt contract
+`scripted-cli-v4` (`pl.txt` now carries the CLI contract). Not comparable with the python-2
+set below: harness generation and prompt contract both moved. `era.config_leaks` is empty in
+all six arm-runs.
+
+| run | run_id | WITH | WITHOUT |
+|---|---|---|---|
+| 1 | `live-20261001T075458Z-69a0947` | $10.17 | $6.58 |
+| 2 | `live-20261001T085738Z-69a0947` | $7.49 recorded (≈$10.05 spent) | $7.10 |
+| 3 | `live-20261001T104654Z-69a0947` | $9.81 | $6.23 |
+
+Run 2's WITH DV stage hit the account usage limit; the harness waited out the reset and
+re-dispatched DV, and the record keeps only the second attempt. The first attempt's $2.56
+(`captures/with-DV.failed.jsonl`) is real spend missing from `cost_usd`
+(`KNOWN-BAD-RECORDS.md`). Figures marked *corrected* add it back.
+
+### The measurement
+
+| metric | WITHOUT min–max (spread) | WITH min–max (spread) | effect 1 | effect 2 | effect 3 |
+|---|---|---|---|---|---|
+| `cost_usd` | 6.23–7.10 (14.0%) | 7.49–10.17 (35.8%); corrected 9.81–10.17 (3.7%) | +54.7% | +5.6% (corrected +41.5%) | +57.4% |
+| `tokens` (total) | 167,331–190,752 (14.0%) | 185,133–254,479 (37.5%) | +33.4% | −2.9% | +52.1% |
+| `wall_clock_s` | 1472–2224 (51.1%) | 1652–2303 (39.4%) | +27.1% | −25.7% | +56.5% |
+| `loc_produced` | 2406–2755 (14.5%) | 2086–2173 (4.2%) | −20.2% | −24.3% | −9.7% |
+| `test_count` | 82–94 (14.6%) | 56–59 (5.4%) | −37.2% | −30.1% | −31.7% |
+| oracle `cases_passed` | 42–42 (0%) | 42–42 (0%) | 0 | 0 | 0 |
+
+### What survives its own noise floor
+
+- **`cost_usd` — survives, smaller.** Mean premium +38% as recorded, ≈+51% corrected
+  (WITH ≈$10.01 vs WITHOUT $6.64). Every effect is positive; runs 1 and 3 (+55%, +57%) sit
+  well above the 14% WITHOUT floor. Down from +80–143% at `89500e0` and +86% at `c638dc2`.
+- **`tokens`, `wall_clock_s` — do not survive.** Run 2 flips sign on both; run 2's WITH
+  tokens also miss the interrupted DV attempt.
+- **`loc_produced`, `test_count` — survive, negative.** WITH writes 10–24% less code and
+  ~31–37% fewer tests in every run, same sign, outside both floors. The oracle cannot
+  see either difference.
+- **Oracle — saturated.** 42/42 in all six arm-runs, including WITH after the DV contract
+  guard; run 1 at `c638dc2` had scored 13/42.
+
+Per-stage deltas and causes: `token-findings-5.md`.
+
+---
+
+## Era python-2 (n=3)
+
+Three complete paired runs, commit `89500e0`, era `python-2`. WITH = corpflow 4.1.0 +
+apple-developer 1.31.0; WITHOUT = plugin-free, isolated config dir. The previous-era
+record `live-20260929T204447Z-d8d8392` is **not** in the set and not comparable
+(`KNOWN-BAD-RECORDS.md`: WITH loaded the installed plugin, WITHOUT carried 36 plugins).
+
+| run | run_id | WITH | WITHOUT |
+|---|---|---|---|
+| 1 | `live-20260930T080425Z-89500e0` | $10.99 | $5.52 |
+| 2 | `live-20260930T090418Z-89500e0` | $10.72 | $5.96 |
+| 3 | `live-20260930T100549Z-89500e0` | $12.57 | $5.17 |
+
+### The measurement
+
+Same method as the n=2 section below: same-arm spread is the floor, the per-run
+WITH-vs-WITHOUT delta is the effect. Spread is (max−min)/min across the three runs.
+
+| metric | WITHOUT min–max (spread) | WITH min–max (spread) | effect 1 | effect 2 | effect 3 |
+|---|---|---|---|---|---|
+| `cost_usd` | 5.17–5.96 (15.4%) | 10.72–12.57 (17.3%) | +99.2% | +79.7% | +143.3% |
+| `tokens` (total) | 128,511–148,113 (15.3%) | 172,404–202,974 (17.7%) | +35.7% | **+16.4%** | +57.9% |
+| `wall_clock_s` | 1200–1363 (13.6%) | 2267–2690 (18.7%) | +74.8% | +69.3% | +124.1% |
+| `loc_produced` | 2077–2254 (8.5%) | 1988–2568 (29.2%) | +1.9% | −11.8% | +23.6% |
+| `test_count` | 73–96 (31.5%) | 59–88 (49.2%) | −38.5% | −8.3% | +13.7% |
+| oracle `cases_passed` | 42–42 (0%) | 42–42 (0%) | 0 | 0 | 0 |
+
+`coverage_pct` is `null` in every arm; `stage_count` is 10 in every arm.
+
+### What survives its own noise floor
+
+- **`cost_usd` — survives.** Floor 15–17%; every effect is +80% or more, same sign in
+  all three runs. The plugin roughly doubles run cost on this workload (+80% to +143%).
+- **`wall_clock_s` — survives, with the old caveat.** Floor 14–19%; effects +69% to
+  +124%, same sign. Wall-clock still includes harness build time.
+- **`tokens` — does not clearly survive.** Same sign in all runs, but the smallest
+  effect (+16.4%) sits inside the 15–18% floor. Direction only.
+- **`loc_produced`, `test_count` — noise.** Both change sign across runs.
+- **Oracle — saturated.** 42/42 in all six arm-runs; it separates nothing.
+
+### What changed versus n=2
+
+- The floor is wider. The python-1 WITHOUT arm reproduced to 1.3%; here it moves
+  15.4%. Two points understated it; n=3 is still a spread, not a distribution.
+- The cost effect is larger (+80–143% vs +32–39%). The eras differ in harness, plugin
+  isolation and plugin version, so this is not a before/after of any single change.
+
+Per-stage cost deltas and their causes: `token-findings-4.md`.
+
+---
+
+The sections below are the python-1 n=2 measurement, kept as history.
+
+## Era python-1 — first measurement (n=2)
 
 `VARIANCE-STUDY.md` specifies three paired runs. This is **two**, and the reason is
 recorded below rather than smoothed over. Everything here is measured; nothing is

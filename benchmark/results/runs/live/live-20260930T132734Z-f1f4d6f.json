@@ -1,0 +1,172 @@
+{
+  "run_id": "live-20260930T132734Z-f1f4d6f",
+  "timestamp_utc": "2026-09-30T13:27:48Z",
+  "mode": "live",
+  "git_sha": "f1f4d6f",
+  "budget_usd": 5.0,
+  "paths": {
+    "with": {
+      "tokens": {
+        "in": 3054,
+        "out": 91758,
+        "total": 94812,
+        "cache_read": 1721380,
+        "cache_creation": 300992
+      },
+      "cost_usd": 4.067283,
+      "wall_clock_s": 888.418,
+      "loc_produced": 0,
+      "test_count": 0,
+      "coverage_pct": 0.0,
+      "estimate_complexity_score": 0,
+      "stage_count": 2,
+      "pass_fail": "fail",
+      "app_path": "benchmark/workdirs/live-20260930T132734Z-f1f4d6f/with",
+      "oracle": {
+        "built": false,
+        "cases_total": 42,
+        "cases_passed": 0,
+        "pass_rate": 0.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 0,
+            "pass_rate": 0.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 0,
+            "pass_rate": 0.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    },
+    "without": {
+      "tokens": {
+        "in": null,
+        "out": null,
+        "total": null,
+        "cache_read": null,
+        "cache_creation": null
+      },
+      "cost_usd": null,
+      "wall_clock_s": 0.0,
+      "loc_produced": 0,
+      "test_count": 0,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 1,
+      "pass_fail": "pass",
+      "app_path": null
+    }
+  },
+  "comparison": {
+    "loc_produced": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "test_count": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "coverage_pct": {
+      "with": 0.0,
+      "without": null,
+      "delta": null
+    },
+    "wall_clock_s": {
+      "with": 888.418,
+      "without": 0.0,
+      "delta": 888.418
+    },
+    "estimate_complexity_score": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "stage_count": {
+      "with": 2,
+      "without": 1,
+      "delta": 1
+    },
+    "tokens_total": {
+      "with": 94812,
+      "without": null,
+      "delta": null
+    },
+    "cost_usd": {
+      "with": 4.067283,
+      "without": null,
+      "delta": null
+    }
+  },
+  "stages": [
+    {
+      "stage": "PL",
+      "fresh_in": 1509,
+      "cache_creation": 57419,
+      "cache_read": 422744,
+      "out": 17051,
+      "cost_usd": 0.8861358000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 12
+      },
+      "parent_fresh_in": 22,
+      "parent_cache_creation": 57419,
+      "parent_cache_read": 422744,
+      "parent_out": 17027
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 1545,
+      "cache_creation": 243573,
+      "cache_read": 1298636,
+      "out": 74707,
+      "cost_usd": 3.1811471999999994,
+      "coverage": {
+        "agents": [
+          "apple-developer:apple-architector"
+        ],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 36
+      },
+      "parent_fresh_in": 26,
+      "parent_cache_creation": 69316,
+      "parent_cache_read": 598785,
+      "parent_out": 29476
+    }
+  ],
+  "era": {
+    "harness": "python-3",
+    "prompt_contract": "scripted-cli-v3",
+    "model_pins": {
+      "PL": "claude-opus-5-5",
+      "AR": "claude-opus-5-5",
+      "TL": "claude-sonnet-5-5",
+      "DV": "claude-opus-5-5",
+      "DR": "claude-opus-5-5",
+      "SR": "claude-opus-5-5",
+      "QA": "claude-sonnet-5-5",
+      "DC": "claude-haiku-4-5",
+      "FN": "claude-sonnet-5-5",
+      "ST": "claude-sonnet-5-5"
+    },
+    "cli_version": "2.1.284 (Claude Code)",
+    "plugin_version": "4.1.0",
+    "plugin_path": "/Volumes/internal/conductor/workspaces/corpflow/minsk",
+    "plugins_with": [
+      "corpflow@4.1.0",
+      "apple-developer@1.31.0"
+    ],
+    "config_leaks": {
+      "with": []
+    }
+  }
+}

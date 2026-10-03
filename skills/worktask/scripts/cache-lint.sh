@@ -202,16 +202,17 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 #   AR  the two H2s agents/software-architector.md mandates.
 #   TL  agents/team-lead.md logs a rejected TC under coordination-N.md § Blockers.
 #   DV  verification-command and decisions are contract-mandated; the title-case two are
-#       agent-mandated.
-#   QA  the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
+#       agent-mandated. acceptance-commands lists exact-output checks for QA to replay.
+#   QA  acceptance-commands records each replayed check (acceptance-check.sh reads it);
+#       the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
 #   RE, IR, ST   legacy wrappers and the retrospective's self-improvement note.
 # Title-case entries sit on their owning stage's row, so another stage writing one is
 # unexpected there.
 _STAGE_OPTIONAL='*|rework-<N>|re-review|design-preview|test-strategy
 AR|<Platform> App Architecture|Test Architecture
 TL|Blockers
-DV|verification-command|decisions|Blockers|DV Completion Checklist
-QA|Visual Evidence|Design Comparison
+DV|verification-command|acceptance-commands|decisions|Blockers|DV Completion Checklist
+QA|acceptance-commands|Visual Evidence|Design Comparison
 RE|Release Preparation Summary
 IR|Incident Report
 ST|Self-Improvement'

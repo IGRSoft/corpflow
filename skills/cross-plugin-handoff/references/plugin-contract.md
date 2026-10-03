@@ -62,7 +62,9 @@ capture adapter; non-UI platforms default `false` with `cli_fallback_adapter` tr
 
 The architect agent is consulted, not handed ownership: it writes
 `.context/<platform>-architecture.md` and returns a summary of ≤500 tokens.
-`corpflow:software-architector` retains the stage and merges the result.
+`corpflow:software-architector` retains the stage and merges the result. It consults only past its
+§ Consult Gate (AR) — complexity ≥31 or an explicit trigger — so most Medium and Moderate runs never reach
+the architect.
 
 ## B. What corpflow guarantees in return
 
@@ -73,7 +75,7 @@ file a bug against corpflow rather than working around any of them.
 
 | Guarantee | Detail |
 |---|---|
-| **Dispatch-time injection** | Every corpflow agent delegating to a plugin agent injects `Read <plugin-root>/CORPFLOW.md and follow it` into the prompt — the plugin's agents never have to remember. |
+| **Dispatch-time injection** | Every corpflow agent delegating to a plugin agent opens the prompt with `Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; …` (full line: `../SKILL.md § Dispatch Injection`). `<ROOT>` is the install this session loaded, from `../scripts/resolve-sibling-root.sh` — the plugin's agents never have to remember or search for it. |
 | **`.context/` ownership** | corpflow creates and owns `.context/`. The plugin writes its stage artifact and its own `errors/<agent>.md`, nothing else. |
 | **`state.json` is orchestrator-owned** | The plugin patches only via `state-patch.sh` when its path is supplied, never a hand-rolled `jq` merge. If the patch fails it proceeds anyway — the `SubagentStop` hook repairs from the artifact frontmatter. |
 
@@ -154,7 +156,16 @@ their own `SKILL.md` are listed in `skills[]`.
 #### Listing, loading and eval
 
 - `claude plugin list --json` rows carry `errorDetails`/`noteDetails`, which tell a sibling that is
-  installed but failed to load apart from one that is absent.
+  installed but failed to load apart from one that is absent. The Skill tool draws the same line:
+  a skill whose plugin failed to load is reported as a load failure, not as uninstalled. Under
+  `-p`, the stream-json `system/init` `plugin_errors` entries carry `path`, naming the
+  `--plugin-dir` that did not load.
+#### Managed-only permission rules
+
+- Under managed `allowManagedPermissionRulesOnly`, a sibling installed from a marketplace,
+  claude.ai or npm loses its `allowed-tools` pre-approval; only a plugin from an official Anthropic
+  source, or a source managed settings vouch for, keeps it. The sibling's tool calls then fall to
+  the managed rules alone.
 - `--plugin-dir` pointed at a folder of plugins loads every child folder with a manifest — one flag
   loads the siblings for local dev.
 - Component paths that are symlinks, contain a backslash, or escape the plugin root are refused;

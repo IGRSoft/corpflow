@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from benchmarklive import credentials
 from benchmarklive.dispatch import dispatch
@@ -21,6 +22,7 @@ from _helpers import (
     logged_in_runner,
     logged_out_runner,
     make_live_sandbox,
+    scrub_env,
     stub_git_sha,
     tripwire_runner,
 )
@@ -63,6 +65,36 @@ class CredentialProbe(unittest.TestCase):
             self.assertNotIn("sk-", str(e))
 
 
+class AuthProbeUsesTheEvalConfigDir(unittest.TestCase):
+    def _probe(self, config_dir):
+        seen = {}
+        real = credentials.Subprocess.run
+
+        def fake(argv, env=None, **_kw):
+            seen["argv"], seen["env"] = argv, scrub_env(env)
+            return SimpleNamespace(exit_code=0, stdout=json.dumps({"loggedIn": True}), stderr="")
+
+        credentials.Subprocess.run = staticmethod(fake)
+        try:
+            self.assertTrue(credentials.has_cli_login(config_dir=config_dir))
+        finally:
+            credentials.Subprocess.run = staticmethod(real)
+        return seen
+
+    def test_probe_runs_under_the_given_config_dir(self):
+        seen = self._probe("/cfg/eval")
+        self.assertEqual(seen["argv"], ["claude", "auth", "status", "--json"])
+        self.assertEqual(seen["env"]["CLAUDE_CONFIG_DIR"], "/cfg/eval")
+
+    def test_probe_without_a_config_dir_inherits_the_environment(self):
+        self.assertIsNone(self._probe(None)["env"])
+
+    def test_message_contract_is_unchanged(self):
+        self.assertEqual(
+            credentials.MISSING_CREDENTIAL_MESSAGE,
+            "live mode requires credentials; set ANTHROPIC_API_KEY or run claude login")
+
+
 class DispatchCredentialGate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="cred-")
@@ -75,7 +107,7 @@ class DispatchCredentialGate(unittest.TestCase):
         captured = []
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=TripwireDispatcher(),
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=TripwireDispatcher(),
             env={}, cli_login_runner=logged_out_runner,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL", "AR"],
             git_sha_runner=stub_git_sha, stderr=captured.append)

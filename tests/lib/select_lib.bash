@@ -32,6 +32,9 @@ sel_alias_for() {
     # Sourced-only helper library of publish-pl-issue.sh, exercised entirely
     # through that CLI's suite. Same shape as fn-preflight-cmds.sh above.
     publish-pl-issue-lib.sh) echo "publish-pl-issue.bats" ;;
+    # A bare capture.bats would read as a suite for any capture script; the entry point's
+    # suite is named for its role.
+    capture.sh) echo "capture-entry.bats" ;;
     # A self-test body under hooks/lib/ is exercised by its OWNING hook's .bats.
     # Resolved through this table rather than by stripping the suffix, because
     # the owner may itself be aliased — dv-comment-density-gate-selftest.sh has
@@ -51,7 +54,8 @@ sel_alias_keys() {
     dv-comment-density-gate.sh \
     audit-dedup.sh \
     fn-preflight-cmds.sh \
-    publish-pl-issue-lib.sh | LC_ALL=C sort
+    publish-pl-issue-lib.sh \
+    capture.sh | LC_ALL=C sort
 }
 
 # Candidate scripts under an arbitrary root, so callers can be pointed at a

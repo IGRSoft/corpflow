@@ -519,6 +519,90 @@ teardown() {
   assert_output "scoped_test_run"
 }
 
+# classify_split <command> -> classify_cmd's verdict for a literal command string.
+classify_split() {
+  run bash -c '. "$1" --lib-only; classify_cmd "$2"' _ "$PLUGIN_ROOT/$SCRIPT" "$1"
+  assert_success
+}
+
+# portability-lint disable=P005 — prose naming the | separator under test, not bash syntax
+@test "quote-aware split: a grep whose double-quoted pattern holds 'swift test' between pipes is not a test run" {
+  # The live false positive (benchmark run 3 DV, call 18): the quoted pipes cut
+  # the grep pattern into a segment that began with the runner.
+  classify_split 'grep "swiftpm|swift test|--filter" f; swift build'
+  assert_output "not_test"
+
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'grep "a|swift test|b" f; swift build')"
+  assert_success
+  [ -z "$output" ] || fail "expected allow, got: $output"
+}
+
+@test "quote-aware split: a quoted \"swift test\" inside an echo is not a runner" {
+  classify_split 'echo "swift test"'
+  assert_output "not_test"
+  classify_split "echo 'swift test'"
+  assert_output "not_test"
+  classify_split 'echo "run swift test; then pytest tests/" && ls'
+  assert_output "not_test"
+}
+
+@test "quote-aware split: an unquoted runner after a separator is still classified" {
+  classify_split 'echo "a;b"; swift test'
+  assert_output "full_test_run"
+  classify_split 'echo "x" && swift test'
+  assert_output "full_test_run"
+  classify_split "echo 'x|y' | swift test"
+  assert_output "full_test_run"
+  classify_split 'echo x | swift test'
+  assert_output "full_test_run"
+  classify_split 'grep "a|b" f
+swift test'
+  assert_output "full_test_run"
+
+  state_with DR
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'grep "a|swift test|b" f; swift test')"
+  assert_success
+  echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null || fail "got: $output"
+}
+
+@test "quote-aware split: single quotes hold every separator literally" {
+  classify_split "grep 'a|swift test|b' f; swift build"
+  assert_output "not_test"
+  classify_split "grep 'a;swift test&&b' f || swift build"
+  assert_output "not_test"
+  # A double quote inside single quotes opens nothing.
+  classify_split "echo 'say \"hi' | swift test"
+  assert_output "full_test_run"
+}
+
+@test "quote-aware split: a backslash-escaped separator does not split" {
+  classify_split 'grep a\|swift\ test\|b f; swift build'
+  assert_output "not_test"
+  classify_split 'echo a\;swift test'
+  assert_output "not_test"
+  # An escaped quote does not open a string, so the real separator after it splits.
+  classify_split 'echo \" | swift test'
+  assert_output "full_test_run"
+  # An escaped quote inside double quotes does not close the string.
+  classify_split 'echo "a\" | swift test"'
+  assert_output "not_test"
+}
+
+@test "quote-aware split: an unterminated quote falls back to the blind split and still denies" {
+  classify_split 'echo "oops | swift test'
+  assert_output "full_test_run"
+  classify_split "echo 'oops; swift test"
+  assert_output "full_test_run"
+}
+
+@test "quote-aware split: bash -c chases a runner after a separator inside its own string" {
+  classify_split "bash -c 'echo x | swift test'"
+  assert_output "full_test_run"
+  classify_split "bash -c 'grep \"a|swift test\" f'"
+  assert_output "not_test"
+}
+
 @test "doc-honesty bypass fix: 'bash -lc' combined short option is now chased" {
   state_with DR
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "bash -lc 'pytest tests/'")"
@@ -944,6 +1028,148 @@ teardown() {
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload 'gradle -p . test --tests com.foo.Bar')"
   assert_success
   [ -z "$output" ]
+}
+
+# --- flag values and redirects are not selectors (DV full-suite deny) ---
+#
+# A value-taking configuration flag's value, or a redirect, used to survive
+# strip_nonselecting_flags as a "positional", so a bare full run read as scoped
+# and DV was allowed the full suite. These pin each hole and the scoped shapes
+# that must stay scoped.
+
+# gate_verdict_at_dv <command> -> sets VERDICT to deny|allow for DV in progress.
+gate_verdict_at_dv() {
+  state_with DV
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$(bash_payload "$1")"
+  assert_success
+  if [ -z "$output" ]; then
+    VERDICT=allow
+  else
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' > /dev/null \
+      || fail "unexpected gate output for: $1 (got: $output)"
+    VERDICT=deny
+  fi
+}
+
+assert_dv_denied() {
+  local cmd
+  for cmd in "$@"; do
+    gate_verdict_at_dv "$cmd"
+    [ "$VERDICT" = deny ] || fail "expected deny at DV for: $cmd"
+  done
+}
+
+assert_dv_allowed() {
+  local cmd
+  for cmd in "$@"; do
+    gate_verdict_at_dv "$cmd"
+    [ "$VERDICT" = allow ] || fail "expected allow at DV for: $cmd"
+  done
+}
+
+@test "flag-value hole: 'swift test --package-path <abs>' is a full run, denied at DV" {
+  assert_dv_denied 'swift test --package-path /abs/pkg' 'swift test --package-path=/abs/pkg'
+}
+
+@test "flag-value hole: every value-taking swift config flag and its value is non-selecting" {
+  assert_dv_denied \
+    'swift test --scratch-path /s' \
+    'swift test --build-path /b' \
+    'swift test -c release' \
+    'swift test --configuration release' \
+    'swift test -j 4' \
+    'swift test --jobs 4' \
+    'swift test -Xswiftc -warnings-as-errors' \
+    'swift test --parallel' \
+    'swift test --package-path /p --scratch-path /s -c release -j 4 --parallel -Xswiftc -DX'
+}
+
+@test "redirect hole: 'swift test 2>&1' with no --filter is a full run, denied at DV" {
+  assert_dv_denied 'swift test 2>&1'
+}
+
+@test "redirect hole: every redirect spelling is dropped before counting selectors" {
+  # portability-lint disable=P005 — literal fixture data fed to the script under test
+  assert_dv_denied 'swift test 2>/dev/null' 'swift test >out.log' 'swift test > out.log' \
+    'swift test 2> err.log' 'swift test &>f' 'swift test >>f' 'swift test >> f' 'swift test >&2' \
+    'swift test </dev/null' 'swift test --package-path /p 2>&1 >out.log'
+}
+
+@test "redirect hole: dropping a redirect leaves a real selector standing" {
+  # Redirect stripping must not over-reach into the surviving --filter.
+  assert_dv_allowed 'swift test --filter X 2>&1'
+  assert_dv_allowed 'swift test 2>&1 --filter X'
+}
+
+@test "kept bare: 'swift test' and 'swift test | tee x.log' stay denied at DV" {
+  assert_dv_denied 'swift test' 'swift test | tee x.log'
+}
+
+@test "kept scoped: swift --filter survives every config flag and redirect" {
+  assert_dv_allowed \
+    'swift test --filter X --package-path P' \
+    'swift test --package-path P --filter X' \
+    "swift test --filter 'A|B' 2>&1 | tee log" \
+    'swift test --filter X -c release -j 4 --parallel' \
+    'swift test --filter X >out.log 2>&1' \
+    'swift test Foo.BarTests --package-path P'
+}
+
+@test "kept scoped: a selector-valued swift flag after -Xswiftc is not swallowed" {
+  # -Xswiftc consumes exactly one value, so the positional after it still selects.
+  assert_dv_allowed 'swift test -Xswiftc -warnings-as-errors Foo.BarTests'
+}
+
+@test "xcodebuild: a redirect or a KEY=VALUE build setting is not a selector" {
+  assert_dv_denied \
+    'xcodebuild test -scheme A 2>&1' \
+    'xcodebuild test -scheme A CODE_SIGNING_ALLOWED=NO' \
+    'xcodebuild test -scheme A -enableCodeCoverage YES -jobs 4'
+  assert_dv_allowed \
+    'xcodebuild test -scheme A -only-testing:T/C CODE_SIGNING_ALLOWED=NO 2>&1'
+}
+
+@test "pytest: config flag values and redirects are not selectors; a path or -m still is" {
+  assert_dv_denied 'pytest 2>&1' 'pytest -q' 'pytest --rootdir /x -n auto' 'pytest --tb short 2>&1' \
+    'python -m pytest --maxfail 1'
+  assert_dv_allowed 'pytest -n 4 tests/foo.py' 'pytest -m slow' 'pytest -k foo --rootdir /x' \
+    'pytest tests/foo.py 2>&1'
+}
+
+@test "npm test / jest: config flag values and redirects are not selectors; a path still is" {
+  assert_dv_denied 'jest --ci 2>&1' 'jest --maxWorkers 2 --coverage' 'npm test -- --ci --maxWorkers 2' \
+    'npm test 2>&1' 'vitest run'
+  assert_dv_allowed 'jest src/a.test.js --ci' 'npm test -- src/a' 'vitest run src/a.test.ts' \
+    'jest -t foo --maxWorkers 2'
+}
+
+@test "go test: a numeric or duration flag value is not a selector; a package pattern still is" {
+  assert_dv_denied 'go test -count 1' 'go test -count=1 -timeout 30s' 'go test -v' 'go test 2>&1'
+  assert_dv_allowed 'go test ./...' 'go test -count 1 ./pkg' 'go test -run TestX -count 1'
+}
+
+@test "gradle: config flags and redirects are not selectors; --tests still is" {
+  assert_dv_denied \
+    './gradlew test 2>&1' \
+    './gradlew test --info' \
+    './gradlew --console plain test' \
+    './gradlew test --console plain -Dfoo=bar --no-daemon --max-workers 2'
+  assert_dv_allowed './gradlew test --tests com.foo.Bar --info 2>&1'
+}
+
+@test "cargo test: manifest and job flags and redirects are not selectors; a name filter still is" {
+  assert_dv_denied 'cargo test --workspace' 'cargo test --manifest-path a/Cargo.toml' \
+    'cargo test --release -j 4 2>&1' 'cargo test -- --nocapture --test-threads 1'
+  assert_dv_allowed 'cargo test foo' 'cargo test -p mycrate' 'cargo test foo --manifest-path a/Cargo.toml'
+}
+
+@test "classification: the holes read full_test_run and the kept-scoped shape scoped_test_run" {
+  classify_split 'swift test --package-path /abs/pkg'
+  assert_output "full_test_run"
+  classify_split 'swift test 2>&1'
+  assert_output "full_test_run"
+  classify_split 'swift test --filter X --package-path P'
+  assert_output "scoped_test_run"
 }
 
 # --- dispatch coupling: the gate is only live while state.json says a stage is ---

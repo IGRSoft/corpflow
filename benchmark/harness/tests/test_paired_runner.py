@@ -28,7 +28,7 @@ class PairedRunner(unittest.TestCase):
 
     def _seed_swift_both_arms(self):
         for arm in ("with", "without"):
-            d = os.path.join(self.sb.workdir_path, arm, "Sources")
+            d = os.path.join(self.sb.arm_dir(arm), "Sources")
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, "App.swift"), "w", encoding="utf-8") as f:
                 f.write("let x = 1\n")
@@ -37,7 +37,7 @@ class PairedRunner(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage()])
         dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL", "AR"],
             git_sha_runner=stub_git_sha, without_arm="real")
         # calls: WITHOUT-PL, WITHOUT-AR, WITH-PL, WITH-AR
@@ -54,7 +54,7 @@ class PairedRunner(unittest.TestCase):
         fake = SequencedFakeDispatcher([single_object_usage()])
         rc = dispatch(
             workdir=self.sb.run_id, budget=1000.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001),
             stages=budget_mod.PIPELINE_STAGES, git_sha_runner=stub_git_sha, without_arm="real")
         self.assertEqual(rc, 0)

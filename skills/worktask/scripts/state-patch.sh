@@ -74,6 +74,16 @@
 #
 # @arg --task-create  <ID> --metadata <json>  Seed tasks.<ID> as pending; no-op if it exists.
 #                                             --metadata is optional (defaults to {}).
+#                                             Repeatable: N `--task-create <ID> [--metadata
+#                                             <json>]` pairs seed N rows in ONE merge under one
+#                                             lock; each --metadata binds to the --task-create
+#                                             before it (one ahead of the first id is exit 2).
+#                                             Every row is gated first (id grammar, effort,
+#                                             required keys, JSON), and any bad row refuses the
+#                                             whole batch with that row's single-call exit code
+#                                             and state.json byte-unchanged. An id that already
+#                                             exists is a per-row no-op; a repeated id, or a
+#                                             batch mixed with another ledger op, is exit 2.
 # @arg --task-status  <ID> <status>           pending|in_progress|completed|blocked|skipped|failed|stale.
 #                                             `stale` parks a task whose consumed input was
 #                                             corrected: it is neither ready (the loop's filter
@@ -212,6 +222,32 @@
 #                                             merge lock and never writes state.json: the
 #                                             ledger is read only to reject an unknown id.
 #
+# @arg --digest            Opt-in. After a successful write or idempotent no-op, print to
+#                          STDOUT a <= 12-line read-back of the WRITTEN ledger: `state-patch
+#                          ok`, then one `<ID> <status> [agent=<a>] [model=<m>]` line per
+#                          touched task (a long batch ends `tasks +N more`), `edge <PREV>→<ID>`
+#                          when --prev was given, `facts decisions=<n> open_questions=<n>
+#                          files_modified=<n>` when --facts was applied and `audit +<n>` when
+#                          --audit-row rows were appended. Absent ⇒ stdout byte-identical to
+#                          the legacy output. Ignored by the ops that already own stdout
+#                          (--resolve-task-id, --read-decisions, --verify-decision,
+#                          --task-settle-stale) and by --ack/--ledger-meta/--resolve-models.
+#                          Nothing is printed on a refusal, a no-op that wrote nothing, or a
+#                          partial --facts (exit 2).
+# @arg --audit-row <json>  Repeatable. {"action","result","subject"} required non-empty
+#                          strings; optional "actor" (default corpflow:unknown), "metadata"
+#                          (object) and "task_id" (<STAGE><N>, overrides the default). Any
+#                          other key, a control byte in a scalar, or bad JSON is exit 2
+#                          before anything is written. Rows are appended through audit-lib.sh
+#                          to <dir of state.json>/logs/audit.jsonl AFTER the main op succeeds
+#                          (write or idempotent no-op), with task_id defaulting to the id the
+#                          call touched (first id of a batched --task-create); a refused op
+#                          appends none. Alone (no other op) it appends rows only, after
+#                          checking the ledger exists and every named id (row task_id or
+#                          --task-id) is a ledger key — unknown ⇒ exit 1. Does not compose
+#                          with the read-only ops, --ack, --ledger-meta or --resolve-models
+#                          (exit 2).
+#
 # @arg --resolve-task-id <CODE>
 #                           Print the ledger key a bare stage CODE resolves to and exit.
 #                           Read-only: takes no lock and writes nothing.  Sibling scripts
@@ -238,7 +274,9 @@
 #               staging failure (mktemp), no ledger resolved for --facts or a ledger op, an
 #               unknown id on --claim/--dispatch/--files-read/--ack, an --ack row that failed
 #               to append, or --facts with no ledger at --state (that write landed nothing
-#               and says so).
+#               and says so). Also: an --audit-row row that failed to append (the main op's
+#               write stands), a standalone --audit-row with no ledger or naming an unknown
+#               id, and a batched --task-create row whose --metadata is not valid JSON.
 # @exitcode 2   DISK_MIN_GB hard-halt (caller must remediate before retrying), OR a --facts
 #               payload that was refused whole (bad JSON, unknown key, non-array value,
 #               invalid branch) with state.json byte-unchanged, OR a --facts payload that
@@ -248,7 +286,11 @@
 #               --dispatch without the row's metadata.agent, an unreachable lib or resolver,
 #               or (--task-create) a row missing a required metadata key.  Also: a
 #               --finding-file that is unreadable, empty, over 2000 bytes or carrying a
-#               control byte, and a --task-reopen without --from.
+#               control byte, and a --task-reopen without --from.  Also: a malformed
+#               --audit-row (bad JSON, missing/empty required key, unknown key) or one
+#               paired with an op it does not compose with, and a malformed batched
+#               --task-create (repeated id, mixed op, --metadata ahead of the first id, or
+#               any row's id/effort/required-key defect) — nothing written in every case.
 # @exitcode 3   Artifact unresolved on the agent self-patch path (--prev given, --via absent),
 #               OR a missing/unknown handoff.verdict on ANY path (--stage/--artifact,
 #               plain or paired with --facts), state.json unchanged either way. An agent
@@ -261,7 +303,11 @@
 #               resolves to more than one open instance with nothing to disambiguate it; or
 #               --claim on a settled (completed|skipped|failed) row or on a parked `stale` one;
 #               or a --task-reopen whose target is the source or is not `completed`.
-#               Unknown ids stay 1 and malformed ids stay 2.
+#               Unknown ids stay 1 and malformed ids stay 2.  Also: the ledger directory
+#               was INFERRED from the cwd (no --state, CONTEXT_DIR, WORKSPACE_ROOT or
+#               CLAUDE_PROJECT_DIR) and lies inside the plugin root (this script's own tree
+#               or the host root corpflow_plugin_root reports) with the cwd not the git
+#               toplevel — nothing is read or written.
 # @exitcode 5   --verify-decision only: the row (or the chain it sits in) is refused — forged,
 #               edited, out of scope, uncorroborated or answer-mismatched.  Every other op in
 #               this file never returns 5.
@@ -274,8 +320,11 @@
 #   DISK_MIN_GB         (default 5)   — hard halt threshold in GiB
 #   DISK_WARN_GB        (default 8)   — hygiene warn threshold in GiB
 #   RUN_INDEX           — override run_index (for callers that know it without reading state.json)
-#   CONTEXT_DIR         rank 2 of the root ladder (see state-read-lib.sh); the audit log
-#                       and every derived path otherwise follow dirname(STATE_PATH)
+#   CONTEXT_DIR         rank 2 of the root ladder; the audit log and every derived path
+#                       otherwise follow dirname(STATE_PATH).  Without --state the ladder is
+#                       CONTEXT_DIR, WORKSPACE_ROOT/.context, CLAUDE_PROJECT_DIR/.context,
+#                       <git toplevel of $PWD>/.context, $PWD/.context
+#                       (corpflow_context_dir_write in state-read-lib.sh).
 #   STATE_LOCK_TIMEOUT_S (default 5)  — max seconds to wait for the merge lock before
 #                                       proceeding UNLOCKED + WARN (never a silent no-op)
 #   STATE_LOCK_STALE_S  (default 60)  — a lock dir older than this (by mtime) is treated
@@ -1568,6 +1617,65 @@ _warn_unledgered_sweep_ids() {
   printf >&2 'warn: %s declares sweep id(s) the ledger does not hold: %s\n' "$artifact" "$missing"
 }
 
+# _post_success <default-task-id> <touched-ids,comma-separated> <edge-key|""> <facts 0|1>
+#
+# The one tail every successful write (or idempotent no-op) passes through when the caller
+# asked for --audit-row or --digest. Rows go in AFTER the main op, never before: a refused
+# op must leave no row claiming it happened. A row that fails to append exits 1 — the
+# ledger write stands, but a caller that asked for the row must not read success.
+#
+# The digest is read back from the WRITTEN ledger, not echoed from the arguments, so a
+# stage agent can trust it in place of re-reading state.json. Capped at 12 lines; a long
+# task list collapses its tail into one `tasks +N more` line.
+_post_success() {
+  local def_tid="$1" touched="$2" edge="$3" facts="$4"
+  local n=0 i=0 failed=0 fields actor action result subject tid meta adir
+  if [[ -n "$AUDIT_ROWS_JSON" ]]; then
+    n=$(jq -r 'length' <<< "$AUDIT_ROWS_JSON")
+    adir="${STATE_PATH%/*}"
+    [[ "$adir" == "$STATE_PATH" ]] && adir="."
+    while [[ "$i" -lt "$n" ]]; do
+      fields=$(jq -r --argjson i "$i" --arg d "${def_tid:-unknown}" \
+        '.[$i] | [.actor, .action, .result, .subject, (.task_id // $d), (.metadata | tojson)]
+         | join("\u001f")' <<< "$AUDIT_ROWS_JSON")
+      IFS=$'\037' read -r actor action result subject tid meta <<< "$fields" || true
+      corpflow_audit_row --file "${adir}/logs/audit.jsonl" --actor "$actor" \
+        --action "$action" --result "$result" --subject "$subject" --task-id "$tid" --meta "$meta"
+      [[ "${CORPFLOW_AUDIT_LAST_RC:-1}" -eq 0 ]] || failed=$((failed + 1))
+      i=$((i + 1))
+    done
+    if [[ "$failed" -gt 0 ]]; then
+      printf >&2 '%d of %d --audit-row row(s) not recorded; the ledger write stands\n' "$failed" "$n"
+      log_msg ERROR "--audit-row: ${failed} of ${n} row(s) not recorded (ledger write already applied)"
+      exit 1
+    fi
+    log_msg INFO "--audit-row: ${n} row(s) appended"
+  fi
+  [[ -n "$DIGEST_FLAG" ]] || return 0
+  { cat "$STATE_PATH" 2> /dev/null || printf 'null'; } \
+    | jq -r --arg ids "$touched" --arg edge "$edge" --arg facts "$facts" --argjson audit "$n" '
+      (. // {}) as $st
+      | ($ids | split(",") | map(select(length > 0))) as $ids
+      | ([$edge != "", $facts == "1", $audit > 0] | map(select(.)) | length) as $extra
+      | (11 - $extra) as $budget
+      | [ $ids[] as $id | ($st.tasks[$id] // null) as $t
+          | ([$id, (if $t == null then "absent" else ($t.status // "unknown") end)]
+             + ([["agent", $t.metadata.agent?], ["model", $t.metadata.model?]]
+                | map(select(.[1] != null and (.[1] | tostring) != "")
+                      | .[0] + "=" + (.[1] | tostring))))
+          | join(" ") ] as $rows
+      | (if ($rows | length) > $budget
+         then $rows[0:($budget - 1)] + ["tasks +\(($rows | length) - $budget + 1) more"]
+         else $rows end) as $rows
+      | ["state-patch ok"] + $rows
+        + (if $edge != "" then ["edge " + $edge] else [] end)
+        + (if $facts == "1"
+           then ["facts decisions=\(($st.facts.decisions // []) | length) open_questions=\(($st.facts.open_questions // []) | length) files_modified=\(($st.facts.files_modified // []) | length)"]
+           else [] end)
+        + (if $audit > 0 then ["audit +\($audit)"] else [] end)
+      | .[]' 2>> "$LOG_FILE" || log_msg WARN "--digest: ledger read-back failed; write already applied"
+}
+
 # ---------- Argument parsing ----------
 STAGE_ARG=""
 ARTIFACT_ARG=""
@@ -1606,6 +1714,16 @@ FINDING_FILE_GIVEN=""
 SETTLE_CHANGED=""
 SETTLE_CHANGED_GIVEN=""
 SETTLE_PLAN=""
+DIGEST_FLAG=""
+# Batched --task-create: parallel arrays, one slot per --task-create, so a --metadata binds to
+# the row it follows rather than overwriting the single TASK_OP_VALUE every op shares.
+TC_IDS=()
+TC_METAS=()
+TC_PRE_META=""
+OTHER_TASK_OP_SEEN=""
+AUDIT_ROWS=()
+AUDIT_ROWS_JSON=""
+DIGEST_TOUCHED=""
 
 while [[ $# -gt 0 ]]; do
   # One line per flag. Every value-taking arm was the same five lines —
@@ -1634,28 +1752,41 @@ while [[ $# -gt 0 ]]; do
     --task-id) shift; TASK_ID_ARG="${1:-}"; shift ;;
     --verify-decision) shift; VERIFY_DECISION_ID="${1:-}"; shift ;;
     --expect-answer) shift; VERIFY_EXPECT="${1:-}"; VERIFY_EXPECT_GIVEN="1"; shift ;;
-    --task-create) shift; TASK_OP="create"; TASK_OP_ID="${1:-}"; shift ;;
-    --task-status) shift; TASK_OP="status"; TASK_OP_ID="${1:-}"; shift; TASK_OP_VALUE="${1:-}"; shift ;;
-    --task-block) shift; TASK_OP="block"; TASK_OP_ID="${1:-}"; shift ;;
-    --task-unblock) shift; TASK_OP="unblock"; TASK_OP_ID="${1:-}"; shift ;;
-    --task-meta) shift; TASK_OP="meta"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-create)
+      shift
+      # The first id stays TASK_OP_ID so a single --task-create runs exactly the legacy path;
+      # every later id only accumulates.
+      if [[ "${#TC_IDS[@]}" -eq 0 ]]; then
+        TASK_OP_ID="${1:-}"
+        if [[ -n "$TASK_OP_VALUE" ]]; then TC_PRE_META="1"; fi
+      fi
+      TASK_OP="create"
+      TC_IDS+=("${1:-}")
+      TC_METAS+=("")
+      if [[ $# -gt 0 ]]; then shift; fi
+      ;;
+    --task-status) shift; TASK_OP="status"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --task-block) shift; TASK_OP="block"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-unblock) shift; TASK_OP="unblock"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-meta) shift; TASK_OP="meta"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
     --resolve-models) shift; RESOLVE_MODELS_OP="1" ;;
     --raise-only) RAISE_ONLY_FLAG="1"; shift ;;
     --corpflow) shift; RESOLVE_MODELS_CORPFLOW_ARG="${1:-}"; shift ;;
-    --task-replay) shift; TASK_OP="replay"; TASK_OP_ID="${1:-}"; shift ;;
-    --task-reopen) shift; TASK_OP="reopen"; TASK_OP_ID="${1:-}"; shift ;;
-    --task-settle-stale) shift; TASK_OP="settle_stale"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-replay) shift; TASK_OP="replay"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-reopen) shift; TASK_OP="reopen"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
+    --task-settle-stale) shift; TASK_OP="settle_stale"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
     # --from is the correction's SOURCE task, not a path; --finding-file takes `-` for stdin.
     # Both are tracked as "given" separately from their value so an empty value reaches the
     # op's own refusal rather than reading as absent.
     --from) shift; REOPEN_FROM="${1:-}"; REOPEN_FROM_GIVEN="1"; shift ;;
     --finding-file) shift; FINDING_FILE="${1:-}"; FINDING_FILE_GIVEN="1"; shift ;;
     --changed) shift; SETTLE_CHANGED="${1:-}"; SETTLE_CHANGED_GIVEN="1"; shift ;;
-    --claim) shift; TASK_OP="claim"; TASK_OP_ID="${1:-}"; shift ;;
+    --claim) shift; TASK_OP="claim"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
     --dispatch)
       shift
       TASK_OP="dispatch"
+      OTHER_TASK_OP_SEEN="1"
       # Consume up to the next --flag rather than a fixed shift*3: a short call (missing
       # agent_id or status) must fall through to the argc check below as malformed, not
       # crash on an out-of-range shift.
@@ -1672,6 +1803,7 @@ while [[ $# -gt 0 ]]; do
     --files-read)
       shift
       TASK_OP="files_read"
+      OTHER_TASK_OP_SEEN="1"
       TASK_OP_ID="${1:-}"
       [[ $# -gt 0 ]] && shift
       # Same "consume to the next --flag" shape as --dispatch; unlike --dispatch this list is
@@ -1685,6 +1817,7 @@ while [[ $# -gt 0 ]]; do
     --ack)
       shift
       TASK_OP="ack"
+      OTHER_TASK_OP_SEEN="1"
       # Consumed like --dispatch so a short or long call reaches the argc check as exit 2.
       _ACK_ARGS=()
       while [[ $# -gt 0 && "$1" != --* ]]; do
@@ -1697,7 +1830,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --cascade) REPLAY_CASCADE="true"; shift ;;
     --agents-json) shift; AGENTS_JSON_ARG="${1:-}"; shift ;;
-    --on | --off | --metadata | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --metadata)
+      shift
+      TASK_OP_VALUE="${1:-}"
+      if [[ "${#TC_IDS[@]}" -gt 0 ]]; then TC_METAS[${#TC_IDS[@]} - 1]="${1:-}"; fi
+      shift
+      ;;
+    --on | --off | --set) shift; TASK_OP_VALUE="${1:-}"; shift ;;
+    --digest) DIGEST_FLAG="1"; shift ;;
+    --audit-row) shift; AUDIT_ROWS+=("${1:-}"); shift ;;
     --resolve-task-id) shift; RESOLVE_CODE_ARG="${1:-}"; shift ;;
     --read-decisions) READ_DECISIONS="1"; shift ;;
     --self-test)
@@ -1725,11 +1866,163 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ---------- Root ladder (rank 1 here; ranks 2-6 in state-read-lib.sh) ----------
-# --state is verbatim, caller-trusted. Its absence sources the shared ladder rather than
-# defaulting to a path relative to cwd: a bare relative default is exactly the "patched the
-# wrong worktree's ledger" hazard the shared root ladder exists to close.
-STATE_UNRESOLVED=""
+# ---------- Batch / audit-row / digest validation ----------
+# Runs before the root ladder and every write, so a malformed batch or audit row costs
+# nothing but the exit code: state.json and audit.jsonl are never touched.
+if [[ "${#TC_IDS[@]}" -gt 1 ]]; then
+  if [[ -n "$OTHER_TASK_OP_SEEN" ]]; then
+    printf >&2 -- 'batched --task-create cannot be combined with another ledger op; issue them separately\n'
+    exit 2
+  fi
+  # In a batch each --metadata belongs to the --task-create before it; one that precedes
+  # every id has no row, and guessing would seed metadata onto the wrong task.
+  if [[ -n "$TC_PRE_META" ]]; then
+    printf >&2 -- '--metadata before the first --task-create binds to no row in a batch\n'
+    exit 2
+  fi
+fi
+
+# Ops that already own stdout keep it byte-stable: a digest appended to a line the caller
+# parses as JSON would break that parse.
+if [[ -n "$VERIFY_DECISION_ID" || -n "$RESOLVE_CODE_ARG" || -n "$READ_DECISIONS" \
+  || "$TASK_OP" == "settle_stale" ]]; then
+  DIGEST_FLAG=""
+fi
+
+if [[ "${#AUDIT_ROWS[@]}" -gt 0 ]]; then
+  if [[ -n "$VERIFY_DECISION_ID" || -n "$RESOLVE_CODE_ARG" || -n "$READ_DECISIONS" \
+    || -n "$LEDGER_META_OP" || -n "$RESOLVE_MODELS_OP" || "$TASK_OP" == "ack" ]]; then
+    printf >&2 -- '--audit-row does not compose with this op (read-only, --ack, --ledger-meta or --resolve-models)\n'
+    exit 2
+  fi
+  command -v jq > /dev/null 2>&1 || {
+    printf >&2 -- '--audit-row needs jq; nothing written\n'
+    exit 2
+  }
+  # Probed before the main op, not after it: a broken install must refuse the whole call
+  # rather than land the ledger write and then lose the rows that were to describe it.
+  _AR_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/audit-lib.sh"
+  if ! command -v corpflow_audit_row > /dev/null 2>&1 && [ -r "$_AR_LIB" ]; then
+    # shellcheck source=../../shared/lib/audit-lib.sh
+    . "$_AR_LIB"
+  fi
+  if ! command -v corpflow_audit_row > /dev/null 2>&1; then
+    printf >&2 -- '--audit-row refused: audit lib unreachable at %s; nothing written\n' "$_AR_LIB"
+    exit 2
+  fi
+  # Control bytes are refused in the scalar fields because _post_success splits each row
+  # on US in one jq read; metadata travels as compact JSON, which escapes them.
+  _AR_FILTER='
+    if length != 1 then error("expected exactly one JSON object") else .[0] end
+    | if type != "object" then error("not a JSON object") else . end
+    | (keys - ["action","result","subject","actor","metadata","task_id"]) as $extra
+    | if ($extra | length) > 0 then error("unknown key(s): " + ($extra | join(","))) else . end
+    | reduce ("action","result","subject") as $k (.;
+        if (.[$k] | type) != "string" or .[$k] == "" then error($k + " must be a non-empty string")
+        else . end)
+    | if has("actor") and (((.actor | type) != "string") or .actor == "")
+      then error("actor must be a non-empty string") else . end
+    | if has("metadata") and ((.metadata | type) != "object")
+      then error("metadata must be an object") else . end
+    | if has("task_id") and (((.task_id | type) != "string") or ((.task_id | test($idre)) | not))
+      then error("task_id must match <STAGE><N>") else . end
+    | if [.action, .result, .subject, (.actor // "")] | any(test("[[:cntrl:]]"))
+      then error("control character in a scalar field") else . end
+    | {action, result, subject, actor: (.actor // "corpflow:unknown"), metadata: (.metadata // {})}
+      + (if has("task_id") then {task_id} else {} end)'
+  AUDIT_ROWS_JSON="[]"
+  for _AR_RAW in "${AUDIT_ROWS[@]}"; do
+    # The fallback sits inside the substitution: a parse failure there would otherwise
+    # fire the ERR trap from the subshell before the refusal below names the defect.
+    _AR_ROW=$(printf '%s' "$_AR_RAW" | jq -cs \
+      --arg idre '^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$' \
+      "try (${_AR_FILTER}) catch {__err: .}" 2> /dev/null || printf '{"__err":"not valid JSON"}')
+    [[ -n "$_AR_ROW" ]] || _AR_ROW='{"__err":"not valid JSON"}'
+    _AR_ERR=$(jq -r '.__err // empty' <<< "$_AR_ROW")
+    if [[ -n "$_AR_ERR" ]]; then
+      printf >&2 'invalid --audit-row: %s; nothing written\n' "$_AR_ERR"
+      exit 2
+    fi
+    AUDIT_ROWS_JSON=$(jq -c --argjson r "$_AR_ROW" '. + [$r]' <<< "$AUDIT_ROWS_JSON")
+  done
+fi
+
+# ---------- Root ladder ----------
+# --state is verbatim and caller-trusted. Without it the writer ladder in state-read-lib.sh
+# (CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel of $PWD, $PWD/.context)
+# picks the directory. Nothing derives from this script's own location, and no
+# main-worktree recovery is tried: a workdir nested inside another checkout, such as a
+# benchmark arm under the plugin's own repo, would otherwise be handed that checkout's live
+# ledger.
+#
+# Only the inferred ranks are policed against the plugin root. --state, CONTEXT_DIR,
+# WORKSPACE_ROOT and CLAUDE_PROJECT_DIR are explicit caller signals and are trusted even when
+# they point inside it: a plugin developed with itself, run from its own checkout, legitimately
+# keeps its ledger there.
+
+# _sp_physical <path> — physical form of a path whose tail may not exist yet. The deepest
+# existing ancestor is resolved with `pwd -P` and the missing tail re-appended; without
+# that a symlinked tmp root (macOS /var -> /private/var) defeats the prefix comparison
+# below.
+_sp_physical() {
+  local p="$1" tail="" head base
+  case "$p" in
+    /*) ;;
+    *) p="$PWD/$p" ;;
+  esac
+  head="$p"
+  while [[ -n "$head" && ! -d "$head" ]]; do
+    base="${head##*/}"
+    tail="/${base}${tail}"
+    head="${head%/*}"
+  done
+  [[ -n "$head" ]] || head="/"
+  head="$(CDPATH='' cd -P -- "$head" 2> /dev/null && pwd -P)" || head=""
+  [[ -n "$head" ]] || {
+    printf '%s' "$p"
+    return 0
+  }
+  printf '%s%s' "${head%/}" "$tail"
+}
+
+# _sp_refuse_plugin_root <ctx-dir> — exit 4 when a ledger dir INFERRED from the cwd lies
+# inside the plugin's own install/checkout, unless the caller is standing at the git toplevel
+# itself (running the plugin from its own repo root). A nested subdirectory such as a benchmark
+# workdir would otherwise be handed the checkout's live ledger, and a non-git cwd under the
+# plugin root would write into the plugin tree; failing loudly beats a silent write into the
+# wrong project. Both the root this script lives in and the host-reported root count, because a
+# dev checkout and an installed copy are different trees.
+_sp_refuse_plugin_root() {
+  local ctx_phys root root_phys top top_phys pwd_phys host_root="" base_lib
+  ctx_phys="$(_sp_physical "$1")"
+  top="$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)"
+  top_phys=""
+  [[ -z "$top" ]] || top_phys="$(_sp_physical "$top")"
+  pwd_phys="$(_sp_physical "$PWD")"
+  # The shared resolver owns the host env ladder; a missing lib only narrows the guard to
+  # this script's own tree, which still covers a dev checkout.
+  base_lib="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
+  if [[ -r "$base_lib" ]]; then
+    # shellcheck source=skills/shared/lib/corpflow-base.sh
+    . "$base_lib"
+    host_root="$(corpflow_plugin_root 2> /dev/null || true)"
+  fi
+  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "$host_root"; do
+    [[ -n "$root" && -d "$root" ]] || continue
+    root_phys="$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P)" || continue
+    [[ -n "$root_phys" && "$root_phys" != "/" ]] || continue
+    case "$ctx_phys/" in
+      "$root_phys/"*)
+        # Rank 5 landing here with the caller at the toplevel is the self-hosted case.
+        [[ -n "$top_phys" && "$pwd_phys" == "$top_phys" ]] && continue
+        printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root %s\n' "$ctx_phys" "$root_phys"
+        printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
+        exit 4
+        ;;
+    esac
+  done
+}
+
 if [[ -z "$STATE_ARG_GIVEN" ]]; then
   _SRL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../shared/lib/state-read-lib.sh"
   if [ ! -r "$_SRL_LIB" ]; then
@@ -1738,18 +2031,11 @@ if [[ -z "$STATE_ARG_GIVEN" ]]; then
   fi
   # shellcheck source=../../shared/lib/state-read-lib.sh
   . "$_SRL_LIB"
-  _CTX_RC=0
-  _CTX_DIR=$(corpflow_context_dir) || _CTX_RC=$?
-  if [[ "$_CTX_RC" -eq 2 ]]; then
-    printf >&2 'state-patch.sh: root resolver unreachable\n'
-    exit 2
-  elif [[ "$_CTX_RC" -eq 0 ]]; then
-    STATE_PATH="${_CTX_DIR}/state.json"
-  else
-    # Unresolved: leave STATE_PATH empty. Every `-f "$STATE_PATH"` check below then reads
-    # false, which is precisely today's "state absent" behaviour — never a cwd fallback.
-    STATE_UNRESOLVED="1"
+  _CTX_DIR="$(corpflow_context_dir_write)"
+  if [[ -z "${CONTEXT_DIR:-}" && -z "${WORKSPACE_ROOT:-}" && -z "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    _sp_refuse_plugin_root "$_CTX_DIR"
   fi
+  STATE_PATH="${_CTX_DIR}/state.json"
 fi
 
 if [[ -z "$STATE_PATH" ]]; then
@@ -1759,19 +2045,15 @@ else
   [[ "$CTX" == "$STATE_PATH" ]] && CTX="."
 fi
 
+# The default log follows the ledger, but only once that directory exists or this call is
+# the one that seeds it: the ladder now always resolves, so an unconditional default would
+# leave a stray .context/logs behind every no-op call made from an arbitrary cwd.
 if [[ -z "$LOG_ARG_GIVEN" ]]; then
-  if [[ -n "$STATE_UNRESOLVED" ]]; then
-    LOG_FILE="/dev/null"
-  else
+  if [[ -d "$CTX" || "$TASK_OP" == "create" ]]; then
     LOG_FILE="${CTX}/logs/state-merge.log"
+  else
+    LOG_FILE="/dev/null"
   fi
-fi
-
-# A self-patch (the documented `--prev` present, `--via` absent signature) gets a loud,
-# distinct warning: every other caller quietly no-ops on an unresolved root, but an agent
-# calling this on its own artifact needs to know its ledger write landed nowhere.
-if [[ -n "$STATE_UNRESOLVED" && -n "$PREV_ARG" && -z "$VIA_ARG" && -z "$ALLOW_MISSING_ARTIFACT" ]]; then
-  printf >&2 'warn: no ledger resolved (checked --state, CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — refusing cwd\n'
 fi
 
 # ---------- --verify-decision (read-only; dispatched before pre-flight so this op takes no
@@ -2143,6 +2425,34 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
   exit 1
 fi
 
+# ---------- Standalone --audit-row ----------
+# Rows only, no ledger write. The ledger is still read, as --ack reads it: a row naming a
+# task this run never seeded is a record of nothing, so an unknown id refuses before the
+# append.
+if [[ "${#AUDIT_ROWS[@]}" -gt 0 && -z "$TASK_OP" && -z "$STAGE_ARG" && -z "$ARTIFACT_ARG" \
+  && -z "$FACTS_ARG" ]]; then
+  if [[ ! -f "$STATE_PATH" ]]; then
+    printf >&2 -- 'no state.json at %s; --audit-row appends against an existing ledger only\n' "$STATE_PATH"
+    exit 1
+  fi
+  if [[ -n "$TASK_ID_ARG" ]] && ! [[ "$TASK_ID_ARG" =~ ^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$ ]]; then
+    printf >&2 'invalid task id: %s (expected <STAGE><N>, e.g. DV0)\n' "$TASK_ID_ARG"
+    exit 2
+  fi
+  _AR_UNKNOWN=$(jq -r --argjson rows "$AUDIT_ROWS_JSON" --arg d "$TASK_ID_ARG" '
+    (.tasks // {}) as $t
+    | [ ($rows[] | .task_id // empty), (if $d != "" then $d else empty end) ]
+    | unique | map(select(. as $i | $t | has($i) | not)) | join(",")' "$STATE_PATH" 2> /dev/null) \
+    || _AR_UNKNOWN="(ledger unreadable)"
+  if [[ -n "$_AR_UNKNOWN" ]]; then
+    printf >&2 'unknown task id: %s (--audit-row needs an existing task); nothing written\n' "$_AR_UNKNOWN"
+    log_msg ERROR "--audit-row on unknown tasks.${_AR_UNKNOWN}; nothing written"
+    exit 1
+  fi
+  _post_success "${TASK_ID_ARG:-unknown}" "$TASK_ID_ARG" "" 0
+  exit 0
+fi
+
 # ---------- Ledger ops ----------
 # Direct tasks{} writes for the orchestrator loop; they short-circuit the
 # artifact/frontmatter path entirely.
@@ -2198,10 +2508,12 @@ if [[ -n "$TASK_OP" ]]; then
   # a stage or more later rather than at the write that introduced it. Checked on the two
   # ops that persist metadata. Absent is fine — the field is optional and older ledgers
   # predate it; present-but-unknown is not.
-  if [[ "$TASK_OP" == "create" || "$TASK_OP" == "meta" ]] && [[ -n "$TASK_OP_VALUE" ]]; then
+  # _ledger_effort_gate <metadata-json> — exits on an off-ladder effort; a batched
+  # --task-create runs it once per row so one bad row refuses the whole call before any write.
+  _ledger_effort_gate() {
     # `has` + `tostring`, not `//`: the alternative operator reads JSON null and false as
     # absent, and a required field must not be erasable through its own gate.
-    _TASK_EFFORT=$(printf '%s' "$TASK_OP_VALUE" \
+    _TASK_EFFORT=$(printf '%s' "$1" \
       | jq -r 'if type == "object" and has("effort") then (.effort | tostring) else empty end' \
         2> /dev/null) \
       || _TASK_EFFORT=""
@@ -2226,6 +2538,13 @@ if [[ -n "$TASK_OP" ]]; then
         exit 2
       fi
     fi
+  }
+  if [[ "${#TC_IDS[@]}" -gt 1 ]]; then
+    for _TC_I in "${!TC_IDS[@]}"; do
+      if [[ -n "${TC_METAS[$_TC_I]}" ]]; then _ledger_effort_gate "${TC_METAS[$_TC_I]}"; fi
+    done
+  elif [[ "$TASK_OP" == "create" || "$TASK_OP" == "meta" ]] && [[ -n "$TASK_OP_VALUE" ]]; then
+    _ledger_effort_gate "$TASK_OP_VALUE"
   fi
 
   # --task-meta --raise-only for model/effort (composition
@@ -2297,42 +2616,97 @@ if [[ -n "$TASK_OP" ]]; then
   TASK_JQ_ARGS=()
   case "$TASK_OP" in
     create)
-      # Seeding is idempotent: an existing task keeps the metadata it has accumulated, so a
-      # re-run of a seed script cannot roll it back to the seed's view.
-      if [[ -f "$STATE_PATH" ]] \
-        && jq -e --arg id "$TASK_OP_ID" 'has("tasks") and (.tasks | has($id))' \
-          "$STATE_PATH" > /dev/null 2>&1; then
-        log_msg INFO "idempotent: tasks.${TASK_OP_ID} already exists"
-        exit 0
-      fi
       # PL/IR rows are exempt because PL0 is the stage that decides base_ref and
       # requires_screenshots: every other row must already be dispatch-ready
       # (effort/isolation/base_ref/requires_screenshots/workspace_path) before it is
       # seeded, so a downstream stage never discovers the gap mid-run.
-      _TC_CODE="${TASK_OP_ID%%[0-9]*}"
-      if [[ "$_TC_CODE" != "PL" && "$_TC_CODE" != "IR" ]]; then
-        # bash 3.2's "${TASK_OP_VALUE:-{}}" leaks a stray "}" onto a non-empty
-        # value (brace-matching quirk in the default-word parse), hence the if/else.
-        if [[ -z "$TASK_OP_VALUE" ]]; then
-          _TC_META='{}'
-        else
-          _TC_META="$TASK_OP_VALUE"
+      # _tc_required_gate <id> <metadata-json-or-empty>
+      _tc_required_gate() {
+        _TC_CODE="${1%%[0-9]*}"
+        if [[ "$_TC_CODE" != "PL" && "$_TC_CODE" != "IR" ]]; then
+          # bash 3.2's "${TASK_OP_VALUE:-{}}" leaks a stray "}" onto a non-empty
+          # value (brace-matching quirk in the default-word parse), hence the if/else.
+          if [[ -z "$2" ]]; then
+            _TC_META='{}'
+          else
+            _TC_META="$2"
+          fi
+          _TC_MISSING=$(printf '%s' "$_TC_META" | jq -r '
+              . as $m
+              | ["effort","isolation","base_ref","requires_screenshots","workspace_path"]
+              | map(select(. as $k | ($m | has($k) | not) or ($m[$k] == null) or ($m[$k] == "")))
+              | join(",")' 2> /dev/null) || _TC_MISSING="effort,isolation,base_ref,requires_screenshots,workspace_path"
+          if [[ -n "$_TC_MISSING" ]]; then
+            printf >&2 'invalid --task-create %s: metadata missing required key(s): %s (required on every non-PL/IR row); state.json unchanged\n' \
+              "$1" "$_TC_MISSING"
+            log_msg ERROR "invalid --task-create ${1}: metadata missing required key(s): ${_TC_MISSING}; state.json unchanged"
+            exit 2
+          fi
         fi
-        _TC_MISSING=$(printf '%s' "$_TC_META" | jq -r '
-            . as $m
-            | ["effort","isolation","base_ref","requires_screenshots","workspace_path"]
-            | map(select(. as $k | ($m | has($k) | not) or ($m[$k] == null) or ($m[$k] == "")))
-            | join(",")' 2> /dev/null) || _TC_MISSING="effort,isolation,base_ref,requires_screenshots,workspace_path"
-        if [[ -n "$_TC_MISSING" ]]; then
-          printf >&2 'invalid --task-create %s: metadata missing required key(s): %s (required on every non-PL/IR row); state.json unchanged\n' \
-            "$TASK_OP_ID" "$_TC_MISSING"
-          log_msg ERROR "invalid --task-create ${TASK_OP_ID}: metadata missing required key(s): ${_TC_MISSING}; state.json unchanged"
-          exit 2
+      }
+      if [[ "${#TC_IDS[@]}" -gt 1 ]]; then
+        # Every row is gated before the single merge below, so one bad row refuses the batch
+        # with state.json byte-unchanged rather than landing the rows that preceded it. A row
+        # that already exists is a per-row no-op and skips the gates, exactly as a single
+        # --task-create on an existing id exits before them.
+        _TC_IDS_JSON="[]"
+        _TC_ROWS_JSON="[]"
+        for _TC_I in "${!TC_IDS[@]}"; do
+          _TC_ID="${TC_IDS[$_TC_I]}"
+          if ! [[ "$_TC_ID" =~ ^(PL|AR|TL|DV|DR|SR|QA|DC|RE|FN|ST|IR|ET)[0-9]+$ ]]; then
+            printf >&2 'invalid task id: %s (expected <STAGE><N>, e.g. DV0); batch refused, state.json unchanged\n' "$_TC_ID"
+            exit 2
+          fi
+          if jq -e --arg id "$_TC_ID" 'index($id) != null' <<< "$_TC_IDS_JSON" > /dev/null; then
+            printf >&2 'invalid --task-create batch: %s named twice; state.json unchanged\n' "$_TC_ID"
+            exit 2
+          fi
+          _TC_IDS_JSON=$(jq -c --arg id "$_TC_ID" '. + [$id]' <<< "$_TC_IDS_JSON")
+          if [[ -f "$STATE_PATH" ]] \
+            && jq -e --arg id "$_TC_ID" 'has("tasks") and (.tasks | has($id))' \
+              "$STATE_PATH" > /dev/null 2>&1; then
+            continue
+          fi
+          _tc_required_gate "$_TC_ID" "${TC_METAS[$_TC_I]}"
+          # Same failure class as an unparseable single --metadata, which surfaces as a jq
+          # apply failure (exit 1) once the required-key gate has let it through.
+          if ! _TC_ROWS_JSON=$(jq -c --arg id "$_TC_ID" --argjson meta "${TC_METAS[$_TC_I]:-null}" \
+            '. + [{id: $id, meta: $meta}]' <<< "$_TC_ROWS_JSON" 2> /dev/null); then
+            printf >&2 'invalid --task-create %s: --metadata is not valid JSON; batch refused, state.json unchanged\n' "$_TC_ID"
+            log_msg ERROR "invalid --task-create ${_TC_ID}: --metadata is not valid JSON; state.json unchanged"
+            exit 1
+          fi
+        done
+        DIGEST_TOUCHED="$(jq -r 'join(",")' <<< "$_TC_IDS_JSON")"
+        # All-present is the whole-batch no-op: skipping the write keeps state.json
+        # byte-identical, as the single-row early exit does.
+        if [[ "$(jq -r 'length' <<< "$_TC_ROWS_JSON")" -eq 0 ]]; then
+          log_msg INFO "idempotent: tasks.${DIGEST_TOUCHED} already exist"
+          _post_success "$TASK_OP_ID" "$DIGEST_TOUCHED" "" 0
+          exit 0
         fi
+        # Re-checked per row inside the lock, so a row a sibling writer seeded after the
+        # pre-lock read above still keeps the metadata it has.
+        TASK_FILTER="${_DESC_CAP}"'reduce $rows[] as $r (.;
+            if ((.tasks // {}) | has($r.id)) then .
+            else .tasks[$r.id] = {status: "pending", metadata: (($r.meta // {}) | _cap_desc)} end)'
+        TASK_JQ_ARGS=(--argjson rows "$_TC_ROWS_JSON")
+        TASK_OP_VALUE="batch=${DIGEST_TOUCHED}"
+      else
+        # Seeding is idempotent: an existing task keeps the metadata it has accumulated, so a
+        # re-run of a seed script cannot roll it back to the seed's view.
+        if [[ -f "$STATE_PATH" ]] \
+          && jq -e --arg id "$TASK_OP_ID" 'has("tasks") and (.tasks | has($id))' \
+            "$STATE_PATH" > /dev/null 2>&1; then
+          log_msg INFO "idempotent: tasks.${TASK_OP_ID} already exists"
+          _post_success "$TASK_OP_ID" "$TASK_OP_ID" "" 0
+          exit 0
+        fi
+        _tc_required_gate "$TASK_OP_ID" "$TASK_OP_VALUE"
+        # --metadata is optional; absent ⇒ an empty object, never a parse abort.
+        TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
+        TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       fi
-      # --metadata is optional; absent ⇒ an empty object, never a parse abort.
-      TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
-      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       ;;
     status)
       case "$TASK_OP_VALUE" in
@@ -2816,6 +3190,7 @@ if [[ -n "$TASK_OP" ]]; then
     if [[ "$TASK_OP" == "settle_stale" ]]; then
       printf '%s\n' "$SETTLE_PLAN"
     fi
+    _post_success "$TASK_OP_ID" "${DIGEST_TOUCHED:-$TASK_OP_ID}" "" 0
     exit 0
   fi
   printf >&2 'ledger %s failed on tasks.%s; state.json unchanged (see %s)\n' \
@@ -3157,6 +3532,9 @@ ${FACTS_REJECT_LIST}"
   # Standalone --facts is done here; with --stage/--artifact it falls through to the
   # completion merge, which takes its own lock.
   if [[ -z "$STAGE_ARG" && -z "$ARTIFACT_ARG" ]]; then
+    if [[ "$FACTS_REJECTED" -eq 0 ]]; then
+      _post_success "$(_audit_task_ref)" "$TASK_ID_ARG" "" 1
+    fi
     exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
 fi
@@ -3224,6 +3602,9 @@ if [[ "$CURRENT_STATUS" == "$STATUS_MAPPED" && "$CURRENT_VERDICT" == "$PARSED_VE
 
   if [[ "$PATCH_IS_NOOP" == "1" ]]; then
     log_msg INFO "idempotent: tasks.${TASK_ID} already ${STATUS_MAPPED} verdict=${PARSED_VERDICT}"
+    if [[ "$FACTS_REJECTED" -eq 0 ]]; then
+      _post_success "$TASK_ID" "$TASK_ID" "${PREV_ARG:+${PREV_ARG}→${TASK_ID}}" "$([[ -n "$FACTS_ARG" ]] && printf 1 || printf 0)"
+    fi
     exit $((FACTS_REJECTED == 1 ? 2 : 0))
   fi
   log_msg INFO \
@@ -3348,4 +3729,7 @@ if [[ "$VIA_ARG" == "hook" ]]; then
   fi
 fi
 
+if [[ "$FACTS_REJECTED" -eq 0 ]]; then
+  _post_success "$TASK_ID" "$TASK_ID" "${PREV_ARG:+${PREV_ARG}→${TASK_ID}}" "$([[ -n "$FACTS_ARG" ]] && printf 1 || printf 0)"
+fi
 exit $((FACTS_REJECTED == 1 ? 2 : 0))

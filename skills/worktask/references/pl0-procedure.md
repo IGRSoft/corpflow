@@ -1,9 +1,11 @@
 # PL0 Procedure — the complete planning-stage worktask integration
 
-Read this file first, before any other action, when `corpflow:product-manager` is dispatched as the
-PL stage agent (PL0). It is the whole planning procedure; the agent file carries identity and a
-pointer here. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`)
-never need it.
+The whole planning procedure for `corpflow:product-manager` dispatched as the PL stage agent (PL0),
+and its canonical source. The agent file carries a steady-path digest (`agents/product-manager.md
+§ PL0 runbook`) and a trigger list naming the sections here to Read; this file wins any
+disagreement, and a change here that alters the steady path updates that runbook in the same
+change. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`) never
+need it.
 
 Every `skills/…` and `commands/…` path below is relative to the corpflow plugin root, not the
 worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
@@ -374,8 +376,12 @@ Name each persisted per-frame file with a placeholder token, never a `.context/.
 
 Execution order. On a `plan_revision` turn, step 1 reuses the frozen `plan_file` and step 3 patches the existing tasks in place (§ Revision of the run in flight).
 
-1. Compute `<plan_file>` and create it from the requirements template
-2. Fill in requirements, acceptance criteria, success metrics
+1. Compute `<plan_file>`, then Read `skills/worktask/templates/planning.md` and Write it to
+   `<plan_file>`: the `#tpl-pl` frontmatter, the § Required Metadata block and every mandatory
+   anchor, in order. Nothing else needs looking up to shape the file.
+2. Replace every `<…>` placeholder and `N`: requirements, acceptance criteria, success metrics.
+   Drop `rejection_reason:` on a first draft; with nothing to ask, the sweep body becomes
+   `open_questions: []` plus a one-line nothing-to-elicit statement.
 3. Assess complexity (0-50) and seed stage tasks via `state-patch.sh --task-create` with the § Downstream propagation fields
 
 #### Post-publish verification (scaffolding step 4)
@@ -388,7 +394,7 @@ Append one audit row `action: "pr_issue_link", result: "warn", reason: "github_i
 
 ### Mandatory Plan-File Anchor Schema
 
-`<plan_file>` includes all eight PL H2 anchors from `skills/worktask/references/handoff-protocol.md#anchor-allow-list § PL` plus the universal `## elicitation-sweep`. AR/TL/DV/DR read them selectively; a missing anchor forces full-file re-reads (`stage-contracts § Required Inputs` step 3) and breaks the cache-friendly handoff layout.
+`<plan_file>` includes all eight PL H2 anchors from `skills/worktask/references/handoff-protocol.md#anchor-allow-list § PL` plus the universal `## elicitation-sweep`; `skills/worktask/templates/planning.md` carries them in order. AR/TL/DV/DR read them selectively; a missing anchor forces full-file re-reads (`stage-contracts § Required Inputs` step 3) and breaks the cache-friendly handoff layout.
 
 #### Mandatory Plan-File Anchor Schema — the table
 
@@ -405,6 +411,14 @@ Required anchors (kebab-case, no underscores, no spaces):
 | `## stages` | Per-stage task list | TL, FN |
 | `## summary` | Complexity/tier line, vetoable assumptions, gate-question preview | user (plan gate), FN (recap) |
 | `## elicitation-sweep` | The plan-gate sweep items, or the explicit empty statement | orchestrator (§ Step C.4) |
+
+#### Exact-output criteria are byte-exact
+
+Every exact-output rule in the goal — CLI flags, output formats, byte-level examples, leading and
+trailing spaces — becomes an acceptance criterion whose expected bytes are quoted verbatim in a
+fenced block under `## acceptance-criteria`. Never paraphrase, reflow, trim or re-quote them: DV
+builds and QA checks against those bytes, and a paraphrase drops exactly the whitespace and
+punctuation the rule exists for.
 
 #### Anchor-lint enforcement
 
@@ -694,16 +708,16 @@ When a worktask includes a version bump (release, tag, or `version:`/`CHANGELOG`
 For grep-based verification steps in `<plan_file>` (e.g. AC validation commands):
 
 - Use word-boundary anchors (`\b`) or full filename matches, not substring patterns, which false-positive on legitimate canonical names.
-- Run each AC verification command once against current repo state and record its literal output before writing it into `<plan_file>`; if it can only run post-edit, mark it inline `(unverified — dry-run required after theme lands)`. Naive `awk`/`grep`/`wc` forms break silently on folded YAML blocks, meta-index files, and similar cases that surface only when run.
+- Record each AC verification command in `<plan_file>` beside its criterion, with the output
+  that passes. PL does not run it: DV runs the residual-greps before yielding and DV and QA
+  execute the rest, per `skills/shared/testing-strategy.md § Test-Execution Authority`.
 
-#### The `(unverified)` mark never excuses an invalid command
+#### Recording a command never excuses an invalid one
 
-The mark covers only the representativeness of the result (present-state data cannot show the
-post-edit answer), never the command's validity: before writing one, run it against present-state
-data and confirm it executes without a usage/syntax error, on a plausible input, with each flag
-doing what the prose claims. A broken flag combination such as `grep -viv -e A -e B` (triple
-negation) reports everything clean. If nothing can run before the edit, simplify until some form
-can.
+Write the simplest form whose every flag does what the prose claims. Naive `awk`/`grep`/`wc`
+forms break silently on folded YAML blocks and meta-index files, and a stacked negation such as
+`grep -viv -e A -e B` reports everything clean. DV and QA report a command that errors, or that
+cannot match on any input, as a plan defect, never as a pass.
 
 #### Per-theme residual-grep completeness gate (REQUIRED)
 
@@ -752,27 +766,41 @@ Before marking PL0 complete, verify:
 
 ## Handoff Protocol
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, so do not Read it in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-pl`. Prev→this label: `USER→PL`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, so do not Read it in the steady path. Per-stage frontmatter template: `stage-contracts.md#tpl-pl`, already at the top of `skills/worktask/templates/planning.md` (§ PL0 Scaffolding step 1), so it needs no separate read. Prev→this label: `USER→PL`.
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage PL --prev USER` (`skills/worktask/scripts/`) to atomically patch `tasks.PL0` + the `USER→PL` edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip: apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run the one call in § Union this stage's facts in the same call to atomically patch `tasks.PL0` + the `USER→PL` edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Put the one-line goal (verb + object, ≤120 chars) in that summary — downstream stages read it as the worktask goal alongside `planning-N.md#requirements`. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip: apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the same call to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer. PL owns both `key_decisions` and the `open_questions[]` a `--auto=[decision]` delegate later resolves:
 
 ```bash
-state-patch.sh --stage PL --prev USER --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage PL --prev USER --facts '{
   "decisions": [{"id":"pl-1","summary":"≤160 chars","ref":"planning-0.md#stages"}],
   "open_questions": [{"id":"sw-PL0-1","class":"decision","ref":"planning-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```
 
 Union by `.id` (last writer wins, newest at the tail): never clobbers an upstream stage's entries, and a re-run is byte-identical. Omitting it loses the facts silently. Canonical rule: `handoff-protocol.md#facts-union`.
 
+#### One call, no jq edits to `state.json`
+
+The command is the grant prefix byte for byte, so it matches `agents/product-manager.md`'s
+`tools:` grant (`skills/shared/plugin-root-resolution.md § Invocation`); every other
+`state-patch.sh --…` step in this file (`--task-create`, `--task-block`, `--ledger-meta`) takes
+the same prefix. It writes `tasks.PL0`, the edge and the `facts` arrays. The ledger has no
+`stages{}` map to fill (`handoff-protocol.md § Ledger root`), and a refused call is fixed by its
+flags, never by rewriting the file:
+
+- exit 4, ledger dir "inside the plugin root": cwd is not the project; add
+  `--state <project>/.context/state.json`.
+- no `state.json` at all: the one case where skipping is correct (`#layer-1-fallback` item 3).
+  Never hand-write or re-version a ledger.
+
 Stage-task seeding uses the same `state-patch.sh` grant and shares this fallback ladder; there is
 no separate task tool to fall back to.
 
 #### State Patch — `facts.goal` is part of the contract
 
-`facts.goal` is non-empty in `.context/state.json` when PL returns. The orchestrator seeds it from the task description at Step 3a; refine it to the one-line goal above, and write it if the seed is missing (`jq '.facts.goal = "<goal>"'` through the same atomic temp+rename). `publish-pl-issue.sh` reads it as the first rank of both the issue title and the `## Summary` chain; without it the issue gets a kebab-slug title and an empty Summary. Also write a `title:` line into the plan's frontmatter — the chain's next rank.
+`facts.goal` is non-empty in `.context/state.json` when PL returns. The orchestrator seeds it from the task description at Step 3a; refine it to the one-line goal above, or add it if the seed lacks it, with one `Edit` of that value: `--facts` has no `goal` key, so it is the one ledger value PL writes by hand. `publish-pl-issue.sh` reads it as the first rank of both the issue title and the `## Summary` chain; without it the issue gets a kebab-slug title and an empty Summary. Also write a `title:` line into the plan's frontmatter — the chain's next rank.

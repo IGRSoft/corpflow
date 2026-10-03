@@ -7,7 +7,7 @@
 #   non-empty default would make every probe look present.
 #
 #   Symbols: corpflow_state_str, corpflow_worktask_id, corpflow_run_index,
-#   corpflow_context_dir.
+#   corpflow_context_dir, corpflow_context_dir_write.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -106,4 +106,47 @@ corpflow_context_dir() {
     return 0
   fi
   return 1
+}
+
+# corpflow_context_dir_write — the ladder for a WRITER that must land a ledger even where no
+# ledger exists yet (a first --task-create in a fresh workdir). Prints the .context
+# directory; always rc 0, because the last rank is unconditional.
+#
+#   1  $CONTEXT_DIR, verbatim
+#   2  $WORKSPACE_ROOT/.context
+#   3  $CLAUDE_PROJECT_DIR/.context
+#   4  $(git -C "$PWD" rev-parse --show-toplevel)/.context
+#   5  $PWD/.context
+#
+# Ranks 2 and 3 are honoured whenever the variable is set, not only when the directory
+# already exists: the reader ladder above skips a declared root that has no .context yet,
+# which for a writer would silently retarget the write at a lower rank.
+#
+# There is deliberately no resolve-root.sh rank and nothing derived from this file's own
+# location. The main-worktree recovery answers "which ledger owns this git tree", so a
+# workdir nested inside some other checkout (a benchmark arm under the plugin's own repo)
+# was handed that checkout's live ledger. A writer must resolve from the caller's tree.
+# Whether the answer is an acceptable place to write is the caller's call; this function
+# only names it.
+corpflow_context_dir_write() {
+  if [ -n "${CONTEXT_DIR:-}" ]; then
+    printf '%s' "$CONTEXT_DIR"
+    return 0
+  fi
+  if [ -n "${WORKSPACE_ROOT:-}" ]; then
+    printf '%s' "${WORKSPACE_ROOT}/.context"
+    return 0
+  fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    printf '%s' "${CLAUDE_PROJECT_DIR}/.context"
+    return 0
+  fi
+  local top=""
+  top=$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)
+  if [ -n "$top" ]; then
+    printf '%s' "$top/.context"
+    return 0
+  fi
+  printf '%s' "$PWD/.context"
+  return 0
 }

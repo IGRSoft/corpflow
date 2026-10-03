@@ -19,11 +19,21 @@ When an external plugin command (`apple-developer:debug`, `apple-developer:revie
 
 ## Dispatch Injection
 
-A sibling plugin's only corpflow-facing file is `CORPFLOW.md` at its repository root; nothing else in it names corpflow. So every delegation to an external plugin agent opens its prompt with:
+A sibling plugin's only corpflow-facing file is `CORPFLOW.md` at its repository root; nothing else in it names corpflow. Before every delegation to an external plugin agent, resolve that root — `<plugin>` is the target id before `:`, and the one stdout line is `<ROOT>`:
 
 ```
-Read CORPFLOW.md at the root of your plugin and follow it. It is the contract for this worktask.
+bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
 ```
+
+Then open the prompt with:
+
+```
+Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
+```
+
+Given no path, a sibling searched the disk for its contract and loaded another config's install. Exit 1 → dispatch nothing; record its stderr line on the dispatcher's skip path. A root with no `CORPFLOW.md` → `skills/shared/routing-matrix.md § Resolution`, step 4.
+
+### Model discipline block
 
 The same prompt carries section `[4b]`, the model discipline block for `task.metadata.model`, copied verbatim from `skills/shared/model-prompting.md` (`handoff-protocol.md#cache-prefix`). The sibling cannot tell which model it was dispatched on, so the delegating stage supplies the block.
 
@@ -51,11 +61,13 @@ Deferred: cross-plugin agents use the full schema. If a relaxed profile is ever 
 
 ## When AR Stage Collaborates with Platform Architects
 
-AR consults; ownership does not transfer. `software-architector` settles system-level architecture (API, backend, infra, data), consults the platform architect, and merges the result into `architecture.md`. Written below for `apple-developer:apple-architector`; for another platform substitute its architect and artifact from `agents/software-architector.md § Architect routing`.
+AR consults; ownership does not transfer, and only past `agents/software-architector.md § Consult Gate (AR)` (score ≥31 or an explicit trigger). Dispatch with `model: "sonnet"`. `software-architector` settles system-level architecture (API, backend, infra, data), consults the platform architect, and merges the result into `architecture.md`. Written below for `apple-developer:apple-architector`; for another platform substitute its architect and artifact from `agents/software-architector.md § Architect routing`.
 
 ### Delegation Prompt Template
 
 ```
+{injection line — § Dispatch Injection, with <ROOT> resolved}
+
 Provide Swift app architecture for the corpflow worktask AR stage:
 
 ## Task
@@ -76,13 +88,13 @@ Provide Swift app architecture for the corpflow worktask AR stage:
 4. Concurrency strategy (actors, async/await patterns)
 5. Navigation pattern
 6. Swift test architecture (unit, integration, UI)
-7. Write full output to .context/apple-architecture.md
-8. Return compressed summary (max 500 tokens)
+7. Decisions only, no tutorial prose or code listings: write them to .context/apple-architecture.md (≤80 lines)
+8. Return compressed summary (max 300 tokens)
 ```
 
 ### Return and Merge Protocol
 
-The architect writes `.context/apple-architecture.md` in full and returns a ≤500-token summary; `software-architector` reads the file when merging. `architecture.md` gains `## Swift App Architecture` with `### Pattern` (+ rationale), `### Module Structure`, `### State & Dependency Boundaries`, `### Concurrency Strategy` and `### Navigation Pattern`; its `## Test Architecture` splits into system tests (`software-architector`) and Swift app tests (`apple-architector`).
+The architect writes `.context/apple-architecture.md` (≤80 lines) and returns a ≤300-token summary, inside the contract's 500-token ceiling; `software-architector` reads the file when merging. `architecture.md` gains `## Swift App Architecture` with `### Pattern` (+ rationale), `### Module Structure`, `### State & Dependency Boundaries`, `### Concurrency Strategy` and `### Navigation Pattern`; its `## Test Architecture` splits into system tests (`software-architector`) and Swift app tests (`apple-architector`).
 
 System constraints override app-level preferences: where the architect's pattern conflicts with the system architecture (e.g. TCA's unidirectional flow vs. required bidirectional API streaming), `software-architector` takes the compatible option and records the trade-off in an ADR.
 
@@ -95,6 +107,8 @@ Pass compressed summaries, not documents: from `.context/<plan_file>` the featur
 ### Delegation Prompt Template
 
 ```
+{injection line — § Dispatch Injection, with <ROOT> resolved}
+
 Implement the following for the corpflow worktask DV stage:
 
 ## Task

@@ -252,7 +252,7 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), `<PREV>` = `TL` when TL ran, `AR` when AR ran without TL, `PL` when neither did — pick it from the `stages` keys actually present in `.context/state.json`, never from this list unconditionally. It atomically patches `tasks.DV0` plus the handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. It atomically patches `tasks.DV0` plus the handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 

@@ -111,6 +111,9 @@ class StageCoverage:
         )
 
 
+_PARENT_KEYS = ("parent_fresh_in", "parent_cache_creation", "parent_cache_read", "parent_out")
+
+
 @dataclass
 class StageAttribution:
     stage: str
@@ -121,6 +124,12 @@ class StageAttribution:
     cost_usd: Optional[float]
     coverage: Optional[StageCoverage] = None  # D2: encoded only when present
     arm: Optional[str] = None  # "with"/"without"; encoded only on the paired path
+    # Parent-session-only figures (``result.usage``); the fields above are summed over
+    # ``result.modelUsage``, sub-agents included. Encoded only when the two differ in source.
+    parent_fresh_in: Optional[int] = None
+    parent_cache_creation: Optional[int] = None
+    parent_cache_read: Optional[int] = None
+    parent_out: Optional[int] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -135,6 +144,9 @@ class StageAttribution:
             d["coverage"] = self.coverage.to_dict()
         if self.arm is not None:
             d["arm"] = self.arm
+        for key in _PARENT_KEYS:
+            if getattr(self, key) is not None:
+                d[key] = getattr(self, key)
         return d
 
     @classmethod
@@ -148,6 +160,7 @@ class StageAttribution:
             cost_usd=d.get("cost_usd"),
             coverage=StageCoverage.from_dict(d.get("coverage")),
             arm=d.get("arm"),
+            **{key: d.get(key) for key in _PARENT_KEYS},
         )
 
 
