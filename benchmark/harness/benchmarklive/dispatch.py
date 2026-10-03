@@ -156,43 +156,41 @@ def assemble_prompts(prompts_dir: str, stages: list, state_json_text: str,
     return out
 
 
-def _failed_attempt_cost(stdout: str) -> Optional[float]:
-    """Spend a failed attempt reported (a limit that struck mid-stage); None when none."""
-    parsed = capture_mod.parse(stdout)
-    return parsed.cost_usd if parsed is not None else None
-
-
 def _dispatch_stage(dispatcher: Dispatching, argv: list, prompt_text: str, arm: str,
                     stage: str, captures_dir: Optional[str],
                     tally: "budget_mod.RunningTally",
-                    limit_policy: Optional[usage_limit.LimitPolicy]) -> tuple:
-    """Dispatch one stage; returns ``(stdout, seconds, interrupted)``.
+                    limit_policy: Optional[usage_limit.LimitPolicy], estimate: float,
+                    interrupted: list, validate_attempt: Callable[[str], bool]) -> tuple:
+    """Dispatch one stage; returns ``(stdout, seconds)`` or ``(None, 0)`` when stopped.
 
     ``stdout`` and ``seconds`` are the attempt that succeeded. A failure is always persisted
     in full. One that is the account's usage limit is waited out and the SAME stage
     re-dispatched; its wall time is excluded, but the spend it reported is real and the
-    re-dispatch builds on its files, so its parsed usage is returned in ``interrupted`` for
-    the caller to fold into the stage, and its cost is charged to the tally at once.
+    re-dispatch builds on its files, so its parsed usage is appended to the caller's
+    ``interrupted`` list, and its cost is charged to the tally at once. Every retry is
+    budget-gated, and an interrupted attempt must pass ``validate_attempt`` before waiting.
     Anything else propagates unchanged; a limit that cannot be waited out raises
-    ``UsageLimitHit``.
+    ``UsageLimitHit`` without losing the caller's interrupted usage.
     """
-    interrupted = []
-    while True:
+    while tally.can_afford(estimate):
         timer = Timer()
         timer.start()
         try:
-            return dispatcher.run(argv, prompt_text), timer.elapsed, interrupted
+            return dispatcher.run(argv, prompt_text), timer.elapsed
         except DispatchFailure as exc:
             persist_failed_capture(captures_dir, arm, stage, exc.stdout)
             policy = limit_policy or usage_limit.LimitPolicy(wait=False)
             limit = usage_limit.detect(exc.stdout, policy.now())
             if limit is None:
                 raise
-            tally.add(_failed_attempt_cost(exc.stdout))
             parsed = capture_mod.parse(exc.stdout)
+            tally.add(parsed.cost_usd if parsed is not None else None)
             if parsed is not None:
                 interrupted.append(parsed)
+            if not validate_attempt(exc.stdout) or not tally.can_afford(estimate):
+                break
             policy.wait_out(limit, f"{arm} {stage}")
+    return None, 0.0
 
 
 _FOLDED_FIELDS = ("input_tokens", "output_tokens", "cost_usd", "cache_read", "cache_creation",
@@ -213,6 +211,35 @@ def fold_interrupted(usage: StageUsage, interrupted: list) -> None:
                 continue
             current = getattr(usage, name)
             setattr(usage, name, extra if current is None else current + extra)
+
+
+def _check_stage_isolation(stdout: str, arm: ArmSpec, result: ArmResult, stage: str,
+                           capture_mode: str, config_dir: Optional[str]) -> bool:
+    """Validate an attempt's plugin contract, retaining violations in the arm result."""
+    if capture_mode != CAPTURE_STREAM_JSON or (
+            arm.plugin_dir is None and arm.enabled_plugins is None):
+        return True
+    if arm.plugin_dir is not None:
+        check = plugin_load.check_stage_plugin(stdout, arm.plugin_dir)
+    else:
+        check = plugin_load.check_stage_bare(stdout)
+    if check.loaded is not None:
+        result.plugin = check.loaded
+    if check.plugins is not None:
+        result.plugins = check.plugins
+    if check.error is not None:
+        result.plugin_error = f"stage {stage}: {check.error}"
+        result.partial = True
+    if config_dir is not None:
+        found = config_leak.find_leaks(stdout, config_dir)
+        result.config_leaks = sorted(set(result.config_leaks or []) | set(found))
+        if found:
+            leak = (f"stage {stage}: read plugin files outside CLAUDE_CONFIG_DIR "
+                    f"{config_dir}: {found}")
+            result.plugin_error = (f"{result.plugin_error}; {leak}"
+                                   if result.plugin_error else leak)
+            result.partial = True
+    return result.plugin_error is None
 
 
 def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
@@ -237,7 +264,8 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
     ``config_dir`` set, either arm also stops at the first stage whose tool inputs name a
     plugin cache outside it (``config_leak``); stream-json only, like the load check.
     A stage that dies on the account usage limit is re-dispatched per ``limit_policy``
-    (``_dispatch_stage``); when it cannot be, the arm stops with ``usage_limit`` set.
+    only while its attempts stay isolated and affordable. Interrupted spend is retained
+    even when the stage never completes; an unresolvable limit sets ``usage_limit``.
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
@@ -253,13 +281,26 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
                                     capture_mode=capture_mode, settings_path=settings_path,
                                     plugin_dir=arm.plugin_dir,
                                     enabled_plugins=arm.enabled_plugins)
+        interrupted = []
+        validate_attempt = functools.partial(
+            _check_stage_isolation, arm=arm, result=result, stage=stage,
+            capture_mode=capture_mode, config_dir=config_dir)
         # A throw here propagates with prior stages' partial ALREADY on disk (OI-2).
         try:
-            stdout, elapsed, interrupted = _dispatch_stage(
-                dispatcher, argv, prompt_text, arm.name, stage, captures_dir, tally, limit_policy)
+            stdout, elapsed = _dispatch_stage(
+                dispatcher, argv, prompt_text, arm.name, stage, captures_dir, tally,
+                limit_policy, estimate, interrupted, validate_attempt)
         except usage_limit.UsageLimitHit as hit:
             result.usage_limit = hit
+            stdout = None
+        if stdout is None:
+            if any(parsed.has_usage for parsed in interrupted):
+                usage = StageUsage(capture_layer=1)
+                fold_interrupted(usage, interrupted)
+                result.usages.append((stage, usage))
             result.partial = True
+            if persist_partial is not None:
+                persist_partial(result)
             break
         persist_capture(captures_dir, arm.name, stage, stdout)
         usage = capture_stage_usage(stdout, arm.audit_path, stage, now_fn=now_fn)
@@ -271,28 +312,7 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
         result.dispatched += 1
         if usage.capture_layer is None:
             result.partial = True
-        if capture_mode == CAPTURE_STREAM_JSON and (
-                arm.plugin_dir is not None or arm.enabled_plugins is not None):
-            if arm.plugin_dir is not None:
-                check = plugin_load.check_stage_plugin(stdout, arm.plugin_dir)
-            else:
-                check = plugin_load.check_stage_bare(stdout)
-            if check.loaded is not None:
-                result.plugin = check.loaded
-            if check.plugins is not None:
-                result.plugins = check.plugins
-            if check.error is not None:
-                result.plugin_error = f"stage {stage}: {check.error}"
-                result.partial = True
-            if config_dir is not None:
-                found = config_leak.find_leaks(stdout, config_dir)
-                result.config_leaks = sorted(set(result.config_leaks or []) | set(found))
-                if found:
-                    leak = (f"stage {stage}: read plugin files outside CLAUDE_CONFIG_DIR "
-                            f"{config_dir}: {found}")
-                    result.plugin_error = (f"{result.plugin_error}; {leak}"
-                                           if result.plugin_error else leak)
-                    result.partial = True
+        validate_attempt(stdout)
         if persist_partial is not None:
             persist_partial(result)
         if result.plugin_error is not None:

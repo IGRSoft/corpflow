@@ -7,7 +7,7 @@
 #               in-process, so it needs no Screen Recording, Accessibility or simulator — the
 #               grants `screencapture` and a launched binary need and a DV host usually lacks.
 #
-#               The host package is scaffolded at <ctx>/tools/WindowCaptureHost/ from
+#               The host package is scaffolded at <ctx>/tools/WindowCaptureHost/<task>.<run>/ from
 #               templates/window-capture-host.swift plus the caller's --root-file.
 #
 # @arg  --worktask-id <id>     state.json worktask_id (required)
@@ -422,9 +422,10 @@ fi
 IMAGES_DIR="${CTX_DIR}/images/${WORKTASK_ID}"
 LOGS_DIR="${CTX_DIR}/logs"
 AUDIT_LOG="${LOGS_DIR}/audit.jsonl"
-HOST_DIR="${CTX_DIR}/tools/WindowCaptureHost"
-mkdir -p "$IMAGES_DIR" "$LOGS_DIR"
-TS="$(date -u +%Y%m%d-%H%M%S)"
+HOST_BASE="${CTX_DIR}/tools/WindowCaptureHost"
+mkdir -p "$IMAGES_DIR" "$LOGS_DIR" "$HOST_BASE"
+HOST_DIR=$(mktemp -d "${HOST_BASE}/${TASK_ID}.XXXXXX")
+TS="$(date -u +%Y%m%d-%H%M%S)-${HOST_DIR##*/}"
 BUILD_LOG="${LOGS_DIR}/build-macos-window-${TS}.log"
 RUN_LOG="${LOGS_DIR}/monitor-macos-window-${TS}.log"
 MANIFEST="${IMAGES_DIR}/screenshots-${TASK_ID}.md"

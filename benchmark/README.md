@@ -185,8 +185,13 @@ reset plus 2 minutes (polling every 15 min when no time is printed; 6h cap, cumu
 re-dispatches that stage only. Spend and tokens the interrupted attempt reported are added to
 that stage in the record and charged to the budget: the re-dispatch builds on its files, so
 leaving it out understates the stage (`KNOWN-BAD-RECORDS.md`, `live-20261001T085738Z`). Its wall
-time stays out. Off, or over the cap, the run writes its partial record and exits
-**6**, naming the reset. Any failed stage's full stdout is kept as
+time stays out. Before waiting or retrying, the interrupted attempt must pass the same plugin
+and config-isolation checks as a successful attempt (violations exit **5**), and the updated
+tally must still afford another attempt (otherwise a budget-limited partial exits **4**).
+Off, or over the wait cap, the run writes its partial record and exits **6**, naming the
+reset. Interrupted spend and tokens remain in the partial record even without a successful
+retry; its stage attribution does not increment the completed `stage_count`.
+Any failed stage's full stdout is kept as
 `workdirs/<run_id>/captures/<arm>-<STAGE>.failed.jsonl`.
 
 **bench-live exit codes:** 0 success · 1 WITH ledger seed refused · 2 pre-flight decline ·

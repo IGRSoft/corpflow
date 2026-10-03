@@ -1,5 +1,5 @@
 // WindowCaptureHost — copied by scripts/macos-window-capture.sh into
-// <ctx>/tools/WindowCaptureHost/Sources/WindowCaptureHost/, next to the caller's CaptureRoot.swift,
+// <ctx>/tools/WindowCaptureHost/<task>.<run>/Sources/WindowCaptureHost/, next to CaptureRoot.swift,
 // which must define `@MainActor func captureRoot() -> some View`.
 //
 // The real root view runs in a real NSWindow and is driven by mouse events delivered through

@@ -32,11 +32,24 @@ stub_swift() { # [build-exit]
         exit 0 ;;
       build)
         [ "'"${1:-0}"'" = 0 ] || { echo "/x/CaptureRoot.swift:2:1: error: boom"; exit 1; }
+        if [ -n "${CAPTURE_BARRIER_DIR:-}" ]; then
+          if grep -q ROOT_A "$3/Sources/WindowCaptureHost/CaptureRoot.swift"; then
+            touch "$CAPTURE_BARRIER_DIR/a-ready"
+            for ((attempt = 0; attempt < 500; attempt++)); do
+              [ ! -f "$CAPTURE_BARRIER_DIR/b-ready" ] || break
+              sleep 0.02
+            done
+            [ -f "$CAPTURE_BARRIER_DIR/b-ready" ] || exit 1
+          else
+            touch "$CAPTURE_BARRIER_DIR/b-ready"
+          fi
+        fi
         mkdir -p "$3/.build/debug"
-        cat > "$3/.build/debug/WindowCaptureHost" <<"HOST"
-#!/usr/bin/env bash
+        printf "#!/usr/bin/env bash\nROOT=%q\n" "$(cat "$3/Sources/WindowCaptureHost/CaptureRoot.swift")" \
+          > "$3/.build/debug/WindowCaptureHost"
+        cat >> "$3/.build/debug/WindowCaptureHost" <<"HOST"
 while read -r verb name; do
-  [ "$verb" = shot ] && printf "\211PNG\r\n\032\nhost" > "$1/$name.png"
+  [ "$verb" = shot ] && printf "\211PNG\r\n\032\nhost%s" "$ROOT" > "$1/$name.png"
 done
 exit 0
 HOST
@@ -89,9 +102,73 @@ capture() { # [extra args...]
   stub_swift
   capture --probe
   assert_success
-  assert_output --partial "probe=$CTX/tools/WindowCaptureHost/probe/main-menu.png"
+  assert_output --partial "probe=$CTX/tools/WindowCaptureHost/DV0."
+  assert_output --partial "/probe/main-menu.png"
   [ ! -e "$CTX/images/wt-test/screenshots-DV0.md" ]
   [ ! -e "$CTX/logs/audit.jsonl" ] || ! grep -q screenshot_captured "$CTX/logs/audit.jsonl"
+}
+
+@test "probe invocations of one task keep separate hosts and artifacts" {
+  stub_swift
+  printf 'ROOT_A\n' > "$WD/root.swift"
+  capture --probe
+  assert_success
+  local first_path
+  first_path=$(printf '%s\n' "$output" | sed -n 's/^probe=\(.*main-menu.png\) bytes=.*/\1/p')
+  printf 'ROOT_B\n' > "$WD/root.swift"
+  capture --probe
+  assert_success
+  local second_path
+  second_path=$(printf '%s\n' "$output" | sed -n 's/^probe=\(.*main-menu.png\) bytes=.*/\1/p')
+  [ "$first_path" != "$second_path" ]
+  run grep -a ROOT_A "$first_path"
+  assert_success
+  run grep -a ROOT_B "$second_path"
+  assert_success
+}
+
+@test "parallel DV tasks build and run their own capture roots" {
+  stub_swift
+  export CAPTURE_BARRIER_DIR="$WD/barrier"
+  mkdir -p "$CAPTURE_BARRIER_DIR"
+  jq '.tasks.DV1 = .tasks.DV0' "$CTX/state.json" > "$CTX/state.next.json"
+  mv "$CTX/state.next.json" "$CTX/state.json"
+  printf 'ROOT_A\n' > "$WD/root.swift"
+  printf 'ROOT_B\n' > "$WD/other-root.swift"
+  printf 'shot main-menu\n' > "$WD/steps.txt"
+  (
+    cd "$WD/app"
+    env CONTEXT_DIR="$CTX" PATH="$STUB_PATH" bash "$PLUGIN_ROOT/$SCRIPT" \
+      --worktask-id wt-test --task-id DV0 --product AppKitLib \
+      --root-file "$WD/root.swift" --steps "$WD/steps.txt"
+  ) > "$WD/first.log" 2>&1 &
+  local first_pid=$! attempt
+  for ((attempt = 0; attempt < 500; attempt++)); do
+    [ ! -f "$CAPTURE_BARRIER_DIR/a-ready" ] || break
+    sleep 0.02
+  done
+  [ -f "$CAPTURE_BARRIER_DIR/a-ready" ]
+  (
+    cd "$WD/app"
+    env CONTEXT_DIR="$CTX" PATH="$STUB_PATH" bash "$PLUGIN_ROOT/$SCRIPT" \
+      --worktask-id wt-test --task-id DV1 --product AppKitLib \
+      --root-file "$WD/other-root.swift" --steps "$WD/steps.txt"
+  ) > "$WD/second.log" 2>&1 &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+  run grep -a ROOT_A "$CTX/images/wt-test/dv-DV0-01-main-menu.png"
+  assert_success
+  run grep -a ROOT_B "$CTX/images/wt-test/dv-DV1-01-main-menu.png"
+  assert_success
+  run bash "$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh" --validate-manifest \
+    "$CTX/images/wt-test/screenshots-DV0.md" --task-id DV0 --images-dir "$CTX/images/wt-test"
+  assert_success
+  run bash "$PLUGIN_ROOT/skills/worktask/scripts/attach-visual-evidence.sh" --validate-manifest \
+    "$CTX/images/wt-test/screenshots-DV1.md" --task-id DV1 --images-dir "$CTX/images/wt-test"
+  assert_success
+  run find "$CTX/logs" -name '*-macos-window-*.log'
+  [ "${#lines[@]}" -eq 4 ]
 }
 
 @test "arg errors: missing --product, bad step grammar and a sixth shot all exit 1" {

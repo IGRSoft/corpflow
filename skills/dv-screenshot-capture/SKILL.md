@@ -293,7 +293,7 @@ Runs § Worktask guard, the dispatch table, the ladder to the tool_missing floor
 
 #### macos-window-capture.sh
 
-Scaffolds `<ctx>/tools/WindowCaptureHost/` from `templates/window-capture-host.swift` plus `--root-file`, builds it against `--product`, feeds it the steps, then moves the PNGs into `images/` and appends their manifest rows. Exit 1 = bad arguments or step grammar, more than 5 shots, a non-library `--product` (the library products are listed), or a ledger mismatch; 2 `swift_unavailable` (not macOS, or no `swift`); 3 `package_unreadable`, `host_build_failed` (the compiler's first errors go to stderr), `host_run_failed` or `shot_missing`, with nothing moved into `images/`.
+Scaffolds a unique `<ctx>/tools/WindowCaptureHost/<TASK_ID>.<run>/` package per invocation from `templates/window-capture-host.swift` plus `--root-file`, builds it against `--product`, feeds it the steps, then moves the PNGs into `images/` and appends their manifest rows. Host sources, build output, staging/probe artifacts, and logs are isolated across parallel DV tasks and repeated invocations. Exit 1 = bad arguments or step grammar, more than 5 shots, a non-library `--product` (the library products are listed), or a ledger mismatch; 2 `swift_unavailable` (not macOS, or no `swift`); 3 `package_unreadable`, `host_build_failed` (the compiler's first errors go to stderr), `host_run_failed` or `shot_missing`, with nothing moved into `images/`.
 
 #### Helper scripts
 

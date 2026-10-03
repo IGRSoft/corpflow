@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from benchmarklive import usage_limit
-from benchmarklive.dispatch import DispatchFailure, dispatch
+from benchmarklive.dispatch import CAPTURE_STREAM_JSON, DispatchFailure, dispatch
 
 _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _helpers import (fake_estimate_runner, load_json, make_live_sandbox,  # noqa: E402
@@ -214,6 +214,17 @@ def limit_failure(text=BANNER):
     return DispatchFailure("claude -p failed (rc=1)", stdout=stdout, returncode=1)
 
 
+def paid_limit_failure(cost=0.4, plugins=None, extra=()):
+    events = [json.loads(line) for line in limit_stdout(extra=extra).splitlines()]
+    if plugins is not None:
+        events[0]["plugins"] = plugins
+    events[-1]["total_cost_usd"] = cost
+    events[-1]["usage"] = {"input_tokens": 12, "output_tokens": 34,
+                           "cache_read_input_tokens": 5, "cache_creation_input_tokens": 6}
+    return DispatchFailure("claude -p failed (rc=1)",
+                           stdout="\n".join(json.dumps(event) for event in events), returncode=1)
+
+
 class DispatchRetries(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="limit-")
@@ -224,16 +235,18 @@ class DispatchRetries(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def run_dispatch(self, dispatcher, stages, wait=True, policy=None):
+    def run_dispatch(self, dispatcher, stages, wait=True, policy=None, budget=100.0,
+                     estimate=0.001, capture_mode="json", config_dir=None):
         policy = policy or usage_limit.LimitPolicy(
             wait=wait, sleep=self.sleeps.append, now=lambda: NOON_UTC, log=self.warnings.append)
         return dispatch(
-            workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
+            workdir=self.sb.run_id, budget=budget, record_path=self.sb.record_path,
             benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root,
             dispatcher=dispatcher, env={"ANTHROPIC_API_KEY": "k"},
-            estimate_runner=fake_estimate_runner(0.001), stages=stages,
+            estimate_runner=fake_estimate_runner(estimate), stages=stages,
             git_sha_runner=stub_git_sha, without_arm="skip", stderr=self.warnings.append,
-            seed_runner=self.seed, limit_policy=policy)
+            seed_runner=self.seed, limit_policy=policy, capture_mode=capture_mode,
+            config_dir=config_dir)
 
     def captures(self, name):
         return os.path.join(self.sb.workdir_path, "captures", name)
@@ -264,9 +277,9 @@ class DispatchRetries(unittest.TestCase):
                                               "usage": {"input_tokens": 1, "output_tokens": 1}})
         failing = DispatchFailure("x", stdout=stdout, returncode=1)
         ok = single_object_usage(cost=0.05)
-        # A $1 share leaves no room for a second stage once $1 is charged.
+        # A $2 share permits the retry but no second stage once $1.05 is charged.
         rc = dispatch(
-            workdir=self.sb.run_id, budget=1.05, record_path=self.sb.record_path,
+            workdir=self.sb.run_id, budget=2.0, record_path=self.sb.record_path,
             benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root,
             dispatcher=ScriptedDispatcher(failing, ok, ok), env={"ANTHROPIC_API_KEY": "k"},
             estimate_runner=fake_estimate_runner(0.001), stages=["PL", "AR"],
@@ -281,6 +294,105 @@ class DispatchRetries(unittest.TestCase):
         stage = load_json(self.sb.record_path)["stages"][0]
         self.assertAlmostEqual(stage["cost_usd"], 1.05)
         self.assertEqual(stage["out"], 50 + 1)  # re-dispatch + interrupted attempt
+
+    def test_a_paid_interruption_blocks_an_unaffordable_retry_before_waiting(self):
+        fake = ScriptedDispatcher(paid_limit_failure(), single_object_usage(cost=0.4))
+        rc = self.run_dispatch(fake, ["PL"], budget=0.5, estimate=0.2)
+        self.assertEqual(rc, 4)
+        self.assertEqual(len(fake.calls), 1)
+        self.assertEqual(self.sleeps, [])
+        record = load_json(self.sb.record_path)
+        self.assertTrue(record["live_partial"])
+        self.assertEqual(record["paths"]["with"]["stage_count"], 0)
+        self.assertAlmostEqual(record["paths"]["with"]["cost_usd"], 0.4)
+        self.assertEqual(record["stages"][0]["out"], 34)
+
+    def test_the_budget_is_rechecked_after_each_interruption(self):
+        fake = ScriptedDispatcher(paid_limit_failure(), paid_limit_failure(),
+                                  single_object_usage(cost=0.1))
+        rc = self.run_dispatch(fake, ["PL"], budget=1.0, estimate=0.2)
+        self.assertEqual(rc, 4)
+        self.assertEqual(len(fake.calls), 2)
+        self.assertEqual(len(self.sleeps), 1)
+        record = load_json(self.sb.record_path)
+        self.assertEqual(record["paths"]["with"]["stage_count"], 0)
+        self.assertAlmostEqual(record["paths"]["with"]["cost_usd"], 0.8)
+        self.assertEqual(record["stages"][0]["out"], 68)
+
+    def test_declining_to_wait_keeps_interrupted_spend_and_tokens(self):
+        for policy in (
+                usage_limit.LimitPolicy(wait=False),
+                usage_limit.LimitPolicy(cap_s=1, now=lambda: NOON_UTC)):
+            with self.subTest(wait=policy.wait):
+                fake = ScriptedDispatcher(single_object_usage(cost=0.1),
+                                          paid_limit_failure(), single_object_usage())
+                rc = self.run_dispatch(fake, ["PL", "AR"], policy=policy)
+                self.assertEqual(rc, 6)
+                self.assertEqual(len(fake.calls), 2)
+                record = load_json(self.sb.record_path)
+                arm = record["paths"]["with"]
+                self.assertEqual(arm["stage_count"], 1)
+                self.assertAlmostEqual(arm["cost_usd"], 0.5)
+                self.assertEqual(arm["tokens"]["in"], 112)
+                self.assertEqual(arm["tokens"]["out"], 84)
+                self.assertEqual(arm["tokens"]["cache_read"], 5)
+                self.assertEqual(arm["tokens"]["cache_creation"], 6)
+                self.assertEqual([stage["stage"] for stage in record["stages"]], ["PL", "AR"])
+                self.assertAlmostEqual(record["stages"][1]["cost_usd"], 0.4)
+
+    def test_a_wrong_plugin_on_an_interrupted_attempt_stops_before_retrying(self):
+        wrong = os.path.join(self.tmp, "wrong-tree")
+        failure = paid_limit_failure(plugins=[{"name": "corpflow", "path": wrong}])
+        success = json.dumps({"type": "system", "subtype": "init", "plugins": [
+            {"name": "corpflow", "path": self.tmp}]}) + "\n" + single_object_usage()
+        fake = ScriptedDispatcher(failure, success)
+        rc = self.run_dispatch(fake, ["PL"], capture_mode=CAPTURE_STREAM_JSON)
+        self.assertEqual(rc, 5)
+        self.assertEqual(len(fake.calls), 1)
+        self.assertEqual(self.sleeps, [])
+        record = load_json(self.sb.record_path)
+        self.assertTrue(record["live_partial"])
+        self.assertEqual(record["era"]["plugin_path"], os.path.realpath(wrong))
+        self.assertEqual(record["paths"]["with"]["stage_count"], 0)
+        self.assertAlmostEqual(record["paths"]["with"]["cost_usd"], 0.4)
+        self.assertTrue(any("corpflow loaded from" in warning for warning in self.warnings))
+
+    def test_a_config_leak_on_an_interrupted_attempt_stops_before_retrying(self):
+        prefix = os.path.join(self.tmp, "outside", "plugins", "cache", "stale")
+        read = {"type": "assistant", "message": {"content": [{
+            "type": "tool_use", "name": "Read", "input": {
+                "file_path": os.path.join(prefix, "1", "agents", "developer.md")}}]}}
+        failure = paid_limit_failure(
+            plugins=[{"name": "corpflow", "path": self.tmp}], extra=[read])
+        success = json.dumps({"type": "system", "subtype": "init", "plugins": [
+            {"name": "corpflow", "path": self.tmp}]}) + "\n" + single_object_usage()
+        fake = ScriptedDispatcher(failure, success)
+        rc = self.run_dispatch(fake, ["PL"], capture_mode=CAPTURE_STREAM_JSON,
+                               config_dir=os.path.join(self.tmp, "config"))
+        self.assertEqual(rc, 5)
+        self.assertEqual(len(fake.calls), 1)
+        self.assertEqual(self.sleeps, [])
+        record = load_json(self.sb.record_path)
+        self.assertEqual(record["era"]["config_leaks"]["with"], [prefix])
+        self.assertAlmostEqual(record["paths"]["with"]["cost_usd"], 0.4)
+
+    def test_a_clean_interrupted_stream_can_retry_and_fold_usage(self):
+        plugins = [{"name": "corpflow", "path": self.tmp}]
+        failure = paid_limit_failure(plugins=plugins)
+        success = json.dumps({"type": "system", "subtype": "init", "plugins": plugins}) \
+            + "\n" + single_object_usage(cost=0.1)
+        fake = ScriptedDispatcher(failure, success)
+        rc = self.run_dispatch(fake, ["PL"], capture_mode=CAPTURE_STREAM_JSON,
+                               config_dir=os.path.join(self.tmp, "config"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(fake.calls), 2)
+        self.assertEqual(len(self.sleeps), 1)
+        record = load_json(self.sb.record_path)
+        self.assertFalse(record.get("live_partial", False))
+        self.assertEqual(record["paths"]["with"]["stage_count"], 1)
+        self.assertAlmostEqual(record["paths"]["with"]["cost_usd"], 0.5)
+        self.assertEqual(record["stages"][0]["out"], 84)
+        self.assertEqual(record["era"]["config_leaks"]["with"], [])
 
     def test_the_arm_ledger_seeding_survives_the_retry(self):
         arm = self.sb.arm_dir("with")
