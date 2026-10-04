@@ -26,6 +26,8 @@ All notable changes to this project are documented here. The format is based on 
 - technical-writer: a project keeping its guidelines in `AGENTS.md` gets a `CLAUDE.md` that
   imports them with `@AGENTS.md`, since Claude Code skips `AGENTS.md` whenever a `CLAUDE.md`
   exists.
+- Live benchmark: both arms also switch off the `plugin-authoring@builtin` plugin that Claude Code
+  2.1.289 ships, so the WITHOUT arm again loads zero plugins.
 
 ### Compatibility
 
