@@ -12,6 +12,20 @@ All notable changes to this project are documented here. The format is based on 
   haiku → `gpt-6-luna`, sonnet/opus → `gpt-6-sol`, and fable → `gpt-6-astra`.
 - Provider-neutral `BASE_PLUGIN_ROOT` and `BASE_PLUGIN_DATA` resolution, including safe plugin-path
   joining and support for portable, Codex, and Claude package markers.
+- `skills/shared/plan-content.md`: one canonical plan-content rule ported from superpowers v6.4.2.
+  A plan records decisions (files, signatures, the spec's values, test assertions), not a
+  transcript of the code; it adds a step scan and a proportion check to self-review.
+- `/prompt-audit` gains a planning-stage plan-content rule and a consistency check that flags
+  unreferenced asset files under `skills/` for deletion.
+
+### Changed
+
+- PL0 (`pl0-procedure.md`, product-manager), AR (software-architector), TL (team-lead) and
+  `request-plan` point at `plan-content.md` by section instead of carrying their own wording:
+  each names the decisions its artifact records, and DV writes the implementation bodies.
+- technical-writer: a project keeping its guidelines in `AGENTS.md` gets a `CLAUDE.md` that
+  imports them with `@AGENTS.md`, since Claude Code skips `AGENTS.md` whenever a `CLAUDE.md`
+  exists.
 
 ### Compatibility
 

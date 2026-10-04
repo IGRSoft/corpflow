@@ -229,12 +229,35 @@ inflation finding whose Fix line downgrades it to the plain imperative.
 `--fix` leaves this rule alone, as it does `## Constraints (DO NOT)` blocks: a mechanical
 downgrade cannot tell earned emphasis from inflated.
 
+### Planning-Stage Rules
+
+These run on planning-stage assets only: an agent that owns PL, AR or TL in
+`skills/shared/stage-codes.md` (when agents are in scope) and the planning skill
+`skills/request-plan/SKILL.md` (when skills are in scope). They also read one file outside every
+loaded class, `skills/worktask/references/pl0-procedure.md`, together with
+`agents/product-manager.md`.
+
+1. **Plan content.** A planning-stage asset whose artifact instructions ask for full implementation
+   code, or that names no `skills/shared/plan-content.md` section, is a warning; the rationale is
+   `plan-content.md § Rule — decisions, not a transcript`. Fix: point at that file by § heading
+   plus one clause naming what this stage's artifact records, never a restatement.
+
 ### Consistency Rules
 
 1. Platform values: `<apple|android|web|systems|backend|ai|all>`, matching `skills/shared/platform-detection.md`. A command whose scope excludes some platforms may list a subset (the UI-only `design-*` commands use `<apple|android|web|all>`). Flag Apple sub-platforms (`iOS|macOS`) or a platform advertised with no content path behind it.
 2. Option syntax: `--option <value>` or `--flag`
 3. Section ordering: Options → Examples → Output Format, then the command's own sections
 4. Terminology standardized
+5. No unreferenced asset files: § Consistency rule 5 — unreferenced asset files
+
+#### Consistency rule 5 — unreferenced asset files
+
+Runs when skills are in scope, and reads every file under `skills/`, not only `SKILL.md`. A file
+there that nothing in the repository names, by path or basename, is unreferenced: nothing loads it,
+and a reader takes it for live guidance. Search the whole repository for the basename, root files
+such as `plugin.json`, `Makefile` and `run-tests.sh` included, excluding the file itself and
+`.context/`. Only an empty result is a warning, and its Fix is deleting the file. Exempt `SKILL.md`
+(loaded by name) and files under a `fixtures/` or `evals/` directory (read by directory).
 
 ### Frontmatter Parsing Convention
 

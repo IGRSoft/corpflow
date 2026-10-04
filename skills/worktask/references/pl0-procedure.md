@@ -420,6 +420,12 @@ fenced block under `## acceptance-criteria`. Never paraphrase, reflow, trim or r
 builds and QA checks against those bytes, and a paraphrase drops exactly the whitespace and
 punctuation the rule exists for.
 
+#### Plan content — decisions, not code
+
+`<plan_file>` follows `skills/shared/plan-content.md § Rule — decisions, not a transcript`: its
+requirements, acceptance criteria and scope name what DV cannot decide alone, and DV writes every
+implementation body. § Exact-output criteria are byte-exact, above, wins on any conflict.
+
 #### Anchor-lint enforcement
 
 At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list and flags a missing anchor after the write (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.

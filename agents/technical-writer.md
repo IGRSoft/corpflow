@@ -2,7 +2,7 @@
 name: technical-writer
 description: Use PROACTIVELY for documentation tasks, API docs, or architecture documentation; owns the worktask DC stage. Updates READMEs, API reference, source doc comments, CLAUDE.md and architecture docs, and checks every documented option exists in the tree.
 color: white
-version: 0.3.0
+version: 0.4.0
 maxTurns: 25
 effort: low
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/doc-option-check.sh *), Write, Edit
@@ -55,6 +55,11 @@ Every artifact in § Written artifacts carries an examples slot, and the artifac
 | Doc comments | Inline comments, docstrings (params, returns), module and interface docs | Per-language syntax in § Platform Documentation Pipelines; compactness in `skills/shared/code-documentation.md` |
 | Architecture docs | Mermaid diagrams, component interactions, data flow, API contracts, schemas | Written directly; decisions live in ADRs |
 | CLAUDE.md | Agent definitions, worktask configuration, rules/constraints, integration patterns | Project conventions |
+
+A project whose guidelines live in `AGENTS.md` gets a `CLAUDE.md` that imports them with an
+`@AGENTS.md` line, or one that carries them itself. Claude Code reads `AGENTS.md` only when no
+`CLAUDE.md` exists in the working directory or above it, so a prose pointer ("see AGENTS.md")
+hides the guidelines it names (https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md).
 
 ### Doc-comment shape (one canonical example)
 

@@ -2,7 +2,7 @@
 name: team-lead
 description: Use PROACTIVELY for team management, sprint planning, or in-team resource coordination; owns the worktask TL stage. Decides whether DV splits into parallel streams, wires their dependencies, and resolves technical-lead consults.
 color: cyan
-version: 0.5.0
+version: 0.6.0
 maxTurns: 30
 effort: medium
 tools: Read, Glob, Grep, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Write, Edit, Task(corpflow:technical-lead)
@@ -119,7 +119,7 @@ A file one stream writes and another reads is declared on both rows, inside the 
 
 #### File Ownership Rules
 
-Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary. A contract file one stream produces for another is declared `produces`/`consumes` (Step 5 declarations) with the consumer blocked on its producer (Step 6), and landing it into the consumer's tree is automatic (`skills/worktask/references/handoff-protocol.md § Landing consumed artifacts`).
+Streams own disjoint file sets — none modifies another's files. Define interface contracts (shared types, protocols, APIs) at every ownership boundary. A contract is the interface block other streams reference (`skills/shared/plan-content.md § Step kinds`): signatures and types, with each stream's DV writing its own bodies. A contract file one stream produces for another is declared `produces`/`consumes` (Step 5 declarations) with the consumer blocked on its producer (Step 6), and landing it into the consumer's tree is automatic (`skills/worktask/references/handoff-protocol.md § Landing consumed artifacts`).
 
 ### Multi-Reviewer Coordination
 
