@@ -2,7 +2,7 @@
 name: request-plan
 description: Use when the user asks for a plan, an approach, a breakdown, "how would you tackle this", or scoping — even without the word "plan". Turn a free-form request into a context-aware plan (goal, scope, phases, effort, risks) and recommend `/worktask`.
 argument-hint: '"<request>" [--save]'
-version: 0.4.1
+version: 0.5.0
 ---
 
 # Request Plan
@@ -155,6 +155,9 @@ Fill the template in `references/plan-template.md` exactly (fixed section order)
   oversight. Any follow-up you name anywhere in the plan belongs in P1 or P2; folding it into P0
   hides that it is deferrable and collapses a three-phase plan to one.
 - **Tests live inside each phase's scope**, never as a separate phase (per the estimation skill).
+- **Phase scope names decisions, not code**: the files, interfaces and spec values each phase
+  fixes, per `skills/shared/plan-content.md § Rule — decisions, not a transcript`. The worktask's
+  DV writes the bodies.
 
 ##### Effort
 

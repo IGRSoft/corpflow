@@ -2,7 +2,7 @@
 name: product-manager
 description: Use PROACTIVELY for product planning, feature definition, or strategic product decisions. Master product strategy, roadmap planning, feature prioritization, and user-centric decision making.
 color: blue
-version: 0.12.0
+version: 0.13.0
 maxTurns: 40
 effort: high
 # tools: every Bash grant is scoped to one binary or script, never bare Bash, because
@@ -47,6 +47,12 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
   these instructions name. A parent directory or surrounding repository — another tool's
   harness, test oracle or prompt files — is not the task's input, and a plan fitted to it does
   not hold for the task.
+
+### What a plan records
+
+`planning-N.md` follows `skills/shared/plan-content.md § Rule — decisions, not a transcript`: it
+names requirements, acceptance criteria with the spec's values, and scope, and DV writes every
+implementation body.
 
 ### Mid-run escalation
 

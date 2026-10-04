@@ -7,7 +7,8 @@ plugins and the WITH arm exactly corpflow plus the siblings it delegates to.
 Verified against Claude Code 2.1.284, in a cwd nested inside a git repo:
 
 * The eval dir alone is not plugin-free. Account-synced plugins load regardless of
-  ``enabledPlugins``, and two builtins (agents-md, telemetry) load beside them.
+  ``enabledPlugins``, and the builtins in ``BUILTIN_PLUGINS`` load beside them
+  (verified on 2.1.289).
 * ``--setting-sources project,local`` still leaks: the repo's own
   ``.claude/settings.local.json`` enables plugins there, and a benchmark workdir sits
   inside that repo. An empty source list is the only value that loads no settings file.
@@ -32,7 +33,7 @@ SETTING_SOURCES = ""
 # but the WITHOUT arm's "loaded nothing" evidence would be unreadable with them present,
 # so both arms switch them off. A future builtin surfaces as a WITHOUT-arm refusal
 # naming it, never as a silent difference.
-BUILTIN_PLUGINS = ("agents-md@builtin", "telemetry@builtin")
+BUILTIN_PLUGINS = ("agents-md@builtin", "telemetry@builtin", "plugin-authoring@builtin")
 
 # Plugins corpflow delegates to; they are part of the product under test, so the WITH
 # arm enables them and the WITHOUT arm does not.

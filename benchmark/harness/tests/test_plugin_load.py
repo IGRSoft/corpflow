@@ -286,7 +286,8 @@ class BaselineIsPluginFree(unittest.TestCase):
             self.assertEqual(argv[argv.index("--setting-sources") + 1], "")
         docs = {arm: json.loads(argv[argv.index("--settings") + 1]) for arm, argv in argvs.items()}
         self.assertEqual(docs["without"]["enabledPlugins"],
-                         {"agents-md@builtin": False, "telemetry@builtin": False})
+                         {"agents-md@builtin": False, "telemetry@builtin": False,
+                          "plugin-authoring@builtin": False})
         self.assertTrue(docs["with"]["enabledPlugins"]["apple-developer@apple-developer"])
         # The deny-list survives inside the inline document.
         self.assertEqual(docs["with"]["permissions"], {"deny": []})

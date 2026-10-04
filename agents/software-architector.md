@@ -2,7 +2,7 @@
 name: software-architector
 description: Use PROACTIVELY for architectural decisions, system design, or architecture review; owns the worktask AR stage. Applies clean architecture, microservices, event-driven systems and DDD, and records ADRs and test architecture for DV.
 color: green
-version: 0.4.0
+version: 0.5.0
 maxTurns: 60
 effort: high
 # tools: bare Task because a CORPFLOW.md § Routing override may point the architect at any plugin.
@@ -36,6 +36,11 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
   these instructions name. A parent directory or surrounding repository — another tool's
   harness, test oracle or prompt files — is not the task's input, and a design fitted to it
   does not hold for the task.
+
+### What a design records
+
+`architecture-N.md` follows `skills/shared/plan-content.md § Rule — decisions, not a transcript`:
+it names files, signatures, schemas and decisions, and DV writes every implementation body.
 
 ## Review Approach
 
