@@ -1252,11 +1252,15 @@ dispatch on `inproc`. Per-stage routing outranks an operator-set `CLAUDE_CODE_EF
 carries `CLAUDE_CODE_EFFORT_LEVEL=<stamped tier>` regardless. The audit row's `effort_transport`
 says which of three surfaces applied:
 
+###### Effort transport surfaces
+
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
 | headless `claude -p --agent` | `--effort <tier>` AND `CLAUDE_CODE_EFFORT_LEVEL=<tier>` in the child's env (the env var is the carrier the documented precedence honours; the flag is there for audit readability) | `dispatch-flag` |
 | in-process, tier equals the agent's own frontmatter | the frontmatter itself | `frontmatter` |
 | in-process, the agent has no `effort:` key in its own frontmatter | nothing — `Task()` carries no effort parameter and there is no frontmatter to fall back to | `none` |
+
+###### Audit every dispatch surface
 
 This same call happens at every stage-dispatch surface, not only here: the main loop's own
 Step 6 `Task()` dispatch, a headless-eligible DV row's fan-out dispatch, and Step C.3's batch
@@ -1264,6 +1268,8 @@ resolver all call `effort-route.sh` before choosing a surface, and each writes i
 `effort_route` audit row (`action: "effort_route"`) carrying the route line's fields plus
 `effort_resolved`/`effort_resolved_reason`, `session_id`, `argv[]` and the cost/usage fields —
 this section is not a special case, it is the one place the shared contract is spelled out.
+
+###### Observe the applied tier
 
 Only `none` records the unapplied literal: the row's `effort_resolved` is
 `"requested, not applied"`, never a tier the session did not run at. Under `dispatch-flag`, the
@@ -1273,11 +1279,8 @@ per `--ledger-root`), while it runs. `headless-dispatch.sh` looks them up itself
 exits, matching on the row's `metadata.dedupe_key` prefix (`"<session_id>:"`) — never on
 `headless-poststop.sh`'s replay, which has no lookup role here at all. Only when no row matches
 (the child ran no tool call that wrote one) does `effort_resolved` stay `null` with
-`effort_resolved_reason: "no_hook_rows"`, never a value copied from the request. The resolver's
-own bumped tier almost always differs from the emitting agent's
-baseline frontmatter tier (that is the bump's point), so the resolver dispatch routes headless
-in the common case — `frontmatter`/`none` cover the tier-equal and frontmatter-less cases, not
-the usual one.
+`effort_resolved_reason: "no_hook_rows"`, never a value copied from the request. A resolver
+bump usually differs from the agent baseline, so it usually routes headless.
 
 ##### Step C.0a — after a headless child exits
 
@@ -1292,11 +1295,20 @@ so it is checked for by exit code alone, before any
 run against a child that never started. Everything that follows applies only to a `result:"ok"`
 (or `result:"error"` handled above at the spawn) return.
 
+###### Register and replay the child
+
 A `headless` route does not end at the spawn: once `headless-dispatch.sh` returns, the
 orchestrator calls `skills/worktask/scripts/headless-poststop.sh` to replay the installed
 `plugin.json`'s `SubagentStop` hooks (state-merge, the DV gates, megatask-monitor, and the
 PL/FN/ST `agent-stop` matchers) against a synthesized payload, because a `claude -p --agent`
-main session never fires `SubagentStop` on itself. `blocked:true` in the reply resumes the
+main session never fires `SubagentStop` on itself. Pass `--ledger-root` for the orchestrator
+ledger and `--workspace` for the child worktree. Before replaying any hook, the helper upserts
+the child-to-task mapping with `state-patch.sh --dispatch`; registration failure exits 2 and
+escalates. This keeps retries bound to the same task even after state-merge completes its row.
+
+###### Resume a blocked child
+
+`blocked:true` in the reply resumes the
 child with `claude -p --resume <uuid>` (same argv and env, the block reason plus
 `additionalContext` on stdin, `--attempt` incremented) — up to the cap of 2 resumes
 (`--attempt` 1, 2, 3). The resume argv carries `--resume <uuid>` alone, never paired with

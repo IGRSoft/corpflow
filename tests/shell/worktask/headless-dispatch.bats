@@ -725,4 +725,3 @@ EOF3
   assert_output --partial '"effort_resolved":null'
   assert_output --partial '"effort_resolved_reason":"no_hook_rows"'
 }
-

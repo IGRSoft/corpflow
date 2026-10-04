@@ -561,7 +561,11 @@ Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium 
 
 ### The tier is a request, not a guarantee
 
-`metadata.effort` is honoured on the headless dispatch surface (`claude -p --agent … --effort`) and, for an agent carrying its own `effort:` frontmatter, in-process too — but only at that agent's OWN frontmatter tier: `Task()` takes no effort parameter, so a bumped tier that differs from the frontmatter tier cannot be carried in-process at all. That gap is exactly what `skills/worktask/scripts/effort-route.sh` routes on: a bumped tier equal to the frontmatter tier stays in-process (nothing to gain by leaving); a bumped tier that differs is routed headless, where `--effort` actually carries it. The bump is computed and recorded on every path and applied on the surface the route decision picked. Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. Every resolver audit row carries `effort_transport` saying which of the three transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
+`metadata.effort` is honoured on the headless dispatch surface (`claude -p --agent … --effort`) and, for an agent carrying its own `effort:` frontmatter, in-process too — but only at that agent's OWN frontmatter tier: `Task()` takes no effort parameter, so a bumped tier that differs from the frontmatter tier cannot be carried in-process at all. That gap is exactly what `skills/worktask/scripts/effort-route.sh` routes on: a bumped tier equal to the frontmatter tier stays in-process (nothing to gain by leaving); a bumped tier that differs is routed headless, where `--effort` actually carries it. The bump is computed and recorded on every path and applied on the surface the route decision picked.
+
+#### Routing precedence and transport audit
+
+Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. Every resolver audit row carries `effort_transport` saying which of the three transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
 
 #### Recorded vs applied tiers
 

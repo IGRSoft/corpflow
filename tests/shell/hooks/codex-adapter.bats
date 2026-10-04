@@ -57,3 +57,72 @@ JSON
   assert_success
   echo "$output" | jq -e '.agent_type == "corpflow:developer" and (.corpflow_task_id? == null)'
 }
+
+@test "absolute workspace paths reach tool and post-hook normalization without a duplicate prefix" {
+  local wd physical payload mode
+  wd="$(mk_tmpworkdir)"; physical="$(cd "$wd" && pwd -P)"
+  payload=$(jq -cn --arg p "$wd/new dir/file.txt" '{tool_name:"apply_patch",
+    tool_input:{patch:("*** Begin Patch\n*** Add File: " + $p + "\n+x\n*** End Patch")}}')
+  for mode in tool patch-post; do
+    run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
+      bash "$PLUGIN_ROOT/$ADAPTER" --mode "$mode" --target "$CAPTURE" <<< "$payload"
+    assert_success
+    echo "$output" | jq -e --arg p "$physical/new dir/file.txt" '.tool_input.file_path == $p'
+  done
+}
+
+@test "relative and absolute artifact patches both reach the real pre-write gate" {
+  local wd path payload
+  wd="$(mk_tmpworkdir)"; mkdir -p "$wd/.context"
+  printf '{}\n' > "$wd/.context/state.json"
+  for path in .context/development-0.md "$wd/.context/development-0.md"; do
+    payload=$(jq -cn --arg p "$path" '{hook_event_name:"PreToolUse",tool_name:"apply_patch",
+      tool_input:{patch:("*** Begin Patch\n*** Add File: " + $p + "\n+## Approach\n*** End Patch")}}')
+    run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
+      bash "$PLUGIN_ROOT/$ADAPTER" --mode patch-pre --target hooks/anchor-preflight.sh \
+      -- --event pre <<< "$payload"
+    assert_success
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
+    assert_output --partial "## Approach"
+  done
+}
+
+@test "an absolute artifact path reaches the real post-write control-byte check" {
+  local wd payload
+  wd="$(mk_tmpworkdir)"; mkdir -p "$wd/.context"
+  printf '{}\n' > "$wd/.context/state.json"
+  printf 'bad\000text\n' > "$wd/.context/notes.md"
+  payload=$(jq -cn --arg p "$wd/.context/notes.md" '{hook_event_name:"PostToolUse",tool_name:"apply_patch",
+    tool_input:{patch:("*** Begin Patch\n*** Update File: " + $p + "\n@@\n+x\n*** End Patch")}}')
+  run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
+    bash "$PLUGIN_ROOT/$ADAPTER" --mode patch-post --target hooks/anchor-preflight.sh \
+    -- --event post <<< "$payload"
+  assert_failure 2
+  assert_output --partial "0x00"
+}
+
+@test "patch paths outside the workspace or through escaping symlinks never reach the target" {
+  local wd outside capture payload
+  wd="$(mk_tmpworkdir)"; outside="$(mk_tmpworkdir)"; capture="$wd/paths"
+  mkdir -p "$wd-sibling" "$wd/inside"
+  ln -s "$outside" "$wd/escape"
+  ln -s "$wd/inside" "$wd/local"
+  printf 'valid\n' > "$wd/inside/file.txt"
+  printf 'outside\n' > "$outside/file.txt"
+  ln -s inside/file.txt "$wd/file-link"
+  ln -s "$outside/file.txt" "$wd/outside-link"
+  ln -s cycle-b "$wd/cycle-a"
+  ln -s cycle-a "$wd/cycle-b"
+  payload=$(jq -cn --arg w "$wd" --arg o "$outside" '{tool_name:"apply_patch",tool_input:{patch:
+    ("*** Begin Patch\n*** Add File: " + $o + "/outside.txt\n+x\n*** Add File: " + $w + "-sibling/no.txt\n+x\n"
+    + "*** Add File: ../outside.txt\n+x\n*** Add File: escape/no.txt\n+x\n"
+    + "*** Add File: " + $w + "/escape/no.txt\n+x\n*** Add File: local/yes.txt\n+x\n"
+    + "*** Update File: " + $w + "/outside-link\n+x\n*** Update File: " + $w + "/file-link\n+x\n"
+    + "*** Update File: cycle-a\n+x\n*** End Patch")}}')
+  run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" CODEX_CAPTURE_FILE="$capture" \
+    bash "$PLUGIN_ROOT/$ADAPTER" --mode patch-post --target "$CAPTURE" <<< "$payload"
+  assert_success
+  [ "$(cat "$capture")" = "$(cd "$wd" && pwd -P)/inside/yes.txt
+$(cd "$wd" && pwd -P)/inside/file.txt" ]
+  rmdir "$wd-sibling"
+}

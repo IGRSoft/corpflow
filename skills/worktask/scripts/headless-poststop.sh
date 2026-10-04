@@ -17,11 +17,11 @@
 #   matching what the real runtime sets on a resumed turn; a stage still blocked at attempt 3
 #   is `escalate` — the two resumes are spent, and the caller (the orchestrator) hands the
 #   stage to the error chain instead of a third `claude -p --resume`. This script only
-#   replays the hooks; the orchestrator runs the actual resume round-trip between attempts.
+#   registers the child and replays the hooks; the orchestrator runs the resume round-trip.
 #
 #   Symbols: none exported — this file is a CLI.
 #
-# @exitcode 2  usage error or an unreadable plugin.json
+# @exitcode 2  usage error, unreadable plugin.json, or child registration failure
 #
 # Minimum shell: bash 3.2+ (macOS default) — no associative arrays, no `local -n`.
 
@@ -35,13 +35,15 @@ usage() {
 usage:
   headless-poststop.sh --task <ID> --orchestrator-session <uuid> --session <uuid>
                         --agent <plugin:agent>
-                        [--workspace <path>] [--artifact <path>]
+                        [--workspace <path>] [--ledger-root <path>] [--artifact <path>]
                         [--plugin-json <path>] [--effort-level <tier>]
                         [--duration-ms <n>] [--result-text <text>] [--attempt 1|2|3]
 
 --orchestrator-session is the orchestrator's own session id (payload session_id).
 --session is the headless child's uuid (payload agent_id) — the two are never the same
 value once dispatch runs headless.
+--ledger-root names the orchestrator's ledger; defaults to WORKSPACE_ROOT, then --workspace.
+The child is registered there before any hook runs. A failed registration refuses the replay.
 
 Prints one JSON line: {"blocked":bool,"reasons":[...],"additional_context":"...",
 "hooks_run":[...],"escalate":bool}. Exit 0 whether or not a hook blocked — the
@@ -55,6 +57,7 @@ SESSION=""
 ORCH_SESSION=""
 AGENT=""
 WORKSPACE=""
+LEDGER_ROOT=""
 ARTIFACT=""
 PLUGIN_JSON="${_HP_PLUGIN_ROOT}/.claude-plugin/plugin.json"
 EFFORT_LEVEL=""
@@ -69,6 +72,7 @@ while [ "$#" -gt 0 ]; do
     --orchestrator-session) ORCH_SESSION="${2:-}"; shift 2 ;;
     --agent) AGENT="${2:-}"; shift 2 ;;
     --workspace) WORKSPACE="${2:-}"; shift 2 ;;
+    --ledger-root) LEDGER_ROOT="${2:-}"; shift 2 ;;
     --artifact) ARTIFACT="${2:-}"; shift 2 ;;
     --plugin-json) PLUGIN_JSON="${2:-}"; shift 2 ;;
     --effort-level) EFFORT_LEVEL="${2:-}"; shift 2 ;;
@@ -93,6 +97,18 @@ command -v jq > /dev/null 2>&1 || {
   exit 2
 }
 [[ "$ATTEMPT" =~ ^[123]$ ]] || usage
+
+# The gate must retain the child-to-task mapping after state-merge completes the row.
+# Otherwise a retry sees no in_progress task and incorrectly treats the DV stop as a no-op.
+LEDGER_ROOT="${LEDGER_ROOT:-${WORKSPACE_ROOT:-$WORKSPACE}}"
+if [ -z "$LEDGER_ROOT" ] || [ ! -f "$LEDGER_ROOT/.context/state.json" ] \
+  || ! bash "$_HP_DIR/state-patch.sh" --state "$LEDGER_ROOT/.context/state.json" \
+      --dispatch "$TASK" "$SESSION" launched > /dev/null; then
+  printf >&2 'headless-poststop.sh: cannot register child in ledger; no hooks replayed\n'
+  exit 2
+fi
+WORKSPACE_ROOT="$LEDGER_ROOT"
+export WORKSPACE_ROOT
 
 # Task id -> bare stage code: strip the trailing run digits (DV0 -> DV), the same shape
 # every other stamped-task-id reader in this plugin already assumes.

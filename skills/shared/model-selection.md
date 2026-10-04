@@ -109,10 +109,15 @@ place a tier is decided, and `tests/shell/worktask/agent-effort-frontmatter.bats
 in parity. No `model:` key exists on any agent file (sw-PL1-1); model selection stays a
 per-dispatch `Task()` argument.
 
+#### Effort precedence
+
 Precedence, documented order: `CLAUDE_CODE_EFFORT_LEVEL`, when set in the process environment
 (the operator's own pin, or a headless child's inherited one), outranks every other source.
 Below that, an active subagent's `effort:` frontmatter beats the session level (`--effort`,
 `effortLevel` in project/managed/`--settings`, `/effort`), which beats a model's launch default.
+
+#### Effort caps and observation
+
 A managed or user `maxEffortLevel` (top-level, or per model under `modelSettings`) still clamps
 the resolved tier on top of either source, silently and with no error. A tier the target model
 does not support falls back downward to the highest one it does (§ xhigh routing above); Haiku

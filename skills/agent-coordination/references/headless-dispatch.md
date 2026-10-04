@@ -58,6 +58,8 @@ The route decision that chooses whether a tier reaches this surface at all lives
 
 One canonical invocation; substitute the per-stage row plus concrete IDs from `task.metadata` at call time. `claude agents run` is not a subcommand and there is no top-level `--cwd` (§ Dispatch surface drift), so the real recipe `cd`s into the worktree first and dispatches through the top-level print-mode surface — re-derived and implemented in `skills/worktask/scripts/headless-dispatch.sh`, which validates every field against a closed allowlist before building this argv array. The tier is carried by BOTH `--effort` and the child's own `CLAUDE_CODE_EFFORT_LEVEL` env var — the env var is what the documented precedence actually honours, the flag is there for audit readability — and `WORKSPACE_ROOT` names the orchestrator's ledger root, never the worktree the child's cwd points at:
 
+### Print-mode invocation
+
 ```bash
 cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
   claude -p --agent "$AGENT" --model "$MODEL" --effort "$EFFORT" \
@@ -67,7 +69,11 @@ cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" CLAUDE_CODE_EFFORT_LEVEL="$EFFOR
 
 `--permission-prompts none` denies instead of hanging on anything that would otherwise prompt. Never `--bg` (it auto-commits and opens a draft PR, racing the FN gate) and never `--dangerously-skip-permissions`/`--allow-dangerously-skip-permissions` — `headless-dispatch.sh` has no code path that can add either.
 
+### Permission cap and ledger inputs
+
 `$MODE` is never applied verbatim: `headless-dispatch.sh --parent-mode <mode>` caps it at the orchestrator's own session mode (narrower of the two on a fixed order — a headless child can never run wider than the same stage would in-process), and PL/SR/FN/RE additionally never exceed `manual` regardless of that cap. An omitted `--parent-mode` defaults to `manual`, never "no cap"; an unrecognized one is refused (exit 2, nothing spawned) — failing closed, not silently defaulting. `--effort`/`--permission-mode`/`--workspace`/`--artifact` are all optional on the CLI: when left out, the script reads them itself from `<ledger-root>/.context/state.json`, so a caller dispatching through a shell string (the orchestrator's own `Bash` tool call, for one) need not carry those ledger values through it at all.
+
+### Stage permission defaults
 
 | Stage | `$AGENT` | `$MODE` |
 |---|---|---|

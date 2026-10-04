@@ -139,7 +139,7 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp e
 | Key | Value | Purpose |
 |---|---|---|
 | `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Task()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
-| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Every agent file also carries a static `effort:` key next to `maxTurns:`, held equal to its matrix row by `tests/shell/worktask/agent-effort-frontmatter.bats` (`skills/shared/stage-codes.md § Model alias notes`) — that key fixes the in-process tier. A row's stamped `metadata.effort` deviating from that static tier is the condition the effort router acts on. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
+| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Agent frontmatter `effort:` fixes the in-process tier and matches the matrix (`agent-effort-frontmatter.bats`; `stage-codes.md § Model alias notes`). A row's stamped `metadata.effort` deviating from that static tier is the condition the effort router acts on. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
 
 ##### Propagation fields — gates
 

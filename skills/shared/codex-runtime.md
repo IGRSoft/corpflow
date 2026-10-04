@@ -32,6 +32,8 @@ write boundaries, and output contract. Translate only the host operations:
 | `EnterWorktree(path)` / worktree shell | Run with `workdir` set to the absolute worktree and pass it to children as `WORKSPACE_ROOT` |
 | `/name` handoff | `$name` in Codex-facing output |
 
+### Translation boundaries
+
 Do not translate prose examples, persisted agent aliases, or ledger schemas. `cc-update` remains a
 Claude Code maintenance workflow even when `$cc-update` launches it from Codex.
 
@@ -44,6 +46,9 @@ Claude Code maintenance workflow even when `$cc-update` launches it from Codex.
 3. Call `spawn_agent` before writing a dispatch row. Spawn with a stable
    `cf_<stage>_<attempt>` task name, fresh context, the workspace path, role instructions, context
    references, and completion contract in the message. The task name is not an agent id.
+
+### Record and coordinate a launched agent
+
 4. Only after `spawn_agent` succeeds, record its returned identifier with
    `state-patch.sh --dispatch`; keep the alias in
    `model_requested` and store the concrete GPT model as `model_resolved` when completing the row.
@@ -54,6 +59,8 @@ Claude Code maintenance workflow even when `$cc-update` launches it from Codex.
 Never synthesize an agent id or mark a dispatch `launched` before the tool returns one. Only call
 `wait_agent` when at least one real spawned agent is still live; an empty agent list is a dispatch
 failure, not a reason to wait.
+
+### Persist runtime identifiers
 
 Codex versions may return an `agent_id` plus a canonical `task_name`, or only the canonical name.
 Persist `agent_id` when present; otherwise persist the exact `task_name` (such as

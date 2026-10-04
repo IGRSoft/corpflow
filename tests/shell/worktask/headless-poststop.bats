@@ -11,7 +11,12 @@ SCRIPT="skills/worktask/scripts/headless-poststop.sh"
 
 setup() {
   RIG="$(mk_tmpworkdir)"
-  mkdir -p "$RIG/hooks" "$RIG/ws"
+  mkdir -p "$RIG/hooks" "$RIG/ws/.context"
+  cat > "$RIG/ws/.context/state.json" <<'EOF'
+{"tasks":{"DV0":{"status":"in_progress","metadata":{"agent":"corpflow:developer"}},
+"FN0":{"status":"in_progress","metadata":{"agent":"corpflow:project-manager"}},
+"QA0":{"status":"in_progress","metadata":{"agent":"corpflow:qa-engineer"}}},"facts":{}}
+EOF
 
   cat > "$RIG/hooks/pass.sh" << 'EOF'
 #!/usr/bin/env bash
@@ -321,4 +326,55 @@ EOF
   assert_success
   LAST_ROW="$(tail -1 "$ORCH_ROOT/.context/logs/audit.jsonl")"
   [ "$(jq -r '.metadata.headless_child' <<< "$LAST_ROW")" = "DV9" ]
+}
+
+@test "real screenshot gates stay blocked across retries after state-merge completes the task" {
+  local ledger stream attempt
+  ledger="$(mk_tmpworkdir)"; stream="$(mk_tmpworkdir)"
+  mkdir -p "$ledger/.context/logs"
+  cat > "$ledger/.context/state.json" <<'EOF'
+{"worktask_id":"replay-test","platform":"web","run_index":0,"facts":{},"tasks":{
+"DV0":{"status":"in_progress","metadata":{"agent":"corpflow:developer","requires_screenshots":true}},
+"DV1":{"status":"in_progress","metadata":{"agent":"corpflow:developer","requires_screenshots":true}}}}
+EOF
+  cat > "$ledger/.context/development-0.md" <<'EOF'
+---
+handoff:
+  stage: DV
+  verdict: ok
+  summary: "implementation without screenshots"
+---
+EOF
+  for attempt in 1 2 3; do
+    run_script "$SCRIPT" --task DV0 --session child-retry --orchestrator-session parent \
+      --agent corpflow:developer --workspace "$stream" --ledger-root "$ledger" \
+      --artifact "$ledger/.context/development-0.md" --attempt "$attempt"
+    assert_success
+    [ "$(field blocked)" = true ]
+    assert_output --partial "task DV0 on platform web has no capture rows"
+    [ "$(jq -r '.tasks.DV0.status' "$ledger/.context/state.json")" = completed ]
+    [ "$(jq -r '.tasks.DV1.status' "$ledger/.context/state.json")" = in_progress ]
+    [ ! -e "$stream/.context/state.json" ]
+  done
+  [ "$(field escalate)" = true ]
+  # A gate-approved policy change provides a positive control after the repeated blocks.
+  jq '.tasks.DV0.metadata.requires_screenshots = false' "$ledger/.context/state.json" > "$ledger/state.next"
+  mv "$ledger/state.next" "$ledger/.context/state.json"
+  run_script "$SCRIPT" --task DV0 --session child-retry --orchestrator-session parent \
+    --agent corpflow:developer --workspace "$stream" --ledger-root "$ledger" \
+    --artifact "$ledger/.context/development-0.md" --attempt 3
+  assert_success
+  [ "$(field blocked)" = false ]
+}
+
+@test "a missing ledger or task refuses the replay before any hooks run" {
+  rm "$RIG/ws/.context/state.json"
+  run_poststop
+  assert_failure 2
+  assert_output --partial "no hooks replayed"
+  printf '{"tasks":{},"facts":{}}\n' > "$RIG/ws/.context/state.json"
+  run_poststop
+  assert_failure 2
+  assert_output --partial "no hooks replayed"
+  refute_output --partial '"hooks_run"'
 }

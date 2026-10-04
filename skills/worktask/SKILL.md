@@ -502,6 +502,11 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
 // cut-off = `transient`; other classes come from the artifact or return text.
 // errorBasename — last ":"-segment of subagent_type (corpflow:developer → developer).
 
+```
+
+###### Shell quoting for headless dispatch
+
+```typescript
 // shellQuoteAll — the headless-dispatch.sh Bash-string call site's only quoting layer: every
 // token is single-quoted, with an embedded single quote escaped as close-quote, literal quote,
 // reopen-quote ('\''). Belt-and-suspenders over the caller's own validation (task id regex,
@@ -1232,32 +1237,16 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ##### Step 6 — session identifiers (r4-2)
 
+Keep these bindings outside the dispatch arm so the resume loop can reuse them. The child UUID
+is distinct from the orchestrator session. Read the parent's identity and permission mode from
+its runtime environment; the ledger has no orchestrator row.
+
 ```typescript
-    // Hoisted to this scope, not the headless-route `if` below, because the resume block
-    // further down (its own, separate `if (launchAck?.headless)`) reads the same three names
-    // — a `const` scoped only to the headless-route arm would be out of scope there.
-    //
-    // childSessionId: a fresh uuid for the child THIS dispatch may spawn headless — the value
-    // headless-dispatch.sh reports under and headless-poststop.sh replays against, distinct
-    // from orchestratorSessionId below (the orchestrator never spawns itself a child).
     const childSessionId = crypto.randomUUID();
-    // orchestratorSessionId/orchestratorSessionMode: this orchestrator's own session id and
-    // permission mode, read once from the runtime when it reports them. An older runtime
-    // reports neither, hence the `?? null` / `?? "manual"` fallbacks — orchestratorSessionMode
-    // feeds parentMode below, orchestratorSessionId is passed to headless-poststop.sh so it can
-    // tag the replayed hook payload with the parent that dispatched it.
-    // Both come from the runtime's own env, the only channel this orchestrator process has
-    // for learning about the session it itself is running in — never from the ledger, which
-    // has no row for the orchestrator's own session.
     const orchestratorSessionId = process.env.CLAUDE_SESSION_ID ?? null;
     const orchestratorSessionMode = process.env.CLAUDE_PERMISSION_MODE ?? null;
-    // parentMode: assigned (not declared) inside the headless-route arm below, at the point
-    // effectiveModel/route are known; declared here with `let` so the resume block can still
-    // read the value the first attempt computed.
     let parentMode;
-    // writePromptFile: the composed prompt (or, on a resume, the block reason +
-    // additionalContext) written once per attempt so headless-dispatch.sh can read it on
-    // stdin via `--prompt <file>` instead of a giant shell-string argument.
+    // Each attempt reads its prompt from stdin via --prompt, not a shell-string argument.
     function writePromptFile(taskId, attempt, contents) {
       const p = `.context/logs/prompt-${taskId}-${attempt}.txt`;
       fs.writeFileSync(p, contents);
@@ -1267,90 +1256,72 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ##### Step 6 — route before every dispatch, headless or in-process
 
+Every dispatch surface calls this router: main loop, DV fan-out, Step 6.6a/C.0a and C.3 resolvers.
+For frontmatter-less platform agents, pass `--role-baseline` from PL0's role-matrix mapping.
+
 ```typescript
-    // Every stage dispatch — this main-loop call, a DV row's fan-out dispatch (§ Step 4.8's
-    // per-stream loop, same call shape), and the resolver dispatches at Step 6.6a/C.0a and
-    // Step C.3 — calls scripts/effort-route.sh first: never a special case at the resolver
-    // alone. Baseline is effectiveModel's own frontmatter tier, or --role-baseline for a
-    // frontmatter-less platform agent (pl0-procedure.md's role-matrix mapping resolves it).
     const route = JSON.parse(spawnSync("bash", ["skills/worktask/scripts/effort-route.sh",
       "--agent", subagentType, "--model", effectiveModel,
       "--requested", full.metadata.effort ?? effortBaseline(subagentType)],
       { encoding: "utf8" }).stdout || "{}");
     appendAudit({ actor: "orchestrator", action: "effort_route", subject: task.id, result: "ok",
-      metadata: { ...route, session_id: null } });  // session_id fills in once headless spawns
+      metadata: { ...route, session_id: null } });  // filled once headless spawns
 ```
 
 ##### Step 6 — Task() dispatch (inproc) or headless-dispatch.sh (headless)
 
+Step 4.8 pins each DV workspace before dispatch; the [7] banner carries it. Do not pass
+`isolation: "worktree"`: that would fork an unrecorded tree blocked by dv-tree-preflight.
+The helper owns the worktree cwd, ledger-root env, validation and side-effect checks. It reads
+ledger-owned effort, permission mode, workspace and artifact itself; do not interpolate those
+values into the Bash command. `shellQuoteAll` quotes the orchestrator-owned arguments.
+
 ```typescript
-    const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];  // from handoff-protocol.md#handoff-schemas; may be undefined
-    // A DV row's tree is fixed at dispatch by the dispatcher: Step 4.8 settled
-    // tasks.<ID>.metadata.workspace_path (re-pinned if a concurrent row shared it) before this
-    // call, and the composed [7] banner carries it. No
-    // `isolation: "worktree"` argument — the Agent tool's fork is a tree the ledger never
-    // recorded, and dv-tree-preflight.sh --assigned blocks every edit inside it.
+    const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];
     let launchAck;
     if (route.route === "headless") {
-      // headless-dispatch.sh owns the cd-into-worktree, the WORKSPACE_ROOT=<ledger root> vs.
-      // cwd=<stream worktree> split, argv validation and the fallback/side-effect check. The
-      // child it spawns outlasts the Bash tool's 10-minute cap (ad6 Spawn), so the dispatch
-      // itself runs DETACHED and the orchestrator blocks on a background waiter — never a
-      // foreground spawnSync, which would be capped exactly like the child it wraps. `--out`
-      // is the canonical per-attempt log path (ad6 Spawn); leaving it unset would scatter the
-      // child's transcript into an untracked mktemp file no later step can find.
-      //
-      // hdArgs carries ONLY values this orchestrator owns outright — never
-      // full.metadata.effort/permission_mode/workspace_path/artifact. Those four are ledger
-      // content, and this dispatch line is a shell STRING (the Bash tool has no argv-array
-      // form), so a ledger value reaching it would cross the CWE-78 boundary this call exists
-      // to avoid. headless-dispatch.sh reads them itself from <ledger-root>/.context/state.json
-      // keyed by --task, under the same allowlist it already applies to every CLI flag — the
-      // script's fail-closed validation runs regardless of which side supplied the value.
       const attempt = 1;
       const outLog = `.context/logs/headless-${task.id}-${attempt}.jsonl`;
-      // promptFile: the composed+spliced prompt (built above at "splice the injections"),
-      // written once per attempt so it can cross on stdin rather than as a shell-string arg.
       const promptFile = writePromptFile(task.id, attempt, prompt);
-      // parentMode is this orchestrator's own session mode, read once at launch when the
-      // runtime reports it; unknown (older runtime, no such signal) defaults to "manual" —
-      // sw-SR0-1's fixed, conservative answer — never treated as "no cap". Assigned here (the
-      // `let` lives in § Step 6 — session identifiers above) so the resume block below, in a
-      // separate `if`, can read the same value this attempt computed.
       parentMode = orchestratorSessionMode ?? "manual";
+```
+
+###### Headless launch arguments
+
+Run detached and wait through Monitor: a foreground call would impose the Bash tool's
+10-minute cap. Always set `--out` to the canonical attempt log.
+
+```typescript
       const hdArgs = ["--task", task.id, "--agent", subagentType, "--model", effectiveModel,
         "--ledger-root", _orch_root,
         "--parent-mode", parentMode, "--baseline", route.baseline,
         "--prompt", promptFile, "--session-id", childSessionId,
         "--out", outLog];
-      // shellQuoteAll: single-quote each token, escaping embedded single quotes
-      // ('\'' — close, literal quote, reopen). Every token above is already
-      // orchestrator-validated (task id regex, session-id uuid regex, a fixed path) before it
-      // reaches this call, so this is belt-and-suspenders, not the only guard.
-      const hd = Monitor(Bash({ run_in_background: true,   // agent-coordination § Monitor Tool
+      const hd = Monitor(Bash({ run_in_background: true,
         command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(hdArgs)}` }));
       const hdResult = JSON.parse(hd.stdout || "{}");
+```
+
+###### Refused launch and safe fallback
+
+Exit 2 refuses malformed or untrusted inputs; exit 3 reports side effects. Neither permits
+fallback. Only `warn` means no headless work ran (`cli_missing`, `cli_below_floor`, `opted_out`,
+`exit_before_artifact`, `auth_failed`, `agent_unresolved`): dispatch in-process at the baseline
+and omit `.headless` so no stop hooks replay for a nonexistent child.
+
+```typescript
       if (hd.status === 3) { escalate(task.id, "side_effects_present"); continue; }
-      // A usage error or refused value (b10) prints nothing on stdout, so hdResult is `{}` —
-      // neither "warn" nor a real launch. exit 2 is NOT one of ad6's enumerated safe-fallback
-      // reasons (cli_missing/cli_below_floor/auth_failed/agent_unresolved/exit_before_artifact/
-      // opted_out): it means the dispatch line itself is malformed, which an in-process fallback
-      // would hide rather than surface. It escalates, and is never recorded as a launch a later
-      // poststop replay would then run against a child that never started.
       if (hd.status === 2) { escalate(task.id, "headless_dispatch_refused"); continue; }
       if (hdResult.result === "warn") {
-        // A warn fallback ran no real work headless (cli_missing, cli_below_floor, opted_out,
-        // exit_before_artifact, auth_failed or agent_unresolved) — trusting it as done would
-        // silently drop the stage. Dispatch in-process at the frontmatter baseline instead,
-        // same call shape as the non-headless arm, and leave launchAck WITHOUT `.headless` so
-        // the replay block below is skipped: a stage that ran in-process has no SubagentStop
-        // chain for headless-poststop.sh to replay.
         launchAck = Task({
-          subagent_type: subagentType,
-          model: effectiveModel,
-          prompt,
+          subagent_type: subagentType, model: effectiveModel, prompt,
           ...(stageSchema ? { schema: stageSchema } : {}),
         });
+```
+
+###### Launch acknowledgement and in-process route
+
+```typescript
       } else {
         launchAck = { agent_id: childSessionId, headless: true, exit: hd.status, result: hdResult };
       }
@@ -1358,61 +1329,68 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
       launchAck = Task({
         subagent_type: subagentType,
         model: effectiveModel,
-        prompt,  // the composer's stdout with [6]/[7] spliced in, never full.description
-        ...(stageSchema ? { schema: stageSchema } : {}),  // omitted entirely when the runtime lacks schema support → exactly today's path
+        prompt,  // composed stdout with [6]/[7] spliced in, never full.description
+        ...(stageSchema ? { schema: stageSchema } : {}),
       });
     }
-
 ```
 
 ##### Step 6 — after a headless child exits: replay, resume, escalate
 
+A `claude -p --agent` main session does not fire SubagentStop. Replay the chain with
+`headless-poststop.sh`, which registers the child-to-task mapping in the orchestrator ledger
+**before any hook runs**. This keeps gates bound to the task across state-merge and retries,
+including concurrent DV rows. Registration failure exits 2 and escalates without replaying.
+Pass the ledger root separately from the child's workspace; Step 6a's later upsert is idempotent.
+
+A blocked reply resumes the same child with the reasons and additional context. Replay attempts
+1, 2 and 3 allow at most two resumes; a blocked third attempt escalates. A refused or `warn`
+resume also escalates: side effects already exist, so no in-process fallback is allowed.
+
 ```typescript
-    // The in-process SubagentStop chain never fires for a `claude -p --agent` main session, so
-    // the orchestrator replays it: headless-poststop.sh with --attempt starting at 1. A
-    // blocked reply resumes the SAME child (--resume childSessionId, same argv/env, the block
-    // reason + additionalContext on stdin instead of the original brief) and re-replays at
-    // --attempt+1. The cap is 2 resumes (--attempt reaches 3); still blocked there is
-    // escalate:true, handed to § Error Handling exactly as an in-process blocked return would.
-    // ad2: "the in-process fallback is not used here, because side effects already exist" — a
-    // resume round-trip that comes back `warn`, refused (exit 2) or side-effect-blocked (exit
-    // 3) escalates too, never falling back to Task() over work the first attempt already left.
-    // `escalated` is a real loop exit, not the `continue` a do…while would route straight back
-    // to its own (still-true) condition.
     if (launchAck?.headless) {
       let attempt = 1;
       let poststop;
       let escalated = false;
       do {
-        poststop = JSON.parse(spawnSync("bash", ["skills/worktask/scripts/headless-poststop.sh",
+```
+
+###### Register and replay stop hooks
+
+```typescript
+        const replay = spawnSync("bash", ["skills/worktask/scripts/headless-poststop.sh",
           "--task", task.id, "--session", childSessionId,
           "--orchestrator-session", orchestratorSessionId, "--agent", subagentType,
+          "--ledger-root", _orch_root,
           "--workspace", full.metadata.workspace_path, "--artifact", full.metadata.artifact,
           "--effort-level", launchAck.result?.effort_resolved ?? "",
-          "--attempt", String(attempt)], { encoding: "utf8" }).stdout);
+          "--attempt", String(attempt)], { encoding: "utf8" });
+        try {
+          if (replay.status !== 0) throw new Error("replay failed");
+          poststop = JSON.parse(replay.stdout);
+          if (typeof poststop.blocked !== "boolean") throw new Error("invalid verdict");
+        } catch {
+          escalate(task.id, "headless_poststop_refused"); escalated = true; break;
+        }
+```
+
+###### Prepare the resume prompt
+
+Re-entering headless-dispatch applies the permission cap and side-effect snapshot again.
+The script needs both `--session-id` for reporting and `--resume` for the same child; it omits
+`--session-id` from the CLI argv when resuming, avoiding a refused pair or a fork.
+
+```typescript
         if (poststop.blocked && !poststop.escalate) {
           attempt += 1;
-          // spawnHeadlessResume: the --resume round-trip, defined here rather than as a
-          // separate helper — the SAME detached dispatch as the initial call above, just
-          // --resume added and the block reason + additionalContext on stdin instead of the
-          // original brief. Re-running headless-dispatch.sh means the P1 mode cap and the
-          // side-effect snapshot both apply again on the resumed attempt, exactly as CWE-834
-          // requires — a missing or garbled poststop stdout on the resumed attempt counts as
-          // escalate, never as an empty parse.
           const resumeOutLog = `.context/logs/headless-${task.id}-${attempt}.jsonl`;
-          // blockPromptFile: poststop.block_reason + poststop.additional_context, written to a
-          // fresh file under .context/logs/ — the resumed child reads this on stdin instead of
-          // the original brief, exactly as the comment above states.
           const blockPromptFile = writePromptFile(task.id, attempt,
-            `${poststop.block_reason}\n\n${poststop.additional_context ?? ""}`);
-          // --session-id together with --resume on the CLI ARGV needs --fork-session (it would
-          // fork a new session rather than resuming this one) — headless-dispatch.sh already
-          // drops --session-id from its own argv build whenever --resume is also given (see
-          // the script's ARGV assembly), so passing both flags here is safe: the CLI never
-          // sees the pair. --session-id still has to reach the SCRIPT itself (r4-1), because
-          // the script's internal SESSION_ID variable — used to report session_id on the
-          // result line and to key the post-exit audit-log lookup for effort_resolved — is
-          // set from that flag alone, never inferred from --resume.
+            `${poststop.reasons.join("\n")}\n\n${poststop.additional_context ?? ""}`);
+```
+
+###### Dispatch the same child again
+
+```typescript
           const resumeArgs = ["--task", task.id, "--agent", subagentType,
             "--model", effectiveModel, "--ledger-root", _orch_root,
             "--parent-mode", parentMode,
@@ -1422,6 +1400,11 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
           const resumeHd = Monitor(Bash({ run_in_background: true,
             command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(resumeArgs)}` }));
           const resumeResult = JSON.parse(resumeHd.stdout || "{}");
+```
+
+###### Refuse unsafe resume fallback
+
+```typescript
           if (resumeHd.status === 3) {
             escalate(task.id, "side_effects_present"); escalated = true; break;
           }
@@ -1429,13 +1412,18 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
             escalate(task.id, "headless_dispatch_refused"); escalated = true; break;
           }
           if (resumeResult.result === "warn") {
-            // ad2: no in-process fallback on a resume — the first attempt's side effects
-            // already exist, so a warn here (the resumed child never ran real work either)
-            // escalates instead of silently re-running the ORIGINAL brief via Task().
             escalate(task.id, "headless_resume_warn"); escalated = true; break;
           }
           launchAck = { agent_id: childSessionId, headless: true, exit: resumeHd.status, result: resumeResult };
         }
+```
+
+###### Enforce the replay cap
+
+`break` leaves the retry loop; `continue` below advances the outer stage loop only after the
+escalation. Never re-enter a still-blocked do/while after a refused resume.
+
+```typescript
       } while (poststop.blocked && !poststop.escalate);
       if (escalated) { continue; }
       if (poststop.blocked && poststop.escalate) { escalate(task.id, "headless_poststop_block"); continue; }
@@ -2118,6 +2106,11 @@ Corrected artifact exists only now; source resumes here not at route that parked
     //      its OWN model, at effort_for_resolver(metadata.effort, metadata.model) from
     //      scripts/effort-ladder.sh. One dispatch for the whole set. No metadata.effort on the
     //      row => audit resolver_skipped/effort_unstamped and fall through; never guess a tier.
+```
+
+###### Route the resolver tier
+
+```typescript
     //      Call scripts/effort-route.sh with the bumped tier and the agent's own frontmatter
     //      tier: equal -> inproc, differ -> headless via scripts/headless-dispatch.sh. Audit
     //      effort_transport (dispatch-flag|frontmatter|env|none) from the route's own output.

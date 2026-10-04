@@ -123,6 +123,9 @@ list: `commands/create-agent.md § Handoff Protocol`.
 The Model column uses aliases (`opus`, `sonnet`, `haiku`); a full model id would also be valid,
 but aliases stay portable across providers. No agent file carries its own `model:` key — model
 selection stays a per-dispatch `Task()` argument (sw-PL1-1, `planning-1.md#elicitation-sweep`).
+
+#### Static effort and dispatch overrides
+
 Every agent file carries an `effort:` key next to `maxTurns:`, equal to this row's Effort cell;
 the matrix stays the only place a tier is *decided*, the file is where Claude Code reads the
 static one from, and a parity test holds the two together
