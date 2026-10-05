@@ -372,6 +372,11 @@ if [ "$MODE" = "selftest" ]; then
 fi
 
 PAYLOAD=$(cat)
+# Bind to the payload's /megatask issue before resolving: the inherited
+# CLAUDE_PROJECT_DIR names the batch, not the issue this agent worked.
+if command -v corpflow_bind_payload > /dev/null 2>&1; then
+  corpflow_bind_payload "$PAYLOAD"
+fi
 CTX="$(resolve_ctx)"
 [ -n "$CTX" ] || exit 0
 

@@ -1,2 +1,10 @@
 Category;Value Min;Value Max;Notes
-Total Hours;24;42;Base + buffer
+Project Name;Fixture;;Validator fixture
+Hourly Rate;$100;;
+Total SP Min;10;;Optimistic estimate
+Total SP Max;20;;Pessimistic estimate
+Base Hours;60;120;SP Min/Max × 6h multiplier
+Buffer (15%);9;18;Contingency
+Total Hours;69;138;Base + buffer
+Timeline;5;5;2 phases + buffer
+Budget;$6900;$13800;Total hours × rate

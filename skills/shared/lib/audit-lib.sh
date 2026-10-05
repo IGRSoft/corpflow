@@ -2,16 +2,14 @@
 # @description audit-lib.sh — the one `.context/logs/audit.jsonl` appender for the skills
 #   tree. One writer, one key order, one symlink refusal.
 #
-#   NOT MIRRORED into hooks/lib/. The hook tree already has exactly one appender
-#   (hooks/model-switch-lib.sh corpflow_audit_row) that every hook emitter binds its actor
-#   onto; a second same-purpose symbol there would be the duplication this file exists to
-#   remove, and the name would collide in any hook that sourced both.
+#   Not mirrored into hooks/lib/: the hook tree has its own appender,
+#   hooks/model-switch-lib.sh corpflow_hook_audit_row.
 #
 #   Symbols: corpflow_audit_row.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
-# Anti-execution guard — MUST be the first statement.
+# Anti-execution guard — must be the first statement.
 if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
   printf >&2 'audit-lib.sh: this is a library — source it, do not execute it directly\n'
   exit 2
@@ -30,12 +28,12 @@ _CORPFLOW_AUDIT_LIB=1
 #
 # Appends exactly one row and always returns 0: an audit row is evidence, never a gate, so
 # no failure here may abort the caller that is mid-way through a real action. A caller that
-# must NOTICE a lost row reads CORPFLOW_AUDIT_LAST_RC (0 written, 1 not) instead of the
+# must notice a lost row reads CORPFLOW_AUDIT_LAST_RC (0 written, 1 not) instead of the
 # return code — returning non-zero would abort the `set -e` caller this contract protects.
 #
 # Flags, not positions: `actor`, `action`, `result` and `subject` are all bare strings, so a
-# positional signature lets a transposition emit a VALID ROW THAT LIES — the worst failure an
-# audit log has. Same reasoning as hooks/model-switch-lib.sh.
+# positional signature lets a transposition emit a valid row that lies — the worst failure an
+# audit log has.
 #
 # `subject` and `task_id` are required and non-empty on both paths below: a row nobody can
 # attribute to a task reads as a record while being a gap. A call missing either writes
@@ -53,7 +51,7 @@ corpflow_audit_row() {
   local _missing="" _pair _k _v
   local _kv=()
   local _dir _ts _row
-  # shellcheck disable=SC2034  # out-parameter; read by publish-pl-issue.sh audit_row
+  # shellcheck disable=SC2034  # out-parameter; read by callers
   CORPFLOW_AUDIT_LAST_RC=1
   while [ "$#" -gt 0 ]; do
     case "${1:-}" in
@@ -88,8 +86,7 @@ corpflow_audit_row() {
   _dir=$(dirname -- "$_file")
   mkdir -p "$_dir" 2> /dev/null || return 0
   # A symlinked audit.jsonl turns this append into a write primitive against an arbitrary
-  # target. Refuse rather than follow — the guard hooks/model-switch-lib.sh carries and
-  # tests/shell/hooks/test-execution-gate.bats pins for the hook side.
+  # target. Refuse rather than follow.
   [ ! -L "$_file" ] || return 0
 
   _ts=$(date -u +%FT%TZ 2> /dev/null) || _ts="unknown"
@@ -122,7 +119,7 @@ corpflow_audit_row() {
   # calling shell's redirection and its failure is invisible to that guard. Capture it
   # explicitly so a caller that must not complete un-audited can see the loss.
   { printf '%s\n' "$_row" >> "$_file"; } 2> /dev/null || return 0
-  # shellcheck disable=SC2034  # out-parameter; read by publish-pl-issue.sh audit_row
+  # shellcheck disable=SC2034  # out-parameter; read by callers
   CORPFLOW_AUDIT_LAST_RC=0
   return 0
 }

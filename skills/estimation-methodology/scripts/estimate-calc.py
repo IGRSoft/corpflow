@@ -6,8 +6,8 @@ Implements exactly:
   2. × 0.15 buffer    → total hours min/max
   3. × rate           → budget min/max          (optional)
   4. phase weeks/%    → per-phase distribution  (optional)
-  5. AI cost product  → token × model_rate × (1+retry) × complexity_mult  (optional)
-  6. 5-factor sum     → complexity band LOW/MEDIUM/HIGH
+  5. AI cost product  → (in × in_rate + out × out_rate) × (1+retry) × complexity_mult  (optional)
+  6. 5-factor sum     → factor score + band LOW/MEDIUM/HIGH (JSON key `complexity`)
 
 Model judgment (T-shirt sizing, factor scoring) stays outside this script.
 """
@@ -50,12 +50,18 @@ COMPLEXITY_BANDS: list[tuple[int, int, str]] = [
     (18, 25, "HIGH"),
 ]
 
-# AI model per-token costs in USD/million tokens (cost-optimization/SKILL.md)
-MODEL_RATES_PER_M: dict[str, float] = {
-    "haiku": 0.25,
-    "sonnet": 3.0,
-    "opus": 15.0,
+# USD per million tokens. The owner is skills/shared/model-selection.md § Cost Tiers;
+# tests/python/test_estimate_calc.py fails when this copy and that table disagree.
+MODEL_RATES_PER_M: dict[str, dict[str, float]] = {
+    "haiku": {"input": 1.0, "output": 5.0},
+    "sonnet": {"input": 2.0, "output": 10.0},
+    "opus": {"input": 4.0, "output": 20.0},
+    "fable": {"input": 10.0, "output": 50.0},
 }
+
+# Input share of Base Tokens when the caller does not supply both sides
+# (cost-optimization/SKILL.md § Cost Estimation Formula, "Default split").
+DEFAULT_INPUT_SHARE: float = 0.8
 
 # Retry factors by complexity label (cost-optimization/SKILL.md)
 RETRY_FACTORS: dict[str, float] = {
@@ -108,17 +114,62 @@ def phase_pct(
     return pct_min, pct_max
 
 
+def split_tokens(
+    base_tokens: int | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> tuple[int, int, bool]:
+    """Resolve (input, output, supplied) from whichever counts the caller has.
+
+    ``supplied`` is True only when both sides came from the caller. A missing side
+    is derived from the total when there is one, else from DEFAULT_INPUT_SHARE.
+    Raises ValueError on negative counts or a total that contradicts its parts.
+    """
+    for label, n in (("base", base_tokens), ("input", input_tokens), ("output", output_tokens)):
+        if n is not None and n < 0:
+            raise ValueError(f"{label} tokens must be >= 0, got {n}")
+    share = DEFAULT_INPUT_SHARE
+    if input_tokens is not None and output_tokens is not None:
+        if base_tokens is not None and base_tokens != input_tokens + output_tokens:
+            raise ValueError(
+                f"tokens {base_tokens} != input {input_tokens} + output {output_tokens}")
+        return input_tokens, output_tokens, True
+    if base_tokens is not None:
+        if input_tokens is not None:
+            if input_tokens > base_tokens:
+                raise ValueError(f"input tokens {input_tokens} exceed tokens {base_tokens}")
+            return input_tokens, base_tokens - input_tokens, False
+        if output_tokens is not None:
+            if output_tokens > base_tokens:
+                raise ValueError(f"output tokens {output_tokens} exceed tokens {base_tokens}")
+            return base_tokens - output_tokens, output_tokens, False
+        inp = round(base_tokens * share)
+        return inp, base_tokens - inp, False
+    if input_tokens is not None:
+        return input_tokens, round(input_tokens * (1 - share) / share), False
+    if output_tokens is not None:
+        return round(output_tokens * share / (1 - share)), output_tokens, False
+    raise ValueError("no token counts given")
+
+
 def ai_cost(
-    base_tokens: int,
+    base_tokens: int | None,
     model: str,
     retry_complexity: str = "medium",
     codebase_type: str = "standard",
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
 ) -> float:
-    """AI cost in USD using cost-optimization/SKILL.md formula."""
-    model_rate = MODEL_RATES_PER_M.get(model.lower(), MODEL_RATES_PER_M["sonnet"])
+    """AI cost in USD using cost-optimization/SKILL.md § Cost Estimation Formula.
+
+    An unknown model prices at the sonnet rate; the CLI rejects it before this point.
+    """
+    rates = MODEL_RATES_PER_M.get(model.lower(), MODEL_RATES_PER_M["sonnet"])
     retry_f = RETRY_FACTORS.get(retry_complexity.lower(), RETRY_FACTORS["medium"])
     cx_mult = CODEBASE_MULTIPLIERS.get(codebase_type.lower(), CODEBASE_MULTIPLIERS["standard"])
-    return base_tokens / 1_000_000 * model_rate * (1 + retry_f) * cx_mult
+    inp, out, _ = split_tokens(base_tokens, input_tokens, output_tokens)
+    token_usd = (inp * rates["input"] + out * rates["output"]) / 1_000_000
+    return token_usd * (1 + retry_f) * cx_mult
 
 
 def complexity_band(scores: list[int]) -> tuple[int, str]:
@@ -174,7 +225,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # AI cost
     p.add_argument("--tokens", type=int, default=None,
                    metavar="N",
-                   help="Base token count for AI cost estimate")
+                   help="Base token count (input + output) for AI cost estimate; "
+                        "split 80:20 input:output unless a side is given")
+    p.add_argument("--input-tokens", type=int, default=None, metavar="N",
+                   help="Input token count; with --output-tokens replaces the default split")
+    p.add_argument("--output-tokens", type=int, default=None, metavar="N",
+                   help="Output token count; with --input-tokens replaces the default split")
     p.add_argument("--model", choices=list(MODEL_RATES_PER_M), default="sonnet",
                    help="AI model for cost calculation (default: sonnet)")
     p.add_argument("--retry-complexity", choices=list(RETRY_FACTORS),
@@ -243,14 +299,21 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     # ------------------------------------------------------------------
     # 4. AI cost
     # ------------------------------------------------------------------
-    if args.tokens is not None:
-        cost = ai_cost(args.tokens, args.model, args.retry_complexity, args.codebase_type)
+    if args.tokens is not None or args.input_tokens is not None or args.output_tokens is not None:
+        inp, out, supplied = split_tokens(args.tokens, args.input_tokens, args.output_tokens)
+        cost = ai_cost(None, args.model, args.retry_complexity, args.codebase_type,
+                       input_tokens=inp, output_tokens=out)
+        rates = MODEL_RATES_PER_M[args.model]
         result["ai_cost"] = {
-            "base_tokens": args.tokens,
+            "base_tokens": inp + out,
             "model": args.model,
             "retry_complexity": args.retry_complexity,
             "codebase_type": args.codebase_type,
             "usd": round(cost, 6),
+            "input_tokens": inp,
+            "output_tokens": out,
+            "split": "supplied" if supplied else "default",
+            "rates_per_m": {"input": rates["input"], "output": rates["output"]},
         }
 
     # ------------------------------------------------------------------
@@ -276,8 +339,10 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
 def _self_test() -> None:
     """Run assertions against hand-computed values; exit non-zero on failure."""
     failures: list[str] = []
+    ran: list[str] = []
 
     def check(name: str, got: object, expected: object) -> None:
+        ran.append(name)
         if got != expected:
             failures.append(f"FAIL {name}: got {got!r}, expected {expected!r}")
 
@@ -306,15 +371,27 @@ def _self_test() -> None:
     check("phase pct full", (p_min, p_max), (100.0, 100.0))
 
     # --- ai_cost: 100k tokens, sonnet, medium retry, standard codebase ---
-    # = 100000/1e6 * 3.0 * 1.2 * 1.0 = 0.1 * 3.0 * 1.2 = 0.36
+    # default split 80k in / 20k out: (0.08 * 2 + 0.02 * 10) * 1.2 * 1.0 = 0.432
     cost = ai_cost(100_000, "sonnet", "medium", "standard")
-    check("ai_cost sonnet 100k", round(cost, 6), round(0.36, 6))
+    check("ai_cost sonnet 100k", round(cost, 6), 0.432)
 
     # --- ai_cost edge: haiku, high retry, novel domain ---
-    # = 50000/1e6 * 0.25 * (1+0.5) * 2.0
-    # = 0.05 * 0.25 * 1.5 * 2.0 = 0.0375
+    # 40k in / 10k out: (0.04 * 1 + 0.01 * 5) * 1.5 * 2.0 = 0.27
     cost2 = ai_cost(50_000, "haiku", "high", "novel")
-    check("ai_cost haiku 50k high novel", round(cost2, 6), round(0.0375, 6))
+    check("ai_cost haiku 50k high novel", round(cost2, 6), 0.27)
+
+    # --- ai_cost: opus prices at the Opus 5.5 rates ---
+    # 80k in / 20k out: (0.08 * 4 + 0.02 * 20) * 1.2 = 0.864
+    check("ai_cost opus 100k", round(ai_cost(100_000, "opus"), 6), 0.864)
+
+    # --- ai_cost: supplied split replaces the default ---
+    # (0.09 * 2 + 0.01 * 10) * 1.1 = 0.308
+    cost3 = ai_cost(None, "sonnet", "low", "standard", input_tokens=90_000, output_tokens=10_000)
+    check("ai_cost sonnet supplied split", round(cost3, 6), 0.308)
+
+    # --- split_tokens: one side plus the total, and one side alone ---
+    check("split total+input", split_tokens(100_000, 70_000, None), (70_000, 30_000, False))
+    check("split input only", split_tokens(None, 80_000, None), (80_000, 20_000, False))
 
     # --- complexity_band ---
     check("band LOW", complexity_band([1, 2, 1, 1, 2]), (7, "LOW"))
@@ -351,7 +428,9 @@ def _self_test() -> None:
     check("e2e total max", out["total_hours"]["max"], 34.5)
     check("e2e budget min", out["budget"]["min"], 4140.0)
     check("e2e budget max", out["budget"]["max"], 5175.0)
-    check("e2e ai usd", out["ai_cost"]["usd"], round(0.36, 6))
+    check("e2e ai usd", out["ai_cost"]["usd"], 0.432)
+    check("e2e ai split", (out["ai_cost"]["input_tokens"], out["ai_cost"]["output_tokens"],
+                           out["ai_cost"]["split"]), (80_000, 20_000, "default"))
     check("e2e complexity total", out["complexity"]["total"], 13)
     check("e2e complexity band", out["complexity"]["band"], "MEDIUM")
     check("e2e phase exceeds 4w", out["phase"]["exceeds_4w_max"], False)
@@ -361,7 +440,7 @@ def _self_test() -> None:
             print(f, file=sys.stderr)
         sys.exit(1)
 
-    print(json.dumps({"self_test": "ok", "checks": 24}))
+    print(json.dumps({"self_test": "ok", "checks": len(ran)}))
 
 
 # ---------------------------------------------------------------------------
@@ -379,14 +458,18 @@ def main() -> None:
 
     # Require at least one meaningful input
     has_sp = args.sp is not None or args.size is not None
-    has_tokens = args.tokens is not None
+    has_tokens = any(
+        n is not None for n in (args.tokens, args.input_tokens, args.output_tokens))
     has_factors = args.factors is not None
 
     if not (has_sp or has_tokens or has_factors):
         parser.print_help(sys.stderr)
         sys.exit(1)
 
-    result = _run(args)
+    try:
+        result = _run(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     print(json.dumps(result))
 
 

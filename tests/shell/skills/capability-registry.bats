@@ -250,6 +250,22 @@ $bad"
     || fail "$inventory inventory lines but only $paths carry a path — a description wrapped"
 }
 
+@test "description: markdown stops at a YAML comment line after description" {
+  # A pipeline-only skill records its G3 answer as a `#` comment directly above
+  # `disable-model-invocation:`, which can sit right after `description:`.
+  local wd; wd="$(mk_tmpworkdir)"
+  printf '%s\n' '---' \
+                'name: planted' \
+                'description: What the skill is for.' \
+                '# G3: a comment that must not be folded in.' \
+                'disable-model-invocation: true' \
+                '---' \
+                '# Body' > "$wd/SKILL.md"
+  run_script_env --cwd "$wd" --source "$SCRIPT" desc_markdown "$wd/SKILL.md"
+  assert_success
+  assert_output "What the skill is for."
+}
+
 @test "description: shell takes the first comment block after the shebang" {
   local wd; wd="$(mk_tmpworkdir)"
   printf '%s\n' '#!/usr/bin/env bash' \

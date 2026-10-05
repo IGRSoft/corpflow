@@ -297,14 +297,15 @@ deleted — labels, judgements, findings, captured responses — described a cas
 that had since been repaired and a skill at three different versions, so no number
 from it can be compared against a number taken after it. `SKILL.md` `version:` and
 `evals.json` `eval_set_version` both read `0.0.1` **at the baseline**, and the rule is
-that they move together — not that they stay at `0.0.1`. **Both are `0.4.0` today**,
-and so is the last **captured** state: two byte-identical 0.4.0 captures on 2026-09-06
-(`findings/request-plan-0.4.0.md`). `0.0.1` named the last captured state when this
-paragraph was written; the pair names the current **spec**. When they disagree, the
+that they move together — not that they stay at `0.0.1`. **Both are `0.4.1` today**,
+a prose cleanup with no rule change and no capture. The last **captured** state is
+0.4.0: two byte-identical 0.4.0 captures on 2026-09-06 (`findings/request-plan-0.4.0.md`).
+`0.0.1` named the last captured state when this paragraph was written; the pair names
+the current **spec**. When they disagree, the
 spec versions are wrong, not this paragraph — and the *captured* version is a
 separate fact from either, which lags whenever a spec ships without a capture.
 
-**The number to quote for the shipping skill is 0.4.0's: corrected 85%, 95% CI
+**The latest measured number is 0.4.0's: corrected 85%, 95% CI
 [81%, 91%]** (TPR 92%, TNR 100% on 18 human negatives; held-out 83% [70%, 100%] on
 four). 0.3.0's restated figure is **86% [82–90]**, not the 87% it was first published
 at — see § The weights belong to the draw. The two are not a before/after: 0.4.0

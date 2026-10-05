@@ -4,11 +4,11 @@
 
 ## Asset Directories
 
-`designs/` holds design assets — Figma PNGs captured at PL and Pencil `.pen` mockups. `images/` holds user-attached screenshots and diagrams plus DV implementation screenshots. Each workspace gets its own `.context/designs/`, so mockups never leak between workspaces.
+Each workspace gets its own `.context/designs/`, so mockups never leak between workspaces. Pencil mockup generation (trigger, tools, verification): `skills/pencil-design-worktask/SKILL.md`.
 
 ### Producer, path, and format per artifact
 
-Paths are relative to `.context/`. Plain-text `logs/*.log` producers and their `<kind>` names are canonical in `skills/logging-conventions/SKILL.md § Kind Taxonomy`.
+Paths are relative to `.context/`. Plain-text `logs/*.log` producers and their `<kind>` names are canonical in `skills/logging-conventions/SKILL.md § Kind Taxonomy`; DV screenshots in `skills/dv-screenshot-capture`.
 
 | Artifact | Producer | Path | Format |
 |---|---|---|---|
@@ -20,10 +20,6 @@ Paths are relative to `.context/`. Plain-text `logs/*.log` producers and their `
 ### User-attached images
 
 Copy them into `.context/images/` under descriptive names (`login-screen-mockup.png`, `screenshot-error-state.png`, `diagram-architecture.png`) and link them from the stage artifact that relies on them.
-
-### Pencil Mockup Workflow
-
-PM detects UI work (design score >= 5) and invokes the Designer, who loads Pencil via `ToolSearch({ query: "+pencil" })`, generates 1-2 `.pen` mockups covering the key screens and states, verifies each with `get_screenshot()`, saves them to `.context/designs/mockup-*.pen`, and cites them in the design documentation. Downstream: AR reviews feasibility, DV implements against them, QA validates against them.
 
 ## Folder Structure Examples
 
@@ -39,11 +35,7 @@ PM detects UI work (design score >= 5) and invokes the Designer, who loads Penci
 | Feature (9-stage, full) | planning-0, architecture-0, coordination-0, development-0, developer-review-0, testing-0, documentation-0, complete-summary-0, retrospective-0 |
 | Security-critical (11-stage) | the full 9-stage set plus security-review-0 and release-0 |
 | Emergency hotfix | incident-0, development-0, developer-review-0, testing-0, release-0, complete-summary-0 |
-| Megatask per-issue | `milestone.json` plus the sized stage set |
-
-### Runtime logs
-
-Background `run_in_background` Bash and Monitor-tool streams land flat in `logs/` as `<kind>-<scope>-<timestamp>.log`, alongside the stage `.md` files. Worked filenames per kind: `skills/logging-conventions/SKILL.md § Kind Taxonomy`.
+| Megatask per-issue | the sized stage set, inside the worktree (§ Megatask run) |
 
 ### Design assets
 
@@ -60,13 +52,9 @@ Figma PNGs and Pencil mockups share `designs/`; `planning-0.md` cites them under
     └── feature-mockup.png                 # User-attached
 ```
 
-### Escalations
-
-`errors/` gets one file per failing agent, each accumulating a section per retry — `errors/developer.md` for DV retries, `errors/qa-engineer.md` if QA also failed. Rules: `../SKILL.md § Per-Agent Error Files`.
-
 ### Megatask run (worktree-isolated)
 
-Under `/megatask` the whole project is checked out per issue, so `.context/` lives inside the worktree — complete source-level isolation at the cost of disk space:
+Under `/megatask` the whole project is checked out per issue, so `.context/` lives inside the worktree:
 
 ```
 .worktrees/milestone-1/42/   # Git worktree root (full source copy)

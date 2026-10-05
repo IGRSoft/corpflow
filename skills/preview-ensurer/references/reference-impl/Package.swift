@@ -6,7 +6,7 @@
 // Run:    swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
 //           --modified-files <newline-list> [--auto-add true|false]
 //
-// AR decision ad2: swift-syntax pinned `.upToNextMajor(from: "510.0.0")`.
+// swift-syntax pinned `.upToNextMajor(from: "510.0.0")`.
 // Covers Swift 5.10 (Xcode 15.4) and Swift 6.0+ (Xcode 16.x).
 
 import PackageDescription

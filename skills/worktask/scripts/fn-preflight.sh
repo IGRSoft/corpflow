@@ -86,7 +86,7 @@
 #   sanitises — a working-folder path must not reach a published body on any route —
 #   but drops its blocking checks: the composition requirements are skipped and an
 #   unreachable sanitiser library degrades to a warning instead of exit 1. See
-#   `fn_batch_scope` (branch-lib.sh) for the five signals.
+#   `fn_batch_scope` (branch-lib.sh) for the six signals.
 #
 #   Branch naming moved to the start of the planning stage (see
 #   `skills/shared/git-conventions.md § Branch Naming`). This validator never
@@ -164,7 +164,7 @@ _resolve_script_dir() {
 SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
 
 # Sanitiser library, resolved from this script's own location (mirrors
-# attach-visual-evidence.sh:69).
+# attach-visual-evidence.sh's _LIB).
 # shellcheck disable=SC2034  # read by sanitise_stream in fn-preflight-cmds.sh
 LIB_PATH="${SCRIPT_DIR}/publish-pl-issue.sh"
 

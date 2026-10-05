@@ -40,7 +40,7 @@
 # @arg --self-test         Run internal test suite; exit 0/non-zero
 #
 # @env SELF_IMPROVE_LABELS  Read verbatim into the row's labels_enabled field.
-# @env CLAUDE_PROJECT_DIR   Passed through to plugin-data-lib.sh's fallback rung.
+# @env WORKSPACE_ROOT       Passed through to plugin-data-lib.sh's fallback rung.
 #
 # @exitcode 0  success (including fallback-rung and --dry-run "no row" runs)
 # @exitcode 1  usage/environment error
@@ -224,7 +224,7 @@ else
   LABELS_ENABLED="true"
 fi
 
-si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${CLAUDE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
+si_resolve_dataset "$DATASET" "$PLUGIN_DATA" "${BASE_PLUGIN_DATA:-}" "failure-labels.jsonl" || exit 1
 
 # Fallback rung: no row, so nothing new lands in the repo tree.
 # --dry-run: caller wants the stderr line only.

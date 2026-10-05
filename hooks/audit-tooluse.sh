@@ -59,6 +59,11 @@ set +e
 [ -f "$_CMDHEAD_LIB" ] && . "$_CMDHEAD_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
+# Bind to the payload's /megatask issue before resolving: the inherited
+# CLAUDE_PROJECT_DIR names the batch, not the issue this agent worked.
+if command -v corpflow_bind_payload > /dev/null 2>&1; then
+  corpflow_bind_payload "$PAYLOAD"
+fi
 if command -v corpflow_context_root >/dev/null 2>&1; then
   CTX=$(corpflow_context_root)
 else

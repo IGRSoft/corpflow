@@ -14,7 +14,7 @@
 # shellcheck disable=SC2016
 self_test() {
   local td rc=0
-  td=$(mktemp -d -t pr-body-lint-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/pr-body-lint-XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT
 

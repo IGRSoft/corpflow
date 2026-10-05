@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @description blocked-on-lib.sh — the one definition of the typed `handoff.blocked_on` return:
-#   both enums in registry order, the per-kind arm table, the legacy `cross_session_ask` normalize
-#   step and the two validators. Sourced by handoff-harness.sh (boundary gate) and
+#   both enums in registry order, the per-kind arm table, the normalize step and the two
+#   validators. Sourced by handoff-harness.sh (boundary gate) and
 #   blocked-on-dispatch.sh (router); two spellings of an enum are how the gate would admit a need
 #   the router then refuses.
 #
@@ -73,22 +73,14 @@ blocked_on_table_json() {
     | from_entries'
 }
 
-# blocked_on_normalize <handoff json> — prints {"blocked_on":{…},"source":"blocked_on"|<legacy alias>}.
-# A non-null blocked_on wins even when malformed, so a broken typed need is validated and
-# refused rather than silently replaced by the alias beside it. Exit 1 when neither is present.
+# blocked_on_normalize <handoff json> — prints {"blocked_on":{…},"source":"blocked_on"}. A non-null
+# blocked_on passes through even when malformed, so a broken typed need is validated and refused
+# downstream rather than read as absent. Exit 1 when it is absent: no other handoff key is a need.
 blocked_on_normalize() {
   local _bo_out
   command -v jq > /dev/null 2>&1 || return 1
   _bo_out=$(printf '%s' "${1:-}" | jq -c '
-    if type != "object" then empty
-    elif .blocked_on != null then {blocked_on: .blocked_on, source: "blocked_on"}
-    elif .cross_session_ask != null then  # legacy alias
-      {blocked_on: {kind: "peer_session",
-                    detail: (.cross_session_ask  # legacy alias
-                      | if type == "object" then {to, question} | with_entries(select(.value != null))
-                        else {} end),
-                    resume_with: "reply_ref"},
-       source: "cross_session_ask"}  # legacy alias
+    if type == "object" and .blocked_on != null then {blocked_on: .blocked_on, source: "blocked_on"}
     else empty end' 2> /dev/null) || _bo_out=""
   [ -n "$_bo_out" ] || return 1
   printf '%s\n' "$_bo_out"

@@ -1,3 +1,6 @@
 Category;Subcategory;SP Min;SP Max;Hours Min;Hours Max;Rate;Cost Min;Cost Max;Percentage;Notes
-Phase 1;Core;4;7;24;42;$100;$2400;$4200;100%;
-TOTAL;;;4;7;24;42;$100;$2400;$4200;100%;
+Phase 1;Core;6;12;36;72;$100;$3600;$7200;52%;
+Phase 2;Profile;4;8;24;48;$100;$2400;$4800;35%;
+Subtotal;Development;10;20;60;120;$100;$6000;$12000;87%;
+Buffer;Contingency (15%);;;9;18;$100;$900;$1800;13%;Risk mitigation
+TOTAL;;;;69;138;$100;$6900;$13800;100%;

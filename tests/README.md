@@ -37,7 +37,7 @@ tests/
                        #               hook-symbol-parity, ci-workflow, test-selection
   python/              # Skill-script tests (stdlib unittest)
     _scriptimport.py   # importlib loader for hyphenated scripts + JSON helpers
-    test_estimate_calc.py   # 21 behaviors via in-process import + CLI smoke
+    test_estimate_calc.py   # 35 behaviors via in-process import + CLI smoke
     test_eval_capture.py    # 112 behaviors via in-process import + CLI smoke
     test_skill_evals.py     # 24 behaviors via in-process import + CLI smoke
   vendor/
@@ -79,7 +79,7 @@ CLI smoke tests:
 
 | Script | Tests | Coverage approach |
 |--------|-------|-------------------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** in-process behaviors | importlib + CLI argparse smoke |
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **35** in-process behaviors | importlib + CLI argparse smoke |
 
 In-process testing asserts true contracts (unknown-model → sonnet fallback,
 unknown-layout → ValueError) rather than approximating via subprocess; each

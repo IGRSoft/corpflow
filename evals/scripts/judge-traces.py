@@ -130,7 +130,7 @@ def main(argv_in) -> int:
     p.add_argument("--out", default=os.path.join(REPO, "evals", "judgements", "request-plan.jsonl"))
     p.add_argument("--case", action="append", type=int, default=None)
     p.add_argument("--limit", type=int, default=None)
-    p.add_argument("--model", default="claude-opus-5")
+    p.add_argument("--model", default="claude-opus-5-5")
     p.add_argument("--effort", default="max")
     p.add_argument("--budget", type=float, default=None)
     p.add_argument("--timeout", type=float, default=280.0)

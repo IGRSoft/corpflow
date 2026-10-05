@@ -276,6 +276,21 @@ go test
 rspec
 EOF
 
+  # A value-taking configuration flag's value and a redirect are not positional
+  # selectors: each of these is still the whole suite, so DV must be denied it.
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _o17=$(run_gate "$(jq -cn --arg c "$_c" '{tool_name:"Bash",tool_input:{command:$c}}')" "$_ctx11")
+    printf '%s' "$_o17" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1 \
+      || { echo "test-execution-gate: self-test FAIL (flag value or redirect read as a selector: $_c)"; _fail=1; }
+  done <<'EOF'
+swift test --package-path /abs/pkg
+swift test 2>&1
+go test -count 1
+EOF
+  _o17b=$(run_gate '{"tool_name":"Bash","tool_input":{"command":"swift test --filter X --package-path P 2>&1"}}' "$_ctx11")
+  [ -z "$_o17b" ] || { echo "test-execution-gate: self-test FAIL (a real selector plus config flags must allow)"; _fail=1; }
+
   # FN has no test-execution authority. This passes the day it is written —
   # the stage limb already denies every stage but DV/QA. It is a parity lock
   # against a future edit to that limb quietly dropping the row, not a bug

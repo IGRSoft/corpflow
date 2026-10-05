@@ -43,8 +43,8 @@
 
 ## A04: Insecure Design
 
-Threat modeling is the SR0 procedure in `threat-model.md` — one methodology, not a second
-one. The sub-items below are its completion criteria, not a separate method.
+Threat modeling is the SR0 procedure in `threat-model.md`; the items below are its completion
+criteria.
 
 ```markdown
 - [ ] Trust boundaries the diff crosses enumerated (both sides + asset named)
@@ -83,10 +83,8 @@ one. The sub-items below are its completion criteria, not a separate method.
 
 ## A06: Vulnerable & Outdated Components
 
-Audits find **known advisories**; they prove neither trustworthiness nor reachability.
-Triage against the paths that actually execute instead of treating any hit as a blocker.
-State commands package-manager-agnostically — SwiftPM's `Package.resolved` is the local
-lockfile analog (`npm audit`/`npm ci` are npm-project examples, not the directive).
+Audits find known advisories; they prove neither trustworthiness nor reachability. Triage
+against the paths that actually execute instead of treating any hit as a blocker.
 
 ### Checklist
 

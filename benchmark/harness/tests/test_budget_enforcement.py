@@ -84,7 +84,7 @@ class DispatchBudgetGates(unittest.TestCase):
     def _dispatch(self, dispatcher, budget_usd, est_cost):
         return dispatch(
             workdir=self.sb.run_id, budget=budget_usd, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=dispatcher, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=dispatcher, env=_ENV,
             estimate_runner=fake_estimate_runner(est_cost), stages=list(_STAGES),
             git_sha_runner=stub_git_sha)
 

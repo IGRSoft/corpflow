@@ -9,7 +9,7 @@
 # Contract: defines `self_test`, returning 0 when every case passes.
 
 self_test() {
-  td=$(mktemp -d -t section-lint-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/section-lint-XXXXXX")
   trap 'rm -rf "$td"' EXIT
 
   # fixture 1: one section within cap

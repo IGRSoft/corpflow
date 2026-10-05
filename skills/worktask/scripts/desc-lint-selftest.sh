@@ -9,7 +9,7 @@
 # Contract: defines `self_test`, returning 0 when every case passes.
 
 self_test() {
-  td=$(mktemp -d -t desc-lint-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/desc-lint-XXXXXX")
   trap 'rm -rf "$td"' EXIT
   mkdir -p "$td/agents" "$td/commands" "$td/skills/nested/deep"
 

@@ -338,6 +338,16 @@ class TestBenchLiveArmWiring(unittest.TestCase):
         kwargs = self._run("--stages", "PL", "--without-arm", "real")
         self.assertEqual(kwargs["selection"].dispatch, ("without", "with"))
 
+    def test_workdir_root_flag_reaches_dispatch_and_defaults_to_none(self):
+        self.assertIsNone(self._run()["workdir_root"])
+        self.assertEqual(self._run("--workdir-root", "/scratch/arms")["workdir_root"],
+                         "/scratch/arms")
+
+    def test_waiting_on_the_usage_limit_is_on_unless_switched_off(self):
+        self.assertTrue(self._run()["wait_on_limit"])
+        self.assertTrue(self._run("--wait-on-limit")["wait_on_limit"])
+        self.assertFalse(self._run("--no-wait-on-limit")["wait_on_limit"])
+
 
 # ---------------------------------------------------------------------------
 # bench-deterministic — ARGV VALIDATION ONLY. A complete argv would build two

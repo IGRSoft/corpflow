@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.0] — 2026-09-28
+
+### Added
+
+- Portable Agent Plugins and Codex compatibility manifests, Codex-native hook registration, and
+  same-named `$skill` adapters for all 28 existing slash-command workflows.
+- A Codex runtime contract mapping Corpflow agent orchestration and model tiers to Codex controls:
+  haiku → `gpt-6-luna`, sonnet/opus → `gpt-6-sol`, and fable → `gpt-6-astra`.
+- Provider-neutral `BASE_PLUGIN_ROOT` and `BASE_PLUGIN_DATA` resolution, including safe plugin-path
+  joining and support for portable, Codex, and Claude package markers.
+- `skills/shared/plan-content.md`: one canonical plan-content rule ported from superpowers v6.4.2.
+  A plan records decisions (files, signatures, the spec's values, test assertions), not a
+  transcript of the code; it adds a step scan and a proportion check to self-review.
+- `/prompt-audit` gains a planning-stage plan-content rule and a consistency check that flags
+  unreferenced asset files under `skills/` for deletion.
+
+### Changed
+
+- PL0 (`pl0-procedure.md`, product-manager), AR (software-architector), TL (team-lead) and
+  `request-plan` point at `plan-content.md` by section instead of carrying their own wording:
+  each names the decisions its artifact records, and DV writes the implementation bodies.
+- technical-writer: a project keeping its guidelines in `AGENTS.md` gets a `CLAUDE.md` that
+  imports them with `@AGENTS.md`, since Claude Code skips `AGENTS.md` whenever a `CLAUDE.md`
+  exists.
+- Live benchmark: both arms also switch off the `plugin-authoring@builtin` plugin that Claude Code
+  2.1.289 ships, so the WITHOUT arm again loads zero plugins.
+
+### Compatibility
+
+- Claude Code commands, agents, hook registration, and legacy `CLAUDE_*` boundary inputs remain
+  supported. Codex-specific behavior is isolated in additive manifests, adapters, skills, and
+  hook configuration.
+
 ## [4.0.32] — 2026-09-11
 
 A control that fails silently is indistinguishable from a control that passed, and an evidence
@@ -41,8 +74,27 @@ out-of-scope.
   to an audit row, never mutates status, always exits `0`.
 - **The ledger lock carries an owner token** and refuses a foreign release, rather than silently
   freeing a lock another writer still holds.
+- **Session hygiene and command output hygiene guidance.** `cost-optimization § 4d` covers noisy
+  command output, which stays in context and is re-billed every turn; token-baselines adds
+  `BASH_MAX_OUTPUT_LENGTH`, `/autocompact`, `/mcp`, `/context` and `/rewind` vs `/compact`;
+  context-compression gains a copy-paste "Compact instructions" block; `/worktask` documents
+  fresh-session, `/rename` + `/clear` and separate-session `/loop` habits. Docs only.
 
 ### Changed
+
+- **A per-dispatch effort raise or lowering now reaches the session, instead of staying an
+  advisory audit field.** `skills/worktask/scripts/effort-route.sh` decides, per dispatch,
+  whether the stamped tier differs from the target agent's own `effort:` frontmatter tier; a
+  difference routes headless through the new `skills/worktask/scripts/headless-dispatch.sh`
+  (`claude -p --agent … --effort`, argv built from an allowlist, never a shell string), and
+  `skills/worktask/scripts/headless-poststop.sh` replays the installed `plugin.json`
+  `SubagentStop` hooks the headless child never fires itself, so a headless DV row gets the
+  same gates, state merge and audit trail an in-process one would. `effort_transport` gains a
+  fourth value, `env`, for an operator `CLAUDE_CODE_EFFORT_LEVEL` pin that outranks a routed
+  raise (`skills/shared/stage-contracts.md § Resolver Effort Tier`,
+  `commands/worktask.md § Step C.0a`). Some stages now run at a raised or lowered tier where
+  they previously ran at the session default; no version-floor change (`--agent`, `--effort`
+  and `--permission-prompts` already exist at 2.1.280).
 
 - **`/cc-update` 0.3.0**: two new standing passes — a Communication Surfaces Watch (cross-session,
   cross-agent, cross-plugin entries routed to their owning docs; the four "re-check at the next

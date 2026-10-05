@@ -46,7 +46,7 @@
   # --- Same family, different spelling: alias vs resolved id is not a re-tier ---
   _sctx="$_tmp/samefamily/.context"
   _mkledger "$_sctx"
-  _sout=$(run_gate '{"session_id":"s2","agent_id":"agt_dv","to_model":"claude-opus-5-20260615"}' "$_sctx")
+  _sout=$(run_gate '{"session_id":"s2","agent_id":"agt_dv","to_model":"claude-opus-5-5"}' "$_sctx")
   [ -z "$_sout" ] || { echo "model-switch-gate: self-test FAIL (same-family: unexpected output)"; _fail=1; }
   [ ! -f "$_sctx/logs/audit.jsonl" ] || { echo "model-switch-gate: self-test FAIL (same-family: wrote a row)"; _fail=1; }
 

@@ -205,6 +205,11 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
+# Bind to the payload's /megatask issue before resolving: the inherited
+# CLAUDE_PROJECT_DIR names the batch, not the issue this agent worked.
+if command -v corpflow_bind_payload > /dev/null 2>&1; then
+  corpflow_bind_payload "$PAYLOAD"
+fi
 if command -v corpflow_context_root > /dev/null 2>&1; then
   CTX=$(corpflow_context_root)
 else

@@ -17,7 +17,7 @@ self_test() {
   local failures=0
   local pass_count=0
   local td
-  td=$(mktemp -d -t init-worktree-selftest.XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/init-worktree-selftest.XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT
 

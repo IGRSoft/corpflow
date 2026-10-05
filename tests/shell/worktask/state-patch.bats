@@ -1462,28 +1462,31 @@ EOART
   assert_output --partial "DR0"
 }
 
-@test "no ledger resolution: cwd is never a fallback, even with a real ledger under ./.context" {
+@test "root ladder: with no declared root and no git repo, \$PWD/.context is the last rank" {
+  # Reverses the old "cwd is never a fallback" contract on purpose: the ladder ends at
+  # $PWD/.context so a first write in a non-git workdir lands where the caller is, rather
+  # than being dropped or retargeted at another checkout's ledger. The plugin-root refusal
+  # (state-patch-context-root.bats) is what stops that rank from writing into the wrong tree.
   local tmp; tmp="$(mk_tmpworkdir)"
   mkdir -p "$tmp/.context/logs"
   cp "$FIXTURES/worktask/state.sample.json" "$tmp/.context/state.json"
   cd "$tmp"
-  local before; before="$(shasum .context/state.json)"
 
   run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
     GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" \
     bash "$PLUGIN_ROOT/$SCRIPT" --facts '{"files_modified":["x"]}'
-  assert_failure 1
-  local after1; after1="$(shasum .context/state.json)"
-  [ "$before" = "$after1" ]
+  assert_success
+  run jq -e '.facts.files_modified | index("x")' .context/state.json
+  assert_success
 
+  local before; before="$(shasum .context/state.json)"
   run env -u WORKSPACE_ROOT -u CLAUDE_PROJECT_DIR -u CONTEXT_DIR \
     GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" \
     bash "$PLUGIN_ROOT/$SCRIPT" --stage DV --task-id DV0
-  # Unresolved-root contract: a stage patch either no-ops (0) or, on the documented
-  # self-patch signature, refuses loudly (3) — never a cwd fallback either way.
+  # No artifact on disk: the stage patch either no-ops (0) or, on the documented
+  # self-patch signature, refuses loudly (3); either way the ledger is untouched.
   [[ "$status" -eq 0 || "$status" -eq 3 ]] || fail "unexpected status $status: $output"
-  local after2; after2="$(shasum .context/state.json)"
-  [ "$before" = "$after2" ]
+  [ "$before" = "$(shasum .context/state.json)" ]
 }
 
 @test "sweep: a stub is stored with stage and status filled, never null" {

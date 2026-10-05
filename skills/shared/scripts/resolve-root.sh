@@ -1,27 +1,25 @@
 #!/usr/bin/env bash
-# @description resolve-root.sh — the git arm of the root-resolution ladder (see
-#   skills/shared/lib/README.md and hooks/model-switch-lib.sh). Every caller tries its
-#   declared roots first (--state, CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, the
-#   own-worktree-ledger rank); this script is what runs only once those all miss, and it
-#   is the one place that walks git plumbing to answer "which .context/ owns this tree".
+# @description resolve-root.sh — rank 6, the git arm, of the root-resolution ladder
+#   (documented on corpflow_context_dir in skills/shared/lib/state-read-lib.sh; the hook
+#   side is hooks/model-switch-lib.sh). Callers try their declared roots first (--state,
+#   CONTEXT_DIR, WORKSPACE_ROOT, CLAUDE_PROJECT_DIR, the own-worktree ledger); this script
+#   runs only once those all miss, and it is the one place that walks git plumbing to
+#   answer "which .context/ owns this tree".
 #
-#   Two-step resolution, deliberately not one:
-#     1. Git common dir — proves a git repository is reachable from cwd at all (honors
-#        GIT_DIR/GIT_WORK_TREE the way `git rev-parse` already does; no extra handling
-#        needed here). Nothing resolves => exit 1, the "no root anywhere" case every
-#        caller falls back to cwd over — which this script refuses to do.
-#     2. Main worktree — the FIRST `worktree <path>` record of
-#        `git worktree list --porcelain`, physicalized. Deliberately NOT
-#        `dirname(common-dir)`: that guess is wrong for a submodule (whose common dir
-#        lives under `.git/modules/<name>`) and for `--separate-git-dir`. A linked
-#        worktree's `.context/` is gitignored and never checked out there, so every
-#        stream — main checkout, linked worktree, any subdirectory of either — must
-#        land on the SAME main worktree to find the one real `.context/`.
+#   Two steps, not one:
+#     1. Git common dir — proves a repository is reachable from cwd (git rev-parse
+#        already honors GIT_DIR/GIT_WORK_TREE). Nothing resolves => exit 1, the "no root
+#        anywhere" case; this script never falls back to cwd.
+#     2. Main worktree — the first `worktree <path>` record of
+#        `git worktree list --porcelain`, physicalized. Not `dirname(common-dir)`: that
+#        guess is wrong for a submodule (common dir under `.git/modules/<name>`) and for
+#        `--separate-git-dir`. A linked worktree's `.context/` is gitignored and never
+#        checked out there, so the main checkout, every linked worktree and any
+#        subdirectory of either must land on the same main worktree.
 #
-#   The common-dir probe tries `--path-format=absolute` first and only trusts it when the
-#   result starts with `/` and names a directory: old git versions that do not know the
-#   flag echo it back as if it were a revision argument, and an unchecked value would be
-#   read as a bogus path instead of a probe failure.
+#   The common-dir probe trusts `--path-format=absolute` only when the result starts
+#   with `/` and names a directory: git versions without the flag echo it back as a
+#   revision argument, which would otherwise read as a bogus path.
 #
 # @arg (none)      Print the main worktree's .context directory (existence unchecked).
 # @arg --root      Print the main worktree itself.
@@ -38,7 +36,7 @@
 set -Eeuo pipefail
 
 usage() {
-  sed -n 's/^# \{0,1\}//p' "$0" | head -30
+  awk 'NR>1{ if (!/^#/) exit; sub(/^# ?/,""); print }' "$0"
 }
 
 # Prints the physical git common dir on stdout and returns 0, or prints nothing and
@@ -90,8 +88,7 @@ _cf_main_worktree() {
   out=$(git worktree list --porcelain 2> /dev/null) || out=""
   [ -n "$out" ] || return 1
 
-  # Only the FIRST record (up to its blank-line terminator) matters — later linked
-  # worktrees have no bearing on which one is main.
+  # Only the first record (up to its blank-line terminator) names the main worktree.
   while IFS= read -r line; do
     case "$line" in
       "") break ;;
@@ -122,7 +119,7 @@ _cf_self_test() {
   # under test always answers physically, so the fixture must compare physical to physical.
   tmp=$(cd "$tmp" && pwd -P)
   bare_tmp=$(cd "$bare_tmp" && pwd -P)
-  # Values are expanded NOW, not at trap time: `tmp`/`bare_tmp` are function-locals and
+  # Values are expanded now, not at trap time: `tmp`/`bare_tmp` are function-locals and
   # would be gone by the time an EXIT trap fires after this function returns.
   # shellcheck disable=SC2064
   trap "rm -rf '${tmp}' '${bare_tmp}'" EXIT INT TERM

@@ -279,7 +279,7 @@ run_pre() { run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT
   [ "$decision" = deny ] || fail "not denied: $output"
   [[ "$reason" == *"development-0.md (stage=DV) adds H2 outside the allow-list: ## Approach."* ]]
   [[ "$reason" == *"Allowed: ## files-changed, ## tests-added"* ]]
-  [[ "$reason" == *"optional: ## verification-command, ## decisions"* ]]
+  [[ "$reason" == *"optional: ## verification-command, ## acceptance-commands, ## decisions"* ]]
 }
 
 @test "pre: a conforming Write, and one missing required H2s, are both allowed" {

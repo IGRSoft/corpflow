@@ -1,3 +1,4 @@
 Phase;Name;Duration;Weeks;SP Min;SP Max;Hours Min;Hours Max;Cost Min;Cost Max;Key Deliverables;Dependencies
-1;Core;2 weeks;1-2;4;7;24;42;$2400;$4200;Auth;-
-TOTAL;;2 weeks;;4;7;24;42;$2400;$4200;;
+1;Core;2 weeks;1-2;4;7;24;42;$2400;$4200;Auth;2
+Buffer;Contingency;1 weeks;4;;;4;6;$400;$600;Risk mitigation;All
+TOTAL;;3 weeks;;4;7;28;48;$2800;$4800;;

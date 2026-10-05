@@ -7,7 +7,7 @@
 #
 #   1. Scaffold-if-missing  → tools/SnapshotHost/ from templates/SnapshotHost-template/
 #   2. Invoke preview-ensurer (Swift executable) on modified files
-#   3. Rewrite PreviewBridge.swift viewRegistry (idempotent)
+#   3. PreviewBridge.swift viewRegistry rewrite — not implemented; logged as deferred
 #   4. swift run --package-path tools/SnapshotHost SnapshotHost --view ... --output ...
 #   5. Apply 500 KB size budget (pngquant fallback / oversize/)
 #   6. Emit manifest row + audit JSON (canvas_render, preview_added, ...)
@@ -244,7 +244,7 @@ if [[ -d "$ENSURER_DIR" ]] && command -v swift >/dev/null 2>&1; then
     if [[ $ENSURER_EXIT -ne 0 ]]; then
         echo "error: preview-ensurer exited with code $ENSURER_EXIT" | tee -a "$BUILD_LOG" >&2
         cat "$ENSURER_JSON_LOG" >&2 2>/dev/null || true
-        # Per ad8 — errors bubble as missing_input; record + return 2
+        # errors bubble as missing_input; record + return 2
         echo "missing_input: preview-ensurer errors" >> "${ERRORS_DIR}/developer.md"
         audit canvas_render error "$(jq -nc \
             --arg phase complete --arg view "$VIEW_ARG" --arg destination "$DESTINATION" \
@@ -276,7 +276,7 @@ fi
 # -----------------------------------------------------------------------------
 # v1 implementation: leave the bridge as-is from the template. Real scaffolder
 # logic (walking `swift package show-dependencies --format json` to derive the
-# minimal @testable import set per ad3) is implemented as a future enhancement;
+# minimal @testable import set) is implemented as a future enhancement;
 # the apple-canvas adapter logs it but does not block on it in v1.
 echo "[apple-canvas] PreviewBridge.swift rewrite deferred (v1: empty registry stub from template)" | tee -a "$BUILD_LOG"
 
@@ -328,7 +328,7 @@ else
         --arg prev_error "render_exit_${RENDER_EXIT}" \
         '{phase:$phase, view:$view, destination:$destination, duration_ms:$duration_ms, prev_error:$prev_error}')"
 
-    # Per ad6 — host build fail → escalate to apple (sim) adapter is the
+    # Host build fail → escalate to apple (sim) adapter is the
     # CALLER's responsibility. This driver returns 3; the parent skill
     # is responsible for the fallback.
     audit screenshot_platform_fallback deferred "$(jq -nc \

@@ -1,0 +1,16 @@
+---
+name: docs-readme
+description: Use when the user invokes $docs-readme or asks for the canonical Corpflow docs-readme workflow.
+argument-hint: "[--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate]"
+---
+
+# docs-readme (Codex adapter)
+
+This skill is the Codex entry point for the canonical Corpflow command.
+
+1. Resolve the plugin root as two directories above this `SKILL.md` and treat it as
+   `BASE_PLUGIN_ROOT`.
+2. Read `skills/shared/codex-runtime.md` and `commands/docs-readme.md` from that root completely.
+3. Apply the command's argument grammar, workflow, write boundaries, and output contract to the
+   user's request. Translate Claude-only operations through the Codex runtime adapter.
+4. Use `$docs-readme` for Codex-facing follow-ups. Do not edit the canonical command while running it.

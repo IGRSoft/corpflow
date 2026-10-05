@@ -4,6 +4,17 @@
 # plugin.json / marketplace.json / README.md (AC-4).
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
+_claude_skill_dirs() {
+  cd "$PLUGIN_ROOT" || return 1
+  find skills -name SKILL.md | sed 's#/SKILL\.md$##' | while IFS= read -r skill; do
+    name="${skill#skills/}"
+    if [ -f "commands/$name.md" ]; then
+      case "$name" in megatask|request-plan|worktask) ;; *) continue ;; esac
+    fi
+    printf '%s\n' "$skill"
+  done | sort
+}
+
 @test "AC-3: marketplace.json commands[] matches commands/*.md filesystem set exactly" {
   local manifest_list fs_list
   manifest_list="$(jq -r '.plugins[0].commands[]' "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
@@ -30,7 +41,7 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   # Carrying a SKILL.md is what makes a directory a skill, so discovery is by that
   # file rather than by depth: it admits skills/shared/milestone-helpers and excludes
   # skills/shared and skills/shared/lib, which are reference material and libraries.
-  fs_list="$(cd "$PLUGIN_ROOT" && find skills -name SKILL.md | sed 's#/SKILL\.md$##' | sort)"
+  fs_list="$(_claude_skill_dirs)"
   diff <(printf '%s\n' "$manifest_list") <(printf '%s\n' "$fs_list")
 }
 
@@ -113,56 +124,22 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
   refute_output --partial 'model-switch-lib.sh'
 }
 
-# Hooks reach the runtime by two independent routes: plugin.json (repo-wide firing) and
-# agent frontmatter (fires only for that agent). The frontmatter route has no manifest to
-# drift against, so a renamed or deleted script fails silently at dispatch time instead.
-# These three tests are that missing check.
-
-# Prints "<agent-file>:<hook-relpath>" for every ${CLAUDE_PLUGIN_ROOT}-composed hook
-# command declared in an agent's YAML frontmatter (everything above the second `---`).
-_frontmatter_hook_refs() {
-  local f
+# Claude Code ignores `hooks`, `mcpServers` and `permissionMode` in the frontmatter of an
+# agent loaded from a plugin, which every agents/*.md here is. A declaration there parses,
+# loads and never runs, so nothing downstream notices. Agent-scoped hooks belong in
+# plugin.json under SubagentStart/SubagentStop with an anchored `^corpflow:<name>$` matcher.
+@test "plugin agents: no agent declares hooks, mcpServers or permissionMode frontmatter" {
+  local f hits="" count=0
   for f in "$PLUGIN_ROOT"/agents/*.md; do
-    awk -v name="${f##*/}" '
-      /^---[[:space:]]*$/ { fences++; if (fences >= 2) exit; next }
-      fences == 1 && match($0, /\$\{CLAUDE_PLUGIN_ROOT\}\/[^"'"'"'[:space:]]+\.sh/) {
-        ref = substr($0, RSTART, RLENGTH)
-        sub(/^\$\{CLAUDE_PLUGIN_ROOT\}\//, "", ref)
-        print name ":" ref
-      }
-    ' "$f"
-  done
-}
-
-@test "frontmatter-wired hooks: every agent-declared hook script exists and is executable" {
-  local refs count=0 entry script
-  refs="$(_frontmatter_hook_refs)"
-
-  # Non-vacuity: at least one agent must wire a hook, or this test asserts nothing.
-  [ -n "$refs" ]
-
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    script="${entry#*:}"
-    [ -f "$PLUGIN_ROOT/$script" ] || fail "frontmatter hook missing on disk: $entry"
-    [ -x "$PLUGIN_ROOT/$script" ] || fail "frontmatter hook not executable: $entry"
     count=$((count + 1))
-  done <<< "$refs"
-
-  [ "$count" -ge 3 ]
-}
-
-@test "frontmatter-wired hooks: agent-stop.sh is wired ONLY via frontmatter, never in plugin.json" {
-  # Deliberate contract, not an oversight. agent-stop.sh runs for the three agents that
-  # declare it; registering it in plugin.json would widen its firing scope to every
-  # subagent in the repo. Kept executable as an assertion so a "fix" must argue with it.
-  local wired
-  wired="$(_frontmatter_hook_refs | grep -c 'hooks/agent-stop\.sh$' || true)"
-  [ "$wired" -ge 3 ]
-
-  run jq -r '[.. | .command? // empty] | join("\n")' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
-  assert_success
-  refute_output --partial 'hooks/agent-stop.sh'
+    hits="$hits$(awk -v name="${f##*/}" '
+      /^---[[:space:]]*$/ { fences++; if (fences >= 2) exit; next }
+      fences == 1 && /^(hooks|mcpServers|permissionMode):/ { print name ": " $0 }
+    ' "$f")"
+  done
+  # Non-vacuity: an empty glob would pass by inspecting nothing.
+  [ "$count" -ge 10 ] || fail "non-vacuity: only $count agent files scanned"
+  [ -z "$hits" ] || fail "plugin agents ignore these fields; move the hook to plugin.json: $hits"
 }
 
 @test "plugin.json hooks: every registered command resolves to an executable script" {
@@ -193,11 +170,6 @@ _expected_registered_handlers() {
   local f
   for f in "$PLUGIN_ROOT"/hooks/*.sh; do
     [ -x "$f" ] || continue
-    case "${f##*/}" in
-      # Wired through agent frontmatter by deliberate contract; registering it here
-      # would widen its firing scope to every subagent (pinned two tests above).
-      agent-stop.sh) continue ;;
-    esac
     printf 'hooks/%s\n' "${f##*/}"
   done
   # Handlers that live outside hooks/ are invisible to the sweep above and are the
@@ -206,13 +178,20 @@ _expected_registered_handlers() {
 }
 
 @test "plugin.json hooks: every hook handler on disk is registered (inverse parity)" {
-  local registered handler count=0
-  registered="$(jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json")"
+  local registered handler marker count=0
+  registered="$({
+    jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+    jq -r '[.. | .command? // empty] | .[]' "$PLUGIN_ROOT/hooks/codex-hooks.json"
+  })"
 
   while IFS= read -r handler; do
     [ -n "$handler" ] || continue
     [ -f "$PLUGIN_ROOT/$handler" ] || fail "expected handler missing on disk: $handler"
-    printf '%s\n' "$registered" | grep -Fq -- "\${CLAUDE_PLUGIN_ROOT}/$handler" \
+    case "$handler" in
+      hooks/codex-*.sh) marker="\${PLUGIN_ROOT}/$handler" ;;
+      *) marker="\${CLAUDE_PLUGIN_ROOT}/$handler" ;;
+    esac
+    printf '%s\n' "$registered" | grep -Fq -- "$marker" \
       || fail "handler exists on disk but is registered in no plugin.json hook event: $handler"
     count=$((count + 1))
   done < <(_expected_registered_handlers)

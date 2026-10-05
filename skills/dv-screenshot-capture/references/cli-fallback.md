@@ -27,7 +27,7 @@ git diff "${BASE_REF}...HEAD" -- "${selected_files[@]}" \
 **Notes**:
 - `--language diff` gives syntax-highlighted diff coloring; `--theme`/`--font` fall back to any available theme/mono font, so `Dracula` and `Hack` are preferences, not requirements.
 - Pipe only the relevant files (`-- <file>` filters) to keep the PNG under budget; pre-truncate a diff over ~200 lines with `head -200` to stay under 200 KB.
-- Install where absent: `brew install silicon` or `cargo install silicon`. CI install is a follow-up (oq1) — the `.txt` floor keeps CI unblocked meanwhile.
+- Install where absent: `brew install silicon` or `cargo install silicon`.
 
 ## magick (ImageMagick)
 
@@ -52,7 +52,7 @@ magick \
 
 ## Floor — loud failure, no placeholder
 
-When no image tool produced a usable PNG, `scripts/cli-fallback.sh` writes **no file**. It emits the
+When no image tool produced a usable PNG, `scripts/cli-fallback.sh` writes no file. It emits the
 adapter contract line with `ok=false` and exits non-zero, distinguishing two conditions that have
 different remedies:
 
@@ -63,10 +63,6 @@ different remedies:
 
 The audit row is `screenshot_capture_failed` (result `fail`) carrying `reason` and a
 `tools_checked` string that names each tool as present or `(absent)`.
-
-An earlier revision wrote a `.txt` diff dump here. It was removed because it satisfies an existence
-check without being visual evidence: `attach-visual-evidence.sh` classified it as a `placeholder`
-capture and DV completion counted it as evidence-of-attempt.
 
 ### tool_missing row and exit 2
 
@@ -85,7 +81,6 @@ Before piping any diff to `silicon` or `magick`, scan for secret patterns — th
 # Detect common secret patterns; abort to tree-capture if found
 if git diff "${BASE_REF}...HEAD" | grep -qE '(password|secret|token|api_key|private_key)\s*[=:]\s*["\x27][^"\x27]{8,}'; then
   echo "WARNING: Potential secret detected in diff. Falling back to file-tree capture." >&2
-  git diff --name-only "${BASE_REF}...HEAD" | silicon --language text --output "${OUT}" || \
-  git diff --name-only "${BASE_REF}...HEAD" > "${OUT}.txt"
+  git diff --name-only "${BASE_REF}...HEAD" | silicon --language text --output "${OUT}"
 fi
 ```

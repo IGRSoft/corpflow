@@ -1,5 +1,7 @@
 # Rollback Plan Template
 
+The two blocks below are one template; copy both, in order.
+
 #### Template — prerequisites, triggers, steps 1–3
 
 ~~~markdown
@@ -36,8 +38,6 @@ Initiate rollback if:
 #### Template — steps 4–6, data, communication
 
 ~~~markdown
-<!-- …continued: Rollback Plan steps 4–6 and closing sections -->
-
 4. **Revert database** (if applicable)
    ```sql
    -- Run rollback migration, then verify data integrity

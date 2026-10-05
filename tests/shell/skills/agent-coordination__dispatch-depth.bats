@@ -10,18 +10,19 @@
 # an enum value with no contract is undocumented, a contract with no enum value
 # is unwritable. These tests pin both halves together:
 #
-#   - both actions are registered in the audit schema enum AND the Writers table
+#   - both actions are registered in the audit action registry AND the Writers table
 #   - the self-report contract section exists and names all three required fields
 #   - worktask check 11 exists, emits the projection row, and never blocks
 #   - the two depth projections cross-link, so neither can be edited alone
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 COORD="$PLUGIN_ROOT/skills/agent-coordination/SKILL.md"
+REGISTRY="$PLUGIN_ROOT/skills/agent-coordination/references/audit-actions.md"
 WORKTASK="$PLUGIN_ROOT/skills/worktask/SKILL.md"
 MEGATASK="$PLUGIN_ROOT/skills/megatask/SKILL.md"
 
-# The audit `action` enum lives on one line inside the ```jsonc Schema block.
-_enum_line() { grep -m1 '"action": "worktask_init|' "$COORD"; }
+# The audit `action` registry is the `actions:` lines of references/audit-actions.md.
+_enum_line() { grep '^actions: ' "$REGISTRY" | tr '\n' ' '; }
 
 # --- schema registration --------------------------------------------------
 @test "schema: dispatch_flattened is a member of the audit action enum" {

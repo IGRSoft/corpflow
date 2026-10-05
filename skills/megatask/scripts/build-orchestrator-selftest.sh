@@ -33,7 +33,7 @@ self_test() {
   }
 
   local td
-  td=$(mktemp -d -t build-orch-selftest.XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/build-orch-selftest.XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT
 

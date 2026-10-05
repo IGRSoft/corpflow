@@ -55,7 +55,7 @@ apply to every table below, so the cells do not repeat them:
 | corpflow Stage | android-developer Agent | Handoff Data |
 |---------------|-------------------------|--------------|
 | DR | and-code-fixer | `metadata.gate_blockers[]` + ktlint/detekt minimal-diff remediation |
-| SR | and-security-auditor | development context + Android security checklist (EncryptedSharedPreferences/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
+| SR | and-security-auditor | development context + Android security checklist (DataStore + Tink/Keystore, no-cleartext, exported-component validation, no hardcoded secrets) |
 | QA | and-test-generator | development context + test requirements; JUnit4/5, MockK, Turbine, Roborazzi screenshot tests |
 | DV-support (dependencies) | and-dependency-manager | version catalog (`libs.versions.toml`) + Gradle dependency CVE audit scope |
 
@@ -115,27 +115,18 @@ apply to every table below, so the cells do not repeat them:
 
 | corpflow Stage | security-scanning Agent | Handoff Data |
 |---------------|------------------------|--------------|
-| SR | security-auditor | code + OWASP checklist |
+| SR | security-scanning-security-auditor | code + OWASP checklist |
 | SR | threat-modeling-expert | architecture + threat analysis |
 
 ## debugging-toolkit Plugin
 
 | corpflow Stage | debugging-toolkit Agent | Handoff Data |
 |---------------|------------------------|--------------|
-| DV | debugger | error logs, stack traces |
-| DV | dx-optimizer | worktask friction points |
-| IR | debugger | production logs, RCA context |
+| DV | debugging-toolkit-debugger | error logs, stack traces |
+| DV | debugging-toolkit-dx-optimizer | worktask friction points |
+| IR | debugging-toolkit-debugger | production logs, RCA context |
 
-## Future Plugin Integration (Not Yet Installed)
-
-Planned marketplace plugins — do NOT invoke these agents until the plugin is added to the project configuration. `frontend-developer`, `backend-developer`, and `ai-engineer` have graduated out of this table (tables above; registry entries in `skills/shared/compatible-plugins.md`).
-
-| Plugin | Agent | Use Case |
-|--------|-------|----------|
-| `code-documentation` | `code-reviewer` | PR code review |
-| `application-performance` | `performance-engineer` | Performance analysis |
-| `cicd-automation` | `deployment-engineer` | CI/CD automation |
-| `accessibility-compliance` | `ui-visual-validator` | WCAG auditing |
+Support-plugin invocation ids double the plugin slug (`skills/shared/routing-matrix.md § Support-plugin aliases`).
 
 ## Error Handling
 
@@ -146,16 +137,8 @@ Planned marketplace plugins — do NOT invoke these agents until the plugin is a
 3. Non-critical → mark partial completion and document what was achieved.
 4. Either way, carry it into the handoff as `PARTIAL_FAILURES: - Agent: {name}, Error: {error}, Impact: {impact}`.
 
-#### Child tool restrictions
-
-> When handing off to an external-plugin agent, a `disallowedTools` entry may use MCP **server-level** specs (`mcp__server`, `mcp__*`) and is honored on the child — deny a whole MCP server in one rule instead of enumerating tools. `WebSearch` works in subagents, so a delegated agent can rely on it. Auth-capable MCP servers do not leak auth-stub tools to headless / SDK children. See `skills/agent-coordination/references/headless-dispatch.md`.
+Tool restrictions on the child (server-level MCP denials, `WebSearch`): `skills/agent-coordination/references/headless-dispatch.md § Child tool grants`.
 
 ### Context Overflow
 
 If a handoff exceeds its token budget: compress P2/P3 items, reference the full output by file path, and keep only critical items inline.
-
-## Model Configuration
-
-> Agent frontmatter accepts full model IDs (e.g. `claude-opus-5`) as well as aliases (`opus`) — cross-plugin handoffs can pin an exact version when provider-specific behavior matters.
->
-> The Agent tool `resume` parameter is removed. Use `SendMessage` to reach running background agents; it auto-resumes stopped ones in the background.

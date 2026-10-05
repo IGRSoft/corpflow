@@ -5,7 +5,7 @@ requires.
 
 ## When to Apply
 
-Complexity score >= 15, or the estimate involves: AR/ML/Vision frameworks, BLE/hardware SDKs,
+Factor score >= 15, or the estimate involves: AR/ML/Vision frameworks, BLE/hardware SDKs,
 real-time camera processing, third-party SDKs of unknown quality, background processing.
 
 ## Adjustment Matrix
@@ -25,8 +25,7 @@ per-platform tables below.
 ## Platform-Specific Adjustments
 
 Apply only the table matching the reviewed platform; each row instantiates an Adjustment
-Matrix capability with that platform's concrete APIs. Table order mirrors the `--platform`
-enum; it is not a priority order.
+Matrix capability with that platform's concrete APIs.
 
 ### Apple/SwiftUI
 | Feature | Min Adjustment | Max Adjustment |
@@ -85,7 +84,7 @@ enum; it is not a priority order.
 
 ## Review Process
 
-1. **Read the estimate** — its `### Breakdown` and `### Complexity Analysis` sections. When
+1. **Read the estimate** — its `### Breakdown` and `### Factor Score` sections. When
    `--export csv` has already run, `features_breakdown.csv`, `complexity_analysis.csv` and
    `integration_specifics.csv` carry the same content and may be read instead.
 2. **Identify adjustment triggers** — check each feature against the matrix; note
@@ -97,8 +96,6 @@ enum; it is not a priority order.
    range, and the timeline range if it shifts.
 
 ## Review Checklist
-
-Before finalizing estimates, verify:
 
 - [ ] All SDK integrations identified
 - [ ] Background mode requirements assessed

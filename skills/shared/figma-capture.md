@@ -1,9 +1,6 @@
 # Figma Design Capture
 
-Read this when a Figma URL is detected in the task description or user input — the URL forces capture
-regardless of the design-detection keyword score. The Figma-URL trigger, the `{{asset:<basename>}}`
-placeholder grammar, and the canonical anchor example stay inline in
-`skills/worktask/references/pl0-procedure.md`.
+Read this when a Figma URL is in the task description or user input — the URL forces capture regardless of the design-detection keyword score. The trigger, the `{{asset:<basename>}}` placeholder grammar and the canonical anchor example live in `skills/worktask/references/pl0-procedure.md`.
 
 ## Figma URL Detection
 
@@ -13,56 +10,56 @@ Scan the task description for URLs matching:
 figma\.com/(?:file|design|proto)/([a-zA-Z0-9]+)/([^?]+)(\?node-id=([0-9-]+))?
 ```
 
-- Group 1 `fileKey`, Group 4 `nodeId` (`-` → `:` for API calls); `(?:file|design|proto)` is **non-capturing** — all three design-file path forms keep the same group numbers.
-- Must match the two trigger regexes in `skills/worktask/references/pl0-procedure.md § Figma Design Capture` — on drift, `/file/` and `/proto/` URLs reach `design-preview` but never fire capture (no PNGs, no registry, QA design gate skipped).
-- Never add `/board/` or `/slides/` — `get_metadata` is design-file-only and rejects FigJam/Slides.
+- Group 1 `fileKey`, Group 4 `nodeId` (`-` → `:` for API calls); `(?:file|design|proto)` is non-capturing, so all three path forms keep the same group numbers.
+- Keep it in step with the two trigger regexes in `skills/worktask/references/pl0-procedure.md § Figma Design Capture` — on drift, `/file/` and `/proto/` URLs reach `design-preview` but never fire capture (no PNGs, no registry, QA design gate skipped).
+- Don't add `/board/` or `/slides/`: `get_metadata` is design-file-only and rejects FigJam/Slides.
 - Branch URL (`…/branch/:branchKey/…`) → `branchKey` is the fileKey. No `node-id` → capture the top-level frame.
 
 ## State Input Contract
 
-State is derived **only from explicit user input** — no heuristic sibling scanning. One URL, no annotation → `state: default`; otherwise one URL per state via fragment (`…?node-id=42-7#state=error`), query parameter (`…&state=error`), or inline annotation (`<url> [state: error]`).
+State comes only from explicit user input, never from scanning sibling frames. One URL, no annotation → `state: default`; otherwise one URL per state via fragment (`…?node-id=42-7#state=error`), query parameter (`…&state=error`), or inline annotation (`<url> [state: error]`).
 
-Valid values: `default | error | empty | loading | hover | disabled | success`. Unknown values are preserved as-is (tolerant); QA reports unusual states in `testing.md`.
+Valid values: `default | error | empty | loading | hover | disabled | success`. Unknown values are kept as-is; QA reports unusual states in `testing.md`.
 
 ## Auth Probe
 
-Before the Capture Workflow, match `figma.com` (case-insensitive substring) in the task description and call `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` once on the first URL. Not net-new traffic: step 3b reordered ahead of any plan-file write, so the auth-error class is classified first.
+Before the Capture Workflow, if the task description contains `figma.com` (case-insensitive), call `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` once on the first URL, before any plan-file write.
 
-- **Success** → run the Capture Workflow as normal.
-- **Non-auth failure** (network, rate limit, bad node id): do not intercept — use the per-URL failure path at the end of `## Capture Workflow`.
+- **Success** → run the Capture Workflow.
+- **Non-auth failure** (network, rate limit, bad node id) → use the per-URL failure path at the end of `## Capture Workflow`.
 
 ### Auth failure (soft halt)
 
-Error string matches (case-insensitive) any of `authenticate` / `OAuth` / `unauthorized` / `401`:
+The error string matches (case-insensitive) `authenticate`, `OAuth`, `unauthorized` or `401`:
 
 1. Emit exactly one user-facing line: `Figma MCP not authenticated. Authorize at <OAUTH_URL_FROM_ERROR> and paste callback to continue, or reply 'skip' to proceed without screenshot.` (OAuth URL from the error payload; if absent, drop the placeholder and say `Authorize the Figma MCP server`.)
-2. Write one closing-sweep item for it (§ Auth failure — the sweep item, below).
-3. **Soft halt**: skip the Capture Workflow entirely and write the plan as if no Figma URL were present — it ships with the sweep item, and the user decides whether to authorize and re-run.
+2. Write one closing-sweep item (§ Auth failure — the sweep item).
+3. Skip the Capture Workflow and write the plan as if no Figma URL were present; the user decides at the gate whether to authorize and re-run.
 
 #### Auth failure — the sweep item
 
-Same contract as every other stage's (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`): the full `SweepItem` under `planning-<N>.md#elicitation-sweep`, and its stub in BOTH `handoff.open_questions[]` and the PL `--facts` payload — the two transports have no derivation between them, so a stub written to only one never reaches the gate.
+Same contract as every other stage's (`skills/shared/stage-contracts.md § Closing Elicitation Sweep`): the full `SweepItem` under `planning-<N>.md#elicitation-sweep`, and its stub in both `handoff.open_questions[]` and the PL `--facts` payload — nothing derives one from the other, so a stub written to only one never reaches the gate.
 
-- `id: sw-PL<N>-<n>`, `class: decision`, `ref: "planning-<N>.md#elicitation-sweep"`, `blocks_next_stage: false` — the field is required on every stub, and `false` is right here because PL's boundary already is the plan gate.
+- `id: sw-PL<N>-<n>`, `class: decision`, `ref: "planning-<N>.md#elicitation-sweep"`, `blocks_next_stage: false` (required on every stub; `false` because PL's boundary already is the plan gate).
 - `summary`: `Figma MCP auth pending; proceed without screenshot capture? (URLs: <comma-separated list>)`
 - `options[]`: `Proceed without screenshots` (`recommended: true`; the QA design gate is skipped for this run) / `Authorize and re-run capture`.
 - `rationale`: one line on why proceeding is the default here.
 
 ## Capture Workflow
 
-Run **Auth Probe** first; on auth failure skip these steps. All PNGs land in the canonical `.context/designs/` (see `skills/task-folder-organization/SKILL.md § Canonical Figma Asset Directory`).
+Run the Auth Probe first; on auth failure skip these steps. All PNGs land in `.context/designs/` (`skills/task-folder-organization/SKILL.md § Canonical Figma Asset Directory`), never `.context/images/` — that directory is DV-only, and a Figma PNG there disables the QA design gate.
 
-Run `mkdir -p .context/designs` **once per turn** before any `curl`: `curl -o` cannot create parents, and frames must never fall back to `.context/images/`. Do not assume the `commands/worktask.md` Phase-1 init mkdir ran, and never claim a file is saved without verifying it on disk.
+Run `mkdir -p .context/designs` once per turn before any `curl`: `curl -o` cannot create parents, and the `commands/worktask.md` init mkdir may not have run.
 
 ### Steps 1–2 — Parse and classify
 
-Per Figma URL (state defaults to `default`): **parse** `fileKey`, `nodeId`, `state`; **classify the node** via `mcp__plugin_figma_figma__get_metadata({ fileKey, nodeId })` FIRST:
+Per Figma URL (state defaults to `default`): parse `fileKey`, `nodeId`, `state`, then classify the node with `mcp__plugin_figma_figma__get_metadata({ fileKey, nodeId })` before capturing:
 
-- **Leaf** — `frame`/`component`/`instance` with no child `frame`s, or fewer than 2 direct `frame` children → one target, the node itself (single-screen behavior unchanged).
-- **Container** — type `section`/`canvas`, or a wide `frame` with **≥ 2** direct `frame` children → descend **one level only**: the container as the **overview**, plus each direct child `frame` (id + name from metadata).
-- **Ambiguous** — lone screen `frame`, or a layout group with 0–1 `frame` children → treat as **leaf** (R3).
+- **Leaf** — `frame`/`component`/`instance` with fewer than 2 direct `frame` children → one target, the node itself.
+- **Container** — type `section`/`canvas`, or a wide `frame` with ≥ 2 direct `frame` children → descend one level only: the container as the overview, plus each direct child `frame` (id + name from metadata).
+- **Ambiguous** — lone screen `frame`, or a layout group with 0–1 `frame` children → treat as leaf.
 
-**Cap**: the first **12** child frames in document order; beyond that capture those 12 and append `R2 over-capture cap hit: container <nodeId> has <N> frames, captured first 12` to `.context/errors/product-manager.md`.
+Cap: the first 12 child frames in document order; beyond that capture those 12 and append `R2 over-capture cap hit: container <nodeId> has <N> frames, captured first 12` to `.context/errors/product-manager.md`.
 
 ### Step 3 — Capture each target
 
@@ -70,7 +67,7 @@ For each target node (overview first, then child frames):
 
 a. `mcp__plugin_figma_figma__get_design_context({ fileKey, nodeId })` — code hints + component info.
 b. `mcp__plugin_figma_figma__get_screenshot({ fileKey, nodeId })` — returns a short-lived image URL.
-c. **Persist in-turn** (the URL expires before any post-approval step): `target_path` = `.context/designs/` + the grammar basename — **always** `.context/designs/`, **NEVER** `.context/images/` (Placement guard in `skills/worktask/references/pl0-procedure.md`: `images/` is DV-only and disables the QA design gate). Download immediately, double-quoting both arguments — the MCP-returned URL is external input:
+c. Persist in this turn, because the URL expires before any post-approval step. `target_path` = `.context/designs/` + the grammar basename. Double-quote both arguments — the MCP-returned URL is external input:
 
 ```bash
 curl -sf -o ".context/designs/<basename>" "<image_url>"
@@ -78,28 +75,28 @@ curl -sf -o ".context/designs/<basename>" "<image_url>"
 
 #### Verify and record (3d–3e)
 
-d. **Verify** before recording success: `file "<target_path>"` reports a PNG **and** byte size > 0. On failure (curl non-zero, missing file, zero bytes, not a PNG) append `figma persist failed: <nodeId> → <target_path> (<reason>)` to `.context/errors/product-manager.md`, record it as a sweep item exactly as § Auth failure — the sweep item specifies — full item under `planning-<N>.md#elicitation-sweep`, stub in the frontmatter AND in `--facts`, `id: sw-PL<N>-<n>`, `class: decision`, options `Proceed without screenshots` (recommended) / `Authorize and re-run capture` — and **continue**: persist failures never block the worktask.
+d. Verify before recording success: `file "<target_path>"` reports a PNG and the byte size is > 0. On failure (curl non-zero, missing file, zero bytes, not a PNG) append `figma persist failed: <nodeId> → <target_path> (<reason>)` to `.context/errors/product-manager.md`, record a sweep item shaped like § Auth failure — the sweep item (same id, class, anchor, both stubs and options), and continue: persist failures never block the worktask.
 e. Record `{nodeId, name, state, image_url, target_path}` into `state.json facts.figma_assets[]`; only verified rows count toward registry success, failed rows carry `failed: true`.
 
 ### Step 4 — Filename grammar
 
 `.context/designs/figma-[screen]-[state]-[node-id].png` — the directory component is mandatory.
 
-- `[screen]`/`[node-id]`: child frame name + child id; the **Overview** (container image) uses the container name + id. Names lowercase, spaces → hyphens; ids colons → dashes.
+- `[screen]`/`[node-id]`: child frame name + child id; the Overview (container image) uses the container name + id. Names lowercase, spaces → hyphens; ids colons → dashes.
 - `[state]`: per the State Input Contract, default `default`; child frames inherit the URL-level state unless annotated per-frame.
 - Non-alphanumeric characters (dashes, slashes, en/em-dashes, other punctuation) collapse to one hyphen; consecutive hyphens squeeze to one.
 
 ### Steps 5–7 — Outputs and failure path
 
 5. Repeat steps 1–4 per Figma URL.
-6. **Summarize per-frame design context** in `<plan_file>` under **Figma Design References**: one bullet per frame (state, badge/label text, build notes — shape/geometry, control deltas) plus one overview bullet.
+6. Summarize per-frame design context in `<plan_file>` under **Figma Design References**: one bullet per frame (state, badge/label text, build notes — shape/geometry, control deltas) plus one overview bullet.
 7. Write `.context/designs/figma-registry.md` (see Registry Generation).
 
 A per-URL MCP failure never stops the run — continue with the remaining URLs, write the registry with the captured rows, append a failure note to `.context/errors/product-manager.md`.
 
 ## Registry Generation
 
-Write `.context/designs/figma-registry.md` after all captures. **Per-frame rule (REQ-B)**: a container yields N+1 rows — one Overview row (container node id, `State: overview`) plus one row per persisted child frame, keyed on **its own** node id with its own name and state; a leaf (single-screen) URL yields exactly one row and **no** Overview row. QA's Design Comparison compares each row's persisted file individually (`agents/qa-engineer.md § Design Comparison (Visual QA)`).
+Write `.context/designs/figma-registry.md` after all captures. Per-frame rule (REQ-B): a container yields N+1 rows — one Overview row (container node id, `State: overview`) plus one row per persisted child frame, keyed on its own node id, name and state; a leaf URL yields exactly one row and no Overview row. QA compares each row's persisted file individually (`agents/qa-engineer.md § Design Comparison (Visual QA)`).
 
 ### Registry template
 
@@ -131,20 +128,20 @@ Reference the registry from `<plan_file> § Figma Design References`:
 
 ## Post-Capture Plan Update (REQ-D)
 
-After persistence and the registry write — **in this same PL turn**, the PM being Bash-capable and having verified the files on disk — rewrite the plan's `## design-preview` anchor with the **Asset-placeholder grammar** from `skills/worktask/references/pl0-procedure.md`, so DV implements and QA verifies against the discrete per-frame files.
+In this same PL turn, after the files are verified on disk and the registry is written, rewrite the plan's `## design-preview` anchor with the Asset-placeholder grammar from `skills/worktask/references/pl0-procedure.md`, so DV implements and QA verifies against the per-frame files.
 
 ### Anchor update steps
 
 1. Keep the captured Figma source URL line(s) at the top of the anchor, verbatim.
-2. Per **persisted** file (verified non-zero PNG): a `{{asset:<basename>}}` token line (basename only, no path) **immediately followed** by a `- <description>` bullet — state mapping plus build notes (shape/geometry, badge/label text, control deltas versus the other states). The Overview gets its own token + bullet, marked as the container reference, not a per-state target.
-3. Failed/skipped frames (`failed: true` in `state.json facts.figma_assets[]`) get a plain bullet naming their sweep item by `sw-PL<N>-<n>` id — no `{{asset:...}}` token (nothing verified to host), never a satisfied target.
+2. Per persisted file (verified non-zero PNG): a `{{asset:<basename>}}` token line (basename only) immediately followed by a `- <description>` bullet — state mapping plus build notes (shape/geometry, badge/label text, control deltas versus the other states). The Overview gets its own token + bullet, marked as the container reference, not a per-state target.
+3. Failed/skipped frames (`failed: true` in `state.json facts.figma_assets[]`) get a plain bullet naming their `sw-PL<N>-<n>` sweep item — no `{{asset:...}}` token, never a satisfied target.
 
 The registry rows, not one combined screenshot, are QA's authoritative per-state targets.
 
 ### Publish-helper boundary
 
-The PM writes **only** tokens and descriptions, never hosted URLs or `![...]()` image markdown. Post-approval and post-sanitisation, `publish-pl-issue.sh` resolves each `{{asset:<basename>}}` into a hosted `![<basename>](<url>)` line, with a non-blocking fallback chain (raw.githubusercontent.com → gist → URL-only note); asset commits stay deferred until after human approval (AC-9). Persistence and the plan update both happen inside the PL turn while the screenshot URLs are valid — no orchestrator re-entry.
+The PM writes only tokens and descriptions, never hosted URLs or `![...]()` image markdown. After approval and sanitisation, `publish-pl-issue.sh` resolves each token into a hosted image line (its tier chain is documented in the script header).
 
 ## Coexistence with Pencil Mockups
 
-A Figma URL always captures + writes the registry; a design keyword score >= 5 without a Figma URL invokes Designer for Pencil mockups instead (existing behavior, no registry). When both fire, do both — the Figma screenshots are the authoritative design reference.
+A Figma URL always captures and writes the registry; a design keyword score >= 5 without a Figma URL invokes Designer for Pencil mockups instead (no registry). When both fire, do both — the Figma screenshots are the authoritative design reference.

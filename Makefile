@@ -66,8 +66,11 @@ bootstrap:
 	@test -x "$(BATS)" || { echo "[bootstrap] FATAL: vendored bats missing at $(BATS)"; exit 1; }
 	@echo "[bootstrap] vendored bats OK: $$("$(BATS)" --version 2>/dev/null)"
 	@echo "[bootstrap] checking swift toolchain…"
-	@command -v swift >/dev/null 2>&1 || { echo "[bootstrap] FATAL: swift toolchain missing"; exit 1; }
-	@echo "[bootstrap] swift OK: $$(swift --version 2>/dev/null | head -1)"
+	@if command -v swift >/dev/null 2>&1; then \
+	   echo "[bootstrap] swift OK: $$(swift --version 2>/dev/null | head -1)"; \
+	 else \
+	   echo "[bootstrap] SKIP: swift toolchain absent — Swift build and coverage phases will be skipped. Shell tests are unaffected. Install: Xcode CLT (macOS) | https://swift.org/install (Linux)."; \
+	 fi
 	@echo "[bootstrap] resolving kcov (tiered: system -> brew -> documented proxy)…"
 	@if command -v kcov >/dev/null 2>&1; then \
 	    echo "[bootstrap] tier-1: system kcov found at $$(command -v kcov)"; \
@@ -127,23 +130,27 @@ coverage: bootstrap
 	    "$(BATS)" $(SHELL_TESTS); \
 	  fi
 	@echo "[coverage] swift coverage phase (ttt-template artifact, gate >=$(COV_MIN)%)…"
-	@set -e; \
-	  for pkg in "$(TTT_PKG)"; do \
-	    echo "[coverage]   swift test --enable-code-coverage ($$pkg)"; \
-	    swift test --enable-code-coverage --package-path "$$pkg" >/dev/null || exit $$?; \
-	    cov=$$(swift test --show-codecov-path --package-path "$$pkg" 2>/dev/null | tail -1); \
-	    [ -f "$$cov" ] || { echo "[coverage] FATAL: codecov JSON missing for $$pkg"; exit 1; }; \
-	    pct=$$(jq '[.data[0].files[] \
-	          | select(.filename | contains("/.build/") | not) \
-	          | select(.filename | contains("/Tests/") | not) \
-	          | select(.filename | contains("Sources/TicTacToeKit/Views/") | not)] \
-	          | (map(.summary.lines.covered) | add) as $$cov \
-	          | (map(.summary.lines.count) | add) as $$cnt \
-	          | if $$cnt == 0 then 100 else ($$cov / $$cnt * 100) end' "$$cov"); \
-	    printf '[coverage]   %s line coverage: %.1f%% (gate %s%%)\n' "$$(basename $$pkg)" "$$pct" "$(COV_MIN)"; \
-	    ok=$$(jq -n --argjson p "$$pct" --argjson m "$(COV_MIN)" '$$p >= $$m'); \
-	    [ "$$ok" = "true" ] || { echo "[coverage] FAIL: $$pkg below $(COV_MIN)%"; exit 1; }; \
-	  done
+	@if ! command -v swift >/dev/null 2>&1; then \
+	   echo "[coverage] SKIP: swift toolchain absent — Swift coverage phase skipped. Shell coverage above is unaffected. Install: Xcode CLT (macOS) | https://swift.org/install (Linux)."; \
+	 else \
+	   set -e; \
+	   for pkg in "$(TTT_PKG)"; do \
+	     echo "[coverage]   swift test --enable-code-coverage ($$pkg)"; \
+	     swift test --enable-code-coverage --package-path "$$pkg" >/dev/null || exit $$?; \
+	     cov=$$(swift test --show-codecov-path --package-path "$$pkg" 2>/dev/null | tail -1); \
+	     [ -f "$$cov" ] || { echo "[coverage] FATAL: codecov JSON missing for $$pkg"; exit 1; }; \
+	     pct=$$(jq '[.data[0].files[] \
+	           | select(.filename | contains("/.build/") | not) \
+	           | select(.filename | contains("/Tests/") | not) \
+	           | select(.filename | contains("Sources/TicTacToeKit/Views/") | not)] \
+	           | (map(.summary.lines.covered) | add) as $$cov \
+	           | (map(.summary.lines.count) | add) as $$cnt \
+	           | if $$cnt == 0 then 100 else ($$cov / $$cnt * 100) end' "$$cov"); \
+	     printf '[coverage]   %s line coverage: %.1f%% (gate %s%%)\n' "$$(basename $$pkg)" "$$pct" "$(COV_MIN)"; \
+	     ok=$$(jq -n --argjson p "$$pct" --argjson m "$(COV_MIN)" '$$p >= $$m'); \
+	     [ "$$ok" = "true" ] || { echo "[coverage] FAIL: $$pkg below $(COV_MIN)%"; exit 1; }; \
+	   done; \
+	 fi
 	@echo "[coverage] python phase (coverage.py measures when present; the suites always gate)…"
 	@py_rc=0; \
 	  if command -v coverage >/dev/null 2>&1; then \

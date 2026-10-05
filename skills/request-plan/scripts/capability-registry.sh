@@ -16,7 +16,7 @@
 #   No worked example is given here on purpose: this file is inside the tree the model
 #   searches, so a prompt printed beside its answer converts that eval case into a lookup.
 #
-#   The whole inventory is ~148 lines / ~7k tokens, so this REPLACES a search rather
+#   The whole inventory is one bounded read, so this REPLACES a search rather
 #   than seeding one: enumeration is complete by construction, which is the point. A
 #   search needs a stop condition the searcher cannot evaluate; a bounded list does not.
 #
@@ -54,11 +54,12 @@ emit_line() {
 }
 
 desc_markdown() {
-  # Frontmatter only: stop at the next key or the closing fence, so a multi-line
-  # description folds but a body heading never leaks in.
+  # Frontmatter only: stop at the next key, a column-0 YAML comment or the closing fence,
+  # so a multi-line description folds but a body heading never leaks in.
   awk '
     /^description:[[:space:]]*/ { sub(/^description:[[:space:]]*/, ""); buf=$0; inside=1; next }
     inside && /^[a-z_-]+:/     { exit }
+    inside && /^#/             { exit }
     inside && /^---/           { exit }
     inside                     { buf = buf " " $0 }
     END                        { print buf }

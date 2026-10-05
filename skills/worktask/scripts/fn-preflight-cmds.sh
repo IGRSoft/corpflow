@@ -476,7 +476,7 @@ cmd_branch_divergence() {
 
   audit_fn branch_divergence_detected warn \
     "$(meta_json class "$class" ledger "$ledger" local "$local_name" \
-      renamed_to "$renamed_to" source "${DIVERGENCE_SOURCE:-fn_preflight}")"
+      renamed_to "$renamed_to" source fn_preflight)"
 
   if [[ "$class" == "third_party" ]]; then
     printf 'branch-divergence: local branch is %s but this run renamed it to %s — renamed by something outside the pipeline\n' \

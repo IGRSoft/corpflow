@@ -16,8 +16,12 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false        # a macOS failure must not cancel the Linux evidence, or the reverse
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30       # was 20; macOS runners are slower to provision
     steps:
       - uses: actions/checkout@v5
         with:
@@ -101,3 +105,7 @@ jobs:
       - name: pr-body-lint (self-test fixtures)
         if: always()
         run: bash skills/worktask/scripts/pr-body-lint.sh --self-test
+
+      - name: portability-lint (repo subject)
+        if: always()
+        run: bash skills/worktask/scripts/portability-lint.sh

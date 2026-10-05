@@ -1,0 +1,5 @@
+Phase;Week;Milestone;Deliverables;SP Min;SP Max;Hours Min;Hours Max;Dependencies
+1;1-2;Core;Auth;6;12;36;72;-
+2;3-4;Profile;Profile form;4;8;24;48;1
+Buffer;5;Contingency;"Risk mitigation, feedback";;;9;18;All phases
+TOTAL;;;;10;20;69;138;

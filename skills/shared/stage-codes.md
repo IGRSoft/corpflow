@@ -6,44 +6,64 @@ name: stage-codes
 
 Single source of truth for worktask stage codes.
 
+## Agent Model Matrix
+
+Every agent's default model and effort, one row per `agents/*.md`. The stage tables map a code
+to its agent; the pair lives only here. Extracted by `model-matrix-lib.sh` and resolved via
+`model_resolve`, with `CORPFLOW.md § Models` as the project override. See § Model and Effort
+Lookup for the join.
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| designer | sonnet | medium |
+| developer | opus | high |
+| ethics-reviewer | opus | xhigh |
+| incident-responder | opus | high |
+| product-manager | opus | high |
+| project-manager | sonnet | medium |
+| prompt-engineer | opus | xhigh |
+| qa-engineer | sonnet | medium |
+| release-engineer | sonnet | low |
+| security-reviewer | opus | xhigh |
+| software-architector | opus | high |
+| stakeholder | sonnet | low |
+| team-lead | sonnet | medium |
+| technical-lead | opus | high |
+| technical-writer | haiku | low |
+| workflow-engineer | sonnet | medium |
+
 ## Primary Stages (11-Stage)
 
-| Code | Stage | Agent | Model | Effort |
-|------|-------|-------|-------|--------|
-| PL | Planning | product-manager | opus | high |
-| AR | Architecture | software-architector | opus | high |
-| TL | Team Lead | team-lead | sonnet | medium |
-| DV | Development | developer | opus | high |
-| DR | Developer Review | technical-lead | opus | high |
-| SR | Security Review | security-reviewer | opus | xhigh |
-| QA | QA Testing | qa-engineer | sonnet | medium |
-| DC | Documentation | technical-writer | haiku | low |
-| RE | Release Engineering | release-engineer | sonnet | low |
-| FN | Finalization | project-manager | sonnet | medium |
-| ST | Stakeholder | stakeholder | sonnet | low |
-| IR | Incident Response | incident-responder | opus | high |
+| Code | Stage | Agent |
+|------|-------|-------|
+| PL | Planning | product-manager |
+| AR | Architecture | software-architector |
+| TL | Team Lead | team-lead |
+| DV | Development | developer |
+| DR | Developer Review | technical-lead |
+| SR | Security Review | security-reviewer |
+| QA | QA Testing | qa-engineer |
+| DC | Documentation | technical-writer |
+| RE | Release Engineering | release-engineer |
+| FN | Finalization | project-manager |
+| ST | Stakeholder | stakeholder |
+| IR | Incident Response | incident-responder |
 
-### Test-execution authority note
+### Routing and test-execution notes
 
-> Who may **execute** tests (vs. build-only) is a separate axis from `test_mode` breadth
-> and is canonical in `skills/shared/testing-strategy.md § Test-Execution Authority`. Not
-> restated here — this table stays the stage/agent/model reference only.
-
-### DV routing note
-
-> DV defaults to `developer` (platform app code). For plugin worktask-infrastructure scope
-> (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`), PL0 routes DV to
-> `workflow-engineer` — see `skills/worktask/references/pl0-procedure.md` § DV0 routing
-> override. This table keeps the unconditional default; the conditional rule lives there.
+- DV defaults to `developer`. For plugin worktask-infrastructure scope
+  (`skills/worktask/scripts/*.sh`, the stage state-machine, `hooks/**`) PL0 routes DV to
+  `workflow-engineer`: `skills/worktask/references/pl0-procedure.md § DV0 routing override`.
+- Which agents may execute tests (as opposed to build only) is canonical in
+  `skills/shared/testing-strategy.md § Test-Execution Authority`.
 
 ### Side-effect-bearing stages
 
-> Canonical list. These two act **outside** the ledger when they complete, so re-running
-> one is not a free retry: it can produce a second commit, PR or tag for one unit of work.
-> `state-patch.sh --task-replay --cascade` traverses them but never resets them **as
-> dependents**, and mirrors this list as one constant (bash cannot read the table; the bats
-> parity test asserts the two agree). A directly named `--task-replay FN0` is still reset,
-> with or without `--cascade` — an explicit id is the user's instruction — but warns.
+These stages act outside the ledger when they complete, so re-running one can produce a second
+commit, PR or tag for one unit of work. `state-patch.sh --task-replay --cascade` traverses them
+but never resets them as dependents; the script mirrors this list in one constant, and a bats
+parity test keeps the two in step. A directly named `--task-replay FN0` is still reset, with or
+without `--cascade` (an explicit id is the user's instruction), but warns.
 
 | Code | External side effect on completion |
 |------|------------------------------------|
@@ -52,27 +72,26 @@ Single source of truth for worktask stage codes.
 
 ## Model and Effort Lookup
 
-The orchestrator MUST pass **both** `model` and `effort` when spawning a stage agent, and
-stamp both onto `tasks.<ID>.metadata`. The **Model** and **Effort** columns in § Primary
-Stages are that lookup, and § Secure overrides replaces a stage's pair under `--secure`/`--full`;
-support agents use § Support Agents below. These tables are the only stage/agent → model and
-effort assignment; other files point to a row here, and `model-selection.md` keeps the rules.
+The orchestrator passes both `model` and `effort` when spawning a stage agent, and stamps both
+onto `tasks.<ID>.metadata`. Two-hop join: § Primary/Support Stages resolve a code to its agent,
+§ Agent Model Matrix resolves that agent to its pair. PL0 does the join itself via
+`model-matrix.sh --resolve <agent>` and pastes the pair into `--task-create`'s `--metadata`;
+`--task-create` reads neither table. The same call resolves PL0's own pair (`/worktask` Step 4)
+and any stage row AR adds. § Secure overrides can then replace the pair.
 
-> `effort` is stamped for the same reason `model` is, plus one of its own: the Step C.0a
-> resolver dispatches one rung above the stage that raised the item
-> (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`), and agent
-> frontmatter is the wrong fallback for that — a stage dispatched at an override runs at a
-> tier its frontmatter never mentions. Only the ledger holds the value that actually ran.
+`effort` is stamped because the Step C.0a resolver dispatches one rung above the item that
+raised it (`stage-contracts.md § Blocking items are resolved, not asked`), and only the ledger
+holds the tier that actually ran.
 
 ### Secure overrides
 
-> Under `--secure` or `--full`, a row here replaces its stage's § Primary Stages model and
-> effort, and a stage with no row keeps its primary pair. PL0 stamps the override through its
-> default-writer rows (`skills/worktask/references/pl0-procedure.md § Default writer rules`);
-> no script resolves a model at runtime. Agent frontmatter keeps the primary pair, so the
-> primary table still equals frontmatter and a dispatch outside a worktask runs the default.
-> DC is here because a secure run's DC turns option-gate findings into typed corrections,
-> which takes judgement the default tier is not sized for.
+Under `--secure` or `--full`, a row here replaces its stage's resolved model and effort
+outright, so a pair a project raised through `CORPFLOW.md § Models` is lowered back to this row
+if this row is lower. A stage with no row keeps its resolved pair. PL0 stamps the override
+through its default-writer rows (`skills/worktask/references/pl0-procedure.md § Default writer
+rules`) with a plain `--task-meta` write, no `--raise-only`. DC is here because a secure run's
+DC turns option-gate findings into typed corrections, which needs more judgement than its
+default tier.
 
 | Code | Condition | Model | Effort |
 |------|-----------|-------|--------|
@@ -80,65 +99,78 @@ effort assignment; other files point to a row here, and `model-selection.md` kee
 
 ## Support Agents (On-Demand)
 
-| Code | Agent | Model | Effort | Invoked By |
-|------|-------|-------|--------|------------|
-| DS | designer | sonnet | medium | PL, AR, DV, QA |
-| TC | technical-lead | opus | high | AR, TL, DV, QA |
-| ET | ethics-reviewer | opus | xhigh | Any stage |
-| PE | prompt-engineer | opus | xhigh | Agent optimization |
-| WE | workflow-engineer | sonnet | medium | Worktask troubleshooting |
+| Code | Agent | Invoked By |
+|------|-------|------------|
+| DS | designer | PL, AR, DV, QA |
+| TC | technical-lead | AR, TL, DV, QA |
+| ET | ethics-reviewer | Any stage |
+| PE | prompt-engineer | Agent optimization |
+| WE | workflow-engineer | Worktask troubleshooting |
 
-Support agents own no worktask stage but can be invoked on-demand via the Task tool.
+Support agents own no worktask stage; they are spawned on demand with the Agent tool.
 
 ### Handoff Protocol exemption
 
-> Owning no stage artifact means owning no ledger write, so `designer` and
-> `prompt-engineer` carry **no** `## Handoff Protocol` / `### State Patch` section — that
-> absence is correct, not drift. Three rows are not exempt: `technical-lead` also owns DR
-> and `workflow-engineer` takes DV0 under the routing override above, so both carry the
-> section; `ethics-reviewer` writes `ethics-review-N.md` and patches state like a stage
-> owner. Canonical rule and full exemption list: `commands/create-agent.md § Handoff
-> Protocol`.
+Owning no stage artifact means owning no ledger write, so `designer` and `prompt-engineer`
+carry no `## Handoff Protocol` / `### State Patch` section; that absence is correct, not drift.
+Three support rows are not exempt: `technical-lead` also owns DR and `workflow-engineer` takes
+DV0 under the routing override above, so both carry the section; `ethics-reviewer` writes
+`ethics-review-N.md` and patches state like a stage owner. Canonical rule and full exemption
+list: `commands/create-agent.md § Handoff Protocol`.
 
 ### Model alias notes
 
-> The Model column uses aliases (`opus`, `sonnet`, `haiku`); full model ids are also valid
-> in agent frontmatter, but aliases stay portable across providers. Which model an alias
-> resolves to, the Fable 5 credit gate, managed-allowlist resolution, and the default
-> effort tier are canonical in `skills/shared/model-selection.md` — agents with explicit
-> `effort:` frontmatter are unaffected by the plan default.
+The Model column uses aliases (`opus`, `sonnet`, `haiku`); a full model id would also be valid,
+but aliases stay portable across providers. No agent file carries its own `model:` key — model
+selection stays a per-dispatch `Task()` argument (sw-PL1-1, `planning-1.md#elicitation-sweep`).
+
+#### Static effort and dispatch overrides
+
+Every agent file carries an `effort:` key next to `maxTurns:`, equal to this row's Effort cell;
+the matrix stays the only place a tier is *decided*, the file is where Claude Code reads the
+static one from, and a parity test holds the two together
+(`tests/shell/worktask/agent-effort-frontmatter.bats`). A per-dispatch deviation from that static
+tier (a default-writer stamp, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override)
+routes headless instead of relying on an in-process advisory flag —
+`skills/agent-coordination/references/headless-dispatch.md § Translation table — model & effort`.
+Alias resolution, the Fable 5 credit gate, managed-allowlist resolution and the effort
+precedence chain are canonical in `skills/shared/model-selection.md § Effort frontmatter and
+caps`.
 
 ## Agent Frontmatter Fields
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `effort` | `low`/`medium`/`high`/`xhigh`/`max` | Default effort level for the agent |
+| `effort` | enum (`EFFORT_ENUM`) | Static per-agent tier Claude Code applies while this agent is active; equal to the matrix row below, enforced by `tests/shell/worktask/agent-effort-frontmatter.bats` |
 | `maxTurns` | number | Limit agent turn count |
 | `disallowedTools` | comma-separated | Block specific tools from the agent |
-| `initialPrompt` | string | Auto-submit first turn on agent start |
+| `initialPrompt` | string | Auto-submitted first turn when the agent runs as the main session (`--agent`) |
+| `experimental.cacheTtl` | `"5m"` / `"1h"` | Per-agent prompt-cache TTL, applied only when no subagent TTL setting is configured (`skills/cost-optimization/SKILL.md § Finer-grained TTL controls`) |
+
+`tools:` and `disallowedTools:` are enforced in `--print`/SDK runs as in interactive ones.
 
 ### Agent Frontmatter Fields (continued)
 
+Claude Code ignores these three when it loads an agent from a plugin, which every
+`agents/*.md` here is, so none of them may appear there. A hook scoped to one agent is a
+`.claude-plugin/plugin.json` `SubagentStart`/`SubagentStop` entry with the matcher
+`^corpflow:<name>$` (the PL/FN/ST `hooks/agent-stop.sh` wiring is the example):
+
 | Field | Type | Purpose |
 |-------|------|---------|
-| `permissionMode` | string | Permission flow for built-in agents launched via `--agent <name>` |
-| `mcpServers` | YAML map | MCP servers loaded for subagent and main-thread (`--agent`) sessions |
-| `hooks` | YAML map | Hooks fire for subagent and main-thread (`--agent`) runs |
-| `paths` | YAML list of globs | Path-based activation (e.g. `- "src/**/*.swift"`) |
-| `experimental.cacheTtl` | `"5m"` / `"1h"` | Per-agent prompt-cache TTL, applied only when no subagent TTL setting is configured (`skills/cost-optimization/SKILL.md § Finer-grained TTL controls`) |
-
-> **`--print` mode honors agent frontmatter**: `tools:` and `disallowedTools:` are enforced
-> in `--print`/SDK runs, matching interactive mode. Plugin agents shipping a least-privilege
-> `tools:` line keep that contract in non-interactive flows.
+| `permissionMode` | string | Permission mode for the agent |
+| `mcpServers` | YAML map | MCP servers available to the agent |
+| `hooks` | YAML map | Lifecycle hooks scoped to the agent |
 
 ### Skill, command, and output-style frontmatter
 
 - Skills and slash commands may declare `effort` and `disallowed-tools`, scoped to that
   skill/command's invocation.
-- Plugin skills invoke by frontmatter `name`, not directory basename — every `SKILL.md`
-  needs an accurate `name:`. Skills also honor `context` and `agent`.
-- Output styles honor `keep-coding-instructions`, which preserves coding instructions
-  across style changes.
+- Plugin skills are named by frontmatter `name`, not directory basename, so every `SKILL.md`
+  needs an accurate `name:`. Skills also honor `context`, `agent` and `paths` (globs that limit
+  when the skill activates, e.g. `- "src/**/*.swift"`).
+- Output styles honor `keep-coding-instructions`, which preserves coding instructions across
+  style changes.
 
 ## Worktask Pipelines
 
@@ -148,20 +180,20 @@ Support agents own no worktask stage but can be invoked on-demand via the Task t
 Emergency: IR → DV → DR → QA → RE → FN
 ```
 
-AR and TL are the optional members: AR is a tier default PL0 may override in either
-direction, TL runs only when PL0 splits work across ≥2 developers. See
+AR and TL are optional: AR is a tier default PL0 may override in either direction, TL runs only
+when PL0 splits work across ≥2 developers. See
 `skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)`.
 
 ## Subject Numbering
 
-Task subjects use `[CODE][N]:` format with a 0-based index per stage code — `PL0`, `AR0`,
-`DV0`/`DV1`/`DV2` when developers split, `DR0` (always present after DV), `QA0`/`QA1`. PL is
-a singleton and is always `PL0`.
+Task subjects use `[CODE][N]:` with a 0-based index per stage code: `PL0`, `AR0`,
+`DV0`/`DV1`/`DV2` when developers split, `DR0` (always present after DV), `QA0`/`QA1`. PL is a
+singleton and is always `PL0`.
 
-- N increments sequentially per seeded task for the same stage code
+- N increments per seeded task for the same stage code
 - The `stage` metadata field stays unnumbered (`"DV"`, not `"DV0"`)
-- `metadata.agent` specifies which agent executes the task
-- `metadata.model` specifies the model alias; the orchestrator MUST pass it to the Agent tool
+- `metadata.agent` names the executing agent; `metadata.model` the model alias passed to the
+  Agent tool (§ Model and Effort Lookup)
 
 ## Stage Artifacts
 
@@ -182,5 +214,5 @@ a singleton and is always `PL0`.
 | IR | incident-N.md |
 | ET | ethics-review-N.md |
 
-N inherits from PL0's `planning-N.md` — see `skills/worktask/references/pl0-procedure.md`
-§ Plan File & Run Index Naming.
+N inherits from PL0's `planning-N.md`: `skills/worktask/references/pl0-procedure.md § Plan File
+& Run Index Naming`.

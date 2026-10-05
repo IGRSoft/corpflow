@@ -30,7 +30,7 @@ mkdir -p "$IMAGES_DIR" "$DESIGNS_DIR" "$LOGS_DIR"
 PRE_LINES=$(wc -l < "$AUDIT_LOG" 2>/dev/null | tr -d ' ' || echo 0)
 
 # Build the modified-files list for the adapter — the fixture's SimpleView.swift
-MOD_FILE="$(mktemp -t canvas-fixture-mods-XXXXXX)"
+MOD_FILE="$(mktemp "${TMPDIR:-/tmp}/canvas-fixture-mods.XXXXXX")"
 echo "examples/canvas-fixture/Sources/FixtureApp/Views/SimpleView.swift" > "$MOD_FILE"
 
 # Detect environment readiness

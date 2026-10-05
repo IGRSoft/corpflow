@@ -39,7 +39,7 @@ class IncrementalPersistence(unittest.TestCase):
     def _dispatch(self, dispatcher):
         return dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=dispatcher, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=dispatcher, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=list(_STAGES),
             git_sha_runner=stub_git_sha)
 

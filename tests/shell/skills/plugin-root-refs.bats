@@ -179,9 +179,11 @@ composed_token_check() {
 
 @test "contract: the CC-native hook wiring the grammar exists for is present" {
   # Positive-presence guard: the grammar must not pass a tree that has quietly
-  # dropped every hook declaration it was written to permit.
+  # dropped every hook declaration it was written to permit. The live declarations
+  # are in plugin.json (JSON, outside this walk), so the guard looks for the
+  # verbatim quotes of them that the docs carry.
   run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z -- "*.md" \
-    | xargs -0 grep -c "command: \${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh" 2>/dev/null \
+    | xargs -0 grep -c "\"command\": \"\${CLAUDE_PLUGIN_ROOT}/hooks/" 2>/dev/null \
     | grep -vc ":0$"'
   assert_success
   [ "${output}" -ge 1 ]
@@ -207,12 +209,12 @@ composed_token_check() {
   assert_output --partial "docs/bare.md:1:"
 }
 
-@test "checker: a NEW agent file declaring a frontmatter hook stays clean" {
+@test "checker: a NEW skill file declaring a frontmatter hook stays clean" {
   # Direct replacement for the deleted frozen whitelist: growth in the number of
   # files carrying a legal token must not turn the contract red.
   local repo
   repo="$(mk_git_fixture \
-    --file 'agents/new-agent.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n\nBody.\n')"
+    --file 'skills/new-skill/SKILL.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n\nBody.\n')"
   run composed_token_check "$repo"
   assert_success
   assert_output ""
@@ -253,7 +255,7 @@ composed_token_check() {
   local repo
   repo="$(mk_git_fixture \
     --file 'docs/gone.md:# placeholder\n' \
-    --file 'agents/a.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n')"
+    --file 'skills/a/SKILL.md:---\nhooks:\n  Stop:\n    - type: command\n      command: ${CLAUDE_PLUGIN_ROOT}/hooks/agent-stop.sh\n---\n')"
   rm "$repo/docs/gone.md"
   run composed_token_check "$repo"
   assert_success
@@ -340,26 +342,38 @@ _pattern_only_files() {
 # Prints every tracked *.sh that mentions the env var, minus the carve-outs.
 _env_var_reader_files() {
   cd "$PLUGIN_ROOT" || return 1
-  git ls-files -z -- '*.sh' \
+  git ls-files -z --cached --others --exclude-standard -- '*.sh' \
     | xargs -0 grep -l 'CLAUDE_PLUGIN_ROOT' 2>/dev/null \
     | { grep -vxF "$(_setter_only_files)" || true; } \
     | { grep -vxF "$(_pattern_only_files)" || true; } \
     | LC_ALL=C sort
 }
 
-@test "contract: scripts reading the env var are the 6 known env-first fallbacks" {
+@test "contract: scripts reading the env var are the 9 known compatibility boundaries" {
   # The benchmark runner exports the variable for dispatched stages; the
   # hook-install harness passes it per invocation of the script under test.
-  # cache-lint.sh joined the list when prefix mode gained the section [4b] canon
-  # check, which has to read skills/shared/model-prompting.md from the plugin
-  # root rather than from whatever directory the lint was invoked in.
+  # The mirrored corpflow-base resolver is the provider-neutral boundary that consumes
+  # Claude's legacy input after BASE_PLUGIN_ROOT and Codex PLUGIN_ROOT. headless-poststop
+  # emulates Claude's hook environment for a child CLI process.
   run _env_var_reader_files
   assert_output "hooks/anchor-preflight.sh
+hooks/codex-adapter.sh
+hooks/codex-agent-stop.sh
+hooks/lib/corpflow-base.sh
 hooks/state-merge.sh
 skills/dv-screenshot-capture/scripts/apple-canvas.sh
-skills/self-improvement/scripts/build-context-set.sh
-skills/worktask/scripts/cache-lint.sh
+skills/shared/lib/corpflow-base.sh
+skills/worktask/scripts/headless-poststop.sh
 skills/worktask/scripts/hook-install.sh"
+}
+
+@test "contract: host plugin-data inputs stay inside resolvers and adapters" {
+  run bash -c 'cd "$PLUGIN_ROOT" && git ls-files -z --cached --others --exclude-standard -- "*.sh" \
+    | xargs -0 grep -lE "\\$\\{?CLAUDE_PLUGIN_DATA" 2>/dev/null \
+    | LC_ALL=C sort'
+  assert_success
+  assert_output "hooks/lib/corpflow-base.sh
+skills/shared/lib/corpflow-base.sh"
 }
 
 @test "contract: the benchmark runner exports the env var instead of resolving from it" {

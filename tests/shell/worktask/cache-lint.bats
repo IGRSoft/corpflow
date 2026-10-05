@@ -346,7 +346,7 @@ EOF
   # The byte-identity check passes here — one line cannot drift from itself.
   # Only the canon check can see this, which is the whole reason it exists.
   cat > "$WD/md-wrong.jsonl" <<'EOF'
-{"worktask_id":"wt8","stage":"DC","model":"haiku","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDC\n<<<model-discipline>>>\nDeliver what the stage contract asks for\n<<<task-description>>>\nwork"}
+{"worktask_id":"wt8","stage":"DC","model":"haiku","prompt":"<<<contract-reminder>>>\nr\n<<<worktask-header>>>\nh\n<<<stage-contract>>>\nDC\n<<<model-discipline>>>\nYou are running unattended inside a worktask stage, and nobody answers mid-stage.\n<<<task-description>>>\nwork"}
 EOF
   run_script_env --separate-stderr -- "$SCRIPT" "$WD/md-wrong.jsonl"
   assert_failure 1

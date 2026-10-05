@@ -40,10 +40,10 @@ translation of these four words.
 
 ## What a sibling returns
 
-End the return with **exactly one** ```` ```json ```` fence, placed last, holding the object.
+End the return with exactly one ```` ```json ```` fence, placed last, holding the object.
 
 The validator reads the whole input when it parses as a single JSON object. Otherwise it takes the
-**last** closed fence that opens with up to three spaces, three backticks and `json`. Earlier fences,
+last closed fence that opens with up to three spaces, three backticks and `json`. Earlier fences,
 tilde fences and an unclosed fence are ignored, and CRLF line endings still match. No closed fence,
 or a fence holding anything but one object, is `no_json`; a fence `jq` cannot parse is `unparseable`.
 
@@ -108,7 +108,7 @@ warn: needs_changes_normalized: verdict needs_changes normalized to fail
 
 | Result | Action |
 |---|---|
-| Exit 0 | Merge **stdout only**. Each `warn:` line becomes a note on that consultant's findings |
+| Exit 0 | Merge stdout only. Each `warn:` line becomes a note on that consultant's findings |
 | Exit 1, or exit 2 with `no_json` / `unparseable` | Rejected return, the consultant's fault: take the reject path with the stderr line verbatim |
 | Exit 2 with `usage` / `unreadable` / `missing_dependency` | The consumer's own call failed: fix it and rerun. Never re-dispatch, never merge |
 

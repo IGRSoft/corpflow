@@ -91,7 +91,7 @@ Canonical boxes for the RE stage — copy the relevant groups verbatim into `rel
 **Compliance**
 - [ ] Content rating questionnaire current
 - [ ] Data safety form accurate
-- [ ] Target API level compliant (API 34+)
+- [ ] Target API level meets Google Play's current requirement
 - [ ] Permissions justified
 
 **Rollout**

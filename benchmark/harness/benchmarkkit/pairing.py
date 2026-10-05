@@ -88,6 +88,28 @@ def _own_digest(record: dict) -> Optional[str]:
     return analysis.oracle_cases_digests(record).get(arm)
 
 
+# Each names what ONE arm loaded or touched (the WITHOUT arm passes no --plugin-dir and
+# loads nothing; ``config_leaks`` is keyed by the arm that was scanned), so demanding a
+# match would refuse every honest pair.
+_ARM_SCOPED_ERA_KEYS = frozenset(
+    {"plugin_path", "plugins_with", "plugins_without", "config_leaks"})
+
+
+def _join_era(with_era, without_era):
+    """The WITH record's era, plus the arm-scoped keys only the WITHOUT record carries."""
+    if not isinstance(with_era, dict) or not isinstance(without_era, dict):
+        return with_era
+    joined = dict(with_era)
+    for key in sorted(_ARM_SCOPED_ERA_KEYS):
+        if key not in joined and key in without_era:
+            joined[key] = without_era[key]
+        elif (key == "config_leaks" and isinstance(joined.get(key), dict)
+              and isinstance(without_era.get(key), dict)):
+            # Each single-arm record carries only its own arm's entry.
+            joined[key] = {**without_era[key], **joined[key]}
+    return joined
+
+
 def _era_is_stamped(era) -> bool:
     return isinstance(era, dict) and bool(era)
 
@@ -107,8 +129,11 @@ def _era_refusal(era_a, era_b) -> Optional[str]:
     # Full dict equality on top of the three-key diff: a future era key the analyzer's
     # advisory comparison does not inspect would otherwise pass the gate and then be
     # silently arbitrated by the join.
-    if era_a != era_b:
-        keys = sorted(k for k in set(era_a) | set(era_b) if era_a.get(k) != era_b.get(k))
+    shared_a = {k: v for k, v in era_a.items() if k not in _ARM_SCOPED_ERA_KEYS}
+    shared_b = {k: v for k, v in era_b.items() if k not in _ARM_SCOPED_ERA_KEYS}
+    if shared_a != shared_b:
+        keys = sorted(k for k in set(shared_a) | set(shared_b)
+                      if shared_a.get(k) != shared_b.get(k))
         return "era: " + "; ".join(
             f"{k}: {era_a.get(k)!r} vs {era_b.get(k)!r}" for k in keys)
     return None
@@ -250,6 +275,6 @@ def join_arm_records(record_a: dict, record_b: dict) -> BenchmarkRecord:
         arm=None,
         live_partial=bool(with_rec.get("live_partial")) or bool(without_rec.get("live_partial")),
         stages=stages,
-        era=with_rec.get("era"),
+        era=_join_era(with_rec.get("era"), without_rec.get("era")),
         joined_from=joined_from,
     )

@@ -329,8 +329,11 @@ _consultant_section() {
 }
 
 @test "AC-4: the developer route lists the XcodeBuildMCP tools and six build-test skills, granting none" {
-  local f="$PLUGIN_ROOT/agents/developer.md" n
-  n="$(grep -oE '\bmcp__XcodeBuildMCP__[a-z_]+\b' "$f" | sort -u | wc -l | tr -d ' ')"
+  # The MCP listing lives in the DV reference file the agent body points at, so it costs no
+  # prefix tokens; the build-test names and the tools: line stay in the agent body.
+  local f="$PLUGIN_ROOT/agents/developer.md" ref="$PLUGIN_ROOT/skills/worktask/references/dv-reference.md" n
+  grep -q 'dv-reference.md § Sibling tooling' "$f" || fail "developer.md no longer points at the sibling tooling listing"
+  n="$(grep -oE '\bmcp__XcodeBuildMCP__[a-z_]+\b' "$ref" | sort -u | wc -l | tr -d ' ')"
   [ "$n" -ge 12 ] || fail "expected at least 12 distinct XcodeBuildMCP ids, got $n"
   n="$(grep -oE '\b(apple-developer|system-developer|android-developer|frontend-developer|backend-developer|ai-engineer):build-test\b' "$f" \
     | sort -u | wc -l | tr -d ' ')"

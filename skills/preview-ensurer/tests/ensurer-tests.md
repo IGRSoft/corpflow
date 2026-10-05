@@ -1,23 +1,24 @@
 # ensurer-tests.md — preview-ensurer fixture test matrix
 
-Documents the expected behavior of `PreviewEnsurer.swift` against the fixture corpus under `Fixtures/`. v1 ships this as a documented contract; a Swift Testing or XCTest harness is a future addition (see § Open follow-ups).
+Expected behavior of `PreviewEnsurer.swift` against the fixture corpus under `Fixtures/`. This is a documented contract; there is no Swift Testing or XCTest harness yet (see § Open follow-ups).
 
-Test runner alignment:
+Runner — `--modified-files` takes a newline-separated list or the path of a file holding one path per line, so pass a list file, as apple-canvas does:
 
 ```
+printf '%s\n' skills/preview-ensurer/tests/Fixtures/SimpleView.swift > <list-file>
 swift run --package-path skills/preview-ensurer/references/reference-impl PreviewEnsurer \
-  --modified-files skills/preview-ensurer/tests/Fixtures/SimpleView.swift \
+  --modified-files <list-file> \
   --auto-add true \
   --project-root <repo-root>
 ```
 
-The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to stdout. Each fixture below asserts on:
+The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to stdout, with sorted keys. `JSONEncoder` drops a nil optional, so `reason`, `mock_strategy` and `lines_added` appear only when set; `lines_added` is set on `added` rows only. Each fixture below asserts on:
 
-1. The `views[0]` row (file/type/has_preview/action/reason/mock_strategy).
+1. The `views[0]` row (action/file/has_preview/lines_added/mock_strategy/reason/type).
 2. Side effects on the fixture file (added `#Preview` block vs. unchanged).
 3. The `errors[]` array (empty on success).
 
-> **Test isolation reminder**: fixture files are mutated on `--auto-add true`. Reset them between runs with `git checkout -- skills/preview-ensurer/tests/Fixtures/`.
+Fixture files are mutated on `--auto-add true`; reset them between runs with `git checkout -- skills/preview-ensurer/tests/Fixtures/`.
 
 ---
 
@@ -34,12 +35,12 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
-      "type": "SimpleView",
-      "has_preview": false,
       "action": "added",
-      "reason": null,
-      "mock_strategy": "concrete-init"
+      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "concrete-init",
+      "type": "SimpleView"
     }
   ]
 }
@@ -58,9 +59,9 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
 
 ```jsonc
 {
-  "actor": "preview-ensurer",
+  "actor": "apple-canvas-adapter",
   "action": "preview_added",
-  "subject": "SimpleView",
+  "subject": "<worktask_id>/<slug>",
   "result": "ok",
   "metadata": {
     "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
@@ -88,12 +89,12 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/BindingView.swift",
-      "type": "BindingView",
-      "has_preview": false,
       "action": "added",
-      "reason": null,
-      "mock_strategy": "binding-constant"
+      "file": "skills/preview-ensurer/tests/Fixtures/BindingView.swift",
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "binding-constant",
+      "type": "BindingView"
     }
   ]
 }
@@ -131,18 +132,17 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/AmbiguousMultiView.swift",
-      "type": "HeaderView",
-      "has_preview": false,
       "action": "skipped",
+      "file": "skills/preview-ensurer/tests/Fixtures/AmbiguousMultiView.swift",
+      "has_preview": false,
       "reason": "ambiguous_view_target",
-      "mock_strategy": null
+      "type": "HeaderView"
     }
   ]
 }
 ```
 
-**Expected file mutation**: NONE (the file is read-only on `ambiguous_view_target`).
+**Expected file mutation**: none (the file is read-only on `ambiguous_view_target`).
 
 **Pass criteria**:
 
@@ -150,7 +150,7 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
 - `reason == "ambiguous_view_target"`.
 - File content unchanged (verify via `git diff Fixtures/AmbiguousMultiView.swift` returns empty).
 
-> **Disambiguation path**: caller should pass `--view AmbiguousMultiView.HeaderView` (or similar) to retry against a specific View. v1 doesn't implement that path inside this test — it documents the skip behavior.
+To target one View, the caller passes its type name (`--view HeaderView`); this test covers only the skip.
 
 ---
 
@@ -167,26 +167,22 @@ The runner emits JSON matching `EnsureResult { views: [...], errors: [...] }` to
   "errors": [],
   "views": [
     {
-      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
-      "type": "SimpleView",
-      "has_preview": true,
       "action": "found",
-      "reason": null,
-      "mock_strategy": null
+      "file": "skills/preview-ensurer/tests/Fixtures/SimpleView.swift",
+      "has_preview": true,
+      "type": "SimpleView"
     }
   ]
 }
 ```
 
-**Expected file mutation**: NONE (A4 invariant — never overwrite existing preview).
+**Expected file mutation**: none — an existing preview is never overwritten.
 
 **Pass criteria**:
 
 - `action == "found"`.
 - `has_preview == true`.
 - File content unchanged from Test 1's post-state.
-
-This test validates the A4 invariant ([planning-0.md §acceptance-criteria]).
 
 ---
 
@@ -210,16 +206,17 @@ struct ContentView: View {
   "errors": [],
   "views": [
     {
-      "type": "ContentView",
-      "has_preview": false,
       "action": "added",
-      "mock_strategy": "concrete-init"
+      "has_preview": false,
+      "lines_added": 4,
+      "mock_strategy": "concrete-init",
+      "type": "ContentView"
     }
   ]
 }
 ```
 
-**Pass criteria**: SwiftSyntax trivia (comments) is correctly ignored by the visitor. Note: this case is documented but no fixture file is shipped yet — added when the Swift Testing harness lands.
+**Pass criteria**: SwiftSyntax trivia (comments) is ignored by the visitor. No fixture file ships for this case yet (see § Open follow-ups).
 
 ---
 
@@ -235,15 +232,15 @@ struct ContentView: View {
 
 ---
 
-## Open follow-ups (deferred from v1)
+## Open follow-ups
 
-- **Swift Testing harness**: convert this contract into runnable `@Test` declarations under `Tests/PreviewEnsurerTests/` once the executable is wired into a fully testable target. v1 ships the contract; v2 wires the harness.
+- **Swift Testing harness**: convert this contract into runnable `@Test` declarations under `Tests/PreviewEnsurerTests/` once the executable is wired into a testable target.
 - **CommentedPreview fixture**: add the literal file once the harness exists.
-- **Generic / closure / mock-found fixtures**: extend the corpus to exercise every branch of `deriveMockArg`. v1 prioritizes the three planning-required fixtures (simple, binding, ambiguous).
-- **CI integration**: `examples/canvas-fixture/run-e2e.sh` exercises preview-ensurer end-to-end against a real-ish project — see `examples/canvas-fixture/`.
+- **Generic / closure / mock-found fixtures**: extend the corpus to exercise every branch of `deriveMockArg`.
+- **End-to-end**: `examples/canvas-fixture/run-e2e.sh` exercises preview-ensurer against a real-ish project.
 
 ---
 
 ## Audit-trail expectations
 
-When invoked via the apple-canvas adapter, preview-ensurer should emit one `preview_added` audit row per `action: "added"` view. The fixture tests do NOT directly assert audit rows (that's an integration concern under P4); they assert on the JSON return shape only.
+Via the apple-canvas adapter, each `action: "added"` view yields one `preview_added` audit row. The fixture tests assert only on the JSON return shape; audit rows are an integration concern.

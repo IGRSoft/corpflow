@@ -47,6 +47,19 @@ class PromptAssembly(unittest.TestCase):
     def test_stage_contract_stable_within_stage(self):
         self.assertEqual(_asm("PL"), _asm("PL"))
 
+    def test_reminder_names_no_state_json_shape(self):
+        """Both arms share the prompt, and the ledger has no `stages{}` map: naming one
+        sent stage agents to hand-edit state.json instead of calling state-patch.sh."""
+        r = preamble.CONTRACT_REMINDER
+        self.assertNotIn("stages.", r)
+        self.assertNotIn("state.json", r)
+        self.assertNotIn("state-patch", r)  # a plugin path would leak into the baseline arm
+
+    def test_reminder_items_are_numbered_consecutively(self):
+        nums = [int(line.split(".", 1)[0]) for line in preamble.CONTRACT_REMINDER.splitlines()
+                if line[:1].isdigit()]
+        self.assertEqual(nums, list(range(1, len(nums) + 1)))
+
     def test_header_only_required_literals(self):
         h = preamble.header("wt", "plan.md")
         self.assertEqual(h, "worktask_id: wt\nplan_file: plan.md")
@@ -62,7 +75,7 @@ class PromptAssembly(unittest.TestCase):
             sb = make_live_sandbox(tmp)
             fake = RecordingFakeDispatcher()
             dispatch(workdir=sb.run_id, budget=100.0, record_path=sb.record_path,
-                     benchmark_dir=sb.benchmark_dir, dispatcher=fake,
+                     benchmark_dir=sb.benchmark_dir, workdir_root=sb.workdir_root, dispatcher=fake,
                      env={"ANTHROPIC_API_KEY": "k"}, estimate_runner=fake_estimate_runner(0.001),
                      stages=["PL"], git_sha_runner=stub_git_sha)
             self.assertEqual(len(fake.calls), 1)

@@ -166,7 +166,7 @@ _isolated_lib() {
     [ "$output" = '[redacted]' ] || fail "published a credential-shaped target: $output"
   done
   for tok in skills/worktask/scripts/state-patch.sh tests/shell/hooks/command-head-lib.bats \
-    .context/development-0.md src/App/Sources/Foo.swift dist/base64url/md5sum.txt; do
+    .context/development-0.md src/App/Sources/Foo.swift dist/base64url/md5sum.txt; do # portability-lint disable=P004 — fixture path string, not a command invocation
     ch audit_targets "cat $tok"
     [ "$output" = "$tok" ] || fail "redacted an ordinary path: $tok -> $output"
   done

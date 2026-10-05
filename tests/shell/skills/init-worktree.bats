@@ -200,3 +200,49 @@ SCRIPT="skills/megatask/scripts/init-worktree.sh"
   run git -C "$repo/.worktrees/milestone-3/7" rev-parse --abbrev-ref HEAD
   assert_output "feature/7-add-feature"
 }
+
+# --- the absolute path /megatask stamps (Phase 2 Step 2 → Step 3) -------------
+# The per-issue PL0 workspace_path must be absolute: workspace-root-banner.sh exits 2 on a
+# relative one, and the worktask cross-check compares it with the worktree's own toplevel.
+
+@test "absolute path: stdout and workspace.json carry the worktree's own physical toplevel" {
+  local origin repo wt top
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+  wt="$(printf '%s\n' "$output" | sed -n 's/^worktree_path=//p')"
+  [ -n "$wt" ] || fail "no worktree_path= line on stdout: $output"
+  case "$wt" in /*) ;; *) fail "worktree_path is not absolute: $wt" ;; esac
+  top="$(git -C "$wt" rev-parse --show-toplevel)"
+  [ "$wt" = "$top" ] || fail "stamp $wt != the worktree's toplevel $top"
+  run jq -r '.git.worktree_path' "$wt/workspace.json"
+  assert_output "$wt"
+
+  # A retry over the existing worktree hands back the same value.
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 7 --title "Add Feature" --group milestone-3 --repo-root "$repo"
+  assert_success
+  assert_line "worktree_path=$wt"
+}
+
+@test "absolute path: a symlinked --repo-root still stamps the physical path" {
+  local origin repo link wt
+  origin="$(mk_git_fixture --branch master \
+            --file 'README.md:seed\n' --commit 'chore: seed')"
+  repo="$(mk_git_fixture --branch master --remote "$origin" \
+          --file 'README.md:seed\n' --commit 'chore: seed')"
+  link="$(mk_tmpworkdir)/repo-link"
+  ln -s "$repo" "$link"
+
+  run_script_env --cwd "$repo" -- "$SCRIPT" \
+    --issue 9 --title "Other" --group milestone-3 --repo-root "$link"
+  assert_success
+  wt="$(printf '%s\n' "$output" | sed -n 's/^worktree_path=//p')"
+  [ "$wt" = "$(cd "$repo" && pwd -P)/.worktrees/milestone-3/9" ] \
+    || fail "stamped $wt, not the physical path under $repo"
+}

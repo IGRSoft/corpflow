@@ -34,12 +34,12 @@ class ArmSymmetry(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_each_arm_measured_in_its_own_folder(self):
-        _seed_arm(os.path.join(self.sb.workdir_path, "with"), "Bar.swift", n_lines=3)
-        _seed_arm(os.path.join(self.sb.workdir_path, "without"), "Foo.swift", n_lines=7)
+        _seed_arm(self.sb.arm_dir("with"), "Bar.swift", n_lines=3)
+        _seed_arm(self.sb.arm_dir("without"), "Foo.swift", n_lines=7)
         fake = SequencedFakeDispatcher([single_object_usage(cost=0.01)])
         dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=fake, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=fake, env=_ENV,
             estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha, without_arm="real")
         rec = load_json(self.sb.record_path)

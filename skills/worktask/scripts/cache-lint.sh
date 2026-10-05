@@ -202,16 +202,17 @@ UNIVERSAL_ANCHORS='elicitation-sweep'
 #   AR  the two H2s agents/software-architector.md mandates.
 #   TL  agents/team-lead.md logs a rejected TC under coordination-N.md § Blockers.
 #   DV  verification-command and decisions are contract-mandated; the title-case two are
-#       agent-mandated.
-#   QA  the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
+#       agent-mandated. acceptance-commands lists exact-output checks for QA to replay.
+#   QA  acceptance-commands records each replayed check (acceptance-check.sh reads it);
+#       the title-case form is what cross-skill readers cite as `§ Visual Evidence`.
 #   RE, IR, ST   legacy wrappers and the retrospective's self-improvement note.
 # Title-case entries sit on their owning stage's row, so another stage writing one is
 # unexpected there.
 _STAGE_OPTIONAL='*|rework-<N>|re-review|design-preview|test-strategy
 AR|<Platform> App Architecture|Test Architecture
 TL|Blockers
-DV|verification-command|decisions|Blockers|DV Completion Checklist
-QA|Visual Evidence|Design Comparison
+DV|verification-command|acceptance-commands|decisions|Blockers|DV Completion Checklist
+QA|acceptance-commands|Visual Evidence|Design Comparison
 RE|Release Preparation Summary
 IR|Incident Report
 ST|Self-Improvement'
@@ -567,22 +568,26 @@ extract_section() {
   ' <<< "$body"
 }
 
-# Resolves the plugin root: $CLAUDE_PLUGIN_ROOT when set, else three levels up
-# from this script (skills/worktask/scripts/ -> root). Full ladder:
-# skills/shared/plugin-root-resolution.md.
+# Resolves the plugin root through the shared host-neutral ladder, then falls back to the
+# script's fixed location (skills/worktask/scripts/ -> root).
 plugin_root() {
-  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" ]]; then
-    printf '%s' "$CLAUDE_PLUGIN_ROOT"
-    return 0
+  local d lib
+  lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../shared/lib" && pwd)/corpflow-base.sh"
+  if [[ -r "$lib" ]]; then
+    # shellcheck source=skills/shared/lib/corpflow-base.sh
+    . "$lib"
+    if d=$(corpflow_plugin_root); then
+      printf '%s' "$d"
+      return 0
+    fi
   fi
-  local d
   d=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
   printf '%s' "$d"
 }
 
 # canonical_model_block <alias> <root> -> the fenced `text` block under that
 # alias's H2 in model-prompting.md, or empty when the alias has none (haiku).
-# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5`,
+# The heading match tolerates both `## haiku` and `## opus — Claude Opus 5.5`,
 # because the em-dash suffix is prose and is not part of the key.
 canonical_model_block() {
   local alias="$1" root="$2" canon="$2/skills/shared/model-prompting.md"
@@ -726,7 +731,7 @@ prefix_lint() {
   # POSIX-compatible state: store per-key sections as files in a tempdir.
   # bash 3.2 has no associative arrays, so we use the filesystem.
   local td
-  td=$(mktemp -d -t cache-lint-prefix-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/cache-lint-prefix-XXXXXX")
   trap "rm -rf '$td'" RETURN
 
   local rc=0

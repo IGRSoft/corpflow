@@ -1,8 +1,7 @@
 # Security Review Output Template
 
 Standalone reviews only. The SR-stage artifact `.context/security-review-N.md` uses the
-four mandatory kebab H2 anchors instead (`agents/security-reviewer.md § Output Artifact`);
-anchor-lint rejects the headings below. Threat-model procedure: `threat-model.md`.
+kebab H2 anchors in `agents/security-reviewer.md § Artifact anchors` instead; anchor-lint rejects the headings below. Threat-model procedure: `threat-model.md`.
 
 ```markdown
 ## Security Review: [Feature/PR Name]

@@ -102,7 +102,7 @@ class SingleArmDispatch(unittest.TestCase):
     def _dispatch(self, dispatcher, arm, budget_usd=100.0, stages=None, est_cost=0.001):
         return dispatch(
             workdir=self.sb.run_id, budget=budget_usd, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=dispatcher, env=_ENV,
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=dispatcher, env=_ENV,
             estimate_runner=fake_estimate_runner(est_cost), stages=stages or ["PL"],
             git_sha_runner=stub_git_sha,
             selection=baseline.resolve_arm_selection(arm, None, None))
@@ -193,7 +193,7 @@ class SingleArmDispatch(unittest.TestCase):
         # The same R5 gap: --without-arm skip is a WITH-only run and was ungraded too.
         rc = dispatch(
             workdir=self.sb.run_id, budget=100.0, record_path=self.sb.record_path,
-            benchmark_dir=self.sb.benchmark_dir, dispatcher=RecordingFakeDispatcher(),
+            benchmark_dir=self.sb.benchmark_dir, workdir_root=self.sb.workdir_root, dispatcher=RecordingFakeDispatcher(),
             env=_ENV, estimate_runner=fake_estimate_runner(0.001), stages=["PL"],
             git_sha_runner=stub_git_sha, without_arm=baseline.ARM_SKIP)
         self.assertEqual(rc, 0)

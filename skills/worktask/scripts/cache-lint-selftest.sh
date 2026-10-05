@@ -16,7 +16,7 @@ self_test() {
   local SELF_REPO_ROOT
   SELF_REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." 2>/dev/null && pwd) || SELF_REPO_ROOT="."
   local td
-  td=$(mktemp -d -t cache-lint-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/cache-lint-XXXXXX")
   trap "rm -rf '$td'" EXIT
 
   # Anchor lint fixture: minimal DV artifact

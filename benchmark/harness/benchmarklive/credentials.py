@@ -15,6 +15,8 @@ from typing import Callable, Optional
 
 from benchmarkkit.genlib import Subprocess
 
+from . import isolation
+
 CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 
 # Frozen error message (byte-exact contract; ported tests assert equality).
@@ -28,17 +30,23 @@ class CredentialError(Exception):
         super().__init__(MISSING_CREDENTIAL_MESSAGE)
 
 
-def default_auth_status_runner() -> str:
-    """Production runner: `claude auth status --json`, read-only, no spend."""
-    return Subprocess.run(["claude", "auth", "status", "--json"]).stdout
+def default_auth_status_runner(config_dir: Optional[str] = None) -> str:
+    """Production runner: `claude auth status --json`, read-only, no spend.
+
+    ``config_dir`` pins ``CLAUDE_CONFIG_DIR``: the stages run against that dir, so a
+    login in the operator's default config says nothing about whether they can run.
+    """
+    env = isolation.claude_env(config_dir) if config_dir else None
+    return Subprocess.run(["claude", "auth", "status", "--json"], env=env).stdout
 
 
-def has_cli_login(runner: Optional[Callable[[], str]] = None) -> bool:
+def has_cli_login(runner: Optional[Callable[[], str]] = None,
+                  config_dir: Optional[str] = None) -> bool:
     """True iff `claude auth status --json` reports loggedIn: true. Defensive → False.
 
     Only the boolean is ever returned — email/orgId/authMethod never surface.
     """
-    run = runner or default_auth_status_runner
+    run = runner or (lambda: default_auth_status_runner(config_dir))
     try:
         stdout = run()
     except Exception:
@@ -51,17 +59,19 @@ def has_cli_login(runner: Optional[Callable[[], str]] = None) -> bool:
 
 
 def has_credential(env: Optional[dict] = None,
-                   cli_login_runner: Optional[Callable[[], str]] = None) -> bool:
+                   cli_login_runner: Optional[Callable[[], str]] = None,
+                   config_dir: Optional[str] = None) -> bool:
     """True iff a usable credential exists via either source. Env key short-circuits."""
     source = env if env is not None else os.environ
     value = source.get(CREDENTIAL_ENV)
     if value is not None and value.strip():
         return True
-    return has_cli_login(runner=cli_login_runner)
+    return has_cli_login(runner=cli_login_runner, config_dir=config_dir)
 
 
 def require_credential(env: Optional[dict] = None,
-                       cli_login_runner: Optional[Callable[[], str]] = None) -> None:
+                       cli_login_runner: Optional[Callable[[], str]] = None,
+                       config_dir: Optional[str] = None) -> None:
     """Raise CredentialError (frozen message) when no credential exists."""
-    if not has_credential(env=env, cli_login_runner=cli_login_runner):
+    if not has_credential(env=env, cli_login_runner=cli_login_runner, config_dir=config_dir):
         raise CredentialError()

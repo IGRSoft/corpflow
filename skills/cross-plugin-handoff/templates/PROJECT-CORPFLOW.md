@@ -36,3 +36,34 @@ An override target must satisfy the plugin contract
 (`corpflow skills/cross-plugin-handoff/references/plugin-contract.md § A`): entry router,
 functional-role agents, handoff frontmatter schema, and — ideally — its own root
 CORPFLOW.md stage contract.
+
+## Models
+
+Keep only the rows you override; delete the rest. Same lifecycle as `## Routing`: rows here win
+over the built-in default matrix (`corpflow skills/shared/stage-codes.md § Agent Model Matrix`),
+row by row, resolved ONCE at worktask init into `state.models` — edits mid-worktask take effect
+on the next worktask. This heading belongs to the **project-root** kind of this file only; the
+plugin-root CORPFLOW.md stage contract (`templates/CORPFLOW.md`) must NOT carry it.
+
+| Agent | Model | Effort |
+|-------|-------|--------|
+| `qa-engineer` | `opus` | `-` |
+
+An empty or `-` cell inherits that agent's built-in value for the other column alone — a row
+overriding only `Effort` leaves `Model` at the default. Agent is the bare corpflow basename (no
+`plugin:` prefix, backticks optional).
+
+### Validation is fail-open, row by row
+
+A config typo must never brick a pipeline, and never silently lower a tier:
+
+| Condition | Behaviour | Audit action |
+|-----------|-----------|---------------|
+| Valid row | overrides that agent | `model_override` |
+| Empty or `-` cell | that cell inherits the built-in value | `model_override` |
+| Agent not in the matrix | row ignored, warning names the agent | `model_override_unknown` |
+| Invalid model or effort value | row ignored, warning names the cell | `model_override_unknown` |
+| Heading present, header garbled, or no rows | whole section ignored, `state.models_source` stays `"matrix"` | `model_override_unparsed` |
+| An agent the matrix has no built-in row for and this section does not override either | dispatch falls back to the session model, warning names the agent | `model_unresolved` |
+
+No `CORPFLOW.md`, or no `## Models` heading → all-default, no rows, no warning.

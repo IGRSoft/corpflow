@@ -1,10 +1,10 @@
 # view-detection.md — SwiftSyntax patterns for View detection
 
-The SwiftSyntax tree walks `preview-ensurer` uses to identify SwiftUI View types and existing `#Preview` macros. Implementation lives in `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift`.
+The SwiftSyntax tree walk `preview-ensurer` uses to identify SwiftUI View types and existing `#Preview` macros. Implementation lives in `references/reference-impl/Sources/PreviewEnsurer/PreviewEnsurer.swift`.
 
 ## SwiftSyntax visitor pattern
 
-Detection uses a read-only `SyntaxVisitor`; in-source insertion uses a `SyntaxRewriter` (immutable tree → new tree). Detection always runs first; the rewrite is conditional on `auto_add: true` AND detection returning "no existing preview".
+Detection uses a read-only `SyntaxVisitor`. There is no `SyntaxRewriter`: the `#Preview` block is a string appended to the source text (§ Position of injection), and only when `--auto-add true` and detection found no existing preview.
 
 ```swift
 import SwiftSyntax
@@ -13,7 +13,7 @@ import SwiftParser
 let tree = Parser.parse(source: try String(contentsOf: file, encoding: .utf8))
 let detector = ViewDetector()
 detector.walk(tree)
-// detector.viewTypes → [ViewTypeInfo]; .hasPreview → Bool; .parseErrors → [String]
+// detector.viewTypes → [Detected] (top-level only); .hasPreview / .hasPreviewProvider → Bool
 ```
 
 ## View-conformance patterns
@@ -21,19 +21,19 @@ detector.walk(tree)
 | Source shape | SwiftSyntax node | Notes |
 |---|---|---|
 | `struct X: View` — also `SwiftUI.View`, and alongside other conformances (`View, Equatable`) | `StructDeclSyntax.inheritanceClause?.inheritedTypes` | the 95% case |
-| `class X: View` / `actor X: View` | `ClassDeclSyntax` / `ActorDeclSyntax` inheritance clause | rare but legal |
-| `extension X: View` | `ExtensionDeclSyntax.inheritanceClause?` plus a same-file `Struct`/`ClassDeclSyntax` with matching `.name.text` | v1 resolves in-file only — cross-file needs a build-graph walk (out of scope) |
+| `class X: View` | `ClassDeclSyntax` inheritance clause | rare but legal; `actor` is not detected |
+| `extension X: View` | `ExtensionDeclSyntax.inheritanceClause?` | registered by `extendedType` name with no parameters, so the preview is `X()`; no check that `X` is declared in the file |
 
-## Existing-preview patterns (A4 — never overwrite)
+## Existing-preview patterns (never overwritten)
 
 | Source shape | SwiftSyntax node |
 |---|---|
-| `struct X_Previews: PreviewProvider` (legacy, pre-Xcode-15) | any decl whose `.inheritanceClause` contains `PreviewProvider` |
-| `#Preview { }`, `#Preview("dark mode") { }`, `#Preview(traits: .sizeThatFitsLayout) { }` | top-level `MacroExpansionExprSyntax` OR `MacroExpansionDeclSyntax` with `.macroName.text == "Preview"` — the visitor scans ALL of `SourceFileSyntax.statements` |
+| `struct X_Previews: PreviewProvider` (legacy, pre-Xcode-15) | a `struct` or `class` whose `.inheritanceClause` contains `PreviewProvider`, at any depth |
+| `#Preview { }`, `#Preview("dark mode") { }`, `#Preview(traits: .sizeThatFitsLayout) { }` | `MacroExpansionExprSyntax` OR `MacroExpansionDeclSyntax` with `.macroName.text == "Preview"`, anywhere in the tree |
 
 ## Anti-pattern — `#Preview` inside comments or strings
 
-Detection MUST NOT trigger on `// #Preview` or `let s = "#Preview"`. The tree walk ignores trivia and string-literal contents inherently — do NOT run regex over the raw source.
+Detection must not trigger on `// #Preview` or `let s = "#Preview"`. The tree walk ignores trivia and string-literal contents on its own, so don't run regex over the raw source.
 
 ## Inheritance-clause traversal
 
@@ -52,21 +52,17 @@ extension InheritanceClauseSyntax {
 
 ## Nested and ambiguous files
 
-- The visitor keeps a depth stack: register only top-level View types (depth == 1). Nested Views get a `// preview-tbd:` with reason `nested_view_unsupported`.
-- `detector.viewTypes.count >= 3` with no caller-supplied `args.view` → `action: "skipped"`, `reason: "ambiguous_view_target"`, plus `view_count` and `view_names` surfaced in the DV summary so the user can pick.
+- The visitor keeps a depth counter and registers only top-level View types (depth == 1). Nested View types are ignored: no comment, no result row of their own.
+- `detector.viewTypes.count >= 3` with no matching `--view` → `action: "skipped"`, `reason: "ambiguous_view_target"`; the result carries no view count or names. With one or two types the first is the target.
 
 ## Position of injection
 
-Append the `#Preview` block to the END of the file, after the last top-level declaration — rewrite `SourceFileSyntax.statements` with a new `MacroExpansionDeclSyntax`. Preserve the trailing newline at EOF.
+Append the block text to the end of the source string, after a newline if the file lacks a trailing one. The block starts with a blank line and ends with a newline.
 
 ## Post-edit smoke
 
-`xcrun swift -frontend -parse <file>`, or the more permissive `xcrun swiftc -parse <file>` for files referencing other modules. Non-zero → rollback. The smoke catches the rare case where SwiftSyntax serialization produced invalid Swift under toolchain version skew.
+`xcrun swift -frontend -parse <file>`. Non-zero → the original text is written back from memory, never `git checkout`, so the developer's uncommitted edits survive. The smoke checks syntax only: it catches a template that produced invalid Swift, not a mock or `concrete-init` guess that fails to type-check.
 
 ## Test fixtures
 
-Under `tests/Fixtures/`, with expected output documented in `tests/ensurer-tests.md`:
-
-- `SimpleView.swift` — plain `struct: View`, no `#Preview` (should auto-add)
-- `BindingView.swift` — same with `@Binding` (should auto-add via `binding-constant`)
-- `AmbiguousMultiView.swift` — 3 View structs (should skip with `ambiguous_view_target`)
+`tests/Fixtures/`, with expected output in `tests/ensurer-tests.md`.

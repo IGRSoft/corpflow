@@ -1,0 +1,721 @@
+{
+  "run_id": "live-20260930T172001Z-c638dc2",
+  "timestamp_utc": "2026-09-30T17:20:09Z",
+  "mode": "live",
+  "git_sha": "c638dc2",
+  "budget_usd": 100.0,
+  "paths": {
+    "with": {
+      "tokens": {
+        "in": 15421,
+        "out": 234861,
+        "total": 250282,
+        "cache_read": 8565185,
+        "cache_creation": 880902
+      },
+      "cost_usd": 10.6132455,
+      "wall_clock_s": 2215.2442,
+      "loc_produced": 2179,
+      "test_count": 113,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 10,
+      "pass_fail": "fail",
+      "app_path": "benchmark/workdirs/live-20260930T172001Z-c638dc2/with",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 13,
+        "pass_rate": 0.3095,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 4,
+            "pass_rate": 0.4444
+          },
+          "specified": {
+            "total": 33,
+            "passed": 9,
+            "pass_rate": 0.2727
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97",
+        "failures": [
+          {
+            "case_id": "empty-board",
+            "reason": "stdout",
+            "expected": " 0 | 1 | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " 0 | 1 | 2\n---+---+---\n 3 | 4 | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "single-move-in-progress",
+            "reason": "stdout",
+            "expected": " 0 | 1 | 2 \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " 0 | 1 | 2\n---+---+---\n 3 | X | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "x-wins-top-row",
+            "reason": "stdout",
+            "expected": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n",
+            "actual": " X | X | X\n---+---+---\n O | O | 5\n---+---+---\n 6 | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-middle-row",
+            "reason": "stdout",
+            "expected": " O | O | 2 \n---+---+---\n X | X | X \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n",
+            "actual": " O | O | 2\n---+---+---\n X | X | X\n---+---+---\n 6 | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-bottom-row",
+            "reason": "stdout",
+            "expected": " O | O | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n X | X | X \nresult: X_wins\n",
+            "actual": " O | O | 2\n---+---+---\n 3 | 4 | 5\n---+---+---\n X | X | X\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-left-column",
+            "reason": "stdout",
+            "expected": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n",
+            "actual": " X | O | 2\n---+---+---\n X | O | 5\n---+---+---\n X | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-middle-column",
+            "reason": "stdout",
+            "expected": " O | X | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | X | 8 \nresult: X_wins\n",
+            "actual": " O | X | O\n---+---+---\n 3 | X | 5\n---+---+---\n 6 | X | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-right-column",
+            "reason": "stdout",
+            "expected": " O | O | X \n---+---+---\n 3 | 4 | X \n---+---+---\n 6 | 7 | X \nresult: X_wins\n",
+            "actual": " O | O | X\n---+---+---\n 3 | 4 | X\n---+---+---\n 6 | 7 | X\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-main-diagonal",
+            "reason": "stdout",
+            "expected": " X | O | O \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | X \nresult: X_wins\n",
+            "actual": " X | O | O\n---+---+---\n 3 | X | 5\n---+---+---\n 6 | 7 | X\nresult: X_wins\n"
+          },
+          {
+            "case_id": "x-wins-anti-diagonal",
+            "reason": "stdout",
+            "expected": " O | O | X \n---+---+---\n 3 | X | 5 \n---+---+---\n X | 7 | 8 \nresult: X_wins\n",
+            "actual": " O | O | X\n---+---+---\n 3 | X | 5\n---+---+---\n X | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "o-wins-middle-column",
+            "reason": "stdout",
+            "expected": " X | O | 2 \n---+---+---\n X | O | 5 \n---+---+---\n 6 | O | X \nresult: O_wins\n",
+            "actual": " X | O | 2\n---+---+---\n X | O | 5\n---+---+---\n 6 | O | X\nresult: O_wins\n"
+          },
+          {
+            "case_id": "o-wins-main-diagonal",
+            "reason": "stdout",
+            "expected": " O | X | X \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | X | O \nresult: O_wins\n",
+            "actual": " O | X | X\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | X | O\nresult: O_wins\n"
+          },
+          {
+            "case_id": "draw-full-board",
+            "reason": "stdout",
+            "expected": " X | O | X \n---+---+---\n X | O | O \n---+---+---\n O | X | X \nresult: draw\n",
+            "actual": " X | O | X\n---+---+---\n X | O | O\n---+---+---\n O | X | X\nresult: draw\n"
+          },
+          {
+            "case_id": "moves-after-win-ignored",
+            "reason": "stdout",
+            "expected": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n",
+            "actual": " X | X | X\n---+---+---\n O | O | 5\n---+---+---\n 6 | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "whitespace-tolerated",
+            "reason": "stdout",
+            "expected": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | X | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "x-wins-on-final-cell",
+            "reason": "stdout",
+            "expected": " O | X | X \n---+---+---\n O | X | X \n---+---+---\n X | O | O \nresult: X_wins\n",
+            "actual": " O | X | X\n---+---+---\n O | X | X\n---+---+---\n X | O | O\nresult: X_wins\n"
+          },
+          {
+            "case_id": "o-wins-top-row",
+            "reason": "stdout",
+            "expected": " O | O | O \n---+---+---\n X | X | 5 \n---+---+---\n X | 7 | 8 \nresult: O_wins\n",
+            "actual": " O | O | O\n---+---+---\n X | X | 5\n---+---+---\n X | 7 | 8\nresult: O_wins\n"
+          },
+          {
+            "case_id": "o-wins-anti-diagonal",
+            "reason": "stdout",
+            "expected": " X | X | O \n---+---+---\n X | O | 5 \n---+---+---\n O | 7 | 8 \nresult: O_wins\n",
+            "actual": " X | X | O\n---+---+---\n X | O | 5\n---+---+---\n O | 7 | 8\nresult: O_wins\n"
+          },
+          {
+            "case_id": "whitespace-padded-tokens",
+            "reason": "stdout",
+            "expected": " X | X | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | X | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "tab-padded-tokens",
+            "reason": "stdout",
+            "expected": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | 1 | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "empty-token-between-commas",
+            "reason": "stdout",
+            "expected": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | 1 | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "trailing-comma-accepted",
+            "reason": "stdout",
+            "expected": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | 1 | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "all-empty-tokens-play-nothing",
+            "reason": "stdout",
+            "expected": " 0 | 1 | 2 \n---+---+---\n 3 | 4 | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " 0 | 1 | 2\n---+---+---\n 3 | 4 | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "leading-comma-accepted",
+            "reason": "stdout",
+            "expected": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | 1 | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "after-win-occupied-move-ignored",
+            "reason": "stdout",
+            "expected": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n",
+            "actual": " X | X | X\n---+---+---\n O | O | 5\n---+---+---\n 6 | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "after-win-out-of-range-move-ignored",
+            "reason": "stdout",
+            "expected": " X | X | X \n---+---+---\n O | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: X_wins\n",
+            "actual": " X | X | X\n---+---+---\n O | O | 5\n---+---+---\n 6 | 7 | 8\nresult: X_wins\n"
+          },
+          {
+            "case_id": "after-draw-extra-move-ignored",
+            "reason": "stdout",
+            "expected": " X | O | X \n---+---+---\n X | O | O \n---+---+---\n O | X | X \nresult: draw\n",
+            "actual": " X | O | X\n---+---+---\n X | O | O\n---+---+---\n O | X | X\nresult: draw\n"
+          },
+          {
+            "case_id": "whitespace-only-token-is-empty",
+            "reason": "stdout",
+            "expected": " X | 1 | 2 \n---+---+---\n 3 | O | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " X | 1 | 2\n---+---+---\n 3 | O | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          },
+          {
+            "case_id": "leading-zero-token-parses",
+            "reason": "stdout",
+            "expected": " O | 1 | 2 \n---+---+---\n 3 | X | 5 \n---+---+---\n 6 | 7 | 8 \nresult: in_progress\n",
+            "actual": " O | 1 | 2\n---+---+---\n 3 | X | 5\n---+---+---\n 6 | 7 | 8\nresult: in_progress\n"
+          }
+        ]
+      }
+    },
+    "without": {
+      "tokens": {
+        "in": 15293,
+        "out": 168510,
+        "total": 183803,
+        "cache_read": 5281644,
+        "cache_creation": 401984
+      },
+      "cost_usd": 6.981250600000001,
+      "wall_clock_s": 1657.7541,
+      "loc_produced": 2710,
+      "test_count": 130,
+      "coverage_pct": null,
+      "estimate_complexity_score": 0,
+      "stage_count": 10,
+      "pass_fail": "pass",
+      "app_path": "benchmark/workdirs/live-20260930T172001Z-c638dc2/without",
+      "oracle": {
+        "built": true,
+        "cases_total": 42,
+        "cases_passed": 42,
+        "pass_rate": 1.0,
+        "tiers": {
+          "implied": {
+            "total": 9,
+            "passed": 9,
+            "pass_rate": 1.0
+          },
+          "specified": {
+            "total": 33,
+            "passed": 33,
+            "pass_rate": 1.0
+          }
+        },
+        "cases_digest": "sha256:8065259102d52025f62f1db5c5667d5f0fbc2fd5db461d72061a308eeb1fbf97"
+      }
+    }
+  },
+  "comparison": {
+    "loc_produced": {
+      "with": 2179,
+      "without": 2710,
+      "delta": -531
+    },
+    "test_count": {
+      "with": 113,
+      "without": 130,
+      "delta": -17
+    },
+    "coverage_pct": {
+      "with": null,
+      "without": null,
+      "delta": null
+    },
+    "wall_clock_s": {
+      "with": 2215.2442,
+      "without": 1657.7541,
+      "delta": 557.4901
+    },
+    "estimate_complexity_score": {
+      "with": 0,
+      "without": 0,
+      "delta": 0
+    },
+    "stage_count": {
+      "with": 10,
+      "without": 10,
+      "delta": 0
+    },
+    "tokens_total": {
+      "with": 250282,
+      "without": 183803,
+      "delta": 66479
+    },
+    "cost_usd": {
+      "with": 10.6132455,
+      "without": 6.981250600000001,
+      "delta": 3.6319948999999987
+    }
+  },
+  "stages": [
+    {
+      "stage": "PL",
+      "fresh_in": 1512,
+      "cache_creation": 63939,
+      "cache_read": 599007,
+      "out": 17796,
+      "cost_usd": 0.9884693999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 15
+      },
+      "arm": "with",
+      "parent_fresh_in": 28,
+      "parent_cache_creation": 63939,
+      "parent_cache_read": 599007,
+      "parent_out": 17772
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 1526,
+      "cache_creation": 201070,
+      "cache_read": 621697,
+      "out": 58302,
+      "cost_usd": 2.4681924,
+      "coverage": {
+        "agents": [
+          "apple-developer:apple-architector"
+        ],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 21
+      },
+      "arm": "with",
+      "parent_fresh_in": 16,
+      "parent_cache_creation": 57041,
+      "parent_cache_read": 251727,
+      "parent_out": 18353
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 1420,
+      "cache_creation": 16393,
+      "cache_read": 25566,
+      "out": 3185,
+      "cost_usd": 0.10383619999999999,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 2
+      },
+      "arm": "with",
+      "parent_fresh_in": 6,
+      "parent_cache_creation": 16393,
+      "parent_cache_read": 25566,
+      "parent_out": 3160
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 2076,
+      "cache_creation": 277911,
+      "cache_read": 5160958,
+      "out": 99050,
+      "cost_usd": 3.9059230999999994,
+      "coverage": {
+        "agents": [
+          "apple-developer:macos-developer"
+        ],
+        "skills": [
+          "corpflow:dv-screenshot-capture"
+        ],
+        "commands": [],
+        "tool_calls": 58
+      },
+      "arm": "with",
+      "parent_fresh_in": 60,
+      "parent_cache_creation": 156562,
+      "parent_cache_read": 3378088,
+      "parent_out": 32518
+    },
+    {
+      "stage": "DR",
+      "fresh_in": 1617,
+      "cache_creation": 87165,
+      "cache_read": 680478,
+      "out": 16773,
+      "cost_usd": 1.1702465999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 17
+      },
+      "arm": "with",
+      "parent_fresh_in": 28,
+      "parent_cache_creation": 87165,
+      "parent_cache_read": 680478,
+      "parent_out": 16751
+    },
+    {
+      "stage": "SR",
+      "fresh_in": 1557,
+      "cache_creation": 117648,
+      "cache_read": 876588,
+      "out": 24706,
+      "cost_usd": 1.3350626,
+      "coverage": {
+        "agents": [
+          "apple-developer:security-auditor"
+        ],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 27
+      },
+      "arm": "with",
+      "parent_fresh_in": 32,
+      "parent_cache_creation": 75334,
+      "parent_cache_read": 781767,
+      "parent_out": 20268
+    },
+    {
+      "stage": "QA",
+      "fresh_in": 1524,
+      "cache_creation": 29881,
+      "cache_read": 108548,
+      "out": 2384,
+      "cost_usd": 0.16648759999999999,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 5
+      },
+      "arm": "with",
+      "parent_fresh_in": 10,
+      "parent_cache_creation": 29881,
+      "parent_cache_read": 108548,
+      "parent_out": 2360
+    },
+    {
+      "stage": "DC",
+      "fresh_in": 1461,
+      "cache_creation": 27067,
+      "cache_read": 229820,
+      "out": 4907,
+      "cost_usd": 0.103112,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 11
+      },
+      "arm": "with",
+      "parent_fresh_in": 97,
+      "parent_cache_creation": 27067,
+      "parent_cache_read": 229820,
+      "parent_out": 4885
+    },
+    {
+      "stage": "FN",
+      "fresh_in": 1382,
+      "cache_creation": 27495,
+      "cache_read": 155614,
+      "out": 4737,
+      "cost_usd": 0.18975579999999997,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 7
+      },
+      "arm": "with",
+      "parent_fresh_in": 16,
+      "parent_cache_creation": 27495,
+      "parent_cache_read": 155614,
+      "parent_out": 4714
+    },
+    {
+      "stage": "ST",
+      "fresh_in": 1346,
+      "cache_creation": 32333,
+      "cache_read": 106909,
+      "out": 3021,
+      "cost_usd": 0.18215979999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [
+          "corpflow:self-improvement"
+        ],
+        "commands": [],
+        "tool_calls": 5
+      },
+      "arm": "with",
+      "parent_fresh_in": 10,
+      "parent_cache_creation": 32333,
+      "parent_cache_read": 106909,
+      "parent_out": 2997
+    },
+    {
+      "stage": "PL",
+      "fresh_in": 1494,
+      "cache_creation": 17679,
+      "cache_read": 91114,
+      "out": 10392,
+      "cost_usd": 0.3686588,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 4
+      },
+      "arm": "without",
+      "parent_fresh_in": 10,
+      "parent_cache_creation": 17679,
+      "parent_cache_read": 91114,
+      "parent_out": 10368
+    },
+    {
+      "stage": "AR",
+      "fresh_in": 1502,
+      "cache_creation": 44402,
+      "cache_read": 222343,
+      "out": 31583,
+      "cost_usd": 1.0325886000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 6
+      },
+      "arm": "without",
+      "parent_fresh_in": 14,
+      "parent_cache_creation": 44402,
+      "parent_cache_read": 222343,
+      "parent_out": 31563
+    },
+    {
+      "stage": "TL",
+      "fresh_in": 1420,
+      "cache_creation": 30228,
+      "cache_read": 64670,
+      "out": 3091,
+      "cost_usd": 0.16605699999999998,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 3
+      },
+      "arm": "without",
+      "parent_fresh_in": 6,
+      "parent_cache_creation": 30228,
+      "parent_cache_read": 64670,
+      "parent_out": 3066
+    },
+    {
+      "stage": "DV",
+      "fresh_in": 2042,
+      "cache_creation": 149740,
+      "cache_read": 3616496,
+      "out": 94062,
+      "cost_usd": 3.8043302000000003,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 74
+      },
+      "arm": "without",
+      "parent_fresh_in": 68,
+      "parent_cache_creation": 149740,
+      "parent_cache_read": 3616496,
+      "parent_out": 94037
+    },
+    {
+      "stage": "DR",
+      "fresh_in": 1605,
+      "cache_creation": 44888,
+      "cache_read": 267366,
+      "out": 7920,
+      "cost_usd": 0.5722852,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 8
+      },
+      "arm": "without",
+      "parent_fresh_in": 16,
+      "parent_cache_creation": 44888,
+      "parent_cache_read": 267366,
+      "parent_out": 7897
+    },
+    {
+      "stage": "SR",
+      "fresh_in": 1535,
+      "cache_creation": 44478,
+      "cache_read": 360199,
+      "out": 8113,
+      "cost_usd": 0.5913738000000001,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 10
+      },
+      "arm": "without",
+      "parent_fresh_in": 20,
+      "parent_cache_creation": 44478,
+      "parent_cache_read": 360199,
+      "parent_out": 8090
+    },
+    {
+      "stage": "QA",
+      "fresh_in": 1526,
+      "cache_creation": 12711,
+      "cache_read": 115771,
+      "out": 1898,
+      "cost_usd": 0.09439619999999999,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 5
+      },
+      "arm": "without",
+      "parent_fresh_in": 12,
+      "parent_cache_creation": 12711,
+      "parent_cache_read": 115771,
+      "parent_out": 1874
+    },
+    {
+      "stage": "DC",
+      "fresh_in": 1445,
+      "cache_creation": 24656,
+      "cache_read": 300172,
+      "out": 5548,
+      "cost_usd": 0.10851420000000002,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 12
+      },
+      "arm": "without",
+      "parent_fresh_in": 81,
+      "parent_cache_creation": 24656,
+      "parent_cache_read": 300172,
+      "parent_out": 5526
+    },
+    {
+      "stage": "FN",
+      "fresh_in": 1380,
+      "cache_creation": 22334,
+      "cache_read": 173409,
+      "out": 4027,
+      "cost_usd": 0.1655618,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 7
+      },
+      "arm": "without",
+      "parent_fresh_in": 14,
+      "parent_cache_creation": 22334,
+      "parent_cache_read": 173409,
+      "parent_out": 4003
+    },
+    {
+      "stage": "ST",
+      "fresh_in": 1344,
+      "cache_creation": 10868,
+      "cache_read": 70104,
+      "out": 1876,
+      "cost_usd": 0.07748479999999999,
+      "coverage": {
+        "agents": [],
+        "skills": [],
+        "commands": [],
+        "tool_calls": 3
+      },
+      "arm": "without",
+      "parent_fresh_in": 8,
+      "parent_cache_creation": 10868,
+      "parent_cache_read": 70104,
+      "parent_out": 1852
+    }
+  ],
+  "era": {
+    "harness": "python-3",
+    "prompt_contract": "scripted-cli-v3",
+    "model_pins": {
+      "PL": "claude-opus-5-5",
+      "AR": "claude-opus-5-5",
+      "TL": "claude-sonnet-5-5",
+      "DV": "claude-opus-5-5",
+      "DR": "claude-opus-5-5",
+      "SR": "claude-opus-5-5",
+      "QA": "claude-sonnet-5-5",
+      "DC": "claude-haiku-4-5",
+      "FN": "claude-sonnet-5-5",
+      "ST": "claude-sonnet-5-5"
+    },
+    "cli_version": "2.1.284 (Claude Code)",
+    "plugin_version": "4.1.0",
+    "plugin_path": "/Volumes/internal/conductor/workspaces/corpflow/minsk",
+    "plugins_with": [
+      "corpflow@4.1.0",
+      "apple-developer@1.31.0"
+    ],
+    "plugins_without": [],
+    "config_leaks": {
+      "with": [],
+      "without": []
+    }
+  }
+}

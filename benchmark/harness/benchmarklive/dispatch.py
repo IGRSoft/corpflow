@@ -4,12 +4,19 @@ Runs PL→AR→TL→DV→DR→SR→QA→DC→FN→ST one stage per headless ``cl
 REAL tokens/cost, budget-gated, credential-gated. Real dispatch hides behind the
 Dispatching protocol; tests inject fakes so NO real LLM call / spend happens. Exit
 codes: 0 ok / 2 pre-flight decline / 3 no credential / 4 running-tally breach or
-degradation (partial record written FIRST, D6).
+degradation (partial record written FIRST, D6) / 5 an arm's loaded plugins broke its
+contract: WITH loaded a corpflow tree other than the one under test, WITHOUT loaded
+any plugin, or either arm read a plugin cache outside the config dir (partial record
+written, never rotated into history) / 6 a stage hit the account usage limit and waiting
+was off or over its cap (partial record written; the reset time is in the message) /
+1 the WITH arm's ledger could not be seeded (nothing dispatched).
 
 Paired arms (U3/U4): the WITHOUT arm no longer runs a single-shot baseline — both
 arms execute the SAME ordered 10-stage prompt sequence over the SAME shared prompt
-bytes, differing ONLY by ``--agent`` binding (WITH) vs bare (WITHOUT) and by cwd
-(``workdirs/<id>/{with,without}/``). ``without_arm="skip"`` (the mechanism default
+bytes, differing ONLY by ``--agent`` binding, ``--plugin-dir`` and the sibling plugins (WITH)
+vs bare (WITHOUT) and by cwd (``<workdir root>/<id>/{with,without}/``, outside the repo and each its own git
+repo; see ``workdirs``). Both run against one
+isolated config dir (``isolation``); the WITHOUT arm must load zero plugins. ``without_arm="skip"`` (the mechanism default
 and every ``--stages`` subset) runs the WITH arm alone and keeps the WITHOUT
 placeholder byte-stable for every pre-existing caller.
 
@@ -20,6 +27,7 @@ shapes in records. Every one of their names stays reachable as ``dispatch.<name>
 
 from __future__ import annotations
 
+import functools
 import os
 import sys
 from datetime import datetime, timezone
@@ -31,7 +39,14 @@ from benchmarkkit.metrics import BenchmarkRecord, write_record
 
 from . import baseline as baseline_mod
 from . import budget as budget_mod
+from . import capture as capture_mod
+from . import config_leak
+from . import isolation
+from . import ledger_seed
+from . import plugin_load
 from . import preamble
+from . import usage_limit
+from . import workdirs
 
 # Re-export shim: callers and tests address these as ``dispatch.<name>``.
 from .arm_exec import (  # noqa: F401
@@ -85,24 +100,37 @@ from .stage_usage import (  # noqa: F401
 CAPTURE_TRUNCATE_BYTES = 25 * 1024 * 1024
 
 
-def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: str) -> None:
-    """Persist raw stage stdout BEFORE parsing (A3). ``captures_dir=None`` is a no-op,
-    keeping existing callers byte-stable; any failure is swallowed — persistence never
-    kills a run. Over-cap payloads are written truncated with a marker."""
-    if captures_dir is None:
-        return
+def _write_capture(captures_dir: str, filename: str, stdout: str) -> None:
     try:
         os.makedirs(captures_dir, exist_ok=True)
-        path = os.path.join(captures_dir, f"{arm}-{stage}.jsonl")
         raw = stdout.encode("utf-8")
         truncated = len(raw) > CAPTURE_TRUNCATE_BYTES
         body = raw[:CAPTURE_TRUNCATE_BYTES].decode("utf-8", "ignore") if truncated else stdout
-        with open(path, "w", encoding="utf-8") as f:
+        with open(os.path.join(captures_dir, filename), "w", encoding="utf-8") as f:
             f.write(body)
             if truncated:
                 f.write(f"\n<<<TRUNCATED at {CAPTURE_TRUNCATE_BYTES} bytes>>>\n")
     except OSError:
         pass
+
+
+def persist_capture(captures_dir: Optional[str], arm: str, stage: str, stdout: str) -> None:
+    """Persist raw stage stdout BEFORE parsing (A3). ``captures_dir=None`` is a no-op,
+    keeping existing callers byte-stable; any failure is swallowed — persistence never
+    kills a run. Over-cap payloads are written truncated with a marker."""
+    if captures_dir is not None:
+        _write_capture(captures_dir, f"{arm}-{stage}.jsonl", stdout)
+
+
+def persist_failed_capture(captures_dir: Optional[str], arm: str, stage: str,
+                           stdout: str) -> None:
+    """Keep a failed stage's full stdout as ``<arm>-<STAGE>.failed.jsonl``.
+
+    Apart from the success capture, so a retry's ``<arm>-<STAGE>.jsonl`` is never mixed
+    with the attempt that died. An empty stdout has nothing to keep.
+    """
+    if captures_dir is not None and stdout:
+        _write_capture(captures_dir, f"{arm}-{stage}.failed.jsonl", stdout)
 
 
 def read_state_json_text(workdir_path: str) -> str:
@@ -128,18 +156,116 @@ def assemble_prompts(prompts_dir: str, stages: list, state_json_text: str,
     return out
 
 
+def _dispatch_stage(dispatcher: Dispatching, argv: list, prompt_text: str, arm: str,
+                    stage: str, captures_dir: Optional[str],
+                    tally: "budget_mod.RunningTally",
+                    limit_policy: Optional[usage_limit.LimitPolicy], estimate: float,
+                    interrupted: list, validate_attempt: Callable[[str], bool]) -> tuple:
+    """Dispatch one stage; returns ``(stdout, seconds)`` or ``(None, 0)`` when stopped.
+
+    ``stdout`` and ``seconds`` are the attempt that succeeded. A failure is always persisted
+    in full. One that is the account's usage limit is waited out and the SAME stage
+    re-dispatched; its wall time is excluded, but the spend it reported is real and the
+    re-dispatch builds on its files, so its parsed usage is appended to the caller's
+    ``interrupted`` list, and its cost is charged to the tally at once. Every retry is
+    budget-gated, and an interrupted attempt must pass ``validate_attempt`` before waiting.
+    Anything else propagates unchanged; a limit that cannot be waited out raises
+    ``UsageLimitHit`` without losing the caller's interrupted usage.
+    """
+    while tally.can_afford(estimate):
+        timer = Timer()
+        timer.start()
+        try:
+            return dispatcher.run(argv, prompt_text), timer.elapsed
+        except DispatchFailure as exc:
+            persist_failed_capture(captures_dir, arm, stage, exc.stdout)
+            policy = limit_policy or usage_limit.LimitPolicy(wait=False)
+            limit = usage_limit.detect(exc.stdout, policy.now())
+            if limit is None:
+                raise
+            parsed = capture_mod.parse(exc.stdout)
+            tally.add(parsed.cost_usd if parsed is not None else None)
+            if parsed is not None:
+                interrupted.append(parsed)
+            if not validate_attempt(exc.stdout) or not tally.can_afford(estimate):
+                break
+            policy.wait_out(limit, f"{arm} {stage}")
+    return None, 0.0
+
+
+_FOLDED_FIELDS = ("input_tokens", "output_tokens", "cost_usd", "cache_read", "cache_creation",
+                  "parent_input_tokens", "parent_output_tokens", "parent_cache_read",
+                  "parent_cache_creation")
+
+
+def fold_interrupted(usage: StageUsage, interrupted: list) -> None:
+    """Add each interrupted attempt's figures to the stage's, field by field.
+
+    A field stays None only when neither side reported it: a stage whose re-dispatch
+    reported nothing still shows what the interrupted attempt spent.
+    """
+    for parsed in interrupted:
+        for name in _FOLDED_FIELDS:
+            extra = getattr(parsed, name, None)
+            if extra is None:
+                continue
+            current = getattr(usage, name)
+            setattr(usage, name, extra if current is None else current + extra)
+
+
+def _check_stage_isolation(stdout: str, arm: ArmSpec, result: ArmResult, stage: str,
+                           capture_mode: str, config_dir: Optional[str]) -> bool:
+    """Validate an attempt's plugin contract, retaining violations in the arm result."""
+    if capture_mode != CAPTURE_STREAM_JSON or (
+            arm.plugin_dir is None and arm.enabled_plugins is None):
+        return True
+    if arm.plugin_dir is not None:
+        check = plugin_load.check_stage_plugin(stdout, arm.plugin_dir)
+    else:
+        check = plugin_load.check_stage_bare(stdout)
+    if check.loaded is not None:
+        result.plugin = check.loaded
+    if check.plugins is not None:
+        result.plugins = check.plugins
+    if check.error is not None:
+        result.plugin_error = f"stage {stage}: {check.error}"
+        result.partial = True
+    if config_dir is not None:
+        found = config_leak.find_leaks(stdout, config_dir)
+        result.config_leaks = sorted(set(result.config_leaks or []) | set(found))
+        if found:
+            leak = (f"stage {stage}: read plugin files outside CLAUDE_CONFIG_DIR "
+                    f"{config_dir}: {found}")
+            result.plugin_error = (f"{result.plugin_error}; {leak}"
+                                   if result.plugin_error else leak)
+            result.partial = True
+    return result.plugin_error is None
+
+
 def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             tally: "budget_mod.RunningTally", estimate_calc_path: str,
             stages: list, estimate_runner: Optional[Callable[[list], str]] = None,
             capture_mode: str = CAPTURE_JSON, settings_path: Optional[str] = None,
             captures_dir: Optional[str] = None,
             persist_partial: Optional[Callable[["ArmResult"], None]] = None,
-            now_fn: Optional[Callable[[], float]] = None) -> ArmResult:
+            now_fn: Optional[Callable[[], float]] = None,
+            ledger_seeder: Optional[Callable[[str], None]] = None,
+            config_dir: Optional[str] = None,
+            limit_policy: Optional[usage_limit.LimitPolicy] = None) -> ArmResult:
     """Dispatch one arm's ordered stage sequence under its own running-tally gate.
 
-    Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``
-    and ``arm.cwd`` differ. Gate (b) aborts before a breaching dispatch; A3 persists
-    each raw stdout before parsing; A5 stops the arm if the DV stage lands no Swift.
+    Both arms call this with identical ``prompts_by_stage``; only ``arm.bind_agent``,
+    ``arm.plugin_dir``, ``arm.enabled_plugins`` and ``arm.cwd`` differ. Gate (b) aborts
+    before a breaching dispatch; A3 persists each raw stdout before parsing; A5 stops the
+    arm if the DV stage lands no Swift. An arm stops at the first stage whose
+    ``system/init`` breaks its plugin contract (wrong corpflow tree, or any plugin on the
+    baseline), so a bad run spends one stage rather than ten (stream-json capture only;
+    json emits no init event). ``ledger_seeder`` runs just before each dispatch. With
+    ``config_dir`` set, either arm also stops at the first stage whose tool inputs name a
+    plugin cache outside it (``config_leak``); stream-json only, like the load check.
+    A stage that dies on the account usage limit is re-dispatched per ``limit_policy``
+    only while its attempts stay isolated and affordable. Interrupted spend is retained
+    even when the stage never completes; an unresolvable limit sets ``usage_limit``.
     """
     result = ArmResult(name=arm.name)
     for stage in stages:
@@ -149,22 +275,48 @@ def run_arm(arm: ArmSpec, prompts_by_stage: dict, dispatcher: Dispatching,
             result.partial = True
             break
         prompt_text = prompts_by_stage[stage]
+        if ledger_seeder is not None:
+            ledger_seeder(stage)
         argv = build_arm_stage_argv(stage, bind_agent=arm.bind_agent,
-                                    capture_mode=capture_mode, settings_path=settings_path)
-        timer = Timer()
-        timer.start()
+                                    capture_mode=capture_mode, settings_path=settings_path,
+                                    plugin_dir=arm.plugin_dir,
+                                    enabled_plugins=arm.enabled_plugins)
+        interrupted = []
+        validate_attempt = functools.partial(
+            _check_stage_isolation, arm=arm, result=result, stage=stage,
+            capture_mode=capture_mode, config_dir=config_dir)
         # A throw here propagates with prior stages' partial ALREADY on disk (OI-2).
-        stdout = dispatcher.run(argv, prompt_text)
+        try:
+            stdout, elapsed = _dispatch_stage(
+                dispatcher, argv, prompt_text, arm.name, stage, captures_dir, tally,
+                limit_policy, estimate, interrupted, validate_attempt)
+        except usage_limit.UsageLimitHit as hit:
+            result.usage_limit = hit
+            stdout = None
+        if stdout is None:
+            if any(parsed.has_usage for parsed in interrupted):
+                usage = StageUsage(capture_layer=1)
+                fold_interrupted(usage, interrupted)
+                result.usages.append((stage, usage))
+            result.partial = True
+            if persist_partial is not None:
+                persist_partial(result)
+            break
         persist_capture(captures_dir, arm.name, stage, stdout)
         usage = capture_stage_usage(stdout, arm.audit_path, stage, now_fn=now_fn)
-        usage.duration_s = timer.elapsed
+        usage.duration_s = elapsed
+        # The tally already holds the interrupted attempts' cost; charge only this one.
+        tally.add(usage.cost_usd)
+        fold_interrupted(usage, interrupted)
         result.usages.append((stage, usage))
         result.dispatched += 1
         if usage.capture_layer is None:
             result.partial = True
-        tally.add(usage.cost_usd)
+        validate_attempt(stdout)
         if persist_partial is not None:
             persist_partial(result)
+        if result.plugin_error is not None:
+            break
         if stage == "DV" and not dv_produced_swift(arm.cwd):
             result.dv_gated = True
             result.partial = True
@@ -184,19 +336,25 @@ def git_sha7(repo_root: str) -> str:
 
 def _measure_arm(arm_cwd: str, plugin_root: str, dispatched: int,
                  warn: Callable[[str], None],
-                 grader: Optional[Callable] = None) -> Optional[baseline_mod.AppMeasure]:
+                 grader: Optional[Callable] = None,
+                 app_path: Optional[str] = None) -> Optional[baseline_mod.AppMeasure]:
     """Measure one arm, then grade it against the held-out oracle.
 
     Runs after dispatch, so oracle build time never lands in ``wall_clock_s``.
+    ``app_path`` is the repo-relative path recorded for the arm; the arm itself runs
+    outside the repo, so the path relative to ``plugin_root`` would be absolute.
     """
     def unmeasured() -> baseline_mod.AppMeasure:
-        return baseline_mod.AppMeasure(loc_produced=0, test_count=0, pass_fail="fail",
-                                       app_path=baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
+        return baseline_mod.AppMeasure(
+            loc_produced=0, test_count=0, pass_fail="fail",
+            app_path=app_path or baseline_mod.genlib.relative_path(arm_cwd, plugin_root))
 
     try:
         app = baseline_mod.measure_app(arm_cwd, plugin_root)
         if app is None and dispatched > 0:
             app = unmeasured()
+        if app is not None and app_path is not None:
+            app.app_path = app_path
     except Exception as exc:  # noqa: BLE001 — measurement never loses the record write
         warn(f"app metrics fill failed for {arm_cwd}: {exc}")
         app = unmeasured() if dispatched > 0 else None
@@ -212,6 +370,17 @@ def _measure_arm(arm_cwd: str, plugin_root: str, dispatched: int,
     return app
 
 
+def _run_goal(prompts_dir: str, stages: list) -> str:
+    """The seeded ``facts.goal``: the PL prompt's task, else the first run stage's."""
+    for code in ["PL"] + list(stages):
+        try:
+            with open(os.path.join(prompts_dir, f"{code.lower()}.txt"), encoding="utf-8") as f:
+                return ledger_seed.goal_from_prompt(f.read())
+        except OSError:
+            continue
+    return ""
+
+
 def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              dispatcher: Optional[Dispatching] = None, env: Optional[dict] = None,
              estimate_runner: Optional[Callable[[list], str]] = None,
@@ -222,8 +391,28 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
              git_sha_runner: Optional[Callable[[str], str]] = None,
              without_arm: str = baseline_mod.ARM_SKIP,
              selection: Optional[baseline_mod.ArmSelection] = None,
-             now_fn: Optional[Callable[[], float]] = None) -> int:
+             now_fn: Optional[Callable[[], float]] = None,
+             config_dir: Optional[str] = None,
+             seed_runner: Optional[ledger_seed.SeedRunner] = None,
+             workdir_root: Optional[str] = None,
+             git_runner: Optional[workdirs.GitRunner] = None,
+             wait_on_limit: bool = False,
+             limit_policy: Optional[usage_limit.LimitPolicy] = None) -> int:
     """Run the live pipeline end-to-end and write the BenchmarkRecord.
+
+    ``config_dir`` (else ``BENCH_CONFIG_DIR``, else ``~/.claude-eval``) is the
+    ``CLAUDE_CONFIG_DIR`` both arms and the credential probe run under.
+
+    ``workdir_root`` (else ``BENCH_WORKDIR_ROOT``, else ``${TMPDIR:-/tmp}/corpflow-bench``)
+    holds ``<run_id>/{with,without}``, one git repo per arm. Captures stay under
+    ``<benchmark_dir>/workdirs/<run_id>/``, which also links each arm.
+
+    The WITH arm's ledger is seeded with the real ``seed-state.sh`` before anything is
+    dispatched (``seed_runner`` stands in for every script call under test); a failure
+    refuses the run with rc 1. ``wait_on_limit`` sleeps through the account usage limit
+    and re-dispatches the stage; off, or over the cap, the run ends with rc 6.
+    ``limit_policy`` replaces the policy ``wait_on_limit`` would build (tests inject a
+    fake clock and sleep).
 
     ``selection`` drives which arms dispatch and what shape is recorded; when omitted
     it is derived from ``without_arm`` so every pre-existing caller keeps its exact
@@ -234,7 +423,9 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
 
     stages = stages if stages is not None else budget_mod.PIPELINE_STAGES
     warn = stderr or (lambda s: sys.stderr.write(s + "\n"))
+    # Persisted evidence (captures, arm links) stays in the repo tree; the arms do not.
     workdir_path = os.path.join(benchmark_dir, "workdirs", workdir)
+    arms_root = os.path.join(workdirs.resolve_workdir_root(workdir_root, env), workdir)
     prompts = prompts_dir or os.path.join(benchmark_dir, "live", "prompts")
     plugin_root = os.path.dirname(benchmark_dir)
     estimate_calc = os.path.join(plugin_root, "skills", "estimation-methodology",
@@ -249,24 +440,36 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             None, without_arm,
             baseline_mod.stages_subset(stages, budget_mod.PIPELINE_STAGES))
 
-    with_spec = ArmSpec(name="with", bind_agent=True,
-                        cwd=os.path.join(workdir_path, "with"),
-                        audit_path=os.path.join(workdir_path, "with", ".context", "logs", "audit.jsonl"))
+    with_spec = ArmSpec(name="with", bind_agent=True, plugin_dir=os.path.realpath(plugin_root),
+                        enabled_plugins=isolation.enabled_plugins(with_siblings=True),
+                        cwd=os.path.join(arms_root, "with"),
+                        audit_path=os.path.join(arms_root, "with", ".context", "logs", "audit.jsonl"))
     without_spec = ArmSpec(name="without", bind_agent=False,
-                           cwd=os.path.join(workdir_path, "without"),
-                           audit_path=os.path.join(workdir_path, "without", ".context", "logs", "audit.jsonl"))
+                           enabled_plugins=isolation.enabled_plugins(with_siblings=False),
+                           cwd=os.path.join(arms_root, "without"),
+                           audit_path=os.path.join(arms_root, "without", ".context", "logs", "audit.jsonl"))
     for spec in (with_spec, without_spec):
         os.makedirs(os.path.join(spec.cwd, ".context", "logs"), exist_ok=True)
+        problem = workdirs.init_arm_repo(spec.cwd, git_runner)
+        if problem is not None:
+            warn(f"{spec.name} arm is not its own git repo ({problem}); "
+                 "git in that workdir will not resolve to the arm")
+        problem = workdirs.link_persisted(workdir_path, spec.name, spec.cwd)
+        if problem is not None:
+            warn(f"{spec.name} arm not linked under the persisted workdir: {problem}")
 
     run_id = workdir
     timestamp_utc = now_iso()
     git_sha = git_sha_runner(plugin_root) if git_sha_runner else git_sha7(plugin_root)
-    with_dispatcher = dispatcher or SubprocessDispatcher(workdir=with_spec.cwd)
-    without_dispatcher = dispatcher or SubprocessDispatcher(workdir=without_spec.cwd)
+    config_dir = isolation.resolve_config_dir(config_dir, env)
+    child_env = isolation.claude_env(config_dir)
+    with_dispatcher = dispatcher or SubprocessDispatcher(workdir=with_spec.cwd, env=child_env)
+    without_dispatcher = dispatcher or SubprocessDispatcher(workdir=without_spec.cwd, env=child_env)
 
     # 1. Credential probe — before ANY dispatch.
     try:
-        credentials.require_credential(env=env, cli_login_runner=cli_login_runner)
+        credentials.require_credential(env=env, cli_login_runner=cli_login_runner,
+                                       config_dir=config_dir)
     except credentials.CredentialError as e:
         warn(str(e))
         return 3
@@ -284,6 +487,19 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     if record_dir:
         os.makedirs(record_dir, exist_ok=True)
 
+    # Before any dispatch, so a refusal spends nothing. The WITHOUT arm stays plugin-free
+    # and ledger-free.
+    if "with" in selection.dispatch:
+        try:
+            outcome = ledger_seed.seed_run(
+                with_spec.cwd, plugin_root, run_id,
+                _run_goal(prompts, stages), runner=seed_runner)
+        except ledger_seed.LedgerSeedError as exc:
+            warn(f"live run refused: {exc}; nothing was dispatched")
+            return 1
+        warn(f"ledger {outcome} at {with_spec.cwd}/.context/state.json")
+    policy = limit_policy or usage_limit.LimitPolicy(wait=wait_on_limit, log=warn)
+
     state_json_text = read_state_json_text(workdir_path)
     prompts_by_stage = assemble_prompts(prompts, stages, state_json_text, run_id,
                                         ".context/planning-0.md")
@@ -298,12 +514,15 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
     apps: dict = {}
 
     def _compose(partial: bool) -> BenchmarkRecord:
+        arm_plugins = {n: r.plugins for n, r in results.items() if r.plugins is not None}
+        leaks = {n: r.config_leaks for n, r in results.items() if r.config_leaks is not None}
         if selection.record_shape == baseline_mod.SHAPE_ARM:
             arm = selection.arm
             res = results.get(arm) or ArmResult(name=arm)
             return build_arm_record(run_id, timestamp_utc, git_sha, budget, arm,
                                     res.usages, res.dispatched, arm_partial=partial,
-                                    app=apps.get(arm))
+                                    app=apps.get(arm), plugin=res.plugin,
+                                    arm_plugins=arm_plugins, config_leaks=leaks)
         with_res = results.get("with") or ArmResult(name="with")
         wo_res = results.get("without")
         return build_live_record(
@@ -312,10 +531,16 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             without_usages=wo_res.usages if wo_res is not None else None,
             without_dispatched=wo_res.dispatched if wo_res is not None else 0,
             without_partial=wo_res.partial if wo_res is not None else False,
-            with_partial=with_res.partial)
+            with_partial=with_res.partial, plugin=with_res.plugin, arm_plugins=arm_plugins,
+            config_leaks=leaks)
 
     def _flush(partial: bool) -> None:
         write_record(_compose(partial), record_path)
+
+    if capture_mode != CAPTURE_STREAM_JSON:
+        warn("plugin load unverified: --capture json emits no system/init event, so "
+             "era.plugin_path and era.plugins_* are not stamped and the baseline's "
+             "zero-plugin claim is unchecked; use stream-json")
 
     for name in selection.dispatch:
         def _persist(res: ArmResult, _name: str = name) -> None:
@@ -329,14 +554,34 @@ def dispatch(workdir: str, budget: float, record_path: str, benchmark_dir: str,
             budget_mod.RunningTally(per_arm_budget), estimate_calc, stages,
             estimate_runner=estimate_runner, capture_mode=capture_mode,
             settings_path=settings_path, captures_dir=captures_dir,
-            persist_partial=_persist, now_fn=now_fn)
+            persist_partial=_persist, now_fn=now_fn, config_dir=config_dir,
+            limit_policy=policy,
+            ledger_seeder=(functools.partial(ledger_seed.seed_stage, arm_cwd=specs[name].cwd,
+                                             plugin_root=plugin_root, warn=warn,
+                                             runner=seed_runner)
+                           if name == "with" else None))
         # Flush as each arm completes so a later arm's breach cannot lose it.
         _flush(partial=True)
+        if results[name].usage_limit is not None:
+            warn(f"live run stopped: {name} arm hit the usage limit: "
+                 f"{usage_limit.describe(results[name].usage_limit)}; partial record at "
+                 f"{record_path}; completed stages are kept, rerun after the reset")
+            return 6
+        if results[name].plugin_error is not None:
+            # Return before measuring: a wrong-tree run must not spend oracle build time
+            # or reach the caller's history rotation, which keys off a zero exit.
+            warn(f"live run refused: {name} arm broke its plugin contract: "
+                 f"{results[name].plugin_error}; partial record at {record_path} "
+                 "is not a measurement of this commit")
+            return 5
 
     # Every dispatched arm is measured and graded, including a single-arm run: an arm
     # with no oracle payload carries no quality signal to compare against.
     for name in selection.dispatch:
-        apps[name] = _measure_arm(specs[name].cwd, plugin_root, results[name].dispatched, warn)
+        apps[name] = _measure_arm(
+            specs[name].cwd, plugin_root, results[name].dispatched, warn,
+            app_path=baseline_mod.genlib.relative_path(
+                os.path.join(workdir_path, name), plugin_root))
 
     # Scoped to the arms that actually dispatched, so an arm that never ran cannot
     # raise the flag on the arm that did.

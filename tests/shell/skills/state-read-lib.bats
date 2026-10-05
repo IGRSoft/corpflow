@@ -197,3 +197,25 @@ withlib() {
   [ "$status" -eq 2 ]
   assert_output ""
 }
+
+# --- corpflow_context_dir_write: the writer ladder ---------------------------
+
+@test "context_dir_write: a non-git cwd with no declared root ends at \$PWD/.context" {
+  local outside
+  outside="$(cd "$(mk_tmpworkdir)" && pwd -P)"
+  run_script_env --cwd "$outside" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --unset CLAUDE_PROJECT_DIR --env "GIT_CEILING_DIRECTORIES=$outside" \
+    --source "$LIB" corpflow_context_dir_write
+  assert_success
+  assert_output "$outside/.context"
+}
+
+@test "context_dir_write: a declared root is honoured even before its .context exists" {
+  local cp
+  cp="$(mk_tmpworkdir)"
+  run_script_env --cwd "$WD" --unset CONTEXT_DIR --unset WORKSPACE_ROOT \
+    --env "CLAUDE_PROJECT_DIR=$cp" --env "GIT_CEILING_DIRECTORIES=$WD" \
+    --source "$LIB" corpflow_context_dir_write
+  assert_success
+  assert_output "$cp/.context"
+}

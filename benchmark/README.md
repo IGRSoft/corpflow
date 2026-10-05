@@ -133,7 +133,8 @@ make benchmark-live
 **Credentials — machine `claude` login is the PREFERRED source;
 `ANTHROPIC_API_KEY` is an optional override.** The credential gate accepts
 EITHER: (1) an active `claude` login on the machine (checked via
-`claude auth status --json`, cheap and non-interactive — no key export needed),
+`claude auth status --json` under the eval `CLAUDE_CONFIG_DIR`, cheap and
+non-interactive — no key export needed),
 or (2) `ANTHROPIC_API_KEY` in the environment, checked FIRST when present.
 **Pitfall:** an `ANTHROPIC_API_KEY` that is actually an OAuth-token-shaped value
 (not a real `sk-ant-api…` key) will 401 when used as an API key AND overrides a
@@ -177,22 +178,55 @@ realized figure off the record.
   granularity from `results/runs/live/*.json`, not from the shell exit
   (run-benchmark.sh collapses any non-zero adapter rc to exit 1 cosmetically)
 
-**bench-live exit codes:** 0 success · 2 pre-flight decline · 3 no credential ·
-4 running-tally breach/degraded (partial record on disk) · 64 bad usage.
+**Usage limit.** A stage that dies on the account's rolling limit ("You've hit your session limit
+· resets 7pm (Europe/Kiev)", or `api_error_status` 429) is classified from its full stdout. With
+`--wait-on-limit` (the default; `--no-wait-on-limit` turns it off) the harness sleeps until the
+reset plus 2 minutes (polling every 15 min when no time is printed; 6h cap, cumulative) and
+re-dispatches that stage only. Spend and tokens the interrupted attempt reported are added to
+that stage in the record and charged to the budget: the re-dispatch builds on its files, so
+leaving it out understates the stage (`KNOWN-BAD-RECORDS.md`, `live-20261001T085738Z`). Its wall
+time stays out. Before waiting or retrying, the interrupted attempt must pass the same plugin
+and config-isolation checks as a successful attempt (violations exit **5**), and the updated
+tally must still afford another attempt (otherwise a budget-limited partial exits **4**).
+Off, or over the wait cap, the run writes its partial record and exits **6**, naming the
+reset. Interrupted spend and tokens remain in the partial record even without a successful
+retry; its stage attribution does not increment the completed `stage_count`.
+Any failed stage's full stdout is kept as
+`workdirs/<run_id>/captures/<arm>-<STAGE>.failed.jsonl`.
+
+**bench-live exit codes:** 0 success · 1 WITH ledger seed refused · 2 pre-flight decline ·
+3 no credential · 4 running-tally breach/degraded (partial record on disk) · 5 plugin contract
+broken · 6 usage limit (waiting off or over the cap; partial record on disk) · 64 bad usage.
 
 ## Paired ±agent runner (live)
 
 A live run dispatches **both a WITH-agent arm and a WITHOUT-agent arm**, each executing
 the full **10-stage prompt sequence** (PL→AR→TL→DV→DR→SR→QA→DC→FN→ST) in parallel:
 
-- **Symmetric arm folders**: each arm runs under its own dedicated `benchmark/workdirs/<run_id>/{with,without}/`
-  directory; generated app, test results, and stage-context logs live inside each arm's folder
+- **Symmetric arm folders**: each arm runs in its own dir `<workdir root>/<run_id>/{with,without}/`, outside
+  the repo and its own `git init`ed repo (`master`, one empty commit), so a stage cannot read the harness or the
+  oracle and `git rev-parse --show-toplevel` resolves to the arm. The root is `--workdir-root` /
+  `BENCH_WORKDIR_ROOT` / `${TMPDIR:-/tmp}/corpflow-bench`. Captures stay in
+  `benchmark/workdirs/<run_id>/captures/`, beside a symlink per arm, so report and analyzer paths hold
 - **Shared prompt files**: both arms consume the identical ordered 10-stage prompt files
   (`benchmark/live/prompts/{pl,ar,tl,dv,dr,sr,qa,dc,fn,st}.txt`). Plugin-surface leakage
   (e.g. agent IDs like `apple-developer:ios-developer` or commands like `/swiftui-review`) is
   neutralized from the prompt text so the bare WITHOUT arm sees a fair identical ask
-- **Dispatch difference**: WITH arm adds `--agent <stage_name>` to each stage dispatch; WITHOUT
-  arm dispatches each stage bare (no `--agent`, no plugin dir) — otherwise frozen argv is identical
+- **Dispatch difference**: WITH adds `--agent`, `--plugin-dir <plugin root>` and enables its
+  sibling plugins (apple-developer); WITHOUT adds none and must load **zero** plugins. Both run
+  under `CLAUDE_CONFIG_DIR` = `--config-dir` / `BENCH_CONFIG_DIR` / `~/.claude-eval`, with
+  `--setting-sources ""` (repo and account-synced plugins would otherwise leak in) and the
+  builtin plugins switched off. `system/init` `plugins[]` is checked every stage; a violation
+  is rc 5. Stamped as `era.plugins_with` / `era.plugins_without`
+- **Config-leak guard**: each stage's tool inputs, in both arms (sub-agents included), are scanned for
+  `…/plugins/cache/` or `…/plugins/marketplaces/` paths outside the config dir (tool results do not
+  count). The distinct prefixes are stamped per arm as `era.config_leaks` (`{"with": [], "without": []}`
+  when clean; arm-scoped); a leak in either arm is rc 5. Stream-json only
+- **Ledger seeding**: the harness plays the orchestrator for the WITH arm only. Before its first
+  stage it runs the production `seed-state.sh` (`--worktask-id <run_id>`, `--goal` from the PL prompt's
+  TASK paragraph, `--context-dir`/`--workspace-path` on the arm); a failure refuses the run (rc 1)
+  before any dispatch. Before DV and QA it closes PL0, stamps `PL0.approved="auto"` and creates and
+  claims `DV0` / `QA0` through `state-patch.sh`. The WITHOUT arm has no ledger
 - **Policy default**: `real` on a full pipeline run, `skip` on a `--stages` subset — `--without-arm real|skip`
   (`run-benchmark.sh --live` or `bench-live`) overrides the default either way
 - **Dispatch order**: the WITHOUT arm is dispatched **FIRST** (all 10 stages), followed by the WITH arm;
@@ -371,8 +405,8 @@ against — harness generation, prompt-contract version, and the per-stage model
 pins read straight from `STAGE_TABLE`:
 
 ```json
-"era": {"harness": "python-1", "prompt_contract": "scripted-cli-v2",
-        "model_pins": {"PL": "claude-opus-5", "DC": "claude-haiku-4-5", …}}
+"era": {"harness": "python-2", "prompt_contract": "scripted-cli-v2",
+        "model_pins": {"PL": "claude-opus-5-5", "DC": "claude-haiku-4-5", …}}
 ```
 
 `bench-analyze` compares the analyzed record's era against the previous live
@@ -405,6 +439,43 @@ change invalidates comparisons just as surely as a model repin.
   into `specified`** — the five cases added alongside them were filed `implied`
   and stayed there until 2026-09-10, which is how the discriminating tier came to
   read 11 cases while only 5 discriminated.
+- **Opus 5.5 pins** — the five Opus stages in `STAGE_TABLE` (PL, AR, DV, DR, SR)
+  repinned from `claude-opus-5` to `claude-opus-5-5`, the model the `opus` alias
+  resolves to. Runs from this change on are **not comparable** to any earlier
+  record. The new pins travel in every record's `era.model_pins`, so the pairing
+  gate refuses mixed pairs and `bench-analyze` caveats the first new run against
+  the last `claude-opus-5` one on its own; no entry in `results/history.json` is
+  edited. The Sonnet and Haiku stages are unchanged.
+- **Sonnet 5.5 pins** — the four Sonnet stages in `STAGE_TABLE` (TL, QA, FN, ST)
+  repinned from `claude-sonnet-5` to `claude-sonnet-5-5`, the model the `sonnet`
+  alias resolves to. Runs from this change on are **not comparable** to any earlier
+  record. The new pins travel in every record's `era.model_pins`, so the pairing
+  gate refuses mixed pairs and `bench-analyze` caveats the first new run against
+  the last `claude-sonnet-5` one on its own; no entry in `results/history.json` is
+  edited. The Opus and Haiku stages are unchanged.
+- **Plugin-free baseline + isolated config dir** — the WITHOUT arm used to load
+  whatever the machine had installed; it now loads zero plugins, and both arms run under
+  `~/.claude-eval` with no settings layers. WITH also gains an enabled `apple-developer` and
+  seeded `DV0`/`QA0` ledger rows. Records from here on are **not comparable** with earlier
+  ones: `era.harness` moves `python-1` → `python-2`, so the pairing gate refuses mixed
+  pairs. `era.plugins_with` / `era.plugins_without` are arm-scoped and ignored by it.
+- **Out-of-repo workdirs + sub-agent-inclusive tokens (python-3)** — arms now run under
+  `--workdir-root` (default `${TMPDIR:-/tmp}/corpflow-bench`), each its own git repo, and a stage's
+  `fresh_in`/`out`/`cache_*` sum `result.modelUsage` over every model, sub-agents included; they
+  were parent-only `result.usage`. The parent-only figures stay as `parent_fresh_in`, `parent_out`,
+  `parent_cache_read`, `parent_cache_creation`. `cost_usd` is unchanged, so cost compares across
+  python-2 and python-3 while tokens do not. `era.harness` moves `python-2` → `python-3`, so the
+  pairing gate refuses mixed pairs. `era.config_leaks` is arm-scoped and ignored by it.
+  The shared stage preamble also stops telling agents to "set `stages.<CODE>` completed" in
+  `state.json`: the ledger has no `stages{}` map, and python-2 WITH runs hand-edited one with `jq`
+  instead of closing their task through `state-patch.sh`. Both arms get the same shortened
+  reminder (five items, not six). `PROMPT_CONTRACT` stays `scripted-cli-v3`: it stamps the graded
+  CLI contract, and this change rides the same `python-2` → `python-3` boundary.
+
+- **`scripted-cli-v4`** — `pl.txt` now embeds the same contract, so the WITH arm's PL stage can
+  write it into `planning-0.md` as byte-exact acceptance criteria, as a production `/worktask`
+  would from the user's goal. The contract text and `CLI_CONTRACT_DIGEST` are unchanged; the
+  WITHOUT arm's prompt is unchanged. Bumped because the graded task text one arm sees changed.
 
 The first three predate era stamping, so records from before it must be compared
 by hand against this list.
@@ -415,6 +486,17 @@ retiring a case refuses old-vs-new pairings without any contract change. The
 2026-09-10 tier audit moved the digest to `sha256:80652591…` while leaving
 `scripted-cli-v3` intact, so records either side of it compare on era but refuse
 on digest.
+
+### Plugin under test (`era.plugin_path`)
+
+The WITH arm runs `--plugin-dir <plugin root>` and the stream-json `system/init`
+event is read back: `era.plugin_path` (realpath) and `era.plugin_version` are what the
+CLI **reported loading**, not what was requested. If corpflow resolves anywhere else,
+or two copies load because `--plugin-dir` failed to shadow the installed one, the
+run stops after that stage with **rc 5**, names both paths plus any `plugin_errors`,
+and is never rotated into history. `--capture json` has no init event, so it warns
+and stamps no `plugin_path`. The pairing gate ignores `plugin_path`, which only the
+WITH arm carries.
 
 ## Held-out oracle (quality metric)
 
@@ -574,7 +656,8 @@ benchmark/
     runs/live-arm/              # Single-arm records (--arm with|without): half a
                                 # comparison, NEVER rotated into history.json;
                                 # join two of them with bin/bench-pair
-  workdirs/<run_id>/{with,without}/   # Generated apps per run (gitignored)
+  workdirs/<run_id>/{captures/,with,without}   # captures + links to the arm dirs (gitignored);
+                                               # the arms live under --workdir-root
 ```
 
 ## Metric Schema (on-disk, key-for-key)
@@ -694,8 +777,9 @@ _total LOC: 91_
 | Sources/TicTacToeKit/Board.swift | 40 |
 ```
 
-The arm folder path (`workdirs/<run_id>/{with,without}`) is the canonical location to inspect
-the full generated source and test suite post-run. A zero-spend fixture-driven test sample is
+The arm folder path (`workdirs/<run_id>/{with,without}`, a link into `--workdir-root`) is the
+canonical location to inspect the full generated source and test suite post-run, while the
+scratch root survives. A zero-spend fixture-driven test sample is
 committed to `benchmark/results/samples/analysis-paired-sample.md` demonstrating the rendering.
 
 ## Test suites
@@ -733,6 +817,7 @@ excluded from the denominator).
   below predates this floor and should be re-read against it.
 - `benchmark/results/token-findings-1.md` — foundational findings (cache_read dominance, ~74%)
 - `benchmark/results/token-findings-2.md` — live A/B measurement (n=1, honesty rule)
+- `benchmark/results/token-findings-4.md` — era python-2 per-stage attribution (n=3, 89500e0); AR and PL diagnosis, ranked levers
 - `benchmark/results/runs/live/` — raw per-stage live records (token attribution + coverage manifests)
 - `benchmark/results/KNOWN-BAD-RECORDS.md` — stored records that must be excluded from comparisons
 
@@ -742,3 +827,4 @@ excluded from the denominator).
 - `benchmark/harness/benchmarklive/preamble.py` — cache-prefix assembly ([1]-[5])
 - `benchmark/harness/benchmarklive/dispatch.py` — headless `claude -p` dispatcher + STAGE_TABLE
 - `benchmark/harness/benchmarklive/capture.py` — dual-mode stream-json/json capture parser
+- `benchmark/harness/benchmarklive/plugin_load.py` — checks the corpflow tree a stage loaded against the tree under test

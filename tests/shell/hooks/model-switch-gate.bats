@@ -83,7 +83,7 @@ _run_gate() {
   # A gate that compared raw strings would call this a mismatch and block a
   # switch that changes nothing.
   _ledger
-  _run_gate "$(switch_payload to_model=claude-opus-5-20260615)"
+  _run_gate "$(switch_payload to_model=claude-opus-5-5)"
   assert_success
   [ -z "$output" ]
   [ ! -f "$WD/.context/logs/audit.jsonl" ]

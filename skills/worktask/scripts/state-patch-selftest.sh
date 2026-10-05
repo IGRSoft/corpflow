@@ -16,7 +16,7 @@ run_self_test() {
   SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
   local td
-  td=$(mktemp -d -t state-patch-selftest-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/state-patch-selftest-XXXXXX")
   # shellcheck disable=SC2064   # expand $td now so the trap removes the right dir
   trap "rm -rf '${td}'" EXIT
 
@@ -1351,12 +1351,17 @@ EOART
 
   # ---- T31: --dispatch upserts facts.dispatched_agents by task_id, clamps 6-launched-newest ----
   make_state
-  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer"}')" > /dev/null
+  bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"stage":"DV","agent":"corpflow:developer","model":"opus"}')" > /dev/null
   bash "$SELF" --dispatch DV0 sess-dv0 launched || {
     printf 'T31: --dispatch returned non-zero\n' >&2
     exit 1
   }
-  if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched"}]' \
+  # metadata.model is PASSED EXPLICITLY here (developer -> opus, corpflow:developer's matrix
+  # row) rather than relying on --task-create to fill it: sw-AR0-1 reversed the mechanically-
+  # enforced auto-fill at the FN-gate sweep, so a caller that omits it now stays unset (this is
+  # exactly what PL0's model-matrix.sh --resolve + hand-paste replaces). The dispatch row still
+  # carries model_requested when the caller supplies the value (dv10's original assertion).
+  if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched","model_requested":"opus"}]' \
     .context/state.json > /dev/null; then
     printf 'T31: first dispatch appends the row: ok\n'
   else
@@ -1382,6 +1387,15 @@ EOART
     printf 'T31: a different agent_id replaces the row at the tail: ok\n'
   else
     printf 'T31: agent_id replacement: FAIL\n' >&2
+    exit 1
+  fi
+  bash "$SELF" --dispatch DV0 /root/cf_dv0_1 launched > /dev/null
+  if jq -e '(.facts.dispatched_agents | length) == 1
+            and .facts.dispatched_agents[0].agent_id == "/root/cf_dv0_1"' \
+    .context/state.json > /dev/null; then
+    printf 'T31: a Codex canonical task name is a valid dispatch identifier: ok\n'
+  else
+    printf 'T31: Codex canonical dispatch identifier: FAIL\n' >&2
     exit 1
   fi
 
@@ -1680,6 +1694,26 @@ EOART
     printf 'T-stream: DV stream-suffix canonical check: FAIL\n%s\n%s\n' "$tstream_out" "$tstream_bad" >&2
     exit 1
   fi
+
+  # ---- T-batch: batched --task-create lands in one merge, --digest reads it back, and one
+  # bad row refuses the batch byte-identically with no audit row appended ----
+  make_state
+  rm -f .context/logs/audit.jsonl
+  tbatch_out=$(bash "$SELF" --task-create DV0 --metadata "$(_r9_meta '{"agent":"corpflow:developer"}')" \
+    --task-create DR0 --metadata "$(_r9_meta)" --digest \
+    --audit-row '{"action":"seed","result":"ok","subject":"plan"}' 2> /dev/null || true)
+  cp .context/state.json .context/state.json.snapb
+  bash "$SELF" --task-create QA0 --metadata "$(_r9_meta)" --task-create DC0 \
+    --audit-row '{"action":"seed","result":"ok","subject":"plan"}' > /dev/null 2>&1 && tbatch_rc=0 || tbatch_rc=$?
+  if [[ "$tbatch_out" == $'state-patch ok\nDV0 pending agent=corpflow:developer\nDR0 pending\naudit +1' ]] \
+    && [[ "$tbatch_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snapb > /dev/null \
+    && [[ "$(wc -l < .context/logs/audit.jsonl | tr -d ' ')" == "1" ]]; then
+    printf 'T-batch: batched create + digest + audit-row, bad row refuses whole batch: ok\n'
+  else
+    printf 'T-batch: FAIL (rc=%s)\n%s\n' "$tbatch_rc" "$tbatch_out" >&2
+    exit 1
+  fi
+  rm -f .context/state.json.snapb
 
   printf 'self-test: ALL PASS\n'
   exit 0

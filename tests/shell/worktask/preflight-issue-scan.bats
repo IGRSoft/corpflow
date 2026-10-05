@@ -175,6 +175,15 @@ EOS
   assert_success
   assert_output --partial "reason=milestone_mode"
   rm -f "$WD/workspace.json"
+
+  # …and through WORKSPACE_ROOT when the shell stands elsewhere, as a /megatask subagent's
+  # does before its `cd`: Step 2a's question is never reached.
+  mkdir -p "$WD/wt"
+  printf '{}\n' > "$WD/wt/workspace.json"
+  RUN WORKSPACE_ROOT="$WD/wt" -- --goal "$GOAL"
+  assert_success
+  assert_output --partial "reason=milestone_mode"
+  refute_output --partial "result=shown"
 }
 
 @test "opt-outs: --no-gh-issue, PREFLIGHT_ISSUE_SCAN=0, and --limit 0" {

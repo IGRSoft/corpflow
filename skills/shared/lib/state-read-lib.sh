@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
-# @description state-read-lib.sh — the read side of .context/state.json. The two fields every
-#   worktask script needs before it can name anything (worktask_id, run_index) were spelled
-#   out in an inline `jq -r … // <default>` at 31 sites, and the SAME field carried three
-#   different defaults across them.
+# @description state-read-lib.sh — the read side of .context/state.json, including the two
+#   fields every worktask script needs before it can name anything (worktask_id, run_index).
 #
-#   The library does NOT unify those defaults. It makes the default an explicit argument
-#   with the majority spelling as its value, so a caller that wants "" or empty — because it
-#   probes for absence rather than reading a value — has to say so at the call site where a
-#   reader can see it. Collapsing the three into one would have silently changed the two
-#   probes into readers that always look present.
+#   The default is an explicit argument. A caller that probes for absence rather than
+#   reading a value passes "" at the call site, where a reader can see it; a shared
+#   non-empty default would make every probe look present.
 #
 #   Symbols: corpflow_state_str, corpflow_worktask_id, corpflow_run_index,
-#   corpflow_context_dir.
+#   corpflow_context_dir, corpflow_context_dir_write.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
-# Anti-execution guard — MUST be the first statement.
+# Anti-execution guard — must be the first statement.
 if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
   printf >&2 'state-read-lib.sh: this is a library — source it, do not execute it directly\n'
   exit 2
@@ -50,8 +46,7 @@ corpflow_state_str() {
   printf '%s' "$out"
 }
 
-# The worktask id, defaulting to the spelling 25 of the 31 inline sites used. Pass "" for
-# the absence-probe semantics.
+# The worktask id, defaulting to "unknown". Pass "" for the absence-probe semantics.
 corpflow_worktask_id() {
   corpflow_state_str "${1:-}" '.worktask_id' "${2-unknown}"
 }
@@ -111,4 +106,47 @@ corpflow_context_dir() {
     return 0
   fi
   return 1
+}
+
+# corpflow_context_dir_write — the ladder for a WRITER that must land a ledger even where no
+# ledger exists yet (a first --task-create in a fresh workdir). Prints the .context
+# directory; always rc 0, because the last rank is unconditional.
+#
+#   1  $CONTEXT_DIR, verbatim
+#   2  $WORKSPACE_ROOT/.context
+#   3  $CLAUDE_PROJECT_DIR/.context
+#   4  $(git -C "$PWD" rev-parse --show-toplevel)/.context
+#   5  $PWD/.context
+#
+# Ranks 2 and 3 are honoured whenever the variable is set, not only when the directory
+# already exists: the reader ladder above skips a declared root that has no .context yet,
+# which for a writer would silently retarget the write at a lower rank.
+#
+# There is deliberately no resolve-root.sh rank and nothing derived from this file's own
+# location. The main-worktree recovery answers "which ledger owns this git tree", so a
+# workdir nested inside some other checkout (a benchmark arm under the plugin's own repo)
+# was handed that checkout's live ledger. A writer must resolve from the caller's tree.
+# Whether the answer is an acceptable place to write is the caller's call; this function
+# only names it.
+corpflow_context_dir_write() {
+  if [ -n "${CONTEXT_DIR:-}" ]; then
+    printf '%s' "$CONTEXT_DIR"
+    return 0
+  fi
+  if [ -n "${WORKSPACE_ROOT:-}" ]; then
+    printf '%s' "${WORKSPACE_ROOT}/.context"
+    return 0
+  fi
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    printf '%s' "${CLAUDE_PROJECT_DIR}/.context"
+    return 0
+  fi
+  local top=""
+  top=$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)
+  if [ -n "$top" ]; then
+    printf '%s' "$top/.context"
+    return 0
+  fi
+  printf '%s' "$PWD/.context"
+  return 0
 }

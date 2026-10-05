@@ -10,11 +10,7 @@
 //
 // Returns JSON to stdout matching the contract in:
 //   skills/preview-ensurer/SKILL.md § Contract (canonical signature)
-//
-// AR decisions referenced:
-//   ad2 — swift-syntax pinned .upToNextMajor(from: "510.0.0")
-//   ad4 — in-source write (no staged patches)
-//   ad8 — errors[] non-empty bubbles to apple-canvas as missing_input
+// Writes in-source only; a non-empty errors[] makes apple-canvas throw missing_input.
 //
 // SwiftSyntax patterns: see references/view-detection.md
 // Mock-arg derivation:  see references/mock-data-strategy.md
@@ -58,7 +54,7 @@ final class ViewDetector: SyntaxVisitor {
         super.init(viewMode: .sourceAccurate)
     }
 
-    // Pattern 1, 2 — struct/class/actor with View conformance
+    // struct/class with View conformance
     // NOTE: depth is incremented here and decremented in visitPost — NOT via defer.
     // SyntaxVisitor visits children after visit() returns, so defer would fire
     // before children are walked, causing all nested types to appear at depth 1.
@@ -67,7 +63,7 @@ final class ViewDetector: SyntaxVisitor {
         if depth == 1, declaresView(node.inheritanceClause) {
             viewTypes.append(extractParameters(typeName: node.name.text, members: node.memberBlock.members))
         }
-        // Detect PreviewProvider legacy form (Pattern 4)
+        // Legacy PreviewProvider form
         if declaresInheritance(node.inheritanceClause, name: "PreviewProvider") {
             hasPreviewProvider = true
         }
@@ -93,11 +89,11 @@ final class ViewDetector: SyntaxVisitor {
         depth -= 1
     }
 
-    // Pattern 3 — extension X: View
+    // extension X: View
     override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
         depth += 1
         if depth == 1, declaresView(node.inheritanceClause) {
-            // v1: only register the extension target name; cross-file extension
+            // Only the extension target name is registered; cross-file extension
             // resolution is out of scope.
             let typeName = node.extendedType.trimmedDescription
             viewTypes.append(Detected(typeName: typeName, parameters: []))
@@ -109,7 +105,7 @@ final class ViewDetector: SyntaxVisitor {
         depth -= 1
     }
 
-    // Pattern 5 — #Preview macro
+    // #Preview macro
     override func visit(_ node: MacroExpansionExprSyntax) -> SyntaxVisitorContinueKind {
         if node.macroName.text == "Preview" {
             hasPreview = true
@@ -334,7 +330,7 @@ func ensureFile(_ path: String, autoAdd: Bool, view: String?, projectRoot: URL) 
     let detector = ViewDetector()
     detector.walk(tree)
 
-    // A4 invariant: pre-existing preview → never overwrite
+    // A pre-existing preview is never overwritten.
     if detector.hasPreview || detector.hasPreviewProvider {
         let firstType = detector.viewTypes.first?.typeName ?? typeFallback
         return (ViewResult(file: path, type: firstType, has_preview: true,

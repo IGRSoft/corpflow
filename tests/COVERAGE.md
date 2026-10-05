@@ -54,7 +54,7 @@ the q3 documented proxy because kcov is impractical on this platform.
 
 | Source file | Test methods | Coverage approach |
 |-------------|---------|-------------------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | **21** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic (sonnet 0.36 / haiku 0.0375), hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test`, no-args rc=1, unknown-model rejection |
+| `skills/estimation-methodology/scripts/estimate-calc.py` | **35** | In-process importlib + CLI argparse smoke; band boundaries (10/11/15/17/18/20/25 + clamp-low), ai_cost arithmetic at split input/output rates (sonnet 0.432 / haiku 0.27 / opus 0.864 / fable 2.16 / supplied split 0.308), token split resolution and its rejections, rate copy vs `model-selection.md § Cost Tiers` and default split vs `§ Cost Estimation Formula`, hours (M/senior 24-30 base, 27.6-34.5 buffered, sp 4-5), CLI JSON shape, `--self-test` (and its check count), no-args rc=1, unknown-model rejection |
 
 The scripts are UNCHANGED (skill runtime contract). In-process testing asserts
 true contracts (unknown-model → sonnet fallback, unknown-layout → ValueError)
@@ -171,6 +171,8 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/dv-screenshot-capture/scripts/visual-diff.sh` | `tests/shell/dv-screenshot/visual-diff.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/web-capture.sh` | `tests/shell/dv-screenshot/web-capture.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/android-capture.sh` | `tests/shell/dv-screenshot/android-capture.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/macos-window-capture.sh` | `tests/shell/dv-screenshot/macos-window-capture.bats` | — | — | — |
+| `skills/dv-screenshot-capture/scripts/capture.sh` | `tests/shell/dv-screenshot/capture-entry.bats` (aliased) | — | — | — |
 
 ### Shell scripts — worktask-core (DV0a, kcov)
 
@@ -232,7 +234,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 
 | Source file | Test file | Test methods |
 |-------------|-----------|-----------|
-| `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 21 |
+| `skills/estimation-methodology/scripts/estimate-calc.py` | `tests/python/test_estimate_calc.py` | 35 |
 
 ### Meta / repo-invariant tests (no single source script — not part of the 45)
 

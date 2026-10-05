@@ -11,7 +11,7 @@ self_test() {
   local self_dir SELF td fail=0
   self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   SELF="$self_dir/brief-compose.sh"
-  td=$(mktemp -d -t brief-compose-XXXXXX)
+  td=$(mktemp -d "${TMPDIR:-/tmp}/brief-compose-XXXXXX")
   # shellcheck disable=SC2064  # expand now: $td is local and gone by EXIT time otherwise
   trap "rm -rf '$td'" EXIT
 

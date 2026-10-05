@@ -22,6 +22,7 @@
 #   benchmark/run-benchmark.sh --live [--budget U] [--stages PL,AR,DV]
 #                              [--without-arm real|skip]
 #                              [--arm with|without|both]
+#                              [--wait-on-limit|--no-wait-on-limit]
 #
 # Wall-clock note: a ttt-template warm-up build happens BEFORE any timing; per-arm
 # app builds/tests stay INSIDE the harness Timer. The Python harness itself needs
@@ -38,6 +39,7 @@ BUDGET="50.00"
 STAGES=""
 WITHOUT_ARM=""
 ARM=""
+WAIT_ON_LIMIT=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -50,6 +52,7 @@ while [ "$#" -gt 0 ]; do
     --without-arm=*) WITHOUT_ARM="${1#*=}"; shift ;;
     --arm)   ARM="${2:?--arm needs with, without or both}"; shift 2 ;;
     --arm=*) ARM="${1#*=}"; shift ;;
+    --wait-on-limit|--no-wait-on-limit) WAIT_ON_LIMIT="$1"; shift ;;
     -h|--help)
       grep '^#' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "run-benchmark.sh: unknown arg '$1'" >&2; exit 64 ;;
@@ -62,6 +65,10 @@ fi
 
 if [ -n "$WITHOUT_ARM" ] && [ "$LIVE" != "1" ]; then
   echo "run-benchmark.sh: --without-arm requires --live" >&2; exit 64
+fi
+
+if [ -n "$WAIT_ON_LIMIT" ] && [ "$LIVE" != "1" ]; then
+  echo "run-benchmark.sh: $WAIT_ON_LIMIT requires --live" >&2; exit 64
 fi
 
 if [ -n "$ARM" ] && [ "$LIVE" != "1" ]; then
@@ -149,6 +156,7 @@ if [ "$LIVE" = "1" ]; then
   [ -n "$STAGES" ] && live_args+=(--stages "$STAGES")
   [ -n "$WITHOUT_ARM" ] && live_args+=(--without-arm "$WITHOUT_ARM")
   [ -n "$ARM" ] && live_args+=(--arm "$ARM")
+  [ -n "$WAIT_ON_LIMIT" ] && live_args+=("$WAIT_ON_LIMIT")
   python3 "$HARNESS_BIN/bench-live" "${live_args[@]}"
   rc=$?
   set -e

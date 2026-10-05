@@ -71,7 +71,7 @@ build_orchestrator() {
   if [[ "$json_src" == "-" ]]; then
     # Materialise stdin to a temp file so we can pass a path to jq safely.
     local tmp_input
-    tmp_input=$(mktemp -t build-orch-input.XXXXXX)
+    tmp_input=$(mktemp "${TMPDIR:-/tmp}/build-orch-input.XXXXXX")
     # shellcheck disable=SC2064
     trap "rm -f '$tmp_input'" RETURN
     cat > "$tmp_input"
@@ -478,8 +478,8 @@ fi
 if [[ -n "$OPT_OUT" ]]; then
   # Atomic write: write to sibling tmp, then rename.
   out_dir="$(dirname -- "$OPT_OUT")"
-  tmp_out=$(mktemp -t build-orch-out.XXXXXX -p "$out_dir" 2> /dev/null \
-    || mktemp -t build-orch-out.XXXXXX)
+  tmp_out=$(mktemp "${out_dir%/}/build-orch-out.XXXXXX" 2> /dev/null \
+    || mktemp "${TMPDIR:-/tmp}/build-orch-out.XXXXXX")
   trap 'rm -f "$tmp_out"' EXIT
   build_orchestrator "$OPT_FILE" > "$tmp_out"
   mv -f -- "$tmp_out" "$OPT_OUT"

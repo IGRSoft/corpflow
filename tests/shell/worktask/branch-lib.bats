@@ -550,6 +550,16 @@ TABLE
   assert_output "milestone_mode_env"
 }
 
+@test "fn_batch_scope: /megatask's PL0 stamp self-disables with no env or workspace.json" {
+  cd "$WD"
+  jq '.tasks.PL0.metadata.megatask_group = "milestone-3"' .context/state.json > s \
+    && mv s .context/state.json
+  run env -u MILESTONE_MODE -u WORKSPACE_ROOT \
+    bash -c "STATE_PATH=.context/state.json; . '$PLUGIN_ROOT/$LIB'; fn_batch_scope && printf '%s' \"\$SCOPE_REASON\""
+  assert_success
+  assert_output "megatask_stamp"
+}
+
 @test "fn_batch_scope: no batch/incident signal returns 1" {
   cd "$WD"
   run bash -c "STATE_PATH=.context/state.json; . '$PLUGIN_ROOT/$LIB'; fn_batch_scope"

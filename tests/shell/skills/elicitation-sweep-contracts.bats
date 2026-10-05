@@ -696,7 +696,7 @@ A missing sweep is warn-only until the next minor.')"
 @test "P2-6 twin: an unrelated warn-only rollout elsewhere in the same file does not false-positive" {
   # The AR-reference check (§ Step B) legitimately says warn-only/--strict in this
   # same file; the widened guard must key on the sweep functions specifically.
-  run bash -c "grep -q 'warn-only in 3.42.0' '$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh'"
+  run bash -c "grep -q 'is warn-only by default and blocks only under --strict' '$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh'"
   assert_success
   run check_no_sweep_escape_hatch_wide "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh"
   assert_success
@@ -1800,7 +1800,7 @@ resolver_body() {
   run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
   assert_output --partial "effort_transport"
   assert_output --partial "dispatch-flag"
-  assert_output --partial "frontmatter-only"
+  assert_output --partial '`none`'
 }
 
 @test "an unstamped effort skips the resolver instead of defaulting a tier" {
@@ -1821,16 +1821,25 @@ resolver_body() {
 
 AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
 
-@test "the resolver-effort fixture pairs with the C.0a effort_resolved prose" {
-  local fm_resolved dispatch_resolved c0a
-  fm_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter-only") | .metadata.effort_resolved' \
+@test "the resolver-effort fixture has one row per transport, pairing with C.0a's prose" {
+  local none_resolved dispatch_resolved frontmatter_resolved c0a
+  none_resolved=$(jq -r 'select(.metadata.effort_transport == "none") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
   dispatch_resolved=$(jq -r 'select(.metadata.effort_transport == "dispatch-flag") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
-  [ "$fm_resolved" = "requested, not applied" ]
+  frontmatter_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  [ "$none_resolved" = "requested, not applied" ]
   [[ "$dispatch_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
+  [[ "$frontmatter_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
 
-  # The frontmatter-only literal must be the same one C.0a documents, not a fixture-only string.
+  # Every literal above must be the one C.0a documents, not a fixture-only string.
   c0a=$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")
-  grep -qF "$fm_resolved" <<< "$c0a"
+  grep -qF "$none_resolved" <<< "$c0a"
+  grep -qF '`dispatch-flag`' <<< "$c0a"
+  # A bare `frontmatter` substring passes on almost any prose (it also occurs inside
+  # "frontmatter tier", "agent's own frontmatter", etc.) — require the backtick-quoted
+  # table-cell form the other two transports are also checked against.
+  grep -qF '`frontmatter`' <<< "$c0a"
+  grep -qF '`none`' <<< "$c0a"
 }

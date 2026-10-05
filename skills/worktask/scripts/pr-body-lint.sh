@@ -61,7 +61,7 @@ CONTEXT_DIR=".context"
 BODY_FILE=""
 STRICT="${CORPFLOW_PR_BODY_STRICT:-0}"
 
-# See fn-preflight.sh:62-78 for why this is a readlink loop with CDPATH= and
+# See fn-preflight.sh _resolve_script_dir for why this is a readlink loop with CDPATH= and
 # `pwd -P` rather than a plain dirname.
 _resolve_script_dir() {
   local src="${BASH_SOURCE[0]:-$0}" dir
@@ -202,7 +202,7 @@ scan_document() {
     [ "$images" -eq 0 ] && printf 'P2\t0\tVisual evidence section present but no inline images reached the reader\n'
   fi
 
-  # P4: required structure. `Test plan` mirrors fn-preflight.sh:258; the other
+  # P4: required structure. `Test plan` mirrors fn-preflight-cmds.sh cmd_pr_body; the other
   # three come from git-conventions.md § Pull Request Format.
   local h
   for h in Motivation Changes "Test plan"; do
@@ -247,7 +247,7 @@ cmd_lint() {
     printf >&2 'pr-body-lint requires --body <path> to an existing file\n'
     exit 2
   }
-  # The scope guard stays the first executed check, matching fn-preflight.sh:220.
+  # The scope guard stays the first executed check, matching fn-preflight-cmds.sh cmd_pr_body.
   # Only consulted when a ledger exists, so the lint is still usable standalone
   # on an arbitrary file with no .context/ around it.
   if [ -f "$STATE_PATH" ] && fn_batch_scope 2> /dev/null; then

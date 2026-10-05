@@ -391,8 +391,10 @@ audit_fn() {
 #   1. MILESTONE_MODE=1        env override (tests, /megatask)
 #   2. INCIDENT_MODE=1         env override (tests, incident runners)
 #   3. state.json .metadata.milestone non-empty
-#   4. state.json .tasks.IR0 present — the emergency pipeline's marker stage
-#   5. workspace.json present at $WORKSPACE_ROOT or $PWD
+#   4. state.json .tasks.PL0.metadata.megatask_group or .milestone non-empty — /megatask's
+#      per-issue stamp, which holds after the stamp even when the env is lost
+#   5. state.json .tasks.IR0 present — the emergency pipeline's marker stage
+#   6. workspace.json present at $WORKSPACE_ROOT or $PWD
 fn_batch_scope() {
   if [ "${MILESTONE_MODE:-0}" = "1" ]; then
     SCOPE_REASON="milestone_mode_env"
@@ -407,6 +409,12 @@ fn_batch_scope() {
     m=$(jq -r '.metadata.milestone // ""' "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '')
     if [ -n "$m" ] && [ "$m" != "null" ]; then
       SCOPE_REASON="milestone_metadata"
+      return 0
+    fi
+    m=$(jq -r '.tasks.PL0.metadata // {} | .megatask_group // .milestone // ""' \
+      "${STATE_PATH:-.context/state.json}" 2> /dev/null || printf '')
+    if [ -n "$m" ] && [ "$m" != "null" ]; then
+      SCOPE_REASON="megatask_stamp"
       return 0
     fi
     if jq -e '[(.tasks // {}) | keys[] | select(test("^IR[0-9]+$"))] | length > 0' \

@@ -67,8 +67,8 @@ _run_audit() {
 
 @test "off_tier: alias vs resolved id is one family, not a re-tier" {
   _ledger
-  _run_audit '{"session_id":"s1","agent_id":"agt_dv","from_model":"opus","to_model":"claude-opus-5-20260615"}'
-  assert_audit_row model_switched --meta resolved=claude-opus-5-20260615 --meta off_tier=false
+  _run_audit '{"session_id":"s1","agent_id":"agt_dv","from_model":"opus","to_model":"claude-opus-5-5"}'
+  assert_audit_row model_switched --meta resolved=claude-opus-5-5 --meta off_tier=false
 }
 
 @test "dedupe_key: two switches in one session keep two rows after audit-dedup" {
