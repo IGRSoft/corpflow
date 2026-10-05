@@ -4,7 +4,8 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
-Fixes the prompt-audit findings and comment gaps of #458, plus a reader-side root-resolution flaw.
+Fixes the prompt-audit findings and comment gaps of #458, a reader-side root-resolution flaw, the
+FN/ST predecessor edges of #467, and the writer's share of the reader guard (#468).
 
 ### Changed
 
@@ -24,17 +25,20 @@ Fixes the prompt-audit findings and comment gaps of #458, plus a reader-side roo
   `skills/worktask/references/fn-multi-stream.md`; the agent keeps a one-line pointer.
 - **Audit commands require `effort:`.** `prompt-audit`, `optimize-agent` and `create-agent` flag
   only a `model:` frontmatter key; `effort:` is required and equals the agent's matrix row.
+- `state-patch.sh` now shares the reader guard (`corpflow_inferred_ctx_ok`, #468); its exit-4 refusal no longer names the plugin root path.
 
 ### Fixed
 
 - Speed-over-exploration clauses removed from product-manager, technical-lead and stakeholder.
 - team-lead clones PL0's resolved model/effort row instead of picking tiers; project-manager's
   stray `F3` step (the label means fallback layer 3 elsewhere) is renamed.
-- workflow-engineer names the five sanctioned ledger-row writers, and its State Patch uses the
+- workflow-engineer names the six sanctioned ledger-row writers, and its State Patch uses the
   `--task-id <ID>` / `tasks.<ID>` form.
 - The handoff edge table gains `QA→RE` for a standard, secure or full run that excluded DC, and
   release-engineer's `<PREV>` rule matches it.
 - `prompt-audit`'s recall-suppression citation points at `tech-code-review § Phase 1`.
+- FN and ST predecessor edges (#467): `QA→FN` when DC and RE are skipped, `DC→FN` only when DC ran
+  and RE did not, and `RE→ST`/`DC→ST`/`QA→ST` when FN is skipped.
 - Ledger readers (`corpflow_context_dir`, `mailbox-lib`, `brief-compose`, the model-switch hooks) no longer hand a cwd nested inside the plugin checkout that checkout's live `.context`; they refuse like the #457 writer does. A linked worktree at its toplevel still resolves the main ledger (#458).
 
 ## [4.1.1] — 2026-10-05
