@@ -149,7 +149,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `hooks/anchor-preflight.sh` | `tests/shell/hooks/anchor-preflight.bats` | — | — | — |
 | `hooks/audit-subagent.sh` | `tests/shell/hooks/audit-subagent.bats` | — | — | — |
 | `hooks/audit-tooluse.sh` | `tests/shell/hooks/audit-tooluse.bats` | — | — | — |
-| `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` | — | — | — |
+| `hooks/dv-screenshot-gate.sh` | `tests/shell/hooks/dv-screenshot-gate.bats` (live escalation arm: also `tests/shell/dv-screenshot/escalate-flag.bats`) | — | — | — |
 | `hooks/megatask-monitor.sh` | `tests/shell/hooks/megatask-monitor.bats` | — | — | — |
 | `hooks/precompact-checkpoint.sh` | `tests/shell/hooks/precompact-checkpoint.bats` | — | — | — |
 | `hooks/session-end-finalize.sh` | `tests/shell/hooks/session-end-finalize.bats` | — | — | — |
@@ -173,6 +173,7 @@ kcov) where the `make coverage` target now works (the `$#`-expansion bug in the 
 | `skills/dv-screenshot-capture/scripts/android-capture.sh` | `tests/shell/dv-screenshot/android-capture.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/macos-window-capture.sh` | `tests/shell/dv-screenshot/macos-window-capture.bats` | — | — | — |
 | `skills/dv-screenshot-capture/scripts/capture.sh` | `tests/shell/dv-screenshot/capture-entry.bats` (aliased) | — | — | — |
+| `skills/dv-screenshot-capture/scripts/escalate-flag.sh` | `tests/shell/dv-screenshot/escalate-flag.bats` | — | — | — |
 
 ### Shell scripts — worktask-core (DV0a, kcov)
 

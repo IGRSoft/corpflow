@@ -68,4 +68,4 @@ actions: `model_switch_blocked`, `model_switch_confirm_requested`, `model_switch
 
 Writers: `skills/dv-screenshot-capture/` adapters and scripts.
 
-actions: `canvas_render`, `preview_added`, `visual_diff_run`, `screenshot_captured`, `screenshot_skipped`, `screenshot_platform_fallback`, `screenshot_size_warn`, `screenshot_size_fail`, `screenshot_count_exceeded`, `screenshot_capture_failed`
+actions: `canvas_render`, `preview_added`, `visual_diff_run`, `screenshot_captured`, `screenshot_skipped`, `screenshot_platform_fallback`, `screenshot_size_warn`, `screenshot_size_fail`, `screenshot_count_exceeded`, `screenshot_capture_failed`, `screenshot_flag_escalated`

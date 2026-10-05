@@ -7,7 +7,7 @@ argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
 
 # dv-screenshot-capture
 
-Capture and attach visual evidence during the DV (Development) stage. One screenshot per acceptance criterion with a visual manifestation; one annotated `git diff` for meta-work. Each DV task's completion is gated on its own valid evidence when `metadata.requires_screenshots` is true (default); see § Completion gate.
+Capture and attach visual evidence during the DV (Development) stage. One screenshot per acceptance criterion with a visual manifestation; one annotated `git diff` for meta-work. Each DV task's completion is gated on its own valid evidence when `metadata.requires_screenshots` is true (default); see § Completion gate. The planner writes the flag; DV may only raise it, via `scripts/escalate-flag.sh`.
 
 ## Trigger conditions
 
@@ -384,6 +384,10 @@ When `.context/designs/figma-registry.md` exists at capture time, resolve each c
 
 This step never fails DV: a failed, missing, or ambiguous match writes `—` and DV proceeds. The registry is PM-owned — DV reads it, never writes or back-patches it. When in doubt write `—`, which routes QA to its live-capture fallback rather than a wrong pairing.
 
+#### Flag escalation (`scripts/escalate-flag.sh`)
+
+Run it from the DV worktree before capture: `escalate-flag.sh --task-id <TASK_ID> --context-dir <ctx>`, then branch on its single stdout line `requires_screenshots=<true|false> action=<escalated|noop|warn> reason=<token>`. With a `false` flag, platform apple/web/android (from the ledger, never an argument) and a change set (`<base>...HEAD`, working-tree and untracked paths, `.context/` excluded) matching `detect-ui-change.sh --path-classes`, it sets the task flag, then the ledger flag, to `true` and appends one `screenshot_flag_escalated` row. It never writes `false`; every operational failure is exit 0 with a `warn` row, and a `warn` after the task flag was raised (`ledger_flag_unwritten`) leaves that write in place. The planner's `false` otherwise stands. The SubagentStop gate runs the same helper (`--invoker gate`) on every DV stop whose flag reads `false`, so a DV that skips it is still covered.
+
 #### Skip manifest (requires_screenshots: false)
 
 When `metadata.requires_screenshots: false` and DV captures nothing:
@@ -443,7 +447,7 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 #### Gate scope and inputs
 
 - **Task**: the `task_id` of the `facts.dispatched_agents[]` row for the payload `agent_id`; with no row, the one in_progress DV task whose `metadata.agent` is the payload `agent_type` (`corpflow:developer` matches any in_progress DV task). No DV task in progress, or none naming that agent type, is a no-op. Any other miss blocks `task_unresolved`, unless the ledger flag is `false`.
-- **Flag**: `requires_screenshots` from the task's metadata, then the ledger's, else `true`. `false` passes unclassified.
+- **Flag**: `requires_screenshots` from the task's metadata, then the ledger's, else `true`. For a task reading `false` the gate also invokes `escalate-flag.sh --invoker gate` in its worktree (`worktree.path`, else task, else ledger `workspace_path`; 10 s watchdog, fail open), then the gate re-reads; still `false` passes.
 - **Platform**: `tasks.<TASK_ID>.metadata.platform`, else the ledger `platform`.
 - **No preflight input**: the gate never reads `metadata.preflight`. A `tool_missing` row passes on the platform alone.
 
@@ -488,6 +492,7 @@ The `cli/fallback` `git diff` pipe can expose env files, tokens, or secrets pres
 |----------|------|--------------------------|
 | `screenshot_captured` | Successful `capture()` | `slug, path, bytes, platform, adapter` |
 | `screenshot_skipped` | `metadata.requires_screenshots: false` | `reason` |
+| `screenshot_flag_escalated` | `escalate-flag.sh`: `ok` raised, `warn` undecided; `raised` = writes that landed | `platform, base, reason, invoker, raised` (+ `matched_count, matched` when a match was computed) |
 | `screenshot_platform_fallback` | Adapter differs from `state.platform` | `requested_platform, used_adapter, reason` |
 | `screenshot_size_warn` | 200 KB ≤ bytes < 500 KB | `path, bytes` |
 | `screenshot_size_fail` | bytes ≥ 500 KB after pngquant | `path, bytes_before, bytes_after` |

@@ -81,7 +81,7 @@ Its `plugin.json` entry carries `"timeout": 5`, which bounds the run. Without a 
 
 Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to feed remediation text back to the model without it being labelled an error. Unlike a bare `{"decision":"block"}`, the `additionalContext` rides into the re-run's context as a fix instruction.
 
-`dv-screenshot-gate.sh` reads the stopping task's `screenshots-<TASK_ID>.md` and blocks missing or invalid evidence; no captures passes only on `backend`/`systems` or `requires_screenshots=false`:
+`dv-screenshot-gate.sh` reads the stopping task's `screenshots-<TASK_ID>.md` and blocks missing or invalid evidence; no captures passes only on `backend`/`systems`:
 
 ```json
 {
@@ -93,6 +93,12 @@ Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to
   }
 }
 ```
+
+#### Gate-side flag escalation
+
+For a resolved DV task whose flag reads `false`, the gate also invokes `escalate-flag.sh` in its worktree (10 s watchdog, fail open) and re-reads the flag: it may raise it to `true`, never lower it. An escalated block opens with `gate raised the planner's requires_screenshots=false: <n> UI path(s) matched in <ws>`.
+
+The row's `metadata.escalation` holds `invoker` (`gate`), `action` (`escalated|noop|warn|skipped|fault`), `reason` (the helper's token, or `worktree_unresolved`, `helper_missing`, `helper_exit`, `escalation_timeout`, `stdout_unparsable`), `flag_after`, `worktree`, and `rc` / `matched_count` when present. Stops that did not run the helper have no `escalation` key.
 
 #### Gate-feedback contract (one contract, two surfaces)
 

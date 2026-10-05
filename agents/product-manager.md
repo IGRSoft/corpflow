@@ -154,7 +154,7 @@ AR0\*: skip only if existing patterns, no new interface or schema, one module, n
 #### PL0 runbook — 4. Test metadata and agents
 
 - `test_mode`: ≤10 `build-only` if marker coverage ≥50%, else `scoped`; 11–25 `scoped`, `full` if multi-module; ≥26 `full`; comment/doc-only diff ⇒ `build-only`. `ui_visual_check: true` for new views, layout, styling or animation. `always_required_tests: []` unless a smoke test must always run.
-- `requires_screenshots`: the `skills/worktask/scripts/detect-ui-change.sh` verdict — S1 `ui_visual_check`, S2 `.context/designs/` artifacts, S3 UI keywords in scope, S4 UI path classes on apple/web/android; any or error ⇒ `true`. `false` over `true` needs a quoted user directive.
+- `requires_screenshots`: you decide; rule, floor and detector role in `skills/worktask/references/pl0-procedure.md § requires_screenshots`. Never ask the user about screenshots.
 - `agent`: `corpflow:` + AR0 `software-architector`, TL0 `team-lead`, DV0 `developer` (routes the platform itself), DR0 `technical-lead`, SR0 `security-reviewer`, QA0 `qa-engineer`, DC0 `technical-writer`, RE0 `release-engineer`, FN0 `project-manager`, ST0 `stakeholder`.
 
 #### PL0 runbook — 5. Seed every row in one call

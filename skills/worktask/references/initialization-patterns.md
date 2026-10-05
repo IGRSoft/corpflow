@@ -203,8 +203,7 @@ After planning completes, PL0 creates stage tasks from the complexity score. Eac
 
 Every stage seed is this call with the values from the table below. `$PLAN_FILE` is the
 **basename** shape (§ plan_file shape boundary); `$REQUIRES_SCREENSHOTS` is the plan-frontmatter
-boolean PL0 stamped via `skills/worktask/scripts/detect-ui-change.sh <plan> --platform <p>`
-(`true` on detector error), propagated so the capture skill and `dv-screenshot-gate` fire.
+boolean the planner decided (`detect-ui-change.sh` is advisory; uncertain means `true`), propagated so the capture skill and `dv-screenshot-gate` fire.
 
 ```bash
 state-patch.sh --task-create DV0 --metadata "$(jq -n \

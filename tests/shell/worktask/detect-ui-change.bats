@@ -4,7 +4,7 @@
 #   - emits a single JSON line {"requires_screenshots":bool,"signals":[...],"rationale":"..."}
 #   - exit 0 ALWAYS on the detection path
 #   - OR over S1..S4: ANY signal true => requires_screenshots:true
-#   - S3 UI keyword set fires on SwiftUI/view/etc.
+#   - S3 UI keyword set fires on framework terms (SwiftUI, Composable, ...), never generic words
 #   - fail-safe: unreadable plan => requires_screenshots:true, signals:["fail_safe"], exit 0
 #   - --self-test => "fail=0", exit 0
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
@@ -109,7 +109,7 @@ setup() {
 }
 
 @test "S4: the same plan on a non-admitted platform fires nothing" {
-  # Falsification arm for the case statement at :122-127 — without it the S4
+  # Falsification arm for the platform gate — without it the S4
   # test above would pass even if the platform gate were deleted.
   printf '## scope\nrewrite src/App.tsx\n' > "$WD/s4.md"
   run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/s4.md" --platform systems
@@ -119,6 +119,48 @@ setup() {
   assert_output '[]'
   run jq -r '.requires_screenshots' <<<"$json"
   assert_output "false"
+}
+
+@test "S3: generic UI-ish words alone fire no signal" {
+  printf '## requirements\nThe view component on the screen has a layout, theme, styling and animation; render HTML; run docker Compose.\n## scope\nview component screen layout theme styling animation HTML Compose\n' > "$WD/generic.md"
+  run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/generic.md" --platform apple
+  assert_success
+  local json="$output"
+  run jq -cr '.signals' <<<"$json"
+  assert_output '[]'
+  run jq -r '.requires_screenshots' <<<"$json"
+  assert_output "false"
+}
+
+@test "S3: every kept framework term fires S3" {
+  local term
+  for term in SwiftUI UIKit AppKit storyboard xib CSS Composable Jetpack RecyclerView ViewBinding drawable; do
+    printf '## scope\nchange the %s code\n' "$term" > "$WD/kw.md"
+    run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/kw.md" --platform all
+    assert_success
+    run jq -cr '.signals' <<<"$output"
+    [ "$output" = '["S3"]' ] || { echo "term $term -> $output"; return 1; }
+  done
+}
+
+@test "contract: --path-classes no longer lists bare .kt" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --path-classes
+  assert_success
+  assert_output 'Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html|res/layout|res/drawable|res/values|res/menu|/ui/'
+}
+
+@test "contract: --ui-platforms prints the S4 platform set" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --ui-platforms
+  assert_success
+  assert_output 'apple|web|android'
+}
+
+@test "S4: a bare Kotlin file outside /ui/ and res/ fires nothing on android" {
+  printf '## scope\nedit data/Repo.kt\n' > "$WD/kt.md"
+  run env DESIGNS_DIR="$WD/none" bash "$PLUGIN_ROOT/$SCRIPT" "$WD/kt.md" --platform android
+  assert_success
+  run jq -cr '.signals' <<<"$output"
+  assert_output '[]'
 }
 
 @test "contract: --self-test passes (smoke, NON-counting)" {
