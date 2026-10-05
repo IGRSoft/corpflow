@@ -5,6 +5,9 @@
 #   blocked-on-dispatch.sh, so the router's route/resume and the two CLIs agree on one grammar,
 #   one hash input and one dedupe key without a second copy anywhere to drift.
 #
+#   mb_dir's inferred-root rank is vetted by corpflow_inferred_ctx_ok (state-read-lib.sh), so a cwd
+#   nested in the plugin checkout gets no mailbox.
+#
 #   Change protocol: a file-shape or grammar change here changes the shared-seam registry entry and the seam
 #   declaration in the same PR.
 #
@@ -27,6 +30,7 @@ _MAILBOX_LIB=1
 # readonly assignment returns 1 under a `set -e` caller.
 _MB_LIB_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2> /dev/null && pwd -P)" || _MB_LIB_DIR=""
 _MB_RESOLVE_ROOT="$_MB_LIB_DIR/../../shared/scripts/resolve-root.sh"
+_MB_STATE_READ_LIB="$_MB_LIB_DIR/../../shared/lib/state-read-lib.sh"
 
 # Lowercase-only UTC stamp plus 12 hex chars from 6 random bytes — 32 bytes total, no `/` or
 # `..` reachable through it. Checked before any path join; nothing this library writes ever
@@ -117,6 +121,12 @@ mb_dir() {
     [ -r "$_MB_RESOLVE_ROOT" ] || return 1
     ctx=$(bash "$_MB_RESOLVE_ROOT" 2> /dev/null) || return 1
     [ -n "$ctx" ] || return 1
+    # The resolver is a plain git lookup; the reader guard refuses a ledger dir inside the
+    # plugin root for a cwd nested in it, before any mkdir can plant a mailbox there.
+    [ -r "$_MB_STATE_READ_LIB" ] || return 1
+    # shellcheck source=../../shared/lib/state-read-lib.sh
+    . "$_MB_STATE_READ_LIB" || return 1
+    corpflow_inferred_ctx_ok "$ctx" || return 1
     if [ ! -e "$ctx" ]; then
       mkdir -m 700 -- "$ctx" 2> /dev/null || return 1
     fi

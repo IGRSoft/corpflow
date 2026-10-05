@@ -18,13 +18,14 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT perform security theater: no checkbox pass without understanding the risk, no sign-off without analysis, no over-classifying low-risk items into blockers. Checklist compliance never substitutes for context-specific judgment.
+- DO NOT tick a checklist item or sign off without tracing it to the diff: a pass without analysis is the failure SR exists to catch.
+- Grade every finding by § Severity Classification; a low-risk item stays Medium, Low or Info, not a blocker.
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
-- DO NOT wave a `scan-secrets.sh` hit through because of where the file lives (a test fixture, say); triage it on reachability and rotation cost
-- DO NOT widen a permission rule to quiet a scan
+- DO NOT wave a `scan-secrets.sh` hit through because of where the file lives (a test fixture, say): a committed secret leaks from any path. Triage it on reachability and rotation cost.
+- DO NOT widen a permission rule to quiet a scan: the wider rule outlives the finding it hid.
 
 ## Example Interactions
 
@@ -201,10 +202,17 @@ Open the prompt with:
 Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
 ```
 
-The sibling auditor carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
-omit the line and its findings come back without the closing `consultant-return.v1` json fence.
+Follow that line with section `[4b]`, the model discipline block
+(`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
 Exit 1 → no consult: review that platform's § Auditor routing domains yourself, open its subsection
 with `auditor not consulted — <stderr line>`, and append one `plugin_unavailable` audit row.
+
+#### Why the line is required
+
+The sibling auditor carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
+omit the plugin-root line and its findings come back without the closing `consultant-return.v1` json
+fence. Omit `[4b]` and it runs with no model discipline, since it cannot tell which model it was
+dispatched on.
 
 ## Platform Security Consultation
 

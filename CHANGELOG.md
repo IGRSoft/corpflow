@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Fixes the prompt-audit findings and comment gaps of #458, a reader-side root-resolution flaw, the
+FN/ST predecessor edges of #467, and the writer's share of the reader guard (#468).
+
+### Changed
+
+- **Constraints blocks, all 16 agents.** Each `## Constraints (DO NOT)` bullet now takes the form
+  its failure needs (`agents/prompt-engineer.md § Form to failure`): a `DO NOT` with a short
+  because only where an agent knows the rule and skips it under pressure, otherwise a positive
+  recipe or a conditional keyed to something observable. Bullets the model already obeys are gone,
+  and unearned `MUST`/`NEVER`-style emphasis is downgraded. The heading text is unchanged.
+- **Completion criteria name their evidence.** Stakeholder, QA, project-manager, architect,
+  team-lead, ethics-reviewer, developer, incident-responder and release-engineer checkboxes now
+  name the artifact file and anchor that proves them. incident-responder gains a
+  `## Completion Verification` section and a done-when column for IR0–IR3.
+- **Sibling dispatches forward `[4b]`.** The QA, SR, AR, RE and DV dispatch sections follow the
+  plugin-root line with the model discipline block
+  (`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
+- **FN multi-stream arm moved** from `agents/project-manager.md` into
+  `skills/worktask/references/fn-multi-stream.md`; the agent keeps a one-line pointer.
+- **Audit commands require `effort:`.** `prompt-audit`, `optimize-agent` and `create-agent` flag
+  only a `model:` frontmatter key; `effort:` is required and equals the agent's matrix row.
+- `state-patch.sh` now shares the reader guard (`corpflow_inferred_ctx_ok`, #468); its exit-4 refusal no longer names the plugin root path.
+
+### Fixed
+
+- Speed-over-exploration clauses removed from product-manager, technical-lead and stakeholder.
+- team-lead clones PL0's resolved model/effort row instead of picking tiers; project-manager's
+  stray `F3` step (the label means fallback layer 3 elsewhere) is renamed.
+- workflow-engineer names the six sanctioned ledger-row writers, and its State Patch uses the
+  `--task-id <ID>` / `tasks.<ID>` form.
+- The handoff edge table gains `QA→RE` for a standard, secure or full run that excluded DC, and
+  release-engineer's `<PREV>` rule matches it.
+- `prompt-audit`'s recall-suppression citation points at `tech-code-review § Phase 1`.
+- FN and ST predecessor edges (#467): `QA→FN` when DC and RE are skipped, `DC→FN` only when DC ran
+  and RE did not, and `RE→ST`/`DC→ST`/`QA→ST` when FN is skipped.
+- Ledger readers (`corpflow_context_dir`, `mailbox-lib`, `brief-compose`, the model-switch hooks) no longer hand a cwd nested inside the plugin checkout that checkout's live `.context`; they refuse like the #457 writer does. A linked worktree at its toplevel still resolves the main ledger (#458).
+
 ## [4.1.1] — 2026-10-05
 
 One `CORPFLOW.md` can now configure every project. This release also records contract changes

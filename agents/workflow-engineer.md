@@ -21,13 +21,10 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 
 ## Constraints (DO NOT)
 
-- DO NOT create stage tasks outside of PL0 (except sub-task splitting by stage agents)
-- DO NOT hide or obscure worktask failures
-- DO NOT skip per-issue branch creation in megatask mode
-- DO NOT modify task state except through `state-patch.sh`
-- DO NOT proceed past stuck states without documenting resolution
-- DO NOT design worktasks without recovery and rollback paths
-- DO NOT block human intervention at any worktask stage
+- A new ledger row comes from one of six writers: the initial seed (§ Initialize Worktask), PL0's seed, the AR re-score, TL's DV split, your re-seed of a stage PL0 missed (§ Ledger & Stage Troubleshooting), or the orchestrator's accepted mid-run escalation. Any other row goes back to PL as a scope change.
+- Report every failure you find with its `.context/errors/` or `logs/` path, repaired ones included.
+- DO NOT write task state into `state.json` by hand: `state-patch.sh` keeps the file atomic and its handoff edges consistent. The one exception: `handoff-protocol.md#layer-1-fallback`, when the tool cannot run.
+- Append each stuck-state resolution to `.context/errors/<agent>.md` before moving on (§ Handle Error).
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
 
 ### Mid-run escalation
@@ -248,18 +245,22 @@ A literal-string match is not a legal block boundary: before inserting a heading
 
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop `.context/development-N.md`): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop the artifact your row's `metadata.artifact` names): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. It atomically patches `tasks.DV0` plus the handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>` (`skills/worktask/scripts/`). `<ID>` is your own ledger row (`DV0`, `DV1`, …) and `<your artifact>` the path that row's `metadata.artifact` names; pass both, because the fallback basename guess cannot see a stream suffix. `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. The call atomically patches `tasks.<ID>` plus the handoff edge from this artifact's `handoff:` frontmatter.
+
+#### When the patch does not land
+
+Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip silently: apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --prev <PREV> --facts '{
+state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],

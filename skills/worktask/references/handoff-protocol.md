@@ -1012,7 +1012,7 @@ its own artifact (§ DV fan-out — ledger tasks).
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
 | `FN.verdict` | `tasks.FN0.verdict` | complete-summary-N.md `## summary` |
-| `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
+| `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0`/`QA→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
 | `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST0` + derived `facts.verdicts.ST` | retrospective-N.md `## decision` |
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
@@ -1595,8 +1595,8 @@ written is the one whose when-clause holds. A stage that never ran never appears
 
 The tables are exhaustive across all three pipelines (standard, secure/full, emergency). The
 emergency pipeline (`IR→DV→DR→QA→RE→FN`) has no PL, AR or TL stage, so DV's predecessor there is
-`IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a row before writing
-one.
+`IR` and RE's is `QA`. RE's predecessor is also `QA` on a standard, secure or full run that
+excluded DC. Any predecessor not listed is not a legal edge; add a row before writing one.
 
 ##### Edge table — standard and secure pipelines
 
@@ -1614,8 +1614,17 @@ one.
 | `SR→QA` / `DR→QA` | SR ran / SR was excluded | QA |
 | `QA→DC` | DC is in the plan | DC |
 | `DC→RE` | RE is in the plan AND DC ran | RE |
-| `RE→FN` / `DC→FN` | RE ran / RE was excluded | FN |
-| `FN→ST` | ST is in the plan | ST |
+| `QA→RE` | RE is in the plan AND DC was excluded | RE |
+| `RE→FN` | FN is in the plan AND RE ran | FN |
+| `DC→FN` | FN is in the plan AND DC ran AND RE did not | FN |
+| `QA→FN` | FN is in the plan AND neither RE nor DC ran | FN |
+| `FN→ST` | ST is in the plan AND FN ran | ST |
+| `RE→ST` / `DC→ST` / `QA→ST` | ST in plan, FN not run: latest of RE, DC, QA that ran | ST |
+
+##### Edge table — what "ran" means
+
+A stage ran when its `tasks` row exists and is not `skipped`. With FN and ST both excluded, no edge
+names FN: the run ends on the edge into the last stage that ran.
 
 ##### Edge table — emergency pipeline and the ethics gate
 

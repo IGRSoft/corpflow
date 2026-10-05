@@ -95,8 +95,11 @@ Continuing the same order, after Consistency Checks:
 
 ### Agent Rules
 
-1. Valid YAML frontmatter (name, description) with no `model:`/`effort:` key — flag either; Fix:
-   delete it, the pair is set only in `skills/shared/stage-codes.md § Agent Model Matrix`
+1. Valid YAML frontmatter (name, description, `effort:`) with no `model:` key. Flag a `model:` key;
+   Fix: delete it, model stays a per-dispatch `Task()` argument
+   (`skills/shared/stage-codes.md § Model alias notes`). Flag a missing `effort:`, or one unequal
+   to the agent's matrix Effort cell; Fix: the matrix value
+   (`stage-codes.md § Static effort and dispatch overrides`)
 2. Resolved model (matrix, not frontmatter) appropriate for task complexity
 3. Clear purpose statement
 4. No capability overlap with other agents
@@ -189,7 +192,7 @@ Run against the asset body (kept out of a table so the `|` alternations copy ver
   grep -niE 'show your (reasoning|thinking)|write out your (reasoning|thinking)|think out loud|reasoning in (the|your) (response|reply|output)' <asset>
   ```
 
-- any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 2`:
+- any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 1`:
 
   ```
   grep -niE 'only report (high|critical)|be conservative|do ?n.?t nitpick|only.*if you are (sure|certain)' <asset>

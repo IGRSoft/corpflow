@@ -16,9 +16,9 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT gold-plate beyond requirements, reject good external solutions from not-invented-here bias, or pick technology for personal interest over project fit
-- DO NOT stall in analysis paralysis, set standards without practical input, or block progress for marginal quality gains
-- DO NOT approve an implementation that lacks human oversight, or an irreversible one without justification
+- When a finding asks for more than the plan's acceptance criteria require, file it as P2 or a follow-up, not a blocker.
+- In a technology consult, rank built-in and external options alike by the evaluation order and weights in `skills/shared/technical-consult.md`.
+- DO NOT pass a change that removes human oversight, or an irreversible one with no justification in the DV artifact's `## decisions`: neither can be reviewed back once it ships.
 
 ### Test-Execution Prohibitions (DR)
 

@@ -1963,31 +1963,6 @@ fi
 # they point inside it: a plugin developed with itself, run from its own checkout, legitimately
 # keeps its ledger there.
 
-# _sp_physical <path> — physical form of a path whose tail may not exist yet. The deepest
-# existing ancestor is resolved with `pwd -P` and the missing tail re-appended; without
-# that a symlinked tmp root (macOS /var -> /private/var) defeats the prefix comparison
-# below.
-_sp_physical() {
-  local p="$1" tail="" head base
-  case "$p" in
-    /*) ;;
-    *) p="$PWD/$p" ;;
-  esac
-  head="$p"
-  while [[ -n "$head" && ! -d "$head" ]]; do
-    base="${head##*/}"
-    tail="/${base}${tail}"
-    head="${head%/*}"
-  done
-  [[ -n "$head" ]] || head="/"
-  head="$(CDPATH='' cd -P -- "$head" 2> /dev/null && pwd -P)" || head=""
-  [[ -n "$head" ]] || {
-    printf '%s' "$p"
-    return 0
-  }
-  printf '%s%s' "${head%/}" "$tail"
-}
-
 # _sp_refuse_plugin_root <ctx-dir> — exit 4 when a ledger dir INFERRED from the cwd lies
 # inside the plugin's own install/checkout, unless the caller is standing at the git toplevel
 # itself (running the plugin from its own repo root). A nested subdirectory such as a benchmark
@@ -1996,34 +1971,11 @@ _sp_physical() {
 # wrong project. Both the root this script lives in and the host-reported root count, because a
 # dev checkout and an installed copy are different trees.
 _sp_refuse_plugin_root() {
-  local ctx_phys root root_phys top top_phys pwd_phys host_root="" base_lib
-  ctx_phys="$(_sp_physical "$1")"
-  top="$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)"
-  top_phys=""
-  [[ -z "$top" ]] || top_phys="$(_sp_physical "$top")"
-  pwd_phys="$(_sp_physical "$PWD")"
-  # The shared resolver owns the host env ladder; a missing lib only narrows the guard to
-  # this script's own tree, which still covers a dev checkout.
-  base_lib="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
-  if [[ -r "$base_lib" ]]; then
-    # shellcheck source=skills/shared/lib/corpflow-base.sh
-    . "$base_lib"
-    host_root="$(corpflow_plugin_root 2> /dev/null || true)"
-  fi
-  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "$host_root"; do
-    [[ -n "$root" && -d "$root" ]] || continue
-    root_phys="$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P)" || continue
-    [[ -n "$root_phys" && "$root_phys" != "/" ]] || continue
-    case "$ctx_phys/" in
-      "$root_phys/"*)
-        # Rank 5 landing here with the caller at the toplevel is the self-hosted case.
-        [[ -n "$top_phys" && "$pwd_phys" == "$top_phys" ]] && continue
-        printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root %s\n' "$ctx_phys" "$root_phys"
-        printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
-        exit 4
-        ;;
-    esac
-  done
+  # The rule itself is corpflow_inferred_ctx_ok (state-read-lib.sh), shared with the readers.
+  corpflow_inferred_ctx_ok "$1" && return 0
+  printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root\n' "$1"
+  printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
+  exit 4
 }
 
 if [[ -z "$STATE_ARG_GIVEN" ]]; then

@@ -16,6 +16,9 @@
 #   digest, never the ledger JSON — cache-lint.sh's ledger_digest_lint() rejects an
 #   inlined ledger outright.
 #
+#   The resolved ledger root joins the allowed roots only through corpflow_inferred_ctx_ok
+#   (state-read-lib.sh), so a cwd nested in the plugin checkout never widens them.
+#
 #   The whole brief is buffered before anything reaches stdout: a guard failure — an
 #   absolute path outside the allowed roots, or a `ref:` line that does not resolve — must
 #   never leak a partial brief, since a partial brief reads as verified when it is not.
@@ -404,6 +407,8 @@ cmd_render() {
 
   local rr_out
   rr_out=$(bash "$PROOT/skills/shared/scripts/resolve-root.sh" 2> /dev/null) || rr_out=""
+  # The resolver is policy-free; a root inside the plugin tree for a nested cwd is not allowed.
+  if [[ -n "$rr_out" ]] && ! corpflow_inferred_ctx_ok "$rr_out"; then rr_out=""; fi
   add_root "$rr_out"
   local ctx_out
   ctx_out=$(WORKSPACE_ROOT="$WORKSPACE_ROOT" corpflow_context_dir 2> /dev/null) || ctx_out=""

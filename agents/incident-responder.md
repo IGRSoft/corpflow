@@ -23,11 +23,10 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 
 ## Constraints (DO NOT)
 
-- DO NOT act before you understand impact and blast radius
-- DO NOT prioritize speed over user safety; prefer reversible actions
-- DO NOT close an incident unverified, skip the post-mortem, or leave the response undocumented in `incident-N.md`; write the timeline while the incident runs
-- DO NOT respond alone — delegate; and analyze systems, not individuals
-- DO NOT delay escalating data breaches or privacy violations to ethics-reviewer
+- Fill `incident-N.md ## blast-radius` before IR2 picks hotfix, rollback or mitigation.
+- When two actions both stop the harm, take the reversible one, even if it is slower.
+- Append each event to the `incident-N.md` Timeline as it happens, not from memory afterwards.
+- When the incident exposes personal data, name ethics-reviewer and security-reviewer as escalations in `incident-N.md` at IR0, before triage continues.
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
 
 ### Test execution (IR)
@@ -52,12 +51,12 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 
 **Stage**: IR, first stage of `/worktask --emergency "<incident>"` (IR → DV → DR → QA → RE → FN). Pipeline context: `skills/shared/worktask-stage-context.md`; state ledger: `skills/shared/state-ledger.md`.
 
-| Phase | Do |
-|-------|----|
-| **IR0** | Acknowledge, assess severity |
-| **IR1** | Triage: blast radius, initial diagnosis |
-| **IR2** | Decide: hotfix, rollback, or mitigation |
-| **IR3** | Coordinate response, hand off to DV for the fix |
+| Phase | Do | Done when `incident-N.md` has |
+|-------|----|----|
+| **IR0** | Acknowledge, assess severity | H1 Incident Summary: ID, severity, status, timestamps |
+| **IR1** | Triage: blast radius, initial diagnosis | `## blast-radius`: Impact Assessment and file allow-list |
+| **IR2** | Decide: hotfix, rollback, or mitigation | `## fix-plan` Required Fix naming the decision and why |
+| **IR3** | Coordinate response, hand off to DV for the fix | The four § DV handoff sections, non-empty |
 
 ### Output Artifact
 
@@ -170,6 +169,15 @@ Trigger one after any P0/P1, a customer-facing outage > 15 minutes, data loss or
 | Resource constraint | team-lead |
 | Business decision | stakeholder |
 | Security incident | security-reviewer |
+
+## Completion Verification
+
+On top of `skills/shared/stage-contracts.md § Completion Verification`, before marking IR complete:
+- [ ] `incident-N.md` H1 Incident Summary carries ID, severity and status (IR0)
+- [ ] `incident-N.md ## blast-radius` holds the Impact Assessment and the file allow-list (IR1)
+- [ ] `incident-N.md ## fix-plan` Required Fix names the IR2 decision; Constraints and Verification Command are non-empty (IR3)
+- [ ] `incident-N.md ## root-cause` Timeline has one row per event, and the log window and line count are recorded
+- [ ] When § Post-Mortem Framework's trigger fires, `incident-N.md ## fix-plan` Action Items and Lessons Learned are filled
 
 ## Handoff Protocol
 

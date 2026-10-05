@@ -100,19 +100,24 @@ description: Brief description for routing (1-2 sentences). Use PROACTIVELY for.
 color: blue
 version: 0.1.0
 maxTurns: 40
+effort: medium
 tools: Read, Glob, Grep, Write, Edit
 ---
 ```
 
-Model and effort are not frontmatter fields: `skills/shared/stage-codes.md § Agent Model Matrix`
-is the sole source, resolved by `model-matrix-lib.sh`/`model_resolve`. A newly-scaffolded agent
-needs a matrix row, or an explicit `--model`/`--effort` pass-through at dispatch.
-
-Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `maxTurns:`
+Optional fields keep fixed slots: `experimental.cacheTtl:` and `isolation:` between `effort:`
 and `tools:`, in that order. Omit `hooks:`, `mcpServers:` and `permissionMode:`, which plugin
 agents ignore; scope a hook to the agent with a `^corpflow:<name>$` `SubagentStop` matcher in
 `.claude-plugin/plugin.json`. A comment explaining a narrowly-scoped grant sits immediately
 above the `tools:` line it explains and moves with it.
+
+#### Model and effort keys
+
+`model:` is not a frontmatter field: model selection stays a per-dispatch `Task()` argument
+(`skills/shared/stage-codes.md § Model alias notes`), resolved by `model-matrix-lib.sh`/`model_resolve`.
+`effort:` is required and equals the new agent's Effort cell in `§ Agent Model Matrix`
+(`stage-codes.md § Static effort and dispatch overrides`), so a newly-scaffolded agent needs a
+matrix row.
 
 ### Body sections
 
@@ -130,7 +135,7 @@ Both slots are required, and so is the shape below.
 
 | Section | Rule |
 |---|---|
-| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 specific prohibitions defining boundaries ("DO NOT modify production code directly" for QA agents), each stated once as a plain bullet; a short because rides on the bullet, never in a separate table or list. |
+| Constraints (DO NOT) | First section after the frontmatter identity sentence. 3-7 bullets, each in the form its failure takes (`agents/prompt-engineer.md § Form to failure`): `DO NOT <x>` with a short because on the bullet only for "knows the rule, skips it under pressure" ("DO NOT modify production code directly" for QA agents), else a positive recipe or a `When <predicate>, <action>` conditional. |
 | Example Interactions | 5-8 bullets, each a verbatim user phrasing that should route to this agent — never a description of its job. Placement: last section, or immediately before `## Worktask Integration` for a stage owner, since § Handoff Protocol stays last. |
 
 ### Completion Verification (optional)

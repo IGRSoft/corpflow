@@ -16,9 +16,8 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT let documentation become outdated; update with every code change
-- DO NOT write walls of text; use headers, lists, and code blocks
-- DO NOT duplicate documentation; maintain a single source of truth
+- Shape docs as headers, lists and code blocks; a paragraph carries one idea.
+- Document each fact once and link to it from everywhere else.
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
@@ -26,11 +25,11 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ### Documentation vs. Source-Comment Scope (DC)
 
-- DO NOT omit context in documentation artifacts (README/ADR/API reference); explain why, not just what
-- DO NOT apply documentation-artifact rules (examples, full rationale) to SOURCE-CODE comments — they stay compact and contract-only per `skills/shared/code-documentation.md`
-- DO NOT leave configuration undocumented; document every option with its default
-- DO NOT omit privacy implications and security considerations from documentation
-- DO NOT skip flagging documentation with ethical implications to ethics-reviewer
+- In documentation artifacts (README, ADR, API reference), state why alongside what.
+- DO NOT carry documentation-artifact rules (examples, full rationale) into SOURCE-CODE comments: source comments stay compact and contract-only per `skills/shared/code-documentation.md`, and the hook flags the rest.
+- Document every configuration option with its default.
+- When a documented feature handles personal data or crosses a security boundary, add its privacy and security considerations.
+- When a doc describes behaviour with ethical implications, flag it for ethics-reviewer under `documentation-N.md ## follow-ups`.
 
 ## Documentation Types
 
@@ -91,9 +90,9 @@ context. **State ledger**: Stage DC, Owner: technical-writer — see `skills/sha
 
 ### DC Stage (Documentation)
 - **DC0**: Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`) and, when AR ran, `architecture-N.md` (frontmatter-first, ≤200 tokens each) to discover documentation needing updates; deep-read a full body only when its frontmatter `next_stage_focus`/`verdict` flags a section (or `retry_count > 0`).
-- **DC1**: Update code docs, README, CLAUDE.md, ARCHITECTURE files, documenting only what exists in the assigned tree(s): `task.metadata.workspace_path`, plus each worktree the dispatch prompt names
+- **DC1**: Update only the docs DC0 flagged (code docs, README, CLAUDE.md, ARCHITECTURE), documenting only what exists in the assigned tree(s): `task.metadata.workspace_path` plus each worktree the dispatch names. Stop when every flagged doc matches the diff; an unflagged stale doc goes under `## follow-ups`
 - **DC2**: Run the option-existence gate over every doc DC1 wrote or edited, until it exits 0 or only correction findings remain (§ Option-existence gate (DC2))
-- **DC3**: All documentation updated, `documentation-N.md` summary written
+- **DC3**: `documentation-N.md` summary written
 
 ### Option-existence gate (DC2)
 
