@@ -7,7 +7,7 @@
 #   non-empty default would make every probe look present.
 #
 #   Symbols: corpflow_state_str, corpflow_worktask_id, corpflow_run_index,
-#   corpflow_context_dir, corpflow_context_dir_write.
+#   corpflow_inferred_ctx_ok, corpflow_context_dir, corpflow_context_dir_write.
 #
 # Minimum shell: bash 3.2+ (macOS default).
 
@@ -57,6 +57,57 @@ corpflow_run_index() {
   corpflow_state_str "${1:-}" '.run_index' "${2-0}"
 }
 
+# corpflow_inferred_ctx_ok <ctx-dir> [<git-toplevel>] — the reader-side twin of state-patch.sh's
+# _sp_refuse_plugin_root: rc 0 when a ledger dir INFERRED from the cwd (ranks 5-6) may be used,
+# rc 1 (nothing printed) when it lies inside a plugin root and the caller is not at its own git
+# toplevel. A cwd nested in the plugin's checkout otherwise borrows that checkout's live ledger.
+# A linked worktree's toplevel still reaches the main ledger (the self-hosted pipeline path).
+#
+# Plugin roots: this library's own tree, and the first host-root env (corpflow_plugin_root's
+# order) that holds a manifest. The env ladder is inlined, not sourced from
+# corpflow-base.sh, because a hook process holds `readonly -f` on a same-named function there.
+# The optional toplevel reuses a probe the caller already paid for. Explicit ranks never call
+# this; keep the predicate in step with the writer's (pinned by reader-ladder-nested.bats).
+corpflow_inferred_ctx_ok() {
+  local ctx="${1:-}" top="${2:-}" ctx_p top_p="" pwd_p libdir root root_p cand
+  [ -n "$ctx" ] || return 1
+  ctx_p=$(CDPATH='' cd -P -- "$ctx" 2> /dev/null && pwd -P) || return 1
+  [ -n "$ctx_p" ] || return 1
+  [ -n "$top" ] || top=$(git rev-parse --show-toplevel 2> /dev/null || true)
+  if [ -n "$top" ]; then
+    top_p=$(CDPATH='' cd -P -- "$top" 2> /dev/null && pwd -P) || top_p=""
+  fi
+  pwd_p=$(pwd -P 2> /dev/null || true)
+  libdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)" || libdir=""
+
+  # Variable names are assembled from a prefix so this library keeps naming no plugin-root
+  # variable literally (state-read-lib.bats H3); the order is corpflow_plugin_root's.
+  local host_root="" pfx var
+  for pfx in BASE_ "" CLAUDE_; do
+    var="${pfx}PLUGIN_ROOT"
+    cand="${!var:-}"
+    [ -n "$cand" ] && [ -d "$cand" ] || continue
+    if [ -f "$cand/plugin.json" ] || [ -f "$cand/.claude-plugin/plugin.json" ] \
+      || [ -f "$cand/.codex-plugin/plugin.json" ]; then
+      host_root="$cand"
+      break
+    fi
+  done
+
+  for root in "${libdir:+$libdir/../../..}" "$host_root"; do
+    [ -n "$root" ] && [ -d "$root" ] || continue
+    root_p=$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P) || continue
+    [ -n "$root_p" ] && [ "$root_p" != "/" ] || continue
+    case "$ctx_p/" in
+      "$root_p/"*)
+        [ -n "$top_p" ] && [ "$pwd_p" = "$top_p" ] && continue
+        return 1
+        ;;
+    esac
+  done
+  return 0
+}
+
 # corpflow_context_dir — ranks 2-6 of the root-resolution ladder (rank 1, --state, is a
 # caller-side concern this library never sees). Prints the absolute .context directory
 # and returns 0 on the first rank that matches; nothing is printed otherwise.
@@ -68,6 +119,10 @@ corpflow_run_index() {
 #      subdirectory-invariant and never creates a ledger, which is what makes it safe to
 #      try before falling back to the resolver
 #   6  `resolve-root.sh`'s stdout, if that directory exists
+#
+# Ranks 5 and 6 are inferred from the cwd and pass corpflow_inferred_ctx_ok; a refusal ends the
+# ladder (rc 1, nothing printed) rather than falling through to the next rank, which would swap
+# one tree's ledger for another's. Ranks 2-4 are explicit and stay trusted.
 #
 # Returns 1 when every rank misses (the caller decides what "unresolved" means — for a
 # writer that is usually "skip the write", never "fall back to cwd"). Returns 2 only when
@@ -90,6 +145,7 @@ corpflow_context_dir() {
   local top=""
   top=$(git rev-parse --show-toplevel 2> /dev/null || true)
   if [ -n "$top" ] && [ -f "$top/.context/state.json" ]; then
+    corpflow_inferred_ctx_ok "$top/.context" "$top" || return 1
     printf '%s' "$top/.context"
     return 0
   fi
@@ -102,6 +158,7 @@ corpflow_context_dir() {
 
   out=$(bash "$resolver" 2> /dev/null || true)
   if [ -n "$out" ] && [ -d "$out" ]; then
+    corpflow_inferred_ctx_ok "$out" "$top" || return 1
     printf '%s' "$out"
     return 0
   fi

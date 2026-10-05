@@ -150,7 +150,7 @@ corpflow_bind_payload() {
 # .context/state.json: a bare folder is what a stray mkdir leaves, and no hook
 # may create the first .context/ — only the seed does.
 corpflow_workspace_root() {
-  local _cf_libdir _cf_resolver _cf_top _cf_root
+  local _cf_libdir _cf_resolver _cf_top _cf_root _cf_opts
   _CORPFLOW_WS_ROOT=""
 
   if [ -n "${_CORPFLOW_ISSUE_ROOT:-}" ] && [ -f "${_CORPFLOW_ISSUE_ROOT}/.context/state.json" ]; then
@@ -184,7 +184,25 @@ corpflow_workspace_root() {
   if [ -n "$_cf_resolver" ]; then
     _cf_top=""
     _cf_top=$(git rev-parse --show-toplevel 2> /dev/null || true)
+    # Ranks 5-6 are inferred from the cwd and need the reader guard. Sourced lazily and only
+    # here: 15 hooks consume this lib and not all drop -e around it, so -e is dropped for the
+    # source and restored. A guard that cannot load skips both ranks, like a missing resolver.
+    if ! command -v corpflow_inferred_ctx_ok > /dev/null 2>&1 \
+      && [ -r "$_cf_libdir/../skills/shared/lib/state-read-lib.sh" ]; then
+      _cf_opts="$-"
+      set +e
+      # shellcheck source=../skills/shared/lib/state-read-lib.sh
+      . "$_cf_libdir/../skills/shared/lib/state-read-lib.sh" 2> /dev/null
+      case "$_cf_opts" in *e*) set -e ;; esac
+    fi
+    if ! command -v corpflow_inferred_ctx_ok > /dev/null 2>&1; then
+      printf ''
+      return 0
+    fi
     if [ -n "$_cf_top" ] && [ -f "$_cf_top/.context/state.json" ]; then
+      # A refusal ends the ladder: falling through to rank 6 would swap this tree's ledger
+      # for the main checkout's.
+      corpflow_inferred_ctx_ok "$_cf_top/.context" "$_cf_top" || { printf ''; return 0; }
       _CORPFLOW_WS_ROOT="$_cf_top"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0
     fi
@@ -197,6 +215,7 @@ corpflow_workspace_root() {
     # of the repo reaches the same main checkout, and borrowing its ledger from
     # an unrelated worktree turns that ledger's gates on work it never ran.
     if [ -n "$_cf_root" ] && [ -f "$_cf_root/.context/state.json" ] \
+      && corpflow_inferred_ctx_ok "$_cf_root/.context" "$_cf_top" \
       && _cf_rank6_owns "$_cf_root" "$_cf_top"; then
       _CORPFLOW_WS_ROOT="$_cf_root"
       printf '%s' "$_CORPFLOW_WS_ROOT"; return 0

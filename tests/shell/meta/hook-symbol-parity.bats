@@ -18,6 +18,9 @@ BASE_LIB="${BATS_TEST_DIRNAME}/../../../hooks/lib/corpflow-base.sh"
 # BASE_LIB it feeds P1/P4 and stays outside P2/P3. It matters here because both consumers
 # fail open to an empty or redacted result, so a rename is otherwise silent.
 PS_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/scripts/path-scrub.sh"
+# The fourth symbol source. model-switch-lib lazy-sources it on ranks 5-6 for
+# corpflow_inferred_ctx_ok; it is readonly-free, so it feeds P1/P4 only.
+SRL_LIB="${BATS_TEST_DIRNAME}/../../../skills/shared/lib/state-read-lib.sh"
 HOOKDIR="${BATS_TEST_DIRNAME}/../../../hooks"
 
 # Every corpflow_* token any hook mentions, libraries included.
@@ -31,7 +34,7 @@ _defined_in() {
 
 # Every corpflow_* any hook library defines, by definition syntax alone.
 _defined() {
-  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; _defined_in "$PS_LIB"; } | sort -u
+  { _defined_in "$LIB"; _defined_in "$BASE_LIB"; _defined_in "$PS_LIB"; _defined_in "$SRL_LIB"; } | sort -u
 }
 
 # Every corpflow_* the library freezes with readonly -f.
@@ -42,7 +45,7 @@ _frozen() {
 @test "P1: every corpflow_* referenced under hooks/ is defined by the library" {
   local missing
   missing="$(comm -23 <(_referenced) <(_defined))"
-  [ -z "$missing" ] || fail "referenced but defined by none of $LIB, $BASE_LIB, $PS_LIB: $missing"
+  [ -z "$missing" ] || fail "referenced but defined by none of $LIB, $BASE_LIB, $PS_LIB, $SRL_LIB: $missing"
 }
 
 @test "P2: every defined symbol is readonly -f'd" {
