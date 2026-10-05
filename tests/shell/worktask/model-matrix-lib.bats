@@ -135,6 +135,35 @@ EOF
   assert_output $'haiku\tlow\tuser-override'
 }
 
+@test "user scope: a bare project ## Models heading with no content falls through to the user file" {
+  printf '## Routing\n\n| Alias | Target |\n|---|---|\n\n## Models\n\n' > "$PROJ/CORPFLOW.md"
+  _models_md "$CLAUDE_CONFIG_DIR/CORPFLOW.md" developer sonnet low
+  run mml "corpflow_md_locate '$PROJ' '## Models'"
+  assert_success
+  assert_output "$CLAUDE_CONFIG_DIR/CORPFLOW.md"$'\tuser'
+  printf '## Models\n\n### Notes\n' > "$PROJ/CORPFLOW.md"
+  run mml "corpflow_md_locate '$PROJ' '## Models'"
+  assert_output "$CLAUDE_CONFIG_DIR/CORPFLOW.md"$'\tuser'
+}
+
+@test "user scope: the user file is labelled user-override under any spelling of its path" {
+  _models_md "$CLAUDE_CONFIG_DIR/CORPFLOW.md" developer sonnet low
+  ln -s "$CLAUDE_CONFIG_DIR" "${BATS_TEST_TMPDIR}/cfg-link"
+  run mml "corpflow_md_source '${BATS_TEST_TMPDIR}/cfg-link/CORPFLOW.md'"
+  assert_output "user-override"
+  run mml "cd '$CLAUDE_CONFIG_DIR' && corpflow_md_source ./CORPFLOW.md"
+  assert_output "user-override"
+  run mml "corpflow_md_source '$PROJ/CORPFLOW.md'"
+  assert_output "project-override"
+}
+
+@test "user scope: a project root that is the config dir reports user, matching its source label" {
+  _models_md "$CLAUDE_CONFIG_DIR/CORPFLOW.md" developer sonnet low
+  run mml "corpflow_md_locate '$CLAUDE_CONFIG_DIR/.context' '## Models'"
+  assert_success
+  assert_output "$CLAUDE_CONFIG_DIR/CORPFLOW.md"$'\tuser'
+}
+
 @test "user scope: no file carries the heading -> locate exits 1" {
   run mml "corpflow_md_locate '$PROJ' '## Models'"
   assert_failure 1

@@ -53,7 +53,8 @@ an earlier corpflow should resync against them.
   as a fallback for `## Routing` and `## Models`. Precedence is per heading: the project-root file
   wins for any heading it carries, the user-scope file supplies the headings it lacks, and the
   built-in matrix covers the rest. A garbled project `## Models` still owns its heading: it is
-  audited `model_override_unparsed` and never falls through to the user file. An explicit
+  audited `model_override_unparsed` and never falls through to the user file; a bare project
+  heading with nothing under it does not claim the heading. An explicit
   `state-patch.sh --resolve-models --corpflow <path>` still beats both.
 - `model-matrix-lib.sh` gains `corpflow_md_locate`, `corpflow_md_user_path` and
   `corpflow_md_source`. `state-patch.sh --resolve-models` and `model-matrix.sh`'s bare `--resolve`
