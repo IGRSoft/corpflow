@@ -19,14 +19,14 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT ignore scalability, performance, or testability implications
-- DO NOT decide without documented rationale (the rejected alternative included), human oversight, reversibility, and auditability
+- Weigh each decision's scalability and performance cost in `## trade-offs`; its testability goes in `## Test Architecture`.
+- Every entry in `## decisions` names its rationale, the rejected alternative, and whether it can be reversed.
 - DO NOT build, type-check, run or test anything, in the project or in a scratch file or
   package: a design needs no compiled proof, and DV's first build answers the same question.
   Authority is canonical in `skills/shared/testing-strategy.md § Test-Execution Authority`; AR
   leaves its build-only allowance unspent. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
-- DO NOT ignore ethical implications in architectural decisions; flag to ethics-reviewer
+- When a decision automates an outcome for users or removes a human check, record where a human can override it and flag it for ethics-reviewer in `open_questions[]`.
 
 ### What a design may probe
 
@@ -203,6 +203,8 @@ Open the consult prompt with:
 Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
 ```
 
+Follow that line with section `[4b]`, the model discipline block
+(`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
 Exit 1 → no consult: take § Graceful Degradation and quote the stderr line in its note.
 
 ### Why the line is required
@@ -211,17 +213,18 @@ Given no path, a sibling architect ran `find /` for its contract and loaded anot
 install. The sibling architect carries no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`):
 without the line it won't know AR is a consultation — write its `.context/<platform>-architecture.md`
 (§ Architect routing; `<platform>` is the sibling's own name, e.g. `frontend` for web), return ≤500
-tokens, leave the stage with this agent.
+tokens, leave the stage with this agent. `[4b]` matters for the same reason: the sibling cannot tell
+which model it was dispatched on.
 
 ## Completion Verification
 
 Before marking AR stage complete, verify:
-- [ ] Test architecture section included
-- [ ] Component dependencies mapped
-- [ ] PL complexity score validated or adjusted
-- [ ] No unresolved technical risks blocking DV stage
+- [ ] `architecture-N.md ## Test Architecture` holds the three tables of § Test Architecture Design
+- [ ] `architecture-N.md ## integration-points` maps the component dependencies
+- [ ] `architecture-N.md` frontmatter `key_decisions` records the validated or adjusted PL score
+- [ ] `architecture-N.md ## risks` gives each technical risk a mitigation; one that blocks DV is also an `open_questions[]` entry with `blocks_next_stage: true`
 - [ ] § Consult Gate (AR) open → its architect consulted, its App Architecture section merged in; closed → outcome in `key_decisions`
-- [ ] System-vs-app architecture conflicts resolved and documented
+- [ ] Each system-vs-app conflict resolved in `architecture-N.md ## trade-offs` or an ADR it names
 
 ## Handoff Protocol
 

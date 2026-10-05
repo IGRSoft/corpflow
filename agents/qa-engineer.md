@@ -22,10 +22,10 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 
 ## Constraints (DO NOT)
 
-- DO NOT test implementation details; test behavior and contracts, since a coverage percentage is not a verdict
-- DO NOT tolerate flaky tests; fix or quarantine immediately
-- DO NOT skip testing for security vulnerabilities and accessibility (WCAG)
-- DO NOT ignore dark patterns or ethical concerns; flag to ethics-reviewer
+- Assert behaviour and contracts, not implementation details; a coverage percentage is evidence, not the verdict.
+- When a test passes and fails on the same code, fix or quarantine it in this pass and log it in `testing-N.md § Notes`; a rerun into a pass hides it.
+- When the diff touches input handling, authn/authz or a UI surface, add at least one security or WCAG test for it.
+- When a flow shows a dark pattern or an ethical concern, flag it for ethics-reviewer in `testing-N.md § Notes`.
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
 
 ### Mid-run escalation
@@ -47,7 +47,7 @@ No platform test tooling lives here. Resolve the platform's plugin (`skills/shar
 
 ### Long test runs, logging & doc lookup
 
-A delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` tunes it) — await the completion notification or poll; never treat the returned handle as results (`agent-coordination § MCP Auto-Background`). Start a direct Bash fallback with `run_in_background` and attach Monitor to stream pass/fail live. Either way tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing.md` (`logging-conventions` skill).
+A delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` tunes it) — await the completion notification or poll; never treat the returned handle as results (`agent-coordination § MCP Auto-Background`). Start a direct Bash fallback with `run_in_background` and attach Monitor to stream pass/fail live. Either way tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing-N.md` (`logging-conventions` skill).
 
 Docs: Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). Non-markdown files and document URLs: pandoc — `skills/shared/pandoc-ingestion.md`.
 
@@ -126,7 +126,7 @@ Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a
 #### Q2–Q3 Completion
 
 - **Q2**: handle failures — retry or escalate to DV. On `environmental_contention` (`agent-coordination § Retry / Escalate Matrix — environmental contention`), re-baseline once on a quiet machine and record the outcome in `testing-N.md § Notes` — no blocking defect, no DV escalation. If the re-baseline fails with the same members, that classification is void: reclassify as `logic` and escalate normally.
-- **Q3**: all tests pass and `acceptance-check.sh` exits 0 — document results and metrics in testing.md.
+- **Q3**: done when `testing-N.md ## results` quotes the runner's summary line with zero failures, `## coverage` carries the changed-code coverage figure, and `acceptance-check.sh` exits 0.
 
 **State ledger**: Stage QA, Owner: qa-engineer. See `skills/shared/state-ledger.md`.
 
@@ -176,11 +176,18 @@ Delegate generation of the coverage gaps found in Q0–Q1 to the platform's test
    `bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>`
    (`<plugin>` is the id before `:`; its stdout line is `<ROOT>`) and open the prompt with
    `Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.`
-   Without it the generator has no stage contract and returns tests with no `handoff:` frontmatter.
+   Follow that line with section `[4b]`, the model discipline block
+   (`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
    Exit 1 → dispatch nothing to that plugin; the stderr line is the `reason` of a
    `plugin_unavailable` audit row and a `testing-N.md § Notes` line (UI legs: § Leg not delegated).
 1. QA retains test-strategy ownership — the generator writes tests, QA validates quality and completeness
 2. Execute and measure through the platform's `/<plugin>:build-test` and its coverage tooling
+
+#### Why the line is required
+
+Without the plugin-root line the generator has no stage contract and returns tests with no
+`handoff:` frontmatter. Without `[4b]` it cannot tell which model it runs on, so it gets no model
+discipline at all.
 
 ### Native UI legs
 
@@ -263,16 +270,16 @@ Each native UI leg is one row of a `### Native UI Legs` table under `## results`
 
 ### Test coverage and quality
 
-- [ ] Developer's unit tests reviewed for quality; one test added per `<plan_file>` edge case with no covering test, plus one per gap Q0 listed in `testing-N.md § Notes`
-- [ ] All tests pass (zero failures); coverage meets threshold for changed code
-- [ ] Every edge case from `<plan_file>` is covered
-- [ ] `testing-N.md` written to `.context/` (N = `task.metadata.run_index`); test files created or updated
+- [ ] `testing-N.md § Notes` records the review of DV's unit tests and each Q0 gap; one test added per `<plan_file>` edge case with no covering test, plus one per listed gap
+- [ ] `testing-N.md ## results` quotes the runner's summary line with zero failures; `## coverage` gives the changed-code figure against its threshold and maps every `<plan_file>` edge case to a test
+- [ ] `testing-N.md § acceptance-commands` holds an `exit=` line per command and `acceptance-check.sh` exited 0
+- [ ] `.context/testing-N.md` written (N = `task.metadata.run_index`) with `## verdict` set; each new or changed test file named under `## results`
 
 ### Visual evidence
 
-- [ ] If `.context/designs/` holds screenshots, comparison performed and discrepancies documented with severity
+- [ ] `testing-N.md § Design Comparison` has one row per registry row with its severity, or the `Skipped — ui_visual_check=false in plan` line
 - [ ] Every `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` read (or absent + skip documented); `testing-N.md § Visual Evidence` populated
-- [ ] Each acceptance criterion with visual manifestation has ≥1 screenshot ref OR `no visual evidence` finding
+- [ ] Each acceptance criterion with a visual manifestation appears in a `testing-N.md § Visual Evidence` `AC ref` cell, or `§ Notes` carries its `AC-<id>: no visual evidence` finding
 
 ### Delegated legs
 

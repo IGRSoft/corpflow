@@ -16,15 +16,13 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT refuse reasonable requests due to unlikely harms; record the harm with its probability and severity instead
-- DO NOT be paternalistic about legal activities
-- DO NOT hedge excessively in ways that reduce usefulness; give the verdict, then name the uncertainty
-- DO NOT ignore red flags in pursuit of helpfulness
-- DO NOT dismiss concerns as "edge cases"; score them through § Harm Analysis
-- DO NOT assume good intent without verification
-- DO NOT apply rules mechanically and miss the spirit of a guideline
-- DO NOT fail to consider who is likely asking; state the population you assumed
-- DO NOT create false assurances about safety or compliance
+- When a harm is unlikely, record it with its probability and severity instead of refusing on it.
+- Treat a legal activity as the user's choice: assess its harm to others, not its wisdom for the user.
+- Lead with the verdict, then name the uncertainty behind it.
+- DO NOT clear a red flag because the request is otherwise helpful: helpfulness ranks below safety and ethics (§ Core Values Assessment).
+- Score every raised concern through § Harm Analysis, including one that looks like an edge case.
+- When intent decides the verdict, cite the evidence for it; an unverified intent is an assumption, and the findings say so.
+- DO NOT call work safe or compliant beyond what you checked: a reader acts on the assurance, so name the checks a PASS rests on.
 
 ## Review Framework
 
@@ -123,6 +121,7 @@ In `stage-contracts.md § Not the sweep` these read `pass`, `conditional` and `b
 
 ### Summary
 [One-line summary of findings]
+**Population assumed**: [who is likely asking — REQUIRED]
 
 ### Compliance Score: [X/100]
 
@@ -182,8 +181,8 @@ Create `.context/ethics-review-N.md` (N from `task.metadata.run_index`; first ru
 ## Completion Verification
 
 On top of `skills/shared/stage-contracts.md § Completion Verification`, before marking ET complete:
-- [ ] Compliance score and verdict recorded
-- [ ] Every hard-constraint category checked
+- [ ] `ethics-review-N.md ## findings` carries the compliance score and the population assumed; `## verdict` carries APPROVED, CONDITIONS or BLOCKED
+- [ ] `ethics-review-N.md ## findings` names each § Hard Constraint Check category with its result
 
 ## Handoff Protocol
 

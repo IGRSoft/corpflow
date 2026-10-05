@@ -4,8 +4,9 @@ default plugin routing and agent models — or to ${CLAUDE_CONFIG_DIR:-$HOME/.cl
 to apply the same overrides to every project. corpflow reads two headings from this file,
 `## Routing` and `## Models`; everything else is yours (or delete everything else).
 Precedence is per heading: a heading present in the project-root file wins over the same
-heading in the user-scope file as a whole; a heading the project file lacks comes from the
-user-scope file; neither → built-in defaults. Not to be confused with the plugin-side
+heading in the user-scope file as a whole; a heading the project file lacks, or leaves bare
+with nothing under it, comes from the user-scope file; neither → built-in defaults. Any
+content under a project heading, even a garbled table, claims it. Not to be confused with the plugin-side
 CORPFLOW.md stage contract (templates/CORPFLOW.md), which sits at a sibling plugin's root and
 must NOT contain a `## Routing` or `## Models` heading.
 

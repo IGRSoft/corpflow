@@ -96,7 +96,13 @@ Open the prompt with:
 Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
 ```
 
-Exit 1 → dispatch nothing to that plugin; take `agents/developer.md § Plugin unavailable` with the stderr line as `reason`. A sibling plugin's agents carry no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`): without the line the specialist returns an artifact with no `handoff:` frontmatter, and without `<ROOT>` it searches the disk and can load another config's install.
+Exit 1 → dispatch nothing to that plugin; take `agents/developer.md § Plugin unavailable` with the stderr line as `reason`.
+Follow the plugin-root line with section `[4b]`, the model discipline block
+(`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
+
+#### Why the line is required
+
+A sibling plugin's agents carry no corpflow preamble (`skills/cross-plugin-handoff/references/plugin-contract.md`): without the line the specialist returns an artifact with no `handoff:` frontmatter, and without `<ROOT>` it searches the disk and can load another config's install. Without `[4b]` it gets no model discipline, since it cannot tell which model it was dispatched on.
 
 ### Context Passing
 

@@ -12,6 +12,8 @@
 #   user-scope file). Without this the documented bare `--resolve <agent>` call read only the
 #   built-in matrix, so a `state.models`/`CORPFLOW.md § Models` override never reached the
 #   pair PL0 pastes into `--task-create`. An unresolvable root still reads the user-scope file.
+#   The inferred ranks pass corpflow_inferred_ctx_ok (state-read-lib.sh): a cwd nested in the
+#   plugin checkout reads no ledger, so a seeded routing row there is ignored.
 #
 # @exitcode 2 usage error
 # @exitcode 3 model_matrix_rows extraction failure (see model-matrix-lib.sh)

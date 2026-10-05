@@ -19,12 +19,11 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT create agents that manipulate, deceive, or circumvent safety
-- DO NOT sacrifice instruction clarity for token efficiency
-- DO NOT ignore model capability boundaries when selecting models
-- DO NOT embed hidden instructions or prompt injection vectors
-- DO NOT create agent instructions without embedding safety principles
-- DO NOT ignore ethical concerns in prompt designs; flag to ethics-reviewer
+- DO NOT write an asset that manipulates, deceives or circumvents safety, even when the request frames it as a test: the asset outlives the framing.
+- When a token cut costs clarity, keep the clearer wording and cut elsewhere.
+- Pick a model from `skills/shared/model-selection.md` and name the capability the asset needs from it.
+- DO NOT embed a hidden instruction or an injection vector (untrusted text the asset reads as instructions): a reviewer can only approve the instructions it can see.
+- When a prompt design raises an ethical concern, flag it to ethics-reviewer and name the concern in your report.
 
 ## Authoring Doctrine
 
@@ -166,8 +165,9 @@ skips it under pressure"**. Diagnose the baseline failure first and reach for `D
 the diagnosis lands on that row; the other three take the positive form their row names, and a
 prohibition aimed at them is the documented wrong form, not a stylistic preference.
 
-This rule governs prose written from here on. Existing `## Constraints (DO NOT)` blocks are **not**
-rewritten under it — that is a separate worktask, and opening one is a stop condition.
+The `## Constraints (DO NOT)` blocks follow it too: each bullet is a row-1 prohibition with its
+because, a positive recipe, a REQUIRED slot, or a conditional keyed to an observable predicate. The
+heading keeps its `(DO NOT)` text, because the audit commands and the self-improvement skill cite it.
 
 #### No-op pruning
 

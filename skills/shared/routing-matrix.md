@@ -135,7 +135,8 @@ The `claude-code-workflows` family doubles its slug in invocation ids
 
 ### Per-heading precedence
 
-The project-root `CORPFLOW.md` is read when it has a `## Routing` heading; otherwise the
+The project-root `CORPFLOW.md` is read when it has a `## Routing` heading with content under it
+(a bare heading does not count); otherwise the
 user-scope `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md`. Precedence is per heading, never per
 row: a project `## Routing` hides the user file's whole `## Routing`, even for aliases it does not
 list. `## Models` follows the same rule (`model-matrix-lib.sh` `corpflow_md_locate`).
