@@ -1,6 +1,6 @@
 {
   "name": "corpflow",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Staged worktask pipeline with a durable state ledger, cross-plugin delegation, and dependency-DAG orchestration.",
   "author": {
     "name": "IGRSoft",

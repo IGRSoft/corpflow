@@ -2,6 +2,62 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.1] — 2026-10-05
+
+One `CORPFLOW.md` can now configure every project. This release also records contract changes
+that shipped on develop without a changelog entry; sibling-plugin `CORPFLOW.md` files that target
+an earlier corpflow should resync against them.
+
+### Added
+
+- **User-scope `CORPFLOW.md`.** corpflow reads `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md`
+  as a fallback for `## Routing` and `## Models`. Precedence is per heading: the project-root file
+  wins for any heading it carries, the user-scope file supplies the headings it lacks, and the
+  built-in matrix covers the rest. A garbled project `## Models` still owns its heading: it is
+  audited `model_override_unparsed` and never falls through to the user file. An explicit
+  `state-patch.sh --resolve-models --corpflow <path>` still beats both.
+- `model-matrix-lib.sh` gains `corpflow_md_locate`, `corpflow_md_user_path` and
+  `corpflow_md_source`. `state-patch.sh --resolve-models` and `model-matrix.sh`'s bare `--resolve`
+  share them, in place of two copies of the project-root path logic.
+- New source value `user-override` for `state.models_source`, per-agent `state.models.*.source`
+  and `state.routing_source`. The `model_override`, `model_override_unknown` and
+  `model_override_unparsed` audit rows carry `metadata.source` and `metadata.path`.
+- **`consultant-return.v1`** (backfill). DR and SR sibling-plugin consults return one shape,
+  checked by `skills/cross-plugin-handoff/scripts/validate-consultant-return.sh`: severities are
+  lowercase, a missing `version` is stamped, a mismatched one is rejected, and `needs_changes`
+  maps to `fail`.
+- **Reserved `## Models` heading** (backfill). `skills/shared/stage-codes.md § Agent Model
+  Matrix` is the single agent-keyed model/effort source. A `CORPFLOW.md § Models` table overrides
+  it row by row, fail-open, resolved once by `state-patch.sh --resolve-models` (validation check
+  13) into `state.models`. A plugin-root `CORPFLOW.md` must not carry `## Models` or `## Routing`.
+
+### Changed
+
+- **Per-task screenshot manifests** (backfill). Each DV task writes its own
+  `.context/images/<worktask_id>/screenshots-<TASK_ID>.md`. `dv-screenshot-gate.sh --check
+  <TASK_ID>` and `attach-visual-evidence.sh --validate-manifest --task-id <TASK_ID>` validate one
+  task's rows against the images on disk.
+- **DV fan-out writes per-row artifacts** (backfill). Each DV ledger row owns the artifact its
+  `metadata.artifact` names, `development-<N>-<stream>.md` when there is more than one row, and
+  completes with `state-patch.sh --task-id <ID> --artifact <path>`. A bare `development-N.md`
+  remains the single-DV case.
+- **Install-root dispatch line** (backfill). A plugin-root `CORPFLOW.md` names the plugin's loaded
+  install root in every dispatch prompt, so the specialist resolves paths under it rather than
+  searching for them.
+- **AR and SR consult gate at High (≥31)** (backfill). The AR architect consult moves from ≥21 to
+  the High floor, and SR consults the platform security auditor only for a sensitive surface or a
+  High score, recording a skipped consult otherwise.
+- Docs: `routing-matrix.md § Resolution` and its three-kind `CORPFLOW.md` table, `PROJECT-CORPFLOW.md`
+  (valid at user scope; reads both `## Routing` and `## Models`, not one heading),
+  `templates/CORPFLOW.md`, `plugin-contract.md`, validation checks 12/13 and the README describe
+  the user-scope fallback.
+
+### Tests
+
+- `tests/lib/test_helper.bash` points `CLAUDE_CONFIG_DIR` at an empty sandbox for every suite, so
+  an operator's real `~/.claude/CORPFLOW.md` never reaches a test. The Python parity suite pins it
+  the same way.
+
 ## [4.1.0] — 2026-09-28
 
 ### Added
