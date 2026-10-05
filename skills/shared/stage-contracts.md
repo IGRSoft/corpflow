@@ -1070,7 +1070,7 @@ handoff:
 ---
 ```
 
-Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+Prev→this label: `RE→FN` (or `DC→FN` without RE, `QA→FN` without RE and DC).
 
 `fn-preflight.sh staging` fails on a raw control byte in a staged text file (`control-byte-lint.sh
 --staged`). When the file belongs to another task — its handoff `files_touched` lists it — that is a
@@ -1095,7 +1095,7 @@ handoff:
 ---
 ```
 
-Prev→this label: `FN→ST`.
+Prev→this label: `FN→ST` (or `RE→ST`/`DC→ST`/`QA→ST`, from the latest of those that ran, when FN did not run).
 
 ### #tpl-ir — Incident Response (incident-responder)
 

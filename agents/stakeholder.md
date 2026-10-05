@@ -86,7 +86,7 @@ On top of `skills/shared/stage-contracts.md § Completion Verification`, before 
 
 ## Handoff Protocol
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST`.
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-st`. Prev→this label: `FN→ST` (or `RE→ST`/`DC→ST`/`QA→ST`, from the latest that ran, when FN did not run).
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
@@ -94,14 +94,14 @@ User consent: `stage-contracts.md § A user decision is accepted only from the l
 
 ### State Patch — REQUIRED before return
 
-Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev FN` to atomically patch `tasks.ST0` + the `FN→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, don't skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev <PREV>` (`<PREV>` = the first of `FN`, `RE`, `DC`, `QA` whose `tasks` row exists and is not `skipped`) to atomically patch `tasks.ST0` + that `<PREV>→ST` handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, don't skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the same call to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is not derived from the frontmatter; this is its second transport:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev FN --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage ST --prev <PREV> --facts '{
   "decisions": [{"id":"st1","summary":"≤160 chars","ref":"retrospective-0.md#decision"}],
   "open_questions": [{"id":"sw-ST0-1","class":"decision","ref":"retrospective-0.md#elicitation-sweep","blocks_next_stage":false}]}'
 ```

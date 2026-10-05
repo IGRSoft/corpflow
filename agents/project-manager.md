@@ -307,7 +307,8 @@ Before marking FN complete:
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules:
 `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read
 stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact
-top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+top): `stage-contracts.md#tpl-fn`. Prev→this label: `RE→FN` (or `DC→FN` when RE did not run, `QA→FN`
+when neither RE nor DC ran).
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
@@ -315,8 +316,9 @@ User consent: `stage-contracts.md § A user decision is accepted only from the l
 
 ### State Patch — REQUIRED before return
 
-Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE` (`--prev DC` when RE is
-skipped) to atomically patch `tasks.FN0` plus the `RE→FN` (or `DC→FN`) handoff edge into
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev <PREV>`, where `<PREV>` is
+the first of `RE`, `DC`, `QA` whose `tasks` row exists and is not `skipped`, to atomically patch
+`tasks.FN0` plus that `<PREV>→FN` handoff edge into
 `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your
 artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the
 tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in
@@ -327,7 +329,7 @@ tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback 
 Pass `--facts` in the **same call** to union this stage's facts into `state.json → facts.*` — the channel every downstream stage reads first, and its only scripted writer. Your sweep stub is **not** derived from the frontmatter; this is its second transport:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev RE --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage FN --prev <PREV> --facts '{
   "files_modified": ["CHANGELOG.md"],
   "decisions": [{"id":"fn1","summary":"≤160 chars","ref":"complete-summary-0.md#summary"}],
   "open_questions": [{"id":"sw-FN0-1","class":"decision","ref":"complete-summary-0.md#elicitation-sweep","blocks_next_stage":false}]}'
