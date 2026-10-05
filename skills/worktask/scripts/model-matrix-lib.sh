@@ -209,39 +209,74 @@ corpflow_md_user_path() {
   printf '%s/CORPFLOW.md\n' "${config%/}"
 }
 
+# _cmd_canon_path <path> -> <path> with its directory resolved physically (`pwd -P`), so two
+# spellings of one file (relative, trailing slash, symlinked dir) compare equal. Falls back
+# to the input when the directory does not exist.
+_cmd_canon_path() {
+  local dir
+  dir=$(cd "$(dirname -- "$1")" 2> /dev/null && pwd -P) || {
+    printf '%s\n' "$1"
+    return 0
+  }
+  printf '%s/%s\n' "${dir%/}" "$(basename -- "$1")"
+}
+
+# _cmd_owns_heading <file> <heading> -> rc 0 when <file> has <heading> as an exact line AND
+# at least one non-blank line before the next `#` line. A heading left bare after its rows
+# were deleted (the template's own "delete the rest") expresses no override, so it must not
+# shadow the user-scope file; any content, garbled or not, still claims the heading.
+_cmd_owns_heading() {
+  [ -f "$1" ] || return 1
+  awk -v h="$2" '
+    !in_s { if ($0 == h) in_s = 1; next }
+    /^#/ { in_s = 0; next }
+    /[^[:space:]]/ { found = 1; exit }
+    END { exit found ? 0 : 1 }
+  ' "$1" 2> /dev/null
+}
+
 # corpflow_md_locate <context_dir|project_root> <heading>
 # Prints "<path><TAB><project|user>" for the CORPFLOW.md that owns <heading> (an exact line,
 # e.g. `## Models`). Precedence is per heading: the project-root file wins whenever it carries
-# the heading — even when the section under it is garbled, so a broken project section is
-# audited, never silently replaced by the user file. A `.context` suffix is stripped; an empty
-# first argument checks the user-scope file alone. rc 1 = neither file carries the heading.
+# the heading with any content under it — even when that section is garbled, so a broken
+# project section is audited, never silently replaced by the user file. A bare heading with
+# nothing under it does not count (_cmd_owns_heading). A project root that IS the config dir
+# reports `user`, matching corpflow_md_source's label. A `.context` suffix is stripped; an
+# empty first argument checks the user-scope file alone. rc 1 = neither file owns the heading.
 corpflow_md_locate() {
-  local root="${1:-}" heading="${2:-}" user
+  local root="${1:-}" heading="${2:-}" user=""
   [ -n "$heading" ] || return 1
   root="${root%/}"
   case "$root" in
     .context) root="." ;;
     */.context) root="${root%/.context}" ;;
   esac
-  if [ -n "$root" ] && [ -f "${root}/CORPFLOW.md" ] \
-    && grep -qxF -- "$heading" "${root}/CORPFLOW.md" 2> /dev/null; then
-    printf '%s\tproject\n' "${root}/CORPFLOW.md"
+  user=$(corpflow_md_user_path) || user=""
+  if [ -n "$root" ] && _cmd_owns_heading "${root}/CORPFLOW.md" "$heading"; then
+    if [ -n "$user" ] \
+      && [ "$(_cmd_canon_path "${root}/CORPFLOW.md")" = "$(_cmd_canon_path "$user")" ]; then
+      printf '%s\tuser\n' "${root}/CORPFLOW.md"
+    else
+      printf '%s\tproject\n' "${root}/CORPFLOW.md"
+    fi
     return 0
   fi
-  user=$(corpflow_md_user_path) || return 1
-  if [ -f "$user" ] && grep -qxF -- "$heading" "$user" 2> /dev/null; then
+  [ -n "$user" ] || return 1
+  if _cmd_owns_heading "$user" "$heading"; then
     printf '%s\tuser\n' "$user"
     return 0
   fi
   return 1
 }
 
-# corpflow_md_source <corpflow_md_path> -> `user-override` for the user-scope file, else
-# `project-override` (an explicit --corpflow path included). The ledger/audit source label.
+# corpflow_md_source <corpflow_md_path> -> `user-override` for the user-scope file (compared
+# after _cmd_canon_path, so an explicit --corpflow spelling of it still counts), else
+# `project-override` (any other explicit --corpflow path included). The ledger/audit label.
 corpflow_md_source() {
   local user
   user=$(corpflow_md_user_path 2> /dev/null) || user=""
-  if [ -n "$1" ] && [ "$1" = "$user" ]; then
+  if [ -n "$1" ] && [ -n "$user" ] \
+    && [ "$(_cmd_canon_path "$1")" = "$(_cmd_canon_path "$user")" ]; then
     printf 'user-override\n'
   else
     printf 'project-override\n'
