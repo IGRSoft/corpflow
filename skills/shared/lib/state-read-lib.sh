@@ -63,15 +63,20 @@ corpflow_run_index() {
 # toplevel. A cwd nested in the plugin's checkout otherwise borrows that checkout's live ledger.
 # A linked worktree's toplevel still reaches the main ledger (the self-hosted pipeline path).
 #
-# Plugin roots: this library's own tree, and the first host-root env (corpflow_plugin_root's
-# order) that holds a manifest. The env ladder is inlined, not sourced from
-# corpflow-base.sh, because a hook process holds `readonly -f` on a same-named function there.
+# Plugin roots: this library's own tree, and the first host root `corpflow_plugin_root` reports
+# (read in a fresh process from corpflow-base.sh).
 # The optional toplevel reuses a probe the caller already paid for. Explicit ranks never call
 # this; keep the predicate in step with the writer's (pinned by reader-ladder-nested.bats).
 corpflow_inferred_ctx_ok() {
-  local ctx="${1:-}" top="${2:-}" ctx_p top_p="" pwd_p libdir root root_p cand
+  local ctx="${1:-}" top="${2:-}" ctx_p top_p="" pwd_p libdir root root_p
   [ -n "$ctx" ] || return 1
-  ctx_p=$(CDPATH='' cd -P -- "$ctx" 2> /dev/null && pwd -P) || return 1
+  if [ -d "$ctx" ]; then
+    ctx_p=$(CDPATH='' cd -P -- "$ctx" 2> /dev/null && pwd -P) || return 1
+  else
+    # A not-yet-created ctx (mailbox's first call) is judged by its parent, same prefix result.
+    ctx_p=$(CDPATH='' cd -P -- "$(dirname -- "$ctx")" 2> /dev/null && pwd -P) || return 1
+    ctx_p="${ctx_p%/}/$(basename -- "$ctx")"
+  fi
   [ -n "$ctx_p" ] || return 1
   [ -n "$top" ] || top=$(git rev-parse --show-toplevel 2> /dev/null || true)
   if [ -n "$top" ]; then
@@ -80,19 +85,12 @@ corpflow_inferred_ctx_ok() {
   pwd_p=$(pwd -P 2> /dev/null || true)
   libdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2> /dev/null && pwd -P)" || libdir=""
 
-  # Variable names are assembled from a prefix so this library keeps naming no plugin-root
-  # variable literally (state-read-lib.bats H3); the order is corpflow_plugin_root's.
-  local host_root="" pfx var
-  for pfx in BASE_ "" CLAUDE_; do
-    var="${pfx}PLUGIN_ROOT"
-    cand="${!var:-}"
-    [ -n "$cand" ] && [ -d "$cand" ] || continue
-    if [ -f "$cand/plugin.json" ] || [ -f "$cand/.claude-plugin/plugin.json" ] \
-      || [ -f "$cand/.codex-plugin/plugin.json" ]; then
-      host_root="$cand"
-      break
-    fi
-  done
+  # The host-root env ladder lives in corpflow-base.sh. A fresh process reads it with the
+  # writer's own resolver and cannot collide with a hook's `readonly -f corpflow_workspace_root`.
+  local host_root=""
+  if [ -n "$libdir" ] && [ -r "$libdir/corpflow-base.sh" ]; then
+    host_root=$(bash -c '. "$1" && corpflow_plugin_root' _ "$libdir/corpflow-base.sh" 2> /dev/null || true)
+  fi
 
   for root in "${libdir:+$libdir/../../..}" "$host_root"; do
     [ -n "$root" ] && [ -d "$root" ] || continue

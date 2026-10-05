@@ -148,7 +148,8 @@ corpflow_bind_payload() {
 # only (see skills/shared/lib/state-read-lib.sh). A per-issue worktree bound by
 # corpflow_bind_payload answers ahead of rank 3. Every rank demands
 # .context/state.json: a bare folder is what a stray mkdir leaves, and no hook
-# may create the first .context/ — only the seed does.
+# may create the first .context/ — only the seed does. Ranks 5-6 also pass
+# corpflow_inferred_ctx_ok (state-read-lib.sh): a cwd nested in the plugin checkout resolves empty.
 corpflow_workspace_root() {
   local _cf_libdir _cf_resolver _cf_top _cf_root _cf_opts
   _CORPFLOW_WS_ROOT=""

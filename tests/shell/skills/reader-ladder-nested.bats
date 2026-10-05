@@ -107,7 +107,7 @@ mk_worktree() {
 }
 
 @test "A7: the predicate takes the 1-arg and 2-arg forms and rejects an unreadable dir" {
-  inlib "$ROOT/sub" "corpflow_inferred_ctx_ok '$ROOT/.context'; echo \"1arg=\$?\"; corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"2arg=\$?\"; corpflow_inferred_ctx_ok '$WD/none'; echo \"none=\$?\""
+  inlib "$ROOT/sub" "corpflow_inferred_ctx_ok '$ROOT/.context'; echo \"1arg=\$?\"; corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"2arg=\$?\"; corpflow_inferred_ctx_ok '$WD/no/such/ctx'; echo \"none=\$?\""
   assert_output $'1arg=1\n2arg=1\nnone=1'
   inlib "$ROOT" "corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"top=\$?\""
   assert_output 'top=0'
@@ -123,9 +123,11 @@ mk_worktree() {
     rc_r=0
     (cd "$cwd" && . "$REPO/$SRL" && corpflow_context_dir > /dev/null) || rc_r=$?
     if [ "$cwd" = "$ROOT/sub/deep" ]; then
-      [ "$rc_w" -eq 4 ] && [ "$rc_r" -eq 1 ]
+      [ "$rc_w" -eq 4 ]
+      [ "$rc_r" -eq 1 ]
     else
-      [ "$rc_w" -ne 4 ] && [ "$rc_r" -eq 0 ]
+      [ "$rc_w" -ne 4 ]
+      [ "$rc_r" -eq 0 ]
     fi
   done
 }
@@ -157,6 +159,13 @@ mk_worktree() {
   assert_failure 1
   assert_output ''
   [ ! -e "$ROOT/.context/mailbox" ]
+  run bash -c "cd '$ROOT' && . '$REPO/skills/worktask/scripts/mailbox-lib.sh' && mb_dir"
+  assert_success
+  assert_output "$ROOT/.context/mailbox"
+}
+
+@test "C3b: mailbox-lib still creates a missing .context at the toplevel" {
+  rm -rf "$ROOT/.context"
   run bash -c "cd '$ROOT' && . '$REPO/skills/worktask/scripts/mailbox-lib.sh' && mb_dir"
   assert_success
   assert_output "$ROOT/.context/mailbox"
