@@ -57,8 +57,8 @@ corpflow_run_index() {
   corpflow_state_str "${1:-}" '.run_index' "${2-0}"
 }
 
-# corpflow_inferred_ctx_ok <ctx-dir> [<git-toplevel>] — the reader-side twin of state-patch.sh's
-# _sp_refuse_plugin_root: rc 0 when a ledger dir INFERRED from the cwd (ranks 5-6) may be used,
+# corpflow_inferred_ctx_ok <ctx-dir> [<git-toplevel>] — the one rule for readers and for
+# state-patch.sh's writer refusal (exit 4): rc 0 when a ledger dir INFERRED from the cwd (ranks 5-6) may be used,
 # rc 1 (nothing printed) when it lies inside a plugin root and the caller is not at its own git
 # toplevel. A cwd nested in the plugin's checkout otherwise borrows that checkout's live ledger.
 # A linked worktree's toplevel still reaches the main ledger (the self-hosted pipeline path).
@@ -66,17 +66,23 @@ corpflow_run_index() {
 # Plugin roots: this library's own tree, and the first host root `corpflow_plugin_root` reports
 # (read in a fresh process from corpflow-base.sh).
 # The optional toplevel reuses a probe the caller already paid for. Explicit ranks never call
-# this; keep the predicate in step with the writer's (pinned by reader-ladder-nested.bats).
+# this; reader/writer parity is pinned by reader-ladder-nested.bats.
 corpflow_inferred_ctx_ok() {
   local ctx="${1:-}" top="${2:-}" ctx_p top_p="" pwd_p libdir root root_p
   [ -n "$ctx" ] || return 1
-  if [ -d "$ctx" ]; then
-    ctx_p=$(CDPATH='' cd -P -- "$ctx" 2> /dev/null && pwd -P) || return 1
-  else
-    # A not-yet-created ctx (mailbox's first call) is judged by its parent, same prefix result.
-    ctx_p=$(CDPATH='' cd -P -- "$(dirname -- "$ctx")" 2> /dev/null && pwd -P) || return 1
-    ctx_p="${ctx_p%/}/$(basename -- "$ctx")"
-  fi
+  # A ctx that does not exist yet (first --task-create, first mailbox call) is judged by its
+  # deepest existing ancestor with the missing tail re-appended; a symlinked tmp root (macOS
+  # /var -> /private/var) would otherwise defeat the prefix comparison.
+  local head="$ctx" tail="" base
+  case "$head" in /*) ;; *) head="$PWD/$head" ;; esac
+  while [ -n "$head" ] && [ ! -d "$head" ]; do
+    base="${head##*/}"
+    tail="/${base}${tail}"
+    head="${head%/*}"
+  done
+  [ -n "$head" ] || head="/"
+  head=$(CDPATH='' cd -P -- "$head" 2> /dev/null && pwd -P) || return 1
+  ctx_p="${head%/}${tail}"
   [ -n "$ctx_p" ] || return 1
   [ -n "$top" ] || top=$(git rev-parse --show-toplevel 2> /dev/null || true)
   if [ -n "$top" ]; then

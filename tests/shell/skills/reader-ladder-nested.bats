@@ -106,9 +106,9 @@ mk_worktree() {
   assert_output 'rc=1'
 }
 
-@test "A7: the predicate takes the 1-arg and 2-arg forms and rejects an unreadable dir" {
-  inlib "$ROOT/sub" "corpflow_inferred_ctx_ok '$ROOT/.context'; echo \"1arg=\$?\"; corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"2arg=\$?\"; corpflow_inferred_ctx_ok '$WD/no/such/ctx'; echo \"none=\$?\""
-  assert_output $'1arg=1\n2arg=1\nnone=1'
+@test "A7: the predicate takes the 1-arg and 2-arg forms and judges a missing dir by its ancestors" {
+  inlib "$ROOT/sub" "corpflow_inferred_ctx_ok '$ROOT/.context'; echo \"1arg=\$?\"; corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"2arg=\$?\"; corpflow_inferred_ctx_ok '$ROOT/no/such/ctx'; echo \"in-root-missing=\$?\"; corpflow_inferred_ctx_ok '$WD/no/such/ctx'; echo \"outside-missing=\$?\""
+  assert_output $'1arg=1\n2arg=1\nin-root-missing=1\noutside-missing=0'
   inlib "$ROOT" "corpflow_inferred_ctx_ok '$ROOT/.context' '$ROOT'; echo \"top=\$?\""
   assert_output 'top=0'
 }
