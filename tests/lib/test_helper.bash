@@ -51,6 +51,11 @@ export FIXTURES="${PLUGIN_ROOT}/tests/fixtures"
 # fixture-less test into a real ledger; each suite that needs one declares it itself.
 unset CONTEXT_DIR WORKSPACE_ROOT CLAUDE_PROJECT_DIR
 
+# Same rule for the operator's config dir: a real user-scope CORPFLOW.md (model-matrix-lib.sh
+# corpflow_md_locate) must never reach a test. Points at a dir nothing creates; a suite that
+# exercises the config dir sets or unsets CLAUDE_CONFIG_DIR itself.
+export CLAUDE_CONFIG_DIR="${BATS_RUN_TMPDIR:-${TMPDIR:-/tmp}}/corpflow-test-claude-config"
+
 # --- run_script: dispatch a target under `run` -------------------------------
 # Usage: run_script skills/foo/scripts/bar.sh --flag value
 # Sets $status/$output/$lines (it wraps bats `run`). The first arg is a path

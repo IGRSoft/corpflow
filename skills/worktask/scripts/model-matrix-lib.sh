@@ -18,14 +18,16 @@
 #     4. Non-vacuity floor: zero rows or a duplicate agent hard-fails; callers assert the row
 #        set is a bijection with `agents/*.md` themselves (stronger than a hard-coded count).
 #
-#   `model_override_rows` reads a project-root CORPFLOW.md `## Models` section the same way,
-#   fail-open row by row: a malformed cell or an unknown agent name
-#   is never fatal — the caller decides what to audit. `model_resolve` composes both into the
-#   three READ ranks (state.models -> CORPFLOW.md -> built-in matrix);
-#   ranks 4-5 (the stamped task, an explicit dispatch flag) are not read ranks and live in the
-#   caller.
+#   `model_override_rows` reads a CORPFLOW.md `## Models` section the same way, fail-open row
+#   by row: a malformed cell or an unknown agent name is never fatal — the caller decides what
+#   to audit. `corpflow_md_locate` picks WHICH CORPFLOW.md carries a heading: the project-root
+#   file when it has that heading, else the user-scope one under
+#   ${CLAUDE_CONFIG_DIR:-$HOME/.claude}. `model_resolve` composes both into the three READ
+#   ranks (state.models -> CORPFLOW.md -> built-in matrix); ranks 4-5 (the stamped task, an
+#   explicit dispatch flag) are not read ranks and live in the caller.
 #
-#   Symbols: MODEL_ENUM, model_matrix_rows, model_override_rows, model_resolve.
+#   Symbols: MODEL_ENUM, model_matrix_rows, model_override_rows, model_resolve,
+#   corpflow_md_user_path, corpflow_md_locate, corpflow_md_source.
 #
 # @exitcode 2 executed rather than sourced
 # @exitcode 3 model_matrix_rows: extraction failure (bad heading/header/row, zero rows, dup)
@@ -195,8 +197,59 @@ model_matrix_rows() {
   return 0
 }
 
+# corpflow_md_user_path -> the user-scope CORPFLOW.md path, whether or not it exists.
+# Same config-dir idiom as resolve-sibling-root.sh: CLAUDE_CONFIG_DIR, never also $HOME, when
+# set — an isolated config must not read the operator's real file. rc 1 with neither set.
+corpflow_md_user_path() {
+  local config="${CLAUDE_CONFIG_DIR:-}"
+  if [ -z "$config" ]; then
+    [ -n "${HOME:-}" ] || return 1
+    config="$HOME/.claude"
+  fi
+  printf '%s/CORPFLOW.md\n' "${config%/}"
+}
+
+# corpflow_md_locate <context_dir|project_root> <heading>
+# Prints "<path><TAB><project|user>" for the CORPFLOW.md that owns <heading> (an exact line,
+# e.g. `## Models`). Precedence is per heading: the project-root file wins whenever it carries
+# the heading — even when the section under it is garbled, so a broken project section is
+# audited, never silently replaced by the user file. A `.context` suffix is stripped; an empty
+# first argument checks the user-scope file alone. rc 1 = neither file carries the heading.
+corpflow_md_locate() {
+  local root="${1:-}" heading="${2:-}" user
+  [ -n "$heading" ] || return 1
+  root="${root%/}"
+  case "$root" in
+    .context) root="." ;;
+    */.context) root="${root%/.context}" ;;
+  esac
+  if [ -n "$root" ] && [ -f "${root}/CORPFLOW.md" ] \
+    && grep -qxF -- "$heading" "${root}/CORPFLOW.md" 2> /dev/null; then
+    printf '%s\tproject\n' "${root}/CORPFLOW.md"
+    return 0
+  fi
+  user=$(corpflow_md_user_path) || return 1
+  if [ -f "$user" ] && grep -qxF -- "$heading" "$user" 2> /dev/null; then
+    printf '%s\tuser\n' "$user"
+    return 0
+  fi
+  return 1
+}
+
+# corpflow_md_source <corpflow_md_path> -> `user-override` for the user-scope file, else
+# `project-override` (an explicit --corpflow path included). The ledger/audit source label.
+corpflow_md_source() {
+  local user
+  user=$(corpflow_md_user_path 2> /dev/null) || user=""
+  if [ -n "$1" ] && [ "$1" = "$user" ]; then
+    printf 'user-override\n'
+  else
+    printf 'project-override\n'
+  fi
+}
+
 # model_override_rows <corpflow_md_path> [agents_dir]
-# Reads a project-root CORPFLOW.md `## Models` section, fail-open per row
+# Reads a CORPFLOW.md `## Models` section (project-root or user-scope), fail-open per row
 # — a bad cell or an unknown agent is reported, never fatal.
 # Prints "agent<TAB>model<TAB>effort<TAB>status" per data row, status one of:
 #   ok       — agent known, model/effort each valid or "-"/empty (inherits the matrix cell)
@@ -276,11 +329,11 @@ model_override_rows() {
 }
 
 # model_resolve <agent> [state_path] [corpflow_md_path] [doc] [agents_dir]
-# The three READ ranks: state.models[<agent>] (already-resolved
-# ledger copy) -> CORPFLOW.md `## Models` at the project root -> the built-in matrix. Prints
-# "model<TAB>effort<TAB>source" (source: state|project-override|matrix). Ranks 4 (the
-# stamped task) and 5 (an explicit dispatch flag) are materialized output and caller
-# precedence, respectively — never read here.
+# The three READ ranks: state.models[<agent>] (already-resolved ledger copy) -> the
+# CORPFLOW.md `## Models` the caller located (corpflow_md_locate) -> the built-in matrix.
+# Prints "model<TAB>effort<TAB>source" (source: state|project-override|user-override|matrix).
+# Ranks 4 (the stamped task) and 5 (an explicit dispatch flag) are materialized output and
+# caller precedence, respectively — never read here.
 # @exitcode 2 unresolved: agent absent from state, override, and the built-in matrix alike
 model_resolve() {
   local agent="$1"
@@ -320,9 +373,10 @@ model_resolve() {
     # First match wins: model_override_rows is fail-open and emits a duplicated agent twice,
     # and a two-line orow would garble the pair below (multi-line `cut` output). Filtered
     # without `exit` — an early awk exit SIGPIPEs the producer, which a `pipefail` caller
-    # (model-matrix.sh) turns into a fatal 141.
+    # (model-matrix.sh) turns into a fatal 141. `|| true` for the same reason: rc 1/3 from a
+    # heading-less or garbled section is a matrix fallback, not an errexit.
     orow=$(model_override_rows "$corpflow_path" "$agents_dir" 2> /dev/null \
-      | awk -F'\t' -v a="$agent" '$1==a && !seen {print; seen=1}')
+      | awk -F'\t' -v a="$agent" '$1==a && !seen {print; seen=1}') || true
     if [ -n "$orow" ]; then
       ostatus="${orow##*$'\t'}"
       if [ "$ostatus" = "ok" ]; then
@@ -331,7 +385,7 @@ model_resolve() {
         [ -n "$omodel" ] && [ "$omodel" != "-" ] || omodel="$mmodel"
         [ -n "$oeffort" ] && [ "$oeffort" != "-" ] || oeffort="$meffort"
         if [ -n "$omodel" ] && [ -n "$oeffort" ]; then
-          printf '%s\t%s\tproject-override\n' "$omodel" "$oeffort"
+          printf '%s\t%s\t%s\n' "$omodel" "$oeffort" "$(corpflow_md_source "$corpflow_path")"
           return 0
         fi
       fi

@@ -88,12 +88,19 @@ file a bug against corpflow rather than working around any of them.
 
 ## Project-level routing override
 
-A second file also carries the name `CORPFLOW.md`, with different semantics decided by
-location: at a *sibling plugin's* root it is that plugin's stage contract (§ A.4); at the
-*user project's* root it is project configuration, of which corpflow reads two headings:
-`## Routing`, a `| Alias | Target |` table whose rows win over the defaults in
-`skills/shared/routing-matrix.md`, and `## Models`, per-agent model/effort overrides. Both are
-reserved: a plugin-side `CORPFLOW.md` never uses them (guard note in `../templates/CORPFLOW.md`).
+Other files also carry the name `CORPFLOW.md`, with semantics decided by location: at a
+*sibling plugin's* root it is that plugin's stage contract (§ A.4); at the *user project's*
+root, or at user scope (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md`, every project), it is
+configuration, of which corpflow reads two headings: `## Routing`, a `| Alias | Target |` table
+whose rows win over the defaults in `skills/shared/routing-matrix.md`, and `## Models`,
+per-agent model/effort overrides. Both are reserved: a plugin-side `CORPFLOW.md` never uses them
+(guard note in `../templates/CORPFLOW.md`).
+
+### Which file supplies each heading
+
+Each heading is taken from the project-root file when it has it, else from the user-scope file
+(`skills/shared/routing-matrix.md § Per-heading precedence`).
+
 Template and creation instructions: `../templates/PROJECT-CORPFLOW.md` and
 `routing-matrix.md § Project override`. Resolution happens once at worktask init and
 persists as `state.routing` (`skills/worktask/SKILL.md § Validation check 12`).

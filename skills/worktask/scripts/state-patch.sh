@@ -107,13 +107,16 @@
 #                                             no scripted writer, so they were hand-edited
 #                                             into state.json around this script.
 # @arg --resolve-models [--corpflow <path>]   Stamp state.models{<agent>: {model,effort,source}}
-#                                             for every agents/*.md row, merging a project-root
-#                                             CORPFLOW.md `## Models` override (default lookup:
-#                                             ${CONTEXT_DIR%/.context}/CORPFLOW.md) row by row,
-#                                             fail-open, over the built-in matrix
-#                                             (skills/shared/stage-codes.md § Agent Model
-#                                             Matrix). Resolved once; --task-create reads the
-#                                             result. Idempotent overwrite, not a merge.
+#                                             for every agents/*.md row, merging a CORPFLOW.md
+#                                             `## Models` override row by row, fail-open, over
+#                                             the built-in matrix (skills/shared/stage-codes.md
+#                                             § Agent Model Matrix). Default lookup, per
+#                                             heading: ${CONTEXT_DIR%/.context}/CORPFLOW.md
+#                                             when it has `## Models`, else
+#                                             ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md;
+#                                             --corpflow beats both. Resolved once;
+#                                             --task-create reads the result. Idempotent
+#                                             overwrite, not a merge.
 # @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
 #                                             stage loop dispatches it again.  Clears
 #                                             metadata.retry_count, metadata.error_escalated_to
@@ -2296,14 +2299,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
   # shellcheck source=model-matrix-lib.sh
   . "$_RM_LIB"
 
-  # Project root is one level above .context/ — the same anchor CORPFLOW.md § Routing already
-  # reads from (skills/worktask/SKILL.md § Validation check 12).
+  # Same per-heading precedence CORPFLOW.md § Routing follows (skills/worktask/SKILL.md
+  # § Validation check 12): project root, then the user-scope file. No hit -> matrix only.
   _RM_CORPFLOW="$RESOLVE_MODELS_CORPFLOW_ARG"
   if [[ -z "$_RM_CORPFLOW" ]]; then
-    _RM_ROOT="$CTX"
-    case "$_RM_ROOT" in */.context) _RM_ROOT="${_RM_ROOT%/.context}" ;; esac
-    _RM_CORPFLOW="${_RM_ROOT}/CORPFLOW.md"
+    _RM_HIT=""
+    _RM_HIT=$(corpflow_md_locate "$CTX" '## Models') || _RM_HIT=""
+    _RM_CORPFLOW="${_RM_HIT%%$'\t'*}"
   fi
+  _RM_OV_SOURCE=$(corpflow_md_source "$_RM_CORPFLOW")
 
   _RM_AUDIT_DIR="${CTX}/logs"
   if ! command -v corpflow_audit_row > /dev/null 2>&1; then
@@ -2368,15 +2372,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
       _rm_effort="${_rm_rest%%$'\t'*}"
       _rm_src="${_rm_rest##*$'\t'}"
     fi
-    if [[ "$_rm_src" == "project-override" ]]; then
-      _RM_SOURCE_OVERALL="project-override"
+    if [[ "$_rm_src" == "project-override" || "$_rm_src" == "user-override" ]]; then
+      _RM_SOURCE_OVERALL="$_rm_src"
       if command -v corpflow_audit_row > /dev/null 2>&1; then
         corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
           --action model_override --subject "$_rm_agent" --result ok \
           --task-id "$(_audit_task_ref)" \
           --meta "$(jq -cn --arg a "$_rm_agent" --arg dm "$_rm_dmodel" --arg de "$_rm_deffort" \
-            --arg om "$_rm_model" --arg oe "$_rm_effort" \
-            '{agent:$a, default_model:$dm, default_effort:$de, override_model:$om, override_effort:$oe}')"
+            --arg om "$_rm_model" --arg oe "$_rm_effort" --arg s "$_rm_src" --arg p "$_RM_CORPFLOW" \
+            '{agent:$a, default_model:$dm, default_effort:$de, override_model:$om, override_effort:$oe, source:$s, path:$p}')"
       fi
     fi
     _RM_JSON=$(printf '%s' "$_RM_JSON" | jq -c --arg a "$_rm_agent" --arg m "$_rm_model" \
@@ -2393,7 +2397,7 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
         corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
           --action model_override_unparsed --subject "CORPFLOW.md" --result degraded \
           --task-id "$(_audit_task_ref)" --meta-kv "path=${_RM_CORPFLOW}" \
-          --meta-kv "reason=header_or_rows"
+          --meta-kv "source=${_RM_OV_SOURCE}" --meta-kv "reason=header_or_rows"
       fi
     elif [[ "$_RM_OV_RC" -eq 0 && -n "$_RM_OV_OUT" ]] && command -v corpflow_audit_row > /dev/null 2>&1; then
       while IFS=$'\t' read -r _rov_agent _rov_model _rov_effort _rov_status; do
@@ -2402,13 +2406,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
             corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
               --action model_override_unknown --subject "$_rov_agent" --result degraded \
               --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
-              --meta-kv "reason=no-matrix-row"
+              --meta-kv "reason=no-matrix-row" --meta-kv "source=${_RM_OV_SOURCE}" \
+              --meta-kv "path=${_RM_CORPFLOW}"
             ;;
           invalid)
             corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
               --action model_override_unknown --subject "$_rov_agent" --result degraded \
               --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
-              --meta-kv "reason=invalid-cell" --meta-kv "cell=${_rov_model}/${_rov_effort}"
+              --meta-kv "reason=invalid-cell" --meta-kv "cell=${_rov_model}/${_rov_effort}" \
+              --meta-kv "source=${_RM_OV_SOURCE}" --meta-kv "path=${_RM_CORPFLOW}"
             ;;
         esac
       done <<< "$_RM_OV_OUT"

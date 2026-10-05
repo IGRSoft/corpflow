@@ -122,8 +122,8 @@ The `claude-code-workflows` family doubles its slug in invocation ids
 
 1. `state.routing` present in `.context/state.json` → use it (resolved once at worktask
    init; see `skills/worktask/SKILL.md § Routing resolution`).
-2. Else read `CORPFLOW.md § Routing` at the **user project root**; its rows win over this
-   matrix, alias by alias.
+2. Else read `CORPFLOW.md § Routing` at the **user project root**, else at **user scope**
+   (§ Per-heading precedence); its rows win over this matrix, alias by alias.
 3. Else (or for aliases not overridden) use the Default target column above.
 4. Dispatch injection is unchanged: resolve the target's root per
    `skills/cross-plugin-handoff/SKILL.md § Dispatch Injection`; if it ships a root
@@ -133,27 +133,41 @@ The `claude-code-workflows` family doubles its slug in invocation ids
    (`agents/developer.md § Plugin unavailable`) with `alias` and `override_target` in the
    audit metadata: fall back override → default target → direct scoped-Bash build.
 
+### Per-heading precedence
+
+The project-root `CORPFLOW.md` is read when it has a `## Routing` heading; otherwise the
+user-scope `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md`. Precedence is per heading, never per
+row: a project `## Routing` hides the user file's whole `## Routing`, even for aliases it does not
+list. `## Models` follows the same rule (`model-matrix-lib.sh` `corpflow_md_locate`).
+
 ## Project override
 
 `CORPFLOW.md` at the **user project root**, heading `## Routing`, same two-column table
-(`| Alias | Target |`). Rows are explicit per alias — overriding an entry alias does not
+(`| Alias | Target |`). The same heading in the user-scope file applies to every project
+whose root file lacks it (`routing_source: "user-override"`). Rows are explicit per alias — overriding an entry alias does not
 implicitly override that platform's role aliases; swapping a platform's plugin normally
 means overriding all five. Partial override (entry overridden, roles not) is legal but
 audited (`routing_override_partial`).
 
 ### Creating the override file
 
-Copy `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md` to the project root as
-`CORPFLOW.md`, keep only the rows you override, then start a new worktask (or re-run init)
-so `state.routing` re-resolves. Overrides never take effect mid-worktask.
+Copy `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md` to the project root (or to
+`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/` for every project) as `CORPFLOW.md`, keep only the rows
+you override, then start a new worktask (or re-run init) so `state.routing` re-resolves.
+Overrides never take effect mid-worktask.
 
-## Two files named CORPFLOW.md
+## Three kinds of CORPFLOW.md
 
-Location decides semantics: at a *sibling plugin's* root it is that plugin's stage
-contract (`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`); at the
-*user project's* root it is project configuration, of which corpflow reads only
-`## Routing`. A project that is itself an integrating plugin holds both in one file — the
-headings are disjoint, and `## Routing` is reserved for the override.
+Location decides semantics:
+
+| Location | Kind | corpflow reads |
+|----------|------|----------------|
+| A *sibling plugin's* root | that plugin's stage contract (`skills/cross-plugin-handoff/references/plugin-contract.md § A.4`) | the whole file, as dispatch context |
+| The *user project's* root | project configuration | `## Routing` and `## Models` |
+| `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/` | user-scope configuration, every project | `## Routing` and `## Models`, each only when the project file lacks it |
+
+A project that is itself an integrating plugin holds the first two in one file — the
+headings are disjoint, and `## Routing` and `## Models` are reserved for the override.
 
 ## Grants
 

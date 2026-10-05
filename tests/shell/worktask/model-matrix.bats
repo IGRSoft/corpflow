@@ -17,7 +17,7 @@ SCRIPT="skills/worktask/scripts/model-matrix.sh"
 
 # Omitted state/CORPFLOW paths resolve from the root ladder (CONTEXT_DIR first), so every
 # bare call below pins CONTEXT_DIR to an empty temp dir — the suite must not read whatever
-# state.json this checkout happens to carry.
+# state.json this checkout happens to carry. CLAUDE_CONFIG_DIR is sandboxed by test_helper.
 @test "--resolve <agent> prints model, effort and source, tab-separated" {
   CONTEXT_DIR="$BATS_TEST_TMPDIR" run bash "$PLUGIN_ROOT/$SCRIPT" --resolve developer
   assert_success
@@ -39,6 +39,26 @@ SCRIPT="skills/worktask/scripts/model-matrix.sh"
   CONTEXT_DIR="$root/.context" run bash "$PLUGIN_ROOT/$SCRIPT" --resolve qa-engineer
   assert_success
   assert_output $'opus\tmedium\tproject-override'
+}
+
+@test "a bare --resolve falls back to the user-scope CORPFLOW.md when the project has no ## Models" {
+  local root="${BATS_TEST_TMPDIR}/proj" cfg="${BATS_TEST_TMPDIR}/cfg"
+  mkdir -p "$root/.context" "$cfg"
+  printf '## Models\n\n| Agent | Model | Effort |\n|---|---|---|\n| qa-engineer | opus | - |\n' \
+    > "$cfg/CORPFLOW.md"
+  CLAUDE_CONFIG_DIR="$cfg" CONTEXT_DIR="$root/.context" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --resolve qa-engineer
+  assert_success
+  assert_output $'opus\tmedium\tuser-override'
+  # An unresolvable root still reads the user file; the project heading, once present, wins.
+  CLAUDE_CONFIG_DIR="$cfg" CONTEXT_DIR="$root/.context" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --resolve developer
+  assert_output $'opus\thigh\tmatrix'
+  printf '## Models\n\n| Agent | Model | Effort |\n|---|---|---|\n| qa-engineer | haiku | low |\n' \
+    > "$root/CORPFLOW.md"
+  CLAUDE_CONFIG_DIR="$cfg" CONTEXT_DIR="$root/.context" \
+    run bash "$PLUGIN_ROOT/$SCRIPT" --resolve qa-engineer
+  assert_output $'haiku\tlow\tproject-override'
 }
 
 @test "--resolve on an unknown agent exits 2 rather than printing an empty pair" {

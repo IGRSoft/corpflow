@@ -500,7 +500,7 @@ Stage artifact paths in task descriptions use `<basename>-${N}.md` (e.g., `archi
 
 #### Agent mapping for `metadata.agent`
 
-Always emit the fully-qualified `plugin:agent` form; bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the routing matrix, never memory: entry and functional-role aliases (architect, security auditor, test generator, code fixer) in `skills/shared/routing-matrix.md` — a project `CORPFLOW.md § Routing` override wins, and the resolved map persists as `state.routing`; DV specialists in `skills/shared/platform-detection.md`. Code pattern: `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks`.
+Always emit the fully-qualified `plugin:agent` form; bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the routing matrix, never memory: entry and functional-role aliases (architect, security auditor, test generator, code fixer) in `skills/shared/routing-matrix.md` — a `CORPFLOW.md § Routing` override (project root, else user scope) wins, and the resolved map persists as `state.routing`; DV specialists in `skills/shared/platform-detection.md`. Code pattern: `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks`.
 
 ##### Stage → agent table
 

@@ -6,7 +6,7 @@
 
 A staged worktask system for Claude Code and Codex — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.1.0 · Requires Claude Code 2.1.284+ · Verified with Codex CLI 0.156.1**
+**Plugin 4.1.1 · Requires Claude Code 2.1.284+ · Verified with Codex CLI 0.156.1**
 
 ## Features
 
@@ -163,7 +163,9 @@ apple-developer:apple-developer`, `corpflow:web-code-fixer →
 frontend-developer:fe-code-fixer`, …). A project can swap any of them: copy
 `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md` to the project root as
 `CORPFLOW.md`, keep only the rows you override under `## Routing`, and the next worktask
-resolves through your targets instead:
+resolves through your targets instead. The same file at
+`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md` applies to every project; a project-root file
+wins per heading (`## Routing`, `## Models`), so a project overrides only what it names:
 
 ```markdown
 ## Routing
