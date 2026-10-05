@@ -1049,7 +1049,7 @@ handoff:
 ---
 ```
 
-Prev→this label: `DC→RE`.
+Prev→this label: `DC→RE` (or `QA→RE` when DC did not run).
 
 ### #tpl-fn — Finalization (project-manager)
 

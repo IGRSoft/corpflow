@@ -21,10 +21,10 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 
 ## Constraints (DO NOT)
 
-- A new ledger row comes from one of five writers: PL0's seed, the architect's re-score, the team-lead's DV split, your re-seed of a stage PL0 failed to create (§ Ledger & Stage Troubleshooting), or the orchestrator's accepted mid-run escalation. Any other row goes back to PL as a scope change.
+- A new ledger row comes from one of six writers: the initial seed (§ Initialize Worktask), PL0's seed, the AR re-score, TL's DV split, your re-seed of a stage PL0 missed (§ Ledger & Stage Troubleshooting), or the orchestrator's accepted mid-run escalation. Any other row goes back to PL as a scope change.
 - Report every failure you find with its `.context/errors/` or `logs/` path, repaired ones included.
-- DO NOT write task state into `state.json` by hand: `state-patch.sh` keeps the file atomic and its handoff edges consistent. The one exception is `handoff-protocol.md#layer-1-fallback`, when the tool cannot run.
-- Append each stuck-state resolution to `.context/errors/<agent>.md` before moving the task on (§ Handle Error).
+- DO NOT write task state into `state.json` by hand: `state-patch.sh` keeps the file atomic and its handoff edges consistent. The one exception: `handoff-protocol.md#layer-1-fallback`, when the tool cannot run.
+- Append each stuck-state resolution to `.context/errors/<agent>.md` before moving on (§ Handle Error).
 - DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
 
 ### Mid-run escalation
@@ -260,7 +260,7 @@ Exit 3 means your artifact is not on disk: write it and re-run, never continue a
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --task-id <ID> --prev <PREV> --facts '{
+state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],

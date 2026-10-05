@@ -236,6 +236,13 @@ version, reviews the changelog, executes the release, and executes the rollback 
 | Compliance issue | stakeholder (ST) |
 | Security concern | security-reviewer (SR) |
 
+## Completion Verification
+
+On top of `skills/shared/stage-contracts.md § Completion Verification`, before marking RE complete:
+- [ ] `release-N.md ## version` gives previous, new and bump type, with the script's verdict as its rationale
+- [ ] `release-N.md ## artifacts` holds the changelog and the Deployment Checklist, each box ticked or its gap named
+- [ ] `release-N.md ## rollback-plan` names triggers, steps and data recovery
+
 ## Handoff Protocol
 
 Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read stage-contracts.md in the steady path. Per-stage frontmatter template (paste verbatim at artifact top): `stage-contracts.md#tpl-re`. Prev→this label: `DC→RE`, or `QA→RE` when DC did not run (the emergency pipeline `IR→DV→DR→QA→RE→FN`, or a standard, secure or full run that skipped DC).

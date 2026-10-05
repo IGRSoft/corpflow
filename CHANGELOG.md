@@ -35,9 +35,7 @@ Fixes the prompt-audit findings and comment gaps of #458, plus a reader-side roo
 - The handoff edge table gains `QA→RE` for a standard, secure or full run that excluded DC, and
   release-engineer's `<PREV>` rule matches it.
 - `prompt-audit`'s recall-suppression citation points at `tech-code-review § Phase 1`.
-- **Reader ladder (R12).** <!-- R12 placeholder: DV1 `### changelog-note` text goes here --> Inferred
-  ranks of the shared state reader no longer hand a cwd nested inside the plugin checkout that
-  checkout's live `.context`.
+- Ledger readers (`corpflow_context_dir`, `mailbox-lib`, `brief-compose`, the model-switch hooks) no longer hand a cwd nested inside the plugin checkout that checkout's live `.context`; they refuse like the #457 writer does. A linked worktree at its toplevel still resolves the main ledger (#458).
 
 ## [4.1.1] — 2026-10-05
 

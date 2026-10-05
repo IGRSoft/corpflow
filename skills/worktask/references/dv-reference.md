@@ -96,9 +96,9 @@ Open the prompt with:
 Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
 ```
 
-Follow that line with section `[4b]`, the model discipline block
-(`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
 Exit 1 → dispatch nothing to that plugin; take `agents/developer.md § Plugin unavailable` with the stderr line as `reason`.
+Follow the plugin-root line with section `[4b]`, the model discipline block
+(`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
 
 #### Why the line is required
 
