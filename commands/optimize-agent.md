@@ -137,7 +137,13 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 |-------|------------|----------|
 | `name` | Globally unique and must not contain `:` — CC rejects the file (`:` is reserved for call-site namespacing, `corpflow:developer`). CC keys agents by this field, so generic stems (`developer`, `qa-engineer`, `incident-responder`) silently overwrite across plugins: cross-check `apple-developer:`, `security-scanning:`, `debugging-toolkit:` stems, prefer `<plugin>-<role>`. | P0 (`:`) / P1 (collision) |
 | `description` | ≤250 characters, measured with `awk -F'description: ' '/^description:/{print length($2)}'`; report exact count, suggest a 240-char rewrite for headroom. | P0 |
-| `model` | Must be absent — the pair lives only in `skills/shared/stage-codes.md § Agent Model Matrix`. Flag `model:`/`effort:` in any definition frontmatter as P0; fix is deletion. | P0 |
+
+#### Frontmatter audit — model and effort (P0)
+
+| Field | Audit Rule | Severity |
+|-------|------------|----------|
+| `model` | Must be absent — model selection stays a per-dispatch `Task()` argument (`skills/shared/stage-codes.md § Model alias notes`). Flag a `model:` key in any definition frontmatter as P0; fix is deletion. | P0 |
+| `effort` | Required, equal to the agent's Effort cell in `skills/shared/stage-codes.md § Agent Model Matrix` (`§ Static effort and dispatch overrides`; `agent-effort-frontmatter.bats` holds the parity). Missing or unequal is P0; fix is the matrix value. | P0 |
 
 #### Frontmatter audit — tools (P1)
 

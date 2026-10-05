@@ -16,16 +16,13 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT allow scope creep; hold sprint commitment, defer new work, and log the deferral
-- DO NOT over-plan; plan in waves — detailed near-term, rough long-term
-- DO NOT foster hero culture; cross-train, document, spread knowledge
-- DO NOT game metrics; measure outcomes, not output
+- When new work appears mid-run, defer it to `complete-summary-N.md ## followups` or a follow-up issue rather than adding it to this run.
+- Plan in waves: near-term tasks in detail, later ones rough.
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
-- DO NOT overload meetings; time-box strictly, combine where appropriate
-- DO NOT skip ethics checkpoints in planning; flag ethical implications to ethics-reviewer
+- When a plan or a follow-up carries an ethical implication, flag it to ethics-reviewer and name it under `## followups`.
 
 ### Mid-run escalation
 
@@ -77,8 +74,9 @@ tools mutate tracked files as a side effect — auto-extracted localization keys
 build-configuration rewrites, generated-project or lockfile touch-ups — and those edits belong to
 no stage's diff. Revert them (`git checkout -- <path>`) as the last action before `git add`, and
 run nothing that builds afterwards: any build re-creates exactly the churn just removed. List each
-reverted path in `complete-summary-N.md`; a path that churns every run is a repo defect worth its
-own issue.
+reverted path in `complete-summary-N.md`. When an earlier run's `complete-summary-*.md` lists the
+same reverted path, file one follow-up issue for it and name it under `## followups`; otherwise the
+list is the whole record.
 
 ##### Untracked files and the landed set
 
@@ -90,92 +88,10 @@ An empty set is normal. A landed path is never committed from a consumer tree �
 tree ships it. One that shows staged or modified is a consumer violation, so the
 subtraction does not hide it: it stays in this check's scope.
 
-###### Untracked files — on the multi-stream arm
-
-The tree being checked is the `<tree>` on that stream's `plan` line (§ FN multi-stream arm): list
-with `git -C <tree> status --porcelain --untracked-files=all` and pass `--arg root "<tree>"` to the
-same expression. Each stream subtracts its own tree's set, never the union over every tree.
-`fn-stream-merge.sh commit` and `merge` read that same set with
-`land-artifacts.sh --list-landed --tree <tree> --strict`, and `commit`'s `untracked=<n>` leaves out
-the tree's untracked landed paths.
-
 #### FN multi-stream arm
 
-Runs only when the ledger holds more than one non-skipped DV task
-(`skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`). With one DV task, skip
-this section: the single-tree commit and push are unchanged.
-
-Start with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh plan`. `arm=single reason=<token>`
-(every DV task shares one tree) → leave this section; the single-tree path applies. `arm=multi
-streams=<n>` is followed by one `<task><TAB><stream><TAB><tree>` line per stream: run § Per stream — scope and staging
-for each, in that order, then § Merge, battery, push.
-
-##### Per stream — scope and staging
-
-1. Run § Pre-commit scope check in `<tree>` (`git -C <tree> status --porcelain`) against that tree's
-   landed set (§ Untracked files — on the multi-stream arm).
-2. Stage the stream's new files: `git -C <tree> add -- <path>...` for every `??` path its DV artifact
-   lists as changed, never a path in that tree's landed set. `commit` stages tracked edits only
-   (`add -u`), so a new file left unstaged never ships.
-
-##### Per stream — commit and facts
-
-3. `Write` the message per `skills/shared/git-conventions.md` to `.context/logs/fn-commit-<task>.txt`,
-   then `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh commit --task <task> --message-file .context/logs/fn-commit-<task>.txt`.
-4. Pass the JSON after `facts=` on the second printed line to
-   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --facts '<that JSON>'`. Skipping it makes `merge`
-   block with `stream_branch_missing`.
-
-If `untracked=<n>` above 0 on the result line: stage any of those paths the DV artifact lists, then re-run `commit`.
-
-##### Merge, battery, push
-
-1. `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh merge` in FN's own tree: it cuts `facts.branch`
-   from the base unless it exists, then merges each stream branch `--no-ff`, in task-id order.
-2. § Pre-`gh pr create` validator battery; `continuity` checks every stream (§ Branch checks).
-3. The existing non-force push, `git push -u origin HEAD:refs/heads/<facts.branch>` (§ Final FN
-   steps), then the PR.
-
-##### Arm exits
-
-| Exit | Printed | FN does |
-|---|---|---|
-| 0 | result lines | continue |
-| 1 | `blocked reason=<token> task=<ID\|-> stream=<s\|->` | `handoff.verdict: blocked`; copy the line verbatim to `.context/errors/project-manager.md` and name the reason and stream in `complete-summary-N.md`; no push, no `gh pr create` |
-| 1 | `blocked reason=stream_is_combined task=<ID> stream=<s>` | a stream's branch is `facts.branch` (`commit`: the stream tree's current branch; `merge`: a `facts.stream_branches` value); nothing was written; `handoff.verdict: blocked` naming that stream, as above |
-| 2 | `fn-stream-merge: <message>` on stderr, nothing on stdout | FN's own call is malformed: fix it and re-run |
-| 3 | stderr | ledger unreadable or install broken: handle as exit 1 |
-| 4 | `escalate reason=merge_abort_failed task=- stream=<s>` | the tree is left mid-merge: `handoff.verdict: escalate`, the line to the errors file, and stop without touching that tree |
-
-###### Arm exits — the landed set
-
-Both reasons are exit 1 `blocked` lines, handled as the first exit-1 row above.
-
-| Reason | Cause | Clearing it |
-|---|---|---|
-| `landed_path_unsafe` | a `landed_paths` entry scoped to that stream's tree fails the path allow-list; nothing was staged or merged | a human inspects that tree's `landed_paths`. `land-artifacts.sh` never writes such an entry, so never edit it away to clear the block |
-| `landed_set_unreadable` | reading that tree's landed set failed, so the arm failed closed | § Clearing a block: fix the failed read, then re-run the same step |
-
-##### Clearing a block
-
-`commit` and `merge` are idempotent: clear a block by fixing its named cause and re-running the
-same step. A `merge_conflict` block was already aborted, so no ref moved. A re-run never clears
-`stream_is_combined`: that stream's work sits on the PR branch itself, where the foreign-commit
-check cannot tell it apart. Giving it its own branch is a human's call.
-
-##### Forbidden on this arm
-
-- DO NOT force-push (`--force`, `--force-with-lease`, a `+` refspec), `git reset`, `git rebase`,
-  `git commit --amend`, or delete a branch (`git branch -d`/`-D`, `git push --delete`) — not to
-  clear a block, not to redo a merge.
-
-`Bash(git:*)` grants every one of these and no hook stops them, while each stream branch may hold
-the only copy of a DV task's commits.
-
-| Excuse | Reality |
-|--------|---------|
-| "The merge conflicted; reset and merge again" | The arm already ran `merge --abort` and moved no ref. Return blocked naming the stream; its DV task resolves the conflict. |
-| "The combined branch has a stray commit; delete it and recut" | `combined_foreign_commits` means work nobody in this run wrote is on it. Return blocked; a human decides. |
+More than one non-skipped DV task → follow `skills/worktask/references/fn-multi-stream.md`; one DV
+task → skip.
 
 #### Conductor attachments
 
@@ -280,7 +196,7 @@ evidence is invisible; `probe_timeout`/`token_invalid` is resolved by exporting
   `Closes #N` trailer only on a merge into the DEFAULT branch. Post-merge run
   `fn-preflight.sh issue-close-required`; on `yes` run the `gh issue close <N>` it printed and
   record it as an `### Issue` H3 under `complete-summary-N.md ## artifacts`. On `no`, do nothing.
-- **F3**: mark technical complete.
+- **Settle the row last**: on the success path, run § State Patch after the push and the PR.
 
 ##### Check for an external rename before pushing
 
@@ -294,7 +210,7 @@ which the charset check below structurally cannot catch.
 
 `branch-name.sh` validates at emission, but nothing re-validates where FN turns the value into
 shell command text. Confirm it matches `^[A-Za-z0-9._/-]+$` first (git ref names permit
-`;`/`|`/`&`/backtick/`$(`/quotes/whitespace; bash does not). A failing value MUST be treated as
+`;`/`|`/`&`/backtick/`$(`/quotes/whitespace; bash does not). Treat a failing value as
 empty, never interpolated as-is — that keeps an externally-named branch (e.g. from
 `gh pr checkout` on a fork PR) out of shell command text. **Empty or failed check** (detached
 HEAD, not-a-git-repo at PL start, unvalidated value): skip the refspec, `git push -u origin HEAD`.
@@ -341,7 +257,7 @@ so. Omit any column the ledger cannot support rather than inventing a number for
 
 Create the PR from the workspace/worktree branch using `workspace.json` metadata; archive context
 afterwards. **Megatask completion contract**: under a `/megatask` per-issue run (`workspace.json`
-present), after the PR is created FN MUST write `execution.status: "completed"` and
+present), after the PR is created FN writes `execution.status: "completed"` and
 `execution.pr: "<PR URL>"` into that issue's `workspace.json` (unrecoverable failure →
 `execution.status: "failed"`). `hooks/megatask-monitor.sh` reads this to mark the orchestrator
 issue done and unblock dependents — `skills/megatask/references/schemas.md § Completion contract`,
@@ -369,16 +285,21 @@ CSV exports (`roadmap_milestones.csv`, `budget_estimate.csv`, `phase_summary.csv
 
 Before marking FN complete:
 
-- [ ] `complete-summary-N.md` written to `.context/`
+### Summary and attachments
+
+- [ ] `.context/complete-summary-N.md` written with `## summary`, `## artifacts`, `## followups` and the `## metrics` Stage Timings table
 - [ ] Both `.context/attachments/` files written with final data, overwriting any pre-seed —
       **verified by `test -f` (or `fn-preflight.sh attachments`), not assumed from the pre-seed**
-- [ ] All stage artifacts collected and reviewed
-- [ ] PR created with proper title and description
+- [ ] `complete-summary-N.md ## artifacts` lists every upstream stage artifact with its `handoff.verdict`
+
+### PR, branch and evidence
+
+- [ ] `complete-summary-N.md ## artifacts` carries the PR URL, and `fn-preflight.sh all` exited 0 on the body that reached `gh pr create`
 - [ ] Branch continuity validated before merge/push (ancestor check passed, OR cherry-pick
       fallback used AND documented in `complete-summary-N.md`; multi-stream arm: every stream
       `stream_merged`)
-- [ ] QA's test evidence verified green, not re-run (`testing-N.md`)
-- [ ] No unresolved blockers from any stage
+- [ ] `testing-N.md` frontmatter `verdict` read as green, not re-run
+- [ ] Every upstream `blockers` entry is closed, or FN returned `verdict: blocked` with it in `.context/errors/project-manager.md`
 
 ## Handoff Protocol
 

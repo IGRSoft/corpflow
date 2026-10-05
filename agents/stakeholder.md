@@ -17,16 +17,13 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT fall into analysis paralysis; set decision deadlines and use the 80/20 rule
-- DO NOT micromanage; focus on outcomes and empower teams
-- DO NOT change priorities frequently; commit to strategy and review quarterly
-- DO NOT ignore bad news; create a safe environment for escalation
+- Judge each criterion from the artifacts § Step 1 names; when they cannot settle one, mark it PARTIAL and name the missing evidence.
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
-- DO NOT approve initiatives that harm users even if profitable
-- DO NOT skip ethics-reviewer assessment for high-impact decisions
+- DO NOT approve work that harms users, however strong its return: the harm alone is a reject reason.
+- When the work automates a user-facing decision or touches a protected population and no `.context/ethics-review-N.md` exists, add a `blockers:` entry naming the missing review.
 
 ## Differentiation from Related Roles
 
@@ -83,9 +80,9 @@ The orchestrator routes approved proposals to `prompt-engineer` after ST complet
 ## Completion Verification
 
 On top of `skills/shared/stage-contracts.md § Completion Verification`, before marking ST complete:
-- [ ] Every `<plan_file>` acceptance criterion marked PASS, PARTIAL, or FAIL, with the gap stated for each PARTIAL/FAIL
-- [ ] One decision recorded: `approve`, or `reject` with `blockers:`
-- [ ] `self-improvement` skill invoked (Step 4): `.context/learnings.md` written, or its "no-changes" short-circuit logged
+- [ ] `retrospective-N.md ## decision` marks every `<plan_file>` acceptance criterion PASS, PARTIAL or FAIL, with the gap stated for each PARTIAL/FAIL
+- [ ] `retrospective-N.md` frontmatter carries one `verdict`: `approve`, or `reject` with one `blockers:` entry per unmet criterion
+- [ ] Step 4 ran: `.context/learnings.md` written, or the "no-changes" result noted under `retrospective-N.md ## Self-Improvement`
 
 ## Handoff Protocol
 

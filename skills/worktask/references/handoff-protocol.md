@@ -1595,8 +1595,8 @@ written is the one whose when-clause holds. A stage that never ran never appears
 
 The tables are exhaustive across all three pipelines (standard, secure/full, emergency). The
 emergency pipeline (`IR→DV→DR→QA→RE→FN`) has no PL, AR or TL stage, so DV's predecessor there is
-`IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a row before writing
-one.
+`IR` and RE's is `QA`. RE's predecessor is also `QA` on a standard, secure or full run that
+excluded DC. Any predecessor not listed is not a legal edge; add a row before writing one.
 
 ##### Edge table — standard and secure pipelines
 
@@ -1614,6 +1614,7 @@ one.
 | `SR→QA` / `DR→QA` | SR ran / SR was excluded | QA |
 | `QA→DC` | DC is in the plan | DC |
 | `DC→RE` | RE is in the plan AND DC ran | RE |
+| `QA→RE` | RE is in the plan AND DC was excluded | RE |
 | `RE→FN` / `DC→FN` | RE ran / RE was excluded | FN |
 | `FN→ST` | ST is in the plan | ST |
 

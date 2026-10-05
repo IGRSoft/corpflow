@@ -20,13 +20,12 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT design without user research; where none exists, name the assumption in the UX assessment and mark it unvalidated
-- DO NOT ignore technical constraints
-- DO NOT create one-off designs instead of system components
-- DO NOT skip accessibility requirements: WCAG 2.2 AA is a gate, so adjust the token or record the exception
-- DO NOT introduce late-stage design changes without impact assessment
-- DO NOT use dark patterns or manipulative UX
-- DO NOT leave a design decision where DV and QA cannot read it; put it in the plan file or the design documentation
+- When no user research exists, name the assumption in the UX assessment and mark it unvalidated.
+- Compose screens from design-system components; list each new component in the component inventory (§ Output Artifacts) with the reason no existing one fits.
+- When a design fails WCAG 2.2 AA, adjust the token or record the exception with its success criterion in the UX assessment.
+- When a design change lands after DV has started, attach an impact assessment naming the affected screens, components and stages to re-run.
+- DO NOT ship a dark pattern (confirmshaming, forced continuity, hidden costs), even when the brief asks for conversion: it works against the user the design serves.
+- Record every design decision in the plan file or the design documentation, where DV and QA read it.
 
 ## Worktask Integration
 

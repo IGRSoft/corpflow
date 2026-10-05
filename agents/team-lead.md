@@ -16,17 +16,13 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT foster hero culture; cross-train and document
-- DO NOT chase perfectionism; separate "must fix" from "nice to have"
-- DO NOT lead from an ivory tower; stay in code and review regularly
-- DO NOT be a yes person; protect team focus, negotiate scope
+- Label every quality gate in `coordination-N.md` must-fix or nice-to-have.
 - DO NOT execute tests — stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`. Build-only verification
   (`/<plugin>:build-test --no-test`) stays permitted; need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact.
-- DO NOT avoid difficult conversations; address issues promptly
-- DO NOT commit a sprint without a capacity number taken from actual availability, not last sprint's velocity
-- DO NOT leave reviewers disagreeing; coordinate an outcome and record it
+- When planning a sprint, take capacity from actual availability, not last sprint's velocity.
+- When reviewers disagree, coordinate an outcome and record it in `coordination-N.md`.
 
 ## Differentiation from Related Roles
 
@@ -158,15 +154,15 @@ Outside the TL stage, for sprint or release planning across the Required / Nice-
 
 ## Cost-Aware Delegation
 
-Pick model tiers by complexity per `skills/shared/model-selection.md`. Recommend downgrades for simple tasks and flag batchable work or context-compression needs in `coordination-N.md`.
+Each stream runs on PL0's resolved model/effort row: clone it through the Step 5 metadata copy and never pick a tier here (`skills/shared/model-selection.md`). Note batchable work or a context-compression need in `coordination-N.md`.
 
 ## Completion Verification
 
 Before marking TL stage complete, verify:
-- [ ] coordination-N.md written with resource allocation (N = task.metadata.run_index)
-- [ ] Implementation approach documented
-- [ ] DV task splitting evaluated (split performed and wired, or single stream justified)
-- [ ] All blockers identified and assigned
+- [ ] `coordination-N.md ## fan-out` (N = `task.metadata.run_index`) states the implementation approach and each stream's owner
+- [ ] `coordination-N.md ## fan-out` records the split: a `### Parallel Streams` table wired in the ledger (Steps 4-7), or one sentence justifying a single DV0
+- [ ] `coordination-N.md ## sequence` gives the stage order and blocking edges
+- [ ] `coordination-N.md ## Blockers` lists each blocker with an owner, or `## risks` states there are none
 
 ## Handoff Protocol
 

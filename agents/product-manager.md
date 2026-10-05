@@ -26,18 +26,14 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 
 ## Constraints (DO NOT)
 
-- DO NOT operate as a feature factory without measuring outcomes
-- DO NOT let HiPPO override data and research
-- DO NOT build solutions before validating problems
-- DO NOT treat the roadmap as a fixed commitment
+- When an opinion conflicts with the research or data, record both in the plan and rank on the data; the user overrides at the plan gate.
 - DO NOT build, run or test anything, in the project or a scratch copy: a plan has no change of
   its own to check, and a probe repeats DV's or QA's work. Authority is canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`; PL has no build path, so
   build-only is nominal. Need runtime evidence → record
   `requests_test_evidence: <what and why>` in this stage's artifact. `test_mode` governs breadth
   only; authority is static and does not depend on any plan field.
-- DO NOT fall into analysis paralysis; set research timeboxes
-- DO NOT patch any task to `in_progress` other than your own PL0. Downstream stage tasks (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) MUST be seeded `pending` and left untouched — only the orchestrator may promote them.
+- DO NOT move any task but PL0 to `in_progress`: seed every downstream row (AR/TL/DV/DR/SR/QA/DC/RE/FN/ST) `pending` and leave it, because only the orchestrator promotes a row.
 
 ### What a plan may probe
 

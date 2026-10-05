@@ -33,13 +33,13 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 ### Requirements & rule authoring
 
 - DO NOT author a review-command hard rule or lint check from the general API pattern alone — state the invariant being protected (not the symptom's most literal trigger site), then hand-walk the rule against at least one real corpus example that should fire and one that should not, before handing it to DR. `§ Decisions` records which corpus file(s) each new gate was validated against and the pass/fail outcome.
-- DO NOT implement without understanding requirements — `§ Decisions` cites the `<plan_file>` (or `architecture-N.md`, when AR ran) row driving each material decision. When AR did not run, the plan is the only upstream authority and you own the rest (§ Architecture Ownership).
+- `§ Decisions` cites the `<plan_file>` (or `architecture-N.md`, when AR ran) row driving each material decision. When AR did not run, the plan is the only upstream authority and you own the rest (§ Architecture Ownership).
 
 ### Code changes & scope
 
-- DO NOT change code you have not read — `§ Tool Invocations` shows a `Read` (or equivalent) on each modified file before its first `Edit`/`Write`.
-- DO NOT skip error handling — every fallible path is named in `§ Approach` with its handler; build/test logs (via tee) carry the runtime trace.
-- DO NOT implement beyond `<plan_file>` scope — `§ Files Changed` maps 1:1 to planning goals; any unmapped file appears in `§ Decisions` with rationale or is reverted.
+- DO NOT change a file you have not read this run: a shell edit skips the Edit tool's read check. `§ Tool Invocations` shows a `Read` (or equivalent) on each modified file before its first change.
+- `§ Approach` names every fallible path with its handler; build/test logs (via tee) carry the runtime trace.
+- `§ Files Changed` maps 1:1 to planning goals. When a changed file maps to no goal, record it in `§ Decisions` with its rationale or revert it.
 
 ### Test execution
 
@@ -48,8 +48,8 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 
 ### Security & documentation
 
-- DO NOT skip input validation or auth/authz — security-sensitive functions are listed in `§ Decisions` with their guard/validation source line; boundary tests in `§ Tests Added`.
-- DO NOT introduce dark patterns, hidden tracking, or backdoors — `§ Decisions` declares every external call/network surface; SR (if enabled) cross-checks.
+- `§ Decisions` lists each security-sensitive function with its input-validation or auth/authz guard source line; `§ Tests Added` carries its boundary tests.
+- `§ Decisions` declares every external call and network surface the diff adds, so nothing tracks users or opens a backdoor undeclared; SR (if enabled) cross-checks.
 - DO NOT over-document source code — no `///` essays, design-history narration, Figma/design-source refs, audit logs, call-site lists, AC-/REQ-/issue-ID provenance, or `#Preview` comments (`skills/shared/code-documentation.md`); rationale/provenance live in `§ Decisions` + the PR, the artifact proving it was recorded out of source.
 
 ### Approval gate
@@ -467,14 +467,13 @@ against the real output with `cmp` (or `diff <(printf …) <(…)`) and record t
 
 Before marking DV stage complete, verify:
 
-- [ ] All planned features implemented
-- [ ] Unit tests written per `<plan_file>` test specs
-- [ ] All `Executed Tests (DV)` pass — zero failures in tests Added/Modified this run plus `always_required_tests` (broader Selected Tests deferred to QA; full-suite regression is QA's gate)
-- [ ] Test file paths documented in development.md
-- [ ] Code compiles without errors
+- [ ] `<your artifact> ## files-changed` maps every `<plan_file>` requirement in scope to the files that implement it
+- [ ] `<your artifact> ## tests-added` lists a unit test per `<plan_file>` test spec, with each test file path
+- [ ] `<your artifact> ## verification-command` quotes the runner's summary line showing zero failures in `Executed Tests (DV)`: tests Added/Modified this run plus `always_required_tests` (broader Selected Tests deferred to QA; full-suite regression is QA's gate)
+- [ ] The last `.context/logs/build-developer-<ts>.log` ends in a successful exit
 - [ ] `<your artifact>` written to .context/ (the path `task.metadata.artifact` names)
-- [ ] No unhandled TODO items in new code
-- [ ] Platform conventions followed
+- [ ] `git diff <base>...HEAD` adds no `TODO`/`FIXME` line without a matching `<your artifact> ## follow-ups` entry
+- [ ] `<your artifact> ## decisions` names each departure from the platform's conventions with its reason
 
 ### Completion checks — logs, audit & checklist
 
