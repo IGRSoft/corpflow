@@ -20,6 +20,8 @@
 # legacy screenshots.md. Row grammar is owned by attach-visual-evidence.sh --validate-manifest.
 # Classes 3 and 4 pass only on backend/systems: a task with no UI has nothing a missing capture
 # tool could have shown. jq absent: live exit 0, --check exit 2.
+# Live arm only: a resolved DV task whose flag reads false first runs escalate-flag.sh in the task's
+# worktree (10 s watchdog, fail open), then re-reads the flag. The helper is the only writer.
 set -eu
 
 MODE=live
@@ -240,24 +242,123 @@ append_row() {
   fi
 }
 
+# Set only by the candidate arm; every other stop leaves them empty and its row has no escalation key.
+ESC_JSON=""
+ESC_NOTE=""
+
 # gate_pass <payload> <ctx> <wid> <task> <class> <platform> <reason>
 gate_pass() {
   append_row "$1" "$2/logs" screenshot_gate_pass ok "$(jq -cn --arg w "$3" --arg t "$4" \
-    --arg c "$5" --arg p "$6" --arg r "$7" \
-    '{worktask_id: $w, task_id: $t, class: $c, platform: $p, reason: $r}')"
+    --arg c "$5" --arg p "$6" --arg r "$7" --argjson e "${ESC_JSON:-null}" \
+    '{worktask_id: $w, task_id: $t, class: $c, platform: $p, reason: $r}
+     + (if $e == null then {} else {escalation: $e} end)')"
 }
 
 # gate_block <payload> <ctx> <wid> <task> <class> <platform> <kind> <reason> <context>
 gate_block() {
-  jq -cn --arg reason "$8" --arg ac "$9" '
+  local reason="$8" ac="$9"
+  if [ -n "$ESC_NOTE" ]; then
+    reason="$ESC_NOTE. $reason"
+    ac="$ESC_NOTE. $ac"
+  fi
+  jq -cn --arg reason "$reason" --arg ac "$ac" '
     {decision: "block", reason: $reason,
      hookSpecificOutput: {hookEventName: "SubagentStop", additionalContext: $ac}}' || {
     echo "dv-screenshot-gate: jq parse failed" >&2
     return 0
   }
   append_row "$1" "$2/logs" screenshot_gate_block block "$(jq -cn --arg w "$3" --arg t "$4" \
-    --arg c "$5" --arg p "$6" --arg k "$7" --arg r "$8" --arg m "${G_MANIFEST:--}" \
-    '{worktask_id: $w, task_id: $t, class: $c, platform: $p, block_kind: $k, reason: $r, missing_manifest: $m}')"
+    --arg c "$5" --arg p "$6" --arg k "$7" --arg r "$reason" --arg m "${G_MANIFEST:--}" \
+    --argjson e "${ESC_JSON:-null}" \
+    '{worktask_id: $w, task_id: $t, class: $c, platform: $p, block_kind: $k, reason: $r, missing_manifest: $m}
+     + (if $e == null then {} else {escalation: $e} end)')"
+}
+
+# Fixed path beside the gate: no override, because a settable path could point the net at a stub.
+ESCALATE_HELPER="$_GATE_DIR/../skills/dv-screenshot-capture/scripts/escalate-flag.sh"
+ESC_ACTION="" ESC_REASON="" ESC_RC="" ESC_MATCHED="" ESC_WS="-"
+readonly ESC_LINE_RE='^requires_screenshots=(true|false) action=(escalated|noop|warn) reason=([a-z_]+)( matched=([0-9]+))?$'
+
+# First worktree candidate that is absolute, control-free, a directory and inside a git work tree.
+# core.fsmonitor=false: a ledger-named repo's own config must not run code inside the hook.
+escalation_worktree() { # <state> <task>
+  local c
+  while IFS= read -r c; do
+    case "$c" in /*) ;; *) continue ;; esac
+    case "$c" in *[[:cntrl:]]*) continue ;; esac
+    [ -d "$c" ] || continue
+    [ "$(git -c core.fsmonitor=false -C "$c" rev-parse --is-inside-work-tree 2> /dev/null)" = "true" ] || continue
+    printf '%s' "$c"
+    return 0
+  done < <(jq -r --arg t "$2" '[.tasks[$t].worktree.path?, .tasks[$t].metadata.workspace_path?, .metadata.workspace_path?]
+    | .[] | strings' "$1" 2> /dev/null)
+  return 1
+}
+
+# Runs the helper in the DV worktree under a 10 s watchdog (own process group, no GNU timeout).
+# Sets ESC_ACTION/ESC_REASON/ESC_RC/ESC_MATCHED/ESC_WS; never writes the flag itself.
+escalate_candidate() { # <ctx> <state> <task>
+  local ws out pid n k to rc line
+  ESC_ACTION=skipped ESC_REASON=worktree_unresolved ESC_RC="" ESC_MATCHED="" ESC_WS="-"
+  ws=$(escalation_worktree "$2" "$3") || return 0
+  ESC_WS="$ws"
+  if [ ! -f "$ESCALATE_HELPER" ]; then
+    ESC_ACTION=fault ESC_REASON=helper_missing
+    return 0
+  fi
+  out=$(mktemp 2> /dev/null) || {
+    ESC_ACTION=fault ESC_REASON=helper_exit
+    return 0
+  }
+  {
+    set -m
+    (cd "$ws" && exec bash "$ESCALATE_HELPER" --task-id "$3" --context-dir "$1" --invoker gate) < /dev/null > "$out" 2> /dev/null &
+    pid=$!
+    set +m
+  } 2> /dev/null
+  # Stderr is closed for the whole block: monitor mode prints a job-status notice when the group is killed.
+  {
+    # Wall-clock deadline ($SECONDS), so load cannot stretch it the way a poll count would.
+    n=$SECONDS to=0
+    while kill -0 "$pid" 2> /dev/null; do
+      if [ $((SECONDS - n)) -ge 10 ]; then
+        to=1
+        kill -TERM -- "-$pid" 2> /dev/null || true
+        k=0
+        while kill -0 "$pid" 2> /dev/null && [ "$k" -lt 10 ]; do
+          sleep 0.1
+          k=$((k + 1))
+        done
+        kill -KILL -- "-$pid" 2> /dev/null || true
+        break
+      fi
+      sleep 0.1
+    done
+    rc=0
+    { wait "$pid"; } 2> /dev/null || rc=$?
+  } 2> /dev/null
+  line=$(head -n 1 "$out" 2> /dev/null || true)
+  rm -f "$out"
+  ESC_RC="$rc"
+  if [ "$to" = 1 ]; then
+    ESC_ACTION=fault ESC_REASON=escalation_timeout
+  elif [ "$rc" -ne 0 ]; then
+    ESC_ACTION=fault ESC_REASON=helper_exit
+  elif [[ $line =~ $ESC_LINE_RE ]]; then
+    ESC_ACTION="${BASH_REMATCH[2]}" ESC_REASON="${BASH_REMATCH[3]}" ESC_MATCHED="${BASH_REMATCH[5]}"
+  else
+    ESC_ACTION=fault ESC_REASON=stdout_unparsable
+  fi
+  return 0
+}
+
+# <flag_after>: the escalation object nested into the gate row's metadata.
+escalation_json() {
+  jq -cn --arg a "$ESC_ACTION" --arg r "$ESC_REASON" --arg rc "$ESC_RC" --arg m "$ESC_MATCHED" \
+    --arg f "$1" --arg w "$ESC_WS" '
+    {invoker: "gate", action: $a, reason: $r, flag_after: $f, worktree: $w}
+    + (if $rc == "" then {} else {rc: ($rc | tonumber)} end)
+    + (if $m == "" then {} else {matched_count: ($m | tonumber)} end)'
 }
 
 run_gate() {
@@ -297,6 +398,14 @@ run_gate() {
 
   platform=$(jq -r --arg t "$tid" '(.tasks[$t].metadata.platform? | strings) // (.platform | strings) // "unknown"' \
     "$state" 2> /dev/null || echo unknown)
+  if [ "$flag" = "false" ]; then
+    escalate_candidate "$ctx" "$state" "$tid"
+    flag=$(jq -r --arg t "$tid" "$FLAG_JQ" "$state" 2> /dev/null || echo true)
+    ESC_JSON=$(escalation_json "$flag")
+    if [ "$flag" != "false" ]; then
+      ESC_NOTE="gate raised the planner's requires_screenshots=false: ${ESC_MATCHED:-unknown} UI path(s) matched in $ESC_WS"
+    fi
+  fi
   if [ "$flag" = "false" ]; then
     gate_pass "$payload" "$ctx" "$wid" "$tid" unclassified "$platform" "requires_screenshots=false"
     return 0

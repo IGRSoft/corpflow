@@ -40,9 +40,9 @@
 #
 # Heuristic (single owner: detect-ui-change.sh --path-classes):
 #   Views/ Screens/ UI/ Components/ .storyboard .xib .tsx .jsx .vue .svelte
-#   .css .scss .html res/layout res/drawable res/values res/menu /ui/ .kt
-# Applied to `git diff --name-only <base>...HEAD`. `.kt` and `/ui/` are the
-# false-positive edge: a Kotlin service file trips them. Set ADHOC_SKIP=1 to
+#   .css .scss .html res/layout res/drawable res/values res/menu /ui/
+# Applied to `git diff --name-only <base>...HEAD`. `/ui/` is the
+# false-positive edge: a non-visual file under a `ui/` package trips it. Set ADHOC_SKIP=1 to
 # suppress a run the heuristic gets wrong.
 #
 # Env: WORKSPACE_ROOT, BASE_REF, ADHOC_ID, ADHOC_SKIP, GH_BIN, DRY_RUN, plus

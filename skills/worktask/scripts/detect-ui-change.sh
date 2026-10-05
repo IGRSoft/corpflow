@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # detect-ui-change.sh — deterministic UI-change detection for PL0.
 #
-# PL (product-manager) runs this against the draft plan to decide whether the
-# worktask's change set touches UI, and stamps the result on
-# `metadata.requires_screenshots` (plan frontmatter + DV/QA task metadata +
-# state.json). The flag drives dv-screenshot-capture and its completion gate.
+# PL (product-manager) runs this against the draft plan as ADVISORY input: the
+# planning model decides `metadata.requires_screenshots` (plan frontmatter +
+# DV/QA task metadata + state.json) and may overrule the verdict in either
+# direction, subject to the S1 floor. The flag drives dv-screenshot-capture and
+# its completion gate.
 # See skills/worktask/references/pl0-procedure.md § Required Metadata: Test Selection Gate.
 #
 # Usage:
 #   detect-ui-change.sh <plan-file> [--platform <p>]
 #   detect-ui-change.sh --path-classes
+#   detect-ui-change.sh --ui-platforms
 #   detect-ui-change.sh --self-test
 #
 # --path-classes prints the S4 UI path-class regex and exits 0, so a caller that
 # classifies a git diff instead of a plan reads the vocabulary from its one owner
-# rather than keeping a second copy free to drift.
+# rather than keeping a second copy free to drift. --ui-platforms does the same
+# for the platforms S4 admits (apple|web|android).
 #
 # Output (stdout, single JSON line):
 #   {"requires_screenshots": <bool>, "signals": ["S1",...], "rationale": "<one line>"}
@@ -32,10 +35,9 @@
 #   S3  plan ## scope / ## requirements match the UI keyword set (word-boundary, -i)
 #   S4  platform ∈ {apple,web,android} AND scope names UI path classes
 #
-# Override asymmetry (caller-side policy, documented here for completeness):
-#   PL may force TRUE at any time without justification. Forcing FALSE when the
-#   detector said TRUE requires an explicit user directive quoted in the plan
-#   rationale. The detector itself never silently downgrades.
+# Advisory; the planner decides. The detector never downgrades on its own; S1 is
+# the planner's hard floor, and an S2 hit with a `false` verdict needs a written
+# reason in the plan.
 
 set -u
 
@@ -45,15 +47,16 @@ PLAN_FILE=""
 # overridable for self-tests via DESIGNS_DIR.
 DESIGNS_DIR="${DESIGNS_DIR:-.context/designs}"
 
-# UI keyword set (S3) — word-boundary, case-insensitive.
-# Android terms carry their own weight here: S4 admits `android` as a platform,
-# so without them an Android UI change produced no signal at all and
-# requires_screenshots never fired.
-UI_KEYWORDS='SwiftUI|UIKit|AppKit|storyboard|xib|screen|layout|styling|CSS|HTML|component|animation|theme|view|Compose|Composable|Jetpack|RecyclerView|ViewBinding|drawable'
+# UI keyword set (S3) — word-boundary, case-insensitive. Framework terms only:
+# generic words fire on nearly every plan's prose. Bare `Compose` is omitted
+# (matches "docker compose"); `Composable` and `Jetpack` cover Android Compose.
+UI_KEYWORDS='SwiftUI|UIKit|AppKit|storyboard|xib|CSS|Composable|Jetpack|RecyclerView|ViewBinding|drawable'
 # UI path classes (S4). Android resource dirs and the lowercase `ui/` package
 # convention are listed explicitly — the match is case-sensitive, so `UI/` alone
 # never matched an Android tree.
-UI_PATH_CLASSES='Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html|res/layout|res/drawable|res/values|res/menu|/ui/|\.kt'
+UI_PATH_CLASSES='Views/|Screens/|UI/|Components/|\.storyboard|\.xib|\.tsx|\.jsx|\.vue|\.svelte|\.css|\.scss|\.html|res/layout|res/drawable|res/values|res/menu|/ui/'
+# Platforms S4 admits; also read by the DV escalation helper (one owner).
+UI_PLATFORMS='apple|web|android'
 
 emit() {
   # $1=bool ("true"/"false"), $2=signals-json-array, $3=rationale
@@ -124,12 +127,10 @@ detect() {
   fi
 
   # S4 — platform ∈ {apple,web,android} AND scope names UI path classes.
-  case "$platform" in
-    apple|web|android)
-      if printf '%s\n' "$sections" | grep -qE "$UI_PATH_CLASSES" 2>/dev/null; then
-        signals+=("S4"); req="true"
-      fi ;;
-  esac
+  if printf '%s\n' "$platform" | grep -qxE "$UI_PLATFORMS" 2>/dev/null &&
+     printf '%s\n' "$sections" | grep -qE "$UI_PATH_CLASSES" 2>/dev/null; then
+    signals+=("S4"); req="true"
+  fi
 
   # Build signals JSON array.
   local sig_json="[]"
@@ -153,10 +154,14 @@ detect() {
 }
 
 # ---------- entrypoint ------------------------------------------------------
-# Answered before the plan-file parser so the vocabulary is readable in a tree
-# that has no plan at all.
+# Answered before the plan-file parser: readable in a tree with no plan.
 if [ "${1:-}" = "--path-classes" ]; then
   printf '%s\n' "$UI_PATH_CLASSES"
+  exit 0
+fi
+
+if [ "${1:-}" = "--ui-platforms" ]; then
+  printf '%s\n' "$UI_PLATFORMS"
   exit 0
 fi
 

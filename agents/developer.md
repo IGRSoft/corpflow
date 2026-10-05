@@ -101,7 +101,7 @@ be dispatched: implement in-process and record `override <id> not granted` in `�
 
 ### UI vs non-UI defaults
 
-apple/android/web work is UI by default (`metadata.requires_screenshots: true`, capture via the platform adapter); systems/backend/ai is non-UI (`false`; build/test transcripts under `.context/logs/` are the Build Evidence — for ai, eval reports and metric tables).
+apple/android/web work is UI by default when the planner leaves the flag unset (`metadata.requires_screenshots: true`, capture via the platform adapter; the planner may set `false` for a diff that renders nothing, and DV may raise it back via `escalate-flag.sh`); systems/backend/ai is non-UI (`false`; build/test transcripts under `.context/logs/` are the Build Evidence — for ai, eval reports and metric tables).
 
 ## Build Verification
 
@@ -343,12 +343,23 @@ It stamps `ts` and always returns 0; a row missing `--subject` or `--task-id` is
 
 ## Screenshot Capture (DV completion gate)
 
-Before marking DV complete, capture visual evidence of the implemented work — unless `metadata.requires_screenshots` is explicitly `false` (PL0 writes it; absent means `true`). Run it right after D3, before writing the DV Completion Checklist, as **one Bash call** to the skill's entry point; never invoke the `dv-screenshot-capture` Skill and never `Read` its SKILL.md in the steady path:
+Before marking DV complete, capture visual evidence of the implemented work — unless the effective flag is `false`. The planner writes `metadata.requires_screenshots` (absent means `true`); DV may only raise it, never lower it. Right after D3, run the escalation helper (next section) and branch on its stdout; this call is belt-and-braces (it decides capture before the stop and saves a block round-trip), because the SubagentStop gate re-runs it on every DV stop. When it reports `true`, run the capture as **one Bash call** to the skill's entry point; never invoke the `dv-screenshot-capture` Skill and never `Read` its SKILL.md in the steady path:
 
 ```bash
 OUT=$(bash "$PLUGIN_ROOT/skills/dv-screenshot-capture/scripts/capture.sh" --task-id <TASK_ID> \
   --context-dir "$CONTEXT_DIR" <platform args> --capture <slug>[:<arg>] ...) ; printf '%s\n' "$OUT"
 ```
+
+### Flag escalation helper (upward-only)
+
+Run it from the DV worktree and branch on its stdout, never on the prompt-stamped flag, which goes stale after an escalation:
+
+```bash
+bash "$PLUGIN_ROOT/skills/dv-screenshot-capture/scripts/escalate-flag.sh" --task-id <TASK_ID> --context-dir "$CONTEXT_DIR"
+# requires_screenshots=<true|false> action=<escalated|noop|warn> reason=<token>
+```
+
+It raises a `false` flag to `true` (task and ledger, one `screenshot_flag_escalated` audit row) when the change set, committed or not, matches the UI path classes on apple/web/android. Record an `escalated` result in `§ Decisions`. A non-zero exit or no `requires_screenshots=` line: fall back to the prompt flag and say so in `§ Decisions`.
 
 ### Platform args for capture.sh
 
@@ -483,8 +494,8 @@ Before marking DV stage complete, verify:
 
 ### Completion checks — screenshots
 
-- [ ] `dv-screenshot-capture/scripts/capture.sh` ran OR `metadata.requires_screenshots == false` documented in `<your artifact> § Decisions`
-- [ ] When `requires_screenshots ≠ false`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID> --state "$CONTEXT_DIR/state.json"` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3 or 4 passes only on `backend`/`systems`) — hook-enforced at SubagentStop
+- [ ] `dv-screenshot-capture/scripts/escalate-flag.sh` ran and its stdout flag decided the next line; `capture.sh` ran OR that flag was `false` and is documented in `<your artifact> § Decisions` (DV raises the flag, never lowers it)
+- [ ] When the helper's flag is `true`, `bash "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" --check <TASK_ID> --state "$CONTEXT_DIR/state.json"` exits 0 on `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (exit 3 or 4 passes only on `backend`/`systems`) — hook-enforced at SubagentStop
 - [ ] If captures > 0, `state.json → facts.screenshots[]` populated
 - [ ] At least one `audit.jsonl` row with `action: "screenshot_captured"` OR `action: "screenshot_skipped"`
 

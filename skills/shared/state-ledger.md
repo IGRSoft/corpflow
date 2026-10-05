@@ -418,7 +418,7 @@ the prompt that needs them.
 ```json
     "requires_screenshots": {
       "type": "boolean",
-      "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
+      "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: the planning model's judgment; detect-ui-change.sh is advisory input; DV or the DV SubagentStop gate may raise it to true via escalate-flag.sh, never lower it). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
     }
   },
   "allOf": [

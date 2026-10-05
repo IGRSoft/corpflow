@@ -5,10 +5,27 @@ All notable changes to this project are documented here. The format is based on 
 ## [Unreleased]
 
 Fixes the prompt-audit findings and comment gaps of #458, a reader-side root-resolution flaw, the
-FN/ST predecessor edges of #467, and the writer's share of the reader guard (#468).
+FN/ST predecessor edges of #467, the writer's share of the reader guard (#468), and the planner-owned
+screenshot flag (#470).
 
 ### Changed
 
+- **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the
+  planning model judges whether the diff alters rendered output, S1 (`ui_visual_check`) is a hard
+  floor, a `false` over an S2 hit needs a written reason, uncertain means `true`, and the planner
+  never raises a screenshot question. The user-directive override is removed from the PL procedure,
+  product-manager runbook, plan template and ledger schema.
+- **Detector S3 matches framework terms only.** `view`, `component`, `screen`, `layout`, `theme`,
+  `styling`, `animation`, `HTML` and bare `Compose` no longer fire it. New `--ui-platforms` option
+  shares the admitted platform set; bare `.kt` leaves the shared UI path vocabulary.
+- **DV upward-only safety net.** New `skills/dv-screenshot-capture/scripts/escalate-flag.sh` raises
+  a `false` flag to `true` (task then ledger, one `screenshot_flag_escalated` audit row) when the
+  change set, including uncommitted and untracked paths, matches the UI path classes on
+  apple/web/android. It never writes `false`; `agents/developer.md` runs it before capture, and
+  `hooks/dv-screenshot-gate.sh` runs it (`--invoker gate`, 10 s watchdog, fail open) on every live DV
+  SubagentStop whose flag reads `false`, so the net also covers DV agents that never read developer.md.
+  An escalated block opens with `gate raised the planner's requires_screenshots=false: <n> UI path(s)
+  matched in <ws>`.
 - **Constraints blocks, all 16 agents.** Each `## Constraints (DO NOT)` bullet now takes the form
   its failure needs (`agents/prompt-engineer.md § Form to failure`): a `DO NOT` with a short
   because only where an agent knows the rule and skips it under pressure, otherwise a positive

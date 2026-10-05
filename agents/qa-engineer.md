@@ -121,7 +121,7 @@ The visual gate (§ Design Comparison) is independent of `test_mode`.
 
 #### Q1.5 — Visual Evidence Ingestion
 
-Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a legacy `screenshots.md` counts only through its `## <TASK_ID>` sections; `worktask_id` from `state.json`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat the manifests as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (PL0 writes `requires_screenshots` via `detect-ui-change.sh`; QA only reads it.)
+Read every DV task's `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (a legacy `screenshots.md` counts only through its `## <TASK_ID>` sections; `worktask_id` from `state.json`). Per manifest row, append one line to `testing-N.md § Visual Evidence` with filename, captioned purpose, and verdict (`accepted` | `flagged` | `missing`). Cross-reference each screenshot against the acceptance criteria in `<plan_file>`: an AC naming a UI/output behavior that no screenshot captures gets a finding `AC-<id>: no visual evidence` in `testing-N.md § Notes`. When `metadata.requires_screenshots: false`, treat the manifests as advisory, skip the AC cross-reference, and record `Visual Evidence skipped per plan` in `§ Notes`. (The planner decides `requires_screenshots`; DV may only raise it; QA only reads it.)
 
 #### Q2–Q3 Completion
 
