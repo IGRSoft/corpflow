@@ -11,7 +11,7 @@ How corpflow delegates worktask stages to external plugin agents.
 - **Per-plugin stage→agent tables and error handling**: `${CLAUDE_SKILL_DIR}/references/plugin-protocols.md`.
 - **Plugin-side template**: `${CLAUDE_SKILL_DIR}/templates/CORPFLOW.md`, copied to an integrating plugin's root.
 - **Consultant return**: `consultant-return.v1` in `references/consultant-return-v1.md`, checked by `scripts/validate-consultant-return.sh`.
-- **Alias routing and project override**: `skills/shared/routing-matrix.md`. To set up a project override, scaffold from `${CLAUDE_SKILL_DIR}/templates/PROJECT-CORPFLOW.md`.
+- **Alias routing and project override**: `skills/shared/routing-matrix.md`. To set up a project (or user-scope, `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md`) override, scaffold from `${CLAUDE_SKILL_DIR}/templates/PROJECT-CORPFLOW.md`.
 
 ## Implementation gate for external plugin commands
 

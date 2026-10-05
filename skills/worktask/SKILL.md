@@ -312,18 +312,24 @@ A hard gate would fail that same legal chain. When it warns, name megatask's two
 
 ### Validation check 12 — Routing resolution
 
-12. **Routing resolution** (first stage only, after the state.json seed): read `CORPFLOW.md § Routing` at the project root, if present, and merge its `| Alias | Target |` rows over the defaults in `skills/shared/routing-matrix.md § Matrix`. Stamp the resolved map on the ledger as `state.routing: {"<alias>": "<plugin:agent>", …}` (only aliases that differ from the default need stamping; an absent map means all-default) plus `state.routing_source: "matrix" | "project-override"`. Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of the project file never splits routing across stages. No `CORPFLOW.md` or no `## Routing` heading → all-default, no rows, no warning.
+12. **Routing resolution** (first stage only, after the state.json seed): read `CORPFLOW.md § Routing` from the project root when that file has the heading, else from the user-scope `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md` (precedence is per heading: `routing-matrix.md § Resolution`), and merge its `| Alias | Target |` rows over the defaults in `skills/shared/routing-matrix.md § Matrix`. Stamp the resolved map on the ledger as `state.routing: {"<alias>": "<plugin:agent>", …}` (only aliases that differ from the default need stamping; an absent map means all-default) plus `state.routing_source: "matrix" | "project-override" | "user-override"`.
+
+#### Check 12 — audit rows and lifecycle
+
+Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of either file never splits routing across stages. No `## Routing` heading in either file → all-default, no rows, no warning.
 
 ### Validation check 13 — Model/effort resolution
 
 13. **Model/effort resolution** (first stage only, right after check 12): run `state-patch.sh
     --resolve-models` before PL0 is dispatched. Merges `CORPFLOW.md § Models`, fail-open per row,
-    over the built-in matrix, via `model-matrix-lib.sh`. Stamps `state.models` for all sixteen
-    agents (unlike check 12's differences-only map) plus `state.models_source`. PL0 reads this
+    over the built-in matrix, via `model-matrix-lib.sh`; the file is picked per heading like check
+    12's (project root, then user scope). Stamps `state.models` for all sixteen agents (unlike
+    check 12's differences-only map) plus `state.models_source` (`matrix` | `project-override` |
+    `user-override`). PL0 reads this
     map itself: `model-matrix.sh --resolve <agent>` (`product-manager.md`'s dedicated Bash grant)
     checks `state.models` first, then `CORPFLOW.md`, then the matrix, and PL0 pastes the pair into
     `--task-create`'s `--metadata`; `--task-create` does not fill it from the map. No
-    `CORPFLOW.md`/`## Models` → all rows `"matrix"`.
+    `## Models` in either file → all rows `"matrix"`.
 
 ### On validation failure
 

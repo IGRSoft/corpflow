@@ -239,7 +239,7 @@ Both rows follow the registered row contract (`skills/agent-coordination/SKILL.m
 {"ts":"<ISO-8601 UTC>","actor":"qa-engineer","action":"plugin_unavailable","subject":"QA0","result":"error","task_id":"QA0","metadata":{"plugin":"android-developer","reason":"plugin_unavailable","alias":"corpflow:android-ui-verifier","override_target":null,"leg_id":"UI-2"}}
 ```
 
-`platform` is `apple`/`android`; `reason` is the leg's `Reason`; `override_target` is the override target or `null`. Add `"routing_source":"project-override"` to `delegation` rows with project overrides.
+`platform` is `apple`/`android`; `reason` is the leg's `Reason`; `override_target` is the override target or `null`. Add `"routing_source"` (`state.routing_source`: `"project-override"` or `"user-override"`) to `delegation` rows with overrides.
 
 #### Record — table structure
 

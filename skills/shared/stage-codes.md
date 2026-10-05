@@ -10,8 +10,8 @@ Single source of truth for worktask stage codes.
 
 Every agent's default model and effort, one row per `agents/*.md`. The stage tables map a code
 to its agent; the pair lives only here. Extracted by `model-matrix-lib.sh` and resolved via
-`model_resolve`, with `CORPFLOW.md § Models` as the project override. See § Model and Effort
-Lookup for the join.
+`model_resolve`, with `CORPFLOW.md § Models` as the override (project root, else user scope:
+`routing-matrix.md § Resolution`). See § Model and Effort Lookup for the join.
 
 | Agent | Model | Effort |
 |-------|-------|--------|

@@ -94,8 +94,8 @@ For a specialist outside these rows, read `skills/shared/platform-detection.md` 
 
 The rows above copy the default targets in `skills/shared/routing-matrix.md § Matrix`
 (bats-validated). Before dispatching, resolve per `routing-matrix.md § Resolution`:
-`state.routing` in `.context/state.json`, else the user-project-root `CORPFLOW.md § Routing`,
-else the defaults here. An override replaces the platform's plugin wholesale — dispatch the
+`state.routing` in `.context/state.json`, else `CORPFLOW.md § Routing` at the user project root,
+then at user scope, else the defaults here. An override replaces the platform's plugin wholesale — dispatch the
 override target and let it specialize internally. An override target missing from `tools:` cannot
 be dispatched: implement in-process and record `override <id> not granted` in `§ Decisions`.
 

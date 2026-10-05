@@ -7,10 +7,11 @@
 #   Path defaults: `--resolve` and `--resolved-json` take optional [state_path]
 #   [corpflow_md_path]. When omitted they are derived from the same root ladder
 #   state-patch.sh uses (`corpflow_context_dir`: CONTEXT_DIR, WORKSPACE_ROOT,
-#   CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — state.json inside it, CORPFLOW.md
-#   beside it. Without this the documented bare `--resolve <agent>` call read only the
+#   CLAUDE_PROJECT_DIR, git toplevel, resolve-root.sh) — state.json inside it, and the
+#   CORPFLOW.md `corpflow_md_locate` picks for `## Models` (project root first, then the
+#   user-scope file). Without this the documented bare `--resolve <agent>` call read only the
 #   built-in matrix, so a `state.models`/`CORPFLOW.md § Models` override never reached the
-#   pair PL0 pastes into `--task-create`. An unresolvable root degrades to matrix-only.
+#   pair PL0 pastes into `--task-create`. An unresolvable root still reads the user-scope file.
 #
 # @exitcode 2 usage error
 # @exitcode 3 model_matrix_rows extraction failure (see model-matrix-lib.sh)
@@ -47,12 +48,13 @@ _mm_default_paths() {
   if command -v corpflow_context_dir > /dev/null 2>&1; then
     ctx=$(corpflow_context_dir 2> /dev/null) || ctx=""
   fi
-  [ -n "$ctx" ] || return 0
-  [ -n "$_mm_state" ] || _mm_state="${ctx}/state.json"
+  if [ -z "$_mm_state" ] && [ -n "$ctx" ]; then
+    _mm_state="${ctx}/state.json"
+  fi
   if [ -z "$_mm_corpflow" ]; then
-    local root="$ctx"
-    case "$root" in */.context) root="${root%/.context}" ;; esac
-    _mm_corpflow="${root}/CORPFLOW.md"
+    local hit=""
+    hit=$(corpflow_md_locate "$ctx" '## Models') || hit=""
+    _mm_corpflow="${hit%%$'\t'*}"
   fi
   return 0
 }
