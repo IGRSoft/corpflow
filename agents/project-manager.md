@@ -90,7 +90,8 @@ subtraction does not hide it: it stays in this check's scope.
 
 #### FN multi-stream arm
 
-More than one non-skipped DV task → follow `skills/worktask/references/fn-multi-stream.md`; one DV
+More than one non-skipped DV task → follow `skills/worktask/references/fn-multi-stream.md`, which
+starts with `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh plan`; one DV
 task → skip.
 
 #### Conductor attachments
