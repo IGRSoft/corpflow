@@ -604,3 +604,114 @@ mk_related_layout() {
   run dangling_related_targets "$PLUGIN_ROOT"
   assert_output ""
 }
+
+# --- frontmatter validity and user-invoked targets -------------------------------
+
+# A plain YAML scalar cannot carry `: ` or end in `:`. Such a value makes the whole
+# frontmatter unparseable, and the loader then drops the file without an error, so
+# the skill or agent silently disappears. Quoted, block (`|`, `>`) and flow values
+# are exempt because YAML allows the colon inside them.
+unquoted_frontmatter_colons() {
+  local f
+  ( cd "$1" || return 1
+    for f in $(git ls-files -- 'agents/*.md' 'commands/*.md' 'skills/*/SKILL.md' 'skills/*/*/SKILL.md'); do
+      awk -v f="$f" '
+        NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+        /^---[[:space:]]*$/ { exit }
+        /^[A-Za-z0-9_-]+:[[:space:]]/ {
+          v = $0; sub(/^[A-Za-z0-9_-]+:[[:space:]]+/, "", v)
+          if (v ~ /^["\047|>\[{]/) next
+          if (index(v, ": ") || v ~ /:[[:space:]]*$/) print f ":" NR ": " $1
+        }' "$f"
+    done
+    return 0 )
+}
+
+# Names a skill answers to when its frontmatter sets disable-model-invocation: true:
+# the frontmatter `name` and the directory basename.
+user_invoked_skills() {
+  local f
+  ( cd "$1" || return 1
+    for f in $(git ls-files -- 'skills/*/SKILL.md' 'skills/*/*/SKILL.md'); do
+      awk 'NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+           /^---[[:space:]]*$/ { exit }
+           /^disable-model-invocation:[[:space:]]*true[[:space:]]*$/ { hit = 1 }
+           /^name:[[:space:]]/ { n = $2; gsub(/["\047]/, "", n) }
+           END { if (hit) { if (n != "") print n; exit 0 } exit 1 }' "$f" \
+        && basename "$(dirname "$f")"
+    done | LC_ALL=C sort -u
+    return 0 )
+}
+
+# user_invoked_skill_calls <plugin-root>
+# One `<file>:<line> -> <skill>` row per imperative Skill() call whose target only a
+# user may invoke. The runtime refuses that call, so the instruction can never run.
+user_invoked_skill_calls() {
+  local root="$1" blocked f l n c t
+  blocked="$(user_invoked_skills "$root")"
+  [ -n "$blocked" ] || return 0
+  ( cd "$root" || return 1
+    for f in $(git ls-files -- 'agents/*.md' 'commands/*.md' 'skills/**/*.md'); do
+      while IFS= read -r l; do
+        [ -n "$l" ] || continue
+        n="${l%%:*}"
+        while IFS= read -r c; do
+          t="$(printf '%s\n' "$c" | sed -nE 's/[^"]*"([^"]+)".*/\1/p' | sed -E 's/^[a-z][a-z0-9-]*://')"
+          [ -n "$t" ] && printf '%s\n' "$blocked" | grep -qxF "$t" \
+            && printf '%s:%s -> %s\n' "$f" "$n" "$t"
+        done <<< "$(printf '%s\n' "${l#*:}" | grep -oE 'Skill\(\{?[^)]*')"
+      done <<< "$(_imperative_skill_lines "$f")"
+    done
+    return 0 )
+}
+
+# A tree that trips neither predicate; prints its root. Negative controls: a quoted
+# and a folded value carrying `: `, and a table-cell Skill() mention of the
+# user-invoked skill.
+mk_frontmatter_layout() {
+  local root
+  root="$(mk_tmpworkdir)"
+  mk_git_fixture --dir "$root" \
+    --file 'skills/manual/SKILL.md:---\nname: manual\ndescription: "Run by hand: never by a model"\ndisable-model-invocation: true\n---\n\nx\n' \
+    --file 'skills/auto/SKILL.md:---\nname: auto\ndescription: >\n  Folded: still valid\n---\n\nx\n' \
+    --file 'agents/caller.md:---\nname: caller\ntools: Read, Skill\n---\n\nRun `Skill("corpflow:auto")`.\n\n| Entry | `Skill("manual")` |\n' >/dev/null
+  printf '%s\n' "$root"
+}
+
+@test "resolver: a well-formed frontmatter tree trips neither predicate" {
+  local root
+  root="$(mk_frontmatter_layout)"
+  run unquoted_frontmatter_colons "$root"; assert_output ""
+  run user_invoked_skill_calls "$root"; assert_output ""
+}
+
+@test "resolver: an unquoted frontmatter value containing ': ' is named" {
+  local root
+  root="$(mk_frontmatter_layout)"
+  printf -- '---\nname: auto\ndescription: Use when: the user asks\n---\n\nx\n' \
+    > "$root/skills/auto/SKILL.md"
+  run unquoted_frontmatter_colons "$root"
+  assert_output "skills/auto/SKILL.md:3: description:"
+}
+
+@test "resolver: an imperative Skill() call into a user-invoked skill is named" {
+  local root
+  root="$(mk_frontmatter_layout)"
+  printf -- '---\nname: caller\ntools: Read, Skill\n---\n\nRun `Skill({skill: "corpflow:manual"})`.\n' \
+    > "$root/agents/caller.md"
+  run user_invoked_skill_calls "$root"
+  assert_output "agents/caller.md:6 -> manual"
+}
+
+@test "contract: every top-level frontmatter value in this repo is valid YAML on colons" {
+  run unquoted_frontmatter_colons "$PLUGIN_ROOT"
+  assert_output ""
+}
+
+# Guarded non-vacuous: the repo must hold at least one user-invoked skill, or the
+# empty output below proves nothing.
+@test "contract: no imperative Skill() call in this repo targets a user-invoked skill" {
+  [ -n "$(user_invoked_skills "$PLUGIN_ROOT")" ]
+  run user_invoked_skill_calls "$PLUGIN_ROOT"
+  assert_output ""
+}

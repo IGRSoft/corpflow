@@ -11,7 +11,7 @@
 #                 stdout. The PR-body composer (FN agent / FN PR flow /
 #                 conductor-attachments skeleton, and adhoc-visual-evidence.sh for
 #                 a PR opened outside a worktask) inserts it between ## Test plan
-#                 and ## Notes. Empty stdout ⇒ insert nothing (flag false / no
+#                 and ## Merge danger. Empty stdout ⇒ insert nothing (flag false / no
 #                 captures). Callers invoke UNCONDITIONALLY; gating lives here.
 #                 Idempotent: a second run replays the first run's hosted URLs from
 #                 the emission cache instead of re-uploading. --force re-hosts.
@@ -103,7 +103,7 @@ if [ ! -r "$_STATE_READ_LIB" ]; then
   printf >&2 'attach-visual-evidence: plugin install broken — state-read-lib.sh not found\n'
   exit 2
 fi
-# shellcheck source=../../shared/lib/state-read-lib.sh
+# shellcheck source=../../shared/lib/state-read-lib.sh disable=SC1091  # sourced from a runtime path; lint runs without -x
 . "$_STATE_READ_LIB"
 
 # Shared audit-row appender. `[ -r ]` before the `.`: a bare `.` on a missing file is a
@@ -113,7 +113,7 @@ if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'attach-visual-evidence: plugin install broken — audit-lib.sh not found\n'
   exit 2
 fi
-# shellcheck source=../../shared/lib/audit-lib.sh
+# shellcheck source=../../shared/lib/audit-lib.sh disable=SC1091  # sourced from a runtime path; lint runs without -x
 . "$_AUDIT_LIB"
 
 audit_av() {
@@ -897,7 +897,7 @@ if [ "${1:-}" = "--self-test" ]; then
   SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/attach-visual-evidence-selftest.sh"
   if [ -r "$SELFTEST_LIB_PATH" ]; then
     # shellcheck source=attach-visual-evidence-selftest.sh
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090,SC1091  # path built at runtime; lint runs without -x
     . "$SELFTEST_LIB_PATH"
   else
     printf >&2 'attach-visual-evidence: self-test harness unreachable at %s — plugin install broken\n' \

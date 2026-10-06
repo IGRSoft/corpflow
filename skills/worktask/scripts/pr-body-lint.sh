@@ -19,7 +19,8 @@
 #         taken and the reader cannot see any of them.
 #     P3  an image reference that is not an absolute https:// URL (relative and
 #         local paths never resolve in a PR/issue body).
-#     P4  a missing required section (Motivation / Changes / Test plan) or a
+#     P4  a missing required section (Motivation / Changes / Test plan /
+#         Merge danger) or a
 #         missing `Closes #<N>` trailer. The trailer arm fires only when an issue
 #         anchor resolves (git-conventions.md § No issue anchor); with none, a body
 #         without a closing line is compliant, matching `validate-pr`'s degrade.
@@ -66,14 +67,14 @@ STRICT="${CORPFLOW_PR_BODY_STRICT:-0}"
 _resolve_script_dir() {
   local src="${BASH_SOURCE[0]:-$0}" dir
   while [ -h "$src" ]; do
-    dir=$(CDPATH= cd -- "$(dirname -- "$src")" && pwd -P)
+    dir=$(CDPATH='' cd -- "$(dirname -- "$src")" && pwd -P)
     src=$(readlink "$src")
     case "$src" in
       /*) ;;
       *) src="$dir/$src" ;;
     esac
   done
-  CDPATH= cd -- "$(dirname -- "$src")" && pwd -P
+  CDPATH='' cd -- "$(dirname -- "$src")" && pwd -P
 }
 SCRIPT_DIR="$(_resolve_script_dir 2> /dev/null)" || SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
 
@@ -202,10 +203,10 @@ scan_document() {
     [ "$images" -eq 0 ] && printf 'P2\t0\tVisual evidence section present but no inline images reached the reader\n'
   fi
 
-  # P4: required structure. `Test plan` mirrors fn-preflight-cmds.sh cmd_pr_body; the other
-  # three come from git-conventions.md § Pull Request Format.
+  # P4: required structure. `Test plan` mirrors fn-preflight-cmds.sh cmd_pr_body; the rest
+  # come from git-conventions.md § Pull Request Format.
   local h
-  for h in Motivation Changes "Test plan"; do
+  for h in Motivation Changes "Test plan" "Merge danger"; do
     grep -E -i -q "^#{1,6}[[:space:]]+${h}[[:space:]]*$" "$f" \
       || printf 'P4\t0\tmissing required section: ## %s\n' "$h"
   done
@@ -306,7 +307,7 @@ case "$MODE" in
     SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/pr-body-lint-selftest.sh"
     if [ -r "$SELFTEST_LIB_PATH" ]; then
       # shellcheck source=pr-body-lint-selftest.sh
-      # shellcheck disable=SC1090
+      # shellcheck disable=SC1090,SC1091  # path built at runtime; lint runs without -x
       . "$SELFTEST_LIB_PATH"
     else
       printf >&2 'pr-body-lint: self-test harness unreachable at %s — plugin install broken\n' \

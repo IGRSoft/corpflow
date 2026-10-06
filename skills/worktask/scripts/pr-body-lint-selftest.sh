@@ -46,6 +46,8 @@ Because.
 - did a thing
 ## Test plan
 - ran tests
+## Merge danger
+two-way: prose only. Blast radius: none.
 Closes #12
 '
   _expect clean-body            ""   "$CLEAN"
@@ -89,6 +91,14 @@ x
 - y
 Closes #1
 '
+  _expect p4-missing-merge-danger P4 '## Motivation
+x
+## Changes
+- y
+## Test plan
+- z
+Closes #1
+'
   # Both trailer arms are pinned with the anchor forced, never inherited from the
   # cwd: a self-test whose verdict depends on whether it ran inside a git checkout
   # with a `#NNN` in recent history is not pinning anything.
@@ -98,11 +108,15 @@ x
 - y
 ## Test plan
 - z
+## Merge danger
+two-way: y. Blast radius: none.
 '
   ISSUE_ANCHOR=42
   ISSUE_ANCHOR_RESOLVED=1
   _expect p4-missing-closes     P4   "$NO_TRAILER"
+  # shellcheck disable=SC2034  # read by pr-body-lint.sh, which sources this file
   ISSUE_ANCHOR=""
+  # shellcheck disable=SC2034  # read by pr-body-lint.sh, which sources this file
   ISSUE_ANCHOR_RESOLVED=1
   _expect p4-no-issue-anchor    ""   "$NO_TRAILER"
 
