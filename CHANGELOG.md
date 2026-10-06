@@ -5,8 +5,8 @@ All notable changes to this project are documented here. The format is based on 
 ## [Unreleased]
 
 Fixes the prompt-audit findings and comment gaps of #458, a reader-side root-resolution flaw, the
-FN/ST predecessor edges of #467, the writer's share of the reader guard (#468), and the planner-owned
-screenshot flag (#470).
+FN/ST predecessor edges of #467, the writer's share of the reader guard (#468), the planner-owned
+screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9..4588b32`.
 
 ### Added
 
@@ -14,6 +14,18 @@ screenshot flag (#470).
   ASD-STE100 at about 80%: single-topic sentences (procedural ≤20 words, descriptive ≤25), active
   voice, imperative steps, articles kept, one term per meaning, and tables or diagrams over prose
   for structure. technical-writer and the context-compression handoff rules cite it.
+- **`## Merge danger` PR section.** The PR format (`skills/shared/git-conventions.md`) and the FN
+  template and checklist (`conductor-attachments.md`) carry a reversal class (`one-way` or
+  `two-way`, with its reason) and a blast radius. `## Changes` leads with the smallest visual, and
+  `## Test plan` shows the failing-then-passing check or the changed output: "tests pass" alone is a
+  claim. `pr-body-lint.sh` P4 warns on a missing section (exit 0 unless `--strict`).
+- **Enforcement form for self-improvement proposals.** Each ST proposal is `mechanical` (a check:
+  lint rule, bats test, hook, or the wiring of an unwired one) or `judgement` (prose; a standards
+  rule targets the reviewer first). No new rule targets an always-loaded file, and each proposal
+  cites its diff hunk. Approved `mechanical` proposals go to workflow-engineer, `judgement` ones to
+  prompt-engineer.
+- **Two `skill-refs.bats` predicates.** One names an unquoted top-level frontmatter value that
+  contains `: `; the other names a `Skill(` call into a skill marked `disable-model-invocation: true`.
 
 ### Changed
 
@@ -50,6 +62,32 @@ screenshot flag (#470).
 - **Audit commands require `effort:`.** `prompt-audit`, `optimize-agent` and `create-agent` flag
   only a `model:` frontmatter key; `effort:` is required and equals the agent's matrix row.
 - `state-patch.sh` now shares the reader guard (`corpflow_inferred_ctx_ok`, #468); its exit-4 refusal no longer names the plugin root path.
+- **team-lead stream rules.** A shared registry file (changelog, string catalogue, config map)
+  belongs to one stream, or the streams are serialised; every new name two streams share is fixed
+  in the interface contract.
+- **DR re-review is scoped.** After a rework round, technical-lead checks the fixed findings and the
+  rework diff only; a new P1 or P2 outside it becomes a follow-up, and only a new P0 reopens review.
+- **A skipped test is not a pass.** `skills/shared/testing-strategy.md § Skipped tests`: runs report
+  their skip count, a skip caused by material a worktree lacks is recorded with its cause, and
+  `.worktreeinclude` is the remedy.
+- **Self-improvement proposals reach the agent their form names.** `/worktask` Phase 3, the
+  FN-gate Post-ST step and `/improve-yourself --apply` send `judgement` items to prompt-engineer
+  and `mechanical` items to workflow-engineer, one dispatch per form, in sequence. workflow-engineer
+  gains a Self-Improvement Patch Application section. An item with no valid `Enforcement:` value
+  (missing, or other than `mechanical` or `judgement`) is not applied; it is counted as skipped
+  and named to the user.
+- **One version-bump rule for applied proposals.** `skills/self-improvement/SKILL.md § Hand-off to
+  the applying agent` states it once: a target with frontmatter takes one `version:` bump, a
+  script, hook or bats file takes none. The same section says that a `mechanical` proposal passes
+  the Step 4 owning-file filter first and then targets a check file. `/improve-yourself`,
+  `/worktask` Phase 3, the FN-gate Post-ST step and workflow-engineer point to it.
+- stakeholder names both applying agents for approved proposals.
+- **One plugin-paths sentence in all 16 agents.** Each `## Plugin paths` section now reads
+  "Every `skills/`, `commands/` and `hooks/` path here", byte-identical across the agents.
+  `skills/worktask/references/pl0-procedure.md` names the same three prefixes for its paths.
+- The five scripts this release changes pass shellcheck at default severity with no output:
+  `attach-visual-evidence.sh`, `adhoc-visual-evidence.sh`, `pr-body-lint.sh`,
+  `pr-body-lint-selftest.sh` and `hooks/dv-screenshot-gate.sh`. Their behaviour is unchanged.
 
 ### Fixed
 
@@ -64,6 +102,25 @@ screenshot flag (#470).
 - FN and ST predecessor edges (#467): `QA→FN` when DC and RE are skipped, `DC→FN` only when DC ran
   and RE did not, and `RE→ST`/`DC→ST`/`QA→ST` when FN is skipped.
 - Ledger readers (`corpflow_context_dir`, `mailbox-lib`, `brief-compose`, the model-switch hooks) no longer hand a cwd nested inside the plugin checkout that checkout's live `.context`; they refuse like the #457 writer does. A linked worktree at its toplevel still resolves the main ledger (#458).
+- The screenshot-gate block text names the Bash entry point
+  (`skills/dv-screenshot-capture/scripts/capture.sh --task-id <id>`) instead of a skill route DV
+  does not hold; the `hook-monitoring.md` example follows.
+- The `writing-style` skill description fits the 250-character cap. The Core rules section of
+  `skills/shared/writing-style.md` is split under two sub-headings to fit the 1000-character
+  section cap; no rule changed.
+- The 0600 mode tests in `tests/shell/skills/append-labels.bats` and
+  `tests/shell/skills/pipeline-counts.bats` no longer fail on macOS, where `ls -l` appends `@` for
+  extended attributes. The scripts were already correct.
+- `tests/selection/matrix.tsv` row R17 lists `skills/shared/writing-style.md` with the other
+  reviewed prose docs that have no executable contract, so test-selection M5 passes again.
+- The `## Visual evidence` block goes between `## Test plan` and `## Merge danger`, the order in
+  `skills/shared/git-conventions.md`. `skills/dv-screenshot-capture/SKILL.md` no longer names
+  `## Notes` as the end point.
+- The header comments of `attach-visual-evidence.sh` and `adhoc-visual-evidence.sh` now say that
+  the Visual evidence block goes between Test plan and Merge danger.
+- Doc references that did not resolve now pass the doc-option check: team-lead's path-character
+  regex is anchored, technical-lead cites `skills/worktask/SKILL.md`, the settings file is named
+  per project, and the git-conventions branch examples move out of code spans. No rule changed.
 
 ## [4.1.1] — 2026-10-05
 
@@ -113,7 +170,7 @@ an earlier corpflow should resync against them.
   High score, recording a skipped consult otherwise.
 - Docs: `routing-matrix.md § Resolution` and its three-kind `CORPFLOW.md` table, `PROJECT-CORPFLOW.md`
   (valid at user scope; reads both `## Routing` and `## Models`, not one heading),
-  `templates/CORPFLOW.md`, `plugin-contract.md`, validation checks 12/13 and the README describe
+  `skills/cross-plugin-handoff/templates/CORPFLOW.md`, `plugin-contract.md`, validation checks 12/13 and the README describe
   the user-scope fallback.
 
 ### Tests
@@ -268,7 +325,7 @@ out-of-scope.
   cap (`commands/prompt-audit.md` and `skills/worktask/references/handoff-protocol.md`).
 - **Stale cross-file section citations**: five distinct broken references repaired across nine files,
   including resume-procedure path correction, ceiling-count update, auto-delegation file/anchor fix,
-  escalation-guard heading refinement, and four bare `references/` path qualifications.
+  escalation-guard heading refinement, and four bare references/ path qualifications.
 - **Release-tooling version line**: `MEMORY.md` version record updated to 4.0.33 with current-branch
   status corrected.
 
@@ -456,12 +513,12 @@ Also carries a second parallel effort: closes all 26 prompt-audit findings (8 Cr
 
 #### Fixed
 
-- **Grant coverage (Critical C1–C3, C13):** five worktask scripts (`branch-name.sh`, `refine-branch-target.sh`, `publish-pl-issue.sh`, `handoff-harness.sh`, `effort-ladder.sh`) added to `commands/worktask.md:allowed-tools`; three megatask scripts added to `commands/megatask.md`; `commands/request-plan.md` matcher gains `bash ` prefix and `:*`; `agents/designer.md` gains `ToolSearch` grant with conditional step-1 delegation in `design-review.md`.
+- **Grant coverage (Critical C1–C3, C13):** five worktask scripts (`branch-name.sh`, `refine-branch-target.sh`, `publish-pl-issue.sh`, `handoff-harness.sh`, `effort-ladder.sh`) added to `commands/worktask.md` `allowed-tools`; three megatask scripts added to `commands/megatask.md`; `commands/request-plan.md` matcher gains `bash ` prefix and `:*`; `agents/designer.md` gains `ToolSearch` grant with conditional step-1 delegation in `design-review.md`.
 - **Audit command write grants (Critical C2):** `commands/prompt-audit.md`, `docs-audit.md`, `arch-debt.md` granted `Write, Edit` with `.context/audits/` output paths; `test-coverage.md` granted `Write`; all four gain `# tools:` comments.
 - **Tool-grant comments (Critical C13, Warning W19):** nine bare `Bash`/`Task` grants annotated with `# tools:` comments; `appstore.md` narrowed to `Task(corpflow:release-engineer)`.
 - **G3 invocation gate polarity (Critical C5):** `agents/prompt-engineer.md` restates G3 as "Does it **lack** standalone value…" (shared polarity with G1/G2); G4 tie-breaker re-anchored; `skills/csv-export-templates/SKILL.md` and `skills/preview-ensurer/SKILL.md` re-verified (both confirm pipeline-only via `disable-model-invocation: true`); `skills/dv-screenshot-capture/SKILL.md` scores G3 = no, gains flag.
 - **Model tier correction (Critical C6):** `commands/create-agent.md` and `commands/prompt-audit.md` changed from `model: sonnet` to `model: opus`.
-- **Link resolution (Critical C7):** seven `related:` entries in `skills/agent-coordination/SKILL.md` and `skills/estimation-methodology/SKILL.md` rewritten to file-relative form (`../worktask/SKILL.md`).
+- **Link resolution (Critical C7):** seven `related:` entries in `skills/agent-coordination/SKILL.md` and `skills/estimation-methodology/SKILL.md` rewritten to file-relative form (../worktask/SKILL.md).
 - **Accessibility version (Critical C8):** WCAG 2.1 → 2.2 across `agents/designer.md`, `commands/design-review.md`, `commands/design-accessibility.md`.
 - **Section ordering (Warning W22):** example sections repositioned (W22) in `commands/milestone.md`, `ethics-review.md`; `tech-code-review.md` reordered with `## Your Job (read before you review)` preamble moved.
 - **Argument-hint fixes (Warning W23):** `milestone.md` gains `|all`, `megatask.md` fixed to `<N>`.
@@ -730,7 +787,7 @@ reduced the number of *implementations*, not the number of lines.
 - **`label-align.py` weighted the held-out tranche against a population it was never drawn
   from.** Strata were re-derived as `(split, grader_verdict)` rather than taken from the draw
   `sample-for-labelling.py` actually cut (`dev/<verdict>` over the dev split, plus
-  `test/held-out` taken whole). All 18 labelled tranche cases therefore landed in a stratum
+  test/held-out taken whole). All 18 labelled tranche cases therefore landed in a stratum
   whose population was the entire 82-case `test` split and carried a weight near 4.6 — an
   extrapolation of a deliberately harder tail across cases it does not describe, when weighting
   assumes a random draw within the stratum. Two faults travelled with it: `--min-id` and
@@ -743,8 +800,8 @@ reduced the number of *implementations*, not the number of lines.
   as a frame mismatch, and `--p-obs` supplies the observed rate when the gitignored responses
   are gone. Six regression tests. **Published numbers restated:** 0.3.0's corrected rate moves
   87% [82–92] → **86% [82–90]** and its held-out row 88% [81–88] → **89% [83–100]** on one human
-  negative; 0.2.0's corrected rate is **withdrawn** outright, since its draw records `dev/pass`
-  25 / `dev/fail` 17 against labels carrying 30 / 12. Every label-only quantity — TPR, TNR, the
+  negative; 0.2.0's corrected rate is **withdrawn** outright, since its draw records dev/pass
+  25 / dev/fail 17 against labels carrying 30 / 12. Every label-only quantity — TPR, TNR, the
   confusion matrices, the paired A/B, the flip and contamination analyses — is unaffected, as is
   the fully-labelled 0.0.1 baseline.
 - **`build-review-page.py`'s label store was scoped by eval-set version but not by skill.**
@@ -776,10 +833,10 @@ reduced the number of *implementations*, not the number of lines.
   tells every stage to emit when it has nothing new to report. The refusal now requires both nothing
   kept **and** something explicitly rejected; an empty, nothing-rejected payload is a no-op success.
 - **`base-sanity` resolved its base to a stale local `develop` ref rather than its remote-tracking
-  counterpart, found by dogfooding it in this run** (`0bd7df5`). `refs/heads/develop` sat nine commits
-  behind `refs/remotes/origin/develop`, and `HEAD` was exactly equal to `origin/develop`. Against the
+  counterpart, found by dogfooding it in this run** (`0bd7df5`). refs/heads/develop sat nine commits
+  behind refs/remotes/origin/develop, and `HEAD` was exactly equal to origin/develop. Against the
   stale local ref the check reported "a PR against develop would carry 55 files" and blocked; against
-  `origin/develop` the diff is 0 files — the check built to catch a wrong base picked the wrong base
+  origin/develop the diff is 0 files — the check built to catch a wrong base picked the wrong base
   ref itself. `resolve_git_ref` now prefers `origin/<base>` over a diverged local ref, covered by AC-4a
   in `tests/shell/worktask/fn-preflight.bats`. The ladder still knows only the `origin` remote, so a
   fork workflow whose base tracks a different remote is not yet correct (gh#353).
@@ -791,7 +848,7 @@ reduced the number of *implementations*, not the number of lines.
 
 ### Evals: label pipeline repair, batch-6 captures, and 0.4.0 calibration
 
-- **`map-and-filter.sh` half-closed join dropped every hook and script edit from the label pipeline (#359).** `build-context-set.sh` Source 4 resolves audit-log basenames against four shapes: `hooks/`, `hooks/lib/`, `scripts/`, and `skills/*/scripts/`. Rule 1 only emitted `.md` prompt files as targets, making hooks and bundled scripts unmatchable by construction. Every user edit to a hook or helper script died at rule 17 DISCARD. Rule 1 widened to all four shapes, keeping test-file precedence and anti-recursion precedence intact. The fix is caller-scoped; the shared resolver is untouched. `evals/failure-labels.jsonl` received its first 7 rows (from 0 since 4.0.10); `map-and-filter.bats` expanded 9 → 13 tests (all pass).
+- **`map-and-filter.sh` half-closed join dropped every hook and script edit from the label pipeline (#359).** `build-context-set.sh` Source 4 resolves audit-log basenames against four shapes: hooks/, hooks/lib/, scripts/, and skills/*/scripts/. Rule 1 only emitted `.md` prompt files as targets, making hooks and bundled scripts unmatchable by construction. Every user edit to a hook or helper script died at rule 17 DISCARD. Rule 1 widened to all four shapes, keeping test-file precedence and anti-recursion precedence intact. The fix is caller-scoped; the shared resolver is untouched. `evals/failure-labels.jsonl` received its first 7 rows (from 0 since 4.0.10); `map-and-filter.bats` expanded 9 → 13 tests (all pass).
 
 - **Batch 6 (ids 213–270) and the first calibrated 0.4.0 rates.** The 26-case `adjacent` analysis (see `evals/findings/request-plan-0.4.0.md`) overturned the 0.3.0 reading: zero of batch 5's three labelled adjacent failures are genuine; the confound is the surface pool. Batch 6 was sized 30 buried / 18 adjacent / 10 absent to ground on the measured-genuine-negative pool (`buried`, registry-excluded surfaces) and the enumerated-registry surfaces (`adjacent`; confound repaired). No obvious or refute cases (the first yields no measurement; the second has a known false-negative floor). Corpus grew 201 → 259 (182 plan / 45 clarify / 32 refute). Two byte-identical captures recorded 259 cases each at imputed cost $207.10 and $209.65 (pair total $416.75, under $500 approved). Human labelling of a 60-case draw produced corrected 0.4.0 rates: **85% CI [81%, 91%]** (TPR 92%, **TNR 100% on 18 human negatives**, full-set); held-out **83% CI [70%, 100%]** (TPR 84%, **TNR 100% on 4 human negatives**). The held-out interval reaches 100% because n=4 — that is what four negatives look like. Corrected rates rest on capture #1 verdicts; the 17.1% run-to-run flip rate (below) means the CI covers sampling error only, not run-to-run variance. The 0.4.0 drifted-rule reconciliations (three copies of rule text, each contradicting the others) predicted a handful of affected cases against this noise band, so they were never measurable by a capture pair. **No delta is attributed to them** and the `evals.json` grading entry stands unamended.
 
@@ -810,8 +867,8 @@ All label-derived quantities carry their denominators explicitly. The 85% and 83
 - Three private base-ref ladders remain divergent from the canonical one in `branch-lib.sh` —
   `dv-tree-preflight.sh` (now documented as reduced, not unified), `attachments-preseed.sh`, and
   `adhoc-visual-evidence.sh`. The adhoc one diverges further than the other two: its own
-  `resolve_base_ref` falls back through the literals `origin/main`, `origin/master`, `main` and
-  `master`, which is the hardcoded-literal shape the canonical ladder documents as forbidden.
+  `resolve_base_ref` falls back through the literals origin/main, origin/master, main and
+  master, which is the hardcoded-literal shape the canonical ladder documents as forbidden.
   Unifying them was scoped out of this release deliberately: the resolver is on the preflight hot
   path and each additional caller changes the cost profile. They are correct for their own callers
   today; they are a consolidation debt, not a live defect.
@@ -1012,7 +1069,7 @@ makes a message's fate observable or removes a false negative from agent discove
   `allowed-tools`; both called it from their bodies without declaring it.
 - **Stratum-weighted calibration.** A labelling budget smaller than the corpus forces an enriched
   sample, and selecting on the grader's own verdict while measuring agreement with it biases both
-  rates. Each case now carries `population/sampled`; verified against the 0.0.1 labels, an enriched
+  rates. Each case now carries population/sampled; verified against the 0.0.1 labels, an enriched
   sample reads TPR 42% unweighted against a population truth of 63%, and 63% weighted.
 - **Seeded bootstrap confidence interval**, stdlib only — no point estimate, no interval.
 - **`sample-for-labelling.py`** — picks the labelling sample by design: even split across harness
@@ -1088,7 +1145,7 @@ makes a message's fate observable or removes a false negative from agent discove
   - **`SKILL.md § 4`'s "absent from the file it was blamed on" is bounded.** It licensed a plan for
     a defect the repo does not contain, which `§ 1`'s ask branch prohibits. It now covers only a
     file that exists whose defect sits elsewhere; anything else is `§ 1`'s, and `§ 1` wins.
-  - **`references/context-gathering.md` no longer states a stop condition.** It carried the
+  - **`skills/request-plan/references/context-gathering.md` no longer states a stop condition.** It carried the
     refuted 0.2.0 rule verbatim for a whole version while `SKILL.md` rejected it in as many words;
     eight responses stopped at a plausible neighbour. The section points at `SKILL.md` instead.
   - **All three tier-trigger copies reconciled to canon.** `handoff.md` listed "security review,
@@ -1125,7 +1182,7 @@ makes a message's fate observable or removes a false negative from agent discove
     responses on `absent` grounding named the ambiguity and planned anyway, executing the first rule
     correctly. The no-surface branch now precedes it, and folding is bounded to requests whose
     surface was found.
-  - **`references/handoff.md` reconciled with both.** Its flag-matches-the-body check keyed on
+  - **`skills/request-plan/references/handoff.md` reconciled with both.** Its flag-matches-the-body check keyed on
     anything the body argued, so a plan naming a credential path its search turned up would carry
     `--secure` — reintroducing the same escalation one layer down. It now compares the flag against
     what the body says the *request* needs. Found by the contradiction cross-read, not by a test.
@@ -1240,7 +1297,7 @@ initialised.
   `## Integration` section claimed use "by `workflow-engineer` for diagnostics" while
   `agents/workflow-engineer.md` never mentioned it. Nothing is lost:
   `skills/context-compression/` stays (four agents, `hooks/precompact-checkpoint.sh`,
-  `skills/worktask/SKILL.md`, `references/resume.md`, and a bats suite consume it), the
+  `skills/worktask/SKILL.md`, `skills/worktask/references/resume.md`, and a bats suite consume it), the
   "> 50% window → summarize completed stages" trigger lives in that skill rather than the command,
   and surviving compaction is already automatic through the `PreCompact` hook with no command in the
   loop.
@@ -1254,15 +1311,15 @@ initialised.
   deleted. What stays is everything that needed no data — the model cost tiers and selection matrix,
   per-effort thinking budgets, the five reduction strategies, prompt caching, and the cost
   estimation formula that `estimation-methodology` cites as canonical.
-- **`skills/worktask/scripts/status-view.sh` and `tests/shell/worktask/status-view.bats`**, in the
+- **skills/worktask/scripts/status-view.sh and tests/shell/worktask/status-view.bats**, in the
   same commit as the command that wrapped them. They had to move together: `coverage-proxy` C2
   reddens on a script with no `.bats` and C5 on a `.bats` orphaned from its script.
-- **`skills/worktask/scripts/attachments-preseed-test.sh`** — superseded twice over and unreachable.
+- **skills/worktask/scripts/attachments-preseed-test.sh** — superseded twice over and unreachable.
   It was a hand-rolled harness for what became `attachments-preseed.sh`, which is live, ships its
   own `--self-test`, and has a real suite. Its only references were `tests/COVERAGE.md`, its own
   bats (a test testing a test), and itself; it survived because commit `719d6e7` mechanically moved
-  every `references/*.sh` into `scripts/`.
-- **`skills/worktask-status/`** — the only skill directory a command removal deletes. Every other
+  every references/*.sh into scripts/.
+- **skills/worktask-status/** — the only skill directory a command removal deletes. Every other
   skill the removed commands touched has other consumers and stays.
 
 ### Changed
@@ -1277,7 +1334,7 @@ initialised.
   commands each opened with an `> **Apple-only.**` banner admitting they were misplaced in a
   platform-neutral plugin. They are now `apple-developer` 1.30.0's `gen-appstore-listing`,
   `gen-appstore-screenshots`, and `gen-appstore-iap`, with `skills/appstore-screenshots/` re-homed
-  as `skills/tooling/appstore-screenshots/` and its 16 layout tests migrated rather than dropped.
+  as skills/tooling/appstore-screenshots/ and its 16 layout tests migrated rather than dropped.
   `android-developer` 1.5.0 gains `gen-playstore-listing` and `gen-playstore-screenshots` — original
   authoring, not a port: Play's field budgets and asset rules differ field by field from App Store
   Connect's. Play Billing IAP is deferred.
@@ -1298,14 +1355,14 @@ initialised.
   deliberately no bare `corpflow:release-engineer` alias: it would collide with the agent of that
   name and redden the no-collision test immediately.
 - **`senior-developer-review` folds into `estimation-methodology`** as
-  `references/estimate-review.md`, and its step 8 stops being inert. `estimation-run.md:16` already
+  `skills/estimation-methodology/references/estimate-review.md`, and its step 8 stops being inert. `estimation-run.md:16` already
   listed "Senior review: platform-specific adjustments" while nothing on `/estimate`'s default path
   loaded the reference. `--detailed` now runs it inline when its existing trigger fires (complexity
   ≥ 15, or AR/ML/Vision, BLE/hardware, real-time camera, unknown third-party SDKs, background
   processing), with `--no-review` to opt out; `--review` stays for reviewing an *existing* estimate
   with `--focus`/`--update`, which the in-run step cannot do. The adjusted SP feed
   `### Budget Calculation`, so the budget is post-adjustment — `estimation-run.md`'s step order was
-  corrected to match. Two sections that arrived there by accident of the `skills/review/` rename
+  corrected to match. Two sections that arrived there by accident of the skills/review/ rename
   (Dependency Upgrade Review, Review Feedback Hygiene) move to `commands/tech-code-review.md`;
   neither adjusts a story point.
 - **Content the survivors cited as canonical was inlined, not dropped.** The business-case skeleton
@@ -1365,11 +1422,11 @@ initialised.
   claim carry its scope. `estimation-methodology` gains the rule that a quiet local tree — no
   `.context/`, no live `state.json`, a green local run — is not evidence about a failure the user is
   reporting.
-- **A required surface-check verdict in the plan template.** `references/plan-template.md` now
+- **A required surface-check verdict in the plan template.** `skills/request-plan/references/plan-template.md` now
   requires one line stating the tier verdict immediately before the trigger, the way
   `P2 — v1.1: none` requires an empty phase row to be stated. Five of the graded routing failures
   shared one shape: the check produced no visible output, so skipping it cost nothing.
-  `references/handoff.md` gains the matching consistency rule — a body arguing for a security review
+  `skills/request-plan/references/handoff.md` gains the matching consistency rule — a body arguing for a security review
   and a plain `/worktask` line are two different recommendations.
 - **`tests/shell/skills/request-plan-contracts.bats`** — the three mechanical parts of the
   cross-surface read: no rule surface names a command that does not resolve (the check that would
@@ -1379,8 +1436,8 @@ initialised.
 ### Fixed
 
 - **`skills/worktask/SKILL.md` ordered a skill that has never existed.** Its DR step emitted
-  `Skill("dev-code-review")` against `commands/dev-code-review.md`; there is no
-  `skills/dev-code-review/`. This is the exact defect class `tests/shell/skills/skill-refs.bats` was
+  `Skill("dev-code-review")` against commands/dev-code-review.md; there is no
+  skills/dev-code-review/. This is the exact defect class `tests/shell/skills/skill-refs.bats` was
   written for — its header names this very call — but the checker could not see it:
   `collect_skill_targets` globbed `agents/*.md` and `commands/*.md` only, and the call lives under
   `skills/`. It silently no-opped and the DR stage fell back to the command doc via
@@ -1403,7 +1460,7 @@ initialised.
   now names no sibling at all and points at § 4 as the authority — naming one is what made the file
   go stale twice (`/pm-requirements`, then `/pm-prioritize`). Step 3 claimed the trigger rule had
   "no exception" while § 4 has had exactly one since 0.1.0; it now cites that exception rather than
-  denying it. `references/handoff.md` still told XL work to emit no command, contradicting both § 4
+  denying it. `skills/request-plan/references/handoff.md` still told XL work to emit no command, contradicting both § 4
   and step 3 — XL now names its sub-tasks and triggers the first.
 - **`init-worktree.sh` resolved the base branch against the wrong repository.** Step 7 correctly
   uses `git -C "$repo_root"`, but `resolve_base_branch()` shelled out to `milestone-helpers.sh
@@ -1417,7 +1474,7 @@ initialised.
   `origin` happened to carry `develop`. Both arms now run in a fixture with a controlled remote, and
   the develop arm — which is what tells a working probe from one hardcoded to `master` — is covered
   for the first time.
-- **The escalation canon called a live failure standard work.** `estimation-methodology/SKILL.md`
+- **The escalation canon called a live failure standard work.** `skills/estimation-methodology/SKILL.md`
   said "a wedged task or a runaway batch is standard work" immediately above the test that decides
   it, so a reader who stopped at the example got the wrong answer. The example is now scoped to a
   task that has *stopped*, and a task that is both stuck and still failing escalates.
@@ -1432,7 +1489,7 @@ initialised.
 - **Eight eval grounding paths were repointed and two cases retired**, because
   `tests/python/test_skill_evals.py:182` asserts every case's grounding file exists and runs in CI.
   Prompts are untouched, so no `prompt_digest` moved and no human label was invalidated. Cases 98
-  and 114 grounded solely on `status-view.sh` and `skills/worktask-status/SKILL.md`; with no
+  and 114 grounded solely on status-view.sh and skills/worktask-status/SKILL.md; with no
   successor surface there is nothing to re-ground them on, so they join the `RETIRED` table and
   their ids stay open rather than renumbering. Case 74 retires for the same reason with
   `/context-status`: nothing else in the repo reports remaining context.
@@ -1588,7 +1645,7 @@ initialised.
   against the repo as their real subject, `cache-lint.sh` and `pr-body-lint.sh` in `--self-test`
   mode because they consume a `prompt-log.jsonl`/PR body that nothing here emits. Checkout depth is
   pinned per job: `fetch-depth: 0` on `test` (several bats shell out to git and diff against
-  `origin/master`) and `fetch-depth: 1` on `lint`. `permissions: contents: read`, no repository
+  origin/master) and `fetch-depth: 1` on `lint`. `permissions: contents: read`, no repository
   secret is referenced, and `concurrency` cancels superseded PR runs only — never a `master` run,
   which would leave `master` unverified.
 - **`tests/shell/meta/ci-workflow.bats` — the workflow's content as an executable contract**,
@@ -1717,7 +1774,7 @@ initialised.
   worktask init into `state.routing` (`worktask/SKILL.md § Validation check 12`), with
   `routing_override` / `routing_override_partial` audit rows. Template:
   `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md`; the `## Routing` heading is
-  now reserved and forbidden in the plugin-side `templates/CORPFLOW.md`. Location decides
+  now reserved and forbidden in the plugin-side `skills/cross-plugin-handoff/templates/CORPFLOW.md`. Location decides
   which of the two same-named files applies (`plugin-contract.md § Project-level routing
   override`).
 - Stage-dispatching agents (`developer`, `software-architector`, `security-reviewer`,
@@ -1732,7 +1789,7 @@ initialised.
   `security-auditor`, `test-generator`, `dependency-manager`) — dispatching those either
   fails or silently resolves to apple-developer's agents. Now `and-*`, matrix-validated.
 - `plugin-protocols.md` apple-developer table lacked the DR row every other plugin has.
-- `commands/pm-milestone.md` defaulted `--platform apple` to `ios-developer` while every
+- commands/pm-milestone.md (now `commands/milestone.md`) defaulted `--platform apple` to `ios-developer` while every
   other platform (and every other file) defaults to the entry router.
 - `compatible-plugins.md` still listed the retired `workflow-integration` skill column
   (replaced by the root `CORPFLOW.md` contract in 4.0.13).
@@ -1760,7 +1817,7 @@ initialised.
   frontmatter), a stale atomic-merge snippet in `stage-contracts.md` missing the mandated mkdir
   spinlock, an emergency stage list missing DR, six dangling section anchors, a stale
   `skills/README.md` index (12 missing entries), and mis-labeled rule-range headings in
-  `self-improvement/references/target-mapping.md`.
+  `skills/self-improvement/references/target-mapping.md`.
 - Three `argument-hint` fields that had drifted from their command's documented options:
   `appstore-iap` and `appstore-screenshots` gained the `--dry-run` (and `--path <dir>`) flags they
   already accept, and `appstore-info` dropped a positional `<app name or bundle ID>` it no longer
@@ -1827,7 +1884,7 @@ initialised.
   now resolves `<name>-selftest.sh` to its owning hook's `.bats` by chaining through the alias
   table, restoring scoped runs for hook work.
 
-- **`commands/agent-report.md` was never registered in `marketplace.json`**, leaving the command
+- **commands/agent-report.md was never registered in `marketplace.json`**, leaving the command
   invisible to the marketplace since it was added.
 
 - **Six red tests, all pre-existing.** `env -u` after a `NAME=VALUE` operand is a no-op on BSD
@@ -1953,10 +2010,10 @@ initialised.
   `benchmark/README.md` disagreed on the same suites (202 vs 344 harness tests, 37 vs 52
   skill-script tests). Every figure is re-derived: **924** bats across **60** files, 52 Python
   skill-script, 350 Python harness, 48 Swift — **1374** total. The hand-maintained coverage
-  roster in `tests/README.md` is replaced by a pointer to `meta/coverage-proxy.bats`, which
+  roster in `tests/README.md` is replaced by a pointer to `tests/shell/meta/coverage-proxy.bats`, which
   computes the target set at run time; a prose count that nothing enforces is what drifted.
 
-- **Two sections were over the 1000-char lint cap.** `agent-coordination/SKILL.md`'s plugin-hook
+- **Two sections were over the 1000-char lint cap.** `skills/agent-coordination/SKILL.md`'s plugin-hook
   writers table (1178) had the same lifecycle-field sentence duplicated across two rows and an
   inline aside on the `state_transition` hook path; both are factored into a `Plugin-hook row
   fields` subsection. `shared/state-ledger.md`'s write-operations section (1137) gained an
@@ -2014,8 +2071,8 @@ initialised.
   under more than one parent directory, anything that reconstructs a worktree path by
   convention rather than from `metadata.workspace_path` must guess a prefix — and can hand
   a stage another stream's tree. In a measured four-stream run a stream assigned
-  `.claude/worktrees/dv3-web` was given `.worktrees/dv0-service` at spawn on four
-  consecutive dispatches, because `.worktrees/` held exactly one entry for the glob to land
+  .claude/worktrees/dv3-web was given .worktrees/dv0-service at spawn on four
+  consecutive dispatches, because .worktrees/ held exactly one entry for the glob to land
   on; normalising to a single parent fixed it on the next dispatch. The preflight now names
   the condition and the parents involved. Advisory, not blocking: the stream that runs it
   has already passed the assigned-tree check, and the condition harms a different one.
@@ -2053,13 +2110,13 @@ Two premises worth recording, because both were checked rather than assumed:
   tracks of one stage resolve to a single unambiguous stage code where bare codes forced a
   fail-open.
 - **BREAKING — the four Task tools are removed from all 16 agents' `tools:` frontmatter**, and from
-  `commands/worktask.md`, `commands/megatask.md`, `commands/cost-report.md`,
-  `commands/context-status.md`, `commands/test-report.md`, `commands/improve-yourself.md`.
+  commands/worktask.md, commands/megatask.md, commands/cost-report.md,
+  commands/context-status.md, commands/test-report.md, commands/improve-yourself.md.
 - **BREAKING — `metadata.context_files` and the F1 fallback are deleted.** `context_files` existed
   solely as the degraded path for "state.json is absent". The ledger is mandatory now, so that path
   cannot occur and a second context-delivery mechanism is exactly the kind of dual path this
   release removes. `context_refs` + `state_file` is the whole contract.
-- `skills/shared/task-system.md` → **`skills/shared/state-ledger.md`**, with all 33 inbound
+- skills/shared/task-system.md → **`skills/shared/state-ledger.md`**, with all 33 inbound
   references updated (two of them structured frontmatter deps, not prose).
 - `.claude-plugin/plugin.json` — the `PostToolUse` audit matcher moves from
   `TaskUpdate|TaskCreate|Write|Edit` to `Bash|Write|Edit`. Without this the stage-transition audit
@@ -2126,7 +2183,7 @@ false when checked against the tree, so the corrections are part of the release:
   the reader cannot find loses its credibility on the first line, so the playbook is written
   **condition-first** instead.
 - **Git has no per-worktree exclude.** `.git/worktrees/<name>/info/exclude` is simply not consulted
-  (verified on git 2.54); only the common dir's `info/exclude` works. So the exclusion is
+  (verified on git 2.54); only the common dir's info/exclude works. So the exclusion is
   necessarily checkout-wide, and the release documents that consequence rather than hiding it.
 - **The "one-line script fix" was not one line.** Three candidate mechanisms with materially
   different blast radius, one of which pollutes every future commit.
@@ -2142,13 +2199,13 @@ false when checked against the tree, so the corrections are part of the release:
   *integrated*, not whether a branch may be rebased before review.
 - **Scratch metadata excluded at worktree creation**, not reactively. `init-worktree.sh` gains
   `exclude_scratch`, writing `/workspace.json` and `/.worktrees/` into the git **common** dir's
-  `info/exclude` *before* `git worktree add`, behind an exact-line `grep -qxF` guard so repeated
+  info/exclude *before* `git worktree add`, behind an exact-line `grep -qxF` guard so repeated
   init cannot duplicate entries, with a provenance header naming the script that wrote them. The
   motivating failure was an unscoped stage-everything command during a conflict resolution that
   committed the batch's own scratch file to the shared branch. It never touches the tracked
   `.gitignore` and never writes a stored setting; `--dry-run` announces and writes nothing. The
   checkout-wide reach is bounded and documented: an ignore rule can never mask a **tracked** file,
-  and the patterns are anchored, so a nested `src/sub/workspace.json` stays visible.
+  and the patterns are anchored, so a nested src/sub/workspace.json stays visible.
 - **`## Conflict Resolution` rules** in `skills/megatask/SKILL.md`. Rule 1: DI-container and
   coordinator-shaped conflicts are hand-resolved by a human and **never** script-merged — a scripted
   "keep both sides" resolver mis-joined an argument list (a missing separator, because the other
@@ -2239,7 +2296,7 @@ false when checked against the tree, so the corrections are part of the release:
   configuration, so nothing catches a Linux regression automatically. A Linux job is recommended
   before the plugin is relied on off-macOS.
 - **The worktree exclusion is verified on git 2.54 only.** It depends on the per-worktree
-  `info/exclude` *not* being consulted while the common-dir one is — empirically established, not a
+  info/exclude *not* being consulted while the common-dir one is — empirically established, not a
   documented guarantee. A future git could change it; the self-test would catch it, but only when
   run.
 - **`skills/worktask/scripts/state-patch.sh` still carries the separated-`stat` shape** at its lock
@@ -2250,7 +2307,7 @@ false when checked against the tree, so the corrections are part of the release:
 
 The same rename, a second time. v4.0.0 moved `igrsoft` → `company-workflow` because the plugin id
 was the last artifact carrying the vendor name; this release moves `company-workflow` → `corpflow`
-because the repository has since become `IGRSoft/corpflow` and the plugin id was, again, the last
+because the repository has since become IGRSoft/corpflow and the plugin id was, again, the last
 thing to catch up. The v4.0.0 entry below is the template this pass followed — the same three-role
 split, the same runtime-literal traps, the same sibling ordering.
 
@@ -2258,7 +2315,7 @@ The word's three roles, and separating them is again the whole substance. **Plug
 moves: every `company-workflow:<agent|skill>` invocation id, the `marketplace.json` plugin entry,
 `plugin.json`'s `Stop` matcher and its notification title, the `Task(company-workflow:…)`
 frontmatter grants, and the install key (`corpflow@igrsoft`). **Vendor identity** does not: the
-author block (`IGRSoft`, `support@igrsoft.com`), the `github.com/IGRSoft/…` owner segment, the
+author block (`IGRSoft`, `support@igrsoft.com`), the github.com/IGRSoft/… owner segment, the
 `com.igrsoft.*` bundle IDs in `/appstore-iap`, and the marketplace name — still `igrsoft`, so the
 cache path becomes `~/.claude/plugins/cache/igrsoft/corpflow/<version>/` with only the second
 segment changed, exactly as last time.
@@ -2309,7 +2366,7 @@ Recorded as breaking despite the PATCH version number, which is user-owned (the 
 - **`COMPANY_WORKFLOW_*` environment variables renamed to `CORPFLOW_*` with no fallback read** —
   `TEST_GATE`, `TEST_SELECT`, `AR_REF_STRICT`, `PR_BODY_STRICT`, and
   `COMMENT_DENSITY_{MAX,WARN,MIN_LINES}`. An eighth, `COMPANY_WORKFLOW_DIR` → `CORPFLOW_DIR`, lives
-  in `scripts/validate.sh` in four of the siblings. Update shell profiles and CI jobs.
+  in scripts/validate.sh in four of the siblings. Update shell profiles and CI jobs.
 - **Stale installs must be reinstalled.** `~/.claude/plugins/cache/` and the
   `known_marketplaces.json` / `installed_plugins.json` indexes still key on the old plugin name
   until then.
@@ -2371,7 +2428,7 @@ no hook, no orchestrator injection.
 
 - **The cross-check no longer defaults to itself.** An unset `workspace_path` is now a loud stop
   with a named audit row, not a silent pass.
-- **`dv-screenshot-capture/references/examples/README.md` corrected to the canonical 9 columns.**
+- **`skills/dv-screenshot-capture/references/examples/README.md` corrected to the canonical 9 columns.**
   It was a **7**-column table (no `Captured`, no `Design Ref`) that would fail
   `--validate-manifest` — and it is the file `attach-visual-evidence.sh`'s failure diagnostic
   sends a stuck DV agent to. Its AC-coverage table became a list, since the validator judges
@@ -2386,7 +2443,7 @@ no hook, no orchestrator injection.
   **Isolation ≠ assignment.** D0.0a's `<workspace>` placeholder is replaced with the concrete
   resolution order.
 - **`agents/product-manager.md`** no longer frames `workspace_path` as a megatask-mode detector.
-- **`references/resume.md`** classifies the yielded agent, which sat between its live-mid-work
+- **`skills/worktask/references/resume.md`** classifies the yielded agent, which sat between its live-mid-work
   and agent-gone rows.
 - **`pr-body-lint.sh` usage errors print to stderr.** `usage()` sent the help header to stdout
   while the one-line diagnostic went to stderr, so under this plugin's own `; true` / piped
@@ -2472,7 +2529,7 @@ check. This release makes each of those signals held-out, durable, or binary.
 
 ### Added
 
-- **Held-out oracle** (`benchmarkkit/oracle.py`, `benchmark/oracle/cases.json`).
+- **Held-out oracle** (`benchmark/harness/benchmarkkit/oracle.py`, `benchmark/oracle/cases.json`).
   Both arms' prompts embed a scripted CLI contract (`_cli-contract.txt` is the
   SSOT; a lint pins both prompts to it verbatim). After measurement the harness
   release-builds each arm's `tictactoe` and scores it against 30 cases whose
@@ -2500,15 +2557,15 @@ check. This release makes each of those signals held-out, durable, or binary.
   every Skill target names a real skill, every `skills/<name>/…` citation
   resolves, and every agent citing plugin paths carries a `## Plugin paths`
   resolution block. Each predicate is falsified against a synthetic tree.
-- **Findings docs**: `results/AGENT-GRANT-ENFORCEMENT.md` (tool *sets* bind in
+- **Findings docs**: `benchmark/results/AGENT-GRANT-ENFORCEMENT.md` (tool *sets* bind in
   headless dispatch; `Bash(cmd:*)` scoping and `maxTurns` did not — probe
-  specified before any fix), `results/KNOWN-BAD-RECORDS.md` (stored records
-  excluded from comparisons instead of edited), `results/VARIANCE-STUDY.md`
+  specified before any fix), `benchmark/results/KNOWN-BAD-RECORDS.md` (stored records
+  excluded from comparisons instead of edited), `benchmark/results/VARIANCE-STUDY.md`
   (the n=3 procedure; the only step that spends money).
 
 ### Changed
 
-- **Per-arm budgets and per-stage projections** (`benchmarklive/budget.py`).
+- **Per-arm budgets and per-stage projections** (`benchmark/harness/benchmarklive/budget.py`).
   Paired runs split `--budget` into equal per-arm tallies (a shared purse let
   the first arm starve the second — the defect that invalidated the first
   paired A/B), projections use calibrated `STAGE_EXPECTED_TOKENS` (DV ≈ 10× a
@@ -2519,13 +2576,13 @@ check. This release makes each of those signals held-out, durable, or binary.
   where the oracle ran, it — not the arm's self-written suite — decides
   `pass_fail`. `coverage_pct` is `null` when unmeasured, never a fabricated 0.0.
 - **Live retention is unbounded** (`rotation.RETENTION`): live records and
-  their `results/runs/live/` detail files are kept and tracked in git —
+  their `benchmark/results/runs/live/` detail files are kept and tracked in git —
   deterministic records stay latest-3 and gitignored.
 - **Agents**: every agent carries the `## Plugin paths` resolution block;
   `developer` and `stakeholder` gain the `Skill` grant their bodies order
   (`dv-screenshot-capture`, `self-improvement` — both silently never ran);
   `Skill` invocations use the real `Skill({skill: "company-workflow:…"})`
-  syntax; `technical-lead`'s DR gate reads `commands/dev-code-review.md` as a
+  syntax; `technical-lead`'s DR gate reads commands/dev-code-review.md as a
   command instead of invoking it as a nonexistent skill.
 
 ### Fixed
@@ -2554,8 +2611,8 @@ default; a bare `./run-tests.sh` is byte-identical to what it was.
   matters because 13 scripts have more than one consumer and convention alone returns one of
   them. L2 is `tests/selection/matrix.tsv` (24 rows), for dependencies that are a *pattern*
   rather than a path, where the glob lives inside the script the test invokes. L3 is the
-  ALWAYS floor, a constant in `tests/lib/select_lib.bash`: `lib/test-helper`,
-  `meta/coverage-proxy`, `skills/plugin-root-refs`, and `worktask/manifest-parity` — 47 of
+  ALWAYS floor, a constant in `tests/lib/select_lib.bash`: lib/test-helper,
+  meta/coverage-proxy, skills/plugin-root-refs, and worktask/manifest-parity — 47 of
   811 tests, included in every scoped run. The engine lives in `tests/lib/select_lib.bash`
   and `tests/bin/select-tests.sh`.
 - **An opt-in runner surface** (`run-tests.sh`, `Makefile`). `--changed` runs the selection,
@@ -2564,7 +2621,7 @@ default; a bare `./run-tests.sh` is byte-identical to what it was.
   the three. `COMPANY_WORKFLOW_TEST_SELECT=0` disables selection entirely. Passing
   `--changed` with `--coverage` is a hard **exit 64**, not a silent full run.
 - **Fail-closed triggers F1–F7.** An unrecognised path, an unresolvable base, an empty
-  changed set, a delete under `tests/`, `hooks/`, `.claude/hooks/` or a skill `scripts/`
+  changed set, a delete under tests/, hooks/, .claude/hooks/ or a skill scripts/
   directory, a change to the runner or the selector itself, and an unparseable matrix each
   yield a `FULL` verdict and run everything. `--print-selection` names the trigger id, so a
   widened run says why it widened instead of looking like a slow selection.
@@ -2663,10 +2720,10 @@ and similar host-workspace setups) — see `### Changed — R6` below before upg
   planned target once from the approved plan's own `title:` before the issue is published —
   six gates, a closed 15-token noop reason set, one `branch_target_refined` audit row, atomic
   ledger write, **no git mutation**, exit 0 always.
-- **Once-only rule reconciled across 8 sites** (`skills/shared/git-conventions.md`,
-  `skills/worktask/references/handoff-protocol.md`, `skills/worktask/references/resume.md`,
-  `agents/project-manager.md`, `agents/product-manager.md`, `commands/worktask.md`,
-  `skills/worktask/SKILL.md`, `skills/shared/task-system.md`): the **rename** happens exactly
+- **Once-only rule reconciled across 8 sites** (skills/shared/git-conventions.md,
+  skills/worktask/references/handoff-protocol.md, skills/worktask/references/resume.md,
+  agents/project-manager.md, agents/product-manager.md, commands/worktask.md,
+  skills/worktask/SKILL.md, skills/shared/task-system.md): the **rename** happens exactly
   once, at the start of planning; the **planned name** on the ledger may additionally be
   refined at most once per run, pre-commit, ledger-only, with no git mutation.
 
@@ -2854,7 +2911,7 @@ downstream consumers** and is listed first.
     `grep` and `ugrep` **reject** the pattern (exit 2, parse error). BSD `/usr/bin/grep`, which is
     what this script actually resolves at runtime on macOS, **accepts** it and treats the unmatched
     `)` as a *literal* character — exit 1, no diagnostic, matching only the impossible text
-    `mongodb)://…`. Either way nothing real was ever matched, and because the `grep` call sent
+    "mongodb)://…". Either way nothing real was ever matched, and because the `grep` call sent
     stderr to `/dev/null`, even the GNU parse error was swallowed. The scan reported completion with
     no finding and no diagnostic on both paths.
   - **Do not assume a loud failure would have alerted you.** On the BSD path there was never
@@ -2879,7 +2936,7 @@ downstream consumers** and is listed first.
 - `scan-secrets.sh` now validates all six patterns at startup (an O(6) compile check) and no longer
   sends `grep`'s stderr to `/dev/null`, so a malformed pattern is fatal and named instead of
   silently producing an empty scan. **This is necessary but not sufficient, and would not have
-  caught the original bug** — BSD `grep` accepts `mongodb)://` as a valid ERE, so the compile check
+  caught the original bug** — BSD `grep` accepts "mongodb)://" as a valid ERE, so the compile check
   passes it. Semantic truncation is caught only by the new per-scheme specimen tests.
 - **Known limitation, unfixed and disclosed:** `scan-secrets.sh --self-test` still exercises only 2
   of the 6 built-in patterns, and `--self-test` is exactly what runs on hosts without `bats`. The
@@ -3041,9 +3098,9 @@ away from the misleading word "legacy" — they are current behavior, not compat
   rest, including every `v3.x+` header peg across the 8 remaining hook/skill scripts.
 - Dead code: `_inline_merge` (the ~105-line inline state merger in `.claude/hooks/state-merge.sh`)
   and its call site — `state-patch.sh` is the single merge implementation.
-- Files: `skills/agent-coordination/scripts/audit-dedup.sh`, `skills/shared/legacy-fallback-f1.md` (folded into
-  `handoff-protocol.md#f1-fallback`), `tests/shell/hooks/audit-dedup.bats`,
-  `benchmark/harness/tests/test_history_backcompat.py`, and 3 audit fixtures.
+- Files: skills/agent-coordination/scripts/audit-dedup.sh, skills/shared/legacy-fallback-f1.md (folded into
+  handoff-protocol.md#f1-fallback), tests/shell/hooks/audit-dedup.bats,
+  benchmark/harness/tests/test_history_backcompat.py, and 3 audit fixtures.
 - `norm_dk` cross-shape key normalisation from `skills/agent-coordination/scripts/audit-dedup.sh`
   (it normalised a 4-segment key shape no writer ever emitted).
 - The `fallback_legacy` value from the `artifact_path_resolved` audit enum (now
@@ -3134,14 +3191,14 @@ reaching neither emitted line; and the `BRANCH_NAME_PRINT` dry run unchanged.
 ## [4.0.1] - 2026-08-03
 
 Two publication-surface bugs, both found the same way: a live worktask shipped output nobody
-would have written by hand — a `fix/`-prefixed branch after `fix` had been removed from the
+would have written by hand — a fix/-prefixed branch after `fix` had been removed from the
 vocabulary, and a GitHub issue titled with a kebab slug. Neither was a failure; both paths
 degraded silently and stayed within their non-blocking contracts while doing it. Scripts,
 tests, and docs only — no stage, agent, or gate semantics change.
 
 ### Fixed — worktask branch naming (four defects on one path)
 
-A live worktask shipped `fix/catalog-image-blinking` — a branch whose type prefix had been
+A live worktask shipped fix/catalog-image-blinking — a branch whose type prefix had been
 deliberately removed from `BRANCH_TYPES`. The root cause was not the vocabulary but the step
 that enforces it.
 
@@ -3155,7 +3212,7 @@ that enforces it.
   clause, and a non-blocking post-check that emits one `branch_convention_check` warning row
   naming both the actual and the derived target when the stamped value fails the predicate.
 - **The grammar gained an optional ticket segment** — `<type>/[<ticket>-]<slug>`. Repos using
-  this plugin already ship `bugfix/ov-156-…`, which the spec (documented as the single source
+  this plugin already ship bugfix/ov-156-…, which the spec (documented as the single source
   of truth) previously forced to drop its issue key. The new `derive_ticket` reads the first
   `\b[A-Z]{2,}-\d+\b` token from the goal text only, lowercased; no key found means unchanged
   behaviour. `branch_is_conventional` accepts both shapes, so no existing branch becomes
@@ -3212,7 +3269,7 @@ a broken title. +5 `--self-test` blocks (13a–13e) with three new plan fixtures
 ## [4.0.0] - 2026-07-31
 
 The plugin was declared as `"name": "igrsoft"` while the repository had already become
-`IGRSoft/company-workflow` — the plugin id was the last artifact carrying the vendor name as its
+IGRSoft/company-workflow — the plugin id was the last artifact carrying the vendor name as its
 identity. This release renames the **plugin**, and only the plugin.
 
 The word appeared in three distinct roles, and separating them is the whole substance of the
@@ -3220,7 +3277,7 @@ change. **Plugin identity** moves: every `igrsoft:<agent|skill>` invocation id, 
 `marketplace.json` plugin entry, the `plugin.json` `Stop` hook matcher, the `Task(igrsoft:…)`
 frontmatter grants, the bare-name resolution shim, and the Claude Code install cache path.
 **Vendor identity** does not move: the author block (`IGRSoft`, `support@igrsoft.com`), the
-`github.com/IGRSoft/…` URLs, the `com.igrsoft.*` bundle IDs in `/appstore-iap`, and the
+github.com/IGRSoft/… URLs, the `com.igrsoft.*` bundle IDs in `/appstore-iap`, and the
 marketplace name — which stays `igrsoft`, so the cache path becomes
 `~/.claude/plugins/cache/igrsoft/company-workflow/<version>/` with only the second segment
 changed, and the install key becomes `company-workflow@igrsoft`.

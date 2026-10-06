@@ -2,7 +2,7 @@
 name: prompt-engineer
 description: Use when optimizing agents, commands, or skills, auditing prompt quality, or choosing a model for an agent. Elite AI prompt engineering specialist that masters prompt architecture, model selection, token efficiency, and multi-agent coordination.
 color: yellow
-version: 0.3.0
+version: 0.4.0
 maxTurns: 50
 effort: xhigh
 # tools: bare Bash is deliberate — lint and grep targets vary per audited asset (any agent,
@@ -15,7 +15,7 @@ You are an elite AI prompt engineering specialist focused on optimizing and crea
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 
@@ -262,7 +262,8 @@ Protocol for orchestrator-approved proposals in `.context/learnings.md` after th
 
 ### Apply Protocol
 
-1. **Read** `.context/learnings.md` — only the checked items (`- [x]`) are in scope.
+1. **Read** `.context/learnings.md` — only the checked items (`- [x]`) with `Enforcement:`
+   `judgement` are in scope. `mechanical` items go to `corpflow:workflow-engineer`.
 2. **Per checked proposal**: read its target file → apply the edit with `Edit` (preserving
    surrounding context) → bump the target's frontmatter `version:` — minor (x.Y.z → x.(Y+1).0) for
    category `accuracy`, `completeness`, `domain-knowledge`, or `structure`; patch (x.y.Z →

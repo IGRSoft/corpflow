@@ -81,6 +81,8 @@ Its `plugin.json` entry carries `"timeout": 5`, which bounds the run. Without a 
 
 Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to feed remediation text back to the model without it being labelled an error. Unlike a bare `{"decision":"block"}`, the `additionalContext` rides into the re-run's context as a fix instruction.
 
+#### Screenshot-gate block payload
+
 `dv-screenshot-gate.sh` reads the stopping task's `screenshots-<TASK_ID>.md` and blocks missing or invalid evidence; no captures passes only on `backend`/`systems`:
 
 ```json
@@ -89,7 +91,7 @@ Stop and SubagentStop hooks may return `hookSpecificOutput.additionalContext` to
   "reason": "no_captures — task <TASK_ID> on platform web has no capture rows",
   "hookSpecificOutput": {
     "hookEventName": "SubagentStop",
-    "additionalContext": "run the dv-screenshot-capture skill with this task_id; … headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots-<TASK_ID>.md"
+    "additionalContext": "run bash \"$PLUGIN_ROOT/skills/dv-screenshot-capture/scripts/capture.sh\" --task-id <task_id> --context-dir <context_dir> <platform args> --capture <slug>[:<arg>] in one Bash call (agents/developer.md § Screenshot Capture); … headless is not a skip reason; expected manifest .context/images/<worktask_id>/screenshots-<TASK_ID>.md"
   }
 }
 ```
@@ -136,7 +138,7 @@ Metadata only: the `dedupe_key` shape is unchanged.
 - `OTEL_RESOURCE_ATTRIBUTES` values surface as metric-datapoint labels, not only span attributes: tag `worktask_id` / `stage` there to slice dashboards per stage without parsing spans.
 - `claude_code.lines_of_code.count` carries a `model` attribute — per-model LoC attribution pairs with the tier split in `skills/shared/stage-codes.md`.
 - `OTEL_METRICS_INCLUDE_REPOSITORY` tags metrics and events with `vcs.*` repository attributes, so a collector shared across repositories slices per repo.
-- Project and local settings ignore the variables that turn on export, set its endpoint or capture content, so a repo's committed `.claude/settings.json` cannot start a per-stage dashboard on its own.
+- Project and local settings ignore the variables that turn on export, set its endpoint or capture content, so a committed `<repo>/.claude/settings.json` cannot start a per-stage dashboard on its own.
 
 #### Log correlation, limits & trace nesting
 

@@ -1,7 +1,7 @@
 ---
 name: dv-screenshot-capture
 description: Use when DV is about to complete and `metadata.requires_screenshots` is true (the default) — the completion gate blocks otherwise. Captures DV screenshots (or an annotated diff for meta-work) as visual evidence for QA, DR and the PR.
-version: 1.1.0
+version: 1.1.1
 argument-hint: "<worktask_id> <task_id> <platform> <slug> [args-json]"
 ---
 
@@ -48,14 +48,14 @@ The skill is model-invocable, so this step, not the harness, decides whether a r
 ```
 
 - `.context` is the context root from § Root resolution, never a cwd-relative path. `<worktask_id>` is `state.json.worktask_id`; `<TASK_ID>` is the DV task's ledger key (`^[A-Z]{2}[0-9]+$`); `<slug>` is kebab-case, ≤40 chars, from the capture's purpose.
-- Before the first move to `oversize/`, ensure it is git-excluded:
+- Before the first move to the oversize/ subdirectory, ensure it is git-excluded:
   ```bash
   grep -qxF '.context/images/*/oversize/' .gitignore 2>/dev/null || echo '.context/images/*/oversize/' >> .gitignore
   ```
 
 ### Numbering
 
-`NN` is two-digit zero-padded and monotonic per task: `NN = 1 + max` over the `dv-<TASK_ID>-[0-9][0-9]-*` files in the images dir and `oversize/` and the `#` column of `screenshots-<TASK_ID>.md` (first = `01`; past `99` the script exits 1). Another task's files never advance it, so parallel streams each start at `01`. Reruns (`run_index > 0`) do not reset it: captures append (`dv-DV0-06-…`), and cleanup happens at FN/ST or via `/worktask archive`.
+`NN` is two-digit zero-padded and monotonic per task: `NN = 1 + max` over the `dv-<TASK_ID>-[0-9][0-9]-*` files in the images dir and its oversize/ subdirectory and the `#` column of `screenshots-<TASK_ID>.md` (first = `01`; past `99` the script exits 1). Another task's files never advance it, so parallel streams each start at `01`. Reruns (`run_index > 0`) do not reset it: captures append (`dv-DV0-06-…`), and cleanup happens at FN/ST or via `/worktask archive`.
 
 ### Legacy manifest
 
@@ -207,7 +207,7 @@ One `--probe`, then one capture; re-probe only on a missed click.
 
 #### apple-canvas adapter
 
-**Backing tool**: `scripts/apple-canvas.sh`, which runs two host-side SPM executables: `PreviewEnsurer` (`swift run --package-path <plugin>/skills/preview-ensurer/references/reference-impl PreviewEnsurer …`) and `SnapshotHost`. Scaffold `tools/SnapshotHost/` from template if missing → PreviewEnsurer auto-adds `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`ios-sim`). Emits `canvas_render` + `preview_added` audit rows. Full recipe: `references/apple-canvas.md`; heuristics: `references/preview-ensurer.md`.
+**Backing tool**: `scripts/apple-canvas.sh`, which runs two host-side SPM executables: `PreviewEnsurer` (`swift run --package-path <plugin>/skills/preview-ensurer/references/reference-impl PreviewEnsurer …`) and `SnapshotHost`. Scaffold tools/SnapshotHost/ in the project from template if missing → PreviewEnsurer auto-adds `#Preview` macros to modified View files → `swift run --package-path tools/SnapshotHost SnapshotHost --view <ModuleType> --output <path> [--size WxH] [--scheme light|dark]`. macOS host first (`metadata.canvas_destination=macos-host`, default); iOS sim opt-in (`ios-sim`). Emits `canvas_render` + `preview_added` audit rows. Full recipe: `references/apple-canvas.md`; heuristics: `references/preview-ensurer.md`.
 
 ##### apple degraded-mode predicate
 
@@ -289,11 +289,11 @@ Runs § Worktask guard, the dispatch table, the ladder to the tool_missing floor
 |--------|------|----------------|
 | `web-capture.sh` | Drives Playwright's `screenshot` CLI | exit 2 `playwright_unavailable`; exit 3 `playwright_navigation_failed` / `playwright_timeout` |
 | `android-capture.sh` | Resolves exactly one online device from `adb devices`, then `adb exec-out screencap -p` | exit 2 `adb_unavailable`; exit 3 `no_device_attached`, `multiple_devices` (pass `--serial`), `serial_not_found`, `screencap_failed`, `screencap_corrupt` |
-| `apple-canvas.sh` | Scaffolds `tools/SnapshotHost/`, invokes `preview-ensurer`, renders via `swift run SnapshotHost`, prints the PNG path | 1 = no resolved root or a ledger mismatch, 2 = preview-ensurer errors (`missing_input`) or a broken install, 3 = render failed (escalate to the sim adapter), 4 = scaffold failed, 5 = argument error, incl. a task the ledger lacks or no git toplevel |
+| `apple-canvas.sh` | Scaffolds tools/SnapshotHost/, invokes `preview-ensurer`, renders via `swift run SnapshotHost`, prints the PNG path | 1 = no resolved root or a ledger mismatch, 2 = preview-ensurer errors (`missing_input`) or a broken install, 3 = render failed (escalate to the sim adapter), 4 = scaffold failed, 5 = argument error, incl. a task the ledger lacks or no git toplevel |
 
 #### macos-window-capture.sh
 
-Scaffolds a unique `<ctx>/tools/WindowCaptureHost/<TASK_ID>.<run>/` package per invocation from `templates/window-capture-host.swift` plus `--root-file`, builds it against `--product`, feeds it the steps, then moves the PNGs into `images/` and appends their manifest rows. Host sources, build output, staging/probe artifacts, and logs are isolated across parallel DV tasks and repeated invocations. Exit 1 = bad arguments or step grammar, more than 5 shots, a non-library `--product` (the library products are listed), or a ledger mismatch; 2 `swift_unavailable` (not macOS, or no `swift`); 3 `package_unreadable`, `host_build_failed` (the compiler's first errors go to stderr), `host_run_failed` or `shot_missing`, with nothing moved into `images/`.
+Scaffolds a unique `<ctx>/tools/WindowCaptureHost/<TASK_ID>.<run>/` package per invocation from `templates/window-capture-host.swift` plus `--root-file`, builds it against `--product`, feeds it the steps, then moves the PNGs into the images dir and appends their manifest rows. Host sources, build output, staging/probe artifacts, and logs are isolated across parallel DV tasks and repeated invocations. Exit 1 = bad arguments or step grammar, more than 5 shots, a non-library `--product` (the library products are listed), or a ledger mismatch; 2 `swift_unavailable` (not macOS, or no `swift`); 3 `package_unreadable`, `host_build_failed` (the compiler's first errors go to stderr), `host_run_failed` or `shot_missing`, with nothing moved into the images dir.
 
 #### Helper scripts
 
@@ -400,9 +400,9 @@ When `metadata.requires_screenshots: false` and DV captures nothing:
 
 ### PR body attachment
 
-Do not hand-author `![…](.context/…)` refs in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies.
+Do not hand-author image refs to `.context/` paths in the PR body — relative `.context/` paths never render in GitHub PR or issue bodies.
 
-FN instead runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Notes`. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block of hosted URLs, and prints nothing when `requires_screenshots == false` or no captures exist. It reads every `screenshots-*.md` in task-id order, then a legacy `screenshots.md`, and the embed cap spans that union. Oversize rows, tool_missing rows and rows past the cap become plain bullets, never image embeds. Insertion contract: `skills/worktask/references/conductor-attachments.md`.
+FN instead runs `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and inserts its stdout between `## Test plan` and `## Merge danger`. The helper hosts PNGs via the publish-helper tier order (raw → gist → none-tier note), emitting a `## Visual evidence` block of hosted URLs, and prints nothing when `requires_screenshots == false` or no captures exist. It reads every `screenshots-*.md` in task-id order, then a legacy `screenshots.md`, and the embed cap spans that union. Oversize rows, tool_missing rows and rows past the cap become plain bullets, never image embeds. Insertion contract: `skills/worktask/references/conductor-attachments.md`.
 
 #### Attachment consumers
 
@@ -410,7 +410,7 @@ The orchestrator — not FN — writes to the GitHub issue.
 
 | Consumer | Stage | Action |
 |----------|-------|--------|
-| **FN** | FN | `--emit pr` → insert block between ## Test plan and ## Notes. A re-run replays the first emission's hosted URLs from `.context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md` instead of uploading a second asset set (which orphans the first); `--force` re-hosts |
+| **FN** | FN | `--emit pr` → insert block between `## Test plan` and `## Merge danger`. A re-run replays the first emission's hosted URLs from `.context/logs/visual-evidence-pr-<worktask_id>-<run_index>.md` instead of uploading a second asset set (which orphans the first); `--force` re-hosts |
 | **Orchestrator** | Post-loop exit | `--post issue` → marker-deduped `gh issue comment` on the PL-published issue (visual-evidence block only) |
 | **Orchestrator** | Post-merge (PR closes) | `--post completion` → one marker-deduped comment per issue the PR closes: work-summary plus the visual-evidence block when captures exist, summary-only otherwise |
 
@@ -464,13 +464,13 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 | Failure | Detection | Required Behavior |
 |---------|-----------|-------------------|
 | All adapters fail including `cli_fallback` | `ok: false`; stdout `error=tool_missing` (exit 2) or `error=render_failed` (exit 3, a tool ran, no usable PNG) | No image is written: a placeholder passes an existence check while proving nothing. Audit `screenshot_capture_failed`; all tools absent adds a tool_missing row. DV reports a failed capture. |
-| Size budget exceeded after pngquant | `oversize_unquantizable` | Move to `oversize/`, link-only in `screenshots-<TASK_ID>.md`. Continue. |
+| Size budget exceeded after pngquant | `oversize_unquantizable` | Move to the oversize/ subdirectory, link-only in `screenshots-<TASK_ID>.md`. Continue. |
 | 5-cap reached | `screenshot_count_exceeded` | Stop further captures. Audit row. Continue. |
 | `Skill()` invocation itself fails | DV catches exception | Escalate per `commands/worktask.md § Error Handling`. Append to `.context/errors/developer.md` (classification: `transient` for retry; `logic` for escalate to AR). Never treat as success. |
 
 ## Redaction
 
-The `cli/fallback` `git diff` pipe can expose env files, tokens, or secrets present in the diff. Redact before piping to `silicon` or `magick`, per `logging-conventions § Bash Pattern`. If a sensitive pattern is detected, capture the file tree (`git diff --name-only`) instead of the diff content.
+The `cli-fallback.sh` `git diff` pipe can expose env files, tokens, or secrets present in the diff. Redact before piping to `silicon` or `magick`, per `logging-conventions § Bash Pattern`. If a sensitive pattern is detected, capture the file tree (`git diff --name-only`) instead of the diff content.
 
 ## Consumers
 

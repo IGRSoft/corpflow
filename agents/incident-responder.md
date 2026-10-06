@@ -2,7 +2,7 @@
 name: incident-responder
 description: Use PROACTIVELY for production incidents, outages, or emergency hotfixes; owns the IR stage in emergency worktasks. Triages severity and blast radius, decides rollback vs hotfix, and runs the blameless post-mortem.
 color: red
-version: 0.3.0
+version: 0.3.1
 maxTurns: 50
 effort: high
 # tools: bare Bash is deliberate — triage commands are unknown before the incident (whatever
@@ -17,7 +17,7 @@ Incident canon (classification criteria, decision tree, rollback checklists, run
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by its full path, `bash "$PLUGIN_ROOT/<path>"`, never by a relative one. If the token above reached you literally, the root is a loaded corpflow skill's base directory minus `/skills/<name>`, or the nearest ancestor of a plugin file you read that holds `.claude-plugin/plugin.json`.
 

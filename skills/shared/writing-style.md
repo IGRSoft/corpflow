@@ -20,6 +20,8 @@ parses once, with no second pass.
 
 ## Core rules
 
+### Sentences and steps
+
 1. Write one topic per sentence. A procedural sentence has 20 words or fewer; a descriptive
    sentence has 25 words or fewer.
 2. Write one topic per paragraph, with 6 sentences or fewer.
@@ -27,6 +29,9 @@ parses once, with no second pass.
 4. Write each step as an imperative, with one action per step, in execution order.
 5. Put a condition first: "If the build fails, read the log."
 6. Put a warning or a precondition before the step it applies to, never after it.
+
+### Words and terms
+
 7. Keep the articles (a, an, the) and the connecting words. Do not write telegraph style.
 8. Use one word for one meaning. Use the same term for the same thing every time. Do not use
    synonyms for variety.

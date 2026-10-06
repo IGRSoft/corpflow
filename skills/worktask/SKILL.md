@@ -2,7 +2,7 @@
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Holds dynamic sizing, the orchestrator loop, and stage handoff rules.
 argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
-version: 0.6.0
+version: 0.7.0
 ---
 
 > **INVOCATION GATE**: a worktask the user asked for runs through `/worktask` in Claude Code,
@@ -218,7 +218,7 @@ and the reason, and stop.
 
 ### Pre-Stage Disk Guard (ENOSPC)
 
-Build stages — **AR, DV, QA, SR, RE** — accumulate `.build/` and DerivedData across runs, and an
+Build stages — **AR, DV, QA, SR, RE** — accumulate .build directories and DerivedData across runs, and an
 exhausted filesystem kills the build harness mid-stage. Assert free space before delegating any of
 the five. Implementation: `scripts/state-patch.sh --disk-check <root>`.
 
@@ -255,8 +255,8 @@ Before executing any worktask stage, the orchestrator validates:
 2. **PL0 exists**: a task with subject starting `PL0:`
 3. **Stage tasks exist**: after PL0 completes, it created subsequent stage tasks (minimum DV0, DR0, QA0 at any complexity)
 3b. **Inclusion decisions are reasoned**: every `metadata.skipped_stages` / `metadata.added_stages` entry carries a non-empty, decision-shaped `reason`; a bare score restatement or a missing reason fails
-4. **Stage contract check**: upstream outputs match the next stage's Required Inputs per `shared/stage-contracts.md` (file exists + required sections present)
-5. **Metadata schema check**: next task's metadata validates against `shared/state-ledger.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
+4. **Stage contract check**: upstream outputs match the next stage's Required Inputs per `skills/shared/stage-contracts.md` (file exists + required sections present)
+5. **Metadata schema check**: next task's metadata validates against `skills/shared/state-ledger.md` § JSON Schema (non-PL tasks require `stage`, `agent`, `model`, `error_file`)
 
 ### Validation checks 6–7
 
@@ -2621,7 +2621,7 @@ Per-issue HTML-marker dedup (`<!-- completion-summary:<worktask_id>:<run_index>:
 
 ## Post-Worktask Self-Improvement
 
-After the execution loop exits (all tasks completed, including ST), except in a `/megatask` per-issue run, which ends at ST (`commands/worktask.md § Phase 3`): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → delegate checked items to prompt-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
+After the execution loop exits (all tasks completed, including ST), except in a `/megatask` per-issue run, which ends at ST (`commands/worktask.md § Phase 3`): if `.context/learnings.md` exists, Read `references/fn-gate.md § Post-Worktask Self-Improvement` and follow the Post-ST procedure (surface learnings → user checks boxes → route each checked item by its `Enforcement:` form to prompt-engineer or workflow-engineer → audit → terminate). Absent → worktask complete. Never apply unchecked proposals.
 
 ## Resume After Interruption
 
