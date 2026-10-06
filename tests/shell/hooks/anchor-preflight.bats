@@ -406,3 +406,50 @@ run_pre() { run env CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/$SCRIPT
   [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ] || fail "not denied: $output"
   [[ "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<< "$output")" == *"## Example."*"Nest other headings as H3." ]]
 }
+
+# --- PreToolUse frontmatter arm -----------------------------------------------
+# The three harness rejections that cost a turn when found only at the stage boundary.
+
+# qa_artifact <summary_line> <summary text> <sweep item body>
+qa_artifact() {
+  printf -- '---\nhandoff:\n  stage: QA\n  verdict: go\n  summary: "%s"\n' "$2"
+  printf '  tests_executed:\n    - { runner: bats, count: 3, summary_line: "%s" }\n' "$1"
+  printf '  files_touched: []\n  key_decisions: []\n  open_questions:\n'
+  printf '    - { id: sw-QA0-1, class: decision, ref: "testing-0.md#elicitation-sweep", blocks_next_stage: false }\n'
+  printf '  refs:\n    results: testing-0.md#results\n---\n\n## results\n\nok 3 of 3 at run 1.\n\n## elicitation-sweep\n\n%s\n' "$3"
+}
+
+fm_denied() {  # <content> -> prints the deny reason, fails when the write was allowed
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/testing-0.md" "$1")"
+  assert_success
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$output")" = deny ] || fail "not denied: $output"
+  jq -r '.hookSpecificOutput.permissionDecisionReason' <<< "$output"
+}
+
+@test "pre frontmatter: a digitless test summary_line is denied before the write" {
+  reason="$(fm_denied "$(qa_artifact 'ALL PASS' 'three suites green' $'sw-QA0-1: Ship now?\n- label: Yes\n- label: No')")"
+  [[ "$reason" == *"testing-0.md frontmatter would be rejected"*"summary_line carries no digit"* ]]
+}
+
+@test "pre frontmatter: an over-budget frontmatter is denied" {
+  local long
+  long="$(printf 'word%s ' $(seq 1 200))"
+  reason="$(fm_denied "$(qa_artifact '1..3' "$long" $'sw-QA0-1: Ship now?\n- label: Yes\n- label: No')")"
+  [[ "$reason" == *"discretionary tokens > 200 budget"* ]]
+}
+
+@test "pre frontmatter: an option-less sweep stub item is denied" {
+  reason="$(fm_denied "$(qa_artifact '1..3' 'three suites green' 'sw-QA0-1: all fine, nothing to ask.')")"
+  [[ "$reason" == *"is a status note, not a question"* ]]
+}
+
+@test "pre frontmatter: a compliant Write is allowed, and an Edit is never judged on frontmatter" {
+  with_ledger
+  run_pre "$(pre_payload Write "$WD/.context/testing-0.md" "$(qa_artifact '1..3' 'three suites green' $'sw-QA0-1: Ship now?\n- label: Yes\n- label: No')")"
+  assert_success
+  assert_output ""
+  run_pre "$(pre_payload Edit "$WD/.context/testing-0.md" '  summary_line: "ALL PASS"' '')"
+  assert_success
+  assert_output ""
+}
