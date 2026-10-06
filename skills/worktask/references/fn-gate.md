@@ -106,23 +106,37 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 3. Wait for the user to check boxes (`- [ ]` → `- [x]`). Never check a box yourself or assume approval.
 4. Read the `- [x]` lines under `## Proposed Updates`; each is one proposal. Zero checked → skip to step 6.
 
-### Step 5 — delegate to prompt-engineer
+### Step 5 — delegate by enforcement form
 
-5. Resolve the model like every other dispatch, never type it:
-   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve prompt-engineer`
-   prints `<model>`, `<effort>` and the source, tab-separated. Then delegate with one `Agent` call
-   carrying the full list of checked proposals:
-   ```typescript
-   Task({
-     subagent_type: "corpflow:prompt-engineer",
-     model: MODEL,  // first field of the --resolve line
-     prompt: `Apply self-improvement learnings from .context/learnings.md.
-              Apply ONLY checked items (- [x]). Follow the Apply Protocol in your agent definition.
-              Do not propose new changes; only apply approved ones.
-              Return a summary of applied/skipped proposals and the commit SHAs created.`
-   });
-   ```
-   Each proposal lands as its own commit with a `version:` bump (`agents/prompt-engineer.md § Self-Improvement Patch Application`).
+5. Group the checked proposals by their `Enforcement:` value
+   (`skills/self-improvement/SKILL.md § Hand-off to the applying agent`): `judgement` →
+   `prompt-engineer`, `mechanical` → `workflow-engineer`. An item with no valid `Enforcement:` value
+   (missing, or other than `mechanical` or `judgement`) goes to neither agent; count it in
+   `skipped_count` and name it to the user. Per non-empty group, resolve the model like every
+   other dispatch, never type it:
+   `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve <agent>`
+   prints `<model>`, `<effort>` and the source, tab-separated. Then delegate that group in one
+   call (§ Step 5 — one dispatch per group).
+
+#### Step 5 — one dispatch per group
+
+Run the two dispatches one after the other, never in parallel: both commit to the same branch.
+
+```typescript
+// form: "mechanical" | "judgement" — the group's Enforcement value
+Task({
+  subagent_type: AGENT,  // "corpflow:prompt-engineer" | "corpflow:workflow-engineer"
+  model: MODEL,  // first field of the --resolve line
+  prompt: `Apply self-improvement learnings from .context/learnings.md.
+           Apply ONLY checked items (- [x]) with Enforcement: ${form}.
+           Follow the Apply Protocol in your agent definition.
+           Do not propose new changes; only apply approved ones.
+           Return a summary of applied/skipped proposals and the commit SHAs created.`
+});
+```
+
+Each proposal lands as its own commit. The `version:` bump goes only to a target with frontmatter
+(`skills/self-improvement/SKILL.md § Hand-off to the applying agent`).
 
 ### Steps 6–7 — audit & terminate
 
@@ -137,5 +151,5 @@ After the execution loop exits (all tasks completed, including ST), the orchestr
 
 - Apply only proposals the user explicitly checked.
 - Do not re-run self-improvement on the orchestrator's own post-ST activity (no recursion).
-- Do not modify `.context/learnings.md` after ST produced it; the prompt-engineer only reads it.
+- Do not modify `.context/learnings.md` after ST produced it; the applying agents only read it.
 - Malformed `learnings.md` (no `## Proposed Updates` section) → log a warning, skip apply, terminate.

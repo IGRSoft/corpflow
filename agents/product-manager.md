@@ -2,7 +2,7 @@
 name: product-manager
 description: Use PROACTIVELY for product planning, feature definition, or strategic product decisions. Master product strategy, roadmap planning, feature prioritization, and user-centric decision making.
 color: blue
-version: 0.13.0
+version: 0.13.1
 maxTurns: 40
 effort: high
 # tools: every Bash grant is scoped to one binary or script, never bare Bash, because
@@ -22,7 +22,7 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

@@ -39,7 +39,7 @@ One bullet per diff hunk: path, line range, category, one-line summary. Detail b
 
 ## Section 3 — Proposed Updates (mandatory if any in-scope change)
 
-Numbered checklist. **Each item is independently approvable** — the orchestrator passes only the ticked boxes to `prompt-engineer`.
+Numbered checklist. **Each item is independently approvable** — the orchestrator passes only the ticked boxes on, each to the agent its `Enforcement:` form names (`SKILL.md § Hand-off to the applying agent`).
 
 **Ordering:** `confidence desc`, then `category`, then target path asc — high-confidence items first, so the user approves the strongest signals quickly.
 
@@ -49,7 +49,8 @@ Numbered checklist. **Each item is independently approvable** — the orchestrat
 ## Proposed Updates
 
 - [ ] **#1 — agents/developer.md — `completeness` — confidence: high**
-  - **Observed:** user added Sendable conformance to Swift 6 actor types in 2 files
+  - **Observed:** user added Sendable conformance to Swift 6 actor types in 2 files (`src/Models/User.swift` L18, `src/Models/Order.swift` L22)
+  - **Enforcement:** `judgement` — conformance depends on how the type crosses actors, so no fixed pattern catches it; a prose constraint for the implementer
   - **Proposed edit:** append to Constraints (DO NOT):
     ```markdown
     - DO NOT define types used across actor boundaries without `Sendable` conformance
@@ -59,7 +60,9 @@ Numbered checklist. **Each item is independently approvable** — the orchestrat
   - **Rationale:** Swift 6 strict concurrency requires Sendable; repeated correction signals missing domain knowledge.
 ~~~
 
-Every proposal repeats that shape — checkbox header, Observed, Proposed edit, Target location, Version bump, Rationale — only the content varies (a `structure`/medium item would carry a diff block as its edit and a patch bump).
+### Proposed Updates shape
+
+Every proposal repeats the shape of the example above — checkbox header, Observed, Enforcement, Proposed edit, Target location, Version bump, Rationale — only the content varies (a `structure`/medium item would carry a diff block as its edit and a patch bump). `Observed` cites the hunk's path and line range. `Enforcement:` is `mechanical` or `judgement` with one line of reason (`references/change-categories.md § Enforcement Form`); a `mechanical` item proposes a check, or the wiring of an unwired one, as its edit.
 
 ## Section 4 — Deferred (Low Confidence)
 
@@ -92,6 +95,6 @@ Always include this block; it is how the user learns what happens next.
 
 1. Check the boxes next to any Proposed Updates you accept.
 2. Leave unchecked any you reject.
-3. Commit nothing — the orchestrator reads this file, hands checked items to `prompt-engineer`, and each applied proposal becomes its own commit with a version bump.
+3. Commit nothing — the orchestrator reads this file, hands checked `judgement` items to `prompt-engineer` and checked `mechanical` items to `workflow-engineer`, and each applied proposal becomes its own commit with a version bump.
 4. Rollback-safe: revert any applied proposal via `git revert <sha>`.
 ```
