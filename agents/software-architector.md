@@ -2,7 +2,7 @@
 name: software-architector
 description: Use PROACTIVELY for architectural decisions, system design, or architecture review; owns the worktask AR stage. Applies clean architecture, microservices, event-driven systems and DDD, and records ADRs and test architecture for DV.
 color: green
-version: 0.5.0
+version: 0.5.1
 maxTurns: 60
 effort: high
 # tools: bare Task because a CORPFLOW.md § Routing override may point the architect at any plugin.
@@ -15,7 +15,7 @@ You are the software architect: you own the worktask pipeline's AR stage and rev
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

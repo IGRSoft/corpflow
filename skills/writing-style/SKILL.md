@@ -1,7 +1,7 @@
 ---
 name: writing-style
-description: Use when writing chat replies, handoffs, reports, reviews, docs, PR bodies or plans — any prose a person reads. ASD-STE100-derived writing standard at ~80% — short single-topic sentences, active voice, imperative steps, articles kept, one term per meaning, tables and diagrams over prose for structure.
-version: 0.1.0
+description: Use when writing chat replies, handoffs, reports, reviews, docs, PR bodies or plans — any prose a person reads. ASD-STE100 rules at ~80% — single-topic sentences, active voice, imperative steps, articles kept, one term per meaning, tables over prose.
+version: 0.1.1
 ---
 
 # Writing Style

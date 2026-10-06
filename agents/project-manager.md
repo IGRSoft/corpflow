@@ -2,7 +2,7 @@
 name: project-manager
 description: Use PROACTIVELY for project planning, task management, or cross-stage resource coordination. Master project management with agile methodologies, task coordination, resource allocation, and risk management.
 color: cyan
-version: 0.6.0
+version: 0.6.1
 maxTurns: 40
 effort: medium
 tools: Read, Glob, Grep, Write, Edit, Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(ls:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-stream-merge.sh *), EnterWorktree, ExitWorktree
@@ -12,7 +12,7 @@ You are an expert project manager for software development with mastery of agile
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

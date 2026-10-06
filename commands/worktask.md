@@ -2,11 +2,11 @@
 name: worktask
 description: Run one task through the staged worktask pipeline (plan, build, review, test, docs, PR) with plan and finalization gates and a resumable state ledger
 argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
-version: 0.6.0
+version: 0.7.0
 # tools: bare Task because each stage row's metadata.agent may name a platform variant from any
 # plugin (`pl0-procedure.md § Stage → agent table`, a project or user-scope CORPFLOW.md § Routing
-# override included), and the Step C.0a resolver and Phase 3 re-dispatch those agents or
-# `corpflow:prompt-engineer`.
+# override included), and the Step C.0a resolver and Phase 3 re-dispatch those agents,
+# `corpflow:prompt-engineer` or `corpflow:workflow-engineer`.
 allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh *)
 related:
   - skills/worktask/SKILL.md
@@ -1553,16 +1553,21 @@ Self-Improvement`. A `/megatask` per-issue run skips this phase: nobody is there
 boxes, so the run ends at ST and any `.context/learnings.md` stays in the worktree for review.
 
 1. If `.context/learnings.md` is absent → worktask done, terminate.
-2. If present → display it and stop until the user checks the boxes of proposals they approve
+2. If present → display it and stop until the user checks the boxes they approve
    (`- [ ]` → `- [x]`).
-3. On the user's approval reply, re-read `learnings.md`, parse the checked items, and delegate to
-   `corpflow:prompt-engineer` (`agents/prompt-engineer.md § Self-Improvement Patch Application`).
-4. Each applied proposal becomes its own commit with a `version:` bump on the target frontmatter
-   (rollback-safe via `git revert <sha>`).
+3. On the user's approval, re-read `learnings.md` and route each checked item by its
+   `Enforcement:` form: `judgement` → `corpflow:prompt-engineer`, `mechanical` →
+   `corpflow:workflow-engineer`. Each applies per its `§ Self-Improvement Patch Application`.
+4. Each applied proposal becomes its own commit (rollback-safe via `git revert <sha>`), with a
+   `version:` bump only on a target with frontmatter. Routing and bump rule:
+   `skills/self-improvement/SKILL.md § Hand-off to the applying agent`.
 
 ### Phase 3 key invariants
 
 - Never auto-apply or auto-check: the user checks the boxes and signals approval.
+- Each checked item goes to one agent only. An item with no valid `Enforcement:` value (missing,
+  or other than `mechanical` or `judgement`) is not applied; count it in `skipped_count` and name
+  it to the user.
 - Proposals are scoped to agents/skills/commands that actually participated in this worktask's
   context (`skills/self-improvement/SKILL.md § Step 4`).
 - Post-ST audit entry in `.context/logs/audit.jsonl` records `applied_count` and `skipped_count`.

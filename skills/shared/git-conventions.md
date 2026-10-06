@@ -152,10 +152,14 @@ Title: `<type>[scope][!]: <summary>`
 - [Change 1]
 
 ## Test plan
-- [How this was verified]
+- [The check that failed before and passes now, or the output that changed]
 
 ## Visual evidence
 [UI changes only — inserted verbatim; see § Visual evidence]
+
+## Merge danger
+- Reversal: [one-way | two-way] — [one line of reason]
+- Blast radius: [what breaks, and for whom, if this change is wrong]
 
 ## Notes
 [Additional context, testing instructions]
@@ -173,8 +177,28 @@ Closes #<N>
   undecided. `fn-preflight.sh unresolved-decisions` writes it at byte 0 of the body; don't write or
   edit it by hand. Each item is `- **sw-SR0-1** (SR0): <question>`, or the id alone when the
   question would not survive the sanitiser.
-- Keep local paths out of a PR body: `.context/`, `/Users/…`, `~/…` and `../…` mean nothing to a
-  reviewer and leak host layout. Code spans count too; `pr-body-lint.sh` checks them.
+- Keep local paths out of a PR body: `.context/`, `/Users/<path>`, `~/<path>` and `../<path>`
+  mean nothing to a reviewer and leak host layout. Code spans count too; `pr-body-lint.sh`
+  checks them.
+
+### Changes, Test plan and Merge danger content
+
+- **Changes**: lead with the smallest visual that shows the change (a file tree, a call tree or a
+  diff sketch) when it is clearer than a list.
+- **Test plan**: show the evidence, not the verdict. Name the check that failed before the change
+  and passes after it, or quote the output that changed. "Tests pass" alone is a claim the
+  reviewer cannot check.
+- **Merge danger**: state the reversal class and the blast radius, so the reviewer knows how much
+  care the merge needs. `pr-body-lint.sh` P4 warns when the section is absent.
+
+#### Merge danger reversal class and blast radius
+
+- `one-way`: the change cannot be undone with a revert. Destructive actions, schema or state
+  migrations, removal of a public contract, and anything that ships outward (a release, a
+  published package, a sent message) are one-way.
+- `two-way`: a revert restores the earlier behavior completely.
+- Authors call their own changes two-way too easily. When in doubt, call it one-way and say why.
+- Blast radius: the users, stages or files that break if the change is wrong.
 
 ### Visual evidence
 
@@ -186,7 +210,7 @@ automatically on `metadata.requires_screenshots: true` (the default). An ad-hoc 
 bash skills/worktask/scripts/adhoc-visual-evidence.sh --emit pr
 ```
 
-Run it every time (it gates itself) and splice its stdout between `## Test plan` and `## Notes`
+Run it every time (it gates itself) and splice its stdout between `## Test plan` and `## Merge danger`
 before `gh pr create`, so no second API call patches the body. Empty stdout means insert nothing.
 
 #### Capture conditions
@@ -217,9 +241,13 @@ Canonical source for worktask branch grammar; other files point here instead of 
 <type>/[<ticket>-]<slug>
 ```
 
-The ticket segment is optional: `bugfix/ov-156-reconstruction-scan-flow` and
-`feature/add-dark-mode` are both conventional, and `branch_is_conventional` accepts both, so an
-existing ticket-less branch is never churned.
+The ticket segment is optional. Both branches below are conventional, and
+`branch_is_conventional` accepts both, so an existing ticket-less branch is never churned.
+
+```
+bugfix/ov-156-reconstruction-scan-flow
+feature/add-dark-mode
+```
 
 ### Ticket derivation
 
@@ -236,7 +264,7 @@ a key.
 ### Slug budget
 
 `<ticket>-<slug>` fits within 48 characters. Truncation drops the trailing partial segment
-rather than cutting mid-word: `bugfix/ov-164-…-blinking-before`, not `…-blinking-before-r`.
+rather than cutting mid-word: "bugfix/ov-164-…-blinking-before", not "…-blinking-before-r".
 At least one whole word always survives, even one longer than the remaining budget, so a long
 issue key can never starve the slug to nothing.
 
@@ -256,7 +284,7 @@ Milestone/batch runs name branches through
 
 The budgets differ deliberately; everything else is shared. `milestone-helpers.sh` sources
 `branch-lib.sh` for `derive_type` and `BRANCH_TYPES` rather than keeping its own copy, and an
-unreachable library stops the run (exit 2) instead of falling back to `feature/`. Kebab body,
+unreachable library stops the run (exit 2) instead of falling back to the `feature` type. Kebab body,
 trimming and whole-word truncation follow § Slug budget, pinned by cross-check tests in
 `tests/shell/skills/milestone-helpers.bats`: the same title yields the same type and slug body
 from both entry points.
@@ -266,7 +294,7 @@ from both entry points.
 13 tokens, accepted by the already-conventional check: `feat`, `feature`, `bugfix`, `hotfix`,
 `refactor`, `perf`, `docs`, `chore`, `test`, `ci`, `build`, `style`, `revert`. There is no `fix`:
 a pre-existing `fix/<slug>` branch is non-conventional and is renamed onto the derived
-`bugfix/`/`hotfix/` target. Generation emits 12 of the 13: new work defaults to the long form
+`bugfix` or `hotfix` target. Generation emits 12 of the 13: new work defaults to the long form
 `feature`, and a title whose leading word is "Build" emits `feat`. `style` is accepted but never
 generated, and any `feat` branch is accepted so a short-form branch is never churned. The single
 machine-readable copy is `BRANCH_TYPES` in `skills/worktask/scripts/branch-lib.sh`; both

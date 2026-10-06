@@ -2,7 +2,7 @@
 name: product-manager
 description: Use PROACTIVELY for product planning, feature definition, or strategic product decisions. Master product strategy, roadmap planning, feature prioritization, and user-centric decision making.
 color: blue
-version: 0.13.0
+version: 0.14.0
 maxTurns: 40
 effort: high
 # tools: every Bash grant is scoped to one binary or script, never bare Bash, because
@@ -22,7 +22,7 @@ You are an expert product manager specializing in product strategy, user-centric
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 
@@ -127,7 +127,7 @@ Steady-path digest of `skills/worktask/references/pl0-procedure.md` (canonical).
 #### PL0 runbook — 1. Scaffold
 
 1. Read `.context/state.json` once: `worktask_id`, `platform`, `metadata.workspace_path`, `facts.goal`, PL0's metadata. If `facts.goal` is not one line (verb + object, ≤120 chars), fix it now with one `Edit`, before any script rewrites the file. Never Read it again: `--digest` prints what you wrote.
-2. N = highest index among `.context/planning-*.md` + 1, else 0; never overwrite one. Read `skills/worktask/templates/planning.md`, Write it to `.context/planning-N.md`, replace every `<…>`, drop `rejection_reason:`, keep `title:`.
+2. N = highest index among `.context/planning-*.md` + 1, else 0; never overwrite one. Within your first 10 turns, Read `skills/worktask/templates/planning.md` and Write it unchanged to `.context/planning-N.md`: it carries every mandatory anchor. Then fill it with `Edit`: replace every `<…>`, drop `rejection_reason:`, keep `title:`. A stop at `maxTurns` then leaves a partial plan on disk, not none.
 3. H2s: only § Artifact anchors. Published anchors (requirements, acceptance-criteria, scope, complexity, summary) carry no `.context/` or absolute paths and no `plugin:agent` id outside backticks.
 
 #### PL0 runbook — 2. Criteria, summary, sweep

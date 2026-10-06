@@ -14,18 +14,25 @@
 #     c  inside bash fences, a command whose first word ends in .sh (run it as `bash x.sh`).
 #        `.`/`source` of a library is fine. Continuation lines are skipped; no heredoc
 #        awareness.
+#     d  (only with --word-split) inside bash fences, an unquoted $name or ${name} used as a command word or argument:
+#        bash splits it on whitespace, zsh does not, so a snippet run from either shell
+#        breaks on one. Exempt: assignment values, [[ ]] tests, case words, $(( )) and
+#        quoted text. Comment lines are skipped; no heredoc awareness. Quote the variable,
+#        or use an array ("${arr[@]}"), or ${=name} to split on purpose.
 #
 # Usage:
 #   bash "$PLUGIN_ROOT/skills/worktask/scripts/snippet-shell-lint.sh"
-#   bash "$PLUGIN_ROOT/skills/worktask/scripts/snippet-shell-lint.sh" --target '<path>::<heading prefix>' [--target ...]
+#   bash "$PLUGIN_ROOT/skills/worktask/scripts/snippet-shell-lint.sh" [--word-split] --target '<path>::<heading prefix>' [--target ...]
 #   bash "$PLUGIN_ROOT/skills/worktask/scripts/snippet-shell-lint.sh" --self-test | -h | --help
 #
+# @arg --word-split  Also apply rule d. Off by default: the default seed-path sections still
+#   carry unquoted plugin-root env var words, so rule d is run on chosen targets.
 # @arg --target <path>::<prefix>  Split on the first `::`. A relative path resolves against
 #   the plugin root, never cwd. The section starts at the first heading outside a fence
 #   that begins with the prefix and ends before the next heading of the same or a higher
 #   level. No --target means the default seed-path targets (listed by --help).
 #
-# stdout: `<path>:<line>: rule-<a|b|c>: <message>` per violation, then one
+# stdout: `<path>:<line>: rule-<a|b|c|d>: <message>` per violation, then one
 #   `snippet-shell-lint: <path>::<prefix>: ok|<n> violation(s)` line per target.
 #
 # @exitcode 0 Clean.
@@ -38,6 +45,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
+WORD_SPLIT=0
 _SSL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 
 _SSL_DEFAULT_TARGETS=(
@@ -89,7 +97,7 @@ function fence_close(s,   sp, n) {
   return trim(substr(s, sp + n + 1)) == ""
 }
 function open_in_section(ln) {
-  open_ln = ln; kind = "other"; shellish = 0; cont = 0
+  open_ln = ln; kind = "other"; shellish = 0; cont = 0; usq = 0; udq = 0
   if (finfo == "bash") kind = "bash"
   else if (finfo == "") kind = "bare"
   else if (finfo ~ shlabelre) report(ln, "b", "fence labelled " finfo " holds shell; label it bash")
@@ -102,10 +110,49 @@ function bare_line(s,   t) {
 function bash_line(s,   t, was) {
   was = cont
   cont = (s ~ /\\$/)
-  if (was) return
   t = trim(s)
   if (t == "" || substr(t, 1, 1) == "#") return
+  if (wsplit && t !~ /^case[ \t]/) scan_unq(t)
+  if (was) return
   scan(t)
+}
+# Rule d. A word-initial # ends the line; the assignment prefix test looks at the word so far.
+function scan_unq(s,   i, n, c, ws, w, inbr, j, rest, pre, name) {
+  n = length(s); ws = 1; inbr = 0
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (usq) { if (c == q) usq = 0; continue }
+    if (c == "\\") { i++; continue }
+    if (udq) { if (c == "\"") udq = 0; continue }
+    if (c == "#" && i == ws) return
+    if (c == q) { usq = 1; continue }
+    if (c == "\"") { udq = 1; continue }
+    if (c == " " || c == "\t") {
+      w = substr(s, ws, i - ws)
+      if (w == "[[") inbr = 1
+      else if (w == "]]") inbr = 0
+      ws = i + 1
+      continue
+    }
+    if (c != "$") continue
+    if (substr(s, i + 1, 2) == "((") { j = index(substr(s, i), "))"); if (j) i += j; continue }
+    if (inbr) continue
+    pre = substr(s, ws, i - ws)
+    if (pre ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) continue
+    rest = substr(s, i + 1)
+    name = ""
+    if (substr(rest, 1, 1) == "{") {
+      if (match(rest, /^[{][A-Za-z_][A-Za-z0-9_]*([}]|:[-+=?]|[-+=?%#\/])/)) {
+        name = substr(rest, 2); sub(/[^A-Za-z0-9_].*$/, "", name)
+      }
+    } else if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) {
+      name = substr(rest, 1, RLENGTH)
+    }
+    if (name != "") {
+      report(NR, "d", "unquoted $" name " splits in bash but not in zsh; quote it, use an array, or ${=" name "} to split on purpose")
+      return
+    }
+  }
 }
 function first_word(s,   i, n, c, sq, dq) {
   n = length(s); sq = 0; dq = 0
@@ -165,6 +212,7 @@ BEGIN {
   asgre = "^[A-Za-z_][A-Za-z0-9_]*="
   dotshre = "[.]sh([ \"" q "]|$)"
   kwre = "^(if|then|else|elif|do|while|until|time|exec|command|nohup|env)$"
+  wsplit = (ENVIRON["SSL_WS"] == "1")
   state = 0; infence = 0; nviol = 0; open_ln = 0
 }
 {
@@ -257,7 +305,7 @@ lint_target() {
     err "$path: cannot read $file"
     return 2
   fi
-  SSL_PATH=$path SSL_PREFIX=$prefix LC_ALL=C awk "$_SSL_AWK" "$file" || rc=$?
+  SSL_WS=$WORD_SPLIT SSL_PATH=$path SSL_PREFIX=$prefix LC_ALL=C awk "$_SSL_AWK" "$file" || rc=$?
   case $rc in
     0 | 1) return "$rc" ;;
   esac
@@ -289,6 +337,10 @@ main() {
       -h | --help)
         usage
         exit 0
+        ;;
+      --word-split)
+        WORD_SPLIT=1
+        shift
         ;;
       --target)
         [ $# -ge 2 ] || usage_error "missing value for --target"

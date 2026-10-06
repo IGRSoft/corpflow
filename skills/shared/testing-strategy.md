@@ -1,6 +1,6 @@
 ---
 name: testing-strategy
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Testing Strategy
@@ -104,10 +104,24 @@ silently instead of erroring.
 
 - Put `--include=`/`--exclude-dir=` before the pattern, and use `-e` for any pattern containing
   `--` — past a `--` terminator ugrep reads the filter as a filename.
-- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./…` matches nothing and the
+- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./.*` matches nothing and the
   exclusion silently does not apply.
 - Report the per-file decomposition, not only the total — a filter that stopped applying looks
   identical to one that found nothing to exclude.
+
+## Skipped tests
+
+A skipped test is not a pass: it proves nothing about the change, yet most runners print it beside a
+green summary. So every DV or QA run reports its skip count next to its pass count.
+
+A worktree is the common cause. It lacks gitignored material the main checkout has: fixtures,
+local databases, credentials. A test that skips because that material is absent reads as green while
+it checked nothing. Record each such skip with its cause in the stage artifact, and treat it as
+missing coverage, not a result.
+
+The remedy is `.worktreeinclude`, which copies named gitignored paths into each new worktree
+(`skills/megatask/SKILL.md § Including gitignored paths`). Never copy credentials this way unless
+the test needs them and the worktree stays local.
 
 ## DV vs QA Boundary
 
@@ -180,7 +194,7 @@ Fail-open by construction: a future unstripped flag degrades to an allow, never 
 ##### The Node runner
 
 `node` is a runner only with `--test`. A bare `node <script>` is script execution and classifies
-as not a test run, the same discrimination `gradle`/`./gradlew` get from their task name — without it
+as not a test run, the same discrimination `gradle`/`gradlew` get from their task name — without it
 every `node` invocation in a Node project would deny at a banned stage. `--test-reporter` and
 `--test-concurrency` are configuration, not selection; `--test-name-pattern` and `--test-only` are
 genuine selectors and classify scoped.
@@ -310,7 +324,7 @@ not a degradation of a defense-in-depth layer.
 
 `CORPFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory with no
 `.context/state.json`) are both agent-writable across sessions, not agent-proof: any stage holding
-`Write`/`Edit` can write `.claude/settings.json` `env`, effective on the next session or resume.
+`Write`/`Edit` can write `<project>/.claude/settings.json` `env`, effective on the next session or resume.
 Within a live session neither is reachable from a command string — the hook reads process env, not
 payload text — which is what makes the hatch a human relief valve rather than an agent-serviceable
 retry. Across sessions it is human-intent-scoped, not a hard boundary; layers 1 and 2 do not share
@@ -345,7 +359,7 @@ warns if `< 50%` of test files lack any marker).
 
 #### Comment/doc-only diffs — PL *selects* `build-only`
 
-When every hunk of the planned diff is a comment, a prose file (`docs/`, `*.md`), or a non-executable
+When every hunk of the planned diff is a comment, a prose file (`docs/**`, `*.md`), or a non-executable
 string, no test outcome can change: PL sets `test_mode: build-only` and says why in
 `<plan_file> § test-strategy`. The one case where the marker-coverage precondition does not apply —
 the mode is chosen because nothing executable changed, not because markers stand in for a run. One

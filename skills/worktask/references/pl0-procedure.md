@@ -7,8 +7,8 @@ disagreement, and a change here that alters the steady path updates that runbook
 change. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`) never
 need it.
 
-Every `skills/…` and `commands/…` path below is relative to the corpflow plugin root, not the
-worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
+Every `skills/`, `commands/` and `hooks/` path below is relative to the corpflow plugin root, not
+the worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
 
 ## Test Strategy Definition
 
@@ -77,7 +77,7 @@ The planning model decides this flag; the detector is advisory input. DV and the
    ```bash
    skills/worktask/scripts/detect-ui-change.sh <draft-plan> --platform <platform>
    ```
-   It emits `{requires_screenshots, signals, rationale}` as advisory input. Signals (any true ⇒ detector true): **S1** `ui_visual_check: true`; **S2** `.context/designs/` has `figma-registry.md`/`*.png`; **S3** `## scope`/`## requirements` matches the UI framework-term set (`SwiftUI`, `UIKit`, `Composable`, `CSS`, …; generic words like "view" or "screen" do not count); **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/`, `Screens/`, `*.storyboard`, `*.tsx`, …). Exits 0 always; any error ⇒ `true` (`fail_safe_default`).
+   It emits `{requires_screenshots, signals, rationale}` as advisory input. Signals (any true ⇒ detector true): **S1** `ui_visual_check: true`; **S2** `.context/designs/` has `figma-registry.md`/`*.png`; **S3** `## scope`/`## requirements` matches the UI framework-term set (`SwiftUI`, `UIKit`, `Composable`, `CSS`, …; generic words like "view" or "screen" do not count); **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/*`, `Screens/*`, `*.storyboard`, `*.tsx`, …). Exits 0 always; any error ⇒ `true` (`fail_safe_default`).
 
 ##### Judge, stamp, propagate (steps 2–4)
 
@@ -176,7 +176,7 @@ artifacts`.
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.produces` | `[path, ...]`, repo-relative post-merge, alphabet `[A-Za-z0-9._@+/-]` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
+| `metadata.produces` | `[path, ...]`, repo-relative post-merge, matching `^[A-Za-z0-9._@+/-]+$` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
 | `metadata.consumes` | `[{"from": "DV<n>", "paths": [path, ...]}]`, each path listed in that producer's `produces` | Consumer row. Block it on every `from` too (`--task-block C --on P`), or landing refuses it with `not_blocked_on_producer`. |
 
 ##### Propagation fields — base branch & test scope
@@ -279,7 +279,7 @@ through the reconcile stub below.
 ##### Reconcile a disagreeing fork point — never override it
 
 With `$BASE` known, compute `fork_base "$BASE"` (its argument is the tie-break and keeps rank 0
-from recursing). When the answer is non-empty and differs from `$BASE` after stripping `origin/`,
+from recursing). When the answer is non-empty and differs from `$BASE` after stripping the `origin` remote prefix,
 emit one sweep stub — `class: decision`, `blocks_next_stage: false` — carrying both branch names
 and both ahead-counts, fork point recommended:
 

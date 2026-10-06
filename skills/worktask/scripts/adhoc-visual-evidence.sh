@@ -13,7 +13,7 @@
 #   --emit pr [--base <ref>] [--force]
 #                 Print a ready-to-insert "## Visual evidence" block to stdout,
 #                 or NOTHING when this PR has no visual surface. The PR-body
-#                 composer inserts it between ## Test plan and ## Notes, BEFORE
+#                 composer inserts it between ## Test plan and ## Merge danger, BEFORE
 #                 `gh pr create`, so no second API call patches the body after.
 #                 Callers invoke UNCONDITIONALLY; gating lives here. --force
 #                 re-captures and re-hosts instead of replaying.
@@ -70,7 +70,7 @@ if [ ! -r "$_AUDIT_LIB" ]; then
   printf >&2 'adhoc-visual-evidence: plugin install broken — audit-lib.sh not found\n'
   exit 2
 fi
-# shellcheck source=../../shared/lib/audit-lib.sh
+# shellcheck source=../../shared/lib/audit-lib.sh disable=SC1091  # sourced from a runtime path; lint runs without -x
 . "$_AUDIT_LIB"
 
 audit_adhoc() {
@@ -174,7 +174,7 @@ write_manifest() {
   case "$nn" in [0-9][0-9]) ;; *) nn=01 ;; esac
   {
     printf '# Screenshots — %s / %s\n\n' "$id" "$STREAM_ID"
-    printf '> Authored by the ad-hoc PR flow via `adhoc-visual-evidence.sh`. Run index: 0.\n\n'
+    printf "> Authored by the ad-hoc PR flow via \`adhoc-visual-evidence.sh\`. Run index: 0.\n\n"
     printf '| # | Slug | Path | Bytes | Platform | Adapter | Caption | Captured | Design Ref |\n'
     printf '|---|------|------|-------|----------|---------|---------|----------|------------|\n'
     printf '| %s | pr-diff | %s | %s | all | %s | ad-hoc PR diff — %s UI file(s) | %s | — |\n' \
@@ -301,7 +301,7 @@ if [ "${1:-}" = "--self-test" ]; then
   SELFTEST_LIB_PATH="$(dirname "${BASH_SOURCE[0]}")/adhoc-visual-evidence-selftest.sh"
   if [ -r "$SELFTEST_LIB_PATH" ]; then
     # shellcheck source=adhoc-visual-evidence-selftest.sh
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090,SC1091  # path built at runtime; lint runs without -x
     . "$SELFTEST_LIB_PATH"
   else
     printf >&2 'adhoc-visual-evidence: self-test harness unreachable at %s — plugin install broken\n' \

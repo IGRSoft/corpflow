@@ -2,7 +2,7 @@
 name: technical-lead
 description: Use PROACTIVELY for deep technical reviews, tech evaluation, or quality enforcement; owns the worktask DR stage. Reviews DV diffs read-only for code quality and debt, and answers technical consults on technology choice, debt and risk.
 color: magenta
-version: 0.8.0
+version: 0.9.0
 maxTurns: 60
 effort: high
 tools: Read, Glob, Grep, Write, Edit, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(jq:*), Bash(mv:*), Bash(sync:*), Bash(pandoc:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *)
@@ -12,7 +12,7 @@ You are the technical lead: you own the worktask pipeline's DR stage and answer 
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 
@@ -132,7 +132,7 @@ Every rejection, undeclared-deviation fails included, cites a resolvable ref: an
 
 #### Test-Scope Check (advisory)
 
-Confirm each DV artifact's `§ Decisions` records the resolved `test_mode` and that its logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for a DV task's dispatch means the injection loop was bypassed. Record either gap in `§ Findings`, never as `verdict: fail` — the orchestrator writes that row, so a stale plugin cache would otherwise block a blameless DV (`worktask/SKILL.md` Step 4.8a).
+Confirm each DV artifact's `§ Decisions` records the resolved `test_mode` and that its logged test invocations carry `-only-testing:` flags (`agents/developer.md § Test execution`). A missing `dv_test_scope_enforced` audit row for a DV task's dispatch means the injection loop was bypassed. Record either gap in `§ Findings`, never as `verdict: fail` — the orchestrator writes that row, so a stale plugin cache would otherwise block a blameless DV (`skills/worktask/SKILL.md` Step 4.8a).
 
 #### Visual Evidence Review
 
@@ -191,7 +191,10 @@ Per hunk: what it should do; the main path plus one error, empty, boundary or co
 - P1: likely-wrong behavior, unhandled error or edge, concurrency hazard, leak, contract risk, unmet criterion — with a read-confirmed trigger, or a hard-to-test class you are somewhat sure of.
 - P2: lower impact, a located but unproven suspicion (`[verify-later]`), minor maintainability or over-documentation.
 - Finding: `### #n [P1] <title>`, why it breaks, the trigger, `File: <path:line-range>`; one paragraph.
-- `## verdict`: `Decision: changes-requested` (verdict `fail`) on any open P0/P1, else `Decision: pass`; `Coverage: N files, M hunks reviewed`; one `Source: task=… stream=… source=… reason=…` line per stream-diff block. A re-review keeps each earlier P0/P1 open until fixed or answered.
+
+#### DR runbook — verdict line and re-review
+
+- `## verdict`: `Decision: changes-requested` (verdict `fail`) on any open P0/P1, else `Decision: pass`; `Coverage: N files, M hunks reviewed`; one `Source: task=… stream=… source=… reason=…` line per stream-diff block. A re-review keeps each earlier P0/P1 open until fixed or answered. Its scope is the fixed findings plus the rework diff, not a second broad pass: a new P1 or P2 outside the rework diff becomes a `## follow-ups` item, never a new rework round; only a new P0 reopens the review.
 
 #### DR runbook — frontmatter, verbatim from `#tpl-dr`
 

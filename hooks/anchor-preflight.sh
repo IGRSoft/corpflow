@@ -12,8 +12,11 @@
 # development-N-<stream>.md) whose content adds an H2 outside that stage's allow-list
 # (cache-lint.sh --anchor-diff). A missing required H2
 # never denies: artifacts are built in steps, and the stage-boundary harness owns that check.
-# An Edit is judged on new_string, minus the H2s old_string already carries. Fails open
-# (allows) without jq, without a state.json beside the artifact, or without a plugin root.
+# An Edit is judged on new_string, minus the H2s old_string already carries. A whole-file Write
+# is also run through handoff-harness.sh --validate-frontmatter and denied for three of its
+# findings only: frontmatter over the token budget, a digitless test summary_line, a sweep stub
+# whose item has under 2 options. Fails open (allows) without jq, without a state.json beside
+# the artifact, or without a plugin root; the frontmatter arm also without yq.
 #
 # PostToolUse: a write under a .context/ that holds a state.json, whose extension is on the
 # control-byte-lib text allowlist, is scanned for raw C0 control bytes (a form feed in a project's
@@ -121,6 +124,15 @@ if [ "$SELF_TEST" -eq 1 ]; then
       *'"permissionDecision":"deny"'*'## Approach'*) ;;
       *) echo "anchor-preflight: self-test FAIL (bad H2 on an artifact path not denied: $_st_out)"; exit 1 ;;
     esac
+    if command -v yq > /dev/null 2>&1; then
+      _st_out=$(jq -cn --arg p "$_st_td/.context/testing-0.md" '{hook_event_name: "PreToolUse", tool_name: "Write",
+        tool_input: {file_path: $p, content: "---\nhandoff:\n  stage: QA\n  verdict: go\n  summary: \"s\"\n  tests_executed:\n    - { runner: bats, count: 3, summary_line: \"ALL PASS\" }\n  files_touched: []\n  key_decisions: []\n  open_questions: []\n  refs:\n    results: testing-0.md#results\n---\n\n## results\n"}}' \
+        | CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname -- "$0")/..}" bash "$0") || _st_out=""
+      case "$_st_out" in
+        *'"permissionDecision":"deny"'*'carries no digit'*) ;;
+        *) echo "anchor-preflight: self-test FAIL (digitless summary_line on a Write not denied: $_st_out)"; exit 1 ;;
+      esac
+    fi
     _st_out=$(_st_pre "$_st_td/notes-0.md") || _st_out="rc!=0"
     [ -z "$_st_out" ] || { echo "anchor-preflight: self-test FAIL (non-artifact write denied: $_st_out)"; exit 1; }
   else
@@ -193,6 +205,26 @@ pre_allowed_set() {
     }'
 }
 
+# Frontmatter rejections the stage-boundary harness would raise after the turn is spent: an
+# over-budget frontmatter, a digitless test summary_line, a sweep stub whose item has no
+# options. Only a whole-file Write is judged (an Edit holds a fragment), and only these three
+# classes deny; every other harness finding, a missing H2 or a not-yet-written sweep item
+# included, belongs to the stage boundary. Fails open without yq or the harness.
+pre_frontmatter_reason() {
+  [ "$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.content | type' 2> /dev/null)" = string ] || return 0
+  head -n 1 "$_pre_td/new" | grep -q '^---$' || return 0
+  command -v yq > /dev/null 2>&1 || return 0
+  _hh="$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh"
+  [ -r "$_hh" ] || return 0
+  mkdir -p "$_pre_td/art" || return 0
+  cp "$_pre_td/new" "$_pre_td/art/${FILE_PATH##*/}" || return 0
+  _fails=$(bash "$_hh" --validate-frontmatter "$_pre_td/art/${FILE_PATH##*/}" 2>&1 > /dev/null \
+    | grep -E '^fail: .*(discretionary tokens >|summary_line carries no digit|is a status note, not a question)' \
+    | sed -E 's/^fail: //') || return 0
+  [ -n "$_fails" ] || return 0
+  _reason="anchor-preflight: ${FILE_PATH##*/} frontmatter would be rejected at the stage boundary: $(printf '%s' "$_fails" | tr '\n' ';'). Fix it in this write."
+}
+
 pre_tool_use_arm() {
   FILE_PATH=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2> /dev/null) || return 0
   [ -n "$FILE_PATH" ] || return 0
@@ -213,19 +245,23 @@ pre_tool_use_arm() {
     else (.tool_input.new_string // "") end' > "$_pre_td/new" 2> /dev/null || return 0
   printf '%s' "$PAYLOAD" | jq -r '.tool_input.old_string // ""' > "$_pre_td/old" 2> /dev/null || return 0
 
+  _reason=""
   _rc=0
   _rows=$(bash "$_lint" --anchor-diff --for-path "$FILE_PATH" --baseline "$_pre_td/old" "$_pre_td/new" 2> /dev/null) || _rc=$?
-  [ "$_rc" -eq 1 ] || return 0
-  _bad=$(printf '%s\n' "$_rows" | awk -F'\t' '$1 == "unexpected" { printf "%s## %s", (n++ ? ", " : ""), $2 }')
-  [ -n "$_bad" ] || return 0
-
-  _base="${FILE_PATH##*/}"
-  # Strip the run index and any DV stream suffix: the allow-list keys rows by canonical basename.
-  _canon=$(printf '%s' "${_base%.md}" | sed -E 's/-[0-9]+(-[a-z0-9-]+)?$//')
-  _set=$(pre_allowed_set "$_lint" "$_canon") || return 0
-  _nl='
+  _bad=""
+  [ "$_rc" -ne 1 ] || _bad=$(printf '%s\n' "$_rows" | awk -F'\t' '$1 == "unexpected" { printf "%s## %s", (n++ ? ", " : ""), $2 }')
+  if [ -n "$_bad" ]; then
+    _base="${FILE_PATH##*/}"
+    # Strip the run index and any DV stream suffix: the allow-list keys rows by canonical basename.
+    _canon=$(printf '%s' "${_base%.md}" | sed -E 's/-[0-9]+(-[a-z0-9-]+)?$//')
+    if _set=$(pre_allowed_set "$_lint" "$_canon"); then
+      _nl='
 '
-  _reason="anchor-preflight: $_base (stage=${_set%%"$_nl"*}) adds H2 outside the allow-list: $_bad. Allowed: ${_set#*"$_nl"}. Nest other headings as H3."
+      _reason="anchor-preflight: $_base (stage=${_set%%"$_nl"*}) adds H2 outside the allow-list: $_bad. Allowed: ${_set#*"$_nl"}. Nest other headings as H3."
+    fi
+  fi
+  [ -n "$_reason" ] || pre_frontmatter_reason
+  [ -n "$_reason" ] || return 0
   _doc=$(jq -cn --arg reason "$_reason" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}' \
     2> /dev/null) || return 0

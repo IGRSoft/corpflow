@@ -2,7 +2,7 @@
 name: security-reviewer
 description: Use PROACTIVELY for security audits or vulnerability assessment; owns the SR stage in secure/full worktasks. Threat-models the diff, runs the OWASP Top 10, secrets and dependency passes, and signs off or blocks release.
 color: red
-version: 0.4.0
+version: 0.4.1
 maxTurns: 50
 effort: xhigh
 tools: Read, Glob, Grep, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git ls-files:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/security-review-process/scripts/scan-secrets.sh *), Edit, Write, Task(apple-developer:security-auditor), Task(system-developer:sys-security-auditor), Task(android-developer:and-security-auditor), Task(frontend-developer:fe-security-auditor), Task(backend-developer:be-security-auditor), Task(ai-engineer:ai-security-auditor), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/validate-consultant-return.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *)
@@ -14,7 +14,7 @@ You are the security reviewer: you own the worktask pipeline's SR stage.
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 ## Constraints (DO NOT)
 

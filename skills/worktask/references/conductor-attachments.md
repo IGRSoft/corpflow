@@ -146,18 +146,29 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 - **Title** ≤ 72 chars, format `<TYPE>[scope]: <Summary>` (matches commit subject style; see `rules/git-conventions.md`). Suggested type: **<TYPE>**.
 - **Body** via HEREDOC (preserves formatting). Use this skeleton — fill from `.context/complete-summary-N.md`:
 
+~~~
+
+#### Template part 4b — PR body skeleton
+
+~~~markdown
   ```markdown
   ## Motivation
   <Why this change exists — link to the user need / bug / requirement>
 
   ## Changes
+  <Smallest visual first — file tree, call tree or diff sketch — when it is clearer than a list>
   - <Change 1, user-visible language>
   - <Change 2>
 
   ## Test plan
   - [ ] <How a reviewer can verify locally — commands, URLs, screenshots>
+  - <The check that failed before and passes now, or the output that changed; "tests pass" alone is a claim>
 
   <!-- ## Visual evidence — inserted here when UI changed (see below) -->
+
+  ## Merge danger
+  - Reversal: <one-way | two-way> — <one line of reason; when in doubt, one-way>
+  - Blast radius: <what breaks, and for whom, if this change is wrong>
 
   ## Notes
   <Risks, follow-ups, deliberate non-goals. Omit section if empty.>
@@ -170,7 +181,7 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 #### Template part 5
 
 ~~~markdown
-  **Visual evidence section** (between `## Test plan` and `## Notes`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers; the manifest reference is path-free, so no `.context/` path reaches the body. Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass, and it then runs `pr-body-lint.sh` (warn-only) over the sanitised body.
+  **Visual evidence section** (between `## Test plan` and `## Merge danger`): on a UI-change run, run `skills/worktask/scripts/attach-visual-evidence.sh --emit pr` and insert its stdout verbatim. The helper self-gates — it prints the `## Visual evidence` block (hosted image refs + manifest reference) when `metadata.requires_screenshots == true` AND captures exist, and prints **nothing** otherwise (flag false / no captures). Insert the block only when stdout is non-empty; never hand-author the section. Image hosting reuses the publish-helper host tiers; the manifest reference is path-free, so no `.context/` path reaches the body. Invoke it unconditionally; the empty-stdout case omits the section. `fn-preflight.sh pr-body` verifies the helper's `visual_evidence_pr_emitted` row for **this** run and blocks a body that dropped the block — a hand-authored body will not pass, and it then runs `pr-body-lint.sh` (warn-only) over the sanitised body.
 
 ~~~
 
@@ -198,6 +209,7 @@ Run `gh pr create --base <BASE_BRANCH>` with:
 
 - [ ] Title ≤ 72 chars, `<TYPE>[scope]: <Summary>` format
 - [ ] `## Motivation`, `## Changes`, `## Test plan` sections present
+- [ ] `## Merge danger` present: reversal class (`one-way` or `two-way`) with its reason, and the blast radius (`skills/shared/git-conventions.md § Changes, Test plan and Merge danger content`)
 - [ ] **`Closes #<N>` line present on its own line when issue number is resolvable** (regex match: `(?im)^(?:Closes|Fixes|Resolves)\s+#\d+\s*$`)
 - [ ] Body reflects ALL workspace-diff commits, not only HEAD
 

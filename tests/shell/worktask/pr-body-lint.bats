@@ -6,6 +6,7 @@
 #   - P1 fires on a BACKTICK-WRAPPED local path — the shape that defeated the
 #     sanitiser's own anchors and reached a published PR
 #   - P2 fires when a Visual evidence section carries no inline image
+#   - P4 names a missing Merge danger section, warn-only unless --strict
 #   - findings go to stderr; the summary line goes to stdout
 #   - the lint self-disables under batch/incident routing
 # No network, no gh, no git push.
@@ -26,6 +27,9 @@ Because it was broken.
 
 ## Test plan
 - ran the suite
+
+## Merge danger
+two-way: a lint rule; revert the commit. Blast radius: PR-body warnings only.
 
 Closes #12
 EOF
@@ -116,6 +120,16 @@ EOF
   assert_output --partial "Test plan"
 }
 
+@test "P4: a body missing the Merge danger heading warns, and blocks only under --strict" {
+  printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n\nCloses #1\n' > "$WD/b.md"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/b.md"
+  assert_success
+  assert_output --partial "warn: P4"
+  assert_output --partial "missing required section: ## Merge danger"
+  run bash "$PLUGIN_ROOT/$SCRIPT" --body "$WD/b.md" --strict
+  assert_failure 1
+}
+
 @test "P4: a body with no Closes trailer is caught when an issue anchor resolves" {
   printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n' > "$WD/b.md"
   mkdir -p "$WD/.context"
@@ -131,7 +145,7 @@ EOF
 # no branch name or recent commit resolves an anchor behind the ledger's back —
 # the linter must agree with `fn-preflight.sh validate-pr`, which passes here.
 @test "P4: with no issue anchor, a body without a closing trailer is compliant" {
-  printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n' > "$WD/b.md"
+  printf '## Motivation\nx\n\n## Changes\n- y\n\n## Test plan\n- z\n\n## Merge danger\ntwo-way\n' > "$WD/b.md"
   mkdir -p "$WD/.context"
   printf '{"version":1,"worktask_id":"w","run_index":0,"metadata":{},"tasks":{},"facts":{}}\n' \
     > "$WD/.context/state.json"
@@ -196,6 +210,9 @@ Rework the results UI.
 Screenshots persisted on disk; inline hosting unavailable — see manifest.
 
 Manifest: `.context/images/ov-161-skin-analysis-results-ui/screenshots.md`
+
+## Merge danger
+two-way: UI only. Blast radius: the results screen.
 
 Closes #161
 EOF

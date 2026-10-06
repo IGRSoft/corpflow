@@ -165,7 +165,9 @@ setup() {
   [ -f "$counts" ]
   run bash -c "ls -l -- '$counts' | awk '{print \$1}'"
   assert_success
-  [ "$output" = "-rw-------" ]
+  # ls appends one marker after the mode: @ xattr (macOS tags new files with
+  # com.apple.provenance), + ACL, . SELinux context. Bits stay exact.
+  [[ "$output" =~ ^-rw-------[@+.]?$ ]]
 }
 
 @test "a non-integer --appended first line counts 0 and warns" {
