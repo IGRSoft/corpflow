@@ -246,6 +246,21 @@ check() {
   assert_success
 }
 
+@test "backticked git refs, slugs, hosts, ellipses and regex fragments are not paths" {
+  tree_with 'docs/a.md:`origin/develop` `refs/heads/x` `IGRSoft/corpflow` `github.com/IGRSoft/x` `skills/...` `(a)/b` `^docs/[a-z]+` `a|b/c`\n'
+  check --tree "$T" "$T/docs/a.md"
+  assert_success
+  assert_output ""
+}
+
+@test "a missing in-tree path is still a finding next to the skipped tokens" {
+  tree_with 'docs/a.md:`origin/develop` `docs/gone.md` `docs/gonedir` `IGRSoft/corpflow`\n'
+  check --tree "$T" "$T/docs/a.md"
+  assert_failure 1
+  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" = 2 ]
+  [[ "$output" == *'"name":"docs/gone.md"'* && "$output" == *'"name":"docs/gonedir"'* ]]
+}
+
 @test "a JSON-hostile path token is escaped, not emitted raw" {
   # mk_git_fixture writes through printf %b, which turns this \\ into one backslash.
   tree_with 'docs/a.md:See `docs/a"b\\c/d.md`.\n'

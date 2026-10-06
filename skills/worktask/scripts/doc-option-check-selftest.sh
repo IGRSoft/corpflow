@@ -40,6 +40,7 @@ run_self_test() {
   printf 'Set `API_PORT` first.\n' > "$tree/docs/defined.md"
   printf 'See [x](/etc/hosts).\n' > "$tree/docs/outside.md"
   printf 'See [x](gone.md).\n' > "$tree/docs/missing.md"
+  printf 'Refs `origin/develop`, `refs/heads/x`, `IGRSoft/corpflow`, `github.com/IGRSoft/x`, `a|b/c`, `(x)/y`, `skills/...` and `^docs/[a-z]+`.\n' > "$tree/docs/notpaths.md"
   printf '#!/usr/bin/env bash\nprintf "%%s" "$API_PORT"\n' > "$tree/run.sh"
   git -C "$tree" init -q .
   git -C "$tree" add -- .
@@ -54,6 +55,8 @@ run_self_test() {
     bash "$SELF" --tree "$tree" "$tree/docs/missing.md"
   selftest_case 'S5: unresolved tree exits 3' 3 '' \
     bash "$SELF" --tree "$td/no-such-tree" "$tree/docs/defined.md"
+  selftest_case 'S6: refs, slugs, hosts and regex fragments are not paths' 0 '' \
+    bash "$SELF" --tree "$tree" "$tree/docs/notpaths.md"
 
   printf 'self-test: ALL PASS\n'
   exit 0

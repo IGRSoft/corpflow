@@ -3,6 +3,8 @@
 #   Every env var and long flag a doc names must appear in a tracked or untracked,
 #   not-ignored file of an assigned tree, and every link target or backticked relative path must resolve inside a tree and
 #   exist. Doc text is only scanned: nothing from it is eval'd, executed or used as a regex.
+#   Backticked tokens that only look like paths (git refs, owner/repo slugs, host/... URLs,
+#   ellipses, regex fragments) are skipped; a link target is always checked.
 #
 # Usage: doc-option-check.sh [--tree <path>]... [--allow <NAME>]... <doc>...
 #        doc-option-check.sh --self-test | -h | --help
@@ -170,6 +172,26 @@ option_defined() { # <name> <env|flag>
   return 1
 }
 
+# True when a backticked token only looks like a path: a git ref, a regex fragment, an
+# ellipsis, or an owner/repo slug or host/... URL whose first segment exists in no tree.
+# A missing in-tree path (`docs/gone.md`, `skills/gone`) is never exempt.
+not_a_path() { # <token> <physical doc dir>
+  local p="$1" docdir="$2" first root known=0
+  local slug_re='^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$'
+  case "$p" in
+    *')'* | *'…'* | *...* | origin/* | upstream/* | refs/* | remotes/*) return 0 ;;
+    *'['* | *']'* | *'|'* | *'^'* | *'+'* | *'?'* | *"\\"*) return 0 ;;
+  esac
+  first="${p%%/*}"
+  [ "$first" != "$p" ] || return 1
+  for root in "$docdir" "${TREES[@]}"; do
+    if [ -e "$root/$first" ]; then known=1; fi
+  done
+  [ "$known" -eq 0 ] || return 1
+  case "$first" in .*) return 1 ;; *.*) return 0 ;; esac
+  [[ $p =~ $slug_re ]]
+}
+
 # Sets PATH_NAME to the checked path and PATH_REASON to "", "outside" or "missing".
 check_path() { # <token> <link|code> <physical doc dir>
   local tok="$1" src="$2" docdir="$3" p cand inside=0 root cands
@@ -184,6 +206,7 @@ check_path() { # <token> <link|code> <physical doc dir>
     # ~/.claude would otherwise fail every doc that mentions them.
     case "$p" in /* | '~'* | .context/*) return 0 ;; esac
     [[ $p =~ $lineref_re ]] && p="${BASH_REMATCH[1]}"
+    not_a_path "$p" "$docdir" && return 0
   fi
   [ -n "$p" ] || return 0
   PATH_NAME="$p"
