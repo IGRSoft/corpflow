@@ -8,6 +8,13 @@ Fixes the prompt-audit findings and comment gaps of #458, a reader-side root-res
 FN/ST predecessor edges of #467, the writer's share of the reader guard (#468), and the planner-owned
 screenshot flag (#470).
 
+### Added
+
+- **`writing-style` skill and `skills/shared/writing-style.md` canon.** Prose rules derived from
+  ASD-STE100 at about 80%: single-topic sentences (procedural ≤20 words, descriptive ≤25), active
+  voice, imperative steps, articles kept, one term per meaning, and tables or diagrams over prose
+  for structure. technical-writer and the context-compression handoff rules cite it.
+
 ### Changed
 
 - **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the

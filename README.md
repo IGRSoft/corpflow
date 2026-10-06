@@ -442,7 +442,7 @@ The store flows themselves live in the plugin that ships to that store
 and Play Console differ field by field. `--apple-platform` selects an Apple device class and is
 passed through unchanged — it is deliberately distinct from the plugin-wide `--platform`.
 
-### Skills (23 total)
+### Skills (24 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
 - `claude-constitution` — Constitutional principles and ethics framework
 - `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
@@ -466,6 +466,7 @@ passed through unchanged — it is deliberately distinct from the plugin-wide `-
 - `task-folder-organization` — `.context/` folder structure and artifact naming
 - `worktask` — Complete staged worktask system (dynamic sizing, init, stage management)
 - `worktask-testing-strategy` — Test-strategy planning for PL/AR stages
+- `writing-style` — ASD-STE100-derived prose standard (~80%) for replies, handoffs, reports and docs; loadable skill wrapping writing-style.md
 
 Each name above is the invocable id — prefix with `corpflow:` (e.g. `Skill({skill:"corpflow:worktask"})`). See [skills/README.md](skills/README.md) for the full index with effort levels and shared (non-loadable) utilities.
 
