@@ -97,6 +97,9 @@ assert_noop() {
     --meta task_id=DV0 --meta class=no_captures --meta platform=web \
     --meta dedupe_key=sess_fix:agt_bash:screenshot-gate
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("dv-screenshot-capture")'
+  # capture.sh exits 2 without --capture, so the remedy must name it.
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext
+    | contains("--context-dir <context_dir> <platform args> --capture <slug>[:<arg>] in one Bash call (agents/developer.md § Screenshot Capture)")'
 }
 
 @test "a prose-only manifest beside a dv-DV0 capture blocks invalid_evidence" {

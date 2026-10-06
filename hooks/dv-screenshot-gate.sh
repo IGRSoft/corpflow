@@ -66,7 +66,7 @@ VALIDATOR="$_GATE_DIR/../skills/worktask/scripts/attach-visual-evidence.sh"
 _LIB="$(dirname "$0")/model-switch-lib.sh"
 _CF_OPTS=$-
 set +e
-# shellcheck source=hooks/model-switch-lib.sh
+# shellcheck source=hooks/model-switch-lib.sh disable=SC1091  # sourced from a runtime path; lint runs without -x
 [ -f "$_LIB" ] && . "$_LIB"
 case "$_CF_OPTS" in *e*) set -e ;; esac
 
@@ -363,7 +363,8 @@ escalation_json() {
 
 run_gate() {
   local payload="$1" ctx="$2" state="$2/state.json" aid atype scope verdict tid flag platform wid rc
-  local capture="run the dv-screenshot-capture skill with this task_id; it picks the adapter for the platform and falls back to cli/fallback, so headless is not a skip reason"
+  # DV has no Skill grant, so the remedy must name the Bash entry point, never the skill.
+  local capture="run bash \"\$PLUGIN_ROOT/skills/dv-screenshot-capture/scripts/capture.sh\" --task-id <task_id> --context-dir <context_dir> <platform args> --capture <slug>[:<arg>] in one Bash call (agents/developer.md § Screenshot Capture); it picks the adapter for the platform and falls back to cli/fallback, so headless is not a skip reason"
   [ -f "$state" ] || return 0
   aid=$(printf '%s' "$payload" | jq -r '.agent_id // "" | strings' 2> /dev/null || true)
   atype=$(printf '%s' "$payload" | jq -r '.agent_type // "unknown" | strings' 2> /dev/null || echo unknown)
@@ -476,7 +477,7 @@ if [ "$MODE" = "selftest" ]; then
     echo "dv-screenshot-gate: self-test body missing at $_selftest_body" >&2
     exit 1
   fi
-  # shellcheck source=hooks/lib/dv-screenshot-gate-selftest.sh
+  # shellcheck source=hooks/lib/dv-screenshot-gate-selftest.sh disable=SC1091  # sourced from a runtime path; lint runs without -x
   . "$_selftest_body"
 fi
 

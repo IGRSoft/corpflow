@@ -72,7 +72,9 @@ setup() {
   printf '%s\n' "$ROW" | bash "$SCRIPT" --worktask-id=wt-1 --dataset="$DS"
   run bash -c "ls -l -- '$DS' | awk '{print \$1}'"
   [ "$status" -eq 0 ]
-  [ "$output" = "-rw-------" ]
+  # ls appends one marker after the mode: @ xattr (macOS tags new files with
+  # com.apple.provenance), + ACL, . SELinux context. Bits stay exact.
+  [[ "$output" =~ ^-rw-------[@+.]?$ ]]
 }
 
 # --- dataset resolution (plugin-data-lib.sh) --------------------------
