@@ -99,7 +99,9 @@ Hooks read the active tier from `effort.level` (JSON payload) and `$CLAUDE_EFFOR
 hooks attribute spend per tier without parsing model metadata
 (`skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`). Subagents
 and compaction inherit the session's extended-thinking config; pass per-stage `metadata.model` +
-`effort` anyway, because explicit beats inherited for stage determinism and cost attribution.
+`effort` anyway, because explicit beats inherited for stage determinism and cost attribution. An
+automatic model switch (after a flagged message, or a retry on a fallback model) keeps the current
+effort level instead of taking the new model's default or saved level.
 
 ### Effort frontmatter and caps
 
@@ -156,6 +158,7 @@ dispatch.
 | Control | Behaviour |
 |---------|-----------|
 | First-call 404 fallback | A subagent whose model 404s on its first call falls through the session's fallback-model chain; the parent's error names type, HTTP status, request id and model. The stage ran on a model `metadata.model` never asked for, so trust `dispatched_agents[].model_resolved`, not `model_requested`, when attributing cost. |
+| Refused alias target | An API refusal of the model an alias resolves to retries once on the previous same-tier model; a fallback retry that cannot run fast runs at standard speed. Attribute cost from `model_resolved`. |
 | `modelPicker` / `modelPricing` | Managed settings: `modelPicker` curates the `/model` list; `modelPricing` applies an org's contracted rates to `/cost`, the status line and telemetry, so a cost figure read under it is org-rated, not list-rated. |
 
 ## Provider Defaults (Bedrock / Vertex / Foundry)
@@ -171,12 +174,14 @@ runners need no region env.
 
 The small model classifying permission decisions in auto mode defaults to a Sonnet-tier model for
 external sessions, validated on the first request and then pinned for the session. It is unrelated
-to the session model.
+to the session model, and an `ANTHROPIC_DEFAULT_SONNET_MODEL` pin to a 5.5 model does not move it.
 
 ## Context-Window Accounting
 
 `/context` percentages are computed against the full 1M window on models that have one (Opus 5.5,
-Sonnet 5.5, Fable 5.x). How the extended window changes stage handoff budgets, plus the fable
+Sonnet 5.5, Fable 5.x). The 1M window is the default on Bedrock, Vertex, Foundry, the Claude apps
+gateway and a custom `ANTHROPIC_BASE_URL`, with no `[1m]` suffix; `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`
+keeps 200K, and `/autocompact 200k` (saved per model) suits a gateway that stops at 200K. How the extended window changes stage handoff budgets, plus the fable
 without-credits caveat: `skills/context-compression/SKILL.md`.
 
 ## Selection Criteria

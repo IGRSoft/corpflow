@@ -29,6 +29,18 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Changed
 
+- **Requires Claude Code 2.1.291** (was 2.1.284). A cross-session message held at the recipient
+  for approval was reported as delivered before 2.1.288; it now reads as not delivered and names
+  the holding session. Background commands in unattended sessions stop at their `timeout` since
+  2.1.285, which the explicit 2 h `timeout` below depends on. 2.1.291 rather than 2.1.288, which
+  could lose a session's last messages on quit.
+- **CC 2.1.285→2.1.291 band integrated.** The reattach result table and `stale-check.sh` handle
+  `held` (stay parked, never re-send, the operator approves at the named session). Headless-dispatch
+  `Monitor(Bash(...))` calls, the mailbox wait and QA's direct-run fallback pass an explicit
+  `timeout`, so an orchestrator running under `-p` no longer cuts a stage off at 30 min; a stop at
+  the time limit is an infrastructure stop, not a test failure. Docs pick up fail-closed
+  `PreToolUse` matching, teammate `agent_id`/`teammate_id`, worktree access fixes, the 1M default on
+  gateways and cloud providers, and new Bash and Read permission hardening.
 - **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the
   planning model judges whether the diff alters rendered output, S1 (`ui_visual_check`) is a hard
   floor, a `false` over an S2 hit needs a written reason, uncertain means `true`, and the planner

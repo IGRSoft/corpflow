@@ -1297,7 +1297,9 @@ values into the Bash command. `shellQuoteAll` quotes the orchestrator-owned argu
 ###### Headless launch arguments
 
 Run detached and wait through Monitor: a foreground call would impose the Bash tool's
-10-minute cap. Always set `--out` to the canonical attempt log.
+10-minute cap. Always set `--out` to the canonical attempt log. Pass `timeout: 7200000` too:
+when the orchestrator itself runs unattended (`-p`, SDK, CI), a background command stops at
+30 min by default, which would cut a long stage off mid-run.
 
 ```typescript
       const hdArgs = ["--task", task.id, "--agent", subagentType, "--model", effectiveModel,
@@ -1305,7 +1307,7 @@ Run detached and wait through Monitor: a foreground call would impose the Bash t
         "--parent-mode", parentMode, "--baseline", route.baseline,
         "--prompt", promptFile, "--session-id", childSessionId,
         "--out", outLog];
-      const hd = Monitor(Bash({ run_in_background: true,
+      const hd = Monitor(Bash({ run_in_background: true, timeout: 7200000,
         command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(hdArgs)}` }));
       const hdResult = JSON.parse(hd.stdout || "{}");
 ```
@@ -1405,7 +1407,7 @@ The script needs both `--session-id` for reporting and `--resume` for the same c
             "--baseline", route.baseline, "--prompt", blockPromptFile,
             "--session-id", childSessionId, "--resume", childSessionId,
             "--out", resumeOutLog];
-          const resumeHd = Monitor(Bash({ run_in_background: true,
+          const resumeHd = Monitor(Bash({ run_in_background: true, timeout: 7200000,
             command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(resumeArgs)}` }));
           const resumeResult = JSON.parse(resumeHd.stdout || "{}");
 ```

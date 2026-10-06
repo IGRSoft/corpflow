@@ -449,7 +449,11 @@ Agent-team teammates use the lead session's model unless overridden. Aliases (`f
 
 #### Cross-session reach & SendMessage authority
 
-`SendMessage` reaches sessions on other machines. `ListAgents` discovers them — labelling disconnected Remote Control rows `offline` and cloud rows `cloud` — and also lists live teammates and the session's own name (the `name` key), the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value holds messages (user settings) or refuses them (managed settings) rather than being ignored. A message held by the receiving session's own permission-mode policy reaches the sender as a delivery notice. Its exact string is unconfirmed, so treat it as a `blocked`-class result (§ Delivery is reported, so check it).
+`SendMessage` reaches sessions on other machines. `ListAgents` discovers them — labelling disconnected Remote Control rows `offline` and cloud rows `cloud` — and also lists live teammates and the session's own name (the `name` key), the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value holds messages (user settings) or refuses them (managed settings) rather than being ignored. A message held by the receiving session's own permission-mode policy is not delivered: since 2.1.288 the sender's notice says so and names the holding session, and an SDK sender learns of it mid-turn (earlier builds reported it as delivered). Log it as `result: "blocked"` with `metadata.reason: "held"` (§ Delivery is reported, so check it).
+
+##### Restricted sessions & dialog timeout
+
+A `--restricted` session opens no messaging socket (2.1.290), so it is unreachable by design, not gone. A `CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS` value with a unit suffix (`5m`) falls back to `dialogExpiry` instead of reading as milliseconds (2.1.290).
 
 ##### Sessions without SendMessage & cloud restarts
 
@@ -461,7 +465,7 @@ Receivers refuse relayed permission requests, and auto mode blocks them outright
 
 ##### Delivery is reported, so check it
 
-A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, `burst_limited` or `queued`, and `SendMessage`/`ListAgents` say when the session list was too long to enumerate fully — a "peer is gone" conclusion drawn then is unconfirmed, not established. `queued` means the target is an offline Remote Control session on another machine and delivery waits for it to reconnect: never re-send, or the message arrives twice. Branch on the result per `skills/worktask/references/resume.md § Reattach rows — the SendMessage has a result too`.
+A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, `burst_limited`, `queued` or `held` (waiting for a person's approval at the recipient), and `SendMessage`/`ListAgents` say when the session list was too long to enumerate fully — a "peer is gone" conclusion drawn then is unconfirmed, not established. `queued` means the target is an offline Remote Control session on another machine and delivery waits for it to reconnect: never re-send, or the message arrives twice. `held` has the same rule: approval at the named session releases the copy it holds. A subagent or teammate that receives a message mid-run keeps its earlier thinking and prompt cache on resume (2.1.290). Branch on the result per `skills/worktask/references/resume.md § Reattach rows — the SendMessage has a result too`.
 
 ##### notify_when_idle, availability & preview collapse
 
@@ -487,7 +491,7 @@ Subagents resolve project, user and plugin skills natively at every depth, so ne
 
 ### Monitor Tool for Background Events
 
-`Monitor` streams stdout from this session's own background scripts (Bash `run_in_background`) — event-driven, no polling loops. Waiting on a peer session to go idle is `notify_when_idle` instead (§ notify_when_idle, availability & preview collapse); neither substitutes for the other. Launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the watch (`logging-conventions`), note the returned shell ID, and attach `Monitor` to it. After Monitor detaches, the `.log` is still readable.
+`Monitor` streams stdout from this session's own background scripts (Bash `run_in_background`) — event-driven, no polling loops. Waiting on a peer session to go idle is `notify_when_idle` instead (§ notify_when_idle, availability & preview collapse); neither substitutes for the other. Launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the watch (`logging-conventions`), note the returned shell ID, and attach `Monitor` to it. After Monitor detaches, the `.log` is still readable. In an unattended session (`-p`, SDK, CI, cloud) the background command itself stops at its Bash `timeout` (default 30 min, max 2 h), so a command that can run longer sets `timeout` explicitly (`references/headless-dispatch.md` § Print-mode runners — background time limit).
 
 ```bash
 <command> 2>&1 | tee .context/logs/<kind>-<slug>-<ts>.log
@@ -510,7 +514,7 @@ A subagent stalled >10 minutes fails with a clear error rather than hanging, and
 
 #### Watch Deadline
 
-Every Monitor watch carries a bounded deadline — at most 30 minutes, 10 inside a single-prompt (`-p`) run. On expiry Claude is notified to re-arm the watch: a step that outlives the deadline (QA `xcodebuild test`, RE `xcodebuild archive`, IR log tail) re-attaches Monitor on that notification instead of assuming one attach spans the whole operation. This adds to the stall-timeout guard above; it does not replace it.
+Every Monitor watch carries a bounded deadline — at most 30 minutes, 10 inside a single-prompt (`-p`) run. On expiry Claude is notified to re-arm the watch: a step that outlives the deadline (QA `xcodebuild test`, RE `xcodebuild archive`, IR log tail) re-attaches Monitor on that notification instead of assuming one attach spans the whole operation. This adds to the stall-timeout guard above; it does not replace it. A re-armed watch cannot outlive the command: in an unattended session the command's own `timeout` (§ Monitor Tool for Background Events) is the outer bound.
 
 ### MCP Auto-Background
 

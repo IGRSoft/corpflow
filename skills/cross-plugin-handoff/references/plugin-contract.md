@@ -155,10 +155,21 @@ their own `SKILL.md` are listed in `skills[]`.
 
 - Run `claude plugin validate` before publishing: it reports `SKILL.md` files whose frontmatter fails
   to parse, which otherwise fail to load silently. Tooling reads `success` from `--json` rather than
-  scraping the text output.
+  scraping the text output. Since 2.1.289 it no longer skips the plugin when its folder also holds a
+  marketplace manifest, so validate the plugin manifest path, not only the marketplace.
 - A plugin may declare `"."` as a `skills` path, meaning the plugin root itself.
 - The `archive` source installs from a zip over HTTPS and accepts an optional SHA-256 pin. Pin the
   hash for any non-first-party marketplace entry.
+
+#### Configure, install refusals and mods
+
+- `claude plugin configure <plugin>` shows a plugin's options and the unset ones, and saves values
+  read from stdin. An install is refused when its id differs from an installed plugin's only in `.`,
+  `-`, `@` or letter case, and npm sources install from registry packages only.
+- Claude Mods let a plugin change deeper behavior through hooks such as `tool.check`, `turn.step`
+  and `agent.spawn`; `claude plugin validate` lists each gating hook with whether it has a `.catch`
+  (`gatingHooks` under `--json`). corpflow ships no mods, and a user-installed mod that makes an
+  organization's guard skip its check is unloaded.
 
 #### Listing, loading and eval
 

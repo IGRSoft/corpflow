@@ -48,7 +48,7 @@ _HD_PLUGIN_ROOT="$(cd "${_HD_DIR}/../../.." && pwd)"
 # shellcheck source=effort-ladder.sh
 . "${_HD_DIR}/effort-ladder.sh"
 
-MIN_CC_VERSION="2.1.284"
+MIN_CC_VERSION="2.1.291"
 
 usage() {
   cat >&2 << 'EOF2'

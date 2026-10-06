@@ -98,23 +98,35 @@ Benchmark-parity pins: `opus` → `claude-opus-5-5`, `sonnet` → `claude-sonnet
 - The `stream-json` init event carries `mcp_server_errors` — the `--mcp-config` entries the validator skipped. A runner depending on a scoped MCP set (`metadata.mcp_config_path`) reads it at init rather than discovering the gap at the first `mcp__<server>__*` call. `claude mcp list` / `/mcp` report HTTP status and error text on failed connections.
 - The same `system/init` event's `plugin_errors` entries carry `path` for a `--plugin-dir` that failed to load, so a runner passing several plugin dirs can name the one that is missing.
 - With `--forward-subagent-text`, depth-2+ subagents appear in the stream keyed by their spawning Agent `tool_use` id, so per-stage token attribution sees nested Tier-2 work instead of folding it into the parent stage.
-- A turn dying on a mid-stream API error keeps the text `claude -p` already produced — salvage the partial work instead of treating the dispatch as empty.
+
+#### Runner-side reliability — partial responses & signals
+
+- A turn dying on a mid-stream API error keeps the text `claude -p` already produced — salvage the partial work instead of treating the dispatch as empty. Since 2.1.288 a mid-response API timeout no longer fails the turn: `-p` sessions and subagents continue from the partial response, and a thinking-only response is retried.
+- `-p` and SDK sessions honor SIGTERM even when a supervisor (`timeout`, systemd) sends SIGCONT with it (2.1.288).
 
 #### Background-worker & env reliability
 
-Background sessions do not inherit another session's `ANTHROPIC_*` env; they preserve a shell-exported `ANTHROPIC_BASE_URL`, inherit the dispatching shell's `PATH`, honor `effortLevel` when forked through the daemon, and follow `CLAUDE_CODE_EXTRA_BODY`. `--setting-sources` (SDK `settingSources`) is forwarded to spawned sessions — teammates, `/bg`, `claude agents` sessions and `--worktree --tmux` — so a runner's restriction holds one level down. `claude --bg` in a directory that has not passed the workspace trust prompt asks for trust first and exits when not run interactively, so an unattended runner trusts the worktree before dispatching into it. A login-expiry warning fires before interruption, so a runner can re-auth ahead of the cut-off; gateway-auth jobs (`ANTHROPIC_AUTH_TOKEN` + `ANTHROPIC_BASE_URL`) survive daemon respawns.
+Background sessions do not inherit another session's `ANTHROPIC_*` env; they preserve a shell-exported `ANTHROPIC_BASE_URL`, inherit the dispatching shell's `PATH`, honor `effortLevel` when forked through the daemon, and follow `CLAUDE_CODE_EXTRA_BODY`. `--setting-sources` (SDK `settingSources`) is forwarded to spawned sessions — teammates, `/bg`, `claude agents` sessions and `--worktree --tmux` — so a runner's restriction holds one level down. `claude --bg` in a directory that has not passed the workspace trust prompt asks for trust first and exits when not run interactively, so an unattended runner trusts the worktree before dispatching into it.
+
+#### Fork subagents & auto-mode hand-back
+
+With `CLAUDE_CODE_FORK_SUBAGENT=1`, a fork runs under its parent's permission mode (it cannot leave plan mode), and its own Agent call runs in the foreground, so the fork gets the child's result (2.1.285). An auto-mode subagent ends as soon as it hands its report back (2.1.285). A login-expiry warning fires before interruption, so a runner can re-auth ahead of the cut-off; gateway-auth jobs (`ANTHROPIC_AUTH_TOKEN` + `ANTHROPIC_BASE_URL`) survive daemon respawns.
 
 #### Unattended-runner resilience
 
-`CLAUDE_CODE_MAX_RETRIES` is capped at 15; for unattended batches set `CLAUDE_CODE_RETRY_WATCHDOG` instead — it raises the default retry count for non-capacity transient errors to 300 and lifts the cap. The streaming idle watchdog is on by default for all providers: a stream silent for 5 minutes aborts and retries (`CLAUDE_ENABLE_STREAM_WATCHDOG=0` disables). Transient 429s unrelated to the usage limit retry automatically with backoff for subscribers.
+`CLAUDE_CODE_MAX_RETRIES` is capped at 15; for unattended batches set `CLAUDE_CODE_RETRY_WATCHDOG` instead — it raises the default retry count for non-capacity transient errors to 300 and lifts the cap. The streaming idle watchdog is on by default for all providers: a stream silent for 5 minutes aborts and retries (`CLAUDE_ENABLE_STREAM_WATCHDOG=0` disables). Transient 429s unrelated to the usage limit retry automatically with backoff for subscribers. One retry limit covers a whole model call, so with default settings a failing call sends at most 14 requests (2.1.286). Under `CLAUDE_CODE_RETRY_WATCHDOG`, a very long stream that keeps failing streams again and gives up after three timeouts (2.1.288).
 
 #### Structured output & MCP auth
 
-`--json-schema` structured output suits dispatch pipelines (schema-validation failures abort after 5 attempts). Authenticate MCP servers up front with `claude mcp login <name>` / `claude mcp logout <name>` (`--no-browser` completes over SSH). `claude agents --dangerously-skip-permissions` shows the bypass disclaimer and applies bypass mode to spawned agents.
+`--json-schema` structured output suits dispatch pipelines (schema-validation failures abort after 5 attempts). Since 2.1.290 a connection drop after the structured output arrived no longer exits non-zero with `is_error: true` on a `success` result. Authenticate MCP servers up front with `claude mcp login <name>` / `claude mcp logout <name>` (`--no-browser` completes over SSH). `claude agents --dangerously-skip-permissions` shows the bypass disclaimer and applies bypass mode to spawned agents.
 
 #### Print-mode (`claude -p`) runners
 
-`--permission-prompts none` makes an unattended runner deny anything that would prompt instead of hanging, while the active permission mode decides the rest. It is a print-mode flag, not a `claude agents` flag and not a ledger field. `claude -p` waits for a Monitor the model armed to fire or time out before exiting. Background commands a subagent starts have no time cap and run until they exit or are stopped, so a runner stops them explicitly. A `cd` persists across turns in non-interactive sessions. With `-p`, `--agents` takes the path to a JSON file as well as inline JSON, and allows an empty `prompt`. `--system-prompt` and `--append-system-prompt` accept their text and `-file` forms together, the file's text first. The first non-interactive turn waits up to 2s for connecting MCP servers named by `--allowedTools` or an `mcp_tool` hook, even with `CLAUDE_CODE_MCP_STARTUP_WAIT_MS=0`.
+`--permission-prompts none` makes an unattended runner deny anything that would prompt instead of hanging, while the active permission mode decides the rest. It is a print-mode flag, not a `claude agents` flag and not a ledger field. `claude -p` waits for a Monitor the model armed to fire or time out before exiting. A `cd` persists across turns in non-interactive sessions. With `-p`, `--agents` takes the path to a JSON file as well as inline JSON, and allows an empty `prompt`. `--system-prompt` and `--append-system-prompt` accept their text and `-file` forms together, the file's text first. The first non-interactive turn waits up to 2s for connecting MCP servers named by `--allowedTools` or an `mcp_tool` hook, even with `CLAUDE_CODE_MCP_STARTUP_WAIT_MS=0`.
+
+#### Print-mode runners — background time limit, `--bare` and the prompt tool
+
+In unattended sessions (`-p`, Agent SDK, CI, cloud) a background Bash or PowerShell command stops at its `timeout` (default 30 min, max 2 h) and Claude is notified (2.1.285; interactive sessions have no limit since 2.1.288). A long background job in a `-p` run therefore sets `timeout` explicitly, and a runner still stops any command that outlives its stage. `--bare` connects only the MCP servers named on the command line, sends no system reminders, starts no background tasks and skips hooks (2.1.286); never dispatch a stage with it, because the audit rows come from the child's hooks. `--permission-prompt-tool` receives a background subagent's permission request instead of auto-denying it (2.1.285).
 
 ## Live Session Discovery
 
@@ -162,7 +174,7 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 #### Observed drift — interactive rows
 
-Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.284, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
+Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.291, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
 
 #### Open: dispatched-agent and teammate rows
 
@@ -170,7 +182,7 @@ Unconfirmed whether rows with `kind` ≠ `interactive` keep the snake_case basel
 
 #### Dispatch surface drift
 
-`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.284). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
+`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.291). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
 
 #### Defensive jq pattern
 
@@ -197,7 +209,7 @@ On a baseline shift (new required field, renamed field, type change), the next c
 
 ## Session Lifecycle CLI (attach / logs / stop / respawn / rm)
 
-`claude attach <id>` attaches a terminal to a running background session; `--resume` is for a stopped conversation, and its message prints the exact `attach` command when the target is still running. `logs`, `stop`, `respawn` and `rm` complete the surface (`claude --help`).
+`claude attach <id|name>` attaches a terminal to a running background session; part of the session name works in place of the id for `attach` and `logs` (2.1.290). Since 2.1.285 `/resume` and `claude --resume <id>` open a session that is running in the background instead of refusing, and `claude --resume <id> "prompt"` sends the prompt as its next turn. `logs`, `stop`, `respawn` and `rm` complete the surface (`claude --help`); options placed before the subcommand no longer start a new session (2.1.285).
 
 ### Operator tools vs orchestrator reattach
 

@@ -47,7 +47,7 @@ No platform test tooling lives here. Resolve the platform's plugin (`skills/shar
 
 ### Long test runs, logging & doc lookup
 
-A delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` tunes it) — await the completion notification or poll; never treat the returned handle as results (`agent-coordination § MCP Auto-Background`). Start a direct Bash fallback with `run_in_background` and attach Monitor to stream pass/fail live. Either way tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing-N.md` (`logging-conventions` skill).
+A delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS` tunes it) — await the completion notification or poll; never treat the returned handle as results (`agent-coordination § MCP Auto-Background`). Start a direct Bash fallback with `run_in_background` and attach Monitor to stream pass/fail live. In an unattended session (`-p`, SDK, CI) that background command stops at 30 min by default, so pass `timeout` (up to 7200000 ms) for a suite that can run longer. A stop at the time limit is an infrastructure stop, never a test failure: split the suite or re-run it with a larger `timeout`. Either way tee stdout to `.context/logs/test-qa-<YYYYMMDD-HHMMSS>.log` for persistence into `testing-N.md` (`logging-conventions` skill).
 
 Docs: Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). Non-markdown files and document URLs: pandoc — `skills/shared/pandoc-ingestion.md`.
 

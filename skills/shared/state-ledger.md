@@ -513,6 +513,9 @@ audit row naming every task still `in_progress` at teardown; it never mutates ta
 
 With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has one implicit team: spawn teammates
 with the Agent tool's `name` parameter (`team_name` is ignored) and message them with `SendMessage`.
+A plugin-defined agent spawned by name runs with its own prompt, tools, `disallowedTools` and
+effort. The Agent result's `agent_id` is the teammate's agent ID; its `name@team` address is in
+`teammate_id`.
 Teammates coordinate through the same `.context/state.json` ledger as every other stage and can
 self-claim available work. Live teammates are visible to `ListAgents`/`claude agents --json`, so a
 lead resuming mid-batch uses the stage loop's pre-check

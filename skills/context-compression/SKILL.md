@@ -148,7 +148,9 @@ Over budget, cut in this order:
 | Context > 50% window | Summarize completed stages |
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
-| Post-compaction | Deferred tool schemas preserved — no re-fetch needed |
+| Post-compaction | Deferred tool schemas preserved — no re-fetch needed; a folder's CLAUDE.md is not attached a second time after a compaction or resume |
+| Write/Edit in a rule's scope | Path-scoped `.claude/rules` and nested CLAUDE.md load on Write and Edit too, not only on Read — count them in the stage budget |
+| Context too long for the auto-mode classifier | The conversation is compacted instead of every tool call prompting or failing |
 | Last few turns are noise | `/rewind`, not `/compact` (`skills/cost-optimization/references/token-baselines.md § Session commands`) |
 
 ## Compact Instructions

@@ -143,7 +143,7 @@ reported. Read the result before treating any reattach as done, and log one `rea
 row per attempt. `result: "ok"` means delivered to the addressed session itself (a backgrounded
 session has no interactive twin in `ListAgents` to absorb the send); every non-delivery is
 `result: "blocked"` with the mode (`refused`, `dropped`, `oversized`, `burst_limited`,
-`session_list_truncated`, `queued`) in `metadata.reason`. Never log a delivered-and-awaiting send
+`session_list_truncated`, `queued`, `held`) in `metadata.reason`. Never log a delivered-and-awaiting send
 as `deferred`, and never omit the field: `stale-check.sh` reads any present result other than `ok`
 as undelivered, while a missing or null `result` counts as delivered. A delivered nudge advances
 the stage; every other result leaves it exactly where it was.
@@ -163,6 +163,7 @@ the stage; every other result leaves it exactly where it was.
 | `oversized` — refused up front for message size | Reattach prompt is too large (authoring defect). Shorten and retry |
 | `burst_limited` — refused up front for send rate | Stage stays parked. Back off briefly, retry once |
 | `queued` — offline Remote Control on another machine | Stage stays parked. Do not re-send (the queued copy lands on reconnect; a second send duplicates). Do not re-delegate or increment `retry_count`. Await reconnection; escalate if stale |
+| `held` — the recipient's permission-mode policy holds it for a person's approval; the notice names the session | Stage stays parked. Do not re-send (approval releases the held copy; a second send duplicates). Do not re-delegate or increment `retry_count`. Escalate to the operator to approve at the named session |
 
 #### Reattach rows — an unconfirmed absence
 
@@ -358,6 +359,12 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 
    Messages sent while a subagent is finishing its turn are not dropped, and `ctrl+b` does not restart the session, so a mid-turn reattach keeps the awaited answer.
 
+### Step 0 notes — scheduled tasks & agents-view replies
+
+   Scheduled tasks and `/loop` wakeups come back after a compaction or resume, and a foreground-set task fires after a `/background` hand-off; a recurring one no longer runs an extra time on resume, respawn or fork. A background session waiting on a scheduled wakeup is kept through updates and low memory.
+
+   A reply sent from `claude agents` arrives as a queued message and is retried for up to 12 s while a crashed session restarts. A slash command or answer it could not deliver is no longer saved and replayed on the next restart. A reply to a session parked on a permission prompt never approves the pending command.
+
 ### Step 0 notes — background-agent guarantees
 
    The resume loop may rely on these at the plugin's min CC:
@@ -371,7 +378,11 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 
    - **Stopped means stopped**: an operator-killed agent never auto-respawns or re-runs a stale prompt; a daemon-restart-killed worker auto-resumes when the agents view next opens. Re-delegate only when the pre-check shows the agent truly absent.
    - **Work preservation**: waking a background job never deletes its transcript or re-runs the prompt; returning to `claude agents` carries running work over; long-running commands survive session restarts. A running background session holds its worktree's lock, so cleanup leaves it alone. Stale-worktree cleanup is not a resume chore.
-   - **Interrupted calls**: a session that ended mid-tool-call resumes with that call marked outcome unknown and no hidden "Continue" message, so check its effect before repeating it. MCP calls in a resumed session wait up to 10s for a reconnecting server.
+
+#### Interrupted calls & transcript fidelity
+
+   - **Interrupted calls**: a session that ended mid-tool-call resumes with that call marked outcome unknown and no hidden "Continue" message, so check its effect before repeating it. MCP calls in a resumed session wait up to 10s for a reconnecting server. `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` does not re-run a turn that ended at `--max-turns`.
+   - **Transcript fidelity**: `--resume` keeps the turns after a batch of parallel tool calls, the context a compaction restored, and the last messages before a quit. A session backgrounded while idle resumes its conversation instead of reopening empty.
 
 #### Reattach, cross-spawn & inspection
 
