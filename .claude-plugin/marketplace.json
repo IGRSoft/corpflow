@@ -109,7 +109,8 @@
         "./skills/shared/milestone-helpers",
         "./skills/task-folder-organization",
         "./skills/worktask",
-        "./skills/worktask-testing-strategy"
+        "./skills/worktask-testing-strategy",
+        "./skills/writing-style"
       ]
     }
   ]

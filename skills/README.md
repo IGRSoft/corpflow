@@ -55,6 +55,7 @@ scanning the table. They are expected to diverge, and a divergence is not drift 
 |-------|-------------|--------|
 | [worktask](worktask/SKILL.md) | Complete staged worktask system with dynamic sizing and stage management | high |
 | [worktask-testing-strategy](worktask-testing-strategy/SKILL.md) | Test strategy planning guidance for PL and AR worktask stages | medium |
+| [writing-style](writing-style/SKILL.md) | ASD-STE100-derived prose standard (~80%) — short active sentences, one term per meaning, tables/diagrams over prose; wraps writing-style.md | low |
 
 ## Shared Utilities
 
@@ -82,6 +83,7 @@ Files in `shared/` are referenced by skills/agents, not loaded directly — **ex
 | [plan-content.md](shared/plan-content.md) | Plan content: decisions, not a transcript |
 | [three-stage-planning.md](shared/three-stage-planning.md) | 3-stage planning model, stage budgets, gate criteria |
 | [technical-consult.md](shared/technical-consult.md) | Technical-lead TC consults: technology evaluation, debt scoring, risk categories |
+| [writing-style.md](shared/writing-style.md) | Prose standard (name writing-style) — ASD-STE100 core rules, relaxations, visual-over-prose |
 
 ### Testing, routing & resolution
 

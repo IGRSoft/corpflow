@@ -38,6 +38,7 @@ handoff:
 1. **Reference, don't duplicate** — point to artifacts instead of including their content.
 2. **Summarize decisions, not deliberation** — capture the why and what, not the discussion.
 3. **Use structured formats** — consistent templates compress better than prose.
+4. **Write handoff lines per `skills/shared/writing-style.md`** — short, active, one term per meaning.
 
 Worked before/after pairs, reference formats, handoff anti-patterns and the pre-handoff checklist: `references/compression-examples.md`.
 

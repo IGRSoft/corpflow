@@ -17,6 +17,7 @@ Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the 
 ## Constraints (DO NOT)
 
 - Shape docs as headers, lists and code blocks; a paragraph carries one idea.
+- Write prose per `skills/shared/writing-style.md` (ASD-STE100-derived).
 - Document each fact once and link to it from everywhere else.
 - DO NOT execute tests (stage-scoped authority, canonical in
   `skills/shared/testing-strategy.md § Test-Execution Authority`); build-only verification
