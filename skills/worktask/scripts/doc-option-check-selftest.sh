@@ -42,6 +42,7 @@ run_self_test() {
   printf 'See [x](gone.md).\n' > "$tree/docs/missing.md"
   printf 'Refs `origin/develop`, `refs/heads/x`, `IGRSoft/corpflow`, `github.com/IGRSoft/x`, `a|b/c`, `(x)/y`, `skills/...` and `^docs/[a-z]+`.\n' > "$tree/docs/notpaths.md"
   printf '#!/usr/bin/env bash\nprintf "%%s" "$API_PORT"\n' > "$tree/run.sh"
+  printf 'See `docs/a"b\\c/d.md`.\n' > "$tree/docs/hostile.md"
   git -C "$tree" init -q .
   git -C "$tree" add -- .
 
@@ -57,6 +58,8 @@ run_self_test() {
     bash "$SELF" --tree "$td/no-such-tree" "$tree/docs/defined.md"
   selftest_case 'S6: refs, slugs, hosts and regex fragments are not paths' 0 '' \
     bash "$SELF" --tree "$tree" "$tree/docs/notpaths.md"
+  selftest_case 'S7: a JSON-hostile path under a real dir is still a finding' 1 '"name":"docs/a\"b\\c/d.md"' \
+    bash "$SELF" --tree "$tree" "$tree/docs/hostile.md"
 
   printf 'self-test: ALL PASS\n'
   exit 0

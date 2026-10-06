@@ -180,13 +180,19 @@ not_a_path() { # <token> <physical doc dir>
   local slug_re='^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$'
   case "$p" in
     *')'* | *'…'* | *...* | origin/* | upstream/* | refs/* | remotes/*) return 0 ;;
-    *'['* | *']'* | *'|'* | *'^'* | *'+'* | *'?'* | *"\\"*) return 0 ;;
   esac
   first="${p%%/*}"
-  [ "$first" != "$p" ] || return 1
   for root in "$docdir" "${TREES[@]}"; do
     if [ -e "$root/$first" ]; then known=1; fi
   done
+  # A regex metacharacter reads as a fragment only when no tree holds the first segment, so
+  # a real directory with an odd character in a deeper name still reaches the path check.
+  if [ "$known" -eq 0 ]; then
+    case "$p" in
+      *'['* | *']'* | *'|'* | *'^'* | *'+'* | *'?'* | *"\\"*) return 0 ;;
+    esac
+  fi
+  [ "$first" != "$p" ] || return 1
   [ "$known" -eq 0 ] || return 1
   case "$first" in .*) return 1 ;; *.*) return 0 ;; esac
   [[ $p =~ $slug_re ]]
