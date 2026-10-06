@@ -26,7 +26,7 @@
 #   bash "$PLUGIN_ROOT/skills/worktask/scripts/snippet-shell-lint.sh" --self-test | -h | --help
 #
 # @arg --word-split  Also apply rule d. Off by default: the default seed-path sections still
-#   carry unquoted ${CLAUDE_PLUGIN_ROOT}-style words, so rule d is run on chosen targets.
+#   carry unquoted plugin-root env var words, so rule d is run on chosen targets.
 # @arg --target <path>::<prefix>  Split on the first `::`. A relative path resolves against
 #   the plugin root, never cwd. The section starts at the first heading outside a fence
 #   that begins with the prefix and ends before the next heading of the same or a higher
