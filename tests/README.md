@@ -294,7 +294,7 @@ Per QA findings (AC-3 resolution):
 
 1. **kcov macOS bash 3.2** (DOCUMENTED PROXY) — kcov cannot instrument bash 3.2's `BASH_VERSINFO` guards; bash line coverage measured via assertion-density proxy (≥3 scenarios/script). Real line numbers obtainable on GNU/Linux host.
 
-2. **`audit-tooluse.bats` environment coupling (P1, FIXED)** — Originally asserted `.effort == "max"` for absent-effort fixture, but script default is `"unknown"` (via `env.CLAUDE_EFFORT // "unknown"`). Test now pins `CLAUDE_EFFORT=off` and asserts `"unknown"` deterministically.
+2. **`audit-tooluse.bats` environment coupling (P1, FIXED)** — Originally asserted `.effort == "max"` for absent-effort fixture, but script default is `"unknown"` (via `.effort.level // "unknown"`). The hooks no longer read `$CLAUDE_EFFORT`, so the test needs no env pin; a separate case sets `CLAUDE_EFFORT=high` and still asserts `"unknown"`.
 
 3. **`build-orchestrator.sh:146` false-cycle bug (FIXED)** — `blocks?` matched "Blocked by" (intended only for the `blocks:` dependency), adding a spurious reverse edge → false cycle (exit 5). Now `\bblocks?\b`; the test asserts the correct wave order and the absence of a reverse edge.
 

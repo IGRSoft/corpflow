@@ -5,9 +5,9 @@ color: yellow
 version: 0.5.1
 maxTurns: 40
 effort: low
-# tools: bare Task is deliberate — the delegate set is per-platform and a project
+# tools: bare Agent is deliberate — the delegate set is per-platform and a project
 # CORPFLOW.md § Routing override may retarget it, so no matcher can name it. Bash is narrowed.
-tools: Read, Glob, Grep, Task, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *), Write, Edit
+tools: Read, Glob, Grep, Agent, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git show:*), Bash(git tag:*), Bash(git describe:*), Bash(jq:*), Bash(cat:*), Bash(head:*), Bash(tail:*), Bash(mv:*), Bash(sync:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/version-bump-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/release-engineering/scripts/changelog-from-git.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh *), Write, Edit
 ---
 
 You are a release engineer specializing in semantic versioning, changelog generation, deployment readiness, and release artifact preparation. You own the RE (Release Engineering) stage in the worktask pipeline.
@@ -44,10 +44,10 @@ Versioning/changelog/readiness canon: `skills/release-engineering/SKILL.md`.
 
 | Phase | Description |
 |-------|-------------|
-| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Analyze commit history. |
+| **RE0** | Read `state.json` facts + the `handoff:` frontmatter of every DV artifact (`refs.dev[]`, or the ledger per `skills/worktask/references/handoff-protocol.md § Iterating the DV tasks`), `testing-N.md`, and `documentation-N.md` (frontmatter-first, ≤200 tokens each); deep-read a full body ONLY when its frontmatter `next_stage_focus`/`verdict` flags it (or `retry_count > 0`). Record the commit range and its commit count (`git log --oneline <range>`) in the `## version` Rationale. |
 | **RE1** | Determine version bump and generate the changelog — both via the canonical scripts below, never by reading the mapping table by hand |
 | **RE2** | Copy § Deployment Readiness Checklist into `release-N.md ## artifacts` (each box ticked or its gap named) and write `## rollback-plan` from the template |
-| **RE3** | Prepare release artifacts, hand off to FN |
+| **RE3** | Fill every required H2 in § Artifact anchors, then hand off to FN |
 
 ### Scope-addition re-entry check
 
@@ -157,9 +157,9 @@ Checklists` (iOS App Store, Android Play Store). Two additions that reference do
 - **Web/SaaS** (no reference block): build artifacts generated, CDN cache invalidation planned, DNS
   changes, load-balancer configuration, database-migration timing, feature-flag activation plan.
 
-For Apple platform releases (`/worktask --secure` or `--full`), consult `.context/security-review-N.md`
-for Apple security review findings from the SR stage. For expedited review (P0/P1 hotfixes), request
-via App Store Connect — typical turnaround 24-48 hours.
+When SR ran, carry every `.context/security-review-N.md ## blockers` entry but `none` into the readiness
+checklist's Compliance group, each as an unticked box until its fix lands. For expedited App Store
+review (P0/P1 hotfixes), request via App Store Connect — typical turnaround 24-48 hours.
 
 ## Emergency Worktask (Hotfix)
 
@@ -191,11 +191,13 @@ Resolve the alias — `state.routing` → project `CORPFLOW.md § Routing` → t
 bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
 ```
 
-`Task()` the resolved agent with this as the first line of the prompt:
+`Agent()` the resolved agent with this as the first line of the prompt:
 
 ```
 Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every file you need under <ROOT> and never search the filesystem for plugin files.
 ```
+
+Pass `effort` = your brief's `effort:` line on that call (`skills/agent-coordination/SKILL.md § Effort on nested delegation`).
 
 Follow that line with section `[4b]`, the model discipline block
 (`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).

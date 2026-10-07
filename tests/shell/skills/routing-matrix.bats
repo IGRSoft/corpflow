@@ -4,7 +4,7 @@
 # targets (mandated copies), and this file is what keeps every copy in lockstep:
 # the pre-matrix layout drifted silently (plugin-protocols.md shipped stale
 # android bare names for two releases). Also guards the virtual alias namespace
-# and the bare-Task grant convention that project routing overrides depend on.
+# and the bare-Agent grant convention that project routing overrides depend on.
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 MATRIX="skills/shared/routing-matrix.md"
@@ -115,19 +115,19 @@ matrix_target() {
   done <<< "$(matrix_rows | awk '{print $1}')"
 }
 
-@test "grants: the architect keeps a bare Task grant, no literal dev-plugin grants" {
+@test "grants: the architect keeps a bare Agent grant, no literal dev-plugin grants" {
   # AR consults rarely (§ Consult Gate) and any plugin's architect may be an override target.
   local tools
   tools="$(grep -E '^tools:' "$PLUGIN_ROOT/agents/software-architector.md")"
-  printf '%s\n' "$tools" | grep -qE '(^tools:|,)[[:space:]]*Task([[:space:]]*(,|$))' \
-    || { echo "software-architector.md: no bare Task grant" >&2; return 1; }
-  if printf '%s\n' "$tools" | grep -qE 'Task\([a-z-]+:'; then
-    echo "software-architector.md: literal Task(plugin:agent) grant remains" >&2
+  printf '%s\n' "$tools" | grep -qE '(^tools:|,)[[:space:]]*Agent([[:space:]]*(,|$))' \
+    || { echo "software-architector.md: no bare Agent grant" >&2; return 1; }
+  if printf '%s\n' "$tools" | grep -qE 'Agent\([a-z-]+:'; then
+    echo "software-architector.md: literal Agent(plugin:agent) grant remains" >&2
     return 1
   fi
 }
 
-# DV, SR and QA run long Opus/Sonnet contexts, where a bare Task grant loads the whole agent
+# DV, SR and QA run long Opus/Sonnet contexts, where a bare Agent grant loads the whole agent
 # directory into every turn; they list their targets instead. The list must cover every matrix
 # default for the role, or a default dispatch would be refused.
 grant_covers() {
@@ -135,15 +135,15 @@ grant_covers() {
   tools="$(grep -E '^tools:' "$PLUGIN_ROOT/$f")"
   target="$(matrix_target "$alias")"
   [ -n "$target" ] || { echo "no matrix target for corpflow:$alias" >&2; return 1; }
-  printf '%s\n' "$tools" | grep -qF "Task($target)" \
-    || { echo "$f: Task($target) (corpflow:$alias) not granted" >&2; return 1; }
+  printf '%s\n' "$tools" | grep -qF "Agent($target)" \
+    || { echo "$f: Agent($target) (corpflow:$alias) not granted" >&2; return 1; }
 }
 
-@test "grants: DV, SR and QA list every matrix default for their role, no bare Task" {
+@test "grants: DV, SR and QA list every matrix default for their role, no bare Agent" {
   local f p
   for f in agents/developer.md agents/security-reviewer.md agents/qa-engineer.md; do
-    if grep -E '^tools:' "$PLUGIN_ROOT/$f" | grep -qE '(^tools:|,)[[:space:]]*Task([[:space:]]*(,|$))'; then
-      echo "$f: bare Task grant" >&2; return 1
+    if grep -E '^tools:' "$PLUGIN_ROOT/$f" | grep -qE '(^tools:|,)[[:space:]]*Agent([[:space:]]*(,|$))'; then
+      echo "$f: bare Agent grant" >&2; return 1
     fi
   done
   for p in $DEV_PLUGINS; do grant_covers agents/developer.md "$p"; done
@@ -158,21 +158,21 @@ grant_covers() {
   local root="$BATS_TEST_TMPDIR/root"
   mkdir -p "$root/agents" "$root/$(dirname "$MATRIX")"
   cp "$PLUGIN_ROOT/$MATRIX" "$root/$MATRIX"
-  sed 's/Task(ai-engineer:ai-engineer), //' "$PLUGIN_ROOT/agents/developer.md" > "$root/agents/developer.md"
+  sed 's/Agent(ai-engineer:ai-engineer), //' "$PLUGIN_ROOT/agents/developer.md" > "$root/agents/developer.md"
   PLUGIN_ROOT="$root" run grant_covers agents/developer.md ai-engineer
   assert_failure
   PLUGIN_ROOT="$root" run grant_covers agents/developer.md apple-developer
   assert_success
 }
 
-@test "grants: /worktask carries a bare Task grant, since a stage row may name any plugin's agent" {
+@test "grants: /worktask carries a bare Agent grant, since a stage row may name any plugin's agent" {
   local tools
   tools="$(grep -E '^allowed-tools:' "$PLUGIN_ROOT/commands/worktask.md")"
   [ -n "$tools" ] || { echo "commands/worktask.md: no allowed-tools line" >&2; return 1; }
-  printf '%s\n' "$tools" | grep -qE '(^allowed-tools:|,)[[:space:]]*Task([[:space:]]*(,|$))' \
-    || { echo "commands/worktask.md: no bare Task grant" >&2; return 1; }
-  if printf '%s\n' "$tools" | grep -qE 'Task\([a-z-]+:'; then
-    echo "commands/worktask.md: literal Task(plugin:agent) grant remains" >&2
+  printf '%s\n' "$tools" | grep -qE '(^allowed-tools:|,)[[:space:]]*Agent([[:space:]]*(,|$))' \
+    || { echo "commands/worktask.md: no bare Agent grant" >&2; return 1; }
+  if printf '%s\n' "$tools" | grep -qE 'Agent\([a-z-]+:'; then
+    echo "commands/worktask.md: literal Agent(plugin:agent) grant remains" >&2
     return 1
   fi
 }

@@ -142,7 +142,7 @@ Runs on every agent regardless of `--focus`; findings block on the Must Apply ti
 
 | Field | Audit Rule | Severity |
 |-------|------------|----------|
-| `model` | Must be absent — model selection stays a per-dispatch `Task()` argument (`skills/shared/stage-codes.md § Model alias notes`). Flag a `model:` key in any definition frontmatter as P0; fix is deletion. | P0 |
+| `model` | Must be absent — model selection stays a per-dispatch `Agent()` argument (`skills/shared/stage-codes.md § Model alias notes`). Flag a `model:` key in any definition frontmatter as P0; fix is deletion. | P0 |
 | `effort` | Required, equal to the agent's Effort cell in `skills/shared/stage-codes.md § Agent Model Matrix` (`§ Static effort and dispatch overrides`; `agent-effort-frontmatter.bats` holds the parity). Missing or unequal is P0; fix is the matrix value. | P0 |
 
 #### Frontmatter audit — tools (P1)

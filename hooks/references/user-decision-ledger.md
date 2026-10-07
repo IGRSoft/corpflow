@@ -273,7 +273,7 @@ answer text.
    `blocked_on.detail`, writes `resumed` with that `decision_ref`, and returns an
    `instruction` that names the verify command and no answer text.
 5. The orchestrator delivers that instruction unmodified and never appends the answer it saw
-   (`skills/worktask/SKILL.md § Step 7a — a user decision resumes by reference`).
+   (`skills/worktask/references/step-7a-arms.md § Step 7a — a user decision resumes by reference`).
 6. The stage verifies the ref and cites it in `decisions_applied: [ud-…]`.
 
 Declining the dialog writes no row, so `resume` exits 1, nothing is written, and the run stops with

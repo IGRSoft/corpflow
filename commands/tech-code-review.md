@@ -2,7 +2,9 @@
 name: tech-code-review
 description: Perform platform-aware code review using specialized developer expertise; --depth deep adds full technical-review analysis
 argument-hint: '[--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]'
-allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
+# tools: Write and Edit are scoped to the DR findings artifact `.context/developer-review-N.md`
+# (§ Output Format); the review never edits source, because DV applies every fix.
+allowed-tools: Read, Glob, Grep, Write, Edit, Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/stream-diff.sh *)
 version: 0.3.0
 related:
   - agents/developer.md
@@ -28,19 +30,21 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 
 | Option | Values | Effect |
 |---|---|---|
-| `--platform` | `apple\|android\|web\|systems\|backend\|ai\|all` | Platform context (default: auto-detect per `skills/shared/platform-detection.md`): fills the findings artifact's `**Platform**:` line and sets the idioms `patterns` and `accessibility` are judged against |
-| `--path <dir>` | directory | Review that directory; the diff is scoped to it |
-| `--pr <number>` | PR number | Review the changes in that PR (§ Reviewing a PR) |
-| `--depth` | `surface\|deep` | Default `surface`; the DR stage passes none, so it always resolves to `surface`. `deep` adds [Deep Mode](#deep-mode---depth-deep) |
-| `--focus <areas>` | `security, performance, patterns, tests, safety, honesty, accessibility`; deep adds `quality, debt` | See § Focus Areas |
+| `--platform <p>` | `apple\|android\|web\|systems\|backend\|ai\|all` | Platform context (default: auto-detect per `skills/shared/platform-detection.md`): fills the findings artifact's `**Platform**:` line and sets the idioms `patterns` and `accessibility` are judged against |
+| `--path <dir>` | directory | Review that directory; the diff is scoped to it (default: the whole working-tree diff) |
+| `--pr <number>` | PR number | Review the changes in that PR, § Reviewing a PR (default: none, the local diff) |
+| `--depth <depth>` | `surface\|deep` | Default `surface`; the DR stage passes none, so it always resolves to `surface`. `deep` adds [Deep Mode](#deep-mode---depth-deep) |
+| `--focus <areas>` | `security, performance, patterns, tests, safety, honesty, accessibility`; deep adds `quality, debt` | See § Focus Areas (default: every area the depth allows) |
 
 ### Output, severity, and ethics options
 
 | Option | Values | Effect |
 |---|---|---|
-| `--output` | `summary\|detailed` | Verbosity for `--depth deep` (default `detailed`); surface mode always writes the findings artifact below |
-| `--severity <level>` | `P2\|P1\|P0` | Minimum severity written to the findings artifact; Phase 1 detection is never filtered by it |
-| `--ethics` | — | Add the § Constitutional pass |
+| `--output <format>` | `summary\|detailed` | Verbosity for `--depth deep` (default `detailed`); surface mode always writes the findings artifact below |
+| `--severity <level>` | `P2\|P1\|P0` | Minimum severity written to the findings artifact; Phase 1 detection is never filtered by it (default: `P2`, every finding) |
+| `--ethics` | — | Add the § Constitutional pass (default: off) |
+
+## Examples
 
 ```
 /tech-code-review [--pr <number> | --path <dir>] [--platform <p>] [--depth surface|deep] [--focus <areas>] [--output summary|detailed] [--severity P2|P1|P0] [--ethics]
@@ -51,6 +55,53 @@ A recall-first, read-only developer code review. This command is the DR (Develop
 /tech-code-review --pr 42 --depth deep --focus quality,debt --output summary
 /tech-code-review --pr 42 --ethics
 ```
+
+## Output Format
+
+Findings go to the DR findings artifact `.context/developer-review-N.md § Findings` (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md`), not as inline diff comments — the command has no diff-comment tool.
+
+Each finding carries its severity tag, names the file (and tightest line subrange), states why it is a bug, and names the scenario/inputs/environment needed for it to arise. At most one paragraph each; say so plainly when uncertain and tag `[verify-later]`. Tone matter-of-fact, neither accusatory nor flattering.
+
+### Example findings artifact
+
+```markdown
+# Developer Code Review
+
+**Platform**: Apple (Swift/iOS)
+
+## Findings
+
+### #1 [P0] Empty input crashes on load
+If the input field is empty when the page loads, `parseInput` force-unwraps nil and crashes.
+File: `src/client/ui/Input.tsx:42-44`
+
+### #2 [P1] Caller in PaymentService breaks on changed return type
+`fetchUser` now returns `User?`; `PaymentService.charge` does not handle nil and would dereference it.
+Triggers when the user lookup misses. Read-confirmed in `PaymentService.ts`.
+File: `src/server/PaymentService.ts:88`
+
+### #3 [P2][verify-later] Possible indirect consumer via notification name
+The renamed `"userDidUpdate"` notification may still be observed elsewhere; string-literal grep was
+inconclusive across generated files. Not blocking.
+File: `src/core/Notifications.ts:17`
+
+## Decision
+
+Decision: changes-requested (1 open P0, 1 open P1)
+Coverage: 12 files, 34 hunks reviewed
+Source: task=- stream=- source=committed reason=-
+```
+
+### Decision line (required)
+
+End every review with:
+
+- `Decision: changes-requested` (verdict `fail`) when any open P0 or P1 finding exists.
+- `Decision: pass` when the review is P2-only or clean — record the P2 findings for follow-up but do not block.
+- `Coverage: N files, M hunks reviewed`.
+- One `Source: task=<ID|-> stream=<s|-> source=<label> reason=<token>` line per stream-diff block, copied from that block's header (under `--pr`, the single `source=pr:<N>` line).
+
+These map onto the DR handoff `verdict: pass|fail` in `agents/technical-lead.md`.
 
 ## Your Job
 
@@ -223,53 +274,6 @@ When the change touches a manifest (`Package.swift`, `Podfile`, `*.gradle`, `req
 | Check DV's test evidence | Suite green after the bump in DV's report, not "it resolved"; missing evidence or thin coverage is a finding for DV/QA |
 | Mind the transitive graph | Review the lockfile / transitive diff, not just the manifest |
 | Keep the lockfile honest | Committed, diff reviewed, never hand-edited — it pins what ships |
-
-## Output Format
-
-Findings go to the DR findings artifact `.context/developer-review-N.md § Findings` (N = `task.metadata.run_index`; resolver: metadata → newest glob `developer-review-*.md`), not as inline diff comments — the command has no diff-comment tool.
-
-Each finding carries its severity tag, names the file (and tightest line subrange), states why it is a bug, and names the scenario/inputs/environment needed for it to arise. At most one paragraph each; say so plainly when uncertain and tag `[verify-later]`. Tone matter-of-fact, neither accusatory nor flattering.
-
-### Example findings artifact
-
-```markdown
-# Developer Code Review
-
-**Platform**: Apple (Swift/iOS)
-
-## Findings
-
-### #1 [P0] Empty input crashes on load
-If the input field is empty when the page loads, `parseInput` force-unwraps nil and crashes.
-File: `src/client/ui/Input.tsx:42-44`
-
-### #2 [P1] Caller in PaymentService breaks on changed return type
-`fetchUser` now returns `User?`; `PaymentService.charge` does not handle nil and would dereference it.
-Triggers when the user lookup misses. Read-confirmed in `PaymentService.ts`.
-File: `src/server/PaymentService.ts:88`
-
-### #3 [P2][verify-later] Possible indirect consumer via notification name
-The renamed `"userDidUpdate"` notification may still be observed elsewhere; string-literal grep was
-inconclusive across generated files. Not blocking.
-File: `src/core/Notifications.ts:17`
-
-## Decision
-
-Decision: changes-requested (1 open P0, 1 open P1)
-Coverage: 12 files, 34 hunks reviewed
-Source: task=- stream=- source=committed reason=-
-```
-
-### Decision line (required)
-
-End every review with:
-
-- `Decision: changes-requested` (verdict `fail`) when any open P0 or P1 finding exists.
-- `Decision: pass` when the review is P2-only or clean — record the P2 findings for follow-up but do not block.
-- `Coverage: N files, M hunks reviewed`.
-- One `Source: task=<ID|-> stream=<s|-> source=<label> reason=<token>` line per stream-diff block, copied from that block's header (under `--pr`, the single `source=pr:<N>` line).
-
-These map onto the DR handoff `verdict: pass|fail` in `agents/technical-lead.md`.
 
 ## Escalation to DV (changes-requested → DV fix → DR re-review)
 

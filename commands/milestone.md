@@ -18,15 +18,15 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 
 ## Options
 
-| Option | Effect |
-|--------|--------|
-| `<description>` | Feature description to decompose into tickets |
-| `--milestone N` | Use existing milestone N; omitted → create one from the feature title |
-| `--from-prd <path>` | Read a PRD (`/product-requirements` output) as input |
-| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Route the implementation agent (default: infer from codebase) |
-| `--dry-run` | Preview tickets as markdown, create nothing |
-| `--secure` | Add `security-reviewer` to Review on every ticket |
-| `--labels <extra>` | Extra labels beyond the auto-assigned priority |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `<description>` | text | Feature description to decompose into tickets (required unless `--from-prd`) |
+| `--milestone N` | milestone number | Use existing milestone N (default: create one from the feature title) |
+| `--from-prd <path>` | PRD path (`/product-requirements` output) | Read the PRD as input (default: none, the `<description>`) |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Route the implementation agent (default: inferred from the codebase) |
+| `--dry-run` | — | Preview tickets as markdown, create nothing (default: off) |
+| `--secure` | — | Add `security-reviewer` to Review on every ticket (default: off) |
+| `--labels <extra>` | comma-separated labels | Extra labels beyond the auto-assigned priority (default: none) |
 
 ## Examples
 
@@ -38,6 +38,35 @@ Generate GitHub milestone tickets with agent assignments for implementation, tes
 /milestone "User profile management"                       # auto-creates the milestone
 /milestone "API rate limiting" --milestone 4 --labels "backend,performance"
 ```
+
+## Output Format
+
+### Dry-run
+
+```markdown
+# Milestone Tickets Preview: {Feature Title}
+
+## Ticket 1: {title}
+**Priority**: P0 · **Labels**: P0, feature
+**Agents**: Implementation: `apple-developer:ios-developer` | Test: `apple-developer:test-generator` | Review: `corpflow:technical-lead`
+
+### Body
+[Full ticket body]
+
+---
+
+## Summary
+| # | Title | Priority | Implementation | Test | Review | Dependencies |
+|---|-------|----------|----------------|------|--------|--------------|
+| 1 | Core theme system | P0 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | — |
+| 2 | Settings toggle | P1 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | Ticket 1 |
+
+Ready to create? Run without --dry-run.
+```
+
+### Live
+
+Same summary table keyed by issue number (`#42`) instead of ticket index and without the Dependencies column, headed by `Milestone: #{N} "{title}"`, with dependencies listed below as `#43 → #42` and closing on `Next: /megatask {N}` to execute all tickets.
 
 ## Step 1 — Parse input
 
@@ -155,32 +184,3 @@ Then [expected result]
 priority tiebreak, and each `Depends on` / `Blocks` keyword is read to the end of its line
 (`skills/megatask/scripts/build-orchestrator.sh`), so keep the two on separate lines — on one
 line, every `#N` after `Depends on` becomes a dependency and the pair turns into a false cycle.
-
-## Output Format
-
-### Dry-run
-
-```markdown
-# Milestone Tickets Preview: {Feature Title}
-
-## Ticket 1: {title}
-**Priority**: P0 · **Labels**: P0, feature
-**Agents**: Implementation: `apple-developer:ios-developer` | Test: `apple-developer:test-generator` | Review: `corpflow:technical-lead`
-
-### Body
-[Full ticket body]
-
----
-
-## Summary
-| # | Title | Priority | Implementation | Test | Review | Dependencies |
-|---|-------|----------|----------------|------|--------|--------------|
-| 1 | Core theme system | P0 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | — |
-| 2 | Settings toggle | P1 | apple-developer:ios-developer | apple-developer:test-generator | corpflow:technical-lead | Ticket 1 |
-
-Ready to create? Run without --dry-run.
-```
-
-### Live
-
-Same summary table keyed by issue number (`#42`) instead of ticket index and without the Dependencies column, headed by `Milestone: #{N} "{title}"`, with dependencies listed below as `#43 → #42` and closing on `Next: /megatask {N}` to execute all tickets.

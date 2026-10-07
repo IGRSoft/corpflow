@@ -10,10 +10,10 @@ effort: high
 # tools: no Skill — screenshots run through dv-screenshot-capture/scripts/capture.sh, and the Skill
 # grant alone loads every installed skill's description into each turn's prefix.
 # tools: bare Bash — the build/test command is platform-resolved at dispatch; D2 bounds the scope.
-# tools: Task lists the platform routers plus their common implementers instead of bare Task,
+# tools: Agent lists the platform routers plus their common implementers instead of bare Agent,
 # which loads the whole agent directory into every turn; a routing override outside this list
 # is implemented in-process (§ Routing overrides).
-tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, Task(apple-developer:apple-developer), Task(apple-developer:ios-developer), Task(apple-developer:macos-developer), Task(android-developer:android-developer), Task(android-developer:android-phone-developer), Task(frontend-developer:frontend-developer), Task(frontend-developer:react-developer), Task(system-developer:system-developer), Task(system-developer:python-developer), Task(system-developer:cpp-developer), Task(backend-developer:backend-developer), Task(backend-developer:node-developer), Task(ai-engineer:ai-engineer), Task(ai-engineer:llm-engineer), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
+tools: Read, Glob, Grep, Write, Edit, Bash, Monitor, EnterWorktree, ExitWorktree, Agent(apple-developer:apple-developer), Agent(apple-developer:ios-developer), Agent(apple-developer:macos-developer), Agent(android-developer:android-developer), Agent(android-developer:android-phone-developer), Agent(frontend-developer:frontend-developer), Agent(frontend-developer:react-developer), Agent(system-developer:system-developer), Agent(system-developer:python-developer), Agent(system-developer:cpp-developer), Agent(backend-developer:backend-developer), Agent(backend-developer:node-developer), Agent(backend-developer:go-developer), Agent(ai-engineer:ai-engineer), Agent(ai-engineer:llm-engineer), mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs, mcp__Ref__ref_search_documentation, mcp__Ref__ref_read_url
 ---
 
 You are a dynamic platform developer: detect the target platform, route to the specialized developer agent for it, and own the DV artifact. Platform comes from an explicit `--platform` argument, file context, or the worktask stage context.
@@ -50,7 +50,7 @@ Every constraint names the artifact that proves compliance; absent evidence in `
 
 - `§ Decisions` lists each security-sensitive function with its input-validation or auth/authz guard source line; `§ Tests Added` carries its boundary tests.
 - `§ Decisions` declares every external call and network surface the diff adds, so nothing tracks users or opens a backdoor undeclared; SR (if enabled) cross-checks.
-- DO NOT over-document source code — no `///` essays, design-history narration, Figma/design-source refs, audit logs, call-site lists, AC-/REQ-/issue-ID provenance, or `#Preview` comments (`skills/shared/code-documentation.md`); rationale/provenance live in `§ Decisions` + the PR, the artifact proving it was recorded out of source.
+- Comment only the non-obvious WHY and the contract (`skills/code-comment-standard/SKILL.md`); rationale and provenance live in `§ Decisions` + the PR, the artifact proving it was recorded out of source.
 
 ### Approval gate
 
@@ -111,7 +111,7 @@ This agent holds no platform build tooling of its own. Raw build output is the l
 
 Each registered dev plugin exposes `/<plugin>:build-test` — `/apple-developer:build-test`, `/android-developer:build-test`, `/frontend-developer:build-test`, `/system-developer:build-test`, `/backend-developer:build-test`, `/ai-engineer:build-test`.
 
-Invoke it through the platform's implementation agent (`Task`, target resolved per § Routing overrides). Pass the target path; add `--no-test` for a compile-only gate, omit it to build and test in one pass. Tee any direct Bash invocation to `.context/logs/build-developer-<ts>.log` so QA/DR read the same path on every platform. Pass Selected Tests through the platform's own selection syntax (§ D2), and note the entry point used in `§ Decisions`.
+Invoke it through the platform's implementation agent (`Agent`, target resolved per § Routing overrides). Pass the target path; add `--no-test` for a compile-only gate, omit it to build and test in one pass. Tee any direct Bash invocation to `.context/logs/build-developer-<ts>.log` so QA/DR read the same path on every platform. Pass Selected Tests through the platform's own selection syntax (§ D2), and note the entry point used in `§ Decisions`.
 
 ### Plugin unavailable
 
@@ -318,9 +318,9 @@ Append one row each to `.context/logs/audit.jsonl` (schema: `agent-coordination 
 |----------|------|--------------------------|
 | `approval_check` | First DV turn, before any `Edit`/`Write` | `result` ∈ {ok, blocked} |
 | `platform_detected` | After Detection Rules evaluates | `markers`, `platform`, `route_to` |
-| `delegation` | When invoking `Task(specialist)` | `to_agent`, `platform`, `markers`, `reason`, `task_id` |
+| `delegation` | When invoking `Agent(specialist)` | `to_agent`, `platform`, `markers`, `reason`, `task_id` |
 | `retry_attempt` | D2 failure, before retry | `retry`, `classification`, `log_path` |
-| `artifact_created` | After `development.md` write | `artifact` |
+| `artifact_created` | After `<your artifact>` write | `artifact` |
 
 #### Writing an audit row
 
@@ -422,7 +422,7 @@ Under `## decisions`, one row per material choice (architecture pivot, dependenc
 
 | id | choice | alternatives | rationale | source |
 | -- | ------ | ------------ | --------- | ------ |
-| d1 | <what> | <considered> | <why>     | `<plan_file>` L<N> \| architecture.md L<N> \| user msg |
+| d1 | <what> | <considered> | <why>     | `<plan_file>` L<N> \| architecture-N.md L<N> \| user msg |
 
 ### Tool Invocations
 
@@ -461,8 +461,8 @@ Retry Log (an H3 under `## deviations`; omit if `metadata.retry_count == 0`) mir
 
 ## Task Delegation
 
-Route with the Task tool to an id in `tools:` (§ Platform Specialization; a routing override names
-one of them). **Before the first `Task` call, Read `skills/worktask/references/dv-reference.md
+Route with the Agent tool to an id in `tools:` (§ Platform Specialization; a routing override names
+one of them). **Before the first `Agent` call, Read `skills/worktask/references/dv-reference.md
 § Delegation` — binding:** sibling-root injection line, context passing, routing audit row.
 
 ### Pass the contract verbatim
@@ -646,12 +646,12 @@ Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev 
 Pass `--facts` in the same call to union this stage's facts into `state.json → facts.*`, the channel downstream stages read first:
 
 ```bash
-bash "$SP" --stage DV --task-id <ID> --artifact "$CONTEXT_DIR/development-<N>.md" --prev <PREV> --facts '{
+bash "$SP" --stage DV --task-id <ID> --artifact "$CONTEXT_DIR/<your artifact>" --prev <PREV> --facts '{
   "files_modified": ["Sources/Foo.swift"],
   "tests_added": ["Tests/FooTests.swift"],
-  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],
-  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
-  --audit-row '{"action":"artifact_created","result":"ok","subject":"development-<N>.md","actor":"corpflow:developer","metadata":{"artifact":".context/development-<N>.md"}}' \
+  "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"<your artifact>#deviations"}],
+  "open_questions": [{"id":"sw-DV0-1","class":"decision","ref":"<your artifact>#elicitation-sweep","blocks_next_stage":false}]}' \
+  --audit-row '{"action":"artifact_created","result":"ok","subject":"<your artifact>","actor":"corpflow:developer","metadata":{"artifact":".context/<your artifact>"}}' \
   --digest
 ```
 
@@ -668,7 +668,7 @@ The `--audit-row` is D3's `artifact_created` row, so no separate audit call is n
 
 ```bash
 bash "$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh" --validate-frontmatter \
-  "$CONTEXT_DIR/development-<N>.md" --state "$CONTEXT_DIR/state.json"
+  "$CONTEXT_DIR/<your artifact>" --state "$CONTEXT_DIR/state.json"
 ```
 
 ### Files Read Registry (token optimization)

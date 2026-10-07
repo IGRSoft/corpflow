@@ -51,7 +51,7 @@ deprecation warning at load, agent frontmatter `model:` included.
 
 Without 1M usage credits a fable-tier dispatch fails hard with `API Error: Usage credits required
 for 1M context`; an interactive 1M session instead auto-compacts back under the standard limit.
-Degrade via a session `fallbackModel` (`--fallback-model`) or a `Task({ model })` /
+Degrade via a session `fallbackModel` (`--fallback-model`) or an `Agent({ model })` /
 `metadata.model` override on the stage.
 
 ### Fast mode and the lean system prompt
@@ -95,11 +95,13 @@ plugin: a `CLAUDE_CODE_MAX_OUTPUT_TOKENS` lowered below the model's default can 
 
 ### Effort visibility and inheritance
 
-Hooks read the active tier from `effort.level` (JSON payload) and `$CLAUDE_EFFORT`, so cost/audit
+Hooks read the active tier from `effort.level` (JSON payload; `"unknown"` when absent), so cost/audit
 hooks attribute spend per tier without parsing model metadata
 (`skills/agent-coordination/references/hook-monitoring.md § Hook Effort Visibility`). Subagents
 and compaction inherit the session's extended-thinking config; pass per-stage `metadata.model` +
-`effort` anyway, because explicit beats inherited for stage determinism and cost attribution.
+`effort` anyway, because explicit beats inherited for stage determinism and cost attribution. An
+automatic model switch (after a flagged message, or a retry on a fallback model) keeps the current
+effort level instead of taking the new model's default or saved level.
 
 ### Effort frontmatter and caps
 
@@ -107,14 +109,16 @@ Every corpflow agent file carries an `effort:` key next to `maxTurns:`, equal to
 Effort cell in `skills/shared/stage-codes.md § Agent Model Matrix` — the matrix stays the sole
 place a tier is decided, and `tests/shell/worktask/agent-effort-frontmatter.bats` holds the two
 in parity. No `model:` key exists on any agent file (sw-PL1-1); model selection stays a
-per-dispatch `Task()` argument.
+per-dispatch `Agent()` argument.
 
 #### Effort precedence
 
-Precedence, documented order: `CLAUDE_CODE_EFFORT_LEVEL`, when set in the process environment
-(the operator's own pin, or a headless child's inherited one), outranks every other source.
-Below that, an active subagent's `effort:` frontmatter beats the session level (`--effort`,
-`effortLevel` in project/managed/`--settings`, `/effort`), which beats a model's launch default.
+corpflow sets a tier only per call: the `Agent` tool's `effort` parameter in-process, `--effort`
+on a headless `claude -p --agent` child. Both outrank the agent's own `effort:` frontmatter
+(probed at 2.1.292), which beats the session level (`effortLevel`, `/effort`) and a model's
+launch default. corpflow reads and sets no effort env var. An operator's
+`CLAUDE_CODE_EFFORT_LEVEL` removes the `effort` parameter from the Agent tool and pins every
+subagent; the audit row then shows `effort_resolved` ≠ `effort_requested`.
 
 #### Effort caps and observation
 
@@ -156,6 +160,7 @@ dispatch.
 | Control | Behaviour |
 |---------|-----------|
 | First-call 404 fallback | A subagent whose model 404s on its first call falls through the session's fallback-model chain; the parent's error names type, HTTP status, request id and model. The stage ran on a model `metadata.model` never asked for, so trust `dispatched_agents[].model_resolved`, not `model_requested`, when attributing cost. |
+| Refused alias target | An API refusal of the model an alias resolves to retries once on the previous same-tier model; a fallback retry that cannot run fast runs at standard speed. Attribute cost from `model_resolved`. |
 | `modelPicker` / `modelPricing` | Managed settings: `modelPicker` curates the `/model` list; `modelPricing` applies an org's contracted rates to `/cost`, the status line and telemetry, so a cost figure read under it is org-rated, not list-rated. |
 
 ## Provider Defaults (Bedrock / Vertex / Foundry)
@@ -171,12 +176,14 @@ runners need no region env.
 
 The small model classifying permission decisions in auto mode defaults to a Sonnet-tier model for
 external sessions, validated on the first request and then pinned for the session. It is unrelated
-to the session model.
+to the session model, and an `ANTHROPIC_DEFAULT_SONNET_MODEL` pin to a 5.5 model does not move it.
 
 ## Context-Window Accounting
 
 `/context` percentages are computed against the full 1M window on models that have one (Opus 5.5,
-Sonnet 5.5, Fable 5.x). How the extended window changes stage handoff budgets, plus the fable
+Sonnet 5.5, Fable 5.x). The 1M window is the default on Bedrock, Vertex, Foundry, the Claude apps
+gateway and a custom `ANTHROPIC_BASE_URL`, with no `[1m]` suffix; `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`
+keeps 200K, and `/autocompact 200k` (saved per model) suits a gateway that stops at 200K. How the extended window changes stage handoff budgets, plus the fable
 without-credits caveat: `skills/context-compression/SKILL.md`.
 
 ## Selection Criteria
@@ -193,10 +200,10 @@ work, a new agent's default.
 
 ## Per-Invocation Override
 
-Use the `model` parameter on `Task()` to override per delegation:
+Use the `model` parameter on `Agent()` to override per delegation:
 
 ```
-Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
+Agent({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 ```
 
 ### Task delegation and inheritance
@@ -224,7 +231,7 @@ Task({ subagent_type: "corpflow:qa-engineer", model: "sonnet", prompt: "..." })
 
 A worktask stage is always dispatched with an explicit `model`: the orchestrator reads
 `task.metadata.model` from the ledger, resolved from `skills/shared/stage-codes.md § Agent Model
-Matrix`, and passes it as a short alias — `Task({ model: "opus" })`. No corpflow agent carries a
+Matrix`, and passes it as a short alias — `Agent({ model: "opus" })`. No corpflow agent carries a
 `model:` key, so there is no frontmatter to fall back to.
 
 A dispatch that skips this fails silently: the stage runs on the parent session's model,
@@ -239,7 +246,7 @@ frontmatter `model:` and an explicit per-spawn `model` both take precedence over
 
 Ledger-dispatched stages are safe: `metadata.model` is required there and validated at step 6.
 The exposure is any dispatch that bypasses the ledger, such as a stage agent's ad-hoc nested
-`Task()` to a Tier-2 specialist. Omit the model there and the spawn falls through to
+`Agent()` to a Tier-2 specialist. Omit the model there and the spawn falls through to
 `CLAUDE_CODE_SUBAGENT_MODEL`, or the session model if that is unset.
 
 A mid-worktask switch away from a pinned model is gated by `hooks/model-switch-gate.sh`
@@ -250,7 +257,7 @@ A mid-worktask switch away from a pinned model is gated by `hooks/model-switch-g
 `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` inverts that precedence. When set, every subagent runs on
 `CLAUDE_CODE_SUBAGENT_MODEL`, or the main session model when that is unset, ignoring both the
 per-spawn `model` and the agent's `model:`. Ledger-dispatched stages lose their safety:
-`Task({ model: "opus" })` still passes step 6, then runs on the forced model with no error.
+`Agent({ model: "opus" })` still passes step 6, then runs on the forced model with no error.
 
 Two controls cover it. PL0 reads the variable before any spend and raises a plan-gate sweep item
 (`skills/worktask/references/pl0-procedure.md § Subagent model-force preflight — detection`), and

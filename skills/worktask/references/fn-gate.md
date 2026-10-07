@@ -124,9 +124,10 @@ Run the two dispatches one after the other, never in parallel: both commit to th
 
 ```typescript
 // form: "mechanical" | "judgement" — the group's Enforcement value
-Task({
+Agent({
   subagent_type: AGENT,  // "corpflow:prompt-engineer" | "corpflow:workflow-engineer"
   model: MODEL,  // first field of the --resolve line
+  effort: EFFORT,  // second field: a CORPFLOW.md § Models override reaches the agent
   prompt: `Apply self-improvement learnings from .context/learnings.md.
            Apply ONLY checked items (- [x]) with Enforcement: ${form}.
            Follow the Apply Protocol in your agent definition.

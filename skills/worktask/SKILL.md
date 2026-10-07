@@ -1,14 +1,14 @@
 ---
 name: worktask
 description: Use when executing multi-stage worktasks, initializing tasks, or managing worktask state. Holds dynamic sizing, the orchestrator loop, and stage handoff rules.
-argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
+argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority <High|Medium|Low>] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.7.1
 ---
 
 > **INVOCATION GATE**: a worktask the user asked for runs through `/worktask` in Claude Code,
 > `$worktask` in Codex, or `Skill({skill:"corpflow:worktask"})`
 > (`../shared/worktask-invocation.md § BLOCKING`). If you
-> reached this file by a direct Read/Task/Grep to run one, tell the user and restart through that
+> reached this file by a direct Read/Agent/Grep to run one, tell the user and restart through that
 > entry point instead of continuing.
 
 # Worktask System
@@ -111,7 +111,7 @@ Each task carries `metadata.agent` for executor resolution
 #### Mid-run escalation — the orchestrator is the consumer
 
 A stage may return `requests_stage_escalation` in its artifact `handoff:` frontmatter, and
-nothing else reads it. At Step 6.5, after `Task()` returns and before the `completed` patch,
+nothing else reads it. At Step 6.5, after `Agent()` returns and before the `completed` patch,
 the orchestrator reads the object; validate it against the four fire conditions, the
 stage-validity list, and the structural caps — canonical in
 `skills/estimation-methodology/SKILL.md § Mid-run re-sizing`, never restated here; on accept,
@@ -166,20 +166,15 @@ Each stage: max 3 retries, tracked in `metadata.retry_count`. Append one `## Ret
 
 ### Escalation Chains
 
-```
-11-stage: ST → FN → RE → DC → QA → SR → DR → DV → TL → AR → PL → USER
-9-stage:  ST → FN → DC → QA → DR → DV → TL → AR → PL → USER
-Emergency: FN → RE → QA → DR → DV → IR → USER
-```
-
-Stages absent from the plan drop out of the chain — escalation from DV goes to TL if TL ran, else
-AR if AR ran, else PL.
+The chains (11-stage, 9-stage, Emergency, Ethics) live in `skills/agent-coordination/SKILL.md §
+Escalation Chains`. Stages absent from the plan drop out of the chain — escalation from DV goes to
+TL if TL ran, else AR if AR ran, else PL.
 
 ### USER under /megatask
 
 A `/megatask` per-issue run (`PL0.metadata.megatask_group`) has no user. Every path that ends at
-USER first settles the issue, then stops: the last link of a chain above, a stop per § Error
-Handling, `escalate()`, a Step 7 `blocked` row, a refused landing (§ Step 6.5d), a second mid-run
+USER first settles the issue, then stops: a chain's last link, a stop per § Error Handling,
+`escalate()`, a Step 7 `blocked` row, a refused landing (§ Step 6.5d), a second mid-run
 escalation, and `stopForUser`.
 
 ```bash
@@ -189,8 +184,8 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh --subject 
 It writes `workspace.json` `execution.status: "failed"`, `execution.reason: "escalated_to_user"`
 and one `megatask_escalated` row, so `hooks/megatask-monitor.sh` frees the track and keeps the
 dependents blocked. Outside `/megatask` it prints `result=skipped` and writes nothing, and it never
-overwrites a settled status, so a PARK (§ Step 7a — the megatask arm) keeps its
-`parked_escalation`. Exit 1 (`result=refused`) leaves the track held: report the issue, the path
+overwrites a settled status, so a PARK keeps its `parked_escalation`
+(`references/step-7a-arms.md § Step 7a — the megatask arm`). Exit 1 (`result=refused`) leaves the track held: report the issue, the path
 and the reason, and stop.
 
 ## Rule Checks
@@ -260,7 +255,7 @@ Before executing any worktask stage, the orchestrator validates:
 
 ### Validation checks 6–7
 
-6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Task()` delegation. Caveat: under a managed `availableModels` allowlist (it constrains subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; don't block
+6. **Model alias check**: `metadata.model ∈ {fable, opus, sonnet, haiku}` — reject unknown aliases before `Agent()` delegation. Caveat: under a managed `availableModels` allowlist (it constrains subagent model overrides too) or `enforceAvailableModels`, a *valid* alias may silently resolve to a different model at dispatch — emit a `model_resolution_constrained` audit row when a managed allowlist is in effect; don't block
 6a. **Effort tier check**: `metadata.effort ∈ EFFORT_ENUM` (`scripts/effort-ladder.sh`), which `state-patch.sh` enforces at the write. Absent is not fatal — Step C.0a skips the stage (`resolver_skipped`/`effort_unstamped`), costing a round-trip rather than the run
 7. **Workspace existence** (megatask per-issue/worktree mode only): `metadata.workspace_path` directory exists and `workspace.json` is readable
 
@@ -318,9 +313,9 @@ A hard gate would fail that same legal chain. When it warns, name megatask's two
 
 Emit one `routing_override` audit row per overridden alias, `metadata: {alias, default_target, override_target}`; when an entry alias is overridden but its platform's role aliases are not, add one `routing_override_partial` row. Stages resolve through `state.routing` first (`routing-matrix.md § Resolution`), so a mid-worktask edit of either file never splits routing across stages. No `## Routing` heading in either file → all-default, no rows, no warning.
 
-### Validation check 13 — Model/effort resolution
+### Validation check 13 — Model resolution
 
-13. **Model/effort resolution** (first stage only, right after check 12): run `state-patch.sh
+13. **Model resolution** (first stage only, right after check 12): run `state-patch.sh
     --resolve-models` before PL0 is dispatched. Merges `CORPFLOW.md § Models`, fail-open per row,
     over the built-in matrix, via `model-matrix-lib.sh`; the file is picked per heading like check
     12's (project root, then user scope). Stamps `state.models` for all sixteen agents (unlike
@@ -340,7 +335,9 @@ Emit one `routing_override` audit row per overridden alias, `metadata: {alias, d
 
 ## Orchestrator Execution Loop
 
-This loop dispatches one `Task()` per ready stage in-process, from the PL0 precondition (below)
+This loop dispatches each ready stage once — in-process via `Agent()`, or headless when
+`effort-route.sh` returns `route: "headless"` (§ Step 6 — route before every dispatch) — from the
+PL0 precondition (below)
 through the FN gate (§ FN Gate), advancing stages as their `blockedBy` dependencies resolve.
 
 Figma asset persistence is not an orchestrator step: the product-manager captures and persists
@@ -357,13 +354,13 @@ An unattended launch (`--auto` containing `plan` or `finalization`) runs
 single message, before anything is seeded; a pass is recorded after the Step 3a seed as
 `metadata.preflight` (`references/handoff-protocol.md § metadata.preflight`). Megatask per-issue
 runs skip it. Canon, including `--accept-absent` and the non-interactive Step 2a scan:
-`commands/worktask.md § Step 2a-pre` and `§ Step 3a — record the autonomy preflight`.
+`skills/worktask/references/autonomy-preflight.md § Step 2a-pre` and `commands/worktask.md § Step 3a — record the autonomy preflight`.
 
 ### Delegation-only
 
 The orchestrator never writes code, tests or docs during a worktask, and never runs build commands
 or marks a task completed without delegating. Every change is made by the stage agent that owns it,
-through `Task()` — including one-line fixes, because an orchestrator edit lands in no stage's
+through `Agent()` — including one-line fixes, because an orchestrator edit lands in no stage's
 `files_touched`, is reviewed by no DR or SR, and appears in no artifact. Reading is unrestricted.
 When a stage returns work that is nearly right, re-dispatch it with the correction instead of
 patching it here. The orchestrator's job is the loop: read tasks, resolve agents, delegate, track
@@ -379,7 +376,7 @@ toolchain owns its lifecycle.
 ### Dispatch on the same turn
 
 Verify a boundary and dispatch the next ready stage in the same turn; report after dispatching, not
-instead of it. A running background `Task` does not block the orchestrator, so "an agent is working"
+instead of it. A running background `Agent` does not block the orchestrator, so "an agent is working"
 is no reason to stop, and ending a turn with "next: DC → RE → FN" while those stages are
 dispatchable leaves the pipeline idle until a human asks. Exactly four things justify stopping
 mid-pipeline: the plan gate (`commands/worktask.md § Step A.5`), an `escalate`-class sweep item, the
@@ -406,13 +403,13 @@ is dispatched), and the FN gate (§ FN Gate).
 
 ### Cache-Friendly Prompt Layout & state.json (handoff-protocol)
 
-Every delegation prompt is built in a fixed order so consecutive `Task()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
+Every delegation prompt is built in a fixed order so consecutive `Agent()` calls within one `worktask_id` share a byte-identical prefix and hit the prompt cache. Spec source: `references/handoff-protocol.md#cache-prefix`.
 
 Each section opens with its own `<<<marker>>>` line and runs to the next marker — that is what `scripts/cache-lint.sh` parses. Section [1] is copied verbatim from `references/contract-reminder.md`. Section [3] is the ledger pointer plus readiness digest that `scripts/ledger-digest.sh` prints, never the ledger JSON: stage agents read `.context/state.json` from disk. Section [4b] is the per-model discipline block, copied verbatim from `skills/shared/model-prompting.md` and selected by `task.metadata.model`; `haiku` emits the marker with an empty body. `brief-compose.sh` copies these blocks verbatim; the orchestrator never writes them.
 
 #### Composing the brief
 
-Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Task()` — surface stderr and treat the row as a blocked dispatch (Step 6).
+Build every stage prompt by running `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh <TASK_ID> --orch-root <orch root>` and dispatching its stdout. The orchestrator is its only caller. The composer emits all eight markers: [1]–[5] complete, [6] empty, and [7] opening with the task's `WORKSPACE_ROOT=` line. The Steps 4.5–5e injections write only into [6] and [7]; nothing edits [1]–[5]. Exit 1 (guard failure) or exit 2 (usage, unknown task id, unreadable ledger, missing jq or canon, failed ledger digest) leaves stdout empty: do not call `Agent()` — surface stderr and treat the row as a blocked dispatch (Step 6).
 
 If text you write into [6] or [7] needs the PR section order or an allowed H2, cite the source by path instead of restating it: `skills/shared/git-conventions.md § Pull Request Format`, `skills/worktask/references/handoff-protocol.md#anchor-allow-list`. A copy drifts from its source, and the stage obeys the copy.
 
@@ -481,9 +478,9 @@ function stageArtifactPath(code: string, runIndex: number, row?: TaskRow): strin
 }
 ```
 
-#### Step 6.5 — After Task() returns, enforce state.json patch
+#### Step 6.5 — After Agent() returns, enforce state.json patch
 
-After every `Task()` return and before Step 7 settles the row, first read any
+After every `Agent()` return and before Step 7 settles the row, first read any
 `requests_stage_escalation` in the artifact frontmatter (§ Mid-run escalation — the orchestrator
 is the consumer), then run the three-layer check: Layer 1 (agent self-patch) → Layer 2
 (`state-patch.sh --via step6_5`) → Layer 3 (F3 derivation). Code and semantics: loop § Step 6.5
@@ -491,7 +488,7 @@ below.
 
 ##### Completion signal (subagents run in the background by default)
 
-"`Task()` return" means the completed stage result, not the launch acknowledgement: the result arrives as a completion notification while the orchestrator keeps its turn. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. Don't fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a running stage. An errored return (rate limit, API cut-off) reports the error with partial work preserved: classify it per `skills/agent-coordination/SKILL.md § Retry / Escalate Matrix` (`transient`) and skip the completion patch.
+"`Agent()` return" means the completed stage result, not the launch acknowledgement: the result arrives as a completion notification while the orchestrator keeps its turn. Run Step 6.5 (and the Step 7 settle that follows) only once that notification — or the stage's `subagent_stopped` audit row — has arrived. Don't fire Layer 3 (F3) while the stage's `agent_id` is still live in `claude agents --json`: F3 would stamp a status over a running stage. An errored return (rate limit, API cut-off) reports the error with partial work preserved: classify it per `skills/agent-coordination/SKILL.md § Retry / Escalate Matrix` (`transient`) and skip the completion patch.
 
 ###### Dispatch-tracking helpers (steps 6a/6.5 — ledger writes; [3] only points at the ledger)
 
@@ -505,7 +502,7 @@ function markDispatchStatus(state, taskId, status, modelResolved) {
       ? { ...a, status, ...(modelResolved ? { model_resolved: modelResolved } : {}) }
       : a);
 }
-// classifyError — map an errored Task() return onto the EXISTING retry taxonomy
+// classifyError — map an errored Agent() return onto the EXISTING retry taxonomy
 // (agent-coordination § Retry / Escalate Matrix); no new vocabulary. Rate-limit / API
 // cut-off = `transient`; other classes come from the artifact or return text.
 // errorBasename — last ":"-segment of subagent_type (corpflow:developer → developer).
@@ -555,7 +552,7 @@ Step A.4. The carrier bypasses neither `plan_gate` nor `fn_gate`.
 
 ##### Signal 3 (FN gate)
 
-FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`): stop immediately before the FN `Task()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
+FN dispatch is gated mid-loop on `PL0.metadata.fn_gate` (default `"checkpoint"`): stop immediately before the FN `Agent()` delegation for finalization approval unless the carrier is `"bypass"` (`--auto=[finalization]` / `--emergency`, or stamped per-issue by the `/megatask` batch orchestrator). See loop step 4.9 and § FN Gate.
 
 #### After PL0 — steps 1–3
 
@@ -719,7 +716,8 @@ serving an older loop would otherwise block a blameless DV.
     //      upstream remediation VERBATIM. Source for N = the failing upstream run_index:
     //      `.context/developer-review-N.md` (DRHandoff.blockers[]) and/or `.context/testing-N.md`
     //      (QAHandoff.blocking_defects[]). Or a typed correction: `--task-reopen` wrote the same two
-    //      keys on the re-opened target and raised `fix_round` (§ Step 6.5a3 — the correction arm).
+    //      keys on the re-opened target and raised `fix_round`
+    //      (references/return-arms.md § Step 6.5a3 — the correction arm).
     //      Hook surface: hookSpecificOutput.additionalContext —
     //      skills/agent-coordination/references/hook-monitoring.md §"Gate-feedback contract".
 ```
@@ -842,12 +840,12 @@ catches. Neither banner is the `WORKSPACE_ROOT=` line:
 Step 6's composer emits that as [7]'s first line from the same script, after the re-stamp below.
 
 ```typescript
-    // 4.8. DV worktree-isolation enforcement — isolation is ALWAYS expected: every DV stage
-    //      runs in an isolated worktree before writing files (agents/developer.md § D0.0), so
-    //      the agent confirms isolation, creates a worktree, or flags the deviation and returns
-    //      instead of silently editing the shared checkout. DR rejects a DV handoff carrying
-    //      `worktree:false` absent an explicit waiver (`worktree_isolation_waived` audit /
-    //      task.metadata.worktree_waived).
+    // 4.8. DV worktree-isolation enforcement — isolation is expected unless
+    //      `task.metadata.worktree_waived` is set (or a `worktree_isolation_waived` audit row
+    //      exists): every DV stage runs in an isolated worktree before writing files
+    //      (agents/developer.md § D0.0), so the agent confirms isolation, creates a worktree,
+    //      or flags the deviation and returns instead of silently editing the shared checkout.
+    //      DR rejects a DV handoff carrying `worktree:false` absent that waiver.
 ```
 
 ##### Step 4.8 — isolation banner
@@ -868,7 +866,7 @@ Step 6's composer emits that as [7]'s first line from the same script, after the
 
 ##### Step 4.8 — pin the tree
 
-The row's tree is fixed here, before `Task()`, so this banner and the Step 6 dispatch read one path.
+The row's tree is fixed here, before `Agent()`, so this banner and the Step 6 dispatch read one path.
 The code implements `references/handoff-protocol.md § Pinning a row's tree`.
 
 ```typescript
@@ -917,7 +915,7 @@ boundary pass (§ Step 6.5d) never reached; an unchanged tree is a no-op that wr
         const land = spawnSync("bash", ["skills/worktask/scripts/land-artifacts.sh",
                                         "--consumer", task.id]);
         if (land.status !== 0 && land.status !== 1) blockOnToolError(task.id);  // 1: already blocked
-        if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Task()
+        if (land.status !== 0) { queueLandingBlock(land, task.id); continue; }  // never Agent()
         full.description += "\n\nLANDED (read-only, never edit or stage): " +
           consumes.flatMap(c => c.paths).join(", ");
       }
@@ -1021,7 +1019,7 @@ then `--task-status <ID> pending`. The next ready pass reaches this gate, which 
 
 ```typescript
     // 4.9. FN gate — PL0.metadata.fn_gate (default "checkpoint"). The gate sits BEFORE the FN
-    //      Task() delegation so nothing remote happens pre-approval. N = state.json.run_index
+    //      Agent() delegation so nothing remote happens pre-approval. N = state.json.run_index
     //      (default 0). § FN Gate below; Read references/fn-gate.md at FN time for the procedure.
     if (full.metadata.stage === "FN") {
       const fnGate = pl0.metadata.fn_gate ?? "checkpoint";
@@ -1168,8 +1166,8 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 ```typescript
     // 5e. Permission-Mode Pinning — when PL0 set `permission_mode: "default"` (typically SR/FN
     //     under --secure/--full), don't propagate --dangerously-skip-permissions into this
-    //     stage's descendant Task()/Bash calls, and audit the boundary. Subagents natively
-    //     inherit the parent session's mode (Task()'s deprecated `mode` param is ignored), so
+    //     stage's descendant Agent()/Bash calls, and audit the boundary. Subagents natively
+    //     inherit the parent session's mode (Agent()'s deprecated `mode` param is ignored), so
     //     pinning = not widening the inherited mode and the row records that it held. See
     //     skills/agent-coordination/references/headless-dispatch.md § Permission-Mode Pinning.
     if (full.metadata.permission_mode === "default") {
@@ -1182,7 +1180,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 
 ```typescript
     // 6. Delegate to the stage agent. Pass the stage's `<CODE>Handoff` schema
-    //     (references/handoff-protocol.md#handoff-schemas) as a Task() ARGUMENT. When the runtime
+    //     (references/handoff-protocol.md#handoff-schemas) as an Agent() ARGUMENT. When the runtime
     //     honors it, the validated typed return maps onto state.json via
     //     `handoff-protocol.md#schema-to-state-map` and SUPERSEDES the post-hoc frontmatter grep
     //     (stage-contracts.md § Validation Protocol step 2 + Step 6.5 below).
@@ -1191,11 +1189,11 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
 ##### Step 6 — degrade path & cache-prefix
 
 ```typescript
-    //     DEGRADE: `schema` is optional on the wire. If the runtime Task() primitive does not
+    //     DEGRADE: `schema` is optional on the wire. If the runtime Agent() primitive does not
     //     accept it, the agent still writes its artifact with `handoff:` frontmatter, the
     //     Step-6.5 scrape runs, and F3 remains the fallback. Artifact + frontmatter are written
     //     either way (durability/compression + F4 source); the typed return never replaces them.
-    //     CACHE-PREFIX: `schema` is a Task() argument, not preamble text — never in
+    //     CACHE-PREFIX: `schema` is an Agent() argument, not preamble text — never in
     //     [1][2][4][4b] nor `full.description` — so the cacheable prefix stays byte-identical.
 ```
 
@@ -1228,7 +1226,7 @@ Nothing to warm: corpflow holds no platform build/test grants — DV/DR/QA deleg
       sh(`state-patch.sh --task-status ${task.id} blocked`);
       appendAudit({ actor: "orchestrator", action: "brief_compose_failed", subject: task.id,
                     result: "blocked", metadata: { exit: composed.status, stderr: composed.stderr.trim() } });
-      continue;  // no Task(): surface the stderr per § Escalation Chains
+      continue;  // no Agent(): surface the stderr per § Escalation Chains
     }
 ```
 
@@ -1265,177 +1263,53 @@ its runtime environment; the ledger has no orchestrator row.
 ##### Step 6 — route before every dispatch, headless or in-process
 
 Every dispatch surface calls this router: main loop, DV fan-out, Step 6.6a/C.0a and C.3 resolvers.
-For frontmatter-less platform agents, pass `--role-baseline` from PL0's role-matrix mapping.
+A row with no stamped `metadata.effort` skips it and dispatches with no `effort`.
 
 ```typescript
-    const route = JSON.parse(spawnSync("bash", ["skills/worktask/scripts/effort-route.sh",
-      "--agent", subagentType, "--model", effectiveModel,
-      "--requested", full.metadata.effort ?? effortBaseline(subagentType)],
-      { encoding: "utf8" }).stdout || "{}");
+    const routed = full.metadata.effort && spawnSync("bash", ["skills/worktask/scripts/effort-route.sh",
+      "--agent", subagentType, "--model", effectiveModel, "--requested", full.metadata.effort],
+      { encoding: "utf8" });
+    // A refused route (exit 2, no line) must not fall through to a dispatch without the tier.
+    if (routed && routed.status !== 0) { escalate(task.id, "effort_route_refused"); continue; }
+    const route = routed ? JSON.parse(routed.stdout)
+      : { route: "inproc", effort_transport: "frontmatter", reason: "effort_unstamped" };
+```
+
+###### Step 6 — the effort argument and the route row
+
+```typescript
+    // "none" = haiku, no effort. "agent-param" = the default in-process route.
+    const effortArg = route.effort_transport === "agent-param" ? { effort: route.requested } : {};
     appendAudit({ actor: "orchestrator", action: "effort_route", subject: task.id, result: "ok",
       metadata: { ...route, session_id: null } });  // filled once headless spawns
 ```
 
-##### Step 6 — Task() dispatch (inproc) or headless-dispatch.sh (headless)
+##### Step 6 — Agent() dispatch (inproc) or headless-dispatch.sh (headless)
 
 Step 4.8 pins each DV workspace before dispatch; the [7] banner carries it. Do not pass
 `isolation: "worktree"`: that would fork an unrecorded tree blocked by dv-tree-preflight.
-The helper owns the worktree cwd, ledger-root env, validation and side-effect checks. It reads
-ledger-owned effort, permission mode, workspace and artifact itself; do not interpolate those
-values into the Bash command. `shellQuoteAll` quotes the orchestrator-owned arguments.
+
+The headless arm runs only when `route.route === "headless"` (`CORPFLOW_HEADLESS_ROUTE=on`).
+Then read `references/headless-arm.md`: launch, safe fallback, and the replay after the child
+exits.
+
+###### Step 6 — the dispatch call
 
 ```typescript
     const stageSchema = HANDOFF_SCHEMA[full.metadata.stage];
     let launchAck;
     if (route.route === "headless") {
-      const attempt = 1;
-      const outLog = `.context/logs/headless-${task.id}-${attempt}.jsonl`;
-      const promptFile = writePromptFile(task.id, attempt, prompt);
-      parentMode = orchestratorSessionMode ?? "manual";
-```
-
-###### Headless launch arguments
-
-Run detached and wait through Monitor: a foreground call would impose the Bash tool's
-10-minute cap. Always set `--out` to the canonical attempt log.
-
-```typescript
-      const hdArgs = ["--task", task.id, "--agent", subagentType, "--model", effectiveModel,
-        "--ledger-root", _orch_root,
-        "--parent-mode", parentMode, "--baseline", route.baseline,
-        "--prompt", promptFile, "--session-id", childSessionId,
-        "--out", outLog];
-      const hd = Monitor(Bash({ run_in_background: true,
-        command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(hdArgs)}` }));
-      const hdResult = JSON.parse(hd.stdout || "{}");
-```
-
-###### Refused launch and safe fallback
-
-Exit 2 refuses malformed or untrusted inputs; exit 3 reports side effects. Neither permits
-fallback. Only `warn` means no headless work ran (`cli_missing`, `cli_below_floor`, `opted_out`,
-`exit_before_artifact`, `auth_failed`, `agent_unresolved`): dispatch in-process at the baseline
-and omit `.headless` so no stop hooks replay for a nonexistent child.
-
-```typescript
-      if (hd.status === 3) { escalate(task.id, "side_effects_present"); continue; }
-      if (hd.status === 2) { escalate(task.id, "headless_dispatch_refused"); continue; }
-      if (hdResult.result === "warn") {
-        launchAck = Task({
-          subagent_type: subagentType, model: effectiveModel, prompt,
-          ...(stageSchema ? { schema: stageSchema } : {}),
-        });
-```
-
-###### Launch acknowledgement and in-process route
-
-```typescript
-      } else {
-        launchAck = { agent_id: childSessionId, headless: true, exit: hd.status, result: hdResult };
-      }
+      // references/headless-arm.md § Headless launch — sets launchAck, or escalates and continues.
     } else {
-      launchAck = Task({
+      launchAck = Agent({
         subagent_type: subagentType,
         model: effectiveModel,
+        ...effortArg,  // agent-param: the stamped tier, honoured in-process since 2.1.292
         prompt,  // composed stdout with [6]/[7] spliced in, never full.description
         ...(stageSchema ? { schema: stageSchema } : {}),
       });
     }
-```
-
-##### Step 6 — after a headless child exits: replay, resume, escalate
-
-A `claude -p --agent` main session does not fire SubagentStop. Replay the chain with
-`headless-poststop.sh`, which registers the child-to-task mapping in the orchestrator ledger
-**before any hook runs**. This keeps gates bound to the task across state-merge and retries,
-including concurrent DV rows. Registration failure exits 2 and escalates without replaying.
-Pass the ledger root separately from the child's workspace; Step 6a's later upsert is idempotent.
-
-A blocked reply resumes the same child with the reasons and additional context. Replay attempts
-1, 2 and 3 allow at most two resumes; a blocked third attempt escalates. A refused or `warn`
-resume also escalates: side effects already exist, so no in-process fallback is allowed.
-
-```typescript
-    if (launchAck?.headless) {
-      let attempt = 1;
-      let poststop;
-      let escalated = false;
-      do {
-```
-
-###### Register and replay stop hooks
-
-```typescript
-        const replay = spawnSync("bash", ["skills/worktask/scripts/headless-poststop.sh",
-          "--task", task.id, "--session", childSessionId,
-          "--orchestrator-session", orchestratorSessionId, "--agent", subagentType,
-          "--ledger-root", _orch_root,
-          "--workspace", full.metadata.workspace_path, "--artifact", full.metadata.artifact,
-          "--effort-level", launchAck.result?.effort_resolved ?? "",
-          "--attempt", String(attempt)], { encoding: "utf8" });
-        try {
-          if (replay.status !== 0) throw new Error("replay failed");
-          poststop = JSON.parse(replay.stdout);
-          if (typeof poststop.blocked !== "boolean") throw new Error("invalid verdict");
-        } catch {
-          escalate(task.id, "headless_poststop_refused"); escalated = true; break;
-        }
-```
-
-###### Prepare the resume prompt
-
-Re-entering headless-dispatch applies the permission cap and side-effect snapshot again.
-The script needs both `--session-id` for reporting and `--resume` for the same child; it omits
-`--session-id` from the CLI argv when resuming, avoiding a refused pair or a fork.
-
-```typescript
-        if (poststop.blocked && !poststop.escalate) {
-          attempt += 1;
-          const resumeOutLog = `.context/logs/headless-${task.id}-${attempt}.jsonl`;
-          const blockPromptFile = writePromptFile(task.id, attempt,
-            `${poststop.reasons.join("\n")}\n\n${poststop.additional_context ?? ""}`);
-```
-
-###### Dispatch the same child again
-
-```typescript
-          const resumeArgs = ["--task", task.id, "--agent", subagentType,
-            "--model", effectiveModel, "--ledger-root", _orch_root,
-            "--parent-mode", parentMode,
-            "--baseline", route.baseline, "--prompt", blockPromptFile,
-            "--session-id", childSessionId, "--resume", childSessionId,
-            "--out", resumeOutLog];
-          const resumeHd = Monitor(Bash({ run_in_background: true,
-            command: `bash skills/worktask/scripts/headless-dispatch.sh ${shellQuoteAll(resumeArgs)}` }));
-          const resumeResult = JSON.parse(resumeHd.stdout || "{}");
-```
-
-###### Refuse unsafe resume fallback
-
-```typescript
-          if (resumeHd.status === 3) {
-            escalate(task.id, "side_effects_present"); escalated = true; break;
-          }
-          if (resumeHd.status === 2) {
-            escalate(task.id, "headless_dispatch_refused"); escalated = true; break;
-          }
-          if (resumeResult.result === "warn") {
-            escalate(task.id, "headless_resume_warn"); escalated = true; break;
-          }
-          launchAck = { agent_id: childSessionId, headless: true, exit: resumeHd.status, result: resumeResult };
-        }
-```
-
-###### Enforce the replay cap
-
-`break` leaves the retry loop; `continue` below advances the outer stage loop only after the
-escalation. Never re-enter a still-blocked do/while after a refused resume.
-
-```typescript
-      } while (poststop.blocked && !poststop.escalate);
-      if (escalated) { continue; }
-      if (poststop.blocked && poststop.escalate) { escalate(task.id, "headless_poststop_block"); continue; }
-    }
+    // launchAck?.headless → references/headless-arm.md § Step 6 — after a headless child exits.
 ```
 
 #### Step 6a
@@ -1550,56 +1424,19 @@ escalation. Never re-enter a still-blocked do/while after a refused resume.
 
 ```
 
-##### Step 6.5a1 — the escalation target
+##### Step 6.5a1–a4 — the return arms, before Layer 2
 
-```typescript
-// The Escalate-to column of agent-coordination § Retry / Escalate Matrix, as data. That
-// table stays the SSOT — status-enum-parity.bats diffs this map against it, so the two
-// cannot drift. `transient` and `logic` are absent: they retry the same agent, so there is
-// no edge. `hard_constraint` is absent too — it aborts for a human rather than re-entering
-// the loop, and capping an abort would be meaningless.
-const ESCALATE_TO = {
-  missing_input: "PREV", exhausted: "PREV",
-  ambiguous_requirements: "PL", design_flaw: "AR",
-};
-```
+Every return runs the detection code below, in order. Each arm's body, helpers and rationale
+live in `references/return-arms.md`; read its section when the predicate holds.
 
-##### Step 6.5a1 — the per-edge escalation cap
-
-```typescript
-function escalationBookkeeping(state, task, cls) {
-  const meta = { ...(state.tasks[task.id].metadata ?? {}) };
-  const code = ESCALATE_TO[cls];  // one patch; routing stays the next iteration's ready filter
-  if (!code) return { terminal: false, metadata: meta };   // same-agent retry, or abort
-  // Full task id, never a bare code: DV0→AR0 must not share a counter with DV3→AR0.
-  const target = code === "PREV"
-    ? (task.blocked_by ?? []).slice(-1)[0]    // previous stage per chain
-    : Object.keys(state.tasks).find(id => id.startsWith(code));
-  if (!target) return { terminal: false, metadata: meta };
-```
-
-##### Step 6.5a1 — the cap, and the reset that must not reach it
-
-```typescript
-// …continued: escalationBookkeeping body
-  const counts = { ...(meta.escalation_counts ?? {}) };
-  counts[target] = (counts[target] ?? 0) + 1;
-  meta.escalation_counts = counts;            // survives the reset below
-  if (counts[target] > 2) return { terminal: true, metadata: meta };  // cap 2
-  meta.retry_count = 0;                       // reset at handoff — retry_count ALONE
-  meta.error_escalated_to = target.replace(/[0-9]+$/, "");
-  return { terminal: false, metadata: meta };
-}
-```
-
-##### Step 6.5a2 — why a mid-stage yield needs its own arm
-
-An agent that yields mid-sentence with budget remaining has **not** errored, so 6.5a does not fire
-and control falls through to Layer 3 and Step 7, which settle the row from a verdict written before
-the stage finished — corrupting the ledger in the one direction nothing downstream re-checks — or
-escalate a stage that only needed resuming. This arm keys on *evidence* (artifact absent, or
-present with no `handoff.verdict`), never on the shape of the return message, so a
-normally-completed stage still takes Layer 2.
+| Read when | Section in `references/return-arms.md` |
+|---|---|
+| 6.5a fires: `escalationBookkeeping` | § Step 6.5a1 — the escalation target |
+| `incomplete` is true | § Step 6.5a2 — why a mid-stage yield needs its own arm |
+| `typedNeed` is true, or the route parks a need | § Step 6.5a3 — why a typed blocked return needs its own arm |
+| `ack.status !== 0`: `resendOnceOrEscalate` | § Step 6.5a4 — why delivered is not acknowledged |
+| `classify` exits 0: the stage parks | § Step 6.5a4 — why a permission denial needs its own arm |
+| any message to a stage: `sendStageMessage` | § Step 6.5a4 — every stage message carries a msg_id |
 
 ##### Step 6.5a2 — incomplete return (mid-stage yield)
 
@@ -1614,74 +1451,14 @@ normally-completed stage still takes Layer 2.
       // written. Field name unconfirmed — read defensively, re-check at the next /cc-update.
       const maxTurnsPartial = Boolean(launchAck?.partial);
       const incomplete = maxTurnsPartial || (!selfPatched && !incHandoff?.verdict);
+      // incomplete → return-arms.md § Step 6.5a2 — mark & audit.
 ```
-
-##### Step 6.5a2 — mark & audit
-
-```typescript
-      // …continued: step 6.5a2 body
-      if (incomplete) {
-        atomicMergeStateJson({ tasks: { [task.id]: { status: "in_progress" } } });
-        appendAudit({
-          actor: "orchestrator", action: "stage_returned_incomplete", subject: code,
-          result: "blocked",
-          metadata: {
-            artifact: incArtifact,
-            artifact_present: fs.existsSync(incArtifact),
-            reason: maxTurnsPartial ? "max_turns_partial"
-                    : fs.existsSync(incArtifact) ? "handoff_verdict_missing" : "artifact_absent",
-          },
-        });
-```
-
-##### Step 6.5a2 — resume, never re-delegate
-
-The agent holds the half-done work; a fresh dispatch would redo it against a tree it already
-edited. Same branch as a parked agent in `references/resume.md § State → Action Table`.
-
-```typescript
-        // …continued: step 6.5a2 body. A stage message, so it carries a msg_id (Step 6.5a4).
-        sendStageMessage(state, task, subagentType,
-          `Stage ${code} returned without a completed handoff. Finish the work, write ${incArtifact} with a handoff verdict, and return. Do not restart from scratch.`);
-        continue;   // never falls through to the completion patch
-      }
-```
-
-##### Step 6.5a3 — why a typed blocked return needs its own arm
-
-A stage that cannot continue without something it cannot produce returns `verdict: "blocked"` with
-one `handoff.blocked_on` (`references/handoff-protocol.md § Schema — blocked_on`). Read as an
-ordinary blocked verdict, that return burns a retry on a stage that never failed, and routed by
-judgement it takes a new improvised route each time. So every kind goes through one table and one
-router, and each writes a fixed set of audit legs.
-
-##### Step 6.5a3 — the dispatch table — kinds and routing
-
-Route every `blocked` return by `kind`.
-
-###### Dispatch table
-
-| kind | Orchestrator action | Audit legs | Fallback |
-|---|---|---|---|
-| `user_decision` | ask `question` with `options` at § Step 7a; resume with hook row's `ud-` id | asked / answered / resumed | none |
-| `user_action` | show `request` and `!` line at § Step 7a | requested / verified | none |
-| `permission` | park through § Step 6.5a4 | denied / granted / resumed | none |
-| `peer_session` | write request, send pointer, relay validated reply | sent / delivered / answered / relayed / expired | `user_action` (mailbox unavailable); `user_decision` (expiry) |
-| `artifact` | resume once `path` in stage tree's landed set | landed | `user_action` until `path` lands |
-| `correction` | re-open `target_task`, park consumers `stale` | opened / closed | none |
-| `host_environment` | re-probe `check` | probed | `user_action` while failing |
-
-###### Step 6.5a3 — landing an arm
-
-Every kind is landed (owner issues: § blocked-on-lib.sh — the arm table). A kind added later starts
-pending and routes to its fallback until its owner lands; landing it changes its row here and its
-landed flag in `scripts/blocked-on-lib.sh` together.
 
 ##### Step 6.5a3 — route every typed blocked return
 
 ```typescript
       // …continued: after the 6.5a2 block; ROUTER = scripts/blocked-on-dispatch.sh. No branch
-      // picks an arm by hand: the router reads the table above from blocked-on-lib.sh.
+      // picks an arm by hand: the router reads the arm table from blocked-on-lib.sh.
       const typedNeed = !incomplete && incHandoff?.verdict === "blocked"
         && Boolean(incHandoff?.blocked_on);
       const routed = !typedNeed ? null : spawnSync("bash", [ROUTER, "route", "--task-id", task.id,
@@ -1697,89 +1474,10 @@ landed flag in `scripts/blocked-on-lib.sh` together.
       const out = routed ? JSON.parse(routed.stdout) : null;
       const rb = out?.resume_block;   // a host_environment re-probe that passed, or an artifact already landed
       if (rb) { deliverResume(rb, rb.instruction); continue; }
-      if (out?.arm === "peer_session") { deliverAsk(out); continue; }   // next section
+      if (out?.arm === "peer_session") { deliverAsk(out); continue; }   // return-arms.md: deliverAsk
       if (out && out.arm !== "permission") continue;   // parked; § Step 7a asks
       // A permission need, or a blocked return with no typed need, goes on to § Step 6.5a4.
 ```
-
-###### Step 6.5a3 — deliverAsk, one transport per ask
-
-```typescript
-// MB = scripts/mailbox.sh. `route` wrote the request and parked the task; this sends the pointer.
-function deliverAsk(out) {
-  const led = JSON.parse(fs.readFileSync(".context/state.json", "utf8"));   // route just parked it
-  const to = led.tasks[out.task_id].metadata.blocked_on.detail.to;
-  const one = ListAgents().filter(a => a.name === to);   // exactly one row ⇒ the message transport
-  if (one.length !== 1) return spawnSync("bash", [MB, "comment", "--task-id", out.task_id]);
-  const leg = (...a) => spawnSync("bash", [MB, "leg", "--task-id", out.task_id, "--ask-id",
-    out.ask_id, "--transport", "message", ...a], { encoding: "utf8" });
-  if (!JSON.parse(leg("--leg", "sent").stdout).written) return;   // sent already: never re-send
-  const r = SendMessage({ to, message: out.message, notify_when_idle: true });
-  leg("--leg", "delivered", "--result", r.result);
-}
-```
-
-###### Step 6.5a3 — why the transport is chosen once
-
-`comment` writes its own `sent` and `delivered` legs, so the two transports never both run for one
-ask. `leg` dedupes on `(task, ask_id, leg)`: `written: false` means a prior turn already sent this
-ask, and `SendMessage` is not idempotent — a second send asks the peer the same question twice. A
-`queued` or `refused` result is recorded and left to the deadline, never retried on another channel.
-
-##### Step 6.5a3 — the fallback arm
-
-`route` parks a need as a `user_action` when the need's own arm cannot clear it: a landed arm whose
-check misses (below), a mailbox that is unavailable, or a kind still waiting on its owner — none
-today. The ledger keeps the stage's original `blocked_on`, and the `requested` row adds
-`fallback_from`, plus `owner_issue` only for that last case, so no fallback carries one while every
-kind is landed. At § Step 7a, `batch` shows a fixed lead line for the kind with the detail keys
-fenced as data. Only a native `user_action` offers a `!` line.
-
-- `peer_session` falls back only when the mailbox is unavailable: `fallback_from`, no `owner_issue`,
-  `ask_id: null`, and the user relays that peer's reply. An ask that reaches its deadline instead
-  takes one `expired` leg and re-routes as a `user_decision` carrying its question and options.
-- `permission` never falls back. § Step 6.5a4 parks it, and the router writes no row for it.
-
-###### Step 6.5a3 — a landed arm that checks before it parks
-
-A miss on either check below parks the need as a `user_action` with `fallback_from` and no
-`owner_issue`.
-
-- `host_environment`: `route` re-runs the autonomy preflight in check mode and writes `probed`. The
-  need clears only when `check` reads `pass`.
-- `artifact`: `route` checks `path` against the landed set of the stage's tree, once the path ladder
-  admits it. A hit clears the need with the ok `landed` row and a `resume_block`; a miss, or a path
-  no landing can produce such as a `.context/` artifact, writes no `landed` row.
-
-###### Step 6.5a3 — the correction arm — invocation
-
-A `correction` names a defect in work another task owns. Route re-opens target and parks source. Orchestrator makes one `route` call; `route` makes one `state-patch.sh --task-reopen <target> --from <source>` call carrying every mutation, then parks source and writes `opened` leg (`references/scripts.md § blocked-on-dispatch.sh — route, the correction arm — invocation`).
-
-###### Step 6.5a3 — the correction arm — guards and mutations
-
-Router checks: target exists, not source, is `completed`; refuses with `fail:` line and untouched ledger. Op re-checks under its lock. Retried turn caught by `opened` leg in log, so `fix_round` moves once per correction. Target becomes `pending` with `fix_round` +1, `gate_from_stage` = source stage code, `gate_blockers` = rework text. Every `completed` consumer becomes `stale`, keeping verdict, artifact, handoff. Ops: `references/handoff-protocol.md § tasks — re-open and settle — guards and invocation`.
-
-###### Step 6.5a3 — what the target and its consumers do next
-
-The target's next dispatch carries the finding through the § Step 4.6 remediation injection, which
-`fix_round` alone triggers, whatever stage the target is — there is no second brief builder. It
-renders as the one `gate_blockers[]` string: the finding byte-for-byte, then its `evidence_ref:` and
-`source_task:` lines. Its `stale` consumers wait for the target's own completion boundary, where § Step 6.5d
-settles each of them; settling at the correcting stage's resume instead would judge them against an
-artifact not yet corrected.
-
-##### Step 6.5a4 — why delivered is not acknowledged
-
-A `reattach_send_result` of `ok` proves the harness accepted a message, not that the stage read it:
-a message waiting on the stage's next tool round misses a stage that returns first. So every
-orchestrator message to a stage carries a `msg_id`. The stage runs the `--ack` line it carries as
-its first tool call and names the message it followed in `handoff.acted_on_msg_id`
-(`skills/shared/stage-contracts.md § Orchestrator messages — ack first`). `ack-check.sh` joins the
-send rows, the `message_ack` rows and that field.
-
-The instruction a stage followed is the one its ack rows and `acted_on_msg_id` prove, not the latest
-amendment; message order proves nothing. Send rows without a `msg_id` are exempt. Exit → action: `references/resume.md § Reattach rows — one resend, then
-escalate`.
 
 ##### Step 6.5a4 — message ack check
 
@@ -1796,14 +1494,6 @@ escalate`.
         continue;   // judged again at the next boundary; never falls through to Layer 2
       }
 ```
-
-##### Step 6.5a4 — why a permission denial needs its own arm
-
-An auto-mode classifier denial is not a stage failure: the stage stopped where it should, and the
-session's permission posture said no. Read as an ordinary blocked or errored return it spends a
-retry or escalates a stage that never failed; left to the orchestrator it becomes an ad-hoc stop
-and a hand-landed command that no stage, review or audit row records. This arm parks the task, § Step 7a asks the user once
-per boundary, and only the denied step resumes.
 
 ##### Step 6.5a4 — detect and park (permission denial)
 
@@ -1834,14 +1524,6 @@ that path, because classify recovers both from the last Tool(...) line at or bef
 wording, so a completed call quoted above the denied one never names the command. If it cannot
 recover a tool it exits 1, and the return stays an ordinary blocked return for § Step 7.
 
-###### Step 6.5a4 — a resumed stage meets the ack check first
-
-§ Step 7a resumes a live stage through `sendStageMessage`, so the resume carries a `msg_id` like
-every other stage message. The stage's next return passes the ack check above before it reaches
-this arm: denied again after acknowledging, it parks again here; a resume it never acknowledged
-reads not delivered and takes one resend, then escalation, without reaching classify. A
-re-dispatched stage gets the instruction as prompt suffix [7], which is not a message.
-
 ##### Step 6.5a4 — what the orchestrator never does with a denial
 
 - Never land the denied command yourself, nor anything with the same effect. § Delegation-only
@@ -1852,79 +1534,6 @@ re-dispatched stage gets the instruction as prompt suffix [7], which is not a me
 - Never grant. "Grant and continue" means the user grants in Claude Code's own permission UI;
   corpflow writes no allow rule or setting, and if the resumed call is denied again the stage
   simply parks again.
-
-##### Step 6.5a4 — rationalizations
-
-| Excuse | Reality |
-|---|---|
-| "One merge; landing it myself beats asking" | The classifier refused it for this session. Landed by hand it is the same action with no grant, no reviewer and no stage record. |
-| "Re-dispatch and let it try again" | The denial stands until the user acts, and a retry walks a stage that never failed toward `exhausted`. |
-| "Ask first, dispatch the ready stages after" | The question waits on a human. Dispatch first (§ Dispatch on the same turn), then ask. |
-
-##### Step 6.5a4 — one resend, then escalate
-
-```typescript
-// Exit 1 resends only `send=ok` misses. Any other send result had its turn at send time in
-// resume.md § Reattach rows — the result table — delivered and refusals, so the boundary escalates it; `queued` included.
-function resendOnceOrEscalate(state, task, subagentType, ack) {
-  if (ack.status === 2) return escalate(task.id);   // a failed check is never clear
-  const misses = [...ack.stdout.matchAll(/^msg (\S+) not-delivered send=(\S+)$/gm)];
-  const ids = ack.status === 1
-    ? misses.filter(m => m[2] === "ok").map(m => m[1])
-    : [ack.stdout.match(/^acted_on \S+ expected=(\S+) mismatch$/m)[1]];
-  if (ack.status === 1 && ids.length === 0) return escalate(task.id);
-```
-
-##### Step 6.5a4 — every id judged before any resend
-
-```typescript
-  // …continued. Nothing is sent until every id is judged, so no resend precedes an escalation.
-  // A non-ok miss beside an ok one escalates; so does a second miss, a message that already
-  // supersedes another: no third send.
-  const secondMiss = id => id === "none"
-    || Boolean(sendRows(task.id).find(r => r.metadata.msg_id === id)?.metadata.supersedes);
-  if (ids.length < misses.length || ids.some(secondMiss)) return escalate(task.id);
-  // When the original message text is not in context, escalate rather than paraphrase.
-  const texts = ids.map(restate);   // the text first sent as each id; null once out of context
-  if (texts.includes(null)) return escalate(task.id);
-  ids.forEach((id, i) => sendStageMessage(state, task, subagentType, texts[i], id));
-}
-```
-
-##### Step 6.5a4 — every stage message carries a msg_id
-
-One path for every orchestrator → stage SendMessage: 6.5a2 nudge, 7a permission, typed-need resumes, reattaches, amendments, resends. Resend/retry omitting `supersedes` leaves replaced message reading not-delivered.
-
-###### Message ID assignment code
-
-```typescript
-// k counts this task's msg_id-bearing send rows over the whole log, so a replay never reuses one.
-function sendStageMessage(state, task, subagentType, body, supersedes = null) {
-  const msg_id = `${task.id}-m${sendRows(task.id).length + 1}`;
-  const sent = SendMessage({ to: dispatchEntry(state, task.id).agent_id ?? subagentType,
-    message: [`msg_id: ${msg_id}`, ...(supersedes ? [`supersedes: ${supersedes}`] : []),
-      `First tool call: bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --ack ${task.id} ${msg_id}`,
-      "Set handoff.acted_on_msg_id to the newest msg_id you acted on.", "", body].join("\n") });
-```
-
-##### Step 6.5a4 — the send row
-
-```typescript
-  // …continued: sendStageMessage body. One row per attempt, result never omitted
-  // (references/resume.md § Reattach rows — the SendMessage has a result too). run_index is the
-  // dispatch scope ack-check.sh --run-index filters on; an integer, so the check can read it.
-  appendAudit({
-    actor: "orchestrator", action: "reattach_send_result", subject: task.id, task_id: task.id,
-    result: sent.delivered ? "ok" : "blocked",
-    metadata: { msg_id, run_index: state.tasks[task.id].metadata.run_index ?? 0,
-                ...(supersedes ? { supersedes } : {}),
-                ...(sent.delivered ? {} : { reason: sent.reason }) },   // refused | dropped | … | queued
-  });
-}
-
-// Matched on task_id, falling back to subject: the same join ack-check.sh uses.
-const sendRows = id => auditRows(id, "reattach_send_result").filter(r => r.metadata?.msg_id);
-```
 
 ##### Step 6.5 — verdict → status
 
@@ -2119,13 +1728,13 @@ Corrected artifact exists only now; source resumes here not at route that parked
 ###### Route the resolver tier
 
 ```typescript
-    //      Call scripts/effort-route.sh with the bumped tier and the agent's own frontmatter
-    //      tier: equal -> inproc, differ -> headless via scripts/headless-dispatch.sh. Audit
-    //      effort_transport (dispatch-flag|frontmatter|env|none) from the route's own output.
-    //      Only "none" (no frontmatter to fall back to) records effort_resolved
-    //      "requested, not applied"; the bumped tier usually differs from the agent's own
-    //      baseline, so this dispatch routes headless in the common case. Never swap in a
-    //      different agent to make it real.
+    //      Call scripts/effort-route.sh with the bumped tier, exactly as Step 6 does. The
+    //      default is in-process with Agent({ effort: <bumped tier> }) — "agent-param"; only
+    //      CORPFLOW_HEADLESS_ROUTE=on sends it headless via
+    //      scripts/headless-dispatch.sh. Audit effort_transport (agent-param|dispatch-flag|
+    //      none) from the route's own output. "agent-param" takes effort_resolved
+    //      from the subagent's hook row (metadata.effort), else null + "no_hook_rows". Only
+    //      "none" (haiku) records "requested, not applied". Never swap in a different agent.
 ```
 
 ##### Step 6.6b — render the remainder
@@ -2221,185 +1830,18 @@ Corrected artifact exists only now; source resumes here not at route that parked
 }
 ```
 
-##### Step 7a — the megatask arm
+##### Step 7a — the parked-need arms
 
-Under a `/megatask` per-issue run `batch` asks nothing. It writes `execution.status: "failed"` and
-`execution.reason: "parked_escalation"` to `workspace.json` plus one `escalation_parked` row, and
-leaves `blocked_on` set — the existing PARK path (§ Escalation class), so nothing more dispatches.
-The router's `batch` parks its typed needs the same way; each `escalated[]` entry is `{kind,
-command_head, truncated}`, and the head and flag appear only on a need with a command.
+The boundary code above calls helpers whose bodies and rules live in
+`references/step-7a-arms.md`. Read the named section when its predicate holds.
 
-###### Step 7a — stopParked checks the path batch resolved
-
-`stopParked` checks the file `batch` itself tried, `$(dirname <state dir>)/workspace.json`, where
-`<state dir>` is the `.context/` the helper resolved. A bare `workspace.json` names the session's
-working directory, which can be another tree.
-
-```typescript
-// The monitor settles a track only on "failed" or "completed", so a bare STOP would hang this one.
-function stopParked(park) {
-  if (park.workspace_written) return;   // STOP: nothing more dispatches
-  const ws = path.join(path.dirname(contextDir()), "workspace.json");
-  // The PARK guard's own write (commands/worktask.md § Escalation guard — unattended
-  // `/megatask` per-issue runs (PARK)), only for an absent or unparseable file.
-  const reason = isSymlink(ws) ? "symlink" : park.workspace_reason;
-  if (reason === "missing" || reason === "malformed") return writeWorkspaceParked(ws);
-  return refuseParkWrite(park.boundary, ws, reason);   // next section
-}
-```
-
-###### Step 7a — the megatask arm never writes through a link
-
-The orchestrator never Writes or Edits a symlinked `workspace.json`, and it checks that same
-resolved path again right before a hand-write, because a link can appear after `batch` looked. For `symlink`,
-`not_regular_file`, `unreadable` or `write_failed`, `refuseParkWrite` makes no write: it appends
-one `escalation` row (`result: "blocked"`, `metadata.{kind, workspace_reason}`, `kind` being
-`permission` or, for the router's park, `user_action`),
-reports the issue, the path and the reason per § Error Handling, and stops. It never removes,
-replaces or re-points the link. The track then does not settle by itself; that is the price of not
-writing through a link another process planted.
-
-##### Step 7a — resume only the denied step
-
-```typescript
-// resume re-claims the row, sets blocked_on to null and appends the permission_resumed row that
-// rb.decision_ref names. Its answer is the user's own; no delegate or resolver supplies one.
-function resumeDeniedStep(need, answer) {
-  const r = spawnSync("bash", [PARK, "resume", "--task-id", need.task_id, "--answer", answer]);
-  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
-  const { resume_block: rb } = JSON.parse(r.stdout);
-  // rb.instruction names only the denied command and forbids re-running completed steps.
-  // Liveness: references/resume.md § Live-agent rows. A re-dispatch carries it as suffix [7].
-  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
-  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
-    sendStageMessage(state, task, task.metadata.agent, rb.instruction);
-  else redispatch(rb.task_id, { suffix: rb.instruction });
-}
-```
-
-###### Step 7a — a refused resume is reported
-
-`resume` exits non-zero when the task is no longer parked, its ledger has no usable detail, or the
-claim was refused. Nothing resumes then, and `reportRefusedResume` tells the user so per
-§ Error Handling: the task, their answer, and the helper's one-line reason. It neither re-runs
-`resume` nor dispatches the stage. Any Bash-holding agent can claim a parked row, so a task that stopped being
-parked between the ask and the resume is the visible trace of a raced or forged resume; returning
-silently would hide it.
-
-###### Step 7a — the two answers, and the record they leave
-
-- "grant and continue" → `grant`, resumed at once. The user grants in Claude Code's own permission
-  UI when the resumed call prompts; corpflow grants nothing.
-- "run it yourself" → `manual`. The `! <command>` line is in the question text. The answer is not
-  the run: resume only after the user reports having run it, with their `! <command>` output in
-  this conversation.
-- `truncated: true` on a need marks a command cut at 512 characters. Its question offers no `!`
-  line and points at the denial notice or `/permissions` recent denials; `rb.instruction` treats
-  the recorded text as context only.
-- `rb.decision_ref`, `permission_resumed:<task_id>:<dedupe_key>:<n>`, names the `permission_resumed`
-  audit row `resume` appended: the record `blocked_on.resume_with: decision_ref` points at.
-
-###### Step 7a — where the `!` line runs
-
-A `!` line runs in the main session's working directory, not in the stage's tree. So the question
-carries the stage's directory as a `cwd:` data line inside its fenced info block, and the user runs
-the `! <command>` line from that directory. Nothing composes `cd <dir> && <command>`: the `!` line
-holds the denied command only, and the directory stays data. `cwd` comes from the ledger's
-`workspace_path`, never from `blocked_on`; a need without one gets no `cwd:` line.
-
-##### Step 7a — resume a typed need
-
-```typescript
-// resume re-claims the row, sets blocked_on to null and appends the closing blocked_on row that
-// rb.decision_ref names. need.resume_leg is that arm's closing leg (verified on a user_action).
-// Only the user's own answer reaches this function, and a user_decision never forwards it.
-function resumeTypedNeed(need, answer) {
-  if (need.arm === "user_decision") return resumeUserDecision(need);   // next section
-  if (answer === "stop here") return stopForUser(need);   // stays parked; the run stops
-  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
-  if (r.status !== 0) return reportRefusedResume(need, answer, r.stderr);
-  const { resume_block: rb } = JSON.parse(r.stdout);
-  deliverResume(rb, answer === "done" ? rb.instruction : `${rb.instruction}\n\n${fence(answer)}`);
-}
-```
-
-###### Step 7a — a user decision resumes by reference
-
-```typescript
-// The hook recorded the answer in .context/decisions.jsonl. With no --decision-ref, resume picks the
-// newest verified ud- row covering the task that no earlier resume consumed, and names it in
-// rb.decision_ref. rb.instruction names the verify command and carries no answer text.
-function resumeUserDecision(need) {
-  const r = spawnSync("bash", [ROUTER, "resume", "--task-id", need.task_id, "--leg", need.resume_leg]);
-  if (r.status !== 0) return stopForUser(need);   // no verified row: declined, or refused
-  const { resume_block: rb } = JSON.parse(r.stdout);
-  deliverResume(rb, rb.instruction);   // unmodified: decision_ref: ud-…, never the answer
-}
-```
-
-###### Step 7a — why the answer is never forwarded
-
-The answer is already in this conversation. Forwarding it, whole or paraphrased, is the prose relay
-a stage must refuse (`skills/shared/stage-contracts.md § A user decision is accepted only from the
-ledger`). So `rb.instruction` goes out as is: through `SendMessage` to a live stage, or as a
-re-dispatch suffix. The stage reads the answer only through the verifier.
-
-A non-zero `resume` exit means no verified row covers the task: the user declined the dialog, the
-hook refused to write a row, or the verifier refused the row. Nothing is written, the task stays
-parked, and `stopForUser` stops the run; a later `/worktask --resume` asks again.
-
-###### Step 7a — deliverResume, live or re-dispatched
-
-```typescript
-// Liveness: references/resume.md § Live-agent rows. A re-dispatch carries body as suffix [7].
-function deliverResume(rb, body) {
-  const task = { id: rb.task_id, ...state.tasks[rb.task_id] };
-  if (isLive(dispatchEntry(state, task.id).agent_id))   // msg_id and ack: § Step 6.5a4
-    sendStageMessage(state, task, task.metadata.agent, body);
-  else redispatch(rb.task_id, { suffix: body });
-}
-```
-
-###### Step 7a — the typed-need answers
-
-- "done" → resumed at once. The user did what the request asked, and the resumed stage checks
-  `verify`, when the need has one, before it continues.
-- "stop here" → nothing is written. The task stays parked, and the run stops per § Escalation
-  Chains; a later `/worktask --resume` asks again (`references/resume.md § Reply routing`).
-- Free text → the answer itself, such as the reply the user got from a peer. It resumes like "done"
-  and reaches the stage as a fenced block; no audit row holds it. It is never consent.
-- A `user_decision` need offers the stage's own options instead of "done" and "stop here". Whatever
-  the user picks or types, the hook records it, and the stage gets only `decision_ref: ud-…`.
-- A `!` line appears only on a native `user_action` whose command was not cut, and runs from the
-  `cwd:` line as § Step 7a — where the `!` line runs says.
-
-###### Step 7a — a decision with no options
-
-A `user_decision` need with no options of its own is asked under two synthetic labels, "the stage
-decides" and "raise this need again". They only clear AskUserQuestion's 2-option minimum and never
-reach the ledger. Neither is a control word: `resume` does not read the answer, so a picked label
-is recorded like text typed under "Other".
-
-##### Step 7a — an inbound reply, on any channel
-
-A peer message, or a user answer, whose first line is exactly `reply <ask_id>` answers that ask; the
-rest of the text is the answer. `mailbox-reply.sh` is the only writer of a reply: it checks the
-answer against the request's `reply_schema` and refuses one that arrives past the deadline. Nothing
-reaches the parked stage here — the next boundary's `scan` relays whatever verified.
-
-###### Step 7a — ingestReply
-
-```typescript
-// REPLY = scripts/mailbox-reply.sh. Untrusted answer text never reaches an argv or a heredoc
-// delimiter — it goes in on stdin, and `--answer-file -` reads it there. No second copy of the
-// answer is written: a temp file under .context/ would inherit the process umask in a directory
-// with no mode contract, and would outlive a crash between the write and the unlink.
-function ingestReply(askId, answer, kind, session) {   // kind: "peer" (message) | "user"
-  spawnSync("bash", [REPLY, "--ask-id", askId, "--answer-file", "-",
-    "--kind", kind, "--session", kind === "user" ? "user" : session],
-    { input: answer });   // exit 1 = refused, the ask stays open
-}
-```
+| Read when | Section in `references/step-7a-arms.md` |
+|---|---|
+| a batch returns `mode: "megatask_park"`: `stopParked` | § Step 7a — the megatask arm |
+| a permission need is answered: `resumeDeniedStep` | § Step 7a — resume only the denied step |
+| a typed need is answered: `resumeTypedNeed` | § Step 7a — resume a typed need |
+| a need resumes: `deliverResume` | § Step 7a — deliverResume, live or re-dispatched |
+| a message or answer opens with `reply <ask_id>`: `ingestReply` | § Step 7a — an inbound reply, on any channel |
 
 ##### Step 7 — loop-back arm
 
@@ -2441,7 +1883,7 @@ function loopBackToDV(ledger, gateId, gateRow) {
 - Patch status at every transition (in_progress at claim, the verdict-mapped status at completion)
 - Execute a stage only after its `blocked_by` dependencies have settled
 - Pass `model` from task metadata to the Agent tool (`model: opus` → `model: "opus"`); don't rely on frontmatter inheritance
-- Stamp `metadata.effort` on the task row even though `Task()` takes no effort argument: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. Headless dispatch turns it into `--effort`; in-process it stays advisory
+- Stamp `metadata.effort` on the task row: it is the ledger record the Step C.0a resolver bumps, and the only place a per-stage override (DV at `xhigh`) is recoverable. In-process it becomes the `Agent` call's `effort` (2.1.292), except on haiku, which gets none (transport `none`); headless dispatch turns it into `--effort`
 - `metadata.agent`: always fully-qualified `plugin:agent` (`corpflow:developer`, `apple-developer:ios-developer`)
 - A stage agent failing after 3 retries escalates per the error handling chain
 
@@ -2539,7 +1981,7 @@ meet it.
 
 ## FN Gate
 
-The pre-finalization human checkpoint, carried by `PL0.metadata.fn_gate` (default `"checkpoint"`). It sits before the FN `Task()` delegation, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`). With the PL gate (`commands/worktask.md § Step A.5`, § PRECONDITION CHECK Signal 2) it forms the pipeline's two human checkpoints; all file-writing work is worktree-isolated, so finalization is reviewable as a PR.
+The pre-finalization human checkpoint, carried by `PL0.metadata.fn_gate` (default `"checkpoint"`). It sits before the FN `Agent()` delegation, so nothing remote (commit/push/PR) happens before approval. `N = state.json.run_index` (default `0`). With the PL gate (`commands/worktask.md § Step A.5`, § PRECONDITION CHECK Signal 2) it forms the pipeline's two human checkpoints; all file-writing work is worktree-isolated, so finalization is reviewable as a PR.
 
 ### FN gate paths
 

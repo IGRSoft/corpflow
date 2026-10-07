@@ -3,14 +3,13 @@ name: megatask
 description: Orchestrate many worktasks across a GitHub milestone or an explicit issue array, ordered by a dependency/blocker DAG and priority, each issue in its own isolated worktree.
 argument-hint: '<N> | --issues N,N,N [--secure] [--platform apple|android|web|systems|backend|ai|all] [--dry-run]'
 version: 0.2.0
-allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Task(corpflow:product-manager), Task(corpflow:workflow-engineer), Task(corpflow:project-manager), Task(general-purpose)
+allowed-tools: Read, AskUserQuestion, Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(jq:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/build-orchestrator.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/init-worktree.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/megatask/scripts/resolve-pbxproj-membership.sh *), Agent(corpflow:product-manager), Agent(corpflow:workflow-engineer), Agent(corpflow:project-manager), Agent(general-purpose)
 related:
   - skills/megatask/SKILL.md
   - skills/megatask/references/dependency-graph.md
   - skills/megatask/references/schemas.md
   - skills/megatask/references/git-integration.md
   - skills/shared/milestone-helpers/SKILL.md
-  - hooks/megatask-monitor.sh
   - commands/worktask.md
   - commands/milestone.md
   - agents/workflow-engineer.md
@@ -40,13 +39,13 @@ mechanics: `skills/megatask/SKILL.md`. Two constraints bound every run:
 
 `N` or `--issues` is required; given both, `--issues` filters within milestone `N`.
 
-| Option | Effect |
-|--------|--------|
-| `N` (positional) | Milestone number — execute its open issues |
-| `--issues N,N,N` | Explicit issue array; may span milestones or have none |
-| `--secure` | Forwarded per issue (11-stage pipeline) |
-| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Forwarded per issue |
-| `--dry-run` | Resolve, build the DAG, print the plan — no worktrees, no PRs |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `<N>` (positional) | milestone number | Execute that milestone's open issues (default: none) |
+| `--issues N,N,N` | comma-separated issue numbers | Explicit issue array; may span milestones or have none (default: none) |
+| `--secure` | — | Forwarded per issue, 11-stage pipeline (default: off) |
+| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Forwarded per issue (default: each issue's detected platform) |
+| `--dry-run` | — | Resolve, build the DAG, print the plan — no worktrees, no PRs (default: off) |
 
 Cross-issue concurrency (`parallel_tracks`) is orchestrator-derived, never a flag (§ Track
 Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belongs to its TL stage.
@@ -54,7 +53,7 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 ## Examples
 
 ```bash
-/megatask [N] [--issues N,N,N] [--secure] [--platform <p>] [--dry-run]
+/megatask <N> | --issues N,N,N [--secure] [--platform <p>] [--dry-run]
 
 /megatask 7                       # milestone 7 by DAG + priority
 /megatask 7 --secure              # …with the 11-stage secure pipeline per issue
@@ -64,10 +63,26 @@ Derivation); intra-issue async (an issue's DV0 splitting into DV0/DV1/…) belon
 /megatask 7 --dry-run             # preview the DAG/order, touch no git state
 ```
 
+## Output Format
+
+`--dry-run` stops after the plan block; a live run appends progress and a batch summary:
+
+~~~markdown
+# Megatask: milestone <N> | issues <list> · <M> issues · <T> tracks
+
+## Plan — issue | title | blockers | track | priority | worktree path
+## Progress — per issue: stage reached, verdict, PR URL, worktree path, any learnings.md left
+## Blocked — issues waiting, each naming the blocker issue it waits on
+## Summary — merged / open / failed counts, plus follow-up issues filed
+~~~
+
+A dependency cycle or an unreadable ledger replaces everything after `## Plan` with
+`## Halted — <cycle members or ledger error>`: no worktree is created and no issue is started.
+
 ## Phase 1: Resolve & Plan (execute immediately)
 
 Phase 1 creates no worktrees and modifies no project files: only `mkdir -p .worktrees/<group>`,
-reads, `gh` queries and `build-orchestrator.sh` writing `orchestrator.json` are permitted until R1
+the R1 audit row, reads, `gh` queries and `build-orchestrator.sh` writing `orchestrator.json` are permitted until R1
 clears.
 
 ### Phase 1 · Steps 1–2 — Parse arguments & resolve the issue set
@@ -132,9 +147,18 @@ Over-cap depth ⇒ name both remediations: raise the env var, or flatten Tier-2 
 
 #### R1 outcomes
 
-- **Approval** → append `{"actor":"megatask","action":"batch_approved","subject":"<group>","result":"ok"}` to `.context/logs/audit.jsonl`; continue to Phase 2.
-- **Rejection** → append `batch_rejected`; STOP, surface feedback, create no worktrees.
+- **Approval** → append a `batch_approved` row (below); continue to Phase 2.
+- **Rejection** → append a `batch_rejected` row (below); STOP, surface feedback, create no worktrees.
 - **`--dry-run`** → print the plan and STOP here regardless (no gate, no execution).
+
+The row goes through the granted `jq` with an append redirect, because `state-patch.sh
+--audit-row` needs a seeded ledger and the batch root has none:
+
+```bash
+mkdir -p .context/logs && jq -nc --arg ts "$(date -u +%FT%TZ)" --arg g "<group>" \
+  '{ts:$ts, actor:"megatask", action:"batch_approved", subject:$g, result:"ok"}' \
+  >> .context/logs/audit.jsonl
+```
 
 > A **free-text** R1 answer arrives neutrally worded, not framed as "continue". "Wait, explain the
 > depth warning first" is a question, not approval: answer it and re-present the gate.
@@ -202,7 +226,7 @@ keeps no variables, and without `WORKSPACE_ROOT` the state scripts resolve megat
 - Never call `EnterWorktree`: the `cd` already runs every call in the worktree, and a path outside
   `.claude/worktrees/` asks for a confirmation nobody is there to give.
 - Never wait on the user: every stop settles the issue in `workspace.json` first
-  (`commands/worktask.md § Per-issue run under /megatask`).
+  (`skills/worktask/references/megatask-per-issue.md`).
 
 #### Step 3 — how hooks find the issue
 
@@ -271,22 +295,6 @@ parked or escalated issue (told apart by `execution.reason`) with its unanswered
    permanently `blocked`, so report them.
 6. **Terminate** when no track is active and every issue is `completed`, `failed`, or `skipped`:
    print per-issue status + PR links, then `git worktree prune`.
-
-## Output Format
-
-`--dry-run` stops after the plan block; a live run appends progress and a batch summary:
-
-~~~markdown
-# Megatask: milestone <N> | issues <list> · <M> issues · <T> tracks
-
-## Plan — issue | title | blockers | track | priority | worktree path
-## Progress — per issue: stage reached, verdict, PR URL, worktree path, any learnings.md left
-## Blocked — issues waiting, each naming the blocker issue it waits on
-## Summary — merged / open / failed counts, plus follow-up issues filed
-~~~
-
-A dependency cycle or an unreadable ledger replaces everything after `## Plan` with
-`## Halted — <cycle members or ledger error>`: no worktree is created and no issue is started.
 
 ## Relationship to /worktask and /milestone
 

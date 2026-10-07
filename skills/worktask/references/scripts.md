@@ -285,4 +285,4 @@ Prints `{"ask_id","reply_ref","sha256"}`. Exit `0` written; `1` refused, with on
 `fail: <reason>: <detail>` line on stderr and nothing written, reason one of `invalid_ask_id`,
 `bad_session`, `too_long`, `unknown_ask`, `bad_request`, `late`, `schema_invalid`, `duplicate`;
 `2` usage error, mailbox unavailable, or no sha256 tool. The answer arrives only through
-`--answer-file` (`-` for stdin), so untrusted text never reaches an argv (§ Step 7a — ingestReply).
+`--answer-file` (`-` for stdin), so untrusted text never reaches an argv (`step-7a-arms.md § Step 7a — ingestReply`).

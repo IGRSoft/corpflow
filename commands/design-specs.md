@@ -16,8 +16,10 @@ Developer-ready specification for a component, screen, or feature — measured v
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
-| `--include-assets` | flag | Include asset export list |
+| `--platform <p>` | `apple`, `android`, `web`, `all` | Target platform (default: `all`) |
+| `--include-assets` | — | Include asset export list (default: off) |
+
+## Examples
 
 ```
 /design-specs <component or screen name> [--platform apple|android|web|all] [--include-assets]
@@ -26,12 +28,7 @@ Developer-ready specification for a component, screen, or feature — measured v
 /design-specs NavigationBar --platform android
 ```
 
-## Procedure
-
-1. **Analyze and specify** — map the target's structure, its design-system token usage and its platform-specific variations, then fill the template below.
-2. **Hand off** — every slot in § Specification Template holds a measured value or `n/a: <reason>`, and every colour, spacing and type value either names the design-system token it comes from or is flagged as a one-off. With `--include-assets`, each asset carries an export row with size and scale. A `[bracketed placeholder]` left anywhere means the spec is not deliverable.
-
-## Specification Template
+## Output Format
 
 The three blocks below are one document, split only to stay skimmable.
 
@@ -108,6 +105,11 @@ The three blocks below are one document, split only to stay skimmable.
 ### Additional Assets
 - [ ] [Asset name] - [format/size]
 ```
+
+## Procedure
+
+1. **Analyze and specify** — map the target's structure, its design-system token usage and its platform-specific variations, then fill § Output Format.
+2. **Hand off** — every slot in § Output Format holds a measured value or `n/a: <reason>`, and every colour, spacing and type value either names the design-system token it comes from or is flagged as a one-off. With `--include-assets`, each asset carries an export row with size and scale. A `[bracketed placeholder]` left anywhere means the spec is not deliverable.
 
 ## Platform-Specific Sections
 

@@ -344,12 +344,18 @@ cmd_render() {
   LEDGER_DIGEST=$(bash "$LDS" --state "$STATE") || digest_rc=$?
   [[ "$digest_rc" -eq 0 ]] || die2 "ledger-digest.sh failed for $STATE (exit $digest_rc)"
 
-  local STAGE MODEL AGENT
+  local STAGE MODEL AGENT EFFORT
   STAGE=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.stage // empty' "$STATE")
   [[ "$STAGE" =~ ^[A-Z]{2}$ ]] || die2 "tasks.$TASK_ID.metadata.stage is missing or malformed"
   MODEL=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.model // empty' "$STATE")
   [[ "$MODEL" =~ ^[a-z][a-z0-9_-]*$ ]] || die2 "tasks.$TASK_ID.metadata.model is missing or malformed"
   AGENT=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.agent // empty' "$STATE")
+  EFFORT=$(jq -r --arg id "$TASK_ID" '.tasks[$id].metadata.effort // empty' "$STATE")
+  if [[ -n "$EFFORT" ]]; then
+    # shellcheck source=effort-ladder.sh
+    . "$PROOT/skills/worktask/scripts/effort-ladder.sh" || die2 "failed to source effort-ladder.sh"
+    effort_rank "$EFFORT" > /dev/null 2>&1 || die2 "tasks.$TASK_ID.metadata.effort is malformed"
+  fi
 
   local allow_row AGENT_BASENAME ARTIFACT_BASENAME
   allow_row=$(bash "$CL" --allow-list --stage "$STAGE" 2> /dev/null | head -1) || true
@@ -547,6 +553,7 @@ cmd_render() {
   emit "stage: ${STAGE}"
   if [[ -n "$AGENT" ]]; then emit "agent: ${AGENT}"; fi
   emit "model: ${MODEL}"
+  if [[ -n "$EFFORT" ]]; then emit "effort: ${EFFORT}"; fi
   emit "artifact: ${ARTIFACT}"
   if [[ -n "$SUBJECT" ]]; then emit "subject: ${SUBJECT}"; fi
   emit "ref: ${PLAN_BASENAME}#requirements"

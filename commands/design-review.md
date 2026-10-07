@@ -2,7 +2,7 @@
 name: design-review
 description: Conduct a comprehensive design review for screens, components, or features
 argument-hint: '<screen, component, or feature> [--focus ui|ux|a11y|system] [--depth quick|standard|comprehensive]'
-allowed-tools: Read, Glob, Grep, Task(corpflow:designer)
+allowed-tools: Read, Glob, Grep, Agent(corpflow:designer)
 related:
   - agents/designer.md
   - commands/design-specs.md
@@ -17,8 +17,10 @@ Comprehensive design review of a screen, component, or feature, run through the 
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--focus` | `ui`, `ux`, `a11y`, `system` | Review focus area (default: all) |
-| `--depth` | `quick`, `standard`, `comprehensive` | Review depth (default: standard) |
+| `--focus <area>` | `ui`, `ux`, `a11y`, `system` | Review focus area (default: all four) |
+| `--depth <depth>` | `quick`, `standard`, `comprehensive` | Review depth (default: `standard`) |
+
+## Examples
 
 ```
 /design-review <screen, component, or feature> [--focus ui|ux|a11y|system] [--depth quick|standard|comprehensive]
@@ -27,20 +29,6 @@ Comprehensive design review of a screen, component, or feature, run through the 
 /design-review Button component --focus system
 /design-review Checkout --focus a11y --depth quick
 ```
-
-## Procedure
-
-1. **Gather context** — when `.context/designs/mockup-*.pen` exists, delegate the read: `Task(corpflow:designer)` with "read the mockups for `<target>` and return a ≤400-token structural and visual summary — frames, states, tokens used, deviations from the design system. Write nothing." No mockup present → skip the delegation and read the source or spec directly. Then identify the target's design patterns, design-system usage, and platform considerations.
-2. **Review and report** — run `agents/designer.md` at the selected focus and depth against the criteria below, then emit every § Output Format section. Each § Review Criteria row selected by `--focus` carries a verdict line — pass, a finding, or `not applicable: <reason>` — and each finding names the screen or component, the criterion it fails, and a before/after. A row with no verdict means the review is unfinished, not that it passed.
-
-## Review Criteria
-
-| Focus | Checks |
-|-------|--------|
-| `ui` | Visual hierarchy and layout; typography and color usage; spacing and alignment consistency; icon and asset quality; dark mode support |
-| `ux` | User flow clarity; interaction patterns; error handling and feedback; loading states; navigation consistency |
-| `a11y` | WCAG 2.2 AA, color contrast, touch target sizes, screen reader support, keyboard navigation — full checklist in `commands/design-accessibility.md` |
-| `system` | Component library adherence; token usage (colors, spacing, typography); pattern consistency; reusability assessment |
 
 ## Output Format
 
@@ -51,6 +39,7 @@ Comprehensive design review of a screen, component, or feature, run through the 
 - Overall assessment: [Good/Needs Work/Critical Issues]
 - Key strengths: [List]
 - Priority improvements: [List]
+- Context: [the designer's mockup summary, quoted; or the source and spec paths read]
 
 ## Findings
 
@@ -67,5 +56,19 @@ Comprehensive design review of a screen, component, or feature, run through the 
 - [Immediate actions]
 - [Follow-up reviews needed]
 ```
+
+## Procedure
+
+1. **Gather context** — when `.context/designs/mockup-*.pen` exists, delegate the read: `Agent(corpflow:designer)` with "read the mockups for `<target>` and return a ≤400-token structural and visual summary — frames, states, tokens used, deviations from the design system. Write nothing." No mockup present → skip the delegation and read the source or spec directly. Then identify the target's design patterns, design-system usage, and platform considerations. Done when the report's `Context:` line quotes the designer's summary or lists the paths read.
+2. **Review and report** — run `agents/designer.md` at the selected focus and depth against the criteria below, then emit every § Output Format section. Each § Review Criteria row selected by `--focus` carries a verdict line — pass, a finding, or `not applicable: <reason>` — and each finding names the screen or component, the criterion it fails, and a before/after. A row with no verdict means the review is unfinished.
+
+## Review Criteria
+
+| Focus | Checks |
+|-------|--------|
+| `ui` | Visual hierarchy and layout; typography and color usage; spacing and alignment consistency; icon and asset quality; dark mode support |
+| `ux` | User flow clarity; interaction patterns; error handling and feedback; loading states; navigation consistency |
+| `a11y` | WCAG 2.2 AA, color contrast, touch target sizes, screen reader support, keyboard navigation — full checklist in `commands/design-accessibility.md` |
+| `system` | Component library adherence; token usage (colors, spacing, typography); pattern consistency; reusability assessment |
 
 Target: $ARGUMENTS

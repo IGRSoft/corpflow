@@ -30,9 +30,15 @@ Claude Code's own internal agents (prompt suggestions, `/btw`) also fire `Subage
 |------------|------------|---------|----------------|
 | `MessageDisplay` | A message is displayed to the user | — | `message`, `role` (`user`/`assistant`), `display_type` |
 | `SessionStart` | Session begins | — | `session_id`, `session_title`, `reloadSkills` (bool), `source` (session origin — a forked session reports `"fork"`, not `"resume"`) |
-| `Notification` | Background agent needs input or finishes; also permission prompts (incl. Claude Desktop / VS Code) | — | reason ∈ `agent_needs_input` / `agent_completed` |
+| `Notification` | Background agent needs input or finishes; also permission prompts (incl. Claude Desktop / VS Code). `idle_prompt` does not fire while background agents still run | — | reason ∈ `agent_needs_input` / `agent_completed` |
 | `PreModelSwitch` | A model switch is about to apply | — | Unconfirmed — see § Model-Switch Hooks |
 | `PostModelSwitch` | A model switch has applied | — | Unconfirmed — see § Model-Switch Hooks |
+
+#### Later lifecycle events — instruction loading
+
+| Hook Event | Fires When | Matcher | Payload Fields |
+|------------|------------|---------|----------------|
+| `InstructionsLoaded` | A rule or nested CLAUDE.md loads, including on Write/Edit inside its scope | — | `agent_id`, `agent_type` when a subagent's file access loaded it; effort for rules and nested CLAUDE.md loaded on file access |
 
 ### Notification as resume wake-up
 
@@ -58,6 +64,7 @@ The Agent tool has no `resume` parameter; use `SendMessage` to reach running age
 ### Compaction recovery & hook-output guards
 
 - `PreCompact` fires before automatic compaction and blocks it with exit code 2. The managed `hooks/precompact-checkpoint.sh` (in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and never blocks (always exit 0).
+- `<system-reminder>` tags in hook output are escaped before they reach Claude (2.1.292); corpflow hooks never rely on them.
 - Parent agents recover subagent results after compaction; killed or interrupted background agents keep partial results in context. `PostCompact` can re-inject critical state: the managed `skills/context-compression/scripts/post-compact-recovery.sh` writes `.context/logs/post-compact-<ts>.json`. It is registered and recurrence-guarded (`manifest-parity.bats`) but has never been observed firing — a real compaction cannot be simulated in CI — so treat it as registered, not confirmed working.
 
 #### SessionEnd finalization
@@ -205,6 +212,7 @@ Hyphenated matchers exact-match rather than substring-match, so a matcher meant 
 - Returning `"defer"` pauses a headless (`-p`) session at the tool call for later `-p --resume` re-evaluation — the CI/CD approval-gate mechanism.
 - JSON on stdout with exit code 2 blocks the call, and the block holds even when that JSON fails schema validation: a malformed payload cannot downgrade an intended block to a pass.
 - `permissions.deny` rules override a hook's `permissionDecision: "ask"`; conversely auto mode cannot override an `ask` — a hook `ask` floors the decision at a prompt, even for unsandboxed Bash.
+- A `PreToolUse` or `PermissionRequest` hook whose matching fails, or whose tool input cannot be serialized to JSON, blocks the call instead of being skipped. Permission rules and safety checks run again on the input a `PreToolUse` hook rewrote.
 
 ### PermissionDenied decision
 
@@ -219,9 +227,14 @@ Hyphenated matchers exact-match rather than substring-match, so a matcher meant 
 - Async hooks that emit no response payload write no empty transcript entries.
 - A hook's `{"continue": false}` halt holds even when the attached tool fails or completes mid-stream.
 
+#### Hook processes & plan visibility
+
+- A synchronous hook finishes shortly after its own process exits, even when a background child it started (`some-daemon &`) keeps the output open. An `asyncRewake` hook whose script is missing is reported once, not on every wake.
+- Hooks on `ExitPlanMode` see the plan written in the same response.
+
 ### Hook Effort Visibility
 
-Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries the active effort (`low|medium|high|xhigh|max`), so audit/cost hooks can attribute spend to the effort tier without parsing model metadata. Tier model: `skills/shared/model-selection.md`.
+Hook payloads include `effort.level` (`low|medium|high|xhigh|max`), so audit/cost hooks can attribute spend to the effort tier without parsing model metadata. corpflow hooks read the payload only and write `"unknown"` when it has no `effort`. `$CLAUDE_EFFORT` is not a substitute: a haiku subagent's payload omits `effort` while the env var still holds the tier the `Agent` call requested (2.1.292). Tier model: `skills/shared/model-selection.md`.
 
 ### Error, config & compatibility semantics
 
@@ -229,6 +242,10 @@ Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries th
 - `{"decision":"block"}` from an `Elicitation` or `ElicitationResult` hook declines the MCP elicitation, as exit code 2 does.
 - A hook-callback timeout is reported as a timeout and infrastructure errors as such, never as a user rejection: route them as transient failures, not refusals.
 - Unrecognized hook event names in `settings.json` do not break the file, so forward-compatible configs survive CC downgrades.
+
+#### OpenTelemetry events
+
+- The `user_prompt` event carries `prompt_text`, a copy of `prompt` — mask or drop it wherever `prompt` is masked. A permission ask left unanswered (in `-p` or on an interrupted turn) emits a `tool_decision` event, and `claude_code.tool.blocked_on_user` spans report their real source and decision.
 
 #### Deleted cwd & broken-hook parks
 
@@ -269,7 +286,7 @@ With agent teams enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), two more ev
 
 | Hook Event | Fires When | Payload Fields | Use Case |
 |------------|------------|----------------|----------|
-| `TeammateIdle` | Teammate finishes work and becomes idle | `agent_id`, `agent_type`; the notification carries the teammate's final answer | Read the lane's result directly; assign next task |
+| `TeammateIdle` | Teammate finishes work and becomes idle; never from the teammate's own subagents or forks | `agent_id`, `agent_type`; the notification carries the teammate's final answer | Read the lane's result directly; assign next task |
 | `TaskCompleted` | A task in the shared task list is completed | `agent_id`, `agent_type` | Trigger dependent stages, update orchestrator |
 
 ### Stopping teammates programmatically
@@ -280,7 +297,7 @@ Background tasks a teammate launches survive the teammate finishing its turn: `T
 
 ## Agent Teams vs Subagents
 
-| Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
+| Aspect | Subagents (Agent tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|
 | Context | Own window, results return to caller | Fully independent sessions |
 | Communication | Report back to parent only | Direct inter-teammate messaging |
@@ -297,7 +314,7 @@ Background tasks a teammate launches survive the teammate finishing its turn: `T
 | Standard 9/11-stage | Default | Not recommended |
 | Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
 | Megatask sequential issues | Default (orchestrator) | Not recommended |
-| Megatask parallel independent issues | Task-based tracks | Optional (experimental) |
+| Megatask parallel independent issues | Agent-based tracks | Optional (experimental) |
 | Cross-cutting research / competing hypotheses | Possible | Preferred |
 | Code review from multiple perspectives | Possible | Preferred |
 

@@ -16,12 +16,14 @@ Update README files based on code changes, keeping documentation in sync with im
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--path <dir>` | any directory | Update the README in that directory (default: every README found) |
-| `--section <name>` | `installation`, `usage`, `api`, `contributing` | Update that section only |
-| `--from-changes` | — | Derive updates from recent git history instead of the current tree |
-| `--validate` | — | Report accuracy issues only; write nothing |
+| `--section <name>` | `installation`, `usage`, `api`, `contributing` | Update that section only (default: every section) |
+| `--from-changes` | — | Derive updates from recent git history instead of the current tree (default: off, the current tree) |
+| `--validate` | — | Report accuracy issues only; write nothing (default: off) |
+
+## Examples
 
 ```
 /docs-readme [--path <dir>] [--section installation|usage|api|contributing] [--from-changes] [--validate]
@@ -40,7 +42,7 @@ Update README files based on code changes, keeping documentation in sync with im
 | `## Validation Results` | `Check \| Status \| Details` for Links, Code Examples, Version Numbers, Dependencies |
 | `### Issues to Fix Manually` | Numbered list of what the command will not write itself, each carrying the corrected value |
 
-Every change carries a `**Reason**` naming the code change that caused it — never restate the diff.
+Every change carries a `**Reason**` naming the code change that caused it.
 
 ## Generated README Structure
 

@@ -39,7 +39,7 @@ Written next to `state.json`, in the artifacts shared across runs (never re-seed
 `created_run_index` is the run that opened the issue; `last_commented_run_index` advances with
 each later run's follow-up comment.
 
-## Two tiers: advisory pre-flight, then authoritative anchor
+## Two tiers: advisory preflight, then authoritative anchor
 
 The anchor exists only once a `.context/` does, so it protects re-runs, not the first run of work
 already filed under different wording. `/worktask` covers that at entry with
@@ -47,7 +47,7 @@ already filed under different wording. `/worktask` covers that at entry with
 `.context/` is created it scores keyword overlap against open-issue titles and offers candidates
 to the user, who may bind the new context to one.
 
-The pre-flight is advisory, human-confirmed, and writes nothing itself; no fuzzy match ever
+The preflight is advisory, human-confirmed, and writes nothing itself; no fuzzy match ever
 auto-binds. Reusing an issue writes an anchor with `created_run_index: -1` (the same "predates
 this context" value a recovered search hit gets), so the publish step comments instead of creating.
 

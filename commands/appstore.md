@@ -2,7 +2,7 @@
 name: appstore
 description: 'Store publishing front door — listing metadata, screenshots, or in-app purchases; delegates to the platform plugin''s release engineer (Apple App Store, Google Play).'
 argument-hint: '--task <listing|screenshots|iap> [--platform apple|android] [--lang en|ua] [--path <dir>] [--dry-run] [--bundle <id>] [--apple-platform ios|macos|tvos|watchos] [--android-form-factor <factor>]'
-allowed-tools: Read, Glob, Grep, Task(corpflow:release-engineer)
+allowed-tools: Read, Glob, Grep, Agent(corpflow:release-engineer)
 version: 0.1.0
 related:
   - skills/shared/routing-matrix.md
@@ -13,7 +13,7 @@ related:
 
 # App Store Publishing
 
-Parse the arguments, dispatch `Task(corpflow:release-engineer)`, return its report. Every store flow
+Parse the arguments, dispatch `Agent(corpflow:release-engineer)`, return its report. Every store flow
 lives in the platform plugin that ships to that store, because App Store Connect and Play Console
 differ field by field and a shared implementation would be true of neither.
 
@@ -23,11 +23,23 @@ grant.
 
 ## Options
 
-| Option | Required | Effect |
-|--------|----------|--------|
-| `--task <listing\|screenshots\|iap>` | yes | The job. `listing` is store-listing metadata, `screenshots` the graphic assets, `iap` the in-app purchase products. |
-| `--platform <apple\|android>` | no | Skips detection. Give it in a repo that carries markers for both. |
-| everything else | no | Passed through verbatim to the target: `--lang`, `--path`, `--dry-run`, `--bundle`, `--apple-platform`, `--android-form-factor`. |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--task <task>` | `listing`, `screenshots`, `iap` | The job (required, no default). `listing` is store-listing metadata, `screenshots` the graphic assets, `iap` the in-app purchase products. |
+| `--platform <p>` | `apple`, `android` | Skips detection (default: detected). Give it in a repo that carries markers for both. |
+
+### Pass-through options
+
+The target receives these verbatim; each default is the target's own.
+
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--lang <code>` | `en`, `ua` | Listing language (default: the target's) |
+| `--path <dir>` | path | Store folder (default: the target's) |
+| `--dry-run` | — | Preview only (default: off) |
+| `--bundle <id>` | bundle ID | App bundle (default: detected by the target) |
+| `--apple-platform <class>` | `ios`, `macos`, `tvos`, `watchos` | Apple device class (default: detected by the target) |
+| `--android-form-factor <factor>` | form factor | Android form factor (default: detected by the target) |
 
 `--apple-platform` selects an Apple **device class** (`ios`, `macos`, `tvos`, `watchos`) and is
 deliberately distinct from the plugin-wide `--platform`. Pass it through; never fold one into the
@@ -42,6 +54,23 @@ other.
 /appstore --task iap --platform apple --bundle com.example.app --dry-run   # read-only; no product created
 /appstore --task listing --platform android
 ```
+
+## Output Format
+
+The delegate's report, prefixed by the route it resolved:
+
+~~~markdown
+# App Store Publishing — <task>
+
+## Route — platform (detected or `--platform`) · target agent · command dispatched
+## Result — the platform release engineer's report, verbatim
+## Artifacts — paths the target wrote, or `none` (this command writes nothing itself)
+## Next Steps — the direct `/<plugin>:<command>` to re-run, plus anything the agent flagged
+~~~
+
+A refusal (§ Refusals) replaces `## Result` with `## Refusal — <reason>` naming the plugin, the
+alias, and the direct command to run instead. Either way the run ends in a report, never in a
+partial store write.
 
 ## Where the work happens
 
@@ -64,23 +93,6 @@ The agent stops and reports rather than guessing when:
 
 None of these fall back to doing the work inline, because writing to a live store account on a
 guessed platform is the failure this design exists to prevent.
-
-## Output Format
-
-The delegate's report, prefixed by the route it resolved:
-
-~~~markdown
-# App Store Publishing — <task>
-
-## Route — platform (detected or `--platform`) · target agent · command dispatched
-## Result — the platform release engineer's report, verbatim
-## Artifacts — paths the target wrote, or `none` (this command writes nothing itself)
-## Next Steps — the direct `/<plugin>:<command>` to re-run, plus anything the agent flagged
-~~~
-
-A refusal (§ Refusals) replaces `## Result` with `## Refusal — <reason>` naming the plugin, the
-alias, and the direct command to run instead. Either way the run ends in a report, never in a
-partial store write.
 
 ## Relationship to the pipeline
 

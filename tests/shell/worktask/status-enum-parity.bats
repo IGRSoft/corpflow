@@ -232,7 +232,7 @@ verdict_map_from_writer() {
   local map expected checked=0 cls col
   map="$(awk '/^const ESCALATE_TO = \{/ { inside = 1; next }
               inside && /^\};/ { exit }
-              inside { print }' "$PLUGIN_ROOT/$LOOP_DOC" \
+              inside { print }' "$PLUGIN_ROOT/skills/worktask/references/return-arms.md" \
     | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' | sort)"
   [ "$(printf '%s\n' "$map" | grep -c .)" -ge 4 ] \
     || fail "non-vacuity: ESCALATE_TO extracted fewer than 4 entries"

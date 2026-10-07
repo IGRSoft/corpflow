@@ -19,7 +19,7 @@ counters and the vendor page documenting it, so the block is re-checked against 
 
 ## Why this lives at dispatch and not in the agent files
 
-`Task()` carries `model` but no per-dispatch effort argument (`commands/worktask.md § Step C.0a —
+`Agent()` carries `model` but no per-dispatch effort argument (`commands/worktask.md § Step C.0a —
 the tier only reaches some dispatch surfaces`). An agent's `effort:` frontmatter
 (`skills/shared/stage-codes.md § Model alias notes`) fixes only that agent's static tier, never a
 per-dispatch raise or lowering, so in-process prompt text is still the only lever on the rest of

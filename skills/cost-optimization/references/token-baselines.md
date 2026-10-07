@@ -27,7 +27,7 @@ Prompt-cache TTL knobs: `skills/cost-optimization/SKILL.md § Finer-grained TTL 
 | Setting | Since | Effect |
 |---|---|---|
 | `/recap`, `--recap` | 2.1.108 | Session recap, reusable as handoff context |
-| `/autocompact <N>` | 2.1.221 | Sets the auto-compaction threshold for the session; `200k` is a safety net on 1M models |
+| `/autocompact <N>` | 2.1.221, 2.1.288 | Sets the auto-compaction threshold, saved per model so each model keeps its own; `200k` is a safety net on 1M models |
 | `/mcp` | — | Disables MCP servers the session does not use, dropping their tool definitions from context |
 | `/rewind` vs `/compact` | — | `/rewind` drops the most recent turns and keeps the rest verbatim; `/compact` rewrites the whole conversation into a summary |
 
@@ -41,6 +41,14 @@ Prompt-cache TTL knobs: `skills/cost-optimization/SKILL.md § Finer-grained TTL 
 | Skill `description:` | 2.1.86 | 250 characters |
 | Stalled subagent | 2.1.113 | Clear error after 10 min instead of silently burning budget |
 | Compaction loop guard | 2.1.76, 2.1.89 | Stops after 3 failed compactions or 3 immediate refills, with an actionable error |
+
+#### Caps to plan against — retries, search and resume
+
+| Limit | Since | Value |
+|---|---|---|
+| Failed model call | 2.1.286 | One retry limit covers the whole call: at most 14 requests with default settings |
+| Interactive WebSearch | 2.1.290 | Budget refills at 100 calls/hour instead of ending after 200 (`CLAUDE_CODE_WEB_SEARCH_REFILLS_PER_HOUR`; 0 turns refill off) |
+| Mid-run message to a subagent | 2.1.290 | The resumed subagent or teammate keeps its earlier thinking and prompt cache, so a nudge no longer pays a full re-cache |
 | 1M window | 2.1.128, 2.1.172 | Autocompact respects the 1M threshold, but a 1M session without usage credits compacts back under the standard limit — budget handoffs against the standard window unless credits are confirmed |
 
 ### Cost-visibility surfaces

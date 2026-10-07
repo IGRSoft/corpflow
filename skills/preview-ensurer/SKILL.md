@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 # preview-ensurer
 
-Appends a minimal `#Preview { TypeName(<mocked-args>) }` block to SwiftUI View files that lack one. SwiftSyntax (pinned `.upToNextMajor(from: "510.0.0")`) detects the View types and existing previews; the block itself is a string template. The executable is `references/reference-impl` (`PreviewEnsurer`), and `dv-screenshot-capture/scripts/apple-canvas.sh` is its only caller, through `swift run`. `disable-model-invocation` keeps the Skill tool from loading this file, so no agent reaches it through `Skill`.
+Appends a minimal `#Preview { TypeName(<mocked-args>) }` block to SwiftUI View files that lack one. SwiftSyntax (pinned `.upToNextMajor(from: "510.0.0")`) detects the View types and existing previews; the block itself is a string template. The executable is `references/reference-impl` (`PreviewEnsurer`), and `skills/dv-screenshot-capture/scripts/apple-canvas.sh` is its only caller, through `swift run`. `disable-model-invocation` keeps the Skill tool from loading this file, so no agent reaches it through `Skill`.
 
 ## Contract (canonical signature)
 

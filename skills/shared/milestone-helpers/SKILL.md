@@ -33,7 +33,7 @@ All subcommands accept pre-fetched JSON via `--file` so they are network-free an
 
 ### Slug-length canon: **50 characters**
 
-The dispatcher implements **50** (matching `megatask/SKILL.md §Branch Naming`) as the single source of truth. The issue number sits outside the cap: `<type>/{issue#}-{slug}` spends the 50 characters on the slug alone. Worktask's own budget is 48, spent on `<ticket>-<slug>` together (`git-conventions.md § Slug budget`) — the two differ deliberately.
+The dispatcher implements **50** (matching `skills/megatask/SKILL.md §Branch Naming`) as the single source of truth. The issue number sits outside the cap: `<type>/{issue#}-{slug}` spends the 50 characters on the slug alone. Worktask's own budget is 48, spent on `<ticket>-<slug>` together (`skills/shared/git-conventions.md § Slug budget`) — the two differ deliberately.
 
 ### Slug truncation: whole words only
 

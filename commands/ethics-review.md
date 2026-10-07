@@ -2,7 +2,7 @@
 name: ethics-review
 description: Review tasks, features, or architecture for constitutional compliance; --lens harm runs a full stakeholder harm assessment
 argument-hint: '[<target>] [--lens full|harm] [--focus safety|honesty|harm|autonomy|all] [--stakeholders users|operators|society|all] [--include-benefits true|false] [--mitigation true|false] [--output summary|detailed|checklist|matrix]'
-allowed-tools: Read, Glob, Grep, Task(corpflow:ethics-reviewer)
+allowed-tools: Read, Glob, Grep, Agent(corpflow:ethics-reviewer)
 related:
   - agents/ethics-reviewer.md
   - skills/claude-constitution/SKILL.md
@@ -12,12 +12,26 @@ related:
 
 Review a task, feature, or code for alignment with Claude's constitutional principles: safety,
 honesty, harm avoidance, user autonomy. Principles canon: `skills/claude-constitution/SKILL.md`.
-Dispatch `Task(corpflow:ethics-reviewer)` with the target and options, as a standalone review:
+Dispatch `Agent(corpflow:ethics-reviewer)` with the target and options, as a standalone review:
 it returns the report in this file's § Output shape for the chosen lens and writes nothing (no
 `ethics-review-N.md`, no state patch). The agent escalates complex or critical cases to
 human/stakeholder review.
 
-## Lenses
+## Options
+
+`target` — task, feature, file, or description. Optional under `--lens full` (the current
+task), required under `--lens harm`.
+
+| Option | Lens | Values | Default | Effect |
+|---|---|---|---|---|
+| `--lens <lens>` | both | `full`, `harm` | `full` | Constitutional review or harm deep-dive |
+| `--output <format>` | both | full: `summary`, `detailed`, `checklist`; harm: `summary`, `matrix` | `summary` | Output format |
+| `--focus <category>` | full | `safety`, `honesty`, `harm`, `autonomy`, `all` | `all` | Focus category |
+| `--stakeholders <scope>` | harm | `users`, `operators`, `society`, `all` | `all` | Impact scope |
+| `--include-benefits <bool>` | harm | `true`, `false` | `true` | Include benefits in the cost-benefit analysis |
+| `--mitigation <bool>` | harm | `true`, `false` | `true` | Include mitigation recommendations |
+
+### Lenses
 
 | `--lens` | Mode |
 |---|---|
@@ -26,20 +40,6 @@ human/stakeholder review.
 
 `--lens harm` selects the deep-dive mode (stakeholder / probability / severity analysis);
 `--focus harm` only scopes a standard `--lens full` review to the Harm category — a lighter pass.
-
-## Options
-
-`target` — task, feature, file, or description. Optional under `--lens full` (the current
-task), required under `--lens harm`.
-
-| Option | Lens | Values | Default | Purpose |
-|---|---|---|---|---|
-| `--lens` | both | `full`, `harm` | `full` | Constitutional review or harm deep-dive |
-| `--output` | both | full: `summary`, `detailed`, `checklist`; harm: `summary`, `matrix` | `summary` | Output format |
-| `--focus` | full | `safety`, `honesty`, `harm`, `autonomy`, `all` | `all` | Focus category |
-| `--stakeholders` | harm | `users`, `operators`, `society`, `all` | `all` | Impact scope |
-| `--include-benefits` | harm | bool | `true` | Include benefits in the cost-benefit analysis |
-| `--mitigation` | harm | bool | `true` | Include mitigation recommendations |
 
 ## Examples
 
@@ -84,17 +84,6 @@ mitigation suggestions, and the related constitutional principles.
 
 One `[ ]` line per dimension in § Review Categories, grouped under
 `SAFETY` / `HONESTY` / `HARM AVOIDANCE` / `USER AUTONOMY`.
-
-## Review Categories (`--lens full`)
-
-Assessed dimensions per category — also the source of the checklist rows above:
-
-| Category | Dimensions |
-|---|---|
-| Safety | Physical harm potential · information security risks · dual-use concerns · safeguard adequacy · hard constraint violations |
-| Honesty | Truthfulness of outputs · calibration of uncertainty · transparency about limitations · deception potential · forthright information sharing |
-| Harm avoidance | Direct and indirect harm · cumulative impacts · vulnerable populations · privacy implications · user wellbeing |
-| User autonomy | User control preservation · informed consent · manipulation avoidance · fair choice presentation · dependency creation risks |
 
 ## Output (`--lens harm`)
 
@@ -174,6 +163,17 @@ Very Likely (> 70%) │        │        │        │
 - **Detection**: monitoring systems, anomaly detection, user reporting, audit logging.
 - **Response**: graceful degradation, incident response plans, user notification, rollback capabilities.
 - **Recovery**: data restoration, user support, compensation mechanisms, learning processes.
+
+## Review Categories (`--lens full`)
+
+Assessed dimensions per category — also the source of the checklist rows above:
+
+| Category | Dimensions |
+|---|---|
+| Safety | Physical harm potential · information security risks · dual-use concerns · safeguard adequacy · hard constraint violations |
+| Honesty | Truthfulness of outputs · calibration of uncertainty · transparency about limitations · deception potential · forthright information sharing |
+| Harm avoidance | Direct and indirect harm · cumulative impacts · vulnerable populations · privacy implications · user wellbeing |
+| User autonomy | User control preservation · informed consent · manipulation avoidance · fair choice presentation · dependency creation risks |
 
 ## Severity Levels
 

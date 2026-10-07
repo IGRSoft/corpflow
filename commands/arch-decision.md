@@ -20,13 +20,13 @@ Technology Decision Records (`--type tdr`); they differ in scope, owner, and out
 
 | Option | Values | Effect |
 |---|---|---|
-| `--type` | `adr` \| `tdr` (default `adr`) | Record type and output directory |
-| `--list` | flag | List existing records of that type |
-| `--update <number>` | record number | Update an existing record |
-| `--supersede <number>` | record number | Create a record superseding another |
-| `--status` | `proposed` \| `accepted` \| `deprecated` \| `superseded` | Set record status |
-| `--evaluate "name"` | technology name | Run the § Evaluation Framework (TDR-oriented) |
-| `--compare "t1" "t2"` | two technology names | Compare two technologies (TDR-oriented) |
+| `--type <type>` | `adr`, `tdr` | Record type and output directory (default: `adr`) |
+| `--list` | — | List existing records of that type (default: off) |
+| `--update <number>` | record number | Update an existing record (default: none, a new record) |
+| `--supersede <number>` | record number | Create a record superseding another (default: none) |
+| `--status <status>` | `proposed`, `accepted`, `deprecated`, `superseded` | Set record status (default: `proposed` on a new record, unchanged on `--update`) |
+| `--evaluate "<name>"` | technology name | Run the § Evaluation Framework, TDR-oriented (default: off) |
+| `--compare "<t1>" "<t2>"` | two technology names | Compare two technologies, TDR-oriented (default: off) |
 
 ## Examples
 
@@ -40,43 +40,6 @@ Technology Decision Records (`--type tdr`); they differ in scope, owner, and out
 /arch-decision --type tdr --evaluate "Zod vs Yup vs Joi"
 /arch-decision --type tdr --compare "Vitest" "Jest"
 ```
-
-## Gate — is a record warranted?
-
-Run this before any template, on `--type adr` and `--type tdr` alike. The three conditions are
-conjunctive: miss any one and the command declines, names the condition that failed, and writes
-no file.
-
-| # | Condition | It fails when |
-|---|---|---|
-| W1 | **Hard to reverse** — undoing it later costs more than making it did: accrued dependent code, a data migration, a published contract, or a social cost once contributors have paid for it. | Reversal is a one-line change with nothing accrued against it. |
-| W2 | **Surprising without context** — a competent reader of the resulting code would guess wrong about why it is this way. | It is the obvious default for the stack, and the code reads as such. |
-| W3 | **The result of a real trade-off** — two or more options were viable and something was actually given up. | Only one option was ever viable, or nothing was surrendered. |
-
-### Short-circuit and exemptions
-
-Evaluation short-circuits: stop at the first condition that fails and decline on it.
-
-`--list`, `--update <number>`, `--supersede <number>`, `--status`, `--evaluate`, and `--compare`
-bypass the gate — the record already exists, or none is being emitted, so warrantedness is settled.
-
-### Declining — the required output
-
-Emit exactly this, and no file:
-
-~~~markdown
-**No record warranted** — <topic>
-
-| Gate | Verdict | Why |
-|---|---|---|
-| W1 Hard to reverse | ❌ | <the reversal cost, in one line> |
-| W2 Surprising without context | ✅ | <one line> |
-| W3 Real trade-off | ✅ | <one line> |
-
-**Record it as a plain decision instead**: <destination> — a `key_decisions[]` entry in the stage
-artifact, a "decisions that did not clear the bar" list beside the accepted records, or a source
-comment stating the WHY.
-~~~
 
 ## Output Format (ADR — `--type adr`)
 
@@ -170,6 +133,43 @@ Steps per phase, ending in removal of the superseded dependency.
 
 ## References
 - <upstream docs and repository links>
+~~~
+
+## Gate — is a record warranted?
+
+Run this before any template, on `--type adr` and `--type tdr` alike. The three conditions are
+conjunctive: miss any one and the command declines, names the condition that failed, and writes
+no file.
+
+| # | Condition | It fails when |
+|---|---|---|
+| W1 | **Hard to reverse** — undoing it later costs more than making it did: accrued dependent code, a data migration, a published contract, or a social cost once contributors have paid for it. | Reversal is a one-line change with nothing accrued against it. |
+| W2 | **Surprising without context** — a competent reader of the resulting code would guess wrong about why it is this way. | It is the obvious default for the stack, and the code reads as such. |
+| W3 | **The result of a real trade-off** — two or more options were viable and something was actually given up. | Only one option was ever viable, or nothing was surrendered. |
+
+### Short-circuit and exemptions
+
+Evaluation short-circuits: stop at the first condition that fails and decline on it.
+
+`--list`, `--update <number>`, `--supersede <number>`, `--status`, `--evaluate`, and `--compare`
+bypass the gate — the record already exists, or none is being emitted, so warrantedness is settled.
+
+### Declining — the required output
+
+Emit exactly this, and no file:
+
+~~~markdown
+**No record warranted** — <topic>
+
+| Gate | Verdict | Why |
+|---|---|---|
+| W1 Hard to reverse | ❌ | <the reversal cost, in one line> |
+| W2 Surprising without context | ✅ | <one line> |
+| W3 Real trade-off | ✅ | <one line> |
+
+**Record it as a plain decision instead**: <destination> — a `key_decisions[]` entry in the stage
+artifact, a "decisions that did not clear the bar" list beside the accepted records, or a source
+comment stating the WHY.
 ~~~
 
 ## Record Numbering

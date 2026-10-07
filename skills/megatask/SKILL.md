@@ -163,7 +163,7 @@ switching, so issues run truly in parallel. `<group>` is `milestone-{N}` or `iss
     handoff.md                         # compressed context
 ```
 
-> Add `.worktrees/` to `.gitignore` so worktree contents do not appear as untracked. Sub-agents in
+> Add `.worktrees/` to `.gitignore` so worktree contents do not appear as untracked. Subagents in
 > an isolated worktree get Read/Edit access to it with no explicit `tools:` grant.
 
 #### Sparse Checkout
@@ -394,7 +394,7 @@ issues. Step-by-step procedure: `../../commands/megatask.md § Phase 1`.
    (`../../commands/megatask.md § Phase 2 loop · Step 3`).
 3. **Errors** — a `failed` issue frees its track but keeps its dependents permanently `blocked`;
    surface the blocked set so the user can intervene (retry, re-scope, or drop the edge).
-4. **Stage creation** — verify each per-issue `PL0` created its subsequent stages.
+4. **Stage creation** — verify each per-issue `state.json` holds ≥1 task key besides `PL0`.
 
 #### Hook properties
 

@@ -4,7 +4,7 @@ name: technical-consult
 
 # Technical Consult (TC) Reference
 
-Read on demand by `agents/technical-lead.md` when answering a technical consult (stage TC) on technology choice, tech debt or implementation risk. The DR review never needs it.
+Read on demand by `agents/technical-lead.md` when answering a technical consult (stage TC) on technology choice, tech debt or implementation risk; "you" below is the technical lead. `agents/team-lead.md` branches on the § TC Return Contract block. The DR review never needs this file.
 
 ## Technology Evaluation Framework
 
@@ -38,3 +38,55 @@ The 20% rule: allocate 20% of sprint capacity to debt reduction, high-impact low
 | Scalability | Single points of failure | Design for scale |
 
 Assess each by likelihood × impact (High/Medium/Low); document indicators, mitigation steps, contingency plans.
+
+## Callers
+
+
+| Called From | Trigger → Purpose |
+|-------------|-------------------|
+| AR | Technology choice → evaluate options, recommend approach |
+| TL | Technical risk → implementation risk analysis |
+| DV | Complex implementation → deep guidance, pattern advice |
+| QA | Quality concern → code quality deep dive |
+| Any | Tech debt decision → prioritization, remediation plan |
+
+Only `team-lead` holds the `Agent(corpflow:technical-lead)` grant today. The AR/DV/QA rows (mirrored in `skills/shared/stage-codes.md § Support Agents` and `worktask-stage-context.md § Support Stages`) record intent, not a wired dispatch path.
+
+## TC Return Contract
+
+A TC consult returns advice, not a stage handoff, so it carries its own machine-readable verdict, emitted as the last fenced block of your final message so the caller can branch without reading your prose:
+
+```yaml
+tc_review:
+  tc_verdict: approve          # approve / reject / conditional
+  summary: "<=160 chars — the recommendation itself, not a restatement of the question>"
+  anchor: "<artifact.md#section | path:line-range>"   # where the caller reads the decision and its evidence
+  conditions: []               # required and non-empty when tc_verdict: conditional
+  confidence: high             # high / medium / low
+```
+
+Each `conditions[]` entry: `{ id: tc-1, must: "<the single action that flips this to approve>", anchor: "<path:line>" }`.
+
+### Verdict semantics — what the caller does
+
+| `tc_verdict` | Caller action |
+|--------------|---------------|
+| `approve` | Proceed with the reviewed approach; TC raises no blocker. |
+| `reject` | Don't proceed. `summary` + `anchor` carry the reason; the caller picks another option or escalates. |
+| `conditional` | Proceed only if every `conditions[].must` is satisfied first — each one discrete and checkable, never "read the prose anyway". |
+
+A `conditional` with empty or absent `conditions[]` is malformed and the caller treats it as `reject`, so emit it only when you can enumerate the conditions. `confidence` is advisory — it never changes the branch, only whether the caller seeks a second opinion.
+
+### TC verdict is not the DR handoff verdict
+
+Distinct key, enum, and lifecycle — keep them separate:
+
+| | DR `handoff.verdict` | TC `tc_review.tc_verdict` |
+|---|---|---|
+| Key | `verdict`, in the `handoff:` frontmatter of `developer-review-N.md` | `tc_verdict`, in a `tc_review:` block in the consult's return message |
+| Enum | `pass` / `fail` (`stage-contracts.md#tpl-dr`) | `approve` / `reject` / `conditional` |
+| Lifecycle | Patched into `state.json` by `state-patch.sh`; drives the retry/escalate matrix | Advisory, read by the calling agent; never patched into the ledger |
+
+Don't unify the keys or reuse `pass`/`fail` for TC: `state-patch.sh` reads `.handoff.verdict` (awk fallback: a `verdict:` line), so a shared key would make an advisory consult look like a stage gate to the ledger tooling.
+
+State ledger: stage TC (support agent) — a consult produces no `tasks.TC*` entry and no handoff edge (`skills/shared/state-ledger.md`).

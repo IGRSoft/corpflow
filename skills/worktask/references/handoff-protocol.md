@@ -635,7 +635,7 @@ A valid `tests_executed` list is excluded from that count up to 96 proxy tokens 
 
 ## Handoff Schemas {#handoff-schemas}
 
-Canonical typed-return schemas — the single source of truth for the structured object a stage agent returns from its `Task()` dispatch (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
+Canonical typed-return schemas — the single source of truth for the structured object a stage agent returns from its `Agent()` dispatch (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
 
 Two parallel channels, neither replacing the other: the typed return is *validated*, the `handoff:` frontmatter is the *cache-friendly on-disk* form. So even on the typed path every stage still mirrors to `state.json facts` and writes its `.context/<stage>-N.md` artifact with frontmatter (durability, human readability, F4 regeneration — `#frontmatter-schema`, `#fallback-paths`).
 
@@ -655,9 +655,9 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 ###### Conventions — the $defs pointer is an obligation
 
-The stage schemas below are printed without it, or without `TestRunEntry` (`#frontmatter-schema § Schema — $defs: TestRunEntry`, referenced by DVHandoff and QAHandoff), so an item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline those `$defs` blocks alongside it; no shipped file implements that step today, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution.
+The stage schemas below are printed without it, or without `TestRunEntry` (`#frontmatter-schema § Schema — $defs: TestRunEntry`, referenced by DVHandoff and QAHandoff), so an item shape is never restated per stage. Whatever passes a stage schema to `Agent()` must inline those `$defs` blocks alongside it; no shipped file implements that step today, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution.
 
-The schema is passed as a `Task()`/`agent()` argument, never inserted into preamble sections [1][2][4][4b], so schema dispatch leaves cache-prefix byte-identity untouched (`#cache-prefix`).
+The schema is passed as an `Agent()`/`agent()` argument, never inserted into preamble sections [1][2][4][4b], so schema dispatch leaves cache-prefix byte-identity untouched (`#cache-prefix`).
 
 ### PLHandoff
 
@@ -1546,7 +1546,7 @@ migration, no tolerant reader.
 
 ```yaml
 # …continued: dispatched_agents.items.properties
-            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (background-default dispatch); resume degrades to best-effort subagent_type match when absent" }
+            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (background-default dispatch); resume degrades to best-effort subagent_type match when absent; for an in-process teammate it is the agent ID, its name@team address is teammate_id (CC 2.1.290)" }
             name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names, /rename persists across restarts" }
             model_requested: { type: string, description: "OPTIONAL — metadata.model alias at dispatch" }
             model_resolved: { type: string, description: "OPTIONAL best-effort — model that actually ran (claude agents --json / audit); omit when unknown" }
@@ -1919,7 +1919,7 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 ### DV fan-out — ledger tasks
 
 DV fans out as ledger tasks, never as sub-agents. `DV0`, `DV1`, … are rows in `state.json`: the
-orchestrator dispatches each on its own `Task()`, each writes its own artifact, each patches its own
+orchestrator dispatches each on its own `Agent()`, each writes its own artifact, each patches its own
 row. No entry agent assembles a canonical file afterwards — every DV artifact is a handoff carrier
 in its own right, and downstream stages reach them by iterating the rows.
 
@@ -2146,7 +2146,7 @@ artifact, never a `--stage` or basename (edge tables: `USER→PL`, `USER→IR`).
 
 ## #cache-prefix
 
-Anthropic prompt cache matches by prefix equality, not full-block equality, so the orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within one `worktask_id`.
+Anthropic prompt cache matches by prefix equality, not full-block equality, so the orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Agent()` calls within one `worktask_id`.
 
 ### Preamble layout (binding)
 

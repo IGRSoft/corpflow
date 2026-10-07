@@ -15,7 +15,7 @@
 #   (`--ledger-root`'s state.json, keyed by `--task`) whenever the caller omits the matching
 #   flag — the caller (the orchestrator's Step 6) therefore never has to carry a ledger value
 #   through its own shell-string dispatch line: only `--task`/`--ledger-root` plus values it
-#   owns outright (agent id, model alias, baseline, prompt file, session id) need to cross that
+#   owns outright (agent id, model alias, prompt file, session id) need to cross that
 #   boundary. An explicit flag always wins over the self-read.
 #
 #   `--print-argv` is the dry mode whose tests exercise full validation, then the argv printed
@@ -29,8 +29,8 @@
 #   apply their own `manual`-or-narrower ceiling on top.
 #
 #   Fallback: a `claude` binary missing/below floor, an auth failure, an unresolved `--agent`,
-#   a pre-artifact exit, or the operator opt-out degrade to in-process at the caller-supplied
-#   baseline tier — but ONLY when the pre/post side-effect snapshots match. A side effect
+#   or a pre-artifact exit degrade to an in-process run that carries the same tier on the
+#   Agent tool's `effort` — but ONLY when the pre/post side-effect snapshots match. A side effect
 #   already landed means the run goes to the error chain instead (`side_effects_present`);
 #   silently retrying in-process over real work would double it.
 #
@@ -48,13 +48,13 @@ _HD_PLUGIN_ROOT="$(cd "${_HD_DIR}/../../.." && pwd)"
 # shellcheck source=effort-ladder.sh
 . "${_HD_DIR}/effort-ladder.sh"
 
-MIN_CC_VERSION="2.1.284"
+MIN_CC_VERSION="2.1.292"
 
 usage() {
   cat >&2 << 'EOF2'
 usage:
   headless-dispatch.sh --task <ID> --agent <plugin:agent> --model <alias>
-                        --ledger-root <path> --baseline <tier> --prompt <file>
+                        --ledger-root <path> --prompt <file>
                         --out <logfile>
                         [--effort <tier>] [--permission-mode <mode>] [--workspace <path>]
                         [--artifact <path>] [--parent-mode <mode>] [--session-id <uuid>]
@@ -87,9 +87,6 @@ Omitted, it defaults to manual — the conservative side. Unrecognized, it is re
 nothing spawned) — the same fail-closed rule every other enum flag gets, never a silent
 default.
 
---baseline is the tier the agent runs at in-process (frontmatter or role-matrix); a fallback
-row reports it.
-
 Prints one JSON result line (the route audit row shape) and exits 0 on success or a clean
 fallback. Exits 2 before any spawn on a refused value. Exits 3 when the child left side
 effects and cannot fall back.
@@ -105,7 +102,6 @@ MODE=""
 PARENT_MODE=""
 WORKSPACE=""
 LEDGER_ROOT=""
-BASELINE=""
 PROMPT=""
 SESSION_ID=""
 RESUME_ID=""
@@ -124,7 +120,6 @@ while [ "$#" -gt 0 ]; do
     --parent-mode) PARENT_MODE="${2:-}"; shift 2 ;;
     --workspace) WORKSPACE="${2:-}"; shift 2 ;;
     --ledger-root) LEDGER_ROOT="${2:-}"; shift 2 ;;
-    --baseline) BASELINE="${2:-}"; shift 2 ;;
     --prompt) PROMPT="${2:-}"; shift 2 ;;
     --session-id) SESSION_ID="${2:-}"; shift 2 ;;
     --resume) RESUME_ID="${2:-}"; shift 2 ;;
@@ -150,7 +145,7 @@ if [ "$PRINT_ARGV" -eq 1 ]; then
   # Dry mode has no ledger to self-read from — every value has to arrive on the CLI.
   [ -n "$EFFORT" ] && [ -n "$MODE" ] && [ -n "$WORKSPACE" ] || usage
 else
-  [ -n "$PROMPT" ] && [ -n "$LEDGER_ROOT" ] && [ -n "$BASELINE" ] && [ -n "$OUT_LOG" ] || usage
+  [ -n "$PROMPT" ] && [ -n "$LEDGER_ROOT" ] && [ -n "$OUT_LOG" ] || usage
 fi
 
 # --- parent-mode normalization, moved ahead of the ledger self-read below: a row with no
@@ -206,8 +201,7 @@ if [ "$_HD_PREFIX" = "$_HD_PLUGIN_NAME" ]; then
   [ -f "${_HD_PLUGIN_ROOT}/agents/${_HD_BARE}.md" ] || refuse "agent not registered: $AGENT"
 else
   # A non-matching prefix is a platform-plugin agent: it has no file under this plugin's
-  # agents/ to check, and it only reaches here because effort-route.sh already resolved it
-  # through --role-baseline. It still has to be a REGISTERED target, though — routing-matrix.md
+  # agents/ to check. It still has to be a REGISTERED target, though — routing-matrix.md
   # is the registry (ad6 Validation), so an unregistered foreign id is refused exactly like an
   # unregistered corpflow one, never a free pass. Anchored to table ROWS (a line starting with
   # `|`), not any backtick-quoted mention anywhere in the file (prose, a "never use" note).
@@ -220,7 +214,6 @@ else
 fi
 [[ "$MODEL" =~ ^(opus|sonnet|haiku|fable)$ ]] || refuse "model: $MODEL"
 effort_rank "$EFFORT" > /dev/null 2>&1 || refuse "effort: $EFFORT"
-effort_rank "$BASELINE" > /dev/null 2>&1 || [ "$PRINT_ARGV" -eq 1 ] || refuse "baseline: $BASELINE"
 
 # Plugin `default` has no CLI counterpart (headless-dispatch.md § Translation table —
 # permission, workspace & MCP); map it to the CLI's allowlist-only mode before the enum check
@@ -381,9 +374,7 @@ fi
 
 # --- pre-spawn fallback checks (no side effects possible yet) --------------------------------
 FALLBACK_REASON=""
-if [ "${CORPFLOW_HEADLESS_ROUTE:-}" = "off" ]; then
-  FALLBACK_REASON="opted_out"
-elif ! command -v claude > /dev/null 2>&1; then
+if ! command -v claude > /dev/null 2>&1; then
   FALLBACK_REASON="cli_missing"
 else
   CC_VERSION="$(claude --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -392,6 +383,11 @@ else
     FALLBACK_REASON="cli_below_floor"
   fi
 fi
+
+# "null" and "" become a bare JSON null; every other value is already allowlist-checked.
+_hd_str_or_null() {
+  if [ -z "$1" ] || [ "$1" = "null" ]; then printf 'null'; else printf '"%s"' "$1"; fi
+}
 
 emit_result() {
   # $1 result (ok|warn|error) $2 effort_transport $3 effort_resolved ("null" -> JSON null)
@@ -409,17 +405,16 @@ emit_result() {
         fallback_reason:(if $reason == "" then null else $reason end),
         duration_ms:$duration, usage:$usage, total_cost_usd:$cost}'
   else
-    printf '{"task":"%s","agent":"%s","result":"%s","effort_transport":"%s","effort_resolved":"%s","fallback_reason":"%s"}\n' \
-      "$TASK" "$AGENT" "$1" "$2" "$3" "$4"
+    printf '{"task":"%s","agent":"%s","result":"%s","effort_transport":"%s","effort_resolved":%s,"effort_resolved_reason":%s,"fallback_reason":%s}\n' \
+      "$TASK" "$AGENT" "$1" "$2" "$(_hd_str_or_null "$3")" "$(_hd_str_or_null "${8:-}")" \
+      "$(_hd_str_or_null "$4")"
   fi
 }
 
 if [ -n "$FALLBACK_REASON" ]; then
-  # Nothing has run yet on this path, so there is no side effect to check. The transport is
-  # "frontmatter": the run degrades to in-process at the agent's own baseline tier, so the row
-  # reports that tier, never the unapplied placeholder ("requested, not applied" is reserved
-  # for the "none" transport, where there is no frontmatter to fall back to at all).
-  emit_result "warn" "frontmatter" "$BASELINE" "$FALLBACK_REASON" null null null
+  # Nothing has run yet on this path, so there is no side effect to check. The in-process
+  # fallback carries the tier on `effort`; only its hook rows can report what ran.
+  emit_result "warn" "agent-param" "null" "$FALLBACK_REASON" null null null "inproc_fallback"
   exit 0
 fi
 
@@ -472,7 +467,6 @@ EXIT_CODE=0
 # resolve .context/state.json there rather than in the (ledger-less) worktree.
 ( cd "$WORKSPACE_REAL" \
   && exec env CORPFLOW_HEADLESS_CHILD="$TASK" WORKSPACE_ROOT="$LEDGER_ROOT_REAL" \
-       CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
        claude "${ARGV[@]}" ) < "$PROMPT" > "$LOG_FILE" 2>&1 \
   || EXIT_CODE=$?
 
@@ -498,7 +492,7 @@ if [ "$EXIT_CODE" -ne 0 ]; then
   elif grep -qiE 'unknown agent|agent not found|no such agent' "$LOG_FILE" 2> /dev/null; then
     REASON="agent_unresolved"
   fi
-  emit_result "warn" "frontmatter" "$BASELINE" "$REASON" null null null
+  emit_result "warn" "agent-param" "null" "$REASON" null null null "inproc_fallback"
   exit 0
 fi
 

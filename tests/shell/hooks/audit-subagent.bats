@@ -40,6 +40,23 @@ setup() {
   assert_success
 }
 
+@test "effort: the payload tier is recorded" {
+  run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"
+  assert_success
+  run jq -e '.metadata.effort == "high"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
+@test "effort: a payload without effort records unknown, never \$CLAUDE_EFFORT" {
+  # A haiku subagent runs with no effort: its SubagentStop payload omits .effort while the
+  # env var still holds the requested tier.
+  run env CLAUDE_EFFORT=high CLAUDE_PROJECT_DIR="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"corpflow:technical-writer","agent_id":"a9","session_id":"s9"}'
+  assert_success
+  run jq -e '.metadata.effort == "unknown"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
 @test "happy: stage is stamped from CLAUDE_TASK_METADATA_STAGE" {
   run env CLAUDE_PROJECT_DIR="$WD" CLAUDE_TASK_METADATA_STAGE=DV \
     bash "$PLUGIN_ROOT/$SCRIPT" < "$PAYLOAD"

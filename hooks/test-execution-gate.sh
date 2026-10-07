@@ -4,7 +4,7 @@
 # tests, and an already-recorded run is denied while the tree is unchanged.
 #
 # Stage comes from .context/state.json alone, never agent identity or env, so a
-# nested delegate inherits the in-progress stage. The Task branch only observes:
+# nested delegate inherits the in-progress stage. The Agent branch only observes:
 # a dispatch prompt quoting the ban names every runner, so matching prose there
 # would refuse to dispatch the stages that implement the policy.
 #
@@ -1555,7 +1555,7 @@ gate_ctx() {
 
 # ---------------------------------------------------------------------------
 # run_gate <payload json> <ctx dir or empty> -> echoes decision JSON (deny) or nothing
-# (allow/observe). Appends an audit row for a deny or a Task observation.
+# (allow/observe). Appends an audit row for a deny or an Agent observation.
 # Parameterized over .context/ so every branch is fixture-reachable, per the
 # dv-screenshot-gate.sh idiom (run_gate <payload> <ctx>).
 # ---------------------------------------------------------------------------
@@ -1587,10 +1587,10 @@ run_gate() {
 
   case "$_tool" in
     Bash|Skill) ;;
-    Task)
-      # Task is OBSERVE-ONLY: a dispatch prompt quoting the ban names every
-      # runner, so matching prose would refuse to dispatch the stages that
-      # implement the policy.
+    Agent)
+      # OBSERVE-ONLY: a dispatch prompt quoting the ban names every runner, so
+      # matching prose would refuse to dispatch the stages that implement the
+      # policy.
       #
       # Resolve the stage BEFORE touching the filesystem. No resolvable stage
       # means no worktask is in flight — the common case in a repo where the
@@ -1695,13 +1695,13 @@ run_gate() {
   return 0
 }
 
-# OBSERVE_TOKENS — the Task-branch telemetry set, deliberately narrower than
+# OBSERVE_TOKENS — the Agent-branch telemetry set, deliberately narrower than
 # RUNNERS: "go", "make", "python", "python3", "swift" are common English
 # words / adjectives and would make first_runner_token fire on ordinary
 # delegation prose ("go ahead", "make the change", "a swift fix"). Excluding
 # them keeps the observe row's `matched_token` meaningful telemetry rather
 # than near-constant noise; scoped/deny classification (which does need
-# those heads) is unaffected — this set is Task-observation-only.
+# those heads) is unaffected — this set is Agent-observation-only.
 OBSERVE_TOKENS="bats pytest ctest cargo jest vitest playwright rspec gradle gradlew xcodebuild dotnet npm pnpm yarn npx uvx bunx"
 
 # redact_unless_known_head <token> -> echoes the token unchanged if it is a
@@ -1722,7 +1722,7 @@ redact_unless_known_head() {
 # first_runner_token <text> -> echoes the first OBSERVE_TOKENS token found in
 # free text as its OWN word (word-boundary matched, not a bare substring
 # scan — an unanchored scan would match "go" inside "algorithm" and fire on
-# nearly every prompt). Used only for the Task branch's observe-only
+# nearly every prompt). Used only for the Agent branch's observe-only
 # telemetry, never for a deny decision.
 first_runner_token() {
   local _text="$1" _tok

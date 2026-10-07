@@ -16,12 +16,14 @@ written to `.context/prd-<feature-slug>.md`, the only file this command creates,
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--from-user-story "<story>"` | — | Build the PRD from a user story instead of a feature description |
 | `--template <type>` | `full`, `lite`, `api` | PRD template (default: `full`; see § Template Types) |
 | `--include-metrics` | — | Add §7 Success Metrics to a `lite` or `api` PRD (`full` always carries it) |
 | `--technical` | — | Add §6 Technical Requirements to a `lite` PRD (`full` and `api` always carry it) |
+
+## Examples
 
 ```
 /product-requirements "<feature or task description>" | --from-user-story "<story>" [--template full|lite|api] [--include-metrics] [--technical]

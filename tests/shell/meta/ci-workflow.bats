@@ -158,7 +158,7 @@ setup() {
 
 @test "the test job provisions a sibling root for cross-plugin resolution" {
   # cross-plugin-refs.bats resolves this repo's `/<plugin>:<command>` and
-  # `Task(<plugin>:<agent>)` references against the sibling repos that own them. On a
+  # `Agent(<plugin>:<agent>)` references against the sibling repos that own them. On a
   # bare runner there are no siblings, so the contract passed while verifying nothing.
   # The clone step is what makes it real, and the export is what the bats reads —
   # either one dropped puts CI back to a green that means nothing.

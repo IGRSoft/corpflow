@@ -4,14 +4,14 @@ load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 ADAPTER="hooks/codex-adapter.sh"
 CAPTURE="tests/fixtures/hooks/codex-capture.sh"
 
-@test "spawn_agent is normalized to the canonical Task payload" {
+@test "spawn_agent is normalized to the canonical Agent payload" {
   local wd; wd="$(mk_tmpworkdir)"
   run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
     bash "$PLUGIN_ROOT/$ADAPTER" --mode tool --target "$CAPTURE" <<'JSON'
 {"tool_name":"spawn_agent","tool_input":{"task_name":"cf_dv0_1","message":"Build it"}}
 JSON
   assert_success
-  echo "$output" | jq -e '.tool_name == "Task" and .tool_input == {subagent_type:"cf_dv0_1",prompt:"Build it"}'
+  echo "$output" | jq -e '.tool_name == "Agent" and .tool_input == {subagent_type:"cf_dv0_1",prompt:"Build it"}'
 }
 
 @test "request_user_input answers are keyed by question text" {

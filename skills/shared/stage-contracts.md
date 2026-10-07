@@ -249,7 +249,7 @@ The orchestrator runs validation between a stage's `completed` patch and the nex
 ### Steps 1–2
 
 1. File check: every file in the next stage's `metadata.context_refs` exists on disk. A missing `metadata.error_file` means "no prior retries", not a failure.
-2. Frontmatter / typed-return check: a valid typed object returned by the stage's `Task()` (the orchestrator passed the `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honoured it) supersedes this step. Verdict and facts come from the validated object via `handoff-protocol.md#schema-to-state-map`, and the grep below is skipped.
+2. Frontmatter / typed-return check: a valid typed object returned by the stage's `Agent()` (the orchestrator passed the `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honoured it) supersedes this step. Verdict and facts come from the validated object via `handoff-protocol.md#schema-to-state-map`, and the grep below is skipped.
 
 #### Step 2 — no-typed-return grep path
 
@@ -265,7 +265,7 @@ With no typed return (the dispatch primitive takes no `schema` argument, or the 
 
 6. Metadata check: task `metadata` validates against `state-ledger` § JSON Schema.
 7. Error file check: if `retry_count > 0`, `metadata.error_file` exists on disk. If it is set but absent (the orchestrator stamped the path, no agent has appended yet), treat it as `retry_count = 0` rather than a failure. The first appending agent creates it (`mkdir -p` its parent, then append the retry block).
-8. state.json patch check: after `Task()` returns, re-read `.context/state.json`. If `tasks.<ID>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge it in (the third safety layer; `handoff-protocol.md#fallback-paths` F2/F3).
+8. state.json patch check: after `Agent()` returns, re-read `.context/state.json`. If `tasks.<ID>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge it in (the third safety layer; `handoff-protocol.md#fallback-paths` F2/F3).
 
 ### Step 9 — AR-reference check (DV completion, warn-only)
 
@@ -561,15 +561,15 @@ Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium 
 
 ### The tier is a request, not a guarantee
 
-`metadata.effort` is honoured on the headless dispatch surface (`claude -p --agent … --effort`) and, for an agent carrying its own `effort:` frontmatter, in-process too — but only at that agent's OWN frontmatter tier: `Task()` takes no effort parameter, so a bumped tier that differs from the frontmatter tier cannot be carried in-process at all. That gap is exactly what `skills/worktask/scripts/effort-route.sh` routes on: a bumped tier equal to the frontmatter tier stays in-process (nothing to gain by leaving); a bumped tier that differs is routed headless, where `--effort` actually carries it. The bump is computed and recorded on every path and applied on the surface the route decision picked.
+`metadata.effort` is carried in-process by the `Agent` tool's `effort` parameter (2.1.292) and on the opt-in headless surface by `claude -p --agent … --effort`. `skills/worktask/scripts/effort-route.sh` picks the surface: in-process by default, headless only when `CORPFLOW_HEADLESS_ROUTE=on`. A request is still not a guarantee: a managed `maxEffortLevel` can cap it, so the hook row decides what ran. The bump is computed and recorded on every path and applied on the surface the route decision picked.
 
-#### Routing precedence and transport audit
+#### Transport audit
 
-Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. Every resolver audit row carries `effort_transport` saying which of the three transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
+Every resolver audit row carries `effort_transport` saying which of the four transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
 
 #### Recorded vs applied tiers
 
-Under `none` (in-process, no frontmatter to fall back to) the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier. Under `frontmatter` (in-process, tier equal to the agent's own file) `effort_resolved` is that frontmatter tier. Under `dispatch-flag` (headless) `effort_resolved` is the tier the child's own hook rows observed — `null` with `effort_resolved_reason: no_hook_rows` if none were, never copied from the request. Recording the unapplied tier under `none` still gives the ledger the tier the item deserved. Don't reach that tier another way: substituting a different agent believed to run higher trades the domain expertise answering the question for a guess.
+Under `none` (haiku, no `effort` passed) the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier. Under `frontmatter` (no `effort` passed: an unstamped row) `effort_resolved` comes from the hook row like `agent-param`. Under `agent-param` (in-process) and `dispatch-flag` (headless) `effort_resolved` is the tier the subagent's or child's own hook rows observed — `null` with `effort_resolved_reason: no_hook_rows` if none were (a row reading `"unknown"` observed nothing), never copied from the request. Recording the unapplied tier under `none` still gives the ledger the tier the item deserved. Don't reach that tier another way: substituting a different agent believed to run higher trades the domain expertise answering the question for a guess.
 
 ### The tier the model can actually carry
 
