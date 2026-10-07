@@ -64,6 +64,6 @@ SR="agents/security-reviewer.md"
 
 @test "SR dispatch injection sits behind the gate" {
   cd "$PLUGIN_ROOT"
-  section "$SR" "### Dispatch Injection (BINDING)" | grep -q "Only past § Consult Gate (SR)"
+  section "$SR" "### Dispatch Injection (REQUIRED)" | grep -q "Only past § Consult Gate (SR)"
   section "$SR" "### Consult Gate (SR)" | grep -q "consult: skipped"
 }

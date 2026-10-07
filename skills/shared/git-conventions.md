@@ -125,6 +125,7 @@ In auto mode the runtime enforces these guards on its own:
 | `rm -rf` on an unresolvable variable | Prompts; catastrophic removals inside `$(…)`/backticks/`<(…)` prompt even under `--dangerously-skip-permissions` |
 | Recursive `rm` whose target is only command-substitution output (`rm -rf "$(pwd)"`) | Prompts in auto and `--dangerously-skip-permissions` mode even with a Bash allow rule, unless `CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT=1` |
 | Dangerous `rm` (on `/` or the home directory) inside `bash -c`/`sh -c`, or with output redirected to a `~` or wildcard path | Keeps its always-ask prompt under bypass mode and shell allow rules |
+| `rm -rf` on the Windows 8.3 short name or another alternate spelling of the home folder or a drive | Treated as removing that folder (2.1.292) |
 | Session transcript files | Tampering blocked |
 | `--force`, `--amend`, `--no-verify` on git/gh | No longer auto-approved by `/commit-push-pr` — they prompt |
 

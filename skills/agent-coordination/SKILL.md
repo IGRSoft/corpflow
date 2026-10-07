@@ -16,10 +16,11 @@ Coordinating agents across worktask stages: handoffs, errors, the audit trail, d
 
 - **Stage codes and agents**: `${CLAUDE_SKILL_DIR}/../shared/stage-codes.md`
 - **State ledger**: `${CLAUDE_SKILL_DIR}/../shared/state-ledger.md`
-- **Per-stage I/O contracts**: `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` — the Inputs → Outputs → Validation table every stage agent's Completion Verification references.
-- `references/hook-monitoring.md` — wiring or debugging hooks: event catalog (lifecycle, agent teams, MCP elicitation), matchers, conditional `if`, PreToolUse/PostToolUse decisions, gate-feedback contract, OTEL, agent teams vs subagents.
+- **Per-stage I/O contracts**: `${CLAUDE_SKILL_DIR}/../shared/stage-contracts.md` — each stage's Inputs → Outputs → Validation table.
+- `references/hook-monitoring.md` — wiring or debugging hooks: event catalog, matchers, conditional `if`, PreToolUse/PostToolUse decisions, gate-feedback contract, OTEL, agent teams vs subagents.
 - `references/headless-dispatch.md` — dispatching from CI/cron/a shell: `task.metadata` → `claude agents` flag bridge, live-session discovery, permission-mode pinning.
 - `references/audit-actions.md` — writing or reading an `audit.jsonl` row: every registered `action`, grouped by writer.
+- `references/cross-session-messaging.md` — messaging a peer session: reach, authority, delivery results.
 
 ## Handoff Protocol
 
@@ -112,7 +113,7 @@ Append to `.context/errors/<agent>.md` — one file per `metadata.agent` basenam
 ## [STAGE][N] Retry [X/max] — [TIMESTAMP]
 **Agent**: [agent name]
 **Task ID**: [task_id]
-**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted | environmental_contention]
+**Classification**: [transient | logic | missing_input | ambiguous_requirements | design_flaw | hard_constraint | exhausted | environmental_contention | permission_denied]
 ### Problem
 [Description]
 ### Resolution Path
@@ -135,9 +136,9 @@ Every material worktask action writes one JSONL line to `.context/logs/audit.jso
 
 | Actor | Action Examples |
 |-------|-----------------|
-| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest` |
+| Orchestrator | `worktask_init`, `stage_transition`, `approval_received`, `resume`, `stage_replay`, `permission_mode_pinned`, `github_issue_created`, `dispatch_depth_projected` (Pre-Stage Validation check 11), `stage_returned_incomplete` (Step 6.5a2), `reattach_send_result` (one per reattach attempt — `skills/worktask/references/resume.md § Reattach rows`), `blocked_on` (one row per leg, Steps 6.5a3 and 7a; § Writers — blocked_on rows), `mailbox_ingest` |
 | Stage agents | `artifact_created`, `error_recorded`, `retry_attempt`, `escalation`, `full_test_run`, `scoped_test_run`, `message_ack` (`state-patch.sh --ack`) |
-| Any agent whose nested `Task()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
+| Any agent whose nested `Agent()` is refused by the depth cap | `dispatch_flattened` (§ Depth-refusal self-report) — the writer is the *refused dispatcher*, which may be a stage agent or a nested platform router, never the orchestrator |
 
 #### Writers — permission denials (two writers, one row)
 
@@ -178,7 +179,7 @@ The full command, `classifier_reason` and `allow_rule` stay out of the audit log
 |-------|-----------------|
 | Orchestrator (`blocked-on-dispatch.sh route\|resume`, worktask Steps 6.5a3 and 7a) | `blocked_on`: one row per leg of a non-permission arm. `subject` and `task_id` are the task id; `result: "blocked"` on a leg that leaves the task parked, `"ok"` on the closing leg. `metadata.{kind, arm, leg}`, plus `fallback_from` and `owner_issue` on a fallback, `command_head` and `truncated` on a need with a command, and `decision_ref` on the closing leg |
 
-The permission arm writes no `blocked_on` row: its `denied` leg is the `permission_denied` row, its `granted` and `resumed` legs the `permission_resumed` row. A closing row's `decision_ref` is `blocked_on:<task_id>:<kind>:<n>` (`worktask/references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`).
+The permission arm writes no `blocked_on` row: its `denied` leg is the `permission_denied` row, its `granted` and `resumed` legs the `permission_resumed` row. A closing row's `decision_ref` is `blocked_on:<task_id>:<kind>:<n>` (`skills/worktask/references/handoff-protocol.md § Schema — blocked_on, decision_ref on the other arms`).
 
 #### Writers — blocked_on rows, the peer_session legs
 
@@ -240,7 +241,7 @@ Every row above is authoritative. `audit-subagent` and `agent-stop` rows also ca
 
 | Actor | Action Examples |
 |-------|-----------------|
-| External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage outside `Task()` — see `references/headless-dispatch.md`) |
+| External dispatcher | `external_dispatch` (CI/cron/user-shell invoked a stage outside `Agent()` — see `references/headless-dispatch.md`) |
 | `apple-canvas` adapter (in `dv-screenshot-capture`) | `canvas_render` (one row per phase ∈ scaffold\|complete\|retry — see `skills/dv-screenshot-capture/references/apple-canvas.md § Audit row schema`) |
 | `apple-canvas` adapter, from the `preview-ensurer` result | `preview_added` (one row per `#Preview` block written to source — `metadata: {file, view_type, mock_strategy, lines_added}`) |
 | QA visual-diff wrapper (`skills/dv-screenshot-capture/scripts/visual-diff.sh`) | `visual_diff_run` (one row per RMSE diff — `metadata: {reference, candidate, metric:"RMSE", value_percent, threshold_percent, verdict}`) |
@@ -330,7 +331,7 @@ Whether a stage splits depends on *who* initiates the split and *what* the depen
 | Stage failed and the retry needs narrower scope | **DV-initiated (sequential)** | DV1 is the focused retry; `retry_count` resets | DV0 full feature → DV1 auth only |
 | Single cohesive scope, <3 files | **No split** | DV0 handles it | `fix null check in login validator` |
 
-Full code patterns: `worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`.
+Full code patterns: `skills/worktask/references/initialization-patterns.md § Stage Sub-Task Splitting`.
 
 ### TL-Initiated DV Splitting
 
@@ -383,11 +384,11 @@ Foreground and background subagents share one depth budget.
 
 #### Pre-launch spawn classification
 
-In auto mode the permission classifier evaluates a subagent spawn before it launches, so a dispatch can be denied up front (`PermissionDenied` fires). Route a refused spawn like a failed stage, per the retry/escalate matrix, rather than assuming every `Task(...)` starts.
+In auto mode the permission classifier evaluates a subagent spawn before it launches, so a dispatch can be denied up front (`PermissionDenied` fires). Route a refused spawn like a failed stage, per the retry/escalate matrix, rather than assuming every `Agent(...)` starts.
 
 #### Depth-refusal self-report
 
-When the depth cap refuses a nested `Task()`, the refused dispatcher appends one `dispatch_flattened` row to `.context/logs/audit.jsonl` before doing that work inline. Written afterwards, the row misses its purpose: an agent that finishes the specialist's job and then forgets leaves an artifact indistinguishable from one the specialist produced.
+When the depth cap refuses a nested `Agent()`, the refused dispatcher appends one `dispatch_flattened` row to `.context/logs/audit.jsonl` before doing that work inline. Written afterwards, the row misses its purpose: an agent that finishes the specialist's job and then forgets leaves an artifact indistinguishable from one the specialist produced.
 
 ##### No hook covers this refusal
 
@@ -410,7 +411,7 @@ Pairs with the orchestrator's forward-looking `dispatch_depth_projected` (`skill
 
 #### Background-by-default dispatch
 
-Subagents run in the background by default: the dispatching agent keeps its turn and receives the child's result as a completion notification. So (1) a `Task()` launch acknowledgement is not stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) overlap with no extra orchestration.
+Subagents run in the background by default: the dispatching agent keeps its turn and receives the child's result as a completion notification. So (1) an `Agent()` launch acknowledgement is not stage completion — advance a stage (Step 6.5, the `completed` patch) only on the completion notification or the `subagent_stopped` audit row (`skills/worktask/SKILL.md § Orchestrator Execution Loop`); (2) unblocked sibling stages (parallel DVN tracks, DC+QA) overlap with no extra orchestration.
 
 ##### Depth accounting & background permission prompts
 
@@ -439,41 +440,31 @@ When `--max-budget-usd` trips, new spawns are denied and running background suba
 
 ### Model Selection
 
-Prefer reading an artifact over invoking an agent. Per-invocation override: `Task({ subagent_type: "corpflow:developer", model: "opus" })`.
+Prefer reading an artifact over invoking an agent. Per-invocation override: `Agent({ subagent_type: "corpflow:developer", model: "opus", effort: "high" })` — `effort` needs 2.1.292. The spawn tool is `Agent`; hooks, matchers and grants name only `Agent`.
 
 Permission rules accept `Tool(param:value)` with `*` wildcards — `Agent(model:opus)` permits only opus-model spawns, `Agent(model:*)` any override — so auto mode's dispatch overrides can be constrained without listing every agent. `Agent(type)` deny rules and `Agent(x,y)` allowed-types restrictions apply to named subagent spawns too.
+
+#### Effort on nested delegation
+
+A nested `Agent` call without `effort` runs at the target's own `effort:` frontmatter tier, never the caller's. Probed at 2.1.292: `team-lead` at `xhigh` spawned `technical-lead`, which ran at `high`. So a stage agent that hands its stage's primary work to another agent passes its own tier, the `effort:` line of its brief:
+
+| Delegation | `effort` |
+|---|---|
+| DV → platform implementer or specialist | the brief's `effort` |
+| QA → test-generator or UI verifier (one leg) | the brief's `effort` |
+| SR → security auditor | the brief's `effort` |
+| RE → platform release engineer | the brief's `effort` |
+| Consults: TL → technical-lead, AR → platform architect, PM → designer or ethics | none: the target's own tier |
+
+Pass no `effort` to a haiku target, or when the brief has no `effort:` line.
 
 #### Model aliases, allowlists & @-mentions
 
 Agent-team teammates use the lead session's model unless overridden. Aliases (`fable`/`opus`/`sonnet`/`haiku`) work across all providers. A managed `availableModels` list also constrains subagent overrides, and `enforceAvailableModels` the Default model, so a valid alias may resolve to a different model (`skills/worktask/SKILL.md § Pre-Stage Validation` step 6). `@` mentions named subagents and other Claude sessions; `SendMessage` delivers to a bare name matching exactly one live session.
 
-#### Cross-session reach & SendMessage authority
+#### Cross-session messaging
 
-`SendMessage` reaches sessions on other machines. `ListAgents` discovers them — labelling disconnected Remote Control rows `offline` and cloud rows `cloud` — and also lists live teammates and the session's own name (the `name` key), the address peers use. `crossSessionInbound` (holds messages into a bypassed-permissions session for approval) and `dialogExpiry` govern inbound traffic; an invalid `crossSessionInbound` value holds messages (user settings) or refuses them (managed settings) rather than being ignored. A message held by the receiving session's own permission-mode policy is not delivered: since 2.1.288 the sender's notice says so and names the holding session, and an SDK sender learns of it mid-turn (earlier builds reported it as delivered). Log it as `result: "blocked"` with `metadata.reason: "held"` (§ Delivery is reported, so check it).
-
-##### Restricted sessions & dialog timeout
-
-A `--restricted` session opens no messaging socket (2.1.290), so it is unreachable by design, not gone. A `CLAUDE_CODE_USER_DIALOG_TIMEOUT_MS` value with a unit suffix (`5m`) falls back to `dialogExpiry` instead of reading as milliseconds (2.1.290).
-
-##### Sessions without SendMessage & cloud restarts
-
-A session launched without the `SendMessage` tool, as Claude Desktop launches some, is not told to message other sessions, so expect no outbound message from it. A cloud session tells Claude about background agents that finished just before a worker restart, so a completion there survives the restart.
-
-##### Authority does not relay
-
-Receivers refuse relayed permission requests, and auto mode blocks them outright — across machines as on one. A reattach may nudge a parked agent (re-prompt, supply an awaited answer) but never authorize: permission escalations and the PL gate stay operator-owned.
-
-##### Delivery is reported, so check it
-
-A send can come back `refused`, `dropped` (full or rate-limited inbox), `oversized`, `burst_limited`, `queued` or `held` (waiting for a person's approval at the recipient), and `SendMessage`/`ListAgents` say when the session list was too long to enumerate fully — a "peer is gone" conclusion drawn then is unconfirmed, not established. `queued` means the target is an offline Remote Control session on another machine and delivery waits for it to reconnect: never re-send, or the message arrives twice. `held` has the same rule: approval at the named session releases the copy it holds. A subagent or teammate that receives a message mid-run keeps its earlier thinking and prompt cache on resume (2.1.290). Branch on the result per `skills/worktask/references/resume.md § Reattach rows — the SendMessage has a result too`.
-
-##### notify_when_idle, availability & preview collapse
-
-`notify_when_idle` on a cross-session `SendMessage` asks a peer for one notice when it next goes idle — opt-in, one-shot, no polling, same-machine peers only (macOS and Linux). Prefer it over a `claude agents --json` poll whenever exactly one peer is awaited.
-
-Cross-session messaging works on every provider and host (Bedrock/Vertex/Foundry, telemetry disabled, Windows, rootless containers), so never gate a handoff, a dispatch flag or a reattach path on provider or OS.
-
-Peer messages collapse to one line — `Message from @<sender>: <first line>` — so a relayed handoff or escalation carries its verdict in the first line.
+When a stage messages a peer session, read `skills/agent-coordination/references/cross-session-messaging.md`: `SendMessage` reach and `ListAgents`, inbound policy, restricted sessions, authority that does not relay, delivery results, `notify_when_idle` and preview collapse.
 
 #### Replies from a subagent land in the parent conversation
 
@@ -491,7 +482,7 @@ Subagents resolve project, user and plugin skills natively at every depth, so ne
 
 ### Monitor Tool for Background Events
 
-`Monitor` streams stdout from this session's own background scripts (Bash `run_in_background`) — event-driven, no polling loops. Waiting on a peer session to go idle is `notify_when_idle` instead (§ notify_when_idle, availability & preview collapse); neither substitutes for the other. Launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the watch (`logging-conventions`), note the returned shell ID, and attach `Monitor` to it. After Monitor detaches, the `.log` is still readable. In an unattended session (`-p`, SDK, CI, cloud) the background command itself stops at its Bash `timeout` (default 30 min, max 2 h), so a command that can run longer sets `timeout` explicitly (`references/headless-dispatch.md` § Print-mode runners — background time limit).
+`Monitor` streams stdout from this session's own background scripts (Bash `run_in_background`) — event-driven, no polling loops. Waiting on a peer session to go idle is `notify_when_idle` instead (`references/cross-session-messaging.md § notify_when_idle, availability & preview collapse`); neither substitutes for the other. Launch with `run_in_background: true`, tee into `.context/logs/` so the capture outlives the watch (`logging-conventions`), note the returned shell ID, and attach `Monitor` to it. After Monitor detaches, the `.log` is still readable. In an unattended session (`-p`, SDK, CI, cloud) the background command itself stops at its Bash `timeout` (default 30 min, max 2 h), so a command that can run longer sets `timeout` explicitly (`references/headless-dispatch.md` § Print-mode runners — background time limit).
 
 ```bash
 <command> 2>&1 | tee .context/logs/<kind>-<slug>-<ts>.log
@@ -518,12 +509,12 @@ Every Monitor watch carries a bounded deadline — at most 30 minutes, 10 inside
 
 ### MCP Auto-Background
 
-An MCP tool call past the auto-background threshold (default 2 minutes, `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS`) is backgrounded by Claude Code itself: the caller gets a handle, not the result. Handle it like a backgrounded `Task()` dispatch (§ Background-by-default dispatch): the handle is not the build/test outcome. A completion gate reading an artifact the call produces (e.g. `developer § D1`'s `build-developer-*.log`) waits for the real completion signal — a log still being written is not done, and file presence proves nothing.
+An MCP tool call past the auto-background threshold (default 2 minutes, `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS`) is backgrounded by Claude Code itself: the caller gets a handle, not the result. Handle it like a backgrounded `Agent()` dispatch (§ Background-by-default dispatch): the handle is not the build/test outcome. A completion gate reading an artifact the call produces (e.g. `developer § D1`'s `build-developer-*.log`) waits for the real completion signal — a log still being written is not done, and file presence proves nothing.
 
 #### MCP auto-background threshold tuning
 
 - XcodeBuildMCP `build_sim` / `build_run_sim` / `test_sim` routinely exceed 2 minutes; flows chaining on them await between steps.
-- Raise or disable the threshold only when one turn genuinely needs a synchronous result (diagnosing a full log in one pass), and only on an external headless dispatch with its own environment: in-process `Task()` children share the session setting, so raising it session-wide costs every other MCP call its safety net.
+- Raise or disable the threshold only when one turn genuinely needs a synchronous result (diagnosing a full log in one pass), and only on an external headless dispatch with its own environment: in-process `Agent()` children share the session setting, so raising it session-wide costs every other MCP call its safety net.
 
 ### MCP Tool Inheritance
 
@@ -562,7 +553,7 @@ DR →──┤       ├→ FN
 
 ## Handoff Message Format
 
-Verdict first, on the first line: relayed to a peer session the message collapses to that line (§ notify_when_idle, availability & preview collapse), so it has to say how the stage ended.
+Verdict first, on the first line: relayed to a peer session the message collapses to that line (`references/cross-session-messaging.md § notify_when_idle, availability & preview collapse`), so it has to say how the stage ended.
 
 ```markdown
 ## [FROM]→[TO] Handoff — [ok|blocked|escalate]: [one clause]
@@ -599,7 +590,7 @@ Fields each handoff carries in addition to the standard format above:
 | DV → SR | **Security-Sensitive Areas** (area: why relevant); **Recommended Focus**: auth, data handling, APIs |
 | SR → QA | **Security Status** [Approved\|Blocked\|Conditional]; **Critical/High Findings** count; **Security Tests Recommended** |
 | DC → RE | **Commit Summary** (feat/fix list); **Recommended Version Bump** [MAJOR\|MINOR\|PATCH] |
-| IR → DV | **Incident ID** INC-[N]; **Severity** P[0-3]; **Required Fix**; **Constraints**: minimal change, no refactoring; **Blast Radius** file allow-list; **Verification Command** (`incident-response/SKILL.md § IR → DV Handoff Contract`) |
+| IR → DV | **Incident ID** INC-[N]; **Severity** P[0-3]; **Required Fix**; **Constraints**: minimal change, no refactoring; **Blast Radius** file allow-list; **Verification Command** (`skills/incident-response/SKILL.md § IR → DV Handoff Contract`) |
 
 ## Constitutional Coordination
 

@@ -46,7 +46,7 @@ dispatched against (`task.metadata.workspace_path`). Only
 
 ### Orchestrator enforcement
 
-1. Before every `Task()` delegation, resolve `WORKSPACE_ROOT = $(git rev-parse --show-toplevel)`.
+1. Before every `Agent()` delegation, resolve `WORKSPACE_ROOT = $(git rev-parse --show-toplevel)`.
 2. Inject `WORKSPACE_ROOT=<path>` as the first line of the stage prompt banner (section [7]).
 3. Rewrite any absolute path from outside `WORKSPACE_ROOT` in a stage prompt as `$WORKSPACE_ROOT/<relative>`.
 
@@ -109,7 +109,7 @@ All DV operations use the worktree path prefix — isolation is always active. `
 
 ##### The tree is pinned at dispatch
 
-Each DV ledger row's tree is fixed before `Task()`: the row's agent enters exactly `tasks.DV<k>.metadata.workspace_path`, which the orchestrator re-pins to a stream worktree at dispatch when parallel streams share it (rule: `handoff-protocol.md § Pinning a row's tree`). Nothing else selects it: not agent frontmatter `isolation`, not the Agent tool's `isolation: "worktree"`, not a glob convention. Each of those hands the stage a harness-created tree that is not the assigned one, which `dv-tree-preflight.sh --assigned` (`agents/developer.md § D0.0a`) then correctly blocks.
+Each DV ledger row's tree is fixed before `Agent()`: the row's agent enters exactly `tasks.DV<k>.metadata.workspace_path`, which the orchestrator re-pins to a stream worktree at dispatch when parallel streams share it (rule: `handoff-protocol.md § Pinning a row's tree`). Nothing else selects it: not agent frontmatter `isolation`, not the Agent tool's `isolation: "worktree"`, not a glob convention. Each of those hands the stage a harness-created tree that is not the assigned one, which `dv-tree-preflight.sh --assigned` (`agents/developer.md § D0.0a`) then correctly blocks.
 
 ##### Absolute-path mode when EnterWorktree is refused
 

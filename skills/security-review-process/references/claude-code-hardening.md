@@ -33,6 +33,7 @@ mid-pattern file rules like `Read(secrets-*/config.json)`.
 ### Read denies and protected-file writes
 
 - `Read` deny rules and the outside-directory read block also cover files reached through a symlink by an @-mention or IDE selection, a link swapped in mid-read, pasted or dragged image paths, the file names listed for an @-mentioned folder, and wildcards in option values of read-only Bash commands.
+- PreToolUse hook approvals and auto mode no longer skip the prompt for reads from network (UNC) paths, and a notebook or PDF read can no longer return an unapproved file through a link swapped mid-read (2.1.292).
 - A whole-tool `Bash` allow rule or an allowing hook prompts for, and does not run, a shell write to a file the file tools refuse outright (the Anthropic profile store, the host credentials file).
 
 ## Settings scope
@@ -54,6 +55,12 @@ mid-pattern file rules like `Read(secrets-*/config.json)`.
 - Repository `.claude/settings.json` and `.claude/settings.local.json` can no longer set `CLAUDE_CODE_DISABLE_ATTACHMENTS` or turn Claude in Chrome on; project settings cannot widen or turn off an admin-required sandbox, replace the proxy behind a managed deny list, extend a strict allowlist, or reopen managed read-denies.
 - `CLAUDE_CODE_DISABLE_WEB_FETCH` removes the WebFetch tool.
 - A reply sent from `claude agents` to a session waiting on a permission prompt never approves the pending command; a repeated `--channels` reply ID is ignored; a respawned background worker honors `--allow-dangerously-skip-permissions` only after the bypass disclaimer was accepted.
+
+### Settings scope — policy cache and mode exits
+
+- A tampered on-disk cache of server-managed settings can no longer switch off or unseat the built-in policy plugin while the settings fetch fails (2.1.292).
+- A skill's or slash command's `allowed-tools` rule no longer comes back in a later turn after the session leaves auto or plan mode partway through that turn (2.1.292).
+- A managed sandbox read-deny path that appears or re-points mid-session now drops project grants inside it and ends credential injection from files it covers (2.1.292).
 
 ## Sandbox
 

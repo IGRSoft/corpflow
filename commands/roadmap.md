@@ -17,12 +17,14 @@ Create or update product roadmap with timeline, milestones, and dependencies. Th
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--quarter <Q>` | `Q1`, `Q2`, `Q3`, `Q4` | Focus on one quarter |
 | `--add "<feature>"` | — | Add an item to the roadmap |
 | `--move "<feature>" --to <quarter>` | feature name as in the Features table | Move that item to another quarter |
 | `--view <type>` | `timeline`, `kanban` | Display format (default: `timeline`) |
+
+## Examples
 
 ```
 /roadmap [--quarter Q1|Q2|Q3|Q4] [--view timeline|kanban] [--add "<feature>"] [--move "<feature>" --to <quarter>]

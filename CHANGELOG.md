@@ -29,18 +29,51 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Changed
 
-- **Requires Claude Code 2.1.291** (was 2.1.284). A cross-session message held at the recipient
-  for approval was reported as delivered before 2.1.288; it now reads as not delivered and names
-  the holding session. Background commands in unattended sessions stop at their `timeout` since
-  2.1.285, which the explicit 2 h `timeout` below depends on. 2.1.291 rather than 2.1.288, which
-  could lose a session's last messages on quit.
-- **CC 2.1.285→2.1.291 band integrated.** The reattach result table and `stale-check.sh` handle
+- **Requires Claude Code 2.1.292** (was 2.1.284). 2.1.292 adds the `Agent` tool's `effort`
+  parameter, which every in-process stage dispatch now passes. A cross-session message held at the
+  recipient for approval was reported as delivered before 2.1.288; it now reads as not delivered
+  and names the holding session. Background commands in unattended sessions stop at their
+  `timeout` since 2.1.285, which the explicit 2 h `timeout` below depends on.
+- **Stage effort is carried in-process.** Step 6 passes the stamped tier on `Agent({ effort })`
+  (new `effort_transport` value `agent-param`), which outranks the agent's `effort:` frontmatter;
+  `effort_resolved` comes from the subagent's hook row. `CORPFLOW_HEADLESS_ROUTE=on` sends every
+  non-haiku stage headless instead; haiku stages pass no `effort` (`none`). **Breaking:**
+  `effort-route.sh` drops `--agents-dir`, `--role-baseline` and the `baseline`/`baseline_source`
+  fields, and `headless-dispatch.sh` drops `--baseline`. A headless `warn` fallback reports
+  `effort_resolved: null` (`inproc_fallback`), and the headless child gets the tier from
+  `--effort` alone, not `CLAUDE_CODE_EFFORT_LEVEL`.
+- **Nested delegates get the stage tier.** A nested `Agent` call without `effort` runs at the
+  target's own frontmatter tier. DV, QA, SR and RE now pass their brief's `effort:` line, which
+  `brief-compose.sh` emits beside `model:`, to the agent doing the stage's primary work; consults
+  keep the target's own tier.
+- **Audit hooks read effort from the payload only.** `audit-tooluse`, `audit-subagent` and
+  `agent-stop` drop the `$CLAUDE_EFFORT` fallback: on haiku the payload has no `effort` but the
+  env var keeps the requested tier, so rows recorded a tier that never ran. They now write
+  `"unknown"`, which the resolvers treat as no row.
+- **`Task` → `Agent`.** Grants, hook matchers, docs and pseudo-code name only `Agent`. Hook
+  payloads name the spawn tool `Agent` even when a `Task` matcher fires, so
+  `test-execution-gate.sh`'s `Task)` branch never matched and wrote no `test_delegation_observed`
+  row. The gate now branches on `Agent)`, and the Codex adapter emits `Agent`.
+- **Prompt-audit sweep (`/prompt-audit --all`, 17 critical, 49 warnings).** Grant gaps closed:
+  project-manager runs `fn-preflight.sh`, team-lead runs `jq`, developer may dispatch
+  `go-developer`, tech-code-review may write its review artifact. Wrong references fixed (`ST-SI`,
+  `TL3`, `release.md`, stream-blind `development-<N>.md` close-outs, lowercase self-improvement
+  commit subject). `/prompt-audit` Agent rule 1 now requires `effort:` equal to the matrix tier, and
+  `/create-agent` scaffolds it plus the matrix row. Branch-only blocks move behind references:
+  `worktask/references/{headless-arm,return-arms,step-7a-arms,autonomy-preflight,auto-decision,
+  megatask-per-issue,dr-reference}.md`, `agent-coordination/references/cross-session-messaging.md`
+  and `shared/technical-consult.md`. Commands follow Options → Examples → Output Format with a
+  Values column and defaults; inflated `BINDING`/`MUST` emphasis and default-behaviour sections
+  are removed; designer writes `.context/designs/ux-assessment-N.md` for PM to merge.
+- **CC 2.1.285→2.1.292 band integrated.** The reattach result table and `stale-check.sh` handle
   `held` (stay parked, never re-send, the operator approves at the named session). Headless-dispatch
-  `Monitor(Bash(...))` calls, the mailbox wait and QA's direct-run fallback pass an explicit
-  `timeout`, so an orchestrator running under `-p` no longer cuts a stage off at 30 min; a stop at
-  the time limit is an infrastructure stop, not a test failure. Docs pick up fail-closed
-  `PreToolUse` matching, teammate `agent_id`/`teammate_id`, worktree access fixes, the 1M default on
-  gateways and cloud providers, and new Bash and Read permission hardening.
+  `Monitor(Bash(...))` calls and QA's direct-run fallback pass an explicit `timeout`, so an
+  orchestrator running under `-p` no longer cuts a stage off at 30 min; a stop at the time limit is
+  an infrastructure stop, not a test failure. Docs pick up fail-closed `PreToolUse` matching,
+  teammate `agent_id`/`teammate_id`, worktree access fixes, the 1M default on gateways and cloud
+  providers, new Bash and Read permission hardening, one-shot `-p` waiting for background commands
+  and wakeups, escaped `<system-reminder>` tags in hook output, UNC-read and `allowed-tools`
+  fixes, `claude plugin test` failing on a failed `expect`, and stdio MCP protocol 2026-07-28.
 - **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the
   planning model judges whether the diff alters rendered output, S1 (`ui_visual_check`) is a hard
   floor, a `false` over an S2 hit needs a written reason, uncertain means `true`, and the planner

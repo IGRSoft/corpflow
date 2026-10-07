@@ -80,11 +80,11 @@ The gate above fires at return time; if you exhaust context mid-batch the orches
 
 ## Delegation
 
-Route with the Task tool. The `subagent_type` is the qualified agent ID from `agents/developer.md § Platform Specialization` or, for specialists outside those rows, from the per-platform tables in `skills/shared/platform-detection.md`.
+Route with the Agent tool. The `subagent_type` is the qualified agent ID from `agents/developer.md § Platform Specialization` or, for specialists outside those rows, from the per-platform tables in `skills/shared/platform-detection.md`.
 
-### Dispatch Injection (BINDING)
+### Dispatch Injection (REQUIRED)
 
-Before every `Task(<plugin>:<agent>)`, resolve the sibling's root; `<plugin>` is the id before `:` and the one stdout line is `<ROOT>`:
+Before every `Agent(<plugin>:<agent>)`, resolve the sibling's root; `<plugin>` is the id before `:` and the one stdout line is `<ROOT>`:
 
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/skills/cross-plugin-handoff/scripts/resolve-sibling-root.sh <plugin>
@@ -97,6 +97,7 @@ Your plugin root is <ROOT>. Read <ROOT>/CORPFLOW.md and follow it; resolve every
 ```
 
 Exit 1 → dispatch nothing to that plugin; take `agents/developer.md § Plugin unavailable` with the stderr line as `reason`.
+Pass `effort` = the `effort:` line of your brief on every such call; without it the target runs at its own frontmatter tier (`skills/agent-coordination/SKILL.md § Effort on nested delegation`).
 Follow the plugin-root line with section `[4b]`, the model discipline block
 (`skills/cross-plugin-handoff/SKILL.md § Model discipline block`).
 
@@ -110,4 +111,4 @@ Pass: the exact-output contract verbatim (`agents/developer.md § Pass the contr
 
 ### Routing Audit
 
-On every `Task(specialist)` invocation append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend|ai>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. When the target came from a routing override, add `alias: "<corpflow:* alias>"` and `routing_source` (`"project-override"` or `"user-override"`, from `state.routing_source`) to the metadata. The specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g. `errors/ios-developer.md`) per `stage-contracts § Cross-Plugin Stages`. A `delegation` row pointing at `self`/generic for a back-end (→ `backend-developer:*`) or web-UI (`.tsx`/`.vue`/`.svelte`/component/state/styling → `frontend-developer:*`) DV task is a routing miss.
+On every `Agent(specialist)` invocation append one `audit.jsonl` line: `action: "delegation"`, `metadata: {to_agent: "<qualified subagent_type>", platform: "<apple|android|web|systems|backend|ai>", markers: [<matched globs>], reason: "<one-line why>", task_id: "<DV task id>"}`. When the target came from a routing override, add `alias: "<corpflow:* alias>"` and `routing_source` (`"project-override"` or `"user-override"`, from `state.routing_source`) to the metadata. The specialist writes its own retry/error narrative to `.context/errors/<basename>.md` (e.g. `errors/ios-developer.md`) per `stage-contracts § Cross-Plugin Stages`. A `delegation` row pointing at `self`/generic for a back-end (→ `backend-developer:*`) or web-UI (`.tsx`/`.vue`/`.svelte`/component/state/styling → `frontend-developer:*`) DV task is a routing miss.

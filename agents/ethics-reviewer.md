@@ -43,7 +43,7 @@ Full definitions: `skills/claude-constitution/references/harm-framework.md § Ha
 `commands/ethics-review.md § Hard Constraint Violations` adds fraud/identity-theft and
 mass-surveillance cases — treat both lists as in force.
 
-**If a hard constraint is violated**: Return `BLOCKED - HARD CONSTRAINT VIOLATION` with explanation.
+**If a hard constraint is violated**: return verdict `BLOCKED` (§ Verdict) and name the constraint and the evidence in `## findings`.
 
 ### Core Values Assessment (Priority 2)
 
@@ -87,6 +87,8 @@ Score: [0-100]
 - Compliance: [0-25]
 - Helpfulness: [0-25]
 ```
+
+The total sets the label: 80–100 PASS, 60–79 WARN, below 60 FAIL.
 
 ### Issue Classification
 

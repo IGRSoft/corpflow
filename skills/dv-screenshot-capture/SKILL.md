@@ -154,7 +154,7 @@ Unknown or `"all"` platform → `cli_fallback_adapter` + audit row `screenshot_p
 
 ### Per-adapter behavior
 
-The `Task(...)` targets below are platform defaults — a routing override
+The `Agent(...)` targets below are platform defaults — a routing override
 (`skills/shared/routing-matrix.md` / `state.routing`) swaps the plugin, and the capture
 request goes to the override's entry agent instead.
 
@@ -166,16 +166,16 @@ These three delegate the capture to the platform's own agent — corpflow holds 
 
 | Adapter | Delegate to | Requested behavior | `reason` |
 |---------|-------------|--------------------|----------|
-| `apple` | `Task(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. A SwiftPM macOS app skips this row: § macos-window adapter. | `xcodebuildmcp_unavailable` |
-| `web` | `Task(frontend-developer:frontend-developer)` | Run `scripts/web-capture.sh --task-id <task_id> --url <args.url> --viewport <args.viewport>`. | `playwright_unavailable` |
-| `android` | `Task(android-developer:android-developer)` | Run `scripts/android-capture.sh --task-id <task_id> [--serial <args.serial>]`. | `adb_unavailable` |
+| `apple` | `Agent(apple-developer:ios-developer)` or the matching `macos-`/`tvos-`/`watchos-`/`visionos-developer` | Boot/locate sim (per `args.simulator`), navigate best-effort, screenshot to target path. A SwiftPM macOS app skips this row: § macos-window adapter. | `xcodebuildmcp_unavailable` |
+| `web` | `Agent(frontend-developer:frontend-developer)` | Run `scripts/web-capture.sh --task-id <task_id> --url <args.url> --viewport <args.viewport>`. | `playwright_unavailable` |
+| `android` | `Agent(android-developer:android-developer)` | Run `scripts/android-capture.sh --task-id <task_id> [--serial <args.serial>]`. | `adb_unavailable` |
 
 ##### Delegated-capture result handling
 
-The delegate's prose reply is never the evidence — the file is. After the `Task` returns, stat the target path:
+The delegate's prose reply is never the evidence — the file is. After the `Agent` returns, stat the target path:
 
 - Non-empty file → `{path, bytes: <stat>, ok: true, error: null}`; apply the size budget.
-- No file, empty file, or an errored `Task` → fall through to `cli_fallback` exactly as a missing tool did, emitting `screenshot_platform_fallback` with the table's `reason` (or `"delegation_unavailable"` when the agent was unreachable). The enum is unchanged: the capture still surfaces as `"capture_failed"`, or `"tool_missing"` once `cli_fallback` also bottoms out.
+- No file, empty file, or an errored `Agent` → fall through to `cli_fallback` exactly as a missing tool did, emitting `screenshot_platform_fallback` with the table's `reason` (or `"delegation_unavailable"` when the agent was unreachable). The enum is unchanged: the capture still surfaces as `"capture_failed"`, or `"tool_missing"` once `cli_fallback` also bottoms out.
 
 #### macos-window adapter
 
@@ -457,7 +457,7 @@ The live hook always exits 0 and carries a block as `decision: block` JSON with 
 |---------|-----------|-------------------|
 | `metadata.requires_screenshots: false` AND zero captures | DV completion checklist | Write `screenshots-<TASK_ID>.md` with skip rationale. DV proceeds; no `missing_screenshot_artifact` error. |
 | `metadata.requires_screenshots: true` (default) AND zero captures | DV completion checklist; `--check` exit 3 | Outside `backend`/`systems`, DV FAILS with `missing_screenshot_artifact` and the gate blocks `no_captures`. Append `## DV[N] Retry [X/3]` block to `.context/errors/developer.md` (classification: `logic`). Retry: attempt `cli_fallback` once. |
-| Platform capture produced no file (delegate unreachable, or its tooling — XcodeBuildMCP / Playwright / adb — missing) | Target path absent or empty after the delegated `Task`; `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
+| Platform capture produced no file (delegate unreachable, or its tooling — XcodeBuildMCP / Playwright / adb — missing) | Target path absent or empty after the delegated `Agent`; `error: "tool_missing"` from adapter | Fall back to `cli_fallback`. Audit `screenshot_platform_fallback`. Continue. |
 
 ### Fallback-floor, budget, and invocation failures
 

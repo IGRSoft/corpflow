@@ -123,7 +123,7 @@ Every file below changes in the same commit. Ordered so later edits can referenc
 | 1 | `skills/shared/routing-matrix.md` | Entry-alias row + four functional-role alias rows (the only copy of the target ids) |
 | 2 | `skills/shared/compatible-plugins.md` | Registry row (entry alias), command-set row, handoff-defaults row |
 | 3 | `skills/shared/platform-detection.md` | Marker rows in § Detection Rules; a per-platform specialization section; precedence notes if markers overlap an existing platform |
-| 4 | `agents/developer.md` | `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description`. No `tools:` edit — stage agents carry a bare `Task` grant |
+| 4 | `agents/developer.md` | `--platform` enum (Priority Order, Detection Logging, Routing Audit); common-rows table; UI/non-UI defaults sentence; agent `description`. No `tools:` edit — stage agents carry a bare `Agent` grant |
 
 ### Stage agents and handoff protocol
 
@@ -170,6 +170,18 @@ their own `SKILL.md` are listed in `skills[]`.
   and `agent.spawn`; `claude plugin validate` lists each gating hook with whether it has a `.catch`
   (`gatingHooks` under `--json`). corpflow ships no mods, and a user-installed mod that makes an
   organization's guard skip its check is unloaded.
+
+#### Marketplace install, plugin tests and name limits (2.1.292)
+
+- `claude plugin install --marketplace <source>` adds the marketplace when needed, under the
+  same policy checks as `marketplace add`, then installs from it.
+- `claude plugin test` now fails on a failed `expect` inside a hook the test registered, or on a
+  stub answer the engine refuses, instead of passing silently.
+- Agent names are capped at 256 characters; a skill's or plugin file's longer `name` is ignored.
+  An MCP tool name over 128 characters is left out, and an MCP error names it.
+- Local (stdio) MCP servers negotiate protocol 2026-07-28 by default; `MCP_PROTOCOL_NEGOTIATION=legacy`
+  opts out. A sibling plugin's stdio server that ignores the newer check connects the older way
+  after one slow connect, remembered for 7 days.
 
 #### Listing, loading and eval
 

@@ -25,7 +25,7 @@ To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by i
 - Report every failure you find with its `.context/` errors or logs path, repaired ones included.
 - DO NOT write task state into `state.json` by hand: `state-patch.sh` keeps the file atomic and its handoff edges consistent. The one exception: `handoff-protocol.md#layer-1-fallback`, when the tool cannot run.
 - Append each stuck-state resolution to `.context/errors/<agent>.md` before moving on (§ Handle Error).
-- DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
+- Comment only the non-obvious WHY and the contract (`skills/code-comment-standard/SKILL.md`).
 
 ### Mid-run escalation
 
@@ -133,7 +133,7 @@ Megatask architecture — DAG, tracks, statuses, branch naming, base-branch chai
    for artifact in .context/{planning,architecture,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
      stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
-     [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
+     [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash "${CLAUDE_PLUGIN_ROOT}/hooks/state-merge.sh"
    done
    ```
 
@@ -247,7 +247,7 @@ Parse trigger and task info → create `.context/` → seed tasks (`state-patch.
 
 ### Stage Transition
 
-`--task-status <ID> completed` → verify `blockedBy` resolved → `--task-status <next> in_progress`. Gates: PL once at Step A.5 before the loop, FN mid-loop at step 4.9 before FN delegation; all other intra-loop transitions unattended.
+`--task-status <ID> completed` → verify `blocked_by` resolved → `--task-status <next> in_progress`. Gates: PL once at Step A.5 before the loop, FN mid-loop at step 4.9 before FN delegation; all other intra-loop transitions unattended.
 
 ### Handle Error
 
@@ -259,7 +259,7 @@ Finish the atomic unit: complete the **current edit theme** (every file in the g
 
 1. Group edits by theme up front; each theme is indivisible.
 2. Yield only at a theme boundary.
-3. Under budget pressure mid-theme, checkpoint the remaining files (paths + pending edit) into `development-N.md` — never stop silently; resume from it next turn and clear it when the theme completes.
+3. Under budget pressure mid-theme, checkpoint the remaining files (paths + pending edit) into `<your artifact>` (your row's `metadata.artifact`) — never stop silently; resume from it next turn and clear it when the theme completes.
 
 Mirrors the DV "finish the atomic unit" principle in `skills/worktask/SKILL.md`.
 
@@ -279,7 +279,7 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>` (`skills/worktask/scripts/`). `<ID>` is your own ledger row (`DV0`, `DV1`, …) and `<your artifact>` the path that row's `metadata.artifact` names; pass both, because the fallback basename guess cannot see a stream suffix. `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. The call atomically patches `tasks.<ID>` plus the handoff edge from this artifact's `handoff:` frontmatter.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>`. `<ID>` is your own ledger row (`DV0`, `DV1`, …) and `<your artifact>` the path that row's `metadata.artifact` names; pass both, because the fallback basename guess cannot see a stream suffix. `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. The call atomically patches `tasks.<ID>` plus the handoff edge from this artifact's `handoff:` frontmatter.
 
 #### When the patch does not land
 
@@ -290,7 +290,7 @@ Exit 3 means your artifact is not on disk: write it and re-run, never continue a
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],

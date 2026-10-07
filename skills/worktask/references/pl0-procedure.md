@@ -139,8 +139,8 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp e
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Task()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
-| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Agent frontmatter `effort:` fixes the in-process tier and matches the matrix (`agent-effort-frontmatter.bats`; `stage-codes.md § Model alias notes`). A row's stamped `metadata.effort` deviating from that static tier is the condition the effort router acts on. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
+| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Agent()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
+| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Agent frontmatter `effort:` fixes the in-process tier and matches the matrix (`agent-effort-frontmatter.bats`; `stage-codes.md § Model alias notes`). The Step 6 `Agent()` call passes the stamped `metadata.effort` as `effort` (2.1.292), which outranks that static tier. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
 
 ##### Propagation fields — gates
 
@@ -196,7 +196,7 @@ Full propagation contract: `skills/agent-coordination/SKILL.md § metadata.skip_
 
 #### Optional dispatch metadata
 
-PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to the headless `claude -p --agent` recipe's flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above). Every agent file also carries a static `effort:` key next to `maxTurns:` (`skills/shared/stage-codes.md § Model alias notes`), which Claude Code applies in-process, so a stamped `metadata.effort` equal to that key needs no dispatch flag. A stamped value that differs from it is exactly the condition that routes the dispatch headless, since in-process `Task()` still has no effort parameter to carry a deviation.
+PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to the headless `claude -p --agent` recipe's flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above). Every agent file also carries a static `effort:` key next to `maxTurns:` (`skills/shared/stage-codes.md § Model alias notes`), which Claude Code applies only when a call passes no `effort`. The stamped value always rides the in-process `Agent()` call's `effort` parameter (2.1.292), which outranks that key; it goes headless only under the operator opt-in `CORPFLOW_HEADLESS_ROUTE=on`.
 
 ##### Default writer rules
 
@@ -554,14 +554,14 @@ Weighted-score the task description for design indicators:
 
 Flag gate: invoke `corpflow:designer` only under `--with-design` (`PL0.metadata.with_design == true`, stamped by `/worktask` Step 4); the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
 
-Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` requesting:
+Threshold met AND flag set ⇒ `Agent(subagent_type: "corpflow:designer")` requesting:
 1. UX Assessment, Design Scope, Technical Design, Pencil Mockups, Effort Estimate
 2. Mockups saved to `.context/designs/` as `mockup-[feature]-[screen]-[variant].pen`
 3. Critical states: default, error, empty, loading
 
 ##### Combined Output
 
-`<plan_file>` gets a Design Requirements section: Figma Design References (URLs + node descriptions → `.context/designs/figma-*.png`), Visual Mockups (`.context/designs/mockup-*.pen`), UX, UI Components, Accessibility.
+Designer writes `.context/designs/ux-assessment-N.md` and returns its path; PM merges it. `<plan_file>` gets a Design Requirements section: Figma Design References (URLs + node descriptions → `.context/designs/figma-*.png`), Visual Mockups (`.context/designs/mockup-*.pen`), UX, UI Components, Accessibility.
 
 ##### Placement guard (non-negotiable)
 

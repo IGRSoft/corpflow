@@ -85,3 +85,20 @@ EOF
   run grep -q 'brief-compose\.sh' commands/worktask.md
   assert_success
 }
+
+# The stage agent passes this tier to its primary delegate (agent-coordination § Effort on
+# nested delegation), so the brief must carry it next to the model.
+@test "brief: the stamped effort sits beside the model; a malformed one exits 2" {
+  cat > "$WD/.context/state.json" << EOF
+{"worktask_id":"bc","plan_file":".context/planning-0.md","run_index":0,
+ "tasks":{"DV0":{"metadata":{"stage":"DV","model":"opus","effort":"xhigh","run_index":0,
+   "workspace_path":"$WD"}}}}
+EOF
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" DV0 --state "$WD/.context/state.json" --orch-root "$WD"
+  assert_success
+  grep -A1 -x 'model: opus' <<< "$output" | grep -qx 'effort: xhigh'
+  jq '.tasks.DV0.metadata.effort = "bogus"' "$WD/.context/state.json" > "$WD/bad.json"
+  run --separate-stderr bash "$PLUGIN_ROOT/$SCRIPT" DV0 --state "$WD/bad.json" --orch-root "$WD"
+  assert_failure 2
+  assert_output ""
+}

@@ -314,7 +314,7 @@ audit rows, which `skills/agent-coordination/SKILL.md` binds as audit-only, neve
 ### SR/RE control layering
 
 For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the only
-control. Their platform-auditor delegates (e.g. `Task(system-developer:sys-security-auditor)`) hold
+control. Their platform-auditor delegates (e.g. `Agent(system-developer:sys-security-auditor)`) hold
 test-capable Bash grants of their own (`ctest`, `make`, …) that narrowing SR's/RE's own grant does not
 touch; the hook denies the delegate's leaf call via the same state.json stage resolution. Correct by
 design — but it means a regression in stage resolution is a complete loss of enforcement for SR/RE,

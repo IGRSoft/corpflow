@@ -2,7 +2,7 @@
 name: create-agent
 description: Create new agent definitions with proper structure, model selection, and best practices
 argument-hint: '<name> --purpose "<description>" [--model haiku|sonnet|opus] [--template minimal|standard|comprehensive] [--tools <preset|list>] [--stage <code>] [--output <path>]'
-allowed-tools: Read, Glob, Grep, Write
+allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/prompt-engineer.md
   - commands/optimize-agent.md
@@ -11,18 +11,19 @@ related:
 
 # Create Agent Command
 
-Generate a production-ready agent definition with the canonical frontmatter, a resolved model,
-and the required body sections.
+Generate a production-ready agent definition with the canonical frontmatter and the required body
+sections, plus its row in `skills/shared/stage-codes.md § Agent Model Matrix`, which holds the
+model and effort.
 
 ## Options
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--purpose <description>` | text | Agent purpose (required) |
-| `--model <tier>` | `haiku`, `sonnet`, `opus` | Model selection (default: auto-select) |
+| `--purpose <description>` | text | Agent purpose (required, no default) |
+| `--model <tier>` | `haiku`, `sonnet`, `opus` | Model cell of the new matrix row (default: § Model Auto-Selection) |
 | `--template <style>` | `minimal`, `standard`, `comprehensive` | Template style (default: `standard`) |
-| `--tools <preset\|list>` | § Tool Presets, or a comma-separated list | Tool access |
-| `--stage <code>` | PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR | Worktask stage integration |
+| `--tools <preset\|list>` | § Tool Presets, or a comma-separated list | Tool access (default: `standard` preset; the `minimal` template writes no `tools:` line) |
+| `--stage <code>` | PL, AR, TL, DV, DR, SR, QA, DC, RE, FN, ST, IR | Worktask stage integration (default: none, a support agent) |
 | `--output <path>` | path | Output path (default: `agents/<name>.md`) |
 
 ## Examples
@@ -37,11 +38,24 @@ and the required body sections.
 /create-agent "release-notary" --purpose "Notarization and stapling for macOS builds" --output agents/platform/release-notary.md
 ```
 
+## Output Format
+
+~~~markdown
+# Agent Created: <name>
+
+## Generated File — `agents/<name>.md`
+## Matrix Row — the `| <name> | <model> | <effort> |` row written to `stage-codes.md`, or `not written: <output path>`
+## Configuration — | Setting | Value | (Name, Model, Effort, Template, Tools, Stage)
+## Preview — generated frontmatter block + first 500 characters of the body
+## Model Selection Rationale — **Selected** + one-line reason; **Alternatives Considered**, one line per rejected tier
+## Next Steps — review the file, tighten the constraints for the stack, add domain examples, then `/optimize-agent agents/<name>.md --dry-run`
+~~~
+
 ## Templates
 
 | Section | minimal | standard (default) | comprehensive |
 |---|---|---|---|
-| Frontmatter | name, description | + tools | + tools |
+| Frontmatter | name, description, effort | + tools | + tools |
 | Constraints (DO NOT) | 3 items | 3-5 items | 5-7 items |
 | Purpose | basic | basic | expert purpose |
 | Behavioral traits, knowledge base | — | — | ✅ |
@@ -53,23 +67,17 @@ and the required body sections.
 | Completion Verification | — | — | optional (see § Completion Verification) |
 | Handoff Protocol + State Patch | — | stage owners only | stage owners only |
 
-## Output Format
-
-~~~markdown
-# Agent Created: <name>
-
-## Generated File — `agents/<name>.md`
-## Configuration — | Setting | Value | (Name, Model, Template, Tools, Stage)
-## Preview — generated frontmatter block + first 500 characters of the body
-## Model Selection Rationale — **Selected** + one-line reason; **Alternatives Considered**, one line per rejected tier
-## Next Steps — review the file, tighten the constraints for the stack, add domain examples, then `/optimize-agent agents/<name>.md --dry-run`
-~~~
-
 ## Model Auto-Selection
 
-Without `--model`, select from purpose keywords: procedural (format, convert, validate) → lowest
-tier, balanced (implement, review, design) → mid tier, complex reasoning (architect, optimize,
-research) → top tier.
+Without `--model`, select from purpose keywords: procedural (format, convert, validate) → `haiku`,
+balanced (implement, review, design) → `sonnet`, complex reasoning (architect, optimize, research)
+→ `opus`. Effort follows the model: `haiku` → `low`, `sonnet` → `medium`, `opus` → `high`.
+
+When the output is `agents/<name>.md`, Edit `skills/shared/stage-codes.md § Agent Model Matrix` to
+add `| <name> | <model> | <effort> |` in alphabetical order, and write the same effort into the
+frontmatter `effort:`. Any other `--output` path gets no row, because the matrix parser rejects a
+row with no `agents/<name>.md` behind it; § Output Format then records `not written` and Next Steps
+names the row to add after the file moves.
 
 Model tiers and stage→model mapping: see `skills/shared/model-selection.md` and
 `skills/shared/stage-codes.md` (canonical).
@@ -85,7 +93,7 @@ Model tiers and stage→model mapping: see `skills/shared/model-selection.md` an
 | orchestrator | Read, Glob, Grep, Write, Edit, Bash, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *) |
 | design | Read, Glob, Grep, Write, ToolSearch |
 
-Cross-plugin delegation appends to any preset: `--tools full,Task(apple-developer:ios-developer)`
+Cross-plugin delegation appends to any preset: `--tools full,Agent(apple-developer:ios-developer)`
 
 ## Agent Structure Guidelines
 
@@ -96,7 +104,7 @@ Canonical field order — every agent in `agents/` follows it:
 ```yaml
 ---
 name: agent-name
-description: Brief description for routing (1-2 sentences). Use PROACTIVELY for...
+description: Use PROACTIVELY for <trigger>. <Keyword sentence naming the role and domain>.
 color: blue
 version: 0.1.0
 maxTurns: 40
@@ -113,17 +121,17 @@ above the `tools:` line it explains and moves with it.
 
 #### Model and effort keys
 
-`model:` is not a frontmatter field: model selection stays a per-dispatch `Task()` argument
+`model:` is not a frontmatter field: model selection stays a per-dispatch `Agent()` argument
 (`skills/shared/stage-codes.md § Model alias notes`), resolved by `model-matrix-lib.sh`/`model_resolve`.
 `effort:` is required and equals the new agent's Effort cell in `§ Agent Model Matrix`
 (`stage-codes.md § Static effort and dispatch overrides`), so a newly-scaffolded agent needs a
-matrix row.
+matrix row, written by § Model Auto-Selection.
 
 ### Body sections
 
 | Section | Rule |
 |---|---|
-| `description` | Include "Use PROACTIVELY for..." to improve routing — e.g. "Database specialist for schema design. Use PROACTIVELY for query optimization or migration planning." |
+| `description` | Trigger first, per `agents/prompt-engineer.md § Description grammar` (G1, G2): `Use PROACTIVELY for <trigger>. <keyword sentence>.` — e.g. "Use PROACTIVELY for query optimization or migration planning. Database specialist for schema design." |
 | Purpose | Role, domain and boundaries, integration context. |
 | Worktask Integration | Stage code, state ledger integration, handoff protocols. |
 | Model fit | Write the body for the model this agent resolves to in `skills/shared/stage-codes.md § Agent Model Matrix`; `skills/shared/model-prompting.md` lists what each alias needs countered, and `commands/prompt-audit.md § Body rules 5-7` is the check. |

@@ -95,8 +95,8 @@ step4_payload() {
     || fail "megatask Step 3 no longer says why a subagent (SubagentStop monitor)"
   grant="$(sed -n 's/^allowed-tools: //p' "$PLUGIN_ROOT/$MEGATASK_DOC")"
   [ -n "$grant" ] || fail "$MEGATASK_DOC has no allowed-tools line"
-  printf '%s' "$grant" | grep -qE '(^|, )Task\(general-purpose\)(,|$)' \
-    || fail "$MEGATASK_DOC does not grant Task(general-purpose)"
+  printf '%s' "$grant" | grep -qE '(^|, )Agent\(general-purpose\)(,|$)' \
+    || fail "$MEGATASK_DOC does not grant Agent(general-purpose)"
   # The monitor the launch relies on must actually be on SubagentStop.
   jq -e '.hooks.SubagentStop[].hooks[].command | select(endswith("/hooks/megatask-monitor.sh"))' \
     "$PLUGIN_ROOT/.claude-plugin/plugin.json" >/dev/null \

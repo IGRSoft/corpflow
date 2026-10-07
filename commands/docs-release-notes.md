@@ -15,12 +15,12 @@ Generate release notes from completed work, git history, or worktask artifacts.
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
-| `--version <v>` | version string | Version these notes describe |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--version <v>` | version string | Version these notes describe (default: the `--to` tag, else `Unreleased`) |
 | `--from <tag>` / `--to <tag\|HEAD>` | git refs | Commit range to read (default: last tag → `HEAD`) |
-| `--from-commits` | — | Source content from git commit history |
-| `--from-worktask` | — | Source content from worktask artifacts |
+| `--from-commits` | — | Source content from git commit history (default: on when neither source flag is given) |
+| `--from-worktask` | — | Source content from worktask artifacts (default: on when neither source flag is given) |
 | `--format <type>` | `markdown`, `slack` | Output format (default: `markdown`) |
 | `--audience <who>` | `internal`, `external`, `all` | Which template to emit (default: `all`) |
 

@@ -35,11 +35,19 @@ bash_payload() {
   assert_success
 }
 
+@test "edge: a payload without effort records unknown, never \$CLAUDE_EFFORT" {
+  # A haiku subagent runs with no effort: its payload omits .effort while the env var still
+  # holds the tier the Agent call requested (observed at 2.1.292). Reading the env would
+  # record a tier that never ran.
+  run env CLAUDE_EFFORT=high CLAUDE_PROJECT_DIR="$WD" \
+    bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Write"}'
+  assert_success
+  run jq -e '.metadata.effort == "unknown"' "$WD/.context/logs/audit.jsonl"
+  assert_success
+}
+
 @test "edge: --kind override and absent ids fall back to placeholders" {
-  # Pin CLAUDE_EFFORT OFF so the placeholder is deterministic regardless of ambient env:
-  # the script falls back .effort.level // env.CLAUDE_EFFORT // "unknown", so with no
-  # .effort in the payload and CLAUDE_EFFORT unset the placeholder is "unknown".
-  run env -u CLAUDE_EFFORT CLAUDE_PROJECT_DIR="$WD" \
+  run env CLAUDE_PROJECT_DIR="$WD" \
     bash "$PLUGIN_ROOT/$SCRIPT" --kind mcp <<< '{"tool_name":"X"}'
   assert_success
   run jq -e '

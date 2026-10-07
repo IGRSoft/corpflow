@@ -1,14 +1,14 @@
 # Headless Dispatch — `claude agents` Flag Bridge
 
-The contract mapping `task.metadata` to `claude -p --agent` CLI flags, for external orchestrators (CI runners, batch schedulers, the user's shell, and the corpflow orchestrator's own headless route) invoking a worktask stage outside the in-process `Task()` path.
+The contract mapping `task.metadata` to `claude -p --agent` CLI flags, for external orchestrators (CI runners, batch schedulers, the user's shell, and the corpflow orchestrator's own headless route) invoking a worktask stage outside the in-process `Agent()` path.
 
-The corpflow orchestrator dispatches every stage in-process via `Task({ subagent_type, model, prompt })`; the flags below are honoured only by a CLI dispatch. PL0 populates the fields anyway, so every dispatcher — in-process or CLI — reads one source of truth.
+The corpflow orchestrator dispatches every stage in-process via `Agent({ subagent_type, model, effort, prompt })` by default; the other flags below are honoured only by a CLI dispatch. PL0 populates the fields anyway, so every dispatcher — in-process or CLI — reads one source of truth.
 
 ## Translation Table
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `agent` | `--agent <name>` | string | N/A (in-process uses `Task({subagent_type})`) | overrides the session's `settings.json` `agent` default; e.g. force `corpflow:developer` for a one-shot run |
+| `agent` | `--agent <name>` | string | N/A (in-process uses `Agent({subagent_type})`) | overrides the session's `settings.json` `agent` default; e.g. force `corpflow:developer` for a one-shot run |
 | `--all` (listing flag, not a `metadata` key) | `claude agents --all` | bool | N/A (listing only) | includes **completed** sessions in `claude agents [--json]` output; pair with `state` to tell `done` apart from `running`/`blocked` |
 
 ### Translation table — model & effort
@@ -17,7 +17,7 @@ The corpflow orchestrator dispatches every stage in-process via `Task({ subagent
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `model` | `--model <alias>` | string | **Yes** (passed to `Task()`) | DV→`opus`; QA/FN→`sonnet` |
+| `model` | `--model <alias>` | string | **Yes** (passed to `Agent()`) | DV→`opus`; QA/FN→`sonnet` |
 
 A managed `availableModels` allowlist also constrains subagent overrides, and `enforceAvailableModels` the Default model, so a requested id may silently resolve to another. Benchmark-parity snapshots use pinned ids (§ Alias note); audit rather than assume.
 
@@ -25,13 +25,13 @@ A managed `availableModels` allowlist also constrains subagent overrides, and `e
 
 | `task.metadata` key | CLI flag | Type | Honoured in-process? | Stage examples |
 |---|---|---|---|---|
-| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | Advisory | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low` |
+| `effort` | `--effort <tier>` | `low\|medium\|high\|xhigh\|max` | **Yes** (`Agent` `effort`, 2.1.292) | DV complex→`xhigh`; DR→`high`; FN→`medium`; RE→`low` |
 
 `claude agents --effort` also accepts `ultracode`, which is not a plugin `metadata.effort` tier; the plugin enum stays `low/medium/high/xhigh/max`. In `/effort`, Ultracode is its own toggle (Tab, or `/effort ultracode [on|off]`) that no longer forces `xhigh` and stays on at any level, so an operator who has it on still runs the tier the stage passes. A managed or user `maxEffortLevel` caps effort on every provider — a tier pinned above the cap runs at the cap with no error.
 
 #### Effort route and transport
 
-The route decision that chooses whether a tier reaches this surface at all lives in `skills/worktask/scripts/effort-route.sh` (architecture-1.md ADR-3): headless iff the stamped tier differs from the target agent's own `effort:` frontmatter tier, in either direction. Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. `effort_transport` carries which of three surfaces actually applied the tier — `dispatch-flag` (this CLI surface), `frontmatter` (in-process, the agent's own file), or `none` (in-process, no frontmatter to fall back to). `commands/worktask.md § Step C.0a` is the one canonical table.
+The route decision lives in `skills/worktask/scripts/effort-route.sh` (architecture-1.md ADR-3). Since 2.1.292 the default is in-process, with the tier on the `Agent` tool's `effort` parameter. This CLI surface is the opt-in: `CORPFLOW_HEADLESS_ROUTE=on` sends every non-haiku stage headless. `--effort` outranks the agent's own `effort:` frontmatter here too (probed at 2.1.292). `effort_transport` names the surface that applied the tier: `agent-param` (in-process), `dispatch-flag` (this CLI surface), `frontmatter` (no `effort` passed: an unstamped row, or the fallback after a headless `warn`) or `none` (haiku). `commands/worktask.md § Step C.0a` is the one canonical table.
 
 ### Translation table — permission, workspace & MCP
 
@@ -52,16 +52,16 @@ The route decision that chooses whether a tier reaches this surface at all lives
 
 ### Advisory vs audited legend
 
-"Advisory" = recorded on the task and read by external dispatchers, but the in-process `Task()` tool has no equivalent parameter. "Audited" = the orchestrator writes an `audit.jsonl` line when the field is set, though it cannot enforce the mode on a `Task()` child.
+"Advisory" = recorded on the task and read by external dispatchers, but the in-process `Agent()` tool has no equivalent parameter. `effort` left this class in 2.1.292. "Audited" = the orchestrator writes an `audit.jsonl` line when the field is set, though it cannot enforce the mode on an `Agent()` child.
 
 ## Per-Stage Recommended Flag Sets
 
-One canonical invocation; substitute the per-stage row plus concrete IDs from `task.metadata` at call time. `claude agents run` is not a subcommand and there is no top-level `--cwd` (§ Dispatch surface drift), so the real recipe `cd`s into the worktree first and dispatches through the top-level print-mode surface — re-derived and implemented in `skills/worktask/scripts/headless-dispatch.sh`, which validates every field against a closed allowlist before building this argv array. The tier is carried by BOTH `--effort` and the child's own `CLAUDE_CODE_EFFORT_LEVEL` env var — the env var is what the documented precedence actually honours, the flag is there for audit readability — and `WORKSPACE_ROOT` names the orchestrator's ledger root, never the worktree the child's cwd points at:
+One canonical invocation; substitute the per-stage row plus concrete IDs from `task.metadata` at call time. `claude agents run` is not a subcommand and there is no top-level `--cwd` (§ Dispatch surface drift), so the real recipe `cd`s into the worktree first and dispatches through the top-level print-mode surface — re-derived and implemented in `skills/worktask/scripts/headless-dispatch.sh`, which validates every field against a closed allowlist before building this argv array. The tier is carried by `--effort` alone, and `WORKSPACE_ROOT` names the orchestrator's ledger root, never the worktree the child's cwd points at:
 
 ### Print-mode invocation
 
 ```bash
-cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
+cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" \
   claude -p --agent "$AGENT" --model "$MODEL" --effort "$EFFORT" \
   --permission-mode "$MODE" --permission-prompts none \
   --output-format stream-json --verbose < "$PROMPT"
@@ -128,6 +128,10 @@ With `CLAUDE_CODE_FORK_SUBAGENT=1`, a fork runs under its parent's permission mo
 
 In unattended sessions (`-p`, Agent SDK, CI, cloud) a background Bash or PowerShell command stops at its `timeout` (default 30 min, max 2 h) and Claude is notified (2.1.285; interactive sessions have no limit since 2.1.288). A long background job in a `-p` run therefore sets `timeout` explicitly, and a runner still stops any command that outlives its stage. `--bare` connects only the MCP servers named on the command line, sends no system reminders, starts no background tasks and skips hooks (2.1.286); never dispatch a stage with it, because the audit rows come from the child's hooks. `--permission-prompt-tool` receives a background subagent's permission request instead of auto-denying it (2.1.285).
 
+#### Print-mode runners — exit waits, MCP start-up and overload backoff
+
+A one-shot `claude -p` or Agent SDK run now waits for a background command and a scheduled wakeup after the final result, instead of stopping the command 5 s later and dropping the wakeup (2.1.292). A runner's exit therefore waits for those too, so bound them with `timeout`. The first turn no longer waits for HTTP and SSE MCP servers to answer `resources/list`. A runner that keeps hitting 529 overloads can lengthen the retry backoff with `CLAUDE_CODE_OVERLOADED_RETRY_BASE_DELAY_MS`.
+
 ## Live Session Discovery
 
 `claude agents --json` returns a JSON array of currently live Claude sessions — poll it to discover what is already running, complementing the dispatch table above, which covers how to start something. Canonical orchestrator shell-out, scoped to one worktask track:
@@ -174,7 +178,7 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 #### Observed drift — interactive rows
 
-Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.291, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
+Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.292, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
 
 #### Open: dispatched-agent and teammate rows
 
@@ -182,7 +186,7 @@ Unconfirmed whether rows with `kind` ≠ `interactive` keep the snake_case basel
 
 #### Dispatch surface drift
 
-`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.291). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
+`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.292). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
 
 #### Defensive jq pattern
 
@@ -205,7 +209,7 @@ On a baseline shift (new required field, renamed field, type change), the next c
 
 #### Child tool grants: `--tools`, MCP denials & WebSearch
 
-`--tools` listing `Grep`/`Glob` wires up dedicated native search tools rather than shelling out — relevant only to a runner hand-building the `--tools` set; the in-process `Task()` path inherits agent-frontmatter `tools:` unchanged. A subagent's `disallowedTools` honors MCP server-level specs (`mcp__server`, `mcp__*`), so a cross-plugin dispatch can deny a whole server to a child. `WebSearch` works inside subagents (~200 calls/session, `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` tunes it). Auth-capable MCP servers hide auth-stub tools from headless / SDK runs.
+`--tools` listing `Grep`/`Glob` wires up dedicated native search tools rather than shelling out — relevant only to a runner hand-building the `--tools` set; the in-process `Agent()` path inherits agent-frontmatter `tools:` unchanged. A subagent's `disallowedTools` honors MCP server-level specs (`mcp__server`, `mcp__*`), so a cross-plugin dispatch can deny a whole server to a child. `WebSearch` works inside subagents (~200 calls/session, `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` tunes it). Auth-capable MCP servers hide auth-stub tools from headless / SDK runs.
 
 ## Session Lifecycle CLI (attach / logs / stop / respawn / rm)
 
@@ -221,7 +225,7 @@ These are operator tools for human debugging. The orchestrator's reattach path s
 
 ## Permission-Mode Pinning (in-process)
 
-When the orchestrator reads `task.metadata.permission_mode === "default"` for a stage, it does not propagate `--dangerously-skip-permissions` or any equivalent shorthand into descendant `Task()` calls or nested `Bash` invocations for that stage, and it appends one `audit.jsonl` line:
+When the orchestrator reads `task.metadata.permission_mode === "default"` for a stage, it does not propagate `--dangerously-skip-permissions` or any equivalent shorthand into descendant `Agent()` calls or nested `Bash` invocations for that stage, and it appends one `audit.jsonl` line:
 
 ```json
 {
@@ -234,7 +238,11 @@ When the orchestrator reads `task.metadata.permission_mode === "default"` for a 
 }
 ```
 
-Subagents inherit the parent session's permission mode (the Task tool's deprecated `mode` parameter is ignored), so pinning is about not widening the inherited mode — the audit line records that the boundary held. Every other flag above is advisory in-process and takes effect only on a CLI dispatch.
+Subagents inherit the parent session's permission mode (the Agent tool's deprecated `mode` parameter is ignored), so pinning is about not widening the inherited mode — the audit line records that the boundary held. Apart from `model` and `effort`, every other flag above is advisory in-process and takes effect only on a CLI dispatch.
+
+### Subagent `permissionMode: auto`
+
+A subagent definition with `permissionMode: auto` no longer enters auto mode when auto is unavailable — off in settings, tripped by the circuit breaker, or not supported by the model (2.1.292). It runs in the inherited mode instead.
 
 ## External-Dispatch Audit Hook
 

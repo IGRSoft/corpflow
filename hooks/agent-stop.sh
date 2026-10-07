@@ -45,7 +45,8 @@ ROW=$(printf '%s' "$PAYLOAD" | jq -c \
     result: "ok",
     metadata: {
       stage: $stage,
-      effort: (.effort.level // env.CLAUDE_EFFORT // "unknown"),
+      # Payload only: $CLAUDE_EFFORT keeps the requested tier even on haiku, which runs none.
+      effort: (.effort.level // "unknown"),
       parent_agent_id: (.parent_agent_id // "none"),
       background_tasks_count: ((.background_tasks // []) | length),
       background_task_ids: ((.background_tasks // []) | map(.id // .task_id // "unknown")),

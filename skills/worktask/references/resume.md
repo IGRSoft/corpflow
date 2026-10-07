@@ -361,7 +361,7 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 
 ### Step 0 notes — scheduled tasks & agents-view replies
 
-   Scheduled tasks and `/loop` wakeups come back after a compaction or resume, and a foreground-set task fires after a `/background` hand-off; a recurring one no longer runs an extra time on resume, respawn or fork. A background session waiting on a scheduled wakeup is kept through updates and low memory.
+   Scheduled tasks and `/loop` wakeups come back after a compaction or resume, and a foreground-set task fires after a `/background` hand-off; a recurring one no longer runs an extra time on resume, respawn or fork. A background session waiting on a scheduled wakeup is kept through updates and low memory. Saved tasks created after `/resume`, `/branch` or `/clear` now fire, and a background session's `/loop` survives a process restart (2.1.292). Plan mode is restored on resume.
 
    A reply sent from `claude agents` arrives as a queued message and is retried for up to 12 s while a crashed session restarts. A slash command or answer it could not deliver is no longer saved and replayed on the next restart. A reply to a session parked on a permission prompt never approves the pending command.
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env bats
 # Contract test for cross-plugin references — every `/<plugin>:<command>` and
-# `Task(<plugin>:<agent>)` this plugin names must resolve to a real file in that
-# sibling plugin. A dangling reference is invisible until a worktask actually
+# `Agent(<plugin>:<agent>)` this plugin names must resolve to a real file in that sibling
+# plugin. A dangling reference is invisible until a worktask actually
 # routes to it, at which point the stage has no build gate (or no agent) and the
 # failure surfaces far from its cause.
 #
 # Caught in practice: the DV/DR/QA build-delegation table promised
 # `/ai-engineer:build-test` while ai-engineer shipped no such command, and an
-# android agent rename left three `Task(android-developer:*)` grants pointing at
+# android agent rename left three `android-developer:*` grants pointing at
 # files that no longer existed. Both passed every other check in the suite.
 #
 # Sibling plugins are separate git repos checked out next to this one. Previously
@@ -51,7 +51,7 @@ report_sibling_coverage() {
 SIBLINGS="apple-developer system-developer android-developer frontend-developer backend-developer ai-engineer"
 
 CMD_PATTERN='/(apple|system|android|frontend|backend)-developer:[a-z][a-z0-9-]*|/ai-engineer:[a-z][a-z0-9-]*'
-TASK_PATTERN='Task\((apple|system|android|frontend|backend)-developer:[a-z][a-z0-9-]*\)|Task\(ai-engineer:[a-z][a-z0-9-]*\)'
+AGENT_PATTERN='Agent\((apple|system|android|frontend|backend)-developer:[a-z][a-z0-9-]*\)|Agent\(ai-engineer:[a-z][a-z0-9-]*\)'
 
 # Emit "<plugin>:<name>" for each distinct reference of the given shape in $1.
 collect_refs() {
@@ -59,7 +59,7 @@ collect_refs() {
   ( cd "$root" || return 1
     git ls-files -z -- 'agents/*.md' 'commands/*.md' 'skills/*.md' 'skills/**/*.md' \
       | xargs -0 grep -hoE "$pattern" 2>/dev/null \
-      | sed -E 's/^\///; s/^Task\(//; s/\)$//' \
+      | sed -E 's/^\///; s/^Agent\(//; s/\)$//' \
       | LC_ALL=C sort -u )
 }
 
@@ -69,7 +69,7 @@ collect_refs() {
 # `checked_siblings` below is what keeps that from silently emptying the check.
 unresolved_refs() {
   local root="$1" sibroot="$2" kind="$3" pattern ref plug name
-  if [ "$kind" = "command" ]; then pattern="$CMD_PATTERN"; else pattern="$TASK_PATTERN"; fi
+  if [ "$kind" = "command" ]; then pattern="$CMD_PATTERN"; else pattern="$AGENT_PATTERN"; fi
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     plug="${ref%%:*}"; name="${ref##*:}"
@@ -99,8 +99,8 @@ mk_plugin_layout() {
   root="$(mk_tmpworkdir)"
   self="$root/corpflow"
   mk_git_fixture --dir "$self" \
-    --file 'agents/developer.md:Build via /apple-developer:build-test.\nGrant: Task(system-developer:python-developer)\n' \
-    --file 'commands/worktask.md:Routes to Task(apple-developer:ios-developer).\n' >/dev/null
+    --file 'agents/developer.md:Build via /apple-developer:build-test.\nGrant: Agent(system-developer:python-developer)\n' \
+    --file 'commands/worktask.md:Routes to Agent(apple-developer:ios-developer).\n' >/dev/null
   mkdir -p "$root/apple-developer/commands" "$root/apple-developer/agents" \
            "$root/system-developer/agents"
   : > "$root/apple-developer/commands/build-test.md"
@@ -128,7 +128,7 @@ mk_plugin_layout() {
   assert_output --partial "apple-developer:build-test"
 }
 
-@test "resolver: a dangling Task(<plugin>:<agent>) grant is named" {
+@test "resolver: a dangling Agent(<plugin>:<agent>) grant is named" {
   local root
   root="$(mk_plugin_layout)"
   rm -f "$root/system-developer/agents/python-developer.md"
@@ -157,7 +157,7 @@ mk_plugin_layout() {
   # regressed, not that the repo became clean.
   refs="$(collect_refs "$PLUGIN_ROOT" "$CMD_PATTERN")"
   [ -n "$refs" ]
-  refs="$(collect_refs "$PLUGIN_ROOT" "$TASK_PATTERN")"
+  refs="$(collect_refs "$PLUGIN_ROOT" "$AGENT_PATTERN")"
   [ -n "$refs" ]
   run unresolved_refs "$PLUGIN_ROOT" "$sibroot" command
   assert_output ""
@@ -167,7 +167,7 @@ mk_plugin_layout() {
 }
 
 @test "contract: routing-matrix default targets resolve against present siblings" {
-  # The stage agents now carry a bare Task grant, so skills/shared/routing-matrix.md
+  # The stage agents now carry a bare Agent grant, so skills/shared/routing-matrix.md
   # is the canonical list of intended targets — resolve each default target the way
   # the old frontmatter grants used to be resolved.
   local sibroot ref plug name missing=""

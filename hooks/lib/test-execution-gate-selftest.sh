@@ -57,22 +57,22 @@
   [ -z "$_o4" ] || { echo "test-execution-gate: self-test FAIL (no state.json)"; _fail=1; }
   [ ! -f "$_ctx4/logs/audit.jsonl" ] || { echo "test-execution-gate: self-test FAIL (no state.json wrote a row)"; _fail=1; }
 
-  # Task carrying ban text -> allow, observe-only row, never deny
+  # Agent carrying ban text -> allow, observe-only row, never deny
   # (a prose-matching deny here would refuse to dispatch this very policy)
   _ctx5="$_tmp/task/.context"; mkdir -p "$_ctx5"
   printf '{"tasks":{"DR0":{"status":"in_progress"}}}' > "$_ctx5/state.json"
-  _p5='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
+  _p5='{"tool_name":"Agent","tool_input":{"subagent_type":"corpflow:developer","prompt":"Never run bats or pytest outside DV/QA"}}'
   _o5=$(run_gate "$_p5" "$_ctx5")
-  [ -z "$_o5" ] || { echo "test-execution-gate: self-test FAIL (Task must never deny)"; _fail=1; }
+  [ -z "$_o5" ] || { echo "test-execution-gate: self-test FAIL (Agent must never deny)"; _fail=1; }
   tail -n 1 "$_ctx5/logs/audit.jsonl" 2>/dev/null | jq -e '.action == "test_delegation_observed"' >/dev/null 2>&1 \
-    || { echo "test-execution-gate: self-test FAIL (Task observe row)"; _fail=1; }
+    || { echo "test-execution-gate: self-test FAIL (Agent observe row)"; _fail=1; }
 
-  # Regression: Task dispatch with NO .context/ at all -> zero side effects
+  # Regression: Agent dispatch with NO .context/ at all -> zero side effects
   # (no worktask in flight means nothing should be created or logged).
   _ctx5b="$_tmp/task-no-ctx/.context"   # deliberately NOT created
-  _o5b=$(run_gate '{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change"}}' "$_ctx5b")
-  [ -z "$_o5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx must be silent)"; _fail=1; }
-  [ ! -d "$_ctx5b" ] || { echo "test-execution-gate: self-test FAIL (Task no-ctx created .context/)"; _fail=1; }
+  _o5b=$(run_gate '{"tool_name":"Agent","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change"}}' "$_ctx5b")
+  [ -z "$_o5b" ] || { echo "test-execution-gate: self-test FAIL (Agent no-ctx must be silent)"; _fail=1; }
+  [ ! -d "$_ctx5b" ] || { echo "test-execution-gate: self-test FAIL (Agent no-ctx created .context/)"; _fail=1; }
 
   # command_head only, never the full command, in a deny's audit row.
   _ctx6="$_tmp/redact/.context"; mkdir -p "$_ctx6"

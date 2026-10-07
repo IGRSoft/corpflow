@@ -196,7 +196,7 @@ The orchestrator's next turn reads the newest `post-compact-*.json`, follows its
 On any compaction signal — sudden loss of earlier context, an explicit `/compact`, or a `PostCompact` pointer file — before the next action:
 
 1. Re-read `.context/state.json` and the active stage artifact. The files are the source of truth; where a fresh read contradicts what you remember, follow the file.
-2. Restate the active stage's constraints and acceptance criteria before the next edit, so a requirement dropped by compaction resurfaces.
+2. Before the next edit, restate the active stage's constraints, restating every acceptance-criterion ID listed in the active stage artifact, so a requirement dropped by compaction resurfaces.
 
 Write decisions into files as they are made, so compaction has nothing load-bearing left to drop.
 

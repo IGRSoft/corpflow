@@ -122,7 +122,7 @@ list: `commands/create-agent.md § Handoff Protocol`.
 
 The Model column uses aliases (`opus`, `sonnet`, `haiku`); a full model id would also be valid,
 but aliases stay portable across providers. No agent file carries its own `model:` key — model
-selection stays a per-dispatch `Task()` argument (sw-PL1-1, `planning-1.md#elicitation-sweep`).
+selection stays a per-dispatch `Agent()` argument (sw-PL1-1, `planning-1.md#elicitation-sweep`).
 
 #### Static effort and dispatch overrides
 
@@ -131,8 +131,9 @@ the matrix stays the only place a tier is *decided*, the file is where Claude Co
 static one from, and a parity test holds the two together
 (`tests/shell/worktask/agent-effort-frontmatter.bats`). A per-dispatch deviation from that static
 tier (a default-writer stamp, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override)
-routes headless instead of relying on an in-process advisory flag —
-`skills/agent-coordination/references/headless-dispatch.md § Translation table — model & effort`.
+rides the `Agent` tool's `effort` parameter in-process (2.1.292), or routes headless when the
+operator opts in — `skills/agent-coordination/references/headless-dispatch.md § Effort route and
+transport`.
 Alias resolution, the Fable 5 credit gate, managed-allowlist resolution and the effort
 precedence chain are canonical in `skills/shared/model-selection.md § Effort frontmatter and
 caps`.

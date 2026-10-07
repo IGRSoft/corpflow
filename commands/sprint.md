@@ -17,13 +17,15 @@ Plan sprint with capacity analysis, task breakdown, and resource allocation.
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `<sprint name or number>` | text | Sprint ID for the plan title (`Sprint Plan: Sprint {ID}`) |
 | `--capacity <points>` | — | Team capacity in story points |
 | `--from-backlog <file>` | — | Import items from a backlog file |
 | `--duration <weeks>` | `1`, `2`, `3`, `4` | Sprint length in weeks (default: `2`) |
 | `--export` | — | Also write the plan to `.context/sprint-<ID>.md` (`<ID>` = the sprint name or number, else the start date `YYYYMMDD`), the only file this command creates |
+
+## Examples
 
 ```
 /sprint [<sprint name or number>] [--capacity <points>] [--from-backlog <file>] [--duration 1|2|3|4] [--export]

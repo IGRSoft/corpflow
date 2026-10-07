@@ -14,13 +14,15 @@ Audit documentation for gaps, outdated content, and quality issues.
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--path <dir>` | any directory | Audit that subtree only (default: repo root) |
 | `--type <type>` | `code`, `readme`, `api`, `architecture` | Restrict to one doc type (default: all four) |
 | `--scope <scope>` | `full`, `section` | Whole-file audit vs. the addressed section only (default: `full`) |
 | `--fix` | — | Apply the mechanical fixes listed under Auto-Fix Available, in place, to files this run already read |
 | `--report` | — | Emit every report section and write it to `.context/audits/docs-audit-<YYYYMMDD-HHMMSS>.md`, the only file this command creates; without it, emit Summary + Critical Issues only |
+
+## Examples
 
 ```
 /docs-audit [--path <dir>] [--type code|readme|api|architecture] [--scope full|section] [--fix] [--report]

@@ -55,7 +55,7 @@ normalize_tool() {
   fi
   jq --arg patch_path "$absolute_path" '
     if .tool_name == "spawn_agent" then
-      .tool_name = "Task"
+      .tool_name = "Agent"
       | .tool_input = ((.tool_input // {}) as $i
           | {subagent_type: ($i.task_name // "codex-agent"), prompt: ($i.message // "")})
     elif .tool_name == "apply_patch" then

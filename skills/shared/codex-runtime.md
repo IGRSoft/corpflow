@@ -22,7 +22,7 @@ write boundaries, and output contract. Translate only the host operations:
 
 | Canonical Claude operation | Codex operation |
 |---|---|
-| `Task(...)` | `spawn_agent` with `fork_turns: "none"` |
+| `Agent(...)` | `spawn_agent` with `fork_turns: "none"` |
 | `TaskStop(id)` | `interrupt_agent` |
 | `ListAgents()` | `list_agents` |
 | `SendMessage(id, text)` | `send_message`; use `followup_task` when an idle agent must run again |

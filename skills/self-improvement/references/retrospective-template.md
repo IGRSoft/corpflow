@@ -39,7 +39,7 @@ One bullet per diff hunk: path, line range, category, one-line summary. Detail b
 
 ## Section 3 — Proposed Updates (mandatory if any in-scope change)
 
-Numbered checklist. **Each item is independently approvable** — the orchestrator passes only the ticked boxes on, each to the agent its `Enforcement:` form names (`SKILL.md § Hand-off to the applying agent`).
+Numbered checklist. **Each item is independently approvable** — the orchestrator passes only the ticked boxes on, each to the agent its `Enforcement:` form names (`SKILL.md § Handoff to the applying agent`).
 
 **Ordering:** `confidence desc`, then `category`, then target path asc — high-confidence items first, so the user approves the strongest signals quickly.
 

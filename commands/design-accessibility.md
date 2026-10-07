@@ -16,9 +16,11 @@ Accessibility audit of a screen, component, or the entire application against WC
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--level` | `A`, `AA`, `AAA` | WCAG conformance level (default: AA) |
-| `--platform` | `apple`, `android`, `web`, `all` | Target platform (default: all) |
-| `--scope` | `quick`, `standard`, `comprehensive` | Audit scope (default: standard) |
+| `--level <level>` | `A`, `AA`, `AAA` | WCAG conformance level (default: `AA`) |
+| `--platform <p>` | `apple`, `android`, `web`, `all` | Target platform (default: `all`) |
+| `--scope <scope>` | `quick`, `standard`, `comprehensive` | Audit scope (default: `standard`) |
+
+## Examples
 
 ```
 /design-accessibility [<screen, component, or app path>] [--level A|AA|AAA] [--platform apple|android|web|all] [--scope quick|standard|comprehensive]
@@ -26,33 +28,6 @@ Accessibility audit of a screen, component, or the entire application against WC
 /design-accessibility "Navigation component" --level AAA
 /design-accessibility --scope comprehensive --platform apple
 ```
-
-## Procedure
-
-Audit the target against the WCAG success criteria at `--level`, the platform guidelines, and
-assistive-technology support, then emit every § Output Format section. Every § Audit Categories row,
-plus every § Platform-Specific Checks row `--platform` selects, carries a verdict — pass, an issue,
-or `not applicable: <reason>` — and every issue names the WCAG 2.2 success criterion it fails, its
-severity, and the remediation. An unscored row means the audit is unfinished.
-
-## Audit Categories
-
-| Category | Checks |
-|----------|--------|
-| Perceivable | Text alternatives for images; captions and transcripts; color contrast ratios; resize and reflow support |
-| Operable | Keyboard accessibility; touch target sizes (platform minimum — see Common Issues Reference); focus management; navigation consistency |
-| Understandable | Readable content; predictable behavior; input assistance; error identification |
-| Robust | Assistive technology compatibility; valid markup/implementation; status messages |
-
-## Platform-Specific Checks
-
-Run only the platforms `--platform` selects; `all` runs every row.
-
-| Platform | Checks |
-|----------|--------|
-| Apple | VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Switch Control compatibility |
-| Android | TalkBack support (announcements, custom actions, live regions); `contentDescription` on every non-decorative image and icon-only control; focus order and traversal (`accessibilityTraversalBefore` / `After`); Compose `semantics {}` on custom composables (merged vs. cleared); font scale and display size (`sp` for text, no fixed-`dp` type) |
-| Web | Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators |
 
 ## Output Format
 
@@ -116,6 +91,33 @@ One markdown report; the three blocks below are one continuous document.
 - [ ] Schedule follow-up audit
 - [ ] Update accessibility documentation
 ```
+
+## Procedure
+
+Audit the target against the WCAG success criteria at `--level`, the platform guidelines, and
+assistive-technology support, then emit every § Output Format section. Every § Audit Categories row,
+plus every § Platform-Specific Checks row `--platform` selects, carries a verdict — pass, an issue,
+or `not applicable: <reason>` — and every issue names the WCAG 2.2 success criterion it fails, its
+severity, and the remediation. An unscored row means the audit is unfinished.
+
+## Audit Categories
+
+| Category | Checks |
+|----------|--------|
+| Perceivable | Text alternatives for images; captions and transcripts; color contrast ratios; resize and reflow support |
+| Operable | Keyboard accessibility; touch target sizes (platform minimum — see Common Issues Reference); focus management; navigation consistency |
+| Understandable | Readable content; predictable behavior; input assistance; error identification |
+| Robust | Assistive technology compatibility; valid markup/implementation; status messages |
+
+## Platform-Specific Checks
+
+Run only the platforms `--platform` selects; `all` runs every row.
+
+| Platform | Checks |
+|----------|--------|
+| Apple | VoiceOver support; Dynamic Type; Reduce Motion; Bold Text; Increase Contrast; Switch Control compatibility |
+| Android | TalkBack support (announcements, custom actions, live regions); `contentDescription` on every non-decorative image and icon-only control; focus order and traversal (`accessibilityTraversalBefore` / `After`); Compose `semantics {}` on custom composables (merged vs. cleared); font scale and display size (`sp` for text, no fixed-`dp` type) |
+| Web | Screen reader compatibility; keyboard navigation; ARIA implementation; focus indicators |
 
 ## Common Issues Reference
 

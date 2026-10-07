@@ -1,7 +1,7 @@
 ---
 name: arch-debt
 description: Analyze, document, and prioritize technical debt in the codebase
-argument-hint: '[--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security] [--platform <p>]'
+argument-hint: '[--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security]'
 allowed-tools: Read, Glob, Grep, Write, Edit
 related:
   - agents/software-architector.md
@@ -23,16 +23,15 @@ Analyze, document, and prioritize technical debt in the codebase. Analysis is th
 | `--report` | — | Write the full tech debt report to `.context/audits/arch-debt-<YYYYMMDD-HHMMSS>.md` |
 | `--prioritize` | — | Re-prioritize existing debt in place, in the register `.context/audits/tech-debt.md` |
 | `--category <c>` | `code`, `architecture`, `testing`, `docs`, `security` | Filter by category (default: all) |
-| `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`) |
 
 ## Examples
 
 ```
-/arch-debt [--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security] [--platform <p>]
+/arch-debt [--path <dir>] [--add "<description>"] [--report] [--prioritize] [--category code|architecture|testing|docs|security]
 /arch-debt
 /arch-debt --path src/legacy --prioritize
 /arch-debt --add "Migrate from callbacks to async/await in api module"
-/arch-debt --report --category security --platform apple
+/arch-debt --report --category security
 ```
 
 ## Output Format

@@ -14,13 +14,15 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--path <dir>` | any directory | Analyze that subtree only (default: entire project) |
 | `--threshold <n>` | percentage | Coverage target (default: 80) |
 | `--report` | — | Write a detailed markdown summary to `.context/audits/test-coverage-<YYYYMMDD-HHMMSS>.md`, linking the toolchain's own coverage artifact; the only file this command creates |
 | `--critical-only` | — | Focus on critical/high-risk areas |
 | `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`; detected per `skills/shared/platform-detection.md`) |
+
+## Examples
 
 ```
 /test-coverage [--path <dir>] [--threshold <n>] [--report] [--critical-only] [--platform <p>]
@@ -28,13 +30,6 @@ Analyze test coverage gaps and generate recommendations for improving test quali
 /test-coverage --path src/auth --threshold 90 --report
 /test-coverage --critical-only --platform apple
 ```
-
-## Running the suite
-
-Coverage numbers need a run. Invoke the detected platform's `/<plugin>:build-test` with `Skill`; it
-knows the repo's build system, coverage flags, and report location. Fall back to the scoped runners in
-`allowed-tools` only when no plugin covers the repo, and pick the runner from the repo, not by
-assuming Swift.
 
 ## Output Format
 
@@ -156,3 +151,10 @@ environment, evals with no recorded threshold.
 | Integration | <e.g. Testcontainers / Robolectric / MSW> | <actual> | ✅ |
 | UI / E2E | <e.g. Playwright / XCUITest / Compose UI test> | <actual> | ✅ |
 ```
+
+## Running the suite
+
+Coverage numbers need a run. Invoke the detected platform's `/<plugin>:build-test` with `Skill`; it
+knows the repo's build system, coverage flags, and report location. Fall back to the scoped runners in
+`allowed-tools` only when no plugin covers the repo, and pick the runner from the repo, not by
+assuming Swift.

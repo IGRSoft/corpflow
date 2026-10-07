@@ -143,7 +143,8 @@ build_row() {
       metadata: ({
         kind: $kind,
         duration_ms: ((.duration_ms // 0) | tonumber? // 0),
-        effort: (.effort.level // env.CLAUDE_EFFORT // "unknown"),
+        # Payload only: $CLAUDE_EFFORT keeps the requested tier even on haiku, which runs none.
+        effort: (.effort.level // "unknown"),
         dedupe_key: ((.session_id // "nosession") + ":" + (.tool_use_id // "notoolid"))
       }
       + (if $patch then {task_id: $patch.id, status: $patch.st} else {} end)

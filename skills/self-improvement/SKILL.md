@@ -89,7 +89,7 @@ Happy path: a prompt file (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`)
 
 Write it per `references/retrospective-template.md` — header block, What Worked / What the User Changed / Proposed Updates / Deferred / Out-of-Context Discards, approval footer. Follow that template rather than improvising: it fixes proposal ordering and the sub-bullets each numbered, independently tickable `- [ ]` proposal carries.
 
-**Versioning:** a proposal that modifies a file's frontmatter instructs the applying agent (§ Hand-off to the applying agent) to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
+**Versioning:** a proposal that modifies a file's frontmatter instructs the applying agent (§ Handoff to the applying agent) to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
 
 ### Step 5b — Append to the label dataset
 
@@ -182,7 +182,7 @@ The script counts rows in the stage output files, so no count comes from prose. 
 
 Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
-## Hand-off to the applying agent
+## Handoff to the applying agent
 
 After user approval (orchestrated per `commands/worktask.md`), each checked item goes to the agent that owns its enforcement form, one commit per proposal:
 

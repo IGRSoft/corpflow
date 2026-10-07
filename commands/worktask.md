@@ -1,13 +1,13 @@
 ---
 name: worktask
 description: Run one task through the staged worktask pipeline (plan, build, review, test, docs, PR) with plan and finalization gates and a resumable state ledger
-argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority High|Medium|Low] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
+argument-hint: '"<task description>" [--secure|--full] [--emergency] [--priority <High|Medium|Low>] [--platform <p>] [--ethics-review] [--with-design] [--sequential] [--no-gh-issue] [--auto=[plan,decision,finalization]] [--accept-absent=<tool[,tool]>] | --resume <STAGE_ID> [--cascade]'
 version: 0.7.0
-# tools: bare Task because each stage row's metadata.agent may name a platform variant from any
+# tools: bare Agent because each stage row's metadata.agent may name a platform variant from any
 # plugin (`pl0-procedure.md § Stage → agent table`, a project or user-scope CORPFLOW.md § Routing
 # override included), and the Step C.0a resolver and Phase 3 re-dispatch those agents,
 # `corpflow:prompt-engineer` or `corpflow:workflow-engineer`.
-allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh *)
+allowed-tools: Read, AskUserQuestion, SendMessage, ListAgents, Monitor, TaskStop, Bash(claude:*), Glob, Grep, Bash(mkdir:*), Bash(gh:*), Bash(git:*), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/preflight-issue-scan.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/branch-name.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/refine-branch-target.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/publish-pl-issue.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/handoff-harness.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/effort-ladder.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/model-matrix.sh --resolve *), Agent, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/seed-state.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/workspace-root-banner.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --producer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --consumer *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/land-artifacts.sh --list-landed *), Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/megatask-settle.sh *)
 related:
   - skills/worktask/SKILL.md
   - commands/megatask.md
@@ -26,7 +26,7 @@ related:
 > |---|---|---|---|
 > | `plan_gate` | `checkpoint` | `bypass` — `--auto=[plan]`, `--emergency` | Post-PL0 checkpoint: present the plan, wait for explicit `AskUserQuestion` approval before dispatching any implementation stage (AR/DV/…) |
 > | `decision_gate` | `user` | `auto` — `--auto=[decision]` | Who answers `open_questions[]`: the user, or a delegate. PL0's at the plan gate (§ Step A.4); every other stage's blocking items at their own boundary (§ Step C.0a); the FN-gate batch at § Step C.3. Escalation-class questions always fall back to the user |
-> | `fn_gate` | `checkpoint` | `bypass` — `--auto=[finalization]`, `--emergency` | Pre-FN checkpoint: stop before the FN `Task()`, present a pre-FN summary, approve before any commit/push/PR |
+> | `fn_gate` | `checkpoint` | `bypass` — `--auto=[finalization]`, `--emergency` | Pre-FN checkpoint: stop before the FN `Agent()`, present a pre-FN summary, approve before any commit/push/PR |
 
 # Worktask Command
 
@@ -39,19 +39,6 @@ or an issue array with dependency ordering is `/megatask`. Three constraints bou
 - If the ledger cannot be read or written, stop and report. Never fall back to alternative
   planning.
 
-## Worktask Types
-
-| Type | Stages | Entry point |
-|------|--------|-------------|
-| Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/worktask` |
-| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `/worktask --secure` |
-| Emergency | IR→DV→DR→QA→RE→FN | `/worktask --emergency` |
-
-AR and TL are optional in the standard and secure pipelines: AR is a tier default PL0 may override
-either way, TL is included only when PL0 splits work across ≥2 developers. Criteria:
-`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)`. Stage details:
-`skills/shared/stage-codes.md`.
-
 ## Options
 
 ### Gate automation flag (`--auto`)
@@ -59,7 +46,8 @@ either way, TL is included only when PL0 splits work across ≥2 developers. Cri
 `--auto=[<values>]` takes any non-empty, comma-separated subset of `plan`, `decision`,
 `finalization`; brackets are optional and inner whitespace is tolerated (`--auto=[plan, decision]`,
 `--auto=plan,finalization`). An unknown value is a parse error: reject the invocation and report,
-never drop it silently. Each value is an independent carrier on PL0.
+never drop it silently. Each value is an independent carrier on PL0. Default: no `--auto`, so
+every carrier keeps its default from the table above.
 
 #### Gate automation flag — values
 
@@ -77,27 +65,34 @@ is the only way a missing tool stops counting as a preflight fail. Tools: `rende
 systems, ai, all; covers `silicon`, `magick` and `convert`, which may also be named one at a time),
 `playwright` and `playwright-browser` (web), `adb-device` (android), `simulator`
 and `xcodebuildmcp` (apple). An unknown tool is a parse error, as for `--auto`. Pass the list
-verbatim; never default, extend or infer it, so a tool nobody named stays a fail.
+verbatim; never default, extend or infer it, so a tool nobody named stays a fail. Default: empty.
 
 ### Scope and pipeline flags
 
-| Option | Effect |
-|--------|--------|
-| `--priority [High\|Medium\|Low]` | Task priority |
-| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | Target platform |
-| `--ethics-review` | Add ET checkpoint after PL |
-| `--with-design` | Invoke `corpflow:designer` during PL. Sets `metadata.with_design: true` on PL0. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
-| `--sequential` | DC waits for QA |
-| `--secure` / `--full` | Use 11-stage worktask |
-| `--emergency` | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. |
-| `--no-gh-issue` | Skip the post-PL GitHub issue auto-publish. Sets `metadata.no_gh_issue: true` on PL0; `publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues. |
+#### Scope flags
+
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--priority <High\|Medium\|Low>` | One level (default: `Medium`) | Task priority |
+| `--platform <apple\|android\|web\|systems\|backend\|ai\|all>` | One platform (default: what the repo markers resolve to, `skills/shared/platform-detection.md § Detection Rules (markers → platform)`) | Target platform |
+| `--ethics-review` | Flag (default: off) | Add ET checkpoint after PL |
+| `--with-design` | Flag (default: off) | Invoke `corpflow:designer` during PL. Sets `metadata.with_design: true` on PL0. Without it Designer is skipped even for UI work and the keyword score stays advisory. |
+
+#### Pipeline flags
+
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--sequential` | Flag (default: off, DC runs beside QA) | DC waits for QA |
+| `--secure` / `--full` | Flag (default: off, standard pipeline) | Use 11-stage worktask |
+| `--emergency` | Flag (default: off) | Run the incident pipeline (IR→DV→DR→QA→RE→FN) instead of the PL-first pipeline; IR owned by `incident-responder`. |
+| `--no-gh-issue` | Flag (default: off, the issue is published) | Skip the post-PL GitHub issue auto-publish. Sets `metadata.no_gh_issue: true` on PL0; `publish-pl-issue.sh` audits `deferred`/`opted_out` and the stage loop continues. |
 
 ### Replay flags
 
-| Option | Effect |
-|--------|--------|
-| `--resume <STAGE_ID>` | Replay one already-settled stage of the worktask in this `.context/` — § Phase 0. Takes a ledger id (`DV1`), not a stage code. Creates no run: no new `planning-N.md`, no issue, no branch rename. Composes with none of the flags above. |
-| `--cascade` | Only with `--resume`. Also replays dependents transitively reachable through `blocked_by`. FN/RE **dependents** are traversed through but never reset; an FN/RE named as the *target* is still reset — an explicit id is your instruction — with a `side-effect-target` warning. |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--resume <STAGE_ID>` | A ledger id such as `DV1`, not a stage code (default: none, a new run) | Replay one already-settled stage of the worktask in this `.context/` — § Phase 0. Creates no run: no new `planning-N.md`, no issue, no branch rename. Composes with none of the flags above. |
+| `--cascade` | Flag, only with `--resume` (default: off, the target alone) | Also replays dependents transitively reachable through `blocked_by`. FN/RE **dependents** are traversed through but never reset; an FN/RE named as the *target* is still reset — an explicit id is your instruction — with a `side-effect-target` warning. |
 
 ## Examples
 
@@ -115,7 +110,46 @@ verbatim; never default, extend or infer it, so a tool nobody named stays a fail
 # Multi-issue: /megatask 1 (milestone) or /megatask --issues 12,15,18 (array)
 ```
 
-### Session hygiene
+## Output Format
+
+One block per stage as it settles, then the run summary:
+
+~~~markdown
+# Worktask: <title> · <worktask_id> · <standard|secure|emergency>
+
+## Stage — <CODE><N> · agent · model/effort · verdict (ok|blocked|escalate)
+## Artifact — `.context/<stage>-N.md` plus its `handoff.summary` line, verbatim
+## Ledger — the `state-patch.sh` call applied and the task ids it moved
+## Gates — plan gate and FN gate: reached, bypassed, or approved (and by whom)
+## Result — branch, PR URL, issue closed, follow-up issues filed
+~~~
+
+A blocked or escalated stage replaces `## Result` with `## Blocker — what stopped, at which stage,
+and the decision the user owes`. The ledger stays resumable either way: `/worktask --resume <ID>`.
+
+### Output Format — unresolved decisions open the final message
+
+After FN, the final message opens with the stdout of
+`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
+non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN wrote at the top of
+the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
+nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the
+scrub is what keeps host paths out of it.
+
+## Worktask Types
+
+| Type | Stages | Entry point |
+|------|--------|-------------|
+| Standard | PL→AR→TL→DV→DR→QA→DC→FN→ST | `/worktask` |
+| Secure | PL→AR→TL→DV→DR→SR→QA→DC→RE→FN→ST | `/worktask --secure` |
+| Emergency | IR→DV→DR→QA→RE→FN | `/worktask --emergency` |
+
+AR and TL are optional in the standard and secure pipelines: AR is a tier default PL0 may override
+either way, TL is included only when PL0 splits work across ≥2 developers. Criteria:
+`skills/estimation-methodology/SKILL.md § Stage Inclusion Criteria (PL0 authority)`. Stage details:
+`skills/shared/stage-codes.md`.
+
+## Session hygiene
 
 Start each `/worktask` or `/megatask` in a fresh session. Between tasks, `/rename` the session and
 then `/clear`; the ledger, not the conversation, carries a task forward
@@ -139,7 +173,7 @@ route or readiness rule: the replayed task becomes `pending` with its dependenci
 
 **Run** — Step 3b hook-install verification (idempotent; a resumed loop still needs
 SubagentStop), the `fn-preflight.sh branch-divergence` check (`resume.md § Branch-rename
-detection`), and the workspace-root cross-check before every `Task()`.
+detection`), and the workspace-root cross-check before every `Agent()`.
 
 ### Phase 0 — procedure
 
@@ -177,14 +211,14 @@ detection`), and the workspace-root cross-check before every `Task()`.
 > Step 3a `autonomy-preflight.sh --record` call, and the `mktemp` buffers under `$TMPDIR`
 > (`corpflow-preflight.*`, `corpflow-issue-scan.*`) that § Step 2a-pre and § Step 2a write.
 
-### Phase 1 binding constraint 2 — Context-Interruption Recovery
+### Context-Interruption Recovery
 
-> **BINDING 2 — Context-Interruption Recovery**: after an interruption (auth flows, tool failures),
-> verify PL0 exists with status `completed`; if not, restart from the appropriate phase. The
-> exception: PL0 `in_progress` with stage tasks present and a `plan_revision_dispatched` audit row
-> with no later `approval_received` for `PL<run_index>` is a plan revision in flight — resume it per
-> § Plan-revision re-dispatch (`plan_revision: true`), never the fresh-run path. Both checkpoints
-> still apply: the plan gate at Step A.5 and the FN gate (`skills/worktask/SKILL.md § FN Gate`).
+After an interruption (auth flows, tool failures), verify PL0 exists with status `completed`; if
+not, restart from the appropriate phase. The exception: PL0 `in_progress` with stage tasks present
+and a `plan_revision_dispatched` audit row with no later `approval_received` for `PL<run_index>` is
+a plan revision in flight — resume it per § Plan-revision re-dispatch (`plan_revision: true`),
+never the fresh-run path. Both checkpoints still apply: the plan gate at Step A.5 and the FN gate
+(`skills/worktask/SKILL.md § FN Gate`).
 
 ### Steps 1–2 — Parse flags and detect embedded commands
 
@@ -198,74 +232,15 @@ detection`), and the workspace-root cross-check before every `Task()`.
 
 ### Per-issue run under `/megatask`
 
-`/megatask` Phase 2 Step 3 launches this command in a background subagent, one per issue, with
-`--auto=[plan,decision,finalization]`, a `PL0.metadata` stamp carrying `megatask_group`, and a run
-environment in which every Bash call opens with
-`cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`,
-`<wt>` being the issue's absolute worktree path. Keep that prefix on every call, the snippets
-below included. It is what makes the state scripts write `<wt>/.context/state.json` instead of
-megatask's own ledger, and what the scan, preflight, publish and branch scripts read as a
-per-issue run. Hooks never see that export: they bind to `<wt>` from the `WORKSPACE_ROOT=`
-banner line in the acting agent's prompt, so keep § Banner injection on every stage brief. No
-user is reachable.
-
-#### Per-issue run — what changes
-
-| Step | Under `/megatask` |
-|---|---|
-| 2a-pre, 2a | Both scripts print `result=skipped reason=milestone_mode`; no `AskUserQuestion` runs |
-| 3c | `branch-name.sh` self-disables; `init-worktree.sh` already named the branch |
-| 4 | The stamp overlays the payload (§ Step 4 — the /megatask stamp) |
-| A | `publish-pl-issue.sh` defers with `reason=milestone_mode` |
-| Any stop for the user | Settles the issue first (`skills/worktask/SKILL.md § USER under /megatask`) |
-| Phase 3 | Skipped |
-| `EnterWorktree` | Never called: the prefix already runs every call in `<wt>` |
+When `/megatask` launched this run (the dispatch prompt carries a `PL0.metadata` stamp with
+`megatask_group`), read `skills/worktask/references/megatask-per-issue.md` before Step 2a-pre: its
+Bash prefix opens every call, and its table lists the steps that change. Other runs skip it.
 
 ### Step 2a-pre — Autonomy preflight (unattended runs)
 
-Runs when the resolved `--auto` contains `plan` or `finalization`, before Step 2a and Step 3, so
-every human dependency an unattended run would hit surfaces in one message before anything is
-seeded: the `git push`, `gh pr create` and `gh pr merge` grants, the evidence tools, and toolchain
-integrity. Without either value, skip this step. A megatask per-issue run (ledger pre-seeded,
-`workspace.json` present) skips it too and records nothing; the script also self-skips there with
-`result=skipped` and `reason=milestone_mode`. It writes nothing under the project and never writes
-a settings file: a missing grant prints the allow rule for the operator to add. It does not check
-capture pre-authorization.
-
-#### Step 2a-pre snippet — check mode, output buffered
-
-```bash
-ACCEPT_ABSENT="<the --accept-absent= value, verbatim; empty when not given>"
-PF_BUF=$(mktemp "${TMPDIR:-/tmp}/corpflow-preflight.XXXXXX")
-set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,platform] or none>"
-[ -n "$ACCEPT_ABSENT" ] && set -- "$@" --accept-absent "$ACCEPT_ABSENT"
-pf_rc=0
-bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@" > "$PF_BUF" || pf_rc=$?
-echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
-if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
-else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
-```
-
-#### Step 2a-pre — the exit code decides
-
-- **0**: continue to Step 2a. `accepted_absent=<tools>` names the missing tools the operator
-  accepted. Keep the printed `PF_BUF` path for Step 3a, because shell variables do not survive
-  between tool calls. On `result=skipped`, delete the buffer instead; Step 3a records nothing.
-- **1 or 2**: stop before Step 2a and Step 3, reporting in one message every entry the snippet printed, each
-  a failed grant, tool or toolchain check with its `fix:` line; for exit 2, the usage error on
-  stderr (an unknown `--accept-absent` tool, say). The snippet has already deleted the buffer, no
-  `.context/` exists, and nothing is recorded. The operator fixes the whole list, or relaunches
-  with `--accept-absent=<tool>` for a tool the run may go without.
-
-#### Step 2a-pre — inputs
-
-- `<platform[,platform] or none>`: `--platform` when given, else what the repo markers resolve to
-  per `skills/shared/platform-detection.md § Detection Rules (markers → platform)`. A mixed repo
-  passes every platform it resolves to.
-- No platform resolves: pass `none`, never empty (exit 2); `none` records a `platform-none` skip.
-- `--harness`, the `git reset --hard` grant check, is not passed: no step of this pipeline resets a
-  tree.
-- The `corpflow-preflight.` buffer prefix is required: `--record` deletes only buffers carrying it.
+Runs only when the resolved `--auto` contains `plan` or `finalization`, before Step 2a and Step 3;
+without either value, skip it. When it runs, follow `skills/worktask/references/autonomy-preflight.md`:
+the snippet, the exit-code decision and the inputs.
 
 ### Step 2a — Duplicate-issue pre-flight (advisory)
 
@@ -389,8 +364,9 @@ fi
 - **0**: seeded; continue to § Step 3a — record the autonomy preflight, then Step 3b.
 - **3**: `state.json` already exists (a new run in an existing `.context/`); byte-unchanged, and the
   script has no overwrite path. The snippet has reopened PL0 so an interruption before Step 5
-  cannot read the previous run's `completed` PL0 as this run's plan (BINDING 2). A non-zero from
-  that call is a ledger write failure: stop and report. Otherwise continue as for 0;
+  cannot read the previous run's `completed` PL0 as this run's plan (§ Context-Interruption
+  Recovery). A non-zero from that call is a ledger write failure: stop and report. Otherwise
+  continue as for 0;
   `pl0-procedure.md § Step 4 — state.json reset` is the re-run writer.
 - **4**: no `.context/` resolves inside this worktree; nothing written. Stop and report.
 - **1 or 2**: write failure or usage error; nothing written. Stop and report, since there is no
@@ -657,7 +633,7 @@ Batching`) and Step A.4.
 ### Steps 5–8 — Dispatch PL, then present the plan
 
 5. **PL0 → in_progress**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 in_progress`
-6. **Delegate**: `Task({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
+6. **Delegate**: `Agent({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
    — PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
    glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
    creates stage tasks with `metadata.agent` and `metadata.plan_file`. The seeded
@@ -687,48 +663,9 @@ unresolved `sw-PL<N>-*` items — those whose `status` is not `"resolved"`
 (`pl0-procedure.md § Plan-Gate Open-Question Batching`). Resolve each item's question text and
 `options[]` from `planning-N.md#elicitation-sweep` exactly as § Step C.4 does; the stub carries
 neither. No-op when `decision_gate == "user"` or no such item exists — fall through to
-Step A.5. Otherwise, run § Step A.4 — the delegate dispatch.
-
-#### Step A.4 — the delegate dispatch
-
-1. Append an `auto_decision_dispatched` audit row (`subject:"PL<N>"`, `metadata.questions: <count>`).
-2. Re-dispatch PM as a decision delegate on the Fable model:
-   `Task({ subagent_type: "corpflow:product-manager", model: "fable", prompt: <decision prompt> })`,
-   the prompt carrying the open-question list verbatim (each with its recommended default) and the
-   plan file path. **Model fallback**: loop step 5f exactly — if
-   `facts.capabilities.fable_dispatch == "credit_blocked"`, dispatch on `"opus"` and audit
-   `model_resolution_constrained`.
-
-#### Step A.4 stamps no approval carrier
-
-This pre-pass bypasses no gate: resolving open questions answers plan content without approving
-the plan, and every path out of here falls through to Step A.5, the sole stamping point. A stamp
-here would approve a `checkpoint` run before any human has seen the plan.
-
-#### Auto-decision recording contract
-
-The delegate decides every non-escalation question (default-biased — deviate from PM's recommended
-default only with stated evidence), applies the amendments to the plan's existing mandatory anchors
-(`## requirements` / `## acceptance-criteria` / `## scope`) in one batch pass, and returns each
-decision as a typed-return `key_decisions[]` entry prefixed `(auto-decided)`, plus any `escalate`
-items. It adds no new anchor (`handoff-protocol.md § #anchor-allow-list`) and does not run
-`state-patch.sh`: PL0 is already `completed`, so the plan amendments are its only writes.
-
-#### Auto-decision ledger merge (orchestrator)
-
-3. On return the orchestrator, not the delegate, merges via `atomicMergeStateJson`: mark each
-   answered `facts.open_questions[]` item `status: "resolved"` with its `resolution` (the § Step C.5
-   write — the whole stub, never `{id, status, resolution}` alone). That is the only write; nothing
-   is appended to `facts.decisions[]`. The answer survives because every stage extracts
-   `facts.open_questions[]` on entry (`skills/shared/stage-contracts.md § Required Inputs`).
-   Entries are marked resolved, never removed — a deleted item takes its `ref` anchor and its
-   answer with it.
-
-##### Auto-decision ledger merge — the audit row
-
-4. Append one `auto_decision_resolved` audit row (`subject:"PL<N>"`, `metadata: { decided: <count>,
-   escalated: <count>, model_resolved: <alias>, decisions: [{question, answer, rationale}] }`) — the
-   per-question rationale is carried there, one line each.
+Step A.5. Otherwise, read `skills/worktask/references/auto-decision.md` and run it: the delegate
+dispatch, the ledger merge, and the gate-summary presentation. § Escalation guard (BINDING) below
+stays inline because every run reads it: Step C.2, Step C.0 and the FN gate apply it too.
 
 #### Escalation guard (BINDING)
 
@@ -781,13 +718,6 @@ without dispatching any stage. Parking rides the monitor's failure path
 interactive `/worktask`. A parked permission need takes this same path; its escalated list holds
 each need's redacted `{tool, command_head, truncated}`, never the command (§ Boundary permission
 prompt — only the user answers).
-
-#### Presentation in the gate summary
-
-On a `checkpoint` plan gate the Step A.5 summary lists every auto-decided question with its
-answer marked `(auto-decided by Fable — see facts.open_questions[].resolution / audit)`, so the user
-approves the decisions together with the plan. On `bypass`, the `auto_decision_resolved` audit rows
-plus each item's own `resolution` are the durable record.
 
 ### Step A.4b — Refine the branch target (after A.4, before A.5)
 
@@ -983,7 +913,7 @@ Stamp before row, as in the approval arm.
 #### After Step A — run the stage loop
 
 Execute the loop from `skills/worktask/SKILL.md § Orchestrator Execution Loop`. Before the FN
-`Task()` delegation apply the FN gate check (stop on `checkpoint`, proceed on `bypass`) —
+`Agent()` delegation apply the FN gate check (stop on `checkpoint`, proceed on `bypass`) —
 `skills/worktask/SKILL.md § FN Gate`.
 
 ##### After Step A — scripts the loop runs directly
@@ -1007,7 +937,7 @@ A refused landing is reported, never worked around: SKILL.md § Step 6.5d.
 #### Workspace-root cross-check
 
 Conductor-managed sessions spawn the orchestrator inside a workspace clone whose `pwd` differs from
-the canonical plugin source repo. Before every `Task()` call in the stage loop, verify that the
+the canonical plugin source repo. Before every `Agent()` call in the stage loop, verify that the
 working tree matches the task's declared workspace, and inject the resolved root into the stage
 prompt so the subagent targets the right directory.
 
@@ -1022,12 +952,12 @@ _task_root=$(jq -r '.metadata.workspace_path // empty' .context/state.json)
 # leaves dv-tree-preflight.sh and developer.md's path-prefix check inert.
 if [ -z "$_task_root" ]; then
   echo "⚠ state.json has no .metadata.workspace_path — the assigned-tree guards are ALL inert. Stamp it with a --ledger-meta patch." >&2
-  # Write audit row `workspace_path_unstamped` and stop; do not call Task()
+  # Write audit row `workspace_path_unstamped` and stop; do not call Agent()
   exit 1
 fi
 if [ "$_orch_root" != "$_task_root" ]; then
   echo "⚠ cwd mismatch: orchestrator is at $_orch_root but task.metadata.workspace_path is $_task_root. Aborting delegation until resolved." >&2
-  # Write audit row and stop; do not call Task()
+  # Write audit row and stop; do not call Agent()
   exit 1
 fi
 ```
@@ -1042,14 +972,14 @@ ledger-level path, which names the orchestrator's tree and hides a DV stream's o
 
 ```bash
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/brief-compose.sh "<TASK_ID>" --orch-root "$_orch_root"
-# stdout is the whole brief, [7] opening with the banner line; exit 1 or 2 means do not call Task()
+# stdout is the whole brief, [7] opening with the banner line; exit 1 or 2 means do not call Agent()
 ```
 
 Failure mode prevented: `workspace-modes.md § Conductor Workspace Topology`.
 
 #### Post-delegation state.json enforcement
 
-After every `Task()` return (the completed stage result — for a background subagent that is the
+After every `Agent()` return (the completed stage result — for a background subagent that is the
 completion notification, not the launch acknowledgement), before Step 7 settles the row:
 re-read `.context/state.json`; if `tasks.<ID>` does not already carry the artifact's
 `handoff.verdict` and the status it maps to (`handoff-protocol.md § tasks — verdict → status`), run
@@ -1208,7 +1138,7 @@ It fires at two points, selected per item by `blocks_next_stage`, never by stage
   blocking `decision` items through a sub-agent so the run does not stop for them at all.
 - **C.0** runs at every stage boundary, immediately after that stage's `completed` patch and
   before the next stage is dispatched, over whatever blocking items C.0a did not settle.
-- **C.1–C.5** run once, immediately before the FN `Task()` delegation, over everything else.
+- **C.1–C.5** run once, immediately before the FN `Agent()` delegation, over everything else.
 
 #### Step C.0a — resolve blocking items instead of asking (loop step 4.9, first)
 
@@ -1240,31 +1170,28 @@ Empty set ⇒ no-op, fall through to § Step C.0 unchanged.
 3. Dispatch the emitting stage's own agent on its own model at the computed tier: one dispatch per
    boundary over the whole set (≤4 by the per-stage cap), never one per item.
 
-##### Step C.0a — the tier only reaches some dispatch surfaces
+##### Step C.0a — how the tier reaches the stage agent
 
-`metadata.effort` is not honoured in-process by `Task()` itself — `headless-dispatch.md
-§ Translation table — model & effort` marks `model` "Yes (passed to `Task()`)" and `effort`
-"Advisory". Whether the computed tier reaches the emitting stage's own agent at all is a route
-decision, `skills/worktask/scripts/effort-route.sh`: headless iff the computed tier differs from
-that agent's own `effort:` frontmatter tier (or its `--role-baseline`) — call it, then dispatch
-through `skills/worktask/scripts/headless-dispatch.sh` on `headless`, or the plain in-process
-dispatch on `inproc`. Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL`
-(sw-AR0-1): the pin no longer short-circuits the route, and a headless child's own env still
-carries `CLAUDE_CODE_EFFORT_LEVEL=<stamped tier>` regardless. The audit row's `effort_transport`
-says which of three surfaces applied:
+Since CC 2.1.292 the `Agent` tool takes an `effort` parameter, so the computed tier reaches an
+in-process stage agent directly. `skills/worktask/scripts/effort-route.sh` still decides the
+surface: in-process with `Agent({ effort })` by default; headless through
+`skills/worktask/scripts/headless-dispatch.sh` only when the operator sets
+`CORPFLOW_HEADLESS_ROUTE=on`. Both carriers outrank the agent's own `effort:` frontmatter
+(probed at 2.1.292). The audit row's `effort_transport` names the surface:
 
 ###### Effort transport surfaces
 
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
-| headless `claude -p --agent` | `--effort <tier>` AND `CLAUDE_CODE_EFFORT_LEVEL=<tier>` in the child's env (the env var is the carrier the documented precedence honours; the flag is there for audit readability) | `dispatch-flag` |
-| in-process, tier equals the agent's own frontmatter | the frontmatter itself | `frontmatter` |
-| in-process, the agent has no `effort:` key in its own frontmatter | nothing — `Task()` carries no effort parameter and there is no frontmatter to fall back to | `none` |
+| in-process (the default) | the `Agent` tool's `effort` parameter | `agent-param` |
+| headless `claude -p --agent` (opt-in) | the `--effort <tier>` flag | `dispatch-flag` |
+| in-process with no stamped tier, or the fallback after a headless `warn` | the agent's own frontmatter; the call passes no `effort` | `frontmatter` |
+| in-process on haiku, which ignores effort | nothing — the call passes no `effort` | `none` |
 
 ###### Audit every dispatch surface
 
 This same call happens at every stage-dispatch surface, not only here: the main loop's own
-Step 6 `Task()` dispatch, a headless-eligible DV row's fan-out dispatch, and Step C.3's batch
+Step 6 `Agent()` dispatch, a headless-eligible DV row's fan-out dispatch, and Step C.3's batch
 resolver all call `effort-route.sh` before choosing a surface, and each writes its own
 `effort_route` audit row (`action: "effort_route"`) carrying the route line's fields plus
 `effort_resolved`/`effort_resolved_reason`, `session_id`, `argv[]` and the cost/usage fields —
@@ -1273,21 +1200,22 @@ this section is not a special case, it is the one place the shared contract is s
 ###### Observe the applied tier
 
 Only `none` records the unapplied literal: the row's `effort_resolved` is
-`"requested, not applied"`, never a tier the session did not run at. Under `dispatch-flag`, the
-tier the child actually ran at is read from ITS OWN hook rows — the child's PreToolUse/PostToolUse
-hooks write those rows live, into the ledger root's `audit.jsonl` (not the child's worktree,
-per `--ledger-root`), while it runs. `headless-dispatch.sh` looks them up itself once the child
-exits, matching on the row's `metadata.dedupe_key` prefix (`"<session_id>:"`) — never on
-`headless-poststop.sh`'s replay, which has no lookup role here at all. Only when no row matches
-(the child ran no tool call that wrote one) does `effort_resolved` stay `null` with
-`effort_resolved_reason: "no_hook_rows"`, never a value copied from the request. A resolver
-bump usually differs from the agent baseline, so it usually routes headless.
+`"requested, not applied"`, never a tier the session did not run at. Under `agent-param`, the
+tier comes from the stage subagent's own `hook:audit-subagent` or `agent-stop` row
+(`metadata.effort`, hook-reported). A managed `maxEffortLevel` can still cap the parameter, so
+the hook row decides, not the request.
+Under `dispatch-flag`, the tier is read from the child's own hook rows, which its hooks write live
+into the ledger root's `audit.jsonl` (per `--ledger-root`). `headless-dispatch.sh` looks them up
+itself once the child exits, matching on `metadata.dedupe_key` prefix `"<session_id>:"`. On
+either surface, a row whose `metadata.effort` is `"unknown"` counts as no row, and no row leaves
+`effort_resolved` `null` with `effort_resolved_reason: "no_hook_rows"`, never a value copied
+from the request.
 
 ##### Step C.0a — after a headless child exits
 
 A `warn` result (`cli_missing`, `cli_below_floor`, `opted_out`, `exit_before_artifact`,
 `auth_failed` or `agent_unresolved`) never reaches this step at all: the stage ran no headless
-work, so the orchestrator dispatches it in-process via `Task()` at the frontmatter baseline and
+work, so the orchestrator dispatches it in-process via `Agent()` at the frontmatter baseline and
 skips the replay below entirely — there is no `SubagentStop` chain for a stage that never ran
 headless. A refused value (exit 2 — a usage error or a validation refusal, e.g. a workspace path
 that is not a worktree this ledger pins) is not a `warn` either: it prints no result line at all,
@@ -1323,7 +1251,8 @@ it does to the first attempt, since side effects already exist either way.
 ###### Step C.0a — do not reach the tier another way
 
 Never substitute a different agent believed to run at a higher tier: that trades the domain
-expertise answering the question for a guess. Invent no `effort` parameter for `Task()` either.
+expertise answering the question for a guess. Pass the tier on `Agent({ effort })` (2.1.292),
+never through prompt text: a tier asked for in prose is not applied.
 
 ##### Step C.0a — what the prompt carries
 
@@ -1343,14 +1272,15 @@ as at Step A.4.
    marked `(auto-decided)` — and appends one `auto_decision_resolved` row (`subject:"<CODE><N>"`,
    `metadata: { decided, declined, model_resolved, effort_requested, effort_resolved,
    effort_transport, decisions: [{question, answer, rationale}] }`). `effort_requested` is the
-   computed tier on both surfaces. `effort_resolved` is the tier the session ran at under
-   `dispatch-flag`, and `"requested, not applied"` under `none`.
+   computed tier on every surface. `effort_resolved` is the tier the session ran at under
+   `agent-param` and `dispatch-flag` (from hook rows), and `"requested, not applied"` under
+   `none`.
 5. Fall through to § Step C.0 with whatever remains: every `escalate` item, everything the
    delegate declined, and everything C.0a's four conditions excluded.
 
 ###### Step C.0a — reading the two effort fields
 
-The comparison applies only under `effort_transport: "dispatch-flag"`. There,
+The comparison applies under `effort_transport` `agent-param` and `dispatch-flag`. There,
 `effort_requested` != `effort_resolved` means the tier evaporated in transit — a managed or user
 `maxEffortLevel` below the requested tier runs the session at the cap with no error
 (`model-selection.md § Effort frontmatter and caps`). Recorded, not enforced: the answer
@@ -1401,7 +1331,7 @@ whose `metadata.escalated[]` holds each need's redacted `{tool, command_head, tr
 command stays in `blocked_on`. Nothing is granted. When `park.workspace_written` is false,
 `park.workspace_reason` decides: on `missing` or `malformed` the orchestrator makes that guard's
 write itself before it stops; any other reason is reported per
-`skills/worktask/SKILL.md § Step 7a — the megatask arm`. The orchestrator
+`skills/worktask/references/step-7a-arms.md § Step 7a — the megatask arm`. The orchestrator
 never Writes or Edits a symlinked `workspace.json`: it refuses, audits and reports instead.
 
 ##### Boundary permission prompt — where the `!` line runs
@@ -1409,7 +1339,7 @@ never Writes or Edits a symlinked `workspace.json`: it refuses, audits and repor
 A `!` line runs in the main session's working directory, not in the parked stage's tree. The
 question therefore shows that tree as a `cwd:` data line inside its fenced info block, and the user
 runs the `! <command>` line from that directory. No `cd <dir> && <command>` is ever composed: the
-`!` line holds the denied command only (`skills/worktask/SKILL.md § Step 7a — where the ! line runs`).
+`!` line holds the denied command only (`skills/worktask/references/step-7a-arms.md § Step 7a — where the ! line runs`).
 
 ##### Boundary permission prompt — typed needs in the same round
 
@@ -1420,7 +1350,7 @@ not cut, and the options "done" and "stop here". A `user_decision` is the except
 with the stage's own question and options, and the stage is resumed with the hook row's `ud-` id.
 Its `payloads[]` are asked in the same round as the permission ones, only the user answers them
 under any gate setting, and a `/megatask` per-issue run parks them the same way. Answers and
-resume: `skills/worktask/SKILL.md § Step 7a — the typed-need answers`.
+resume: `skills/worktask/references/step-7a-arms.md § Step 7a — the typed-need answers`.
 
 #### Step C.1 — collect everything not already answered
 
@@ -1623,33 +1553,7 @@ TL0, revise the embedded command choice, or remove the embedding.
 
 External orchestrators (CI, cron, the user's shell) can invoke a single stage via
 `claude -p --agent <plugin:agent> …` (`skills/worktask/scripts/headless-dispatch.sh`) instead of
-the in-process `Task()` path — `claude agents run` is not a subcommand. PL0 populates the
+the in-process `Agent()` path — `claude agents run` is not a subcommand. PL0 populates the
 optional dispatch fields in `skills/shared/state-ledger.md § Dispatch metadata`, and the runner
 builds its flags from them. The runner recipe, the required `external_dispatch` audit line and
 the permission-mode caveats: `skills/agent-coordination/references/headless-dispatch.md`.
-
-## Output Format
-
-One block per stage as it settles, then the run summary:
-
-~~~markdown
-# Worktask: <title> · <worktask_id> · <standard|secure|emergency>
-
-## Stage — <CODE><N> · agent · model/effort · verdict (ok|blocked|escalate)
-## Artifact — `.context/<stage>-N.md` plus its `handoff.summary` line, verbatim
-## Ledger — the `state-patch.sh` call applied and the task ids it moved
-## Gates — plan gate and FN gate: reached, bypassed, or approved (and by whom)
-## Result — branch, PR URL, issue closed, follow-up issues filed
-~~~
-
-A blocked or escalated stage replaces `## Result` with `## Blocker — what stopped, at which stage,
-and the decision the user owes`. The ledger stays resumable either way: `/worktask --resume <ID>`.
-
-### Output Format — unresolved decisions open the final message
-
-After FN, the final message opens with the stdout of
-`bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/fn-preflight.sh unresolved-decisions --print` whenever it is
-non-empty, verbatim and before `# Worktask:`. It is the same scrubbed block FN wrote at the top of
-the PR body, so the user reads every escalate item that shipped undecided first. Empty stdout adds
-nothing. On a non-zero exit, say the block could not be rendered and retype no question text: the
-scrub is what keeps host paths out of it.

@@ -222,7 +222,7 @@ tiers: `skills/shared/model-selection.md`.
 When dispatched as a worktask **DV-stage** agent (multi-theme edit passes over agents/commands/
 skills), finish the current theme/atomic unit — every file in the group, its residual-grep
 verification, and its test-suite gate — before yielding; under budget pressure checkpoint into
-`development-N.md` rather than stopping silently. Full rule:
+`<your artifact>` (your row's `metadata.artifact`) rather than stopping silently. Full rule:
 `agents/workflow-engineer.md § Batch-Completion Discipline (DV execution)`.
 
 ## Response Approach
@@ -271,16 +271,18 @@ Protocol for orchestrator-approved proposals in `.context/learnings.md` after th
 
 #### Commit and Verify (Steps 3–4)
 
-3. **Commit per proposal** (one commit per applied item):
+3. **Commit per proposal** (one commit per applied item), subject per
+   `skills/shared/git-conventions.md § Commit Message Format` (drop `#<issue> ` when no anchor
+   resolves — § No issue anchor):
    ```
-   <type>(<scope>): apply self-improvement — <category>
+   #<issue> <type>(<scope>): Apply self-improvement — <category>
 
    Proposal #<N> from .context/learnings.md
    Target: <path>
    Confidence: <high|medium|low>
 
    Agent: corpflow:prompt-engineer
-   Stage: ST-SI
+   Stage: ST
    ```
    Type selection: `refactor` for wording/structure, `fix` for accuracy corrections, `feat` for completeness additions (new capability).
 4. **Verification:** after each commit, run `git show --stat HEAD` to confirm only the expected file changed.

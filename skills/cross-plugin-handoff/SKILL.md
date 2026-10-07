@@ -129,7 +129,7 @@ Implement the following for the corpflow worktask DV stage:
 - Code documentation: follow corpflow:code-comment-standard — non-obvious WHY and contract only
 
 ## Expected Output
-1. Implementation code
+1. Implementation for which `/<plugin>:build-test` exits 0 and each acceptance criterion maps to a changed file in the DV artifact
 2. Write summary to the DV row's artifact (tasks.<ID>.metadata.artifact)
 3. Return compressed handoff for QA stage (max 500 tokens)
 ```

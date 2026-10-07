@@ -5,7 +5,7 @@ argument-hint: '[--since <ref>] [--target agents|skills|commands|all] [--dry-run
 # tools: bare Bash is deliberate — the self-audit runs the repo's own lints and diff tooling,
 # which differ per repository, so no matcher can name them; the bound is that proposals land
 # in .context/learnings.md and are applied only under `--apply`.
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Task(corpflow:prompt-engineer), Task(corpflow:workflow-engineer)
+allowed-tools: Read, Glob, Grep, Bash, Write, Edit, Agent(corpflow:prompt-engineer), Agent(corpflow:workflow-engineer)
 estimated-cost:
   min-tokens: 3000
   max-tokens: 20000
@@ -28,7 +28,7 @@ Manual entry point for the `self-improvement` skill — run the retrospective **
 
 ## Options
 
-| Flag | Effect | Default |
+| Option | Effect | Default |
 |------|--------|---------|
 | `--since <ref>` | Git ref used as diff baseline (`HEAD~N`, SHA, tag, branch) | Last commit with `Agent:` trailer; fallback HEAD |
 | `--target <kind>` | `agents`, `skills`, `commands`, or `all` — filters proposals to those target types. Comma-separated for multiple. | `all` |
@@ -46,12 +46,33 @@ Manual entry point for the `self-improvement` skill — run the retrospective **
 /improve-yourself --no-scope-filter --dry-run      # include agents that didn't run this session
 ```
 
+## Output Format
+
+```markdown
+# /improve-yourself — Results
+
+**Baseline:** <sha> — **Scope:** <in-context | unbounded> — **Target filter:** <all | agents | skills | commands>
+
+## Summary
+- Detected diff hunks: <N>
+- In-scope proposals: <N> (high: N, medium: N)
+- Deferred (low confidence): <N>
+- Out-of-context discards: <N>
+- Labels appended to the label dataset (<plugin data | repo fallback>): <N> (dry-run: would append <N>)
+- Pipeline counts: `self-improve-counts: context_paths=<N> changed_paths=<N> mapped_rows=<N> appended_rows=<N>`
+
+## Next steps
+- Review `.context/learnings.md` (written at <timestamp>)
+- Check the boxes next to proposals you want applied
+- Re-run with `--apply` (or reply "apply" if the current call used --apply)
+```
+
 ## Behavior
 
 The skill owns the pipeline; this command wires flags around it:
 
-1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution).
-2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal).
+1. Parse flags; resolve baseline (`--since` if given and valid, else `skills/self-improvement/scripts/detect-user-changes.sh` default resolution). Done when the SHA is on the report's `**Baseline:**` line.
+2. Build used-in-context set via `skills/self-improvement/scripts/build-context-set.sh`; `--no-scope-filter` marks it unbounded (mapper keeps every mapped proposal). Done when the report shows **Scope** and `context_paths=N` (§ Pipeline closure).
 3. Run the skill's classify → map → emit pipeline — writes `.context/learnings.md` when proposals survive, `.context/logs/self-improve-<ts>.log` always. Post-filter proposals by `--target`.
 4. **Append labels** — § Label Append (the skill's Step 5b).
 5. Present `learnings.md`: proposal count by confidence (high/medium), deferred count, out-of-context discard count, labels appended, and the `self-improve-counts:` line.
@@ -90,27 +111,6 @@ Both agents make one commit per proposal, with a `version:` bump only on a targe
 
 ```json
 {"actor": "command:/improve-yourself", "action": "self_improvement_applied", "applied_count": N, "skipped_count": M, "result": "ok"}
-```
-
-## Output Format
-
-```markdown
-# /improve-yourself — Results
-
-**Baseline:** <sha> — **Scope:** <in-context | unbounded> — **Target filter:** <all | agents | skills | commands>
-
-## Summary
-- Detected diff hunks: <N>
-- In-scope proposals: <N> (high: N, medium: N)
-- Deferred (low confidence): <N>
-- Out-of-context discards: <N>
-- Labels appended to the label dataset (<plugin data | repo fallback>): <N> (dry-run: would append <N>)
-- Pipeline counts: `self-improve-counts: context_paths=<N> changed_paths=<N> mapped_rows=<N> appended_rows=<N>`
-
-## Next steps
-- Review `.context/learnings.md` (written at <timestamp>)
-- Check the boxes next to proposals you want applied
-- Re-run with `--apply` (or reply "apply" if the current call used --apply)
 ```
 
 ## Constraints (DO NOT)

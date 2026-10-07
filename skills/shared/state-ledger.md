@@ -74,7 +74,7 @@ only purpose and normative use.
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task, in fully-qualified `plugin:agent` form (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are rejected |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()`: frontmatter inheritance falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Agent()`: frontmatter inheritance falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
 
 #### Model field details
 
@@ -226,17 +226,17 @@ PL0 should set `permission_mode: default` on SR/FN tasks under `--secure`/`--ful
 stamped, not dispatch-optional) names the worktree a headless dispatcher `cd`s into before running
 `claude -p --agent` — there is no top-level `--cwd` flag to carry it instead.
 
-#### effort is mandatory, and a deviation from the agent's own tier routes headless
+#### effort is mandatory, and the Agent call carries it
 
 As a ledger record `effort` is required: the Step C.0a resolver
 (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`) bumps it one rung, and
 a per-stage override exists nowhere else. Every agent file also carries a static `effort:` key
 next to `maxTurns:`, held equal to its `skills/shared/stage-codes.md § Agent Model Matrix` row by
-`tests/shell/worktask/agent-effort-frontmatter.bats`; Claude Code applies that key in-process, so a
-stamped `metadata.effort` equal to it needs no dispatch flag. In-process `Task()` still takes no
-effort argument, so a stamped value that *differs* from the agent's frontmatter tier — a
-default-writer raise, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override — is the
-condition the effort router acts on rather than leaving advisory. `state-patch.sh` validates
+`tests/shell/worktask/agent-effort-frontmatter.bats`; Claude Code applies that key only when a
+call passes no `effort`. Since 2.1.292 the in-process `Agent()` call always passes the stamped
+value as `effort` (`effort_transport: "agent-param"`), which outranks the key, so a raise, a
+resolver bump or a `CORPFLOW.md § Models` override applies in-process. Only
+`CORPFLOW_HEADLESS_ROUTE=on` sends it headless instead. `state-patch.sh` validates
 `effort` against `EFFORT_ENUM` on `--task-create` and `--task-meta` either way.
 
 ### JSON Schema

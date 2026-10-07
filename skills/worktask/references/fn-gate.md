@@ -124,7 +124,7 @@ Run the two dispatches one after the other, never in parallel: both commit to th
 
 ```typescript
 // form: "mechanical" | "judgement" — the group's Enforcement value
-Task({
+Agent({
   subagent_type: AGENT,  // "corpflow:prompt-engineer" | "corpflow:workflow-engineer"
   model: MODEL,  // first field of the --resolve line
   prompt: `Apply self-improvement learnings from .context/learnings.md.

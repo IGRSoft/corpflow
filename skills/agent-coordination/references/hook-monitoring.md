@@ -64,6 +64,7 @@ The Agent tool has no `resume` parameter; use `SendMessage` to reach running age
 ### Compaction recovery & hook-output guards
 
 - `PreCompact` fires before automatic compaction and blocks it with exit code 2. The managed `hooks/precompact-checkpoint.sh` (in `plugin.json`) snapshots `.context/state.json` to `.context/state.checkpoint-<ts>.json` on every compaction and never blocks (always exit 0).
+- `<system-reminder>` tags in hook output are escaped before they reach Claude (2.1.292); corpflow hooks never rely on them.
 - Parent agents recover subagent results after compaction; killed or interrupted background agents keep partial results in context. `PostCompact` can re-inject critical state: the managed `skills/context-compression/scripts/post-compact-recovery.sh` writes `.context/logs/post-compact-<ts>.json`. It is registered and recurrence-guarded (`manifest-parity.bats`) but has never been observed firing — a real compaction cannot be simulated in CI — so treat it as registered, not confirmed working.
 
 #### SessionEnd finalization
@@ -233,7 +234,7 @@ Hyphenated matchers exact-match rather than substring-match, so a matcher meant 
 
 ### Hook Effort Visibility
 
-Hook payloads include `effort.level` and the `$CLAUDE_EFFORT` env var carries the active effort (`low|medium|high|xhigh|max`), so audit/cost hooks can attribute spend to the effort tier without parsing model metadata. Tier model: `skills/shared/model-selection.md`.
+Hook payloads include `effort.level` (`low|medium|high|xhigh|max`), so audit/cost hooks can attribute spend to the effort tier without parsing model metadata. corpflow hooks read the payload only and write `"unknown"` when it has no `effort`. `$CLAUDE_EFFORT` is not a substitute: a haiku subagent's payload omits `effort` while the env var still holds the tier the `Agent` call requested (2.1.292). Tier model: `skills/shared/model-selection.md`.
 
 ### Error, config & compatibility semantics
 
@@ -296,7 +297,7 @@ Background tasks a teammate launches survive the teammate finishing its turn: `T
 
 ## Agent Teams vs Subagents
 
-| Aspect | Subagents (Task tool) | Agent Teams (`Agent(name: …)`) |
+| Aspect | Subagents (Agent tool) | Agent Teams (`Agent(name: …)`) |
 |--------|----------------------|------------------------|
 | Context | Own window, results return to caller | Fully independent sessions |
 | Communication | Report back to parent only | Direct inter-teammate messaging |
@@ -313,7 +314,7 @@ Background tasks a teammate launches survive the teammate finishing its turn: `T
 | Standard 9/11-stage | Default | Not recommended |
 | Cross-plugin handoff (DV→apple-developer) | Default | Not applicable |
 | Megatask sequential issues | Default (orchestrator) | Not recommended |
-| Megatask parallel independent issues | Task-based tracks | Optional (experimental) |
+| Megatask parallel independent issues | Agent-based tracks | Optional (experimental) |
 | Cross-cutting research / competing hypotheses | Possible | Preferred |
 | Code review from multiple perspectives | Possible | Preferred |
 

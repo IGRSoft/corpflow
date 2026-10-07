@@ -173,6 +173,6 @@ headings are disjoint, and `## Routing` and `## Models` are reserved for the ove
 ## Grants
 
 Stage-dispatching agents (`developer`, `software-architector`, `security-reviewer`,
-`qa-engineer`) carry a bare `Task` grant so any override target dispatches. This matrix, not the
+`qa-engineer`) carry a bare `Agent` grant so any override target dispatches. This matrix, not the
 frontmatter, is the canonical record of intended targets; the guardrail for the wider spawn surface
 is the mandatory routing audit row on every delegation (`agents/developer.md § Routing Audit`).
