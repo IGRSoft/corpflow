@@ -37,8 +37,7 @@ bash_payload() {
 
 @test "edge: a payload without effort records unknown, never \$CLAUDE_EFFORT" {
   # A haiku subagent runs with no effort: its payload omits .effort while the env var still
-  # holds the tier the Agent call requested (observed at 2.1.292). Reading the env would
-  # record a tier that never ran.
+  # holds the tier the Agent call requested. Reading the env would record a tier that never ran.
   run env CLAUDE_EFFORT=high CLAUDE_PROJECT_DIR="$WD" \
     bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"tool_name":"Write"}'
   assert_success

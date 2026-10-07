@@ -1266,11 +1266,18 @@ Every dispatch surface calls this router: main loop, DV fan-out, Step 6.6a/C.0a 
 A row with no stamped `metadata.effort` skips it and dispatches with no `effort`.
 
 ```typescript
-    const route = full.metadata.effort
-      ? JSON.parse(spawnSync("bash", ["skills/worktask/scripts/effort-route.sh",
-          "--agent", subagentType, "--model", effectiveModel,
-          "--requested", full.metadata.effort], { encoding: "utf8" }).stdout || "{}")
+    const routed = full.metadata.effort && spawnSync("bash", ["skills/worktask/scripts/effort-route.sh",
+      "--agent", subagentType, "--model", effectiveModel, "--requested", full.metadata.effort],
+      { encoding: "utf8" });
+    // A refused route (exit 2, no line) must not fall through to a dispatch without the tier.
+    if (routed && routed.status !== 0) { escalate(task.id, "effort_route_refused"); continue; }
+    const route = routed ? JSON.parse(routed.stdout)
       : { route: "inproc", effort_transport: "frontmatter", reason: "effort_unstamped" };
+```
+
+###### Step 6 — the effort argument and the route row
+
+```typescript
     // "none" = haiku, no effort. "agent-param" = the default in-process route.
     const effortArg = route.effort_transport === "agent-param" ? { effort: route.requested } : {};
     appendAudit({ actor: "orchestrator", action: "effort_route", subject: task.id, result: "ok",

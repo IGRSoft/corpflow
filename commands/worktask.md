@@ -633,15 +633,20 @@ Batching`) and Step A.4.
 ### Steps 5–8 — Dispatch PL, then present the plan
 
 5. **PL0 → in_progress**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 in_progress`
-6. **Delegate**: `Agent({ subagent_type: "corpflow:product-manager", prompt: "<planning prompt>" })`
-   — PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
-   glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
-   creates stage tasks with `metadata.agent` and `metadata.plan_file`. The seeded
-   `plan_file`/`run_index` are provisional — PM recomputes and is authoritative. Glob+increment
-   applies to a new run only: a plan-gate revision reuses the frozen index (§ Plan-revision
-   re-dispatch).
+6. **Delegate**: `Agent({ subagent_type: "corpflow:product-manager", model: <PL0 model>, effort:
+   <PL0 effort>, prompt: "<planning prompt>" })` — the pair Step 4 stamped on PL0, so a
+   `CORPFLOW.md § Models` raise reaches PM (§ Step 6 — what PM computes).
 7. **PL0 → completed**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 completed`
 8. **Present the plan summary** (contents per § Plan gate checkpoint path), then continue to Phase 2.
+
+#### Step 6 — what PM computes
+
+PM computes the next free plan filename (`pl0-procedure.md § Plan File & Run Index Naming`:
+glob+increment `.context/planning-0.md`, `planning-1.md`, …), writes it, assesses complexity, and
+creates stage tasks with `metadata.agent` and `metadata.plan_file`. The seeded
+`plan_file`/`run_index` are provisional — PM recomputes and is authoritative. Glob+increment
+applies to a new run only: a plan-gate revision reuses the frozen index (§ Plan-revision
+re-dispatch).
 
 #### Step 6 — record dropped and added stages
 
@@ -1183,9 +1188,9 @@ surface: in-process with `Agent({ effort })` by default; headless through
 
 | Surface | Carries the tier by | `effort_transport` |
 |---|---|---|
-| in-process (the default) | the `Agent` tool's `effort` parameter | `agent-param` |
+| in-process (the default, and the fallback after a headless `warn`) | the `Agent` tool's `effort` parameter | `agent-param` |
 | headless `claude -p --agent` (opt-in) | the `--effort <tier>` flag | `dispatch-flag` |
-| in-process with no stamped tier, or the fallback after a headless `warn` | the agent's own frontmatter; the call passes no `effort` | `frontmatter` |
+| in-process with no stamped tier | the agent's own frontmatter; the call passes no `effort` | `frontmatter` |
 | in-process on haiku, which ignores effort | nothing — the call passes no `effort` | `none` |
 
 ###### Audit every dispatch surface
@@ -1213,9 +1218,9 @@ from the request.
 
 ##### Step C.0a — after a headless child exits
 
-A `warn` result (`cli_missing`, `cli_below_floor`, `opted_out`, `exit_before_artifact`,
-`auth_failed` or `agent_unresolved`) never reaches this step at all: the stage ran no headless
-work, so the orchestrator dispatches it in-process via `Agent()` at the frontmatter baseline and
+A `warn` result (`cli_missing`, `cli_below_floor`, `exit_before_artifact`, `auth_failed` or
+`agent_unresolved`) never reaches this step at all: the stage ran no headless work, so the
+orchestrator dispatches it in-process via `Agent({ effort })` at the same tier and
 skips the replay below entirely — there is no `SubagentStop` chain for a stage that never ran
 headless. A refused value (exit 2 — a usage error or a validation refusal, e.g. a workspace path
 that is not a worktree this ledger pins) is not a `warn` either: it prints no result line at all,

@@ -49,7 +49,7 @@ setup() {
 
 @test "effort: a payload without effort records unknown, never \$CLAUDE_EFFORT" {
   # A haiku subagent runs with no effort: its SubagentStop payload omits .effort while the
-  # env var still holds the requested tier (observed at 2.1.292).
+  # env var still holds the requested tier.
   run env CLAUDE_EFFORT=high CLAUDE_PROJECT_DIR="$WD" \
     bash "$PLUGIN_ROOT/$SCRIPT" <<< '{"agent_type":"corpflow:technical-writer","agent_id":"a9","session_id":"s9"}'
   assert_success

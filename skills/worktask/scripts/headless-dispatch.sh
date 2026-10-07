@@ -29,8 +29,8 @@
 #   apply their own `manual`-or-narrower ceiling on top.
 #
 #   Fallback: a `claude` binary missing/below floor, an auth failure, an unresolved `--agent`,
-#   a pre-artifact exit, or the operator opt-out degrade to an in-process run on the agent's
-#   own frontmatter tier — but ONLY when the pre/post side-effect snapshots match. A side effect
+#   or a pre-artifact exit degrade to an in-process run that carries the same tier on the
+#   Agent tool's `effort` — but ONLY when the pre/post side-effect snapshots match. A side effect
 #   already landed means the run goes to the error chain instead (`side_effects_present`);
 #   silently retrying in-process over real work would double it.
 #
@@ -374,9 +374,7 @@ fi
 
 # --- pre-spawn fallback checks (no side effects possible yet) --------------------------------
 FALLBACK_REASON=""
-if [ "${CORPFLOW_HEADLESS_ROUTE:-}" = "off" ]; then
-  FALLBACK_REASON="opted_out"
-elif ! command -v claude > /dev/null 2>&1; then
+if ! command -v claude > /dev/null 2>&1; then
   FALLBACK_REASON="cli_missing"
 else
   CC_VERSION="$(claude --version 2> /dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -385,6 +383,11 @@ else
     FALLBACK_REASON="cli_below_floor"
   fi
 fi
+
+# "null" and "" become a bare JSON null; every other value is already allowlist-checked.
+_hd_str_or_null() {
+  if [ -z "$1" ] || [ "$1" = "null" ]; then printf 'null'; else printf '"%s"' "$1"; fi
+}
 
 emit_result() {
   # $1 result (ok|warn|error) $2 effort_transport $3 effort_resolved ("null" -> JSON null)
@@ -402,15 +405,16 @@ emit_result() {
         fallback_reason:(if $reason == "" then null else $reason end),
         duration_ms:$duration, usage:$usage, total_cost_usd:$cost}'
   else
-    printf '{"task":"%s","agent":"%s","result":"%s","effort_transport":"%s","effort_resolved":"%s","fallback_reason":"%s"}\n' \
-      "$TASK" "$AGENT" "$1" "$2" "$3" "$4"
+    printf '{"task":"%s","agent":"%s","result":"%s","effort_transport":"%s","effort_resolved":%s,"effort_resolved_reason":%s,"fallback_reason":%s}\n' \
+      "$TASK" "$AGENT" "$1" "$2" "$(_hd_str_or_null "$3")" "$(_hd_str_or_null "${8:-}")" \
+      "$(_hd_str_or_null "$4")"
   fi
 }
 
 if [ -n "$FALLBACK_REASON" ]; then
   # Nothing has run yet on this path, so there is no side effect to check. The in-process
-  # fallback runs on the agent's own frontmatter tier, which only its hook rows can report.
-  emit_result "warn" "frontmatter" "null" "$FALLBACK_REASON" null null null "inproc_fallback"
+  # fallback carries the tier on `effort`; only its hook rows can report what ran.
+  emit_result "warn" "agent-param" "null" "$FALLBACK_REASON" null null null "inproc_fallback"
   exit 0
 fi
 
@@ -488,7 +492,7 @@ if [ "$EXIT_CODE" -ne 0 ]; then
   elif grep -qiE 'unknown agent|agent not found|no such agent' "$LOG_FILE" 2> /dev/null; then
     REASON="agent_unresolved"
   fi
-  emit_result "warn" "frontmatter" "null" "$REASON" null null null "inproc_fallback"
+  emit_result "warn" "agent-param" "null" "$REASON" null null null "inproc_fallback"
   exit 0
 fi
 

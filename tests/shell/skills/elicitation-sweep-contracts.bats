@@ -1789,7 +1789,7 @@ resolver_body() {
 }
 
 @test "the in-process effort claim matches what headless-dispatch.md actually says" {
-  # The contract claims the Agent tool carries effort in-process (2.1.292); that claim is only
+  # The contract claims the Agent tool carries effort in-process; that claim is only
   # safe while the translation table says so too. If the table falls back to Advisory, this
   # fires and the contract's claim becomes wrong rather than merely stale.
   grep -qE '^\| `effort` \|.*\| \*\*Yes\*\* \(`Agent` `effort`' "$PLUGIN_ROOT/$HEADLESS"

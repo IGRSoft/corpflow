@@ -180,9 +180,9 @@ argv_has() { grep -qxF -- "$1" "$PA_OUT_FILE"; } # <exact-token>
   assert_output --partial "not registered"
 }
 
-# --- spawn / fallback (each fallback reason -> one warn result, frontmatter transport, tier unobserved)
+# --- spawn / fallback (each fallback reason -> one warn result, agent-param transport, tier unobserved)
 
-@test "cli_missing: claude absent from PATH degrades to warn/frontmatter" {
+@test "cli_missing: claude absent from PATH degrades to warn/agent-param" {
   echo hi > "$WS/prompt.txt"
   run_script_env --path "/usr/bin:/bin" "$SCRIPT" --task DV0 --agent corpflow:developer \
     --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
@@ -190,12 +190,12 @@ argv_has() { grep -qxF -- "$1" "$PA_OUT_FILE"; } # <exact-token>
   assert_success
   assert_output --partial '"result":"warn"'
   assert_output --partial '"fallback_reason":"cli_missing"'
-  assert_output --partial '"effort_transport":"frontmatter"'
+  assert_output --partial '"effort_transport":"agent-param"'
   assert_output --partial '"effort_resolved":null'
   assert_output --partial '"effort_resolved_reason":"inproc_fallback"'
 }
 
-@test "cli_below_floor: an old claude --version degrades to warn/frontmatter" {
+@test "cli_below_floor: an old claude --version degrades to warn/agent-param" {
   stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi; exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
@@ -215,15 +215,32 @@ argv_has() { grep -qxF -- "$1" "$PA_OUT_FILE"; } # <exact-token>
   assert_output --partial '"fallback_reason":"cli_below_floor"'
 }
 
-@test "opted_out: CORPFLOW_HEADLESS_ROUTE=off degrades to warn before any spawn" {
-  stub_cmd claude --body 'exit 0'
+@test "CORPFLOW_HEADLESS_ROUTE=off is not a fallback reason: the spawn still runs" {
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.292"; exit 0; fi
+cat > /dev/null
+echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
+exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path --env "CORPFLOW_HEADLESS_ROUTE=off" "$SCRIPT" --task DV0 \
     --agent corpflow:developer --model opus --effort xhigh --permission-mode manual \
     --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_success
-  assert_output --partial '"fallback_reason":"opted_out"'
-  [ "$(stub_log --count claude)" -eq 0 ]
+  refute_output --partial 'opted_out'
+  assert_output --partial '"result":"ok"'
+}
+
+@test "without jq a warn row still emits JSON null, never the string \"null\"" {
+  echo hi > "$WS/prompt.txt"
+  run_script_env --hide jq --hide claude "$SCRIPT" --task DV0 --agent corpflow:developer \
+    --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
+    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
+  assert_success
+  assert_output --partial '"effort_resolved":null'
+  assert_output --partial '"effort_resolved_reason":"inproc_fallback"'
+  assert_output --partial '"fallback_reason":"cli_missing"'
+  refute_output --partial '"null"'
+  # Only the jq branch prints session_id, so its absence proves the printf branch ran.
+  refute_output --partial '"session_id"'
 }
 
 @test "the child's cwd is the worktree and WORKSPACE_ROOT is the ledger root, not the worktree" {

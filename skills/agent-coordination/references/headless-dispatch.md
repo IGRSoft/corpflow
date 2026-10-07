@@ -31,7 +31,7 @@ A managed `availableModels` allowlist also constrains subagent overrides, and `e
 
 #### Effort route and transport
 
-The route decision lives in `skills/worktask/scripts/effort-route.sh` (architecture-1.md ADR-3). Since 2.1.292 the default is in-process, with the tier on the `Agent` tool's `effort` parameter. This CLI surface is the opt-in: `CORPFLOW_HEADLESS_ROUTE=on` sends every non-haiku stage headless. `--effort` outranks the agent's own `effort:` frontmatter here too (probed at 2.1.292). `effort_transport` names the surface that applied the tier: `agent-param` (in-process), `dispatch-flag` (this CLI surface), `frontmatter` (no `effort` passed: an unstamped row, or the fallback after a headless `warn`) or `none` (haiku). `commands/worktask.md § Step C.0a` is the one canonical table.
+The route decision lives in `skills/worktask/scripts/effort-route.sh` (architecture-1.md ADR-3). Since 2.1.292 the default is in-process, with the tier on the `Agent` tool's `effort` parameter. This CLI surface is the opt-in: `CORPFLOW_HEADLESS_ROUTE=on` sends every non-haiku stage headless. `--effort` outranks the agent's own `effort:` frontmatter here too (probed at 2.1.292). `effort_transport` names the surface that applied the tier: `agent-param` (in-process, including the fallback after a headless `warn`), `dispatch-flag` (this CLI surface), `frontmatter` (no `effort` passed: an unstamped row) or `none` (haiku). `commands/worktask.md § Step C.0a` is the one canonical table.
 
 ### Translation table — permission, workspace & MCP
 

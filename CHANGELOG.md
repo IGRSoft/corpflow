@@ -39,9 +39,12 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
   `effort_resolved` comes from the subagent's hook row. `CORPFLOW_HEADLESS_ROUTE=on` sends every
   non-haiku stage headless instead; haiku stages pass no `effort` (`none`). **Breaking:**
   `effort-route.sh` drops `--agents-dir`, `--role-baseline` and the `baseline`/`baseline_source`
-  fields, and `headless-dispatch.sh` drops `--baseline`. A headless `warn` fallback reports
-  `effort_resolved: null` (`inproc_fallback`), and the headless child gets the tier from
-  `--effort` alone, not `CLAUDE_CODE_EFFORT_LEVEL`.
+  fields, and `headless-dispatch.sh` drops `--baseline` and the `opted_out` fallback
+  (`CORPFLOW_HEADLESS_ROUTE=off`). The headless child gets the route's tier from `--effort` alone,
+  not `CLAUDE_CODE_EFFORT_LEVEL`, so a resolver bump reaches it; a `warn` fallback runs in-process
+  at the same tier (`agent-param`, `effort_resolved: null`, `inproc_fallback`). A refused route
+  escalates instead of dispatching without the tier, and the PL0 and self-improvement dispatches
+  pass their resolved `effort` too.
 - **Nested delegates get the stage tier.** A nested `Agent` call without `effort` runs at the
   target's own frontmatter tier. DV, QA, SR and RE now pass their brief's `effort:` line, which
   `brief-compose.sh` emits beside `model:`, to the agent doing the stage's primary work; consults

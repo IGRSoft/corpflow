@@ -10,9 +10,9 @@
 #        so the call passes no `effort` — transport "none".
 #     2. CORPFLOW_HEADLESS_ROUTE=on routes headless (`claude -p --agent … --effort`) — the
 #        opt-in for runs that want a separate process per stage.
-#     3. Everything else stays in-process with `effort` set — "agent-param" (CC 2.1.292).
-#   The agent's own `effort:` frontmatter plays no part: the Agent call's `effort` outranks it
-#   (probed at 2.1.292), so there is no baseline to compare against.
+#     3. Everything else stays in-process with `effort` set — "agent-param".
+#   The agent's own `effort:` frontmatter plays no part: the Agent call's `effort` outranks it,
+#   so there is no baseline to compare against.
 #
 #   Symbols: none exported — this file is a CLI, never sourced (unlike effort-ladder.sh).
 #

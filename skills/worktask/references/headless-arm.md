@@ -9,8 +9,8 @@ section of `skills/worktask/SKILL.md`.
 ## Headless launch
 
 The helper owns the worktree cwd, ledger-root env, validation and side-effect checks. It reads
-ledger-owned effort, permission mode, workspace and artifact itself; do not interpolate those
-values into the Bash command. `shellQuoteAll` quotes the orchestrator-owned arguments.
+ledger-owned permission mode, workspace and artifact itself; do not interpolate those values
+into the Bash command. `--effort` is the route's tier, so a resolver bump reaches the child. `shellQuoteAll` quotes the orchestrator-owned arguments.
 
 ### Headless launch — open the arm
 
@@ -32,7 +32,7 @@ when the orchestrator itself runs unattended (`-p`, SDK, CI), a background comma
 
 ```typescript
       const hdArgs = ["--task", task.id, "--agent", subagentType, "--model", effectiveModel,
-        "--ledger-root", _orch_root,
+        "--effort", route.requested, "--ledger-root", _orch_root,
         "--parent-mode", parentMode, "--prompt", promptFile, "--session-id", childSessionId,
         "--out", outLog];
       const hd = Monitor(Bash({ run_in_background: true, timeout: 7200000,
@@ -42,20 +42,20 @@ when the orchestrator itself runs unattended (`-p`, SDK, CI), a background comma
 
 ### Refused launch and safe fallback
 
-Exit 2 refuses bad inputs; exit 3 reports side effects; neither permits fallback. Only `warn`
-means no headless work ran: dispatch in-process with no `effort` (the frontmatter tier), audit the
-new surface, and omit `.headless` so no stop hooks replay for a nonexistent child.
+Exit 2 refuses bad inputs; exit 3 reports side effects; neither permits fallback. On `warn` no
+headless work ran: dispatch in-process at the route's tier, audit the new surface, and omit
+`.headless` so no stop hooks replay.
 
 ```typescript
       if (hd.status === 3) { escalate(task.id, "side_effects_present"); continue; }
       if (hd.status === 2) { escalate(task.id, "headless_dispatch_refused"); continue; }
       if (hdResult.result === "warn") {
         launchAck = Agent({
-          subagent_type: subagentType, model: effectiveModel, prompt,
+          subagent_type: subagentType, model: effectiveModel, effort: route.requested, prompt,
           ...(stageSchema ? { schema: stageSchema } : {}),
         });
         appendAudit({ actor: "orchestrator", action: "effort_route", subject: task.id,
-          result: "ok", metadata: { ...route, route: "inproc", effort_transport: "frontmatter",
+          result: "ok", metadata: { ...route, route: "inproc", effort_transport: "agent-param",
             reason: "headless_warn_fallback", fallback_reason: hdResult.fallback_reason } });
 ```
 
@@ -125,7 +125,7 @@ The script needs both `--session-id` for reporting and `--resume` for the same c
 
 ```typescript
           const resumeArgs = ["--task", task.id, "--agent", subagentType,
-            "--model", effectiveModel, "--ledger-root", _orch_root,
+            "--model", effectiveModel, "--effort", route.requested, "--ledger-root", _orch_root,
             "--parent-mode", parentMode, "--prompt", blockPromptFile,
             "--session-id", childSessionId, "--resume", childSessionId,
             "--out", resumeOutLog];
