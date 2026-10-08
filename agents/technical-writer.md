@@ -124,6 +124,16 @@ Take the findings in stdout order. For each one, the first arm that matches wins
 
 `blocked_on` carries one finding, the first arm-2 finding. List every finding with its arm in `documentation-N.md`. Worked example: `stage-contracts.md#tpl-dc`.
 
+#### DC2 — runtime paths stop rule
+
+A `missing` path can be one the code creates at run time; stderr then may say it is git-ignored. After one failed fix attempt on the same `missing` path finding, stop editing that line:
+
+1. Check whether the code creates the path, or `.gitignore` lists it.
+2. If so, re-run with `--allow-path <tree-relative path>`. Record the path and its evidence (the creating `file:line` or the ignore line) in `documentation-N.md`.
+3. If not, route the finding by the arms above.
+
+Never delete a correct claim to quiet the check. Run the gate at most 3 times per doc set.
+
 ### Diff-Only Read Rule (DC)
 
 Cheapest-first when only the delta is needed to update a doc reference: frontmatter-first, then diff-only via `git diff <base>..HEAD -- <path>` when `state.json → facts.files_read` lists the path, else anchor-scoped `Read`. Full reads stay available when those are insufficient; absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.
@@ -218,7 +228,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DC --p
 <!-- output-sections:begin stage=DC -->
 ### Artifact anchors
 
-`documentation-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+`documentation-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. An Edit adding another H2 is denied; a Write lands and Post feedback asks for an Edit fix, never a re-Write. The stage gate (`handoff-harness.sh --validate-frontmatter`) fails a missing or unexpected H2, `handoff:` over 200 discretionary tokens, or a non-`escalate` sweep stub lacking 2-4 `options[]`.
 
 - Required: `## files-changed`, `## cross-references`, `## follow-ups`, `## elicitation-sweep`
 - Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`

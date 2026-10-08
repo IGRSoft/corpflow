@@ -429,7 +429,7 @@ implementation body. § Exact-output criteria are byte-exact, above, wins on any
 
 #### Anchor-lint enforcement
 
-At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list and flags a missing anchor after the write (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
+At write time `hooks/anchor-preflight.sh` denies an Edit that adds an H2 outside the allow-list; after a Write it reports an off-list H2, a missing anchor or a frontmatter finding for an Edit fix (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
 
 #### Workspace Mode
 

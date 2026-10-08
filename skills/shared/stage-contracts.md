@@ -257,7 +257,7 @@ With no typed return (the dispatch primitive takes no `schema` argument, or the 
 
 ### Steps 3–5
 
-3. Anchor lint (every stage boundary): every produced artifact's H2 headings match its stage's allow-list in `handoff-protocol.md#anchor-allow-list`. `handoff-harness.sh --validate-frontmatter` fails the transition on a missing required or an unexpected H2; at write time `hooks/anchor-preflight.sh` denies a `PreToolUse` write that adds an unexpected H2 and re-lints advisorily on `PostToolUse` (`handoff-protocol.md § Anchor Pre-Flight`). No CI counterpart exists.
+3. Anchor lint (every stage boundary): every produced artifact's H2 headings match its stage's allow-list in `handoff-protocol.md#anchor-allow-list`. `handoff-harness.sh --validate-frontmatter` fails the transition on a missing required or an unexpected H2; at write time `hooks/anchor-preflight.sh` denies a `PreToolUse` Edit that adds an unexpected H2 and reports a Write's off-list H2 or frontmatter finding on `PostToolUse`, for an Edit fix (`handoff-protocol.md § Anchor Pre-Flight`). No CI counterpart exists.
 4. Section check: grep the output artifact for required section headers.
 5. Side-artifact check: for DV/QA, the corresponding `.context/logs/` build/test capture exists.
 
@@ -580,6 +580,15 @@ A second silent path cannot be clamped and is read from the audit row instead: a
 ## Per-Stage Frontmatter Templates
 
 Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy. `#tpl-pl` has one more copy to mirror: the top of `skills/worktask/templates/planning.md`, which PL0 copies.
+
+### Two first-write rules the stage gate enforces
+
+Read these before the first artifact write. `handoff-harness.sh --validate-frontmatter` fails the stage on either.
+
+1. **Frontmatter budget.** The `handoff:` block stays at or under 200 discretionary tokens. The harness counts words × 1.33, comments included, so the limit is about 150 words. `open_questions` stubs and `tests_executed` do not count.
+2. **Sweep stubs.** Each `open_questions` stub has an item under `## elicitation-sweep` with 2–4 `options[]` (`label:`), or it is an `escalate` item whose question ends in `?`. Never write a status-note stub. The empty case is in § Closing Elicitation Sweep.
+
+A Write that breaks either rule lands. `hooks/anchor-preflight.sh` then reports it at PostToolUse: fix it with a small Edit, do not re-Write the file. Every stage agent carries a short form of both rules in its generated "Artifact anchors" block.
 
 ### Typed-return equivalent
 
@@ -974,6 +983,14 @@ a tree or doc cannot be read.
 Exit 1 is a gate failure, not a warning, and neither 2 nor 3 is a pass. `--allow` suppresses a name
 the host sets, and each use names that host in `documentation-N.md`. The steady-path steps live in
 `agents/technical-writer.md § Option-existence gate (DC2)`.
+
+#### DC exempts a runtime path with --allow-path (tpl-dc)
+
+`--allow-path <path>` suppresses a `missing` path finding at that tree-relative path or below it, for a path the code creates at run
+time. The value must not be empty, `.`, absolute, or hold `..`. Each use records the creating
+`file:line` or the `.gitignore` line in `documentation-N.md`. DC uses it after one failed fix
+attempt, never deletes a correct claim to quiet the check, and runs the gate at most 3 times per doc
+set.
 
 #### A finding routes by who wrote the line (tpl-dc)
 

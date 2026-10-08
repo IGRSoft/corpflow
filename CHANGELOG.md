@@ -10,6 +10,15 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Added
 
+- **Fewer full-artifact rewrites and a bounded DC path loop.** `hooks/anchor-preflight.sh` no
+  longer denies a whole-file Write. Frontmatter over budget, a digitless `summary_line`, a
+  status-note sweep stub and an off-list H2 now come back at PostToolUse, one line per finding,
+  with "fix it with a small Edit, do not re-Write the file". An Edit that adds an off-list H2 is
+  still denied, and the stage-boundary harness still gates. Every stage agent's "Artifact anchors"
+  block states the 200-token budget and the 2–4 option sweep rule. `doc-option-check.sh` gains a
+  repeatable `--allow-path <path>` for paths the code creates at run time, and a stderr hint for a
+  git-ignored missing path. technical-writer DC2 gets a stop rule: one failed fix, then evidence and
+  `--allow-path`, never a deleted correct claim, at most 3 runs.
 - **`writing-style` skill and `skills/shared/writing-style.md` canon.** Prose rules derived from
   ASD-STE100 at about 80%: single-topic sentences (procedural ≤20 words, descriptive ≤25), active
   voice, imperative steps, articles kept, one term per meaning, and tables or diagrams over prose

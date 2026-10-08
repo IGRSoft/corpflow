@@ -298,7 +298,7 @@ Union by `.id` (last writer wins, newest at the tail): never clobbers an upstrea
 <!-- output-sections:begin stage=DR -->
 ### Artifact anchors
 
-`developer-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+`developer-review-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. An Edit adding another H2 is denied; a Write lands and Post feedback asks for an Edit fix, never a re-Write. The stage gate (`handoff-harness.sh --validate-frontmatter`) fails a missing or unexpected H2, `handoff:` over 200 discretionary tokens, or a non-`escalate` sweep stub lacking 2-4 `options[]`.
 
 - Required: `## findings`, `## verdict`, `## blockers`, `## follow-ups`, `## elicitation-sweep`
 - Optional in any stage: `## rework-<N>`, `## re-review`, `## design-preview`, `## test-strategy`

@@ -216,7 +216,7 @@ Omit it and the stub reaches only the frontmatter, never the FN gate's render: t
 <!-- output-sections:begin stage=TL -->
 ### Artifact anchors
 
-`coordination-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. `hooks/anchor-preflight.sh` denies a write that adds any other H2; `handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2.
+`coordination-N.md` carries only these H2 headings; nest every other heading as H3. Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. An Edit adding another H2 is denied; a Write lands and Post feedback asks for an Edit fix, never a re-Write. The stage gate (`handoff-harness.sh --validate-frontmatter`) fails a missing or unexpected H2, `handoff:` over 200 discretionary tokens, or a non-`escalate` sweep stub lacking 2-4 `options[]`.
 
 - Required: `## fan-out`, `## shared-snippets`, `## sequence`, `## risks`, `## elicitation-sweep`
 - Optional for TL: `## Blockers`
