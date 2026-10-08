@@ -1324,6 +1324,35 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     || fail "raising to blocking was refused: $out"
 }
 
+@test "q8 union: class is raise-only — escalate survives decision, a raise is honoured" {
+  local filter out
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-SR0-1","class":"escalate","ref":"a.md#x","blocks_next_stage":false}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-SR0-1","class":"decision","ref":"b.md#y","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0] | .class == "escalate" and .ref == "b.md#y"' > /dev/null \
+    || fail "an incumbent escalate was lowered: $out"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"escalate","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0].class == "escalate"' > /dev/null \
+    || fail "a raise to escalate was refused: $out"
+}
+
+@test "q8 union: a stub that omits class keeps the incumbent's class, whatever it is" {
+  # Unreachable through --facts (the shape gate requires .class), so exercised on the filter.
+  local filter out cls
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  for cls in escalate decision; do
+    out="$(printf '%s' "{\"facts\":{\"open_questions\":[{\"id\":\"sw-DV0-1\",\"class\":\"$cls\",\"ref\":\"a.md#x\",\"blocks_next_stage\":false}]}}" \
+          | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+    printf '%s' "$out" | jq -e --arg c "$cls" '.facts.open_questions[0].class == $c' > /dev/null \
+      || fail "an omitted class dropped the incumbent $cls: $out"
+  done
+  out="$(printf '%s' '{"facts":{"open_questions":[]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0] | has("class") | not' > /dev/null \
+    || fail "a new stub with no class gained a class key: $out"
+}
+
 @test "q9: the raise-only lattice is scoped to labellers, and transports are named a defect" {
   # Without this scope the orchestrator reaches for the nearest rule when an agent's artifact
   # and its own ledger stub disagree, ORs them, and manufactures a gate out of a bookkeeping slip.

@@ -90,6 +90,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+ST treats every `escalate` item as a recommendation only and never resolves it, in prose or in the ledger; the user answers it at its checkpoint.
+
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 ### State Patch — REQUIRED before return

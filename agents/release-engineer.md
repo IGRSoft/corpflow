@@ -251,6 +251,8 @@ Inputs (anchor-first), completion checklist, run-index resolver, atomic-write ru
 
 **Sweep before handoff (REQUIRED)** — emit `open_questions[]` per `skills/shared/stage-contracts.md § Closing Elicitation Sweep`; that section is canonical and is never restated here.
 
+A question offering to ship with a known vulnerability, CVE or open security finding is `class: escalate` per `commands/worktask.md § Escalation guard (BINDING)`.
+
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
 ### State Patch — REQUIRED before return

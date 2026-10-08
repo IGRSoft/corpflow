@@ -161,6 +161,17 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Fixed
 
+- **A sweep item's `class` can no longer be lowered from `escalate`.** `state-patch.sh --facts`
+  joined `class` last-writer-wins, so a stage re-run could write `decision` over an item another
+  labeller raised to `escalate`. The ledger then agreed with the artifact, and the harness passed.
+  Now `class` is raise-only on `decision < escalate`, and a stub with no class keeps the incumbent's.
+  A refused downgrade exits 2. It prints one line per id on stdout and stderr and writes one
+  `facts_items_rejected` audit row. The rest of the payload still lands. Ledgers that agree
+  today keep passing. After a refusal, an artifact stub that still says `decision` fails
+  `--validate-frontmatter` at the next boundary. That failure is a real defect: raise the stub to
+  `escalate`. `#tpl-sr` and `#tpl-re` now make a question that offers to accept a known vulnerability,
+  CVE or security finding `class: escalate`. `#tpl-st` states that ST never resolves an `escalate`
+  item.
 - **`apple-swift-match` checks a minimum, not equality.** It passes on any `swift` on PATH at or
   above `CORPFLOW_SWIFT_MIN` (default 6.3.0). The compare is numeric per field, and the detail
   names both versions when `xcrun swift` differs. A `swift` that cannot run fails with the probe's

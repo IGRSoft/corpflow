@@ -1840,3 +1840,30 @@ ANCHORS="$FIXTURES/worktask/anchors"
   assert_failure 1
   assert_output --partial "fail: anchor gate cannot run on retrospective-0.md"
 }
+
+# The ledger refuses the downgrade, so an artifact still saying `decision` diverges from it
+# and the unchanged harness must fail the boundary.
+@test "sweep class: a refused --facts downgrade leaves the decision artifact failing the harness" {
+  local d="$WD/sr" rc=0 sp="$PLUGIN_ROOT/skills/worktask/scripts/state-patch.sh"
+  local want="fail: sweep stub sw-SR0-1 disagrees across transports — class is decision in security-review-0.md but escalate in facts.open_questions[]. Reconcile both to the intended value (the artifact is the author's copy); do not leave them divergent"
+  mkdir -p "$d/logs"
+  printf '{"version":2,"run_index":0,"tasks":{},"facts":{"open_questions":[]}}\n' > "$d/state.json"
+  bash "$sp" --state "$d/state.json" --facts '{"open_questions":[{"id":"sw-SR0-1","class":"escalate","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
+  run bash "$sp" --state "$d/state.json" --facts '{"open_questions":[{"id":"sw-SR0-1","class":"decision","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":false}]}'
+  assert_failure 2
+  assert_output --partial "class downgrade escalate -> decision refused"
+  {
+    printf -- '---\nhandoff:\n  stage: SR\n  verdict: pass\n  summary: "fixture"\n'
+    printf '  key_decisions:\n    - { id: sr1, summary: "x", anchor: "security-review-0.md#findings" }\n'
+    printf '  open_questions:\n'
+    printf '    - { id: sw-SR0-1, class: decision, ref: "security-review-0.md#elicitation-sweep", blocks_next_stage: false }\n'
+    printf '  refs:\n    findings: security-review-0.md#findings\n---\n\n# Security Review\n'
+    anchor_h2s SR
+    printf '\n## elicitation-sweep\n\n- id: sw-SR0-1\n  summary: "Accept the finding?"\n  options:\n'
+    printf -- '    - { label: "A", detail: "first" }\n    - { label: "B", detail: "second" }\n'
+  } > "$d/security-review-0.md"
+  bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$d/security-review-0.md" --state "$d/state.json" \
+    > "$d/out" 2> "$d/err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "the harness passed a decision stub beside a ledger escalate"
+  grep -qF -- "$want" "$d/err" || fail "exact divergence line absent from stderr: $(cat "$d/err")"
+}

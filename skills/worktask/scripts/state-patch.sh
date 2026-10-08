@@ -1291,6 +1291,11 @@ _STATE_BOUNDS_FILTER='
 # never truthiness, tells those apart — conflating them made `true` unclearable. Legacy
 # payloads only: `--facts` requires the key. facts.decisions keeps _union_keyed.
 #
+# `class` is raise-only on `decision < escalate`: labellers are indistinguishable here, so
+# a re-run lowering another labeller's `escalate` would route it to an unattended answer. An
+# absent or null class keeps the incumbent's. A third SWEEP_CLASS_ENUM value means revisiting
+# this arm. An `escalate` already evicted to the spill has no incumbent and is not guarded.
+#
 # Object-merge (`. * $patch`) REPLACES arrays, so without this a downstream patch would drop
 # every entry an upstream stage recorded. Identity is `.id`, or the string itself for the
 # scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps the
@@ -1315,7 +1320,12 @@ _FACTS_UNION_FILTER='
         + (if ($new.resolution // null) == null and ($prev.resolution // null) != null
            then { resolution: $prev.resolution } else {} end)
         + (if ($prev.blocks_next_stage // false) == true and (($new | has("blocks_next_stage")) | not)
-           then { blocks_next_stage: true } else {} end);
+           then { blocks_next_stage: true } else {} end)
+        + (if ($prev.class // null) == "escalate"
+           then { class: "escalate" }
+           elif ($new.class // null) == null and ($prev.class // null) != null
+           then { class: $prev.class }
+           else {} end);
       def _sweep_defaults:
         # $ARGS.named, not a bare $sweep_stage: a hard reference makes the whole
         # filter fail to COMPILE for any caller that does not pass --arg, which
@@ -1354,6 +1364,19 @@ _FACTS_UNION_FILTER='
         | (if (($f.stream_branches // {}) | length) > 0
            then .stream_branches = ((.stream_branches // {}) + $f.stream_branches)
            else . end))'
+
+# Run against the post-union state INSIDE the lock (ATOMIC_APPLY_PROBE): post `escalate` under
+# a non-escalate last write for that id can only be the class arm refusing a downgrade. Emits
+# the _FACTS_PARTITION_FILTER `.rejects[]` shape so one reporter serves both.
+_FACTS_CLASS_REFUSAL_PROBE='
+      (.facts.open_questions // []) as $post
+      | [ ($f.open_questions // []) | reduce .[] as $e ({}; .[$e.id] = $e) | .[]
+          | select((.class // null) != null and .class != "escalate")
+          | . as $n
+          | select(any($post[]; .id == $n.id and .class == "escalate"))
+          | { key: "open_questions", label: $n.id,
+              reason: ("class downgrade escalate -> " + ($n.class | tostring)
+                       + " refused; the ledger keeps escalate — set class: escalate in your artifact stub") } ]'
 
 # Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
 # refusal, `clean` carries only the items that passed, `rejects` names each dropped item and
@@ -1549,9 +1572,14 @@ _spill_evicted() {
 # The filter is evaluated against the file contents INSIDE the lock. Read-modify-write ops
 # (blocked_by union/subtraction) MUST come through here rather than precomputing from an
 # unlocked read: a pre-lock read races a sibling writer and silently drops its edges.
+#
+# Opt-in observer: a caller that sets ATOMIC_APPLY_PROBE (jq text, same args) gets its
+# output over the about-to-commit state in ATOMIC_APPLY_PROBE_OUT. A probe failure only
+# loses the report, never the write.
 atomic_apply() {
   local state="$1" filter="$2"
   shift 2
+  ATOMIC_APPLY_PROBE_OUT=""
   # `${state%/*}` returns $state unchanged when the path has no directory component,
   # so a bare `--state state.json` derived `state.json/.state.json….tmp` — ENOTDIR,
   # and every ledger op failed with the file untouched. Same guard the spill path
@@ -1571,6 +1599,13 @@ atomic_apply() {
   local rc=0
   if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then
     _spill_evicted "$state" "$tmp" "$filter" "$@"
+    if [[ -n "${ATOMIC_APPLY_PROBE:-}" ]]; then
+      ATOMIC_APPLY_PROBE_OUT=$(jq -c "$@" "$ATOMIC_APPLY_PROBE" "$tmp" 2>> "$LOG_FILE") || {
+        ATOMIC_APPLY_PROBE_OUT=""
+        printf >&2 'warn: class-downgrade detection failed; join still enforced (merge unaffected)\n'
+        log_msg WARN "class-downgrade detection failed; join still enforced (merge unaffected)"
+      }
+    fi
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -3442,20 +3477,21 @@ if [[ -n "$FACTS_ARG" ]]; then
     exit 2
   fi
 
-  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
-  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+  # _facts_report_rejects <header> <rejects-json-array> <log-line>
+  # Sets FACTS_REJECTED=1, so every exit site below turns it into exit 2.
+  _facts_report_rejects() {
+    local header="$1" rejects="$2" logline="$3" list msg
     FACTS_REJECTED=1
     # Built ONCE, then written to each stream. Two independent emissions read as two
     # separate rejections in any caller that merges the streams. Stdout as well as stderr
     # because a caller whose harness swallows stderr otherwise ships a stage one item short,
     # and the artifact/ledger divergence then surfaces a boundary later than its cause.
-    FACTS_REJECT_LIST=$(printf '%s' "$FACTS_PART" \
-      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason')
-    FACTS_REJECT_MSG="invalid --facts: ${FACTS_REJECT_N} item(s) rejected, the rest still persist:
-${FACTS_REJECT_LIST}"
-    printf '%s\n' "$FACTS_REJECT_MSG" >&2
-    printf '%s\n' "$FACTS_REJECT_MSG"
-    log_msg ERROR "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
+    list=$(printf '%s' "$rejects" | jq -r '.[] | "  - " + .key + " " + .label + ": " + .reason')
+    msg="${header}
+${list}"
+    printf '%s\n' "$msg" >&2
+    printf '%s\n' "$msg"
+    log_msg ERROR "$logline"
     # Neither stream above is durable. stderr inside a subagent turn is read by whatever
     # is reattaching, if anything; stdout is the tool result the model may or may not
     # quote. An audit row is the only channel a later sweep can find, and "which items
@@ -3464,8 +3500,15 @@ ${FACTS_REJECT_LIST}"
       corpflow_audit_row --file "${STATE_PATH%/*}/logs/audit.jsonl" \
         --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --subject facts --result degraded \
         --task-id "$(_audit_task_ref)" \
-        --meta "$(printf '%s' "$FACTS_PART" | jq -c '{rejected: [.rejects[] | {key, label, reason}]}')"
+        --meta "$(printf '%s' "$rejects" | jq -c '{rejected: [.[] | {key, label, reason}]}')"
     fi
+  }
+
+  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
+  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    _facts_report_rejects "invalid --facts: ${FACTS_REJECT_N} item(s) rejected, the rest still persist:" \
+      "$(printf '%s' "$FACTS_PART" | jq -c '.rejects')" \
+      "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
   fi
 
   FACTS_ARG=$(printf '%s' "$FACTS_PART" | jq -c '.clean')
@@ -3508,10 +3551,24 @@ ${FACTS_REJECT_LIST}"
     printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
     log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
     exit 1
-  elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
-    --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK" \
-    --arg decision_task "$DECISION_TASK_ID"; then
+  elif {
+    # Read-after-release would misreport a sibling's concurrent raise; so the probe runs in-lock.
+    [[ "$(printf '%s' "$FACTS_ARG" | jq -r '(.open_questions // []) | length')" -gt 0 ]] \
+      && ATOMIC_APPLY_PROBE="$_FACTS_CLASS_REFUSAL_PROBE"
+    _facts_apply_rc=0
+    atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
+      --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK" \
+      --arg decision_task "$DECISION_TASK_ID" || _facts_apply_rc=$?
+    unset ATOMIC_APPLY_PROBE
+    [[ "$_facts_apply_rc" -eq 0 ]]
+  }; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
+    _FACTS_REFUSED_N=$(printf '%s' "${ATOMIC_APPLY_PROBE_OUT:-[]}" | jq -r 'length' 2> /dev/null || printf '0')
+    if [[ "${_FACTS_REFUSED_N:-0}" -gt 0 ]]; then
+      _facts_report_rejects "invalid --facts: ${_FACTS_REFUSED_N} class downgrade(s) refused, the rest still persist:" \
+        "$ATOMIC_APPLY_PROBE_OUT" \
+        "--facts: ${_FACTS_REFUSED_N} class downgrade(s) refused; remainder persisted"
+    fi
     # Post-write assertion: keys in the log are not evidence the ids landed. An id that went
     # in and is not there afterwards was evicted by a clamp, which is exactly the silent loss
     # this stage exists to remove. Loud on stderr; the merge itself stands.
