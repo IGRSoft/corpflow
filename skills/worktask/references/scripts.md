@@ -9,6 +9,28 @@ and on a missing or unknown `handoff.verdict` on any path (`ERROR: verdict refus
 exits 0. `--allow-missing-artifact` silences that but writes **nothing**. Contract:
 `references/handoff-protocol.md#layer-1-fallback`.
 
+## state-patch.sh — removing a metadata key
+
+`--task-meta <ID> --unset <key[,key...]>` deletes those keys from `tasks.<ID>.metadata`. It runs
+alone or beside `--set`, after the merge and under the same lock and atomic write, so it wins over
+a key the same `--set` names.
+
+| Case | Result |
+|---|---|
+| The key exists | Removed; `has("<key>")` is false afterwards |
+| The key is absent | No-op: exit 0, state bytes unchanged |
+| A pipeline key: `stage`, `agent`, `model`, `effort`, `plan_gate`, `decision_gate`, `fn_gate`, `workspace_path`, `isolation`, `base_ref`, `requires_screenshots` | Exit 2, the key named on stderr, state unchanged. Correct it with `--set` |
+| A malformed name, or `--unset` on another op | Exit 2 |
+
+`--set '{"k":null}'` is not a delete: it stores `k: null`, and `has("k")` stays true.
+
+## state-patch.sh — the description notice
+
+A `description` over 240 chars is cut to 239 plus "…" on `--task-create` and `--task-meta`, and
+never refused (`skills/shared/state-ledger.md § description is capped at 240 chars`). After the
+write lands, stderr gets one `description_truncated=<id>:<original length>` line per cut. A value
+that fits prints nothing.
+
 ## permission-park.sh — CLI
 
 ```

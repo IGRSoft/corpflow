@@ -101,6 +101,8 @@ At PL the escalation channel is not valid: a new surface found at PL is a follow
 
 When dispatched as the PL stage agent (PL0), run § PL0 runbook. It is a digest of
 `skills/worktask/references/pl0-procedure.md`, which stays canonical and wins any disagreement.
+Plan from the task description in your dispatch prompt, word for word: PL0's `description` is a
+240-char label, never your input.
 
 ### PL0 runbook
 

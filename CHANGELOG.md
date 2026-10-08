@@ -170,6 +170,16 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 - **The Step 2a-pre snippet exits 0 on a clean pass.** It grepped for `result=`, which the script
   prints only on a skip, so a pass ended the tool call with exit 1. It now prints
   `result=<pass|skipped>` from `result_json`, keeps `reason=` and `accepted_absent=`, and exits 0.
+- **PL0 gets the full task.** Step 4 calls `description` a capped label, never the planner's
+  input. The new § Step 6 — the planning prompt names the minimum: the task word for word (the
+  issue body under `/megatask`), the resolved flags and carriers, and the `WORKSPACE_ROOT=` banner.
+  product-manager plans from that prompt. A 908-char task had reached PM cut at 240 chars.
+- **`state-patch.sh` reports a description cut.** It still truncates and never refuses. After the
+  write it prints `description_truncated=<id>:<length>` on stderr, on create and on meta.
+- **`--task-meta --unset <key[,key...]>` removes metadata keys.** Before, `--set '{"k":null}'`
+  was the only option, and `has("k")` stayed true. It runs after the merge under the same lock. An
+  absent key is a no-op. A pipeline key (`stage`, `agent`, `model`, `effort`, the three gates,
+  `workspace_path`, `isolation`, `base_ref`, `requires_screenshots`) exits 2 and names the key.
 - Speed-over-exploration clauses removed from product-manager, technical-lead and stakeholder.
 - team-lead clones PL0's resolved model/effort row instead of picking tiers; project-manager's
   stray `F3` step (the label means fallback layer 3 elsewhere) is renamed.
