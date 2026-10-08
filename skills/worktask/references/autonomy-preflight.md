@@ -24,14 +24,16 @@ set -- --auto "<resolved --auto values, comma-joined>" --platform "<platform[,pl
 pf_rc=0
 bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/autonomy-preflight.sh "$@" > "$PF_BUF" || pf_rc=$?
 echo "pf_rc=$pf_rc PF_BUF=$PF_BUF"
-if [ "$pf_rc" -eq 0 ]; then grep -E '^(result|reason|accepted_absent)=' "$PF_BUF"
+if [ "$pf_rc" -eq 0 ]; then
+  grep -E '^(result|reason|accepted_absent)=' "$PF_BUF" || true
+  sed -n 's/^result_json=//p' "$PF_BUF" | jq -r '"result=" + .result'
 else awk '/^result_json=/{exit} f; /^preflight_failures=/{f=1}' "$PF_BUF"; rm -f -- "$PF_BUF"; fi
 ```
 
 ### Step 2a-pre — the exit code decides
 
-- **0**: continue to Step 2a. `accepted_absent=<tools>` names the missing tools the operator
-  accepted. Keep the printed `PF_BUF` path for Step 3a, because shell variables do not survive
+- **0**: continue to Step 2a. The snippet prints `result=pass`, or `result=skipped` with its
+  `reason=`. `accepted_absent=<tools>` names the missing tools the operator accepted. Keep the printed `PF_BUF` path for Step 3a, because shell variables do not survive
   between tool calls. On `result=skipped`, delete the buffer instead; Step 3a records nothing.
 - **1 or 2**: stop before Step 2a and Step 3, reporting in one message every entry the snippet printed, each
   a failed grant, tool or toolchain check with its `fix:` line; for exit 2, the usage error on

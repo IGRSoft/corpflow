@@ -161,6 +161,15 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Fixed
 
+- **`apple-swift-match` checks a minimum, not equality.** It passes on any `swift` on PATH at or
+  above `CORPFLOW_SWIFT_MIN` (default 6.3.0). The compare is numeric per field, and the detail
+  names both versions when `xcrun swift` differs. A `swift` that cannot run fails with the probe's
+  first line (home path shown as `~`). The fix line is `swiftly use --global-default --assume-yes
+  xcode` or a PATH change; without `--assume-yes`, swiftly waits on a prompt. The check id is
+  unchanged.
+- **The Step 2a-pre snippet exits 0 on a clean pass.** It grepped for `result=`, which the script
+  prints only on a skip, so a pass ended the tool call with exit 1. It now prints
+  `result=<pass|skipped>` from `result_json`, keeps `reason=` and `accepted_absent=`, and exits 0.
 - Speed-over-exploration clauses removed from product-manager, technical-lead and stakeholder.
 - team-lead clones PL0's resolved model/effort row instead of picking tiers; project-manager's
   stray `F3` step (the label means fallback layer 3 elsewhere) is renamed.

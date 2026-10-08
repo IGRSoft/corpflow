@@ -51,24 +51,30 @@ EOS
 }
 
 # _pf [VAR=val ...] -- <script args>
-_pf() {
-  local envs=()
+_pf() { _pf_in "$PLUGIN_ROOT/$SCRIPT" "$@"; }
+
+# _pf_in <bash file> [VAR=val ...] -- [args]: the same stub environment for any entry point,
+# so a doc snippet runs against exactly the host the script tests see.
+_pf_in() {
+  local file="$1" envs=()
+  shift
   while [ $# -gt 0 ] && [ "$1" != "--" ]; do envs+=("$1"); shift; done
   [ "${1:-}" = "--" ] && shift
   run --separate-stderr env -u WORKSPACE_ROOT -u MILESTONE_MODE -u CLAUDE_CONFIG_DIR \
-    -u ANDROID_HOME -u ANDROID_SDK_ROOT \
-    PATH="$BIN:/usr/bin:/bin" HOME="$WD/home" TMPDIR="$WD/tmp" \
+    -u ANDROID_HOME -u ANDROID_SDK_ROOT -u CORPFLOW_SWIFT_MIN \
+    PATH="$BIN:/usr/bin:/bin" HOME="$WD/home" TMPDIR="$WD/tmp" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
     GH_BIN="$BIN/gh" GIT_BIN="$WD/git-stub" CLAUDE_PROJECT_DIR="$WD/proj" \
     AUTONOMY_PREFLIGHT_SETTINGS="$SETTINGS" AUTONOMY_PREFLIGHT_TIMEOUT=5 \
     AUTONOMY_PREFLIGHT_MCP_CONFIGS="$WD/cfg/mcp.json" \
     AUTONOMY_PREFLIGHT_PLUGINS_FILE="$WD/cfg/plugins.json" \
     PLAYWRIGHT_BROWSERS_PATH="$WD/browsers" DEVELOPER_DIR="$WD/dev" \
-    ${envs[@]+"${envs[@]}"} bash "$PLUGIN_ROOT/$SCRIPT" "$@"
+    ${envs[@]+"${envs[@]}"} bash "$file" "$@"
 }
 
 _block() { printf '%s\n' "$output" | awk '/^preflight_failures=/ { on = 1 } /^result_json=/ { on = 0 } on'; }
 _entries() { _block | grep -c '^  - \[' || true; }
 _rj() { printf '%s\n' "$output" | sed -n 's/^result_json=//p' | tail -n 1; }
+_swift_row() { jq -c '.checks[] | select(.id == "apple-swift-match")' <<< "$(_rj)"; }
 
 _no_context_anywhere() {
   local hit
@@ -90,11 +96,16 @@ _apple_host() {
 #!/bin/sh
 case "$1" in
   simctl) echo '-- iOS 18.0 --'; echo '    iPhone 16 (0A1B2C3D-0000-0000-0000-000000000000) (Shutdown)' ;;
-  swift) echo 'Apple Swift version 6.0 (swiftlang-6.0.0.9.10)' ;;
+  swift) printf '%s\n' "${XCRUN_SWIFT:-Apple Swift version 6.4 (swiftlang-6.4.0.1.1)}" ;;
 esac
 exit 0
 EOS
-  printf '#!/bin/sh\necho "Apple Swift version 6.0 (swiftlang-6.0.0.9.10)"\n' > "$BIN/swift"
+  # PATH_SWIFT / PATH_SWIFT_EXIT reshape the swift on PATH per test.
+  cat > "$BIN/swift" << 'EOS'
+#!/bin/sh
+printf '%s\n' "${PATH_SWIFT:-Apple Swift version 6.4 (swiftlang-6.4.0.1.1)}"
+exit "${PATH_SWIFT_EXIT:-0}"
+EOS
   printf '#!/bin/sh\nexit 0\n' > "$BIN/xcodebuild"
   printf '#!/bin/sh\n[ "$1" = "-lint" ] && grep -q "<plist" "$2"\n' > "$BIN/plutil"
   chmod +x "$BIN/xcrun" "$BIN/swift" "$BIN/xcodebuild" "$BIN/plutil"
@@ -408,6 +419,106 @@ _gate() {
   _pf CLAUDE_PROJECT_DIR= AUTONOMY_PREFLIGHT_SETTINGS= GIT_BIN="$BIN/git" \
     -- --auto plan --platform backend
   if _block | grep -q '\] gh-pr-merge:'; then fail "the worktree's own grant was not read: $output"; fi
+}
+
+# --- apple-swift-match: a minimum version, not equality with xcrun ---------------
+
+@test "swift: the same version on PATH and in xcrun passes" {
+  _apple_host
+  _pf -- --auto plan --platform apple
+  run jq -e '.status == "pass" and (.detail | test("swift 6.4 on PATH matches xcrun swift"))' <<< "$(_swift_row)"
+  assert_success
+}
+
+@test "swift: a PATH swift at the minimum passes beside a newer xcrun, and the detail names both" {
+  _apple_host
+  _pf PATH_SWIFT="Apple Swift version 6.3.0 (swift-6.3.0-RELEASE)" -- --auto plan --platform apple
+  local block
+  block="$(_block)"
+  run jq -e '.status == "pass" and (.detail | test("6\\.3\\.0")) and (.detail | test("xcrun swift is 6\\.4"))' <<< "$(_swift_row)"
+  assert_success
+  ! grep -q 'apple-swift-match' <<< "$block" || fail "a passing swift landed in the failure block"
+}
+
+@test "swift: a driver banner ahead of the version line still parses" {
+  _apple_host
+  _pf PATH_SWIFT="swift-driver version: 1.127.5 Apple Swift version 6.4 (swiftlang-6.4.0.1.1)" -- --auto plan --platform apple
+  run jq -e '.status == "pass"' <<< "$(_swift_row)"
+  assert_success
+}
+
+@test "swift: a PATH swift below the minimum fails and names its version and the floor" {
+  _apple_host
+  _pf PATH_SWIFT="Apple Swift version 6.2.1 (swiftlang-6.2.1.4.8)" -- --auto plan --platform apple
+  [ "$status" -eq 1 ]
+  run jq -e '.status == "fail" and (.detail | test("is 6\\.2\\.1, below the minimum 6\\.3\\.0"))' <<< "$(_swift_row)"
+  assert_success
+}
+
+@test "swift: a swift that cannot run carries its first output line and the non-interactive swiftly fix" {
+  _apple_host
+  local msg="error: The toolchain version 6.3.2 could not be located in $WD/home/Library/Developer/Toolchains/swift-6.3.2-RELEASE.xctoolchain/usr/bin"
+  _pf PATH_SWIFT="$msg" PATH_SWIFT_EXIT=1 -- --auto plan --platform apple
+  [ "$status" -eq 1 ]
+  # `run jq` replaces $output, so the block is read first.
+  local block
+  block="$(_block)"
+  run jq -e '.status == "fail" and (.detail | test("cannot run: error: The toolchain version 6\\.3\\.2 could not be located"))
+    and (.detail | test("in ~/Library/Developer/Toolchains"))' <<< "$(_swift_row)"
+  assert_success
+  grep -qF 'swiftly use --global-default --assume-yes xcode' <<< "$block" || fail "no non-interactive swiftly fix: $block"
+  ! grep -qF "$WD/home" <<< "$block" || fail "the home path leaked into the block"
+}
+
+@test "swift: CORPFLOW_SWIFT_MIN raises and lowers the floor, and a malformed value exits 2" {
+  _apple_host
+  _pf CORPFLOW_SWIFT_MIN=6.5 -- --auto plan --platform apple
+  run jq -e '.status == "fail" and (.detail | test("below the minimum 6\\.5"))' <<< "$(_swift_row)"
+  assert_success
+  _pf CORPFLOW_SWIFT_MIN=6.2 PATH_SWIFT="Apple Swift version 6.2.1 (swiftlang-6.2.1.4.8)" -- --auto plan --platform apple
+  run jq -e '.status == "pass"' <<< "$(_swift_row)"
+  assert_success
+  _pf CORPFLOW_SWIFT_MIN=six -- --auto plan --platform apple
+  [ "$status" -eq 2 ]
+}
+
+# --- the Step 2a-pre doc snippet ---------------------------------------------------
+
+# Writes the reference's snippet to $WD/snippet.sh with its placeholders filled.
+_snippet() { # <auto> <platform> <accept-absent>
+  awk '/^### Step 2a-pre snippet/ { s = 1; next } s && /^```bash/ { f = 1; next } f && /^```/ { exit } f' \
+    "$PLUGIN_ROOT/skills/worktask/references/autonomy-preflight.md" > "$WD/snippet.raw"
+  [ -s "$WD/snippet.raw" ] || fail "no bash fence under ### Step 2a-pre snippet"
+  AUTO="$1" PLAT="$2" ACC="$3" awk '{
+      sub(/"<the --accept-absent= value, verbatim; empty when not given>"/, "\"" ENVIRON["ACC"] "\"")
+      sub(/"<resolved --auto values, comma-joined>"/, "\"" ENVIRON["AUTO"] "\"")
+      sub(/"<platform\[,platform\] or none>"/, "\"" ENVIRON["PLAT"] "\"")
+      print }' "$WD/snippet.raw" > "$WD/snippet.sh"
+  ! grep -q '"<' "$WD/snippet.sh" || fail "a placeholder was left unfilled: $(grep '"<' "$WD/snippet.sh")"
+}
+
+@test "snippet: a clean pass exits 0 and prints result=pass" {
+  _snippet plan,finalization backend ""
+  _pf_in "$WD/snippet.sh"
+  assert_success
+  assert_line --regexp '^pf_rc=0 PF_BUF='
+  assert_line "result=pass"
+}
+
+@test "snippet: a pass with an accepted tool prints accepted_absent and result=pass" {
+  _snippet plan web playwright
+  _pf_in "$WD/snippet.sh"
+  assert_success
+  assert_line "accepted_absent=playwright"
+  assert_line "result=pass"
+}
+
+@test "snippet: a skip still prints result=skipped and its reason" {
+  _snippet decision web ""
+  _pf_in "$WD/snippet.sh"
+  assert_success
+  assert_line "result=skipped"
+  assert_line "reason=not_unattended"
 }
 
 @test "probes: a failed push and a missing gh login both surface in the same block" {
