@@ -382,7 +382,7 @@ the mailbox alone, and must not read an absent decision row as a decision never 
 #### Interrupted calls & transcript fidelity
 
    - **Interrupted calls**: a session that ended mid-tool-call resumes with that call marked outcome unknown and no hidden "Continue" message, so check its effect before repeating it. MCP calls in a resumed session wait up to 10s for a reconnecting server. `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` does not re-run a turn that ended at `--max-turns`.
-   - **Transcript fidelity**: `--resume` keeps the turns after a batch of parallel tool calls, the context a compaction restored, and the last messages before a quit. A session backgrounded while idle resumes its conversation instead of reopening empty.
+   - **Transcript fidelity**: `--resume` keeps the turns after a batch of parallel tool calls, the context a compaction restored, and the last messages before a quit. A session backgrounded while idle resumes its conversation instead of reopening empty. After a compaction Claude no longer takes its own last actions from before it as done after it, which made it retract or redo finished work, and a message typed while Claude works survives `←` backgrounding; if it cannot move, the session stays in the foreground and says so (2.1.293).
 
 #### Reattach, cross-spawn & inspection
 

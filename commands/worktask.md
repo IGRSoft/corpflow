@@ -575,6 +575,9 @@ there is a bug report: a conventional target existed and something stamped past 
 the task (`--task-create` would hit the create op's idempotent early-exit and drop the payload
 silently). `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-meta PL0 --set '{"stage":"PL","agent":"corpflow:product-manager","model":"<model>","effort":"<effort>","worktask_id":"<slug>","priority":"<priority>","plan_gate":"checkpoint","decision_gate":"user","fn_gate":"checkpoint","isolation":"worktree","workspace_path":"<resolved root>","description":"<task description>"}'`
 — `metadata.agent` is always the fully-qualified `plugin:agent` form (`corpflow:`, `apple-developer:`, …).
+`description` is a capped label, never the planner's input. `state-patch.sh` cuts a value over 240
+chars to 239 plus "…" and prints `description_truncated=PL0:<length>` on stderr; Step 6 passes the
+full statement.
 
 #### Step 4 — PL0's model and effort
 
@@ -635,9 +638,23 @@ Batching`) and Step A.4.
 5. **PL0 → in_progress**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 in_progress`
 6. **Delegate**: `Agent({ subagent_type: "corpflow:product-manager", model: <PL0 model>, effort:
    <PL0 effort>, prompt: "<planning prompt>" })` — the pair Step 4 stamped on PL0, so a
-   `CORPFLOW.md § Models` raise reaches PM (§ Step 6 — what PM computes).
+   `CORPFLOW.md § Models` raise reaches PM (§ Step 6 — what PM computes). The prompt's minimum
+   content is in § Step 6 — the planning prompt.
 7. **PL0 → completed**: `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --task-status PL0 completed`
 8. **Present the plan summary** (contents per § Plan gate checkpoint path), then continue to Phase 2.
+
+#### Step 6 — the planning prompt
+
+The prompt carries at least these 3 parts, in this order:
+
+1. **The task description, word for word and uncapped.** Take it from the user's invocation, or
+   from the issue body under `/megatask`. Never take it from `tasks.PL0.metadata.description`:
+   that field is the capped label from Step 4, and a long statement loses its end there.
+2. **The resolved flags and carriers.** These are the `--auto` array, the tier flags
+   (`--secure`, `--full`, `--emergency`), `--priority`, `--platform`, `--accept-absent`, and the
+   keys Step 4 stamped (the gates, `with_design`, `no_gh_issue`, `embedded_commands`).
+3. **The workspace-root banner line.** This is `WORKSPACE_ROOT=<path>` as
+   `workspace-root-banner.sh --task PL0` prints it (§ Banner injection).
 
 #### Step 6 — what PM computes
 

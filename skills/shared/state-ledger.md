@@ -271,7 +271,10 @@ The orchestrator should validate metadata before spawning the stage agent. Non-P
 #### `description` is capped at 240 chars
 
 Both writers — `--task-create --metadata` and `--task-meta --set` — truncate a longer value with an
-ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation.
+ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation. Each
+cut prints `description_truncated=<id>:<original length>` on stderr, so the caller knows the field
+no longer holds the whole text. The field is a label: the planner's input is the full statement in
+the PL0 dispatch prompt (`commands/worktask.md § Step 6 — the planning prompt`).
 
 The orchestrator's dispatch-time appends (test scope, bans, the FN banner) mutate an in-memory copy
 that is never written back, so they stay uncapped — capping them would strip those banners from

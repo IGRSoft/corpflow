@@ -406,7 +406,7 @@ pins read straight from `STAGE_TABLE`:
 
 ```json
 "era": {"harness": "python-2", "prompt_contract": "scripted-cli-v2",
-        "model_pins": {"PL": "claude-opus-5-5", "DC": "claude-haiku-4-5", …}}
+        "model_pins": {"PL": "claude-opus-5-5", "DC": "claude-haiku-5-5", …}}
 ```
 
 `bench-analyze` compares the analyzed record's era against the previous live
@@ -418,6 +418,9 @@ change invalidates comparisons just as surely as a model repin.
 
 **Known era boundaries:**
 
+- **v4.1.1** — `DC` repinned from `claude-haiku-4-5` to `claude-haiku-5-5` (Haiku 5.5,
+  1/10 the Haiku 4.5 rate). DC token and cost figures from that version on are **not
+  comparable** to earlier runs; `bench-analyze` flags the `model_pins` change on its own.
 - **v3.37.1** — `STAGE_TABLE` repinned from the prior Opus/Sonnet generation to
   `claude-opus-5` / `claude-sonnet-5`. Runs from that version on are **not
   comparable** to the stored baselines in `results/history.json`,

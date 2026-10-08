@@ -85,6 +85,8 @@ cd "$WORKTREE" && WORKSPACE_ROOT="$LEDGER_ROOT" \
 | **RE** | `corpflow:release-engineer` | `default` |
 | **ST** | `corpflow:stakeholder` | `acceptEdits` |
 
+A DV child gets bypass only from `--permission-mode`, never from saved consent. `claude agents` now asks for bypass consent when the only saved consent is in `.claude/settings.local.json` or a `--settings` file, and a background session that ignores bypass shows a notice that stays (2.1.293). Before that, such a session silently ran without bypass.
+
 ### Model & effort defaults
 
 `$MODEL` and `$EFFORT` come from `skills/shared/stage-codes.md § Agent Model Matrix` (a two-hop join: § Primary Stages resolves the stage to its agent, the matrix resolves that agent to its pair; § Secure overrides under `--secure` or `--full` replaces the resolved pair outright, so it can also lower a pair `CORPFLOW.md` raised). Pass the model as the alias; the pinned ids in § Alias note are for benchmark-parity runs only. Override per task when `metadata.model` / `metadata.effort` are set. `benchmark/harness/benchmarklive/stage_table.py` mirrors those rows as the machine-checked SSOT; model rules (aliases, cost tiers, the effort ladder) stay in `skills/shared/model-selection.md`.
@@ -178,7 +180,7 @@ In any cc-update whose CC version delta touches the `claude agents` CLI surface,
 
 #### Observed drift — interactive rows
 
-Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.292, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
+Interactive rows diverge from the baseline (unannounced, first seen on CC 2.1.175). As last probed (CC 2.1.294, unchanged since 2.1.270) they carry exactly `{pid, cwd, kind: "interactive", startedAt, sessionId, name, status}`: camelCase `sessionId`, `startedAt` as an epoch-millis number, a `kind` discriminator, `name` (the readable session name — also the `SendMessage`/`/rename` address, and the key a session's own name reuses), `status` (e.g. `"busy"`), and no `agent_id`, `id`, `state` or `waitingFor`. The resume identity chain `agent_id // id // sessionId` tolerates the missing ids.
 
 #### Open: dispatched-agent and teammate rows
 
@@ -186,7 +188,7 @@ Unconfirmed whether rows with `kind` ≠ `interactive` keep the snake_case basel
 
 #### Dispatch surface drift
 
-`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.292). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
+`claude agents run` is not a subcommand — `claude agents run --help` prints `claude agents` usage (through 2.1.294). Top-level `claude` accepts `--bg`, `--model`, `--effort`, `--permission-mode`, `--add-dir`, `--plugin-dir`, `--settings` and `--mcp-config` but no `--cwd`, so an external dispatcher must `cd` into the worktree first. Re-derived: `claude -p --agent <plugin:agent> --model <m> --effort <tier> --permission-mode <mode> --permission-prompts none` (§ Per-Stage Recommended Flag Sets; `skills/worktask/scripts/headless-dispatch.sh`).
 
 #### Defensive jq pattern
 
@@ -209,11 +211,11 @@ On a baseline shift (new required field, renamed field, type change), the next c
 
 #### Child tool grants: `--tools`, MCP denials & WebSearch
 
-`--tools` listing `Grep`/`Glob` wires up dedicated native search tools rather than shelling out — relevant only to a runner hand-building the `--tools` set; the in-process `Agent()` path inherits agent-frontmatter `tools:` unchanged. A subagent's `disallowedTools` honors MCP server-level specs (`mcp__server`, `mcp__*`), so a cross-plugin dispatch can deny a whole server to a child. `WebSearch` works inside subagents (~200 calls/session, `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` tunes it). Auth-capable MCP servers hide auth-stub tools from headless / SDK runs.
+`--tools` listing `Grep`/`Glob` wires up dedicated native search tools rather than shelling out — relevant only to a runner hand-building the `--tools` set; the in-process `Agent()` path inherits agent-frontmatter `tools:` unchanged. A subagent's `disallowedTools` honors MCP server-level specs (`mcp__server`, `mcp__*`), so a cross-plugin dispatch can deny a whole server to a child. `WebSearch` works inside subagents (~200 calls/session, `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` tunes it). Auth-capable MCP servers hide auth-stub tools from headless / SDK runs. A subagent or `--agent` run whose own tool list leaves out a built-in tool is no longer told the tool is off for the whole session, so the child sees its narrowed grant as its own (2.1.293).
 
 ## Session Lifecycle CLI (attach / logs / stop / respawn / rm)
 
-`claude attach <id|name>` attaches a terminal to a running background session; part of the session name works in place of the id for `attach` and `logs` (2.1.290). Since 2.1.285 `/resume` and `claude --resume <id>` open a session that is running in the background instead of refusing, and `claude --resume <id> "prompt"` sends the prompt as its next turn. `logs`, `stop`, `respawn` and `rm` complete the surface (`claude --help`); options placed before the subcommand no longer start a new session (2.1.285).
+`claude attach <id|name>` attaches a terminal to a running background session; part of the session name works in place of the id for `attach` and `logs` (2.1.290). Since 2.1.285 `/resume` and `claude --resume <id>` open a session that is running in the background instead of refusing, and `claude --resume <id> "prompt"` sends the prompt as its next turn. `logs`, `stop` (alias `kill`), `respawn` and `rm` complete the surface (`claude --help`); options placed before the subcommand no longer start a new session (2.1.285). `logs`, `stop`, `kill` and `rm` no longer sign the operator out when the login has expired or is about to (2.1.293).
 
 ### Operator tools vs orchestrator reattach
 

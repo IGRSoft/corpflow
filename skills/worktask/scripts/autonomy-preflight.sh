@@ -42,6 +42,8 @@
 #
 # @env GH_BIN, GIT_BIN                 Binaries probed (default gh, git).
 # @env AUTONOMY_PREFLIGHT_TIMEOUT      Seconds bounding each gh/git/tool probe (default 20).
+# @env CORPFLOW_SWIFT_MIN              Lowest `swift` on PATH that apple-swift-match accepts,
+#                                      X[.Y[.Z]] (default 6.3.0). Malformed => exit 2.
 # @env AUTONOMY_PREFLIGHT_SETTINGS     Colon list of settings files, lowest precedence first;
 #                                      replaces every default source.
 # @env AUTONOMY_PREFLIGHT_MCP_CONFIGS  Colon list of MCP config files (default user
@@ -88,6 +90,7 @@ readonly BUFFER_PREFIXES="corpflow-preflight. corpflow-issue-scan."
 GH_BIN="${GH_BIN:-gh}"
 GIT_BIN="${GIT_BIN:-git}"
 PROBE_SECS="${AUTONOMY_PREFLIGHT_TIMEOUT:-20}"
+SWIFT_MIN="${CORPFLOW_SWIFT_MIN:-6.3.0}"
 TIMEOUT_BIN="${TIMEOUT_BIN:-$(command -v gtimeout || command -v timeout || true)}"
 
 WORK=""
@@ -621,8 +624,74 @@ check_xcodebuildmcp() {
 
 # --- toolchain integrity ----------------------------------------------------------
 
+# Held in a variable: bash 3.2 and 5 disagree on a quoted or inline =~ pattern.
+_VER_RE='^[0-9]+(\.[0-9]+){0,2}$'
+
+# <probe-output-file>: the first `Swift version X[.Y[.Z]]` anywhere in the output. Not the
+# first line: newer drivers print `swift-driver version: ...` ahead of it.
+_swift_ver() {
+  local v
+  v=$(grep -oE 'Swift version [0-9]+(\.[0-9]+){0,2}' "$1" 2> /dev/null | head -n 1)
+  v="${v#Swift version }"
+  [ -n "$v" ] && printf '%s' "$v"
+}
+
+# <a> <b>: 0 when a >= b. Numeric per field, missing fields are 0, so 6.10 > 6.9 and
+# 6.3 == 6.3.0; a string compare gets both wrong.
+_ver_ge() {
+  local a1 a2 a3 b1 b2 b3
+  IFS=. read -r a1 a2 a3 <<< "$1"
+  IFS=. read -r b1 b2 b3 <<< "$2"
+  set -- "${a1:-0}" "${b1:-0}" "${a2:-0}" "${b2:-0}" "${a3:-0}" "${b3:-0}"
+  while [ $# -gt 0 ]; do
+    [ "$1" -gt "$2" ] && return 0
+    [ "$1" -lt "$2" ] && return 1
+    shift 2
+  done
+  return 0
+}
+
+# Passes on any `swift` on PATH at or above SWIFT_MIN, even one that is not Xcode's:
+# swiftly and toolchain installs differ from `xcrun swift` and build fine. The id stays
+# apple-swift-match because result_json consumers key on it.
+check_swift() {
+  local a b="" rc=0 line tilde='~'
+  local path_fix="or put the Xcode toolchain's usr/bin first on PATH (xcrun -f swift prints its swift)"
+  # Without --assume-yes swiftly asks to confirm, and an unattended shell hangs on it.
+  local swiftly_fix="if swiftly manages swift, select Xcode's toolchain: swiftly use --global-default --assume-yes xcode"
+  if ! command -v swift > /dev/null 2>&1; then
+    _add_check apple-swift-match toolchain fail "swift not found on PATH" "$path_fix"
+    return 0
+  fi
+  _bounded "$WORK/sw1.out" swift --version || rc=$?
+  a=$(_swift_ver "$WORK/sw1.out")
+  if [ "$rc" -ne 0 ] || [ -z "$a" ]; then
+    if [ "$rc" -eq 124 ]; then
+      line="swift --version timed out after ${PROBE_SECS}s"
+    else
+      line=$(head -n 1 "$WORK/sw1.out" 2> /dev/null)
+      [ -n "${HOME:-}" ] && line="${line//"$HOME"/$tilde}"
+    fi
+    _add_check apple-swift-match toolchain fail "swift on PATH cannot run: ${line:-no output, exit $rc}" \
+      "$swiftly_fix" "$path_fix"
+    return 0
+  fi
+  if command -v xcrun > /dev/null 2>&1 && _bounded "$WORK/sw2.out" xcrun swift --version; then
+    b=$(_swift_ver "$WORK/sw2.out")
+  fi
+  if ! _ver_ge "$a" "$SWIFT_MIN"; then
+    _add_check apple-swift-match toolchain fail "swift on PATH is $a, below the minimum $SWIFT_MIN" \
+      "$swiftly_fix" "or xcode-select an Xcode whose swift is $SWIFT_MIN or later" \
+      "or lower the floor with CORPFLOW_SWIFT_MIN"
+  elif [ "$a" = "$b" ]; then
+    _add_check apple-swift-match toolchain pass "swift $a on PATH matches xcrun swift (minimum $SWIFT_MIN)"
+  else
+    _add_check apple-swift-match toolchain pass "swift $a on PATH meets the minimum $SWIFT_MIN; xcrun swift is ${b:-unavailable}"
+  fi
+}
+
 check_apple_toolchain() {
-  local dev plist n=0 bad="" a b
+  local dev plist n=0 bad="" a
   dev="${DEVELOPER_DIR:-}"
   if [ -z "$dev" ] && command -v xcode-select > /dev/null 2>&1; then
     _bounded "$WORK/xs.out" xcode-select -p && dev=$(head -n 1 "$WORK/xs.out")
@@ -664,16 +733,7 @@ check_apple_toolchain() {
       "run sudo xcodebuild -runFirstLaunch, then confirm with xcodebuild -showsdks"
   fi
 
-  a=""
-  b=""
-  command -v swift > /dev/null 2>&1 && _bounded "$WORK/sw1.out" swift --version && a=$(head -n 1 "$WORK/sw1.out")
-  command -v xcrun > /dev/null 2>&1 && _bounded "$WORK/sw2.out" xcrun swift --version && b=$(head -n 1 "$WORK/sw2.out")
-  if [ -n "$a" ] && [ "$a" = "$b" ]; then
-    _add_check apple-swift-match toolchain pass "swift on PATH matches xcrun swift"
-  else
-    _add_check apple-swift-match toolchain fail "swift on PATH (${a:-unavailable}) differs from xcrun swift (${b:-unavailable})" \
-      "put the selected Xcode toolchain's swift first on PATH, or xcode-select the Xcode that matches it"
-  fi
+  check_swift
 }
 
 check_android_toolchain() {
@@ -767,6 +827,7 @@ CANDIDATES_BUF=""
 check_main() {
   local p evidence_plats="" IFS
   case "$PROBE_SECS" in '' | *[!0-9]* | 0) die_usage "AUTONOMY_PREFLIGHT_TIMEOUT must be a positive integer" ;; esac
+  [[ "$SWIFT_MIN" =~ $_VER_RE ]] || die_usage "CORPFLOW_SWIFT_MIN must be a version like 6.3 or 6.3.0"
 
   if ! _in_list plan "$AUTO" && ! _in_list finalization "$AUTO"; then
     printf 'result=skipped\nreason=not_unattended\n'

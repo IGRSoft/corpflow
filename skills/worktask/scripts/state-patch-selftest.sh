@@ -775,8 +775,8 @@ EOSTATE
   # ---- T26: metadata.description is capped on the two ledger write paths ----
   make_state
   T26_LONG=$(printf 'x%.0s' $(seq 1 400))
-  bash "$SELF" --task-create DV9 --metadata "$(_r9_meta "$(jq -nc --arg d "$T26_LONG" '{stage:"DV",description:$d}')")" > /dev/null
-  bash "$SELF" --task-meta DV9 --set "$(jq -nc --arg d "$T26_LONG" '{description:$d}')" > /dev/null
+  bash "$SELF" --task-create DV9 --metadata "$(_r9_meta "$(jq -nc --arg d "$T26_LONG" '{stage:"DV",description:$d}')")" > /dev/null 2> t26c.err
+  bash "$SELF" --task-meta DV9 --set "$(jq -nc --arg d "$T26_LONG" '{description:$d}')" > /dev/null 2> t26m.err
   if jq -e '(.tasks.DV9.metadata.description | length) == 240
             and (.tasks.DV9.metadata.description | endswith("…"))
             and .tasks.DV9.metadata.stage == "DV"' .context/state.json > /dev/null; then
@@ -784,6 +784,55 @@ EOSTATE
   else
     printf 'T26: description cap did not apply: FAIL\n' >&2
     jq -c '.tasks.DV9' .context/state.json >&2
+    exit 1
+  fi
+  # The cut is silent no more: one notice per cut on stderr, none for a value that fits.
+  bash "$SELF" --task-meta DV9 --set '{"description":"short label"}' > /dev/null 2> t26s.err
+  if grep -qx 'description_truncated=DV9:400' t26c.err && grep -qx 'description_truncated=DV9:400' t26m.err \
+    && ! grep -q 'description_truncated' t26s.err; then
+    printf 'T26: a cut prints description_truncated=<id>:<len> on stderr, a short value prints none: ok\n'
+  else
+    printf 'T26: truncation notice missing or spurious: FAIL\n' >&2
+    cat t26c.err t26m.err t26s.err >&2
+    exit 1
+  fi
+
+  # ---- T26b: --task-meta --unset deletes keys, never pipeline keys ----
+  make_state
+  bash "$SELF" --task-create DV9 --metadata "$(_r9_meta '{"stage":"DV","note":"x","flag":true}')" > /dev/null
+  bash "$SELF" --task-meta DV9 --unset note > /dev/null
+  if ! jq -e '.tasks.DV9.metadata | has("note")' .context/state.json > /dev/null \
+    && jq -e '.tasks.DV9.metadata.flag == true and .tasks.DV9.metadata.stage == "DV"' .context/state.json > /dev/null; then
+    printf 'T26b: --unset removes an existing key and keeps the rest: ok\n'
+  else
+    printf 'T26b: --unset did not remove the key: FAIL\n' >&2
+    jq -c '.tasks.DV9.metadata' .context/state.json >&2
+    exit 1
+  fi
+  cp .context/state.json t26b.before
+  t26b_rc=0
+  bash "$SELF" --task-meta DV9 --unset never_there > /dev/null 2>&1 || t26b_rc=$?
+  if [[ "$t26b_rc" -eq 0 ]] && cmp -s t26b.before .context/state.json; then
+    printf 'T26b: --unset of an absent key exits 0 and leaves the bytes unchanged: ok\n'
+  else
+    printf 'T26b: absent-key --unset rc=%s or changed state: FAIL\n' "$t26b_rc" >&2
+    exit 1
+  fi
+  t26b_rc=0
+  bash "$SELF" --task-meta DV9 --unset flag,stage > /dev/null 2> t26b.err || t26b_rc=$?
+  if [[ "$t26b_rc" -eq 2 ]] && grep -q 'refused --unset stage' t26b.err && cmp -s t26b.before .context/state.json; then
+    printf 'T26b: --unset of a pipeline key exits 2, names it, and changes nothing: ok\n'
+  else
+    printf 'T26b: protected-key --unset rc=%s or changed state: FAIL\n' "$t26b_rc" >&2
+    cat t26b.err >&2
+    exit 1
+  fi
+  bash "$SELF" --task-meta DV9 --set '{"owner":"qa"}' --unset flag > /dev/null
+  if jq -e '.tasks.DV9.metadata.owner == "qa" and (.tasks.DV9.metadata | has("flag") | not)' .context/state.json > /dev/null; then
+    printf 'T26b: --set and --unset in one call apply both: ok\n'
+  else
+    printf 'T26b: combined --set/--unset did not apply both: FAIL\n' >&2
+    jq -c '.tasks.DV9.metadata' .context/state.json >&2
     exit 1
   fi
 

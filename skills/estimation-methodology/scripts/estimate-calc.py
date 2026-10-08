@@ -53,7 +53,7 @@ COMPLEXITY_BANDS: list[tuple[int, int, str]] = [
 # USD per million tokens. The owner is skills/shared/model-selection.md § Cost Tiers;
 # tests/python/test_estimate_calc.py fails when this copy and that table disagree.
 MODEL_RATES_PER_M: dict[str, dict[str, float]] = {
-    "haiku": {"input": 1.0, "output": 5.0},
+    "haiku": {"input": 0.10, "output": 0.50},
     "sonnet": {"input": 2.0, "output": 10.0},
     "opus": {"input": 4.0, "output": 20.0},
     "fable": {"input": 10.0, "output": 50.0},
@@ -376,9 +376,9 @@ def _self_test() -> None:
     check("ai_cost sonnet 100k", round(cost, 6), 0.432)
 
     # --- ai_cost edge: haiku, high retry, novel domain ---
-    # 40k in / 10k out: (0.04 * 1 + 0.01 * 5) * 1.5 * 2.0 = 0.27
+    # 40k in / 10k out: (0.04 * 0.1 + 0.01 * 0.5) * 1.5 * 2.0 = 0.027
     cost2 = ai_cost(50_000, "haiku", "high", "novel")
-    check("ai_cost haiku 50k high novel", round(cost2, 6), 0.27)
+    check("ai_cost haiku 50k high novel", round(cost2, 6), 0.027)
 
     # --- ai_cost: opus prices at the Opus 5.5 rates ---
     # 80k in / 20k out: (0.08 * 4 + 0.02 * 20) * 1.2 = 0.864

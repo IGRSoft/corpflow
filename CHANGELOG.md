@@ -38,8 +38,9 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Changed
 
-- **Requires Claude Code 2.1.292** (was 2.1.284). 2.1.292 adds the `Agent` tool's `effort`
-  parameter, which every in-process stage dispatch now passes. A cross-session message held at the
+- **Requires Claude Code 2.1.294** (was 2.1.284). 2.1.293 resolves `haiku` to Haiku 5.5, the
+  model the cost table now prices, and `headless-dispatch.sh` floors at 2.1.294. 2.1.292 adds the
+  `Agent` tool's `effort` parameter, which every in-process stage dispatch now passes. A cross-session message held at the
   recipient for approval was reported as delivered before 2.1.288; it now reads as not delivered
   and names the holding session. Background commands in unattended sessions stop at their
   `timeout` since 2.1.285, which the explicit 2 h `timeout` below depends on.
@@ -86,6 +87,18 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
   providers, new Bash and Read permission hardening, one-shot `-p` waiting for background commands
   and wakeups, escaped `<system-reminder>` tags in hook output, UNC-read and `allowed-tools`
   fixes, `claude plugin test` failing on a failed `expect`, and stdio MCP protocol 2026-07-28.
+- **CC 2.1.293→2.1.294 band integrated: Haiku 5.5.** `haiku` now prices at Haiku 5.5 ($0.10 /
+  $0.50 / $0.01 cache read, 1/20 of sonnet). A prompt over 100K tokens bills 5x that. The Sonnet
+  5.5 cache-read rate is corrected to $0.10. `estimate-calc.py` follows the table. The benchmark
+  `DC` pin moves to `claude-haiku-5-5`, which is a new era boundary. The README no longer says
+  Haiku sees the `TaskCreate` tools: Haiku 5.5 does not. The docs add these changes:
+  - instruction-style `prompt`/`agent` hooks now block (2.1.294)
+  - `subagentStatusLine` `agentType`
+  - rules loaded on a Bash `cat`/`head`/`tail`/`sed -n`/`grep` view
+  - no `SendMessage` prompt once the tool is removed
+  - narrowed child tool lists
+  - `claude agents` bypass consent
+  - the compaction self-action fix
 - **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the
   planning model judges whether the diff alters rendered output, S1 (`ui_visual_check`) is a hard
   floor, a `false` over an S2 hit needs a written reason, uncertain means `true`, and the planner
@@ -148,6 +161,25 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Fixed
 
+- **`apple-swift-match` checks a minimum, not equality.** It passes on any `swift` on PATH at or
+  above `CORPFLOW_SWIFT_MIN` (default 6.3.0). The compare is numeric per field, and the detail
+  names both versions when `xcrun swift` differs. A `swift` that cannot run fails with the probe's
+  first line (home path shown as `~`). The fix line is `swiftly use --global-default --assume-yes
+  xcode` or a PATH change; without `--assume-yes`, swiftly waits on a prompt. The check id is
+  unchanged.
+- **The Step 2a-pre snippet exits 0 on a clean pass.** It grepped for `result=`, which the script
+  prints only on a skip, so a pass ended the tool call with exit 1. It now prints
+  `result=<pass|skipped>` from `result_json`, keeps `reason=` and `accepted_absent=`, and exits 0.
+- **PL0 gets the full task.** Step 4 calls `description` a capped label, never the planner's
+  input. The new § Step 6 — the planning prompt names the minimum: the task word for word (the
+  issue body under `/megatask`), the resolved flags and carriers, and the `WORKSPACE_ROOT=` banner.
+  product-manager plans from that prompt. A 908-char task had reached PM cut at 240 chars.
+- **`state-patch.sh` reports a description cut.** It still truncates and never refuses. After the
+  write it prints `description_truncated=<id>:<length>` on stderr, on create and on meta.
+- **`--task-meta --unset <key[,key...]>` removes metadata keys.** Before, `--set '{"k":null}'`
+  was the only option, and `has("k")` stayed true. It runs after the merge under the same lock. An
+  absent key is a no-op. A pipeline key (`stage`, `agent`, `model`, `effort`, the three gates,
+  `workspace_path`, `isolation`, `base_ref`, `requires_screenshots`) exits 2 and names the key.
 - Speed-over-exploration clauses removed from product-manager, technical-lead and stakeholder.
 - team-lead clones PL0's resolved model/effort row instead of picking tiers; project-manager's
   stray `F3` step (the label means fallback layer 3 elsewhere) is renamed.

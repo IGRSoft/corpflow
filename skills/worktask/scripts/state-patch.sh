@@ -95,6 +95,18 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+#                                             --unset <key[,key...]>: delete those keys
+#                                             after the merge, under the same lock and
+#                                             atomic write; alone or beside --set, and it
+#                                             wins over a key --set also names. An absent
+#                                             key is a no-op (exit 0, bytes unchanged). A
+#                                             pipeline key (stage, agent, model, effort,
+#                                             plan_gate, decision_gate, fn_gate,
+#                                             workspace_path, isolation, base_ref,
+#                                             requires_screenshots) exits 2, unchanged.
+#                                             On create and meta a description over 240
+#                                             chars is cut to 239 + "…", never refused;
+#                                             stderr gets description_truncated=<id>:<len>.
 #                                             --raise-only: drop `model`/`effort` from the
 #                                             merge when it would lower the row's CURRENT
 #                                             value (ladder rank; opus>sonnet>haiku) — every
@@ -1705,6 +1717,9 @@ VERIFY_EXPECT_GIVEN=""
 FACTS_ARG=""
 REPLAY_CASCADE="false"
 RAISE_ONLY_FLAG=""
+UNSET_KEYS=""
+UNSET_GIVEN=""
+DESC_TRUNCATED=""
 AGENTS_JSON_ARG=""
 DISPATCH_AGENT_ID=""
 DISPATCH_STATUS=""
@@ -1775,6 +1790,7 @@ while [[ $# -gt 0 ]]; do
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
     --resolve-models) shift; RESOLVE_MODELS_OP="1" ;;
     --raise-only) RAISE_ONLY_FLAG="1"; shift ;;
+    --unset) shift; UNSET_KEYS="${1:-}"; UNSET_GIVEN="1"; shift ;;
     --corpflow) shift; RESOLVE_MODELS_CORPFLOW_ARG="${1:-}"; shift ;;
     --task-replay) shift; TASK_OP="replay"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
     --task-reopen) shift; TASK_OP="reopen"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
@@ -2449,6 +2465,10 @@ if [[ -n "$TASK_OP" ]]; then
     printf >&2 -- '--raise-only applies to --task-meta only (got --task-%s)\n' "$TASK_OP"
     usage
   fi
+  if [[ "$TASK_OP" != "meta" && -n "$UNSET_GIVEN" ]]; then
+    printf >&2 -- '--unset applies to --task-meta only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
 
   # --task-create auto-fill REMOVED (sw-AR0-1, reversed at the FN-gate sweep over the
   # recommended design): resolution now happens at the CALLER —
@@ -2563,12 +2583,45 @@ if [[ -n "$TASK_OP" ]]; then
   # R-4.4 — the ONLY two paths that persist a task description. Dispatch-time appends
   # (the orchestrator's test-scope, ban and FN banners) mutate an in-memory copy and are
   # never written back, so capping post-append would strip banners that no ledger holds.
-  # Truncate, never reject: a refused --task-create would break PL0 stage creation.
+  # Truncate, never reject: a refused --task-create would break PL0 stage creation. The
+  # cut is still reported (description_truncated=<id>:<len> on stderr after the write), so a
+  # caller can tell its value no longer holds the whole text.
   # 240 chars matches the facts.goal precedent in initialization-patterns.md.
   _DESC_CAP='def _cap_desc:
       if (type == "object") and ((.description? | type) == "string")
          and ((.description | length) > 240)
       then .description = (.description[0:239] + "…") else . end;'
+
+  # Keys a stage dispatch, gate or resume reads. Deleting one leaves a row the loop cannot
+  # dispatch or resume, which a --set to the right value repairs and a delete never does.
+  _UNSET_PROTECTED="stage agent model effort plan_gate decision_gate fn_gate workspace_path isolation base_ref requires_screenshots"
+  # _unset_keys_json <key[,key...]> — the list as a JSON array on stdout; exits 2 on a
+  # malformed or pipeline key, before any write.
+  _unset_keys_json() {
+    local k out='[]'
+    local -a _keys
+    IFS=',' read -r -a _keys <<< "$1"
+    [[ "${#_keys[@]}" -gt 0 ]] || {
+      printf >&2 'missing value: --unset requires <key[,key...]>\n'
+      exit 2
+    }
+    for k in "${_keys[@]}"; do
+      if [[ ! "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        printf >&2 'refused --unset: "%s" is not a metadata key name; state.json unchanged\n' "$k"
+        exit 2
+      fi
+      case " $_UNSET_PROTECTED " in
+        *" $k "*)
+          printf >&2 'refused --unset %s: the pipeline reads tasks.%s.metadata.%s; set it to the right value instead; state.json unchanged\n' \
+            "$k" "$TASK_OP_ID" "$k"
+          log_msg ERROR "refused --unset ${k} on tasks.${TASK_OP_ID}: pipeline key; state.json unchanged"
+          exit 2
+          ;;
+      esac
+      out=$(jq -c --arg k "$k" '. + [$k] | unique' <<< "$out")
+    done
+    printf '%s' "$out"
+  }
 
   TASK_FILTER=""
   TASK_JQ_ARGS=()
@@ -2650,6 +2703,8 @@ if [[ -n "$TASK_OP" ]]; then
             else .tasks[$r.id] = {status: "pending", metadata: (($r.meta // {}) | _cap_desc)} end)'
         TASK_JQ_ARGS=(--argjson rows "$_TC_ROWS_JSON")
         TASK_OP_VALUE="batch=${DIGEST_TOUCHED}"
+        DESC_TRUNCATED=$(jq -r '.[] | (.meta.description? | strings | length) as $n
+          | select($n > 240) | "\(.id):\($n)"' <<< "$_TC_ROWS_JSON" 2> /dev/null) || DESC_TRUNCATED=""
       else
         # Seeding is idempotent: an existing task keeps the metadata it has accumulated, so a
         # re-run of a seed script cannot roll it back to the seed's view.
@@ -2662,6 +2717,9 @@ if [[ -n "$TASK_OP" ]]; then
         fi
         _tc_required_gate "$TASK_OP_ID" "$TASK_OP_VALUE"
         # --metadata is optional; absent ⇒ an empty object, never a parse abort.
+        DESC_TRUNCATED=$(jq -rn --arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" \
+          '$meta.description? | strings | length | select(. > 240) | "\($id):\(.)"' 2> /dev/null) \
+          || DESC_TRUNCATED=""
         TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
         TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       fi
@@ -2708,9 +2766,30 @@ if [[ -n "$TASK_OP" ]]; then
       ;;
     meta)
       require_task_exists "$TASK_OP_ID" meta
-      # Recursive merge, so a partial --set updates named keys without dropping the rest.
-      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = (((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)'
-      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
+      _UNSET_JSON='[]'
+      if [[ -n "$UNSET_GIVEN" ]]; then
+        # Runs in a subshell, so its exit 2 only ends the subshell: re-raise it here.
+        _UNSET_JSON=$(_unset_keys_json "$UNSET_KEYS") || exit 2
+        # Nothing to merge and nothing to delete: skip the write so the bytes stay as they are.
+        if [[ -z "$TASK_OP_VALUE" ]] && ! jq -e --arg id "$TASK_OP_ID" --argjson u "$_UNSET_JSON" \
+          '(.tasks[$id].metadata // {}) as $m | any($u[]; . as $k | $m | has($k))' \
+          "$STATE_PATH" > /dev/null 2>&1; then
+          log_msg INFO "idempotent: tasks.${TASK_OP_ID}.metadata has none of ${UNSET_KEYS}"
+          _post_success "$TASK_OP_ID" "$TASK_OP_ID" "" 0
+          exit 0
+        fi
+      fi
+      # Read before the lock: it only words the notice, the cap itself runs inside the write.
+      DESC_TRUNCATED=$(jq -r --arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" \
+        --argjson u "$_UNSET_JSON" '((.tasks[$id].metadata // {}) * ($meta // {})) as $m
+          | select(($u | index("description")) == null)
+          | $m.description? | strings | length | select(. > 240) | "\($id):\(.)"' \
+        "$STATE_PATH" 2> /dev/null) || DESC_TRUNCATED=""
+      # Recursive merge, so a partial --set updates named keys without dropping the rest;
+      # --unset runs after it, so it wins over a key the same --set names.
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = ((((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)
+        | delpaths($unset | map([.])))'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" --argjson unset "$_UNSET_JSON")
       ;;
     replay)
       require_task_exists "$TASK_OP_ID" replay
@@ -3140,6 +3219,14 @@ if [[ -n "$TASK_OP" ]]; then
 
   if atomic_apply "$STATE_PATH" "$TASK_FILTER" "${TASK_JQ_ARGS[@]}"; then
     log_msg INFO "ledger ${TASK_OP}: tasks.${TASK_OP_ID} ${TASK_OP_VALUE}"
+    # After the rename only: a cut that did not land must not be reported as made.
+    if [[ -n "$DESC_TRUNCATED" ]]; then
+      while IFS= read -r _dt; do
+        [[ -n "$_dt" ]] || continue
+        printf >&2 'description_truncated=%s\n' "$_dt"
+        log_msg INFO "description_truncated=${_dt} (cap 240)"
+      done <<< "$DESC_TRUNCATED"
+    fi
     if [[ "$TASK_OP" == "replay" ]]; then
       replay_audit
     fi

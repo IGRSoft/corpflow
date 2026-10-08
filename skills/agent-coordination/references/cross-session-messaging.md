@@ -12,7 +12,7 @@ A `--restricted` session opens no messaging socket (2.1.290), so it is unreachab
 
 ### Sessions without SendMessage & cloud restarts
 
-A session launched without the `SendMessage` tool, as Claude Desktop launches some, is not told to message other sessions, so expect no outbound message from it. A cloud session tells Claude about background agents that finished just before a worker restart, so a completion there survives the restart. After a restart it also names the stopped background agents Claude can resume by id (2.1.292).
+A session launched without the `SendMessage` tool, as Claude Desktop launches some, is not told to message other sessions, so expect no outbound message from it. The same holds for a subagent or a resumed session when a host, a permission rule or a `--tools` list removed `SendMessage`: it is no longer told to continue or message subagents with it (2.1.293). A cloud session tells Claude about background agents that finished just before a worker restart, so a completion there survives the restart. After a restart it also names the stopped background agents Claude can resume by id (2.1.292).
 
 ### Authority does not relay
 
