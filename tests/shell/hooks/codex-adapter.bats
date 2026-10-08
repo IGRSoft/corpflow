@@ -71,10 +71,12 @@ JSON
   done
 }
 
-@test "relative and absolute artifact patches both reach the real pre-write gate" {
+# A patch maps to a Write, which the pre-write gate never denies; the post-write gate reports it.
+@test "relative and absolute artifact patches pass the pre-write gate and fail the post-write gate" {
   local wd path payload
   wd="$(mk_tmpworkdir)"; mkdir -p "$wd/.context"
   printf '{}\n' > "$wd/.context/state.json"
+  printf -- '---\nhandoff:\n  stage: DV\n---\n\n## Approach\n' > "$wd/.context/development-0.md"
   for path in .context/development-0.md "$wd/.context/development-0.md"; do
     payload=$(jq -cn --arg p "$path" '{hook_event_name:"PreToolUse",tool_name:"apply_patch",
       tool_input:{patch:("*** Begin Patch\n*** Add File: " + $p + "\n+## Approach\n*** End Patch")}}')
@@ -82,8 +84,14 @@ JSON
       bash "$PLUGIN_ROOT/$ADAPTER" --mode patch-pre --target hooks/anchor-preflight.sh \
       -- --event pre <<< "$payload"
     assert_success
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
-    assert_output --partial "## Approach"
+    assert_output ""
+    payload=$(jq -cn --arg p "$path" '{hook_event_name:"PostToolUse",tool_name:"apply_patch",
+      tool_input:{patch:("*** Begin Patch\n*** Add File: " + $p + "\n+## Approach\n*** End Patch")}}')
+    run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
+      bash "$PLUGIN_ROOT/$ADAPTER" --mode patch-post --target hooks/anchor-preflight.sh \
+      -- --event post <<< "$payload"
+    assert_failure 2
+    assert_output --partial "has H2 outside the allow-list: ## Approach."
   done
 }
 

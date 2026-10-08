@@ -60,6 +60,8 @@ run_self_test() {
     bash "$SELF" --tree "$tree" "$tree/docs/notpaths.md"
   selftest_case 'S7: a JSON-hostile path under a real dir is still a finding' 1 '"name":"docs/a\"b\\c/d.md"' \
     bash "$SELF" --tree "$tree" "$tree/docs/hostile.md"
+  selftest_case 'S8: --allow-path exempts an exact missing path' 0 '' \
+    bash "$SELF" --tree "$tree" --allow-path docs/gone.md "$tree/docs/missing.md"
 
   printf 'self-test: ALL PASS\n'
   exit 0

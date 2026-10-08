@@ -2348,12 +2348,12 @@ Allowed in that stage's artifact only, required in none; title-case entries are 
 3. Anchor IDs come from GitHub-style slugify, but the H2 title is already the kebab-case form; do not rely on slugify.
 4. `key_decisions[].anchor` and `refs.*` resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution only for the AR→DV edge (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
-### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
+### Anchor Pre-Flight (PreToolUse Edit deny, PostToolUse feedback)
 
 One managed plugin hook (`hooks/anchor-preflight.sh`, default-on) checks anchors at write before stray H2 costs rework; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-- **`PreToolUse` deny** — Path on artifact regex, basename exactly `<canonical>-<N>.md` (or DV's `development-<N>-<stream>.md`), `state.json` beside it. Unexpected H2 in Write `content` (or Edit `new_string`/`old_string`) gets `deny` with those H2s and allowed set. Missing required H2 never denies; hook error allows.
-- **`PostToolUse` advisory** — Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost — scan logic).
+- **`PreToolUse` deny (Edit only)** — Path on artifact regex, basename exactly `<canonical>-<N>.md` (or DV's `development-<N>-<stream>.md`), `state.json` beside it. An Edit whose `new_string` adds an off-list H2 that `old_string` lacks gets `deny` naming it and the allowed set. A Write (Codex patches too) is never denied: an Edit fix is cheaper than a re-emit. Missing H2 never denies; hook error allows.
+- **`PostToolUse` feedback** — Control-byte scan, `--anchor-lint`, one line per off-list H2 or frontmatter finding (§ Post frontmatter check).
 - **Stage boundary** — `handoff-harness.sh --validate-frontmatter` fails on missing/unexpected H2 for all 13 stages; fails closed when `cache-lint.sh` cannot run.
 
 #### Managed hook entries (plugin.json)
@@ -2369,7 +2369,11 @@ One managed plugin hook (`hooks/anchor-preflight.sh`, default-on) checks anchors
 
 #### Preflight behavior and cost — scan logic
 
-`anchor-preflight.sh` scans allowlisted text writes for control bytes before artifact check. Anchor-lint runs only on canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); other Write/Edit gets control-byte scan alone. Finding exits 2 (only PostToolUse exit routing stderr to model). Producer sees diagnostic and amends, so downstream doesn't pay. `continueOnBlock` follows managed-hook discipline (diagnostic surfaced, unrelated write never blocked). Non-hook environments use stage-boundary harness only. Cost: O(seconds) per Write/Edit.
+`anchor-preflight.sh` scans allowlisted text writes for control bytes before artifact check. Anchor-lint runs only on canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); other Write/Edit gets control-byte scan alone. Finding exits 2 (only PostToolUse exit routing stderr to model). Producer sees diagnostic and amends, so downstream doesn't pay.
+
+#### Post frontmatter check
+
+The frontmatter check, like the off-list H2 line, runs only when a ledger `state.json` sits beside the artifact. It runs `handoff-harness.sh --validate-frontmatter` on a same-basename temp copy of the file on disk and reports three classes only: `handoff:` over the 200-token budget, a digitless `summary_line`, a sweep stub without 2-4 `options[]`. It runs after a Write, a Codex patch, an unreadable payload, or an Edit whose `new_string` is empty or lands in the frontmatter or `## elicitation-sweep`; a body-only Edit is skipped. Each finding is one stderr line ending `fix it with a small Edit, do not re-Write the file.` Without `yq` the check fails open; the boundary still gates. `continueOnBlock` follows managed-hook discipline (diagnostic surfaced, unrelated write never blocked). Non-hook environments use stage-boundary harness only. Cost: O(seconds) per Write/Edit.
 
 ---
 

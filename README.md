@@ -480,7 +480,7 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 | `model-switch-gate.sh` | PreModelSwitch | **Blocks** a mid-worktask re-tier away from the stage's pinned `metadata.model` |
 | `model-switch-audit.sh` | PostModelSwitch | Records `model_switched` so cost is attributed to the model that ran |
 | `audit-tooluse.sh` | PostToolUse (`Bash`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl`; Bash rows only for ledger patches |
-| `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
+| `anchor-preflight.sh` | PreToolUse + PostToolUse (`Write`/`Edit`) | Denies an Edit adding an off-list H2 to `.context/<stage>-N.md`; after a write, reports anchor and frontmatter findings for an Edit fix |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
 | `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion on missing or invalid evidence in a task's `screenshots-<TASK_ID>.md`; no captures passes only on backend/systems or `requires_screenshots=false` |
