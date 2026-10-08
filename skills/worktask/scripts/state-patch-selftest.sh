@@ -665,6 +665,79 @@ EOSTATE
     exit 1
   fi
 
+  # ---- T20c: class is raise-only; a refused downgrade exits 2 with one audit row ----
+  # The ledger cannot tell labellers apart, so `decision` over `escalate` is refused while
+  # the stub's other fields still land.
+  _oq_esc='{"open_questions":[{"id":"sw-SR0-1","class":"escalate","ref":"security-review-0.md#elicitation-sweep","blocks_next_stage":true}]}'
+  _oq_dec='{"open_questions":[{"id":"sw-SR0-1","class":"decision","ref":"security-review-1.md#elicitation-sweep","blocks_next_stage":false}]}'
+  make_state
+  rm -f .context/logs/audit.jsonl
+  bash "$SELF" --facts "$_oq_esc" > /dev/null
+  st20c_rc=0
+  bash "$SELF" --facts "$_oq_dec" > .context/t20c.out 2> .context/t20c.err || st20c_rc=$?
+  if [[ "$st20c_rc" -eq 2 ]] \
+    && jq -e '.facts.open_questions[0] | .class == "escalate" and .blocks_next_stage == false
+              and .ref == "security-review-1.md#elicitation-sweep"' .context/state.json > /dev/null \
+    && [[ "$(jq -c 'select(.action == "facts_items_rejected") | .metadata.rejected[] | select(.label == "sw-SR0-1")' \
+           .context/logs/audit.jsonl | grep -c '^')" -eq 1 ]] \
+    && grep -q 'class downgrade escalate -> decision refused' .context/t20c.out \
+    && grep -q 'class downgrade escalate -> decision refused' .context/t20c.err; then
+    printf 'T20c: escalate -> decision refused, other fields land, one audit row, rc=2: ok\n'
+  else
+    printf 'T20c: class downgrade not refused/reported (rc=%s): FAIL\n' "$st20c_rc" >&2
+    jq -c '.facts.open_questions' .context/state.json >&2
+    cat .context/t20c.err >&2
+    exit 1
+  fi
+
+  # ---- T20d: the refusal survives the --stage fall-through: merge lands, exit still 2 ----
+  make_state
+  bash "$SELF" --facts "$_oq_esc" > /dev/null
+  st20d_rc=0
+  bash "$SELF" --stage DV --artifact .context/development-0.md --facts "$_oq_dec" \
+    > /dev/null 2>&1 || st20d_rc=$?
+  if [[ "$st20d_rc" -eq 2 ]] \
+    && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]] \
+    && jq -e '.facts.open_questions[0].class == "escalate"' .context/state.json > /dev/null; then
+    printf 'T20d: refused downgrade with --stage still merges the stage and exits 2: ok\n'
+  else
+    printf 'T20d: refusal lost or merge aborted on --stage (rc=%s): FAIL\n' "$st20d_rc" >&2
+    exit 1
+  fi
+
+  # ---- T20e: a raise decision -> escalate is honoured, exit 0, no audit row ----
+  make_state
+  rm -f .context/logs/audit.jsonl
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
+  st20e_rc=0
+  bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"escalate","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' \
+    > /dev/null 2>&1 || st20e_rc=$?
+  if [[ "$st20e_rc" -eq 0 ]] \
+    && jq -e '.facts.open_questions[0].class == "escalate"' .context/state.json > /dev/null \
+    && ! grep -q 'facts_items_rejected' .context/logs/audit.jsonl 2> /dev/null; then
+    printf 'T20e: decision -> escalate raise honoured, rc=0, no rejection row: ok\n'
+  else
+    printf 'T20e: class raise refused or reported (rc=%s): FAIL\n' "$st20e_rc" >&2
+    exit 1
+  fi
+
+  # ---- T20f: three replayed downgrades leave escalate and write one row each ----
+  make_state
+  rm -f .context/logs/audit.jsonl
+  bash "$SELF" --facts "$_oq_esc" > /dev/null
+  t20f_ok=1
+  for _i in 1 2 3; do
+    bash "$SELF" --facts "$_oq_dec" > /dev/null 2>&1 || true
+    jq -e '.facts.open_questions[0].class == "escalate"' .context/state.json > /dev/null || t20f_ok=0
+  done
+  if [[ "$t20f_ok" -eq 1 ]] \
+    && [[ "$(grep -c '"facts_items_rejected"' .context/logs/audit.jsonl)" -eq 3 ]]; then
+    printf 'T20f: 3 replayed downgrades keep escalate, 3 rejection rows: ok\n'
+  else
+    printf 'T20f: replayed downgrade lowered the class or miscounted rows: FAIL\n' >&2
+    exit 1
+  fi
+
   # ---- T24: --facts rejects per item, persisting the valid remainder ----
   # One bad class value used to discard the whole write — decisions, changed files and
   # every valid sweep stub in the same object.

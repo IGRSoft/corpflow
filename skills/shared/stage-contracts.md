@@ -509,7 +509,7 @@ There is exactly one auto-answer authority — the existing Fable decision deleg
 
 #### Self-labels raise, never lower
 
-`class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)`, computed before any auto-answer, so raising is honoured and lowering is refused by construction. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. The two axes are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class behaviour under a bypassed gate or an unattended lane is per carrier, one row each in § Unattended fallbacks.
+`class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)`, computed before any auto-answer, so raising is honoured and lowering is refused by construction. The ledger enforces the join on `class` too: `state-patch.sh --facts` keeps an `escalate` item at `escalate` whatever a later stub says, so a stage cannot lower an item another labeller raised; the refusal exits 2 and writes a `facts_items_rejected` audit row. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. The two axes are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class behaviour under a bypassed gate or an unattended lane is per carrier, one row each in § Unattended fallbacks.
 
 ##### The join is over labellers, never transports
 
@@ -892,6 +892,10 @@ handoff:
 
 Prev→this label: `DR→SR`.
 
+A question whose options include accepting a known vulnerability, a CVE or a security finding is
+`class: escalate`, never `decision`: accepting one is an escalation-class choice per
+`commands/worktask.md § Escalation guard (BINDING)`.
+
 ### #tpl-qa — QA (qa-engineer)
 
 ```yaml
@@ -1068,6 +1072,9 @@ handoff:
 
 Prev→this label: `DC→RE` (or `QA→RE` when DC did not run).
 
+A question offering to ship with a known vulnerability, CVE or open security finding is
+`class: escalate` per `commands/worktask.md § Escalation guard (BINDING)`.
+
 ### #tpl-fn — Finalization (project-manager)
 
 ```yaml
@@ -1113,6 +1120,8 @@ handoff:
 ```
 
 Prev→this label: `FN→ST` (or `RE→ST`/`DC→ST`/`QA→ST`, from the latest of those that ran, when FN did not run).
+
+ST treats every `escalate` item as a recommendation only and never resolves it, in prose or in the ledger; the user answers it at its checkpoint.
 
 ### #tpl-ir — Incident Response (incident-responder)
 

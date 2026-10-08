@@ -1053,7 +1053,7 @@ an upstream stage's entries.
 | Array | Identity | Collision | Order |
 |---|---|---|---|
 | `decisions` | `.id` | last writer wins | survivor moves to the tail |
-| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped | survivor moves to the tail |
+| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped, `class` `decision < escalate` raise-only (an omitted class keeps the incumbent's; a refused downgrade exits 2 with a `facts_items_rejected` row) | survivor moves to the tail |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
 | `stream_branches` (object) | the stream key | later value for that key wins; other keys kept | key insertion order |
 
