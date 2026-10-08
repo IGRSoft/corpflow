@@ -149,7 +149,7 @@ Over budget, cut in this order:
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
 | Post-compaction | Deferred tool schemas preserved — no re-fetch needed; a folder's CLAUDE.md is not attached a second time after a compaction or resume |
-| Write/Edit in a rule's scope | Path-scoped `.claude/rules` and nested CLAUDE.md load on Write and Edit too, not only on Read — count them in the stage budget |
+| Write/Edit or a Bash view in a rule's scope | Path-scoped `.claude/rules` and nested CLAUDE.md load on Write and Edit too, and on a single-file Bash `cat`/`head`/`tail`/`sed -n`/`grep` view (2.1.293), not only on Read — count them in the stage budget of every agent with those Bash grants |
 | Context too long for the auto-mode classifier | The conversation is compacted instead of every tool call prompting or failing |
 | Last few turns are noise | `/rewind`, not `/compact` (`skills/cost-optimization/references/token-baselines.md § Session commands`) |
 

@@ -38,7 +38,7 @@ Claude Code's own internal agents (prompt suggestions, `/btw`) also fire `Subage
 
 | Hook Event | Fires When | Matcher | Payload Fields |
 |------------|------------|---------|----------------|
-| `InstructionsLoaded` | A rule or nested CLAUDE.md loads, including on Write/Edit inside its scope | — | `agent_id`, `agent_type` when a subagent's file access loaded it; effort for rules and nested CLAUDE.md loaded on file access |
+| `InstructionsLoaded` | A rule or nested CLAUDE.md loads, including on Write/Edit inside its scope and on a single-file Bash `cat`/`head`/`tail`/`sed -n`/`grep` view (2.1.293) | — | `agent_id`, `agent_type` when a subagent's file access loaded it; effort for rules and nested CLAUDE.md loaded on file access |
 
 ### Notification as resume wake-up
 
@@ -152,7 +152,7 @@ Metadata only: the `dedupe_key` shape is unchanged.
 - Log events carry `message.uuid`, `client_request_id` and `tool_source` for message-level correlation and tool provenance across spans and audit rows.
 - `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` sets the 60 KB truncation limit on OTEL content attributes — set it with `OTEL_RESOURCE_ATTRIBUTES` when a collector enforces a payload ceiling.
 - Log events emitted outside the turn's async context (background/notification-triggered) carry the interaction span's trace context, so a background-agent completion nests under the originating trace.
-- Session transcripts record the reasoning effort per assistant message and `subagentStatusLine` includes it (pairs with § Hook Effort Visibility).
+- Session transcripts record the reasoning effort per assistant message and `subagentStatusLine` includes it; the `subagentStatusLine` payload also carries `agentType`, so a status script can tell custom subagent types apart (2.1.293) (pairs with § Hook Effort Visibility).
 
 #### BG-Task ID Schema Watch
 
@@ -255,6 +255,7 @@ Hook payloads include `effort.level` (`low|medium|high|xhigh|max`), so audit/cos
 #### Config-error hints & main-thread agents
 
 - A prompt-type or agent-type hook for `SessionStart`, `Setup` or `SubagentStart` is rejected at load ("use a command-type hook instead"): stage-lifecycle hooks that must react before any session message exists are `type: "command"` (or `type: "mcp_tool"`).
+- A `prompt` or `agent` hook written as an instruction ("Block commands that ...") now blocks what it names, and an instruction-style `prompt` hook on `Stop`/`SubagentStop` ends the turn early less often (2.1.294). corpflow ships only command hooks; re-check a sibling or user hook of either type.
 - Agent frontmatter `hooks:` and `mcpServers` apply in `--agent <name>` main-thread runs as well as subagent delegations, but only for project and user agents: a plugin agent ignores both in either context (§ Agent-scoped hooks live in plugin.json).
 
 ### Hook Terminal Sequences

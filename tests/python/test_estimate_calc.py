@@ -46,8 +46,8 @@ class AiCostArithmetic(unittest.TestCase):
         self.assertAlmostEqual(est.ai_cost(100_000, "sonnet", "medium", "standard"), 0.432, places=6)
 
     def test_haiku_50k_high_novel(self):
-        # 40k in / 10k out: (0.04*1 + 0.01*5) * (1+0.5) * 2.0 = 0.27
-        self.assertAlmostEqual(est.ai_cost(50_000, "haiku", "high", "novel"), 0.27, places=6)
+        # 40k in / 10k out: (0.04*0.1 + 0.01*0.5) * (1+0.5) * 2.0 = 0.027
+        self.assertAlmostEqual(est.ai_cost(50_000, "haiku", "high", "novel"), 0.027, places=6)
 
     def test_opus_prices_at_opus_5_5(self):
         # 80k in / 20k out: (0.08*4 + 0.02*20) * 1.2 = 0.864

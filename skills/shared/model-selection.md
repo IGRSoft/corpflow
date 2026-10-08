@@ -14,13 +14,20 @@ Standard API rates, USD per million tokens, for the model each alias resolves to
 
 | Alias | Model | Input $/Mtok | Output $/Mtok | Cache read $/Mtok | Relative cost | Use For |
 |-------|-------|--------------|---------------|-------------------|---------------|---------|
-| **haiku** | Haiku 4.5 | 1.00 | 5.00 | 0.10 | 1x (baseline) | Formatting, routing, checklists, status checks |
-| **sonnet** | Sonnet 5.5 | 2.00 | 10.00 | 0.20 | 2x haiku | Implementation, analysis, test design, coordination |
-| **opus** | Opus 5.5 | 4.00 | 20.00 | 0.20 | 4x haiku | Architecture decisions, review gates, complex reasoning, meta-optimization |
-| **fable** | Fable 5.1 | 10.00 | 50.00 | 0.25 | 10x haiku | Operator override only, never a stage default |
+| **haiku** | Haiku 5.5 | 0.10 | 0.50 | 0.01 | 1x (baseline) | Formatting, routing, checklists, status checks |
+| **sonnet** | Sonnet 5.5 | 2.00 | 10.00 | 0.10 | 20x haiku | Implementation, analysis, test design, coordination |
+| **opus** | Opus 5.5 | 4.00 | 20.00 | 0.20 | 40x haiku | Architecture decisions, review gates, complex reasoning, meta-optimization |
+| **fable** | Fable 5.1 | 10.00 | 50.00 | 0.25 | 100x haiku | Operator override only, never a stage default |
 
 Relative cost holds at any input:output mix, since every tier prices output at 5x input. Dollars:
 `skills/cost-optimization/SKILL.md § Cost Estimation Formula`.
+
+### Haiku prompt-length pricing
+
+Haiku 5.5 alone is priced by prompt length: a prompt over 100,000 tokens bills at 0.50 / 2.50 /
+0.05, which narrows the gap to 4x / 8x / 20x. The other three tiers price the full 1M window at the
+rates above. The estimator uses the standard row, so a haiku stage whose context grows past 100K
+costs up to 5x its estimate.
 
 ### Rate ownership
 
@@ -36,7 +43,7 @@ Re-check the rates against the `claude-api` skill whenever an alias moves to a n
 | `opus` | Opus 5.5 (`claude-opus-5-5`), the default Opus and Claude Code's default model outside Foundry | 1M by default, no usage-credit gate | § Cost Tiers; fast mode multiplier on top |
 | `sonnet` | Sonnet 5.5 (`claude-sonnet-5-5`), the default Sonnet on the Anthropic API | native 1M | § Cost Tiers |
 | `fable` | Fable 5.1 (`claude-fable-5-1`), Mythos-class top reasoning. Claude apps gateway sessions still resolve `fable` and `best` to Fable 5 | 1M by default (`[1m]` names normalize to the base id) | § Cost Tiers |
-| `haiku` | current Haiku | standard | § Cost Tiers |
+| `haiku` | Haiku 5.5 (`claude-haiku-5-5`), the default Haiku on the Anthropic API | 1M | § Cost Tiers; prompts over 100K bill at the higher Haiku rate |
 
 Opus-tier stages follow the `opus` alias to each new default Opus with no plugin change. `fable` is
 a valid operator override, never a plugin default.

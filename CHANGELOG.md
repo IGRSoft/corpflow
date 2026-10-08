@@ -38,8 +38,9 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Changed
 
-- **Requires Claude Code 2.1.292** (was 2.1.284). 2.1.292 adds the `Agent` tool's `effort`
-  parameter, which every in-process stage dispatch now passes. A cross-session message held at the
+- **Requires Claude Code 2.1.294** (was 2.1.284). 2.1.293 resolves `haiku` to Haiku 5.5, the
+  model the cost table now prices, and `headless-dispatch.sh` floors at 2.1.294. 2.1.292 adds the
+  `Agent` tool's `effort` parameter, which every in-process stage dispatch now passes. A cross-session message held at the
   recipient for approval was reported as delivered before 2.1.288; it now reads as not delivered
   and names the holding session. Background commands in unattended sessions stop at their
   `timeout` since 2.1.285, which the explicit 2 h `timeout` below depends on.
@@ -86,6 +87,18 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
   providers, new Bash and Read permission hardening, one-shot `-p` waiting for background commands
   and wakeups, escaped `<system-reminder>` tags in hook output, UNC-read and `allowed-tools`
   fixes, `claude plugin test` failing on a failed `expect`, and stdio MCP protocol 2026-07-28.
+- **CC 2.1.293→2.1.294 band integrated: Haiku 5.5.** `haiku` now prices at Haiku 5.5 ($0.10 /
+  $0.50 / $0.01 cache read, 1/20 of sonnet). A prompt over 100K tokens bills 5x that. The Sonnet
+  5.5 cache-read rate is corrected to $0.10. `estimate-calc.py` follows the table. The benchmark
+  `DC` pin moves to `claude-haiku-5-5`, which is a new era boundary. The README no longer says
+  Haiku sees the `TaskCreate` tools: Haiku 5.5 does not. The docs add these changes:
+  - instruction-style `prompt`/`agent` hooks now block (2.1.294)
+  - `subagentStatusLine` `agentType`
+  - rules loaded on a Bash `cat`/`head`/`tail`/`sed -n`/`grep` view
+  - no `SendMessage` prompt once the tool is removed
+  - narrowed child tool lists
+  - `claude agents` bypass consent
+  - the compaction self-action fix
 - **The planner now owns `requires_screenshots`.** `detect-ui-change.sh` is advisory input: the
   planning model judges whether the diff alters rendered output, S1 (`ui_visual_check`) is a hard
   floor, a `false` over an S2 hit needs a written reason, uncertain means `true`, and the planner
