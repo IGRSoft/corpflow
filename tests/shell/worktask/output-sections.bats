@@ -151,4 +151,5 @@ gen() { run bash "$PLUGIN_ROOT/$SCRIPT" --root "$WD/repo" "$@"; }
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }

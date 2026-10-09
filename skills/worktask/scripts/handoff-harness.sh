@@ -1190,9 +1190,10 @@ check_test_evidence() {
 # Two tiers, because "verbatim" is not mechanically decidable. Tier 1 asks only
 # that the excerpt EXIST somewhere durable — the artifact body, or a .context/logs/
 # capture the artifact names — which is platform-neutral and decidable. Tier 2, the
-# count-token match, is warn-only: it holds for bats and pytest but not for every
-# Gradle or Xcode formatter this cross-platform contract also governs, and a check
-# that guesses wrong fails honest stages. Same posture as ar_ref_violation below.
+# count-token match, fails only for a strict runner (te_runner_strict), whose line always
+# carries the count. For any other runner it warns: a free-form script or an Xcode
+# formatter need not repeat the count, and a check that guesses wrong fails honest stages.
+# The legacy scalar has no runner name, so it always warns.
 #
 # DV and QA only: they are the two stages holding test-execution authority, so no
 # other stage can produce the line honestly.
@@ -1224,6 +1225,71 @@ check_summary_line() {  # <artifact> <fmfile> <stage>
   fi
   echo "fail: stage=$stage tests_executed is a scalar (\"$val\") — record one entry per runner: tests_executed: [{runner, count, summary_line}]; a legacy scalar validates only under --legacy-tests-executed" >&2
   return 1
+}
+
+# A strict runner has a line that always carries the executed count: its own tally, or for
+# Gradle and JUnit the junit-tally.sh line. Every other runner keeps the warn: a bash-*
+# script prints what its author chose, and xcodebuild prints one tally per framework and no
+# total for a mixed XCTest + Swift Testing scheme. Matched lowercased; a trailing `*` is a
+# prefix match, so gradlew and junit5 are strict too. Canonical list:
+# skills/shared/testing-strategy.md § Strict-count runners. One or two names per pattern
+# line, because tests/shell/skills/test-authority-matrix.bats refuses a line outside its
+# allow-list that names three runners.
+te_runner_strict() {  # <runner>
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    gradle* | junit*) return 0 ;;
+    swift-testing) return 0 ;;
+    vitest | jest) return 0 ;;
+    pytest | bats) return 0 ;;
+  esac
+  return 1
+}
+
+# pytest prints a total only when every case passed; a failing run prints a list of
+# outcome counts (`1 failed, 57 passed in 3.2s`). Its line still proves the count when the
+# count lies in [base, base + errors], base = passed + failed + xpassed + xfailed: an error
+# is either a case of its own (setup failed) or a second report on a case already counted
+# (`1 passed, 1 error` when teardown fails). Skipped, deselected and warnings are not
+# executed cases, so they never add. With no passed/failed/x* outcome at all (`3 errors`,
+# a collection failure) the range is off: those errors may be no cases, so only a count
+# the line carries as a token is proven. pytest only: the other strict runners print a total.
+te_outcome_sum_matches() {  # <runner> <line> <count>
+  local base errs n
+  [[ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" == pytest ]] || return 1
+  base=$(te_outcome_count "$2" 'passed|failed|xpassed|xfailed')
+  errs=$(te_outcome_count "$2" 'errors?')
+  n=$((10#$3))
+  [[ "$base" -gt 0 && "$n" -ge "$base" && "$n" -le $((base + errs)) ]]
+}
+
+# A whole-number token is a digit run that is not part of a decimal (`0.1s`, `8.3.1`), so
+# a stray decimal digit cannot stand in for a count. A TAP plan `1..N` is one token worth
+# N: its lower bound 1 is not a count, and reading it as one would let `count: 1` pass
+# every bats plan. Leftmost-longest matching takes the plan form before the bare digits.
+te_count_is_token() {  # <line> <count>
+  local tok n=$((10#$2))
+  while IFS= read -r tok; do
+    case "$tok" in
+      *..*) tok=${tok#*..} ;;
+      *.*) continue ;;
+    esac
+    [[ -n "$tok" && $((10#$tok)) -eq "$n" ]] && return 0
+  done < <(printf '%s\n' "$1" | grep -oE '[0-9]+\.\.[0-9]+|[0-9]+(\.[0-9]+)*')
+  return 1
+}
+
+te_outcome_count() {  # <line> <outcome-ere> — sum of "<N> <outcome>" tokens
+  printf '%s\n' "$1" | grep -oE "(^|[^0-9.])[0-9]+ ($2)([^a-z]|\$)" \
+    | awk 'match($0, /[0-9]+/) { s += substr($0, RSTART, RLENGTH) } END { print s + 0 }'
+}
+
+te_strict_fix() {  # <runner>
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    gradle* | junit*)
+      echo "run skills/worktask/scripts/junit-tally.sh <results-dir>, capture its line to .context/logs/, name that capture, and quote the line as summary_line" ;;
+    *)
+      echo "quote the tally line the runner printed, the one that carries the count" ;;
+  esac
 }
 
 # Every entry is checked and every fault gets its own line, so one run reports them all.
@@ -1285,8 +1351,15 @@ check_summary_line_list() {  # <artifact> <fmfile> <stage>
       echo "fail: stage=$stage tests_executed[$i] runner=$runner summary_line is uncorroborated: \"$line\" appears neither in $(basename "$artifact") nor in a .context/logs/ capture it names — an excerpt nobody can check is the unverifiable claim this arm refuses" >&2
       rc=1; i=$((i + 1)); continue
     fi
-    if ! printf '%s' "$line" | grep -qE "(^|[^0-9])${count}([^0-9]|\$)"; then
-      echo "warn: stage=$stage tests_executed[$i] runner=$runner count: $count is not a whole-number token of summary_line \"$line\" — the excerpt is corroborated, the count is not" >&2
+    if ! te_count_is_token "$line" "$count"; then
+      if te_outcome_sum_matches "$runner" "$line" "$count"; then
+        i=$((i + 1)); continue
+      fi
+      if te_runner_strict "$runner"; then
+        echo "fail: stage=$stage tests_executed[$i] runner=$runner count: $count is not a whole-number token of summary_line \"$line\" — this runner has a line that prints the executed count, so a line without it does not prove the count; $(te_strict_fix "$runner")" >&2
+        rc=1; i=$((i + 1)); continue
+      fi
+      echo "warn: stage=$stage tests_executed[$i] runner=$runner count: $count is not a whole-number token of summary_line \"$line\" — the excerpt is corroborated, the count is not; a bash-* script names a .context/logs/ capture whose result line carries the count" >&2
       summary_line_audit "$artifact" "$stage" "$count" "$line" "$runner"
     fi
     i=$((i + 1))

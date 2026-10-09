@@ -29,6 +29,7 @@ EOF
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "self-test OK"
+  assert_output --regexp 'self-test OK \([1-9][0-9]* passed, 0 failed\)'
 }
 
 @test "guard: an off-root absolute path in the ledger fails closed" {

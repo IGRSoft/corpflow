@@ -227,6 +227,7 @@ setup() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 @test "REQ-2 crit 2: the lint is green against this repository's own tracked tree" {

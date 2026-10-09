@@ -9,6 +9,7 @@
 
 self_test() {
   local self_dir SELF td fail=0
+  _SELFTEST_PASSED=0
   self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   SELF="$self_dir/brief-compose.sh"
   td=$(mktemp -d "${TMPDIR:-/tmp}/brief-compose-XXXXXX")
@@ -32,9 +33,10 @@ self_test() {
     shift
     if "$@"; then
       printf 'ok: %s\n' "$label"
+      _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
     else
       printf 'FAIL: %s\n' "$label" >&2
-      fail=1
+      fail=$((fail + 1))
     fi
   }
 
@@ -633,6 +635,6 @@ EOF
   check "fan-out: no bare development-0.md" not_grep 'development-0\.md' "$out4"
   check "fan-out: no hand-written anchor list" not_grep "Anchors:" "$out4"
 
-  [ "$fail" -eq 0 ] || exit 1
-  printf 'self-test OK\n'
+  [ "$fail" -eq 0 ] || { printf 'self-test FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$fail" >&2; exit 1; }
+  printf 'self-test OK (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
 }

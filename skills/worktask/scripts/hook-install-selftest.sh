@@ -10,6 +10,7 @@
 
 # ---------- Self-test ----------
 self_test() {
+  _SELFTEST_PASSED=0
   local self_path
   self_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
   local td
@@ -35,6 +36,7 @@ JSON
   CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1
   if [[ -x ".claude/hooks/state-merge.sh" ]]; then
     echo "self-test: fresh install: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: fresh install: FAIL" >&2; exit 1
   fi
@@ -44,6 +46,7 @@ JSON
   out=$(CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" 2>&1)
   if echo "$out" | grep -q "idempotent"; then
     echo "self-test: idempotent re-run: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: idempotent re-run: FAIL" >&2; exit 1
   fi
@@ -51,6 +54,7 @@ JSON
   # Test 3: check mode
   if CLAUDE_PLUGIN_ROOT="$td/plugin" "$self_path" --check >/dev/null 2>&1; then
     echo "self-test: check mode (installed): ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: check mode (installed): FAIL" >&2; exit 1
   fi
@@ -61,6 +65,7 @@ JSON
     echo "self-test: check mode (missing): FAIL (should have failed)" >&2; exit 1
   else
     echo "self-test: check mode (missing): ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   fi
 
   # Test 5: a non-executable dst is backed up, not silently destroyed
@@ -73,6 +78,7 @@ JSON
   if [[ -f ".claude/hooks/state-merge.sh.bak" ]] \
      && [[ "$(cat .claude/hooks/state-merge.sh.bak)" == "CUSTOMIZED" ]]; then
     echo "self-test: backup on overwrite: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: backup on overwrite: FAIL" >&2; exit 1
   fi
@@ -96,6 +102,7 @@ JSON
     echo "self-test: tracked refresh leaves no .bak: FAIL (stale copy was not refreshed)" >&2; exit 1
   fi
   echo "self-test: tracked refresh leaves no .bak: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
   # Test 7: a tracked but locally MODIFIED dst still gets its rescue copy — git holds the
   # committed version, not the local edit, so that content is genuinely at risk.
@@ -105,9 +112,10 @@ JSON
   if [[ -f ".claude/hooks/state-merge.sh.bak" ]] \
      && [[ "$(cat .claude/hooks/state-merge.sh.bak)" == "HANDEDITED" ]]; then
     echo "self-test: modified tracked copy still backed up: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: modified tracked copy still backed up: FAIL" >&2; exit 1
   fi
 
-  echo "self-test: ALL PASS"
+  echo "self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }

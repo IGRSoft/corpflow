@@ -9,6 +9,7 @@
 # Contract: defines `run_self_test`, returning 0 when every case passes.
 
 run_self_test() {
+  _SELFTEST_PASSED=0
   local SELF td repo wt rc out
   SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
   td=$(mktemp -d "${TMPDIR:-/tmp}/dv-tree-preflight-XXXXXX")
@@ -34,6 +35,7 @@ run_self_test() {
   set -e
   if [[ "$rc" -eq 0 && -z "$out" ]]; then
     printf 'S1: matching tree passes silently: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'S1: matching tree must pass silently (rc=%s out=%s): FAIL\n' "$rc" "$out" >&2
     exit 1
@@ -48,6 +50,7 @@ run_self_test() {
   set -e
   if [[ "$rc" -eq 1 ]] && printf '%s' "$out" | grep -q 'MISMATCH'; then
     printf 'S2: mismatched tree blocks naming both paths: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'S2: mismatched tree must exit 1 (rc=%s): FAIL\n' "$rc" >&2
     exit 1
@@ -60,11 +63,12 @@ run_self_test() {
   set -e
   if [[ "$rc" -eq 0 ]] && printf '%s' "$out" | grep -q 'WARN'; then
     printf 'S3: unresolved assignment warns, never blocks: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'S3: unresolved assignment must warn and exit 0 (rc=%s): FAIL\n' "$rc" >&2
     exit 1
   fi
 
-  printf 'self-test: ALL PASS\n'
+  printf 'self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   exit 0
 }

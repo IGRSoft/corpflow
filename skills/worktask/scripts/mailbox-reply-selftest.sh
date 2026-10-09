@@ -10,6 +10,7 @@
 
 self_test() {
   local self td fails=0
+  _SELFTEST_PASSED=0
   self="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/mailbox-reply.sh"
   command -v jq > /dev/null 2>&1 || {
     echo "mailbox-reply: self-test FAIL (jq missing)"
@@ -20,7 +21,7 @@ self_test() {
   trap "rm -rf '$td'" EXIT
   mkdir -p "$td/mailbox/requests" "$td/mailbox/replies"
 
-  _st_pass() { printf '  ok   %s\n' "$1"; }
+  _st_pass() { printf '  ok   %s\n' "$1"; _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)); }
   _st_fail() {
     printf '  FAIL %s\n' "$1"
     fails=$((fails + 1))
@@ -134,9 +135,9 @@ self_test() {
   fi
 
   if [ "$fails" -eq 0 ]; then
-    echo "mailbox-reply: self-test OK"
+    echo "mailbox-reply: self-test OK ($_SELFTEST_PASSED passed, 0 failed)"
     return 0
   fi
-  echo "mailbox-reply: self-test FAIL ($fails)"
+  echo "mailbox-reply: self-test FAIL ($_SELFTEST_PASSED passed, $fails failed)"
   return 1
 }

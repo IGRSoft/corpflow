@@ -110,6 +110,7 @@ setup() {
   assert_output --partial "self-test: supersede-mismatch exits 3: ok"
   assert_output --partial "self-test: run-scope-unacked-later-run exits 0: ok"
   assert_output --partial "self-test: ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 @test "run scope: a run-0 supersede log does not judge a run-1 artifact that received no message (exit 0)" {

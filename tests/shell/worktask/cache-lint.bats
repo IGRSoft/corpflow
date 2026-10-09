@@ -474,6 +474,7 @@ EOF
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 # ---------------------------------------------------------------------------
@@ -729,6 +730,7 @@ mk_agent_repo() {   # $1 = agent basename, $2… = file body lines
   run bash "$PLUGIN_ROOT/$SCRIPT" --selftest
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 # --- --allow-list / --anchor-diff: the read-only core ------------------------

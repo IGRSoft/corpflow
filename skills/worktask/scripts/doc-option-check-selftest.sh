@@ -20,7 +20,7 @@ selftest_case() { # <label> <expected rc> <stdout must contain, or "" for empty>
     exit 1
   fi
   case "$out" in
-    *"$want_out"*) printf '%s: ok\n' "$label" ;;
+    *"$want_out"*) printf '%s: ok\n' "$label"; _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)) ;;
     *)
       printf >&2 '%s: FAIL (stdout lacks %s: %s)\n' "$label" "$want_out" "$out"
       exit 1
@@ -31,6 +31,7 @@ selftest_case() { # <label> <expected rc> <stdout must contain, or "" for empty>
 # shellcheck disable=SC2016  # fixture text: backticks and $NAME must reach the doc unexpanded
 run_self_test() {
   local td tree
+  _SELFTEST_PASSED=0
   td=$(mktemp -d "${TMPDIR:-/tmp}/doc-option-check-selftest.XXXXXX")
   # shellcheck disable=SC2064  # expand $td now so the trap removes the right dir
   trap "rm -rf -- '${td}'" EXIT
@@ -63,6 +64,6 @@ run_self_test() {
   selftest_case 'S8: --allow-path exempts an exact missing path' 0 '' \
     bash "$SELF" --tree "$tree" --allow-path docs/gone.md "$tree/docs/missing.md"
 
-  printf 'self-test: ALL PASS\n'
+  printf 'self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   exit 0
 }

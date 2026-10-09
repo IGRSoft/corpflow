@@ -474,4 +474,5 @@ check() {
   assert_output --partial "S1: undefined env var is a finding: ok"
   assert_output --partial "S5: unresolved tree exits 3: ok"
   assert_output --partial "self-test: ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }

@@ -15,6 +15,7 @@ _ST_ERR=""
 _ST_OUT=""
 _ST_RC=0
 _ST_FAILS=0
+_SELFTEST_PASSED=0
 
 # _st_run <cwd> <NAME=value|-> <args...> — sets _ST_OUT and _ST_RC; stderr to _ST_ERR.
 _st_run() {
@@ -37,6 +38,7 @@ _st_repo() {
 _st_case() {
   if "$2"; then
     printf 'seed-state self-test: ok   %s\n' "$1"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'seed-state self-test: FAIL %s (rc=%s stderr=%s)\n' "$1" "$_ST_RC" \
       "$(head -c 200 "$_ST_ERR" 2> /dev/null | tr '\n' ' ')"
@@ -305,9 +307,9 @@ self_test() {
   _st_case "S14 --context-dir outranks CONTEXT_DIR" _st_s14_context_dir_rank
 
   if [ "$_ST_FAILS" -eq 0 ]; then
-    printf 'seed-state self-test: ALL PASS\n'
+    printf 'seed-state self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
     return 0
   fi
-  printf 'seed-state self-test: %s case(s) failed\n' "$_ST_FAILS"
+  printf 'seed-state self-test: FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$_ST_FAILS"
   return 1
 }

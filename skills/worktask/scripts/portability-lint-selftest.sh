@@ -27,7 +27,7 @@ assert_hit() {
   local label="$1" rule="$2" content="$3"
   lint_one "$content"
   case "$LINT_OUT" in
-    *":$rule:"*) [ "$LINT_RC" -eq 1 ] && return 0 ;;
+    *":$rule:"*) [ "$LINT_RC" -eq 1 ] && { _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)); return 0; } ;;
   esac
   printf >&2 'portability-lint self-test: FAIL (%s — expected %s, rc=1; got rc=%s out=%s)\n' \
     "$label" "$rule" "$LINT_RC" "$LINT_OUT"
@@ -38,7 +38,7 @@ assert_hit() {
 assert_clean() {
   local label="$1" content="$2"
   lint_one "$content"
-  [ "$LINT_RC" -eq 0 ] && [ -z "$LINT_OUT" ] && return 0
+  [ "$LINT_RC" -eq 0 ] && [ -z "$LINT_OUT" ] && { _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)); return 0; }
   printf >&2 'portability-lint self-test: FAIL (%s — expected clean; got rc=%s out=%s)\n' \
     "$label" "$LINT_RC" "$LINT_OUT"
   exit 1
@@ -46,6 +46,7 @@ assert_clean() {
 
 self_test() {
   ST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/portability-lint-selftest.XXXXXX")
+  _SELFTEST_PASSED=0
   trap 'rm -rf "$ST_DIR"' EXIT
 
   # --- P001: mktemp -t (BSD prefix flag) vs the AD-3 template shape -----------------
@@ -121,6 +122,7 @@ self_test() {
     printf >&2 'portability-lint self-test: FAIL (tier2: directive on the line above — rc=%s out=%s)\n' "$LINT_RC" "$out"
     exit 1
   fi
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   LINT_RC=0
 
   # --- Suppression tier 3: file-level disable-file within the first 20 lines ---------
@@ -135,6 +137,7 @@ self_test() {
     printf >&2 'portability-lint self-test: FAIL (tier3: file-level disable-file — rc=%s out=%s)\n' "$LINT_RC" "$out"
     exit 1
   fi
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   LINT_RC=0
 
   # --- Suppression tier 4: hard path exclusions (tests/vendor/) ----------------------
@@ -150,6 +153,7 @@ self_test() {
     printf >&2 'portability-lint self-test: FAIL (tier4: tests/vendor exclusion — rc=%s out=%s)\n' "$LINT_RC" "$out"
     exit 1
   fi
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
-  printf 'portability-lint: self-test ALL PASS\n'
+  printf 'portability-lint: self-test ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
 }
