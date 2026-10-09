@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Contract tests for the /megatask per-issue run environment (commands/megatask.md § Step 3 —
-# run environment in the per-issue prompt; commands/worktask.md § Per-issue run under
-# /megatask):
+# run environment in the per-issue prompt; skills/worktask/references/megatask-per-issue.md
+# § Per-issue run under /megatask):
 #   - both files state one Bash prefix, `cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&`;
 #   - run literally from megatask's root, as a subagent's shell starts, that prefix makes
 #     seed-state.sh and state-patch.sh write the worktree's ledger and leave megatask's alone,
@@ -20,7 +20,8 @@ MEGATASK_DOC="commands/megatask.md"
 WORKTASK_DOC="commands/worktask.md"
 SKILL_DOC="skills/worktask/SKILL.md"
 ENV_HEAD="#### Step 3 — run environment in the per-issue prompt"
-PER_ISSUE_HEAD='### Per-issue run under `/megatask`'
+PER_ISSUE_DOC="skills/worktask/references/megatask-per-issue.md"
+PER_ISSUE_HEAD='## Per-issue run under `/megatask`'
 SCRIPTS="skills/worktask/scripts"
 
 section() {
@@ -61,8 +62,8 @@ in_run() {
   p="$(doc_prefix)"
   [ "$p" = 'cd "<wt>" && export WORKSPACE_ROOT="<wt>" MILESTONE_MODE=1 &&' ] \
     || fail "megatask Step 3 prefix changed or missing: [$p]"
-  section "$WORKTASK_DOC" "$PER_ISSUE_HEAD" | grep -qF "\`$p\`" \
-    || fail "$WORKTASK_DOC § Per-issue run under /megatask does not state the same prefix"
+  section "$PER_ISSUE_DOC" "$PER_ISSUE_HEAD" | grep -qF "\`$p\`" \
+    || fail "$PER_ISSUE_DOC § Per-issue run under /megatask does not state the same prefix"
 }
 
 @test "prefix: seed-state.sh and state-patch.sh write the worktree's ledger, not megatask's" {
@@ -108,7 +109,7 @@ in_run() {
   section "$WORKTASK_DOC" "#### Step 2a — the gate" | tr '\n' ' ' \
     | grep -qF 'A `/megatask` per-issue run never asks' \
     || fail "Step 2a's gate no longer rules out the question under /megatask"
-  section "$WORKTASK_DOC" "#### Per-issue run — what changes" \
+  section "$PER_ISSUE_DOC" "### Per-issue run — what changes" \
     | grep -E '^\| 2a-pre, 2a \|' | grep -qF 'no `AskUserQuestion` runs' \
     || fail "the per-issue table no longer says Step 2a asks nothing"
 }
@@ -125,7 +126,7 @@ in_run() {
 @test "EnterWorktree: never called by the per-issue run or its DV stage" {
   section "$MEGATASK_DOC" "$ENV_HEAD" | grep -qF 'Never call `EnterWorktree`' \
     || fail "megatask's run environment no longer forbids EnterWorktree"
-  section "$WORKTASK_DOC" "#### Per-issue run — what changes" \
+  section "$PER_ISSUE_DOC" "### Per-issue run — what changes" \
     | grep -E '^\| `EnterWorktree` \|' | grep -qF 'Never called' \
     || fail "the per-issue table no longer forbids EnterWorktree"
   section "$SKILL_DOC" "##### Step 4.8 — isolation banner" | tr '\n' ' ' \
@@ -266,6 +267,6 @@ stop_payload() {  # stop_payload <agent_id> <cwd> [agent_transcript_path]
     || fail "megatask Step 3 no longer tells the per-issue prompt to carry the hook binding banner"
   section "$MEGATASK_DOC" "#### Step 3 — how hooks find the issue" | grep -qF 'corpflow_bind_payload' \
     || fail "megatask no longer names the hook-side binding"
-  section "$WORKTASK_DOC" "$PER_ISSUE_HEAD" | tr '\n' ' ' | grep -qF 'Hooks never see that export' \
+  section "$PER_ISSUE_DOC" "$PER_ISSUE_HEAD" | tr '\n' ' ' | grep -qF 'Hooks never see that export' \
     || fail "worktask's per-issue section no longer says hooks bind from the banner"
 }

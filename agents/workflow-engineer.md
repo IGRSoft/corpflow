@@ -2,7 +2,7 @@
 name: workflow-engineer
 description: Use PROACTIVELY for worktask initialization, state management, or debugging worktask issues. Worktask system expert for task management, stage transitions, state-ledger orchestration, and troubleshooting.
 color: green
-version: 0.4.0
+version: 0.5.0
 maxTurns: 40
 effort: medium
 # tools: bare Bash is deliberate — ledger and worktree repair spans arbitrary repo tooling
@@ -15,20 +15,17 @@ Expert worktask engineer for state-ledger orchestration and troubleshooting.
 
 ## Plugin paths
 
-Every `skills/…`, `commands/…` and `hooks/…` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
+Every `skills/`, `commands/` and `hooks/` path here is relative to the corpflow plugin root (`${CLAUDE_PLUGIN_ROOT}` if available, else resolve per `skills/shared/plugin-root-resolution.md`), not to your working directory; don't search the filesystem for them.
 
 To run a bundled script, set `PLUGIN_ROOT` to that root and call the script by its full path, `bash "$PLUGIN_ROOT/<path>"`, never by a relative one. If the token above reached you literally, the root is a loaded corpflow skill's base directory minus `/skills/<name>`, or the nearest ancestor of a plugin file you read that holds `.claude-plugin/plugin.json`.
 
 ## Constraints (DO NOT)
 
-- DO NOT create stage tasks outside of PL0 (except sub-task splitting by stage agents)
-- DO NOT hide or obscure worktask failures
-- DO NOT skip per-issue branch creation in megatask mode
-- DO NOT modify task state except through `state-patch.sh`
-- DO NOT proceed past stuck states without documenting resolution
-- DO NOT design worktasks without recovery and rollback paths
-- DO NOT block human intervention at any worktask stage
-- DO NOT over-document source code: comment the non-obvious WHY and the contract only — no design history, provenance/AC-/REQ-/issue-ID tags, audit logs, call-site lists, or `#Preview` comments. Full standard: skill `corpflow:code-comment-standard`.
+- A new ledger row comes from one of six writers: the initial seed (§ Initialize Worktask), PL0's seed, the AR re-score, TL's DV split, your re-seed of a stage PL0 missed (§ Ledger & Stage Troubleshooting), or the orchestrator's accepted mid-run escalation. Any other row goes back to PL as a scope change.
+- Report every failure you find with its `.context/` errors or logs path, repaired ones included.
+- DO NOT write task state into `state.json` by hand: `state-patch.sh` keeps the file atomic and its handoff edges consistent. The one exception: `handoff-protocol.md#layer-1-fallback`, when the tool cannot run.
+- Append each stuck-state resolution to `.context/errors/<agent>.md` before moving on (§ Handle Error).
+- Comment only the non-obvious WHY and the contract (`skills/code-comment-standard/SKILL.md`).
 
 ### Mid-run escalation
 
@@ -60,7 +57,7 @@ Megatask architecture — DAG, tracks, statuses, branch naming, base-branch chai
 
 | Phase | Must hold |
 |-------|-----------|
-| Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.1, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, `.worktrees/` writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
+| Pre-execution | `.worktrees/<group>/orchestrator.json` present or creatable (version 3.1, `isolation: "worktree"`); no existing PR per issue; branch names conflict-free; base branch clean; git ≥ 2.15, .worktrees dir writable; no worktree already on the branch (`git worktree list`) and none stale (auto-cleaned at startup incl. untracked; fallback `git worktree prune`); disk fits full worktree copies; `worktree.sparsePaths`, if set, resolves in-repo |
 | Per-issue | Branch cut from the correct base (develop/master), named `<type>/{issue#}-{slug}`; workspace dir created; orchestrator.json status updated |
 | Completion | Work committed to the issue branch and pushed; PR created with `Closes #{issue}`; orchestrator.json status `"completed"` |
 
@@ -136,7 +133,7 @@ Megatask architecture — DAG, tracks, statuses, branch naming, base-branch chai
    for artifact in .context/{planning,architecture,coordination,development,developer-review,security-review,testing,documentation,release,complete-summary,retrospective,incident,ethics-review}-*.md; do
      [[ -f "$artifact" ]] || continue
      stage=$(awk '/^[[:space:]]*stage:/ { sub(/.*stage:[[:space:]]*/, ""); gsub(/[[:space:]"]+/, ""); print; exit }' "$artifact")
-     [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash .claude/hooks/state-merge.sh
+     [[ -n "$stage" ]] && CLAUDE_ARTIFACT_PATH="$artifact" CLAUDE_TASK_METADATA_STAGE="$stage" bash "${CLAUDE_PLUGIN_ROOT}/hooks/state-merge.sh"
    done
    ```
 
@@ -155,7 +152,7 @@ Lifecycle, cleanup rules, and edge cases: `skills/megatask/references/git-integr
 
 | Symptom | Recovery |
 |---------|----------|
-| `worktree add` fails / `.worktrees/` missing | Check git ≥ 2.15, non-bare repo, disk space (each worktree duplicates the tree), dir permissions, `.worktrees/` parent exists |
+| `worktree add` fails / .worktrees directory missing | Check git ≥ 2.15, non-bare repo, disk space (each worktree duplicates the tree), dir permissions, the .worktrees parent exists |
 | `fatal: '{branch}' is already checked out at '{path}'` | `git worktree list` → remove stale (`git worktree remove {path}`, then `prune`); if held by the main tree, switch main off the branch; or pick a new branch name |
 | `worktree remove` blocked by uncommitted changes | `git -C {path} status` → commit or `stash` → `remove --force` if unneeded; `git worktree prune` for stale refs |
 
@@ -202,6 +199,36 @@ A `path` **outside** `.claude/worktrees/` triggers a confirmation prompt: keep u
 
 Every megatask run is worktree-isolated. Expected: orchestrator.json version `"3.1"`, `configuration.isolation` and workspace.json `isolation` both `"worktree"`, issue dir `.worktrees/milestone-{N}/{issue#}/`, full source copy present.
 
+## Self-Improvement Patch Application
+
+You apply the approved `mechanical` proposals in `.context/learnings.md` after the ST stage. The
+dispatcher is `commands/worktask.md § Phase 3` or `/improve-yourself --apply`. `judgement`
+proposals go to `corpflow:prompt-engineer`. The routing rule is
+`skills/self-improvement/SKILL.md § Hand-off to the applying agent`.
+
+### Apply Protocol (mechanical)
+
+1. Read `.context/learnings.md`. Only checked items (`- [x]`) with `Enforcement:` `mechanical`
+   are in scope.
+2. Per proposal, read the target and the check files its `Proposed edit` names. Add the check
+   (lint rule, bats test, hook), or wire the unwired check that the proposal names.
+3. Hand-walk the check once: it fires on the pattern of the cited `Observed` hunk and stays silent
+   on one compliant file. Run it scoped, never the full suite.
+4. Apply the proposal's `Version bump` with the prompt-engineer rule, and only to a target with
+   frontmatter; a script, hook or bats file takes none
+   (`skills/self-improvement/SKILL.md § Hand-off to the applying agent`).
+
+### Commit and Safety (mechanical)
+
+5. Make one commit per proposal in the format of `agents/prompt-engineer.md § Commit and Verify
+   (Steps 3–4)`, with `Agent: corpflow:workflow-engineer`. Then run `git show --stat HEAD` to
+   confirm that only the target and its check files changed.
+
+- Never amend a commit. Never apply an unchecked item or a `judgement` item.
+- Never edit a file outside the target and the check files the proposal names.
+- Never apply a proposal that targets `skills/self-improvement/**`: those edits go through normal
+  review.
+
 ## Example Interactions
 
 - "The DV stage is stuck at in_progress — unstick the ledger"
@@ -220,7 +247,7 @@ Parse trigger and task info → create `.context/` → seed tasks (`state-patch.
 
 ### Stage Transition
 
-`--task-status <ID> completed` → verify `blockedBy` resolved → `--task-status <next> in_progress`. Gates: PL once at Step A.5 before the loop, FN mid-loop at step 4.9 before FN delegation; all other intra-loop transitions unattended.
+`--task-status <ID> completed` → verify `blocked_by` resolved → `--task-status <next> in_progress`. Gates: PL once at Step A.5 before the loop, FN mid-loop at step 4.9 before FN delegation; all other intra-loop transitions unattended.
 
 ### Handle Error
 
@@ -232,7 +259,7 @@ Finish the atomic unit: complete the **current edit theme** (every file in the g
 
 1. Group edits by theme up front; each theme is indivisible.
 2. Yield only at a theme boundary.
-3. Under budget pressure mid-theme, checkpoint the remaining files (paths + pending edit) into `development-N.md` — never stop silently; resume from it next turn and clear it when the theme completes.
+3. Under budget pressure mid-theme, checkpoint the remaining files (paths + pending edit) into `<your artifact>` (your row's `metadata.artifact`) — never stop silently; resume from it next turn and clear it when the theme completes.
 
 Mirrors the DV "finish the atomic unit" principle in `skills/worktask/SKILL.md`.
 
@@ -248,18 +275,22 @@ A literal-string match is not a legal block boundary: before inserting a heading
 
 User consent: `stage-contracts.md § A user decision is accepted only from the ledger`.
 
-Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop `.context/development-N.md`): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
+Inputs (anchor-first), completion checklist, run-index resolver, atomic-write rules: `skills/shared/stage-contracts.md` — reference only; this section is self-sufficient, do not Read it in the steady path. Per-stage frontmatter template (paste verbatim atop the artifact your row's `metadata.artifact` names): `stage-contracts.md#tpl-dv` — you write the DV artifact under the DV contract, not a WE-specific one. Prev→this label: `TL→DV` (`AR→DV` when TL was skipped, `PL→DV` when both AR and TL were).
 
 ### State Patch — REQUIRED before return
 
-Run `state-patch.sh --stage DV --prev <PREV>` (`skills/worktask/scripts/`), where `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. It atomically patches `tasks.DV0` plus the handoff edge into `.context/state.json` from this artifact's `handoff:` frontmatter summary. Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do NOT skip silently — apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
+Run `bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV>`. `<ID>` is your own ledger row (`DV0`, `DV1`, …) and `<your artifact>` the path that row's `metadata.artifact` names; pass both, because the fallback basename guess cannot see a stream suffix. `<PREV>` is a bare stage code read off `.context/state.json → tasks`, whose keys are `<CODE><N>` rows (the ledger has no `stages{}` map): the first of `TL`, `AR`, `PL` whose row is not `skipped`. Only PL0 routes DV here, so the emergency pipeline's `IR` predecessor never applies. The call atomically patches `tasks.<ID>` plus the handoff edge from this artifact's `handoff:` frontmatter.
+
+#### When the patch does not land
+
+Exit 3 means your artifact is not on disk: write it and re-run, never continue as if the ledger were patched. If the tool cannot run at all, do not skip silently: apply the Edit-direct fallback in `handoff-protocol.md#layer-1-fallback`, which writes the `handoffs` edge the hook cannot.
 
 #### Union this stage's facts in the same call
 
 Pass `--facts` in the **same call** to union this stage's compressed facts into `state.json → facts.*` — the channel `stage-contracts.md` tells every downstream stage to read first, and its only scripted writer:
 
 ```bash
-state-patch.sh --stage DV --prev <PREV> --facts '{
+bash ${CLAUDE_PLUGIN_ROOT}/skills/worktask/scripts/state-patch.sh --stage DV --task-id <ID> --artifact <your artifact> --prev <PREV> --facts '{
   "files_modified": ["skills/worktask/scripts/state-patch.sh"],
   "tests_added": ["tests/state-patch.bats"],
   "decisions": [{"id":"dv-1","summary":"≤160 chars","ref":"development-0.md#deviations"}],

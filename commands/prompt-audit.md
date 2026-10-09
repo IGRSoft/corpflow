@@ -95,8 +95,11 @@ Continuing the same order, after Consistency Checks:
 
 ### Agent Rules
 
-1. Valid YAML frontmatter (name, description) with no `model:`/`effort:` key — flag either; Fix:
-   delete it, the pair is set only in `skills/shared/stage-codes.md § Agent Model Matrix`
+1. Valid YAML frontmatter (name, description, `effort:`) with no `model:` key. Flag a `model:` key;
+   Fix: delete it, model stays a per-dispatch `Agent()` argument
+   (`skills/shared/stage-codes.md § Model alias notes`). Flag a missing `effort:`, or one unequal
+   to the agent's matrix Effort cell; Fix: the matrix value
+   (`stage-codes.md § Static effort and dispatch overrides`)
 2. Resolved model (matrix, not frontmatter) appropriate for task complexity
 3. Clear purpose statement
 4. No capability overlap with other agents
@@ -189,7 +192,7 @@ Run against the asset body (kept out of a table so the `|` alternations copy ver
   grep -niE 'show your (reasoning|thinking)|write out your (reasoning|thinking)|think out loud|reasoning in (the|your) (response|reply|output)' <asset>
   ```
 
-- any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 2`:
+- any model — recall suppression at a detection step; see `commands/tech-code-review.md § Phase 1`:
 
   ```
   grep -niE 'only report (high|critical)|be conservative|do ?n.?t nitpick|only.*if you are (sure|certain)' <asset>
@@ -244,7 +247,7 @@ loaded class, `skills/worktask/references/pl0-procedure.md`, together with
 
 ### Consistency Rules
 
-1. Platform values: `<apple|android|web|systems|backend|ai|all>`, matching `skills/shared/platform-detection.md`. A command whose scope excludes some platforms may list a subset (the UI-only `design-*` commands use `<apple|android|web|all>`). Flag Apple sub-platforms (`iOS|macOS`) or a platform advertised with no content path behind it.
+1. Platform values: `<apple|android|web|systems|backend|ai|all>`, matching `skills/shared/platform-detection.md`. A command whose scope excludes some platforms may list a subset (the UI-only `design-*` commands use `<apple|android|web|all>`). Flag Apple sub-platforms (`iOS|macOS`) or a platform advertised with no content path behind it. The rule reads `--platform` values only: an option that forwards a device class verbatim to a platform plugin's command (`commands/appstore.md` `--apple-platform ios|macos|tvos|watchos`, `--android-form-factor`) lists that plugin's device classes.
 2. Option syntax: `--option <value>` or `--flag`
 3. Section ordering: Options → Examples → Output Format, then the command's own sections
 4. Terminology standardized

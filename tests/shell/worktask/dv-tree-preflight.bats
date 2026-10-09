@@ -117,6 +117,7 @@ setup() {
   assert_output --partial "S2: mismatched tree blocks"
   assert_output --partial "S3: unresolved assignment warns"
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 @test "usage: an unknown flag exits 2" {

@@ -124,6 +124,28 @@ The WITHOUT arm, the oracle (42/42 both arms) and every other stage are unaffect
 from cost means; never quote its +5.6% premium. **Since fixed:** the usage-limit retry
 adds the interrupted attempt's usage to the stage it re-dispatches.
 
+## `live-20261009T091452Z-82d3bb1` — WITH `test_count` counts one test target of two
+
+**In:** `results/history.json` (`live[25]`) and `results/runs/live/`
+
+| field | value |
+|---|---|
+| `paths.with.test_count` | **13** (executed: 55) |
+| `paths.without.test_count` | 87 |
+
+The WITH app split its tests into two targets, so `swift test` printed two summary lines:
+`Test run with 13 tests in 4 suites passed` and `Test run with 42 tests in 7 suites passed`.
+`genlib.parse_test_count` returns the first `Test run with N` match only, so the record
+keeps 13 and drops 42. The WITH DV, DR, SR and QA captures in
+`workdirs/live-20261009T091452Z-82d3bb1/captures/` all show both lines. The WITHOUT
+count is right only by output order: its captures also hold a `2 tests in 1 suite` line,
+printed after the 87.
+
+Cost, tokens, LOC, the oracle (42/42 both arms) and every stage figure are unaffected.
+
+**Reading it:** use 55 for WITH `test_count`; never quote the −74 delta. **Not yet
+fixed:** `parse_test_count` must sum every summary line instead of taking the first.
+
 ## Reading `without_arm="skip"` placeholders
 
 A WITHOUT arm run in `skip` mode is a byte-stable placeholder, not a measurement:

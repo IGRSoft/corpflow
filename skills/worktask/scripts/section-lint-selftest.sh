@@ -11,6 +11,7 @@
 self_test() {
   td=$(mktemp -d "${TMPDIR:-/tmp}/section-lint-XXXXXX")
   trap 'rm -rf "$td"' EXIT
+  _SELFTEST_PASSED=0
 
   # fixture 1: one section within cap
   printf -- '## ok section\nshort body\n' > "$td/ok.md"
@@ -28,13 +29,18 @@ self_test() {
 
   lint "$td/ok.md" "$td/plain.md" >/dev/null \
     || { echo "section-lint self-test: FAIL (ok/plain fixtures flagged)" >&2; exit 2; }
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   lint "$td/over.md" >/dev/null \
     && { echo "section-lint self-test: FAIL (over fixture passed)" >&2; exit 2; }
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   lint "$td/fenced.md" | grep -q '1 sections' \
     || { echo "section-lint self-test: FAIL (fenced heading started a section)" >&2; exit 2; }
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   lint "$td/tilde.md" | grep -q '1 sections' \
     || { echo "section-lint self-test: FAIL (nested fence mis-toggled)" >&2; exit 2; }
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   lint "$td/leaf.md" | grep -q '2 sections' \
     || { echo "section-lint self-test: FAIL (leaf split not applied)" >&2; exit 2; }
-  echo "section-lint self-test: ALL PASS"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
+  echo "section-lint self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }

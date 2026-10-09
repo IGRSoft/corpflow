@@ -97,6 +97,9 @@ assert_noop() {
     --meta task_id=DV0 --meta class=no_captures --meta platform=web \
     --meta dedupe_key=sess_fix:agt_bash:screenshot-gate
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("dv-screenshot-capture")'
+  # capture.sh exits 2 without --capture, so the remedy must name it.
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext
+    | contains("--context-dir <context_dir> <platform args> --capture <slug>[:<arg>] in one Bash call (agents/developer.md § Screenshot Capture)")'
 }
 
 @test "a prose-only manifest beside a dv-DV0 capture blocks invalid_evidence" {
@@ -443,4 +446,254 @@ assert_noop() {
   assert_success
   [ -z "$output" ]
   [ ! -e "$cwd/.context" ]
+}
+
+# --- gate-side escalation (candidate arm: resolved DV task, flag false) -------------------
+
+esc_repo() { # builds $WS: a git work tree on branch work, base branch main
+  WS="$WD/ws"
+  mkdir -p "$WS"
+  git -C "$WS" init -q -b main
+  git -C "$WS" config user.email t@example.com
+  git -C "$WS" config user.name t
+  git -C "$WS" config commit.gpgsign false
+  printf 'base\n' > "$WS/README.md"
+  git -C "$WS" add -A
+  git -C "$WS" commit -q -m base
+  git -C "$WS" checkout -q -b work
+}
+
+# esc_ledger <platform> [workspace_path|-] [task-flag-json]
+esc_ledger() {
+  local ws="${2:-$WS}"
+  [ "$ws" != "-" ] || ws=""
+  ledger "$(jq -cn --arg a "$BASH_DEV" --arg p "$1" --arg w "$ws" --argjson f "${3:-false}" \
+    '{DV0: {status: "in_progress", metadata: ({stage: "DV", agent: $a, platform: $p, requires_screenshots: $f, base_ref: "main"}
+      + (if $w == "" then {} else {workspace_path: $w} end))}}')" \
+    "" "$(jq -cn --argjson f "${3:-false}" '{requires_screenshots: $f, base_ref: "main"}')" "$1"
+}
+
+esc_rows() { [ -f "$AUDIT" ] || { echo 0; return; }; jq -s '[.[] | select(.action == "screenshot_flag_escalated")] | length' "$AUDIT"; }
+esc_plugin() { # copy of the plugin whose helper a case may replace
+  PLUG="$BATS_TEST_TMPDIR/plugin"
+  mkdir -p "$PLUG"
+  cp -R "$PLUGIN_ROOT/hooks" "$PLUGIN_ROOT/skills" "$PLUG/"
+  HELPER_COPY="$PLUG/skills/dv-screenshot-capture/scripts/escalate-flag.sh"
+}
+gate_row_esc() { jq -s -c '[.[] | select(.action | startswith("screenshot_gate_"))] | .[-1].metadata.escalation' "$AUDIT"; }
+
+@test "gate escalation: a web .tsx in the DV worktree raises the flag and blocks no_captures with the gate note" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  gate_file "$BASH_PAYLOAD"
+  assert_success
+  echo "$output" | jq -e --arg ws "$WS" '.decision == "block"
+    and (.reason | startswith("gate raised the planner'"'"'s requires_screenshots=false: 1 UI path(s) matched in " + $ws))
+    and (.hookSpecificOutput.additionalContext | startswith("gate raised the planner'"'"'s requires_screenshots=false: 1 UI path(s) matched in " + $ws))
+    and (.reason | test("no_captures"))'
+  [ "$(jq -c '.tasks.DV0.metadata.requires_screenshots' "$WD/.context/state.json")" = true ]
+  [ "$(jq -c '.metadata.requires_screenshots' "$WD/.context/state.json")" = true ]
+  [ "$(esc_rows)" = 1 ]
+  assert_audit_row screenshot_flag_escalated --file "$AUDIT" --meta invoker=gate
+  [ "$(gate_row_esc | jq -r '.invoker + "/" + .action + "/" + .reason')" = "gate/escalated/ui_path_matched" ]
+  [ "$(gate_row_esc | jq -r .matched_count)" = 1 ]
+}
+
+@test "gate escalation: non-UI platforms and a diff with no UI path pass with the ledger byte-identical" {
+  esc_repo
+  local p
+  for p in systems backend all; do
+    printf 'x\n' > "$WS/App.tsx"
+    esc_ledger "$p"
+    cp "$WD/.context/state.json" "$WD/before.json"
+    gate_file "$BASH_PAYLOAD"
+    assert_success
+    assert_output ''
+    cmp "$WD/.context/state.json" "$WD/before.json"
+  done
+  rm -f "$WS/App.tsx"
+  printf 'notes\n' > "$WS/notes.md"
+  esc_ledger web
+  cp "$WD/.context/state.json" "$WD/before.json"
+  gate_file "$BASH_PAYLOAD"
+  assert_output ''
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(esc_rows)" = 0 ]
+}
+
+@test "gate escalation: --check never spawns the helper or writes the ledger" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  cp "$WD/.context/state.json" "$WD/before.json"
+  check DV0
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(esc_rows)" = 0 ]
+}
+
+@test "gate escalation: a relative, missing or non-git workspace_path is skipped as worktree_unresolved" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  mkdir -p "$WD/plain"
+  local w
+  for w in "ws" "$WD/nope" "$WD/plain"; do
+    esc_ledger web "$w"
+    jq 'del(.metadata.workspace_path)' "$WD/.context/state.json" > "$WD/s.json" && mv "$WD/s.json" "$WD/.context/state.json"
+    cp "$WD/.context/state.json" "$WD/before.json"
+    gate_file "$BASH_PAYLOAD"
+    assert_success
+    assert_output ''
+    cmp "$WD/.context/state.json" "$WD/before.json"
+    [ "$(gate_row_esc | jq -r '.action + "/" + .reason')" = "skipped/worktree_unresolved" ]
+  done
+}
+
+@test "gate escalation: the hook's own cwd is never the diff source" {
+  esc_repo
+  local other="$WD/other"
+  mkdir -p "$other"
+  git -C "$other" init -q -b main
+  printf 'x\n' > "$other/Foreign.tsx"
+  esc_ledger web
+  cp "$WD/.context/state.json" "$WD/before.json"
+  run_script_env --cwd "$other" --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUGIN_ROOT/$SCRIPT"
+  assert_success
+  assert_output ''
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(esc_rows)" = 0 ]
+}
+
+@test "gate escalation: a missing helper fails open (pass, ledger untouched, helper_missing)" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  esc_plugin
+  rm -f "$HELPER_COPY"
+  cp "$WD/.context/state.json" "$WD/before.json"
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUG/hooks/dv-screenshot-gate.sh"
+  assert_success
+  assert_output ''
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(gate_row_esc | jq -r .reason)" = helper_missing ]
+}
+
+@test "gate escalation: a helper that exits 1 or prints junk fails open" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  esc_plugin
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$HELPER_COPY"
+  cp "$WD/.context/state.json" "$WD/before.json"
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUG/hooks/dv-screenshot-gate.sh"
+  assert_output ''
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(gate_row_esc | jq -r '.reason + "/" + (.rc|tostring)')" = "helper_exit/1" ]
+  printf '#!/usr/bin/env bash\necho nonsense\n' > "$HELPER_COPY"
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUG/hooks/dv-screenshot-gate.sh"
+  assert_output ''
+  [ "$(gate_row_esc | jq -r .reason)" = stdout_unparsable ]
+}
+
+@test "gate escalation: a helper that outlives the watchdog is killed and the gate returns within 12 s" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  esc_plugin
+  local mark="30.$RANDOM$RANDOM"
+  printf '#!/usr/bin/env bash\nsleep %s\n' "$mark" > "$HELPER_COPY"
+  cp "$WD/.context/state.json" "$WD/before.json"
+  local t0=$SECONDS
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUG/hooks/dv-screenshot-gate.sh"
+  [ $((SECONDS - t0)) -le 12 ]
+  assert_output ''
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(gate_row_esc | jq -r .reason)" = escalation_timeout ]
+  ! pgrep -f "sleep $mark" > /dev/null
+}
+
+@test "gate escalation: a write that landed before a helper fault is enforced (block, count unknown)" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  esc_plugin
+  printf '#!/usr/bin/env bash\nbash "%s/skills/worktask/scripts/state-patch.sh" --state "%s/.context/state.json" --task-meta DV0 --set "{\\"requires_screenshots\\":true}" >/dev/null\nsleep 30\n' \
+    "$PLUGIN_ROOT" "$WD" > "$HELPER_COPY"
+  run_script_env --env "WORKSPACE_ROOT=$WD" --stdin-file "$BASH_PAYLOAD" "$PLUG/hooks/dv-screenshot-gate.sh"
+  assert_success
+  echo "$output" | jq -e '.decision == "block" and (.reason | startswith("gate raised the planner'"'"'s requires_screenshots=false: unknown UI path(s) matched in "))'
+  [ "$(gate_row_esc | jq -r .reason)" = escalation_timeout ]
+}
+
+@test "gate escalation: non-candidate stops spawn nothing and their row has no escalation key" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web "$WS" true
+  png dv-DV0-01-home.png
+  manifest DV0 "$(img_row DV0 01 home)"
+  cp "$WD/.context/state.json" "$WD/before.json"
+  gate_file "$BASH_PAYLOAD"
+  assert_success
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(esc_rows)" = 0 ]
+  [ "$(gate_row_esc)" = null ]
+}
+
+@test "gate escalation: idempotent (DV-escalated stop does not re-invoke; double noop stays silent)" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  (cd "$WS" && bash "$PLUGIN_ROOT/skills/dv-screenshot-capture/scripts/escalate-flag.sh" --task-id DV0 --context-dir "$WD/.context" > /dev/null)
+  [ "$(esc_rows)" = 1 ]
+  gate_file "$BASH_PAYLOAD"
+  assert_success
+  [ "$(esc_rows)" = 1 ]
+  [ "$(gate_row_esc)" = null ]
+  rm -f "$WS/App.tsx"
+  esc_ledger web
+  rm -f "$AUDIT"
+  gate_file "$BASH_PAYLOAD"
+  cp "$WD/.context/state.json" "$WD/before.json"
+  gate_file "$BASH_PAYLOAD"
+  cmp "$WD/.context/state.json" "$WD/before.json"
+  [ "$(esc_rows)" = 0 ]
+}
+
+@test "gate source never writes the flag (no state-patch token, no false payload)" {
+  run grep -nE 'state-patch|"requires_screenshots": *false' "$PLUGIN_ROOT/hooks/dv-screenshot-gate.sh" "$PLUGIN_ROOT/hooks/lib/dv-screenshot-gate-selftest.sh"
+  assert_failure
+}
+
+@test "gate escalation: tasks.<T>.worktree.path outranks the workspace_path fields" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  local ws2="$WD/ws2"
+  mkdir -p "$ws2"
+  git -C "$ws2" init -q -b main
+  git -C "$ws2" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m base
+  git -C "$ws2" checkout -q -b work
+  printf 'notes\n' > "$ws2/notes.md"
+  esc_ledger web "$ws2"
+  jq --arg w "$WS" '.tasks.DV0.worktree.path = $w' "$WD/.context/state.json" > "$WD/s.json" && mv "$WD/s.json" "$WD/.context/state.json"
+  gate_file "$BASH_PAYLOAD"
+  assert_success
+  echo "$output" | jq -e --arg ws "$WS" '.decision == "block" and (.reason | startswith("gate raised the planner'"'"'s requires_screenshots=false: 1 UI path(s) matched in " + $ws))'
+  [ "$(gate_row_esc | jq -r .worktree)" = "$WS" ]
+}
+
+@test "gate escalation: unresolved-task and non-DV stops carry no escalation key" {
+  esc_repo
+  printf 'x\n' > "$WS/App.tsx"
+  esc_ledger web
+  jq '.tasks.DV1 = .tasks.DV0' "$WD/.context/state.json" > "$WD/s.json" && mv "$WD/s.json" "$WD/.context/state.json"
+  gate_file "$BASH_PAYLOAD"
+  assert_success
+  [ "$(gate_row_esc)" = null ]
+  [ "$(esc_rows)" = 0 ]
+  esc_ledger web
+  rm -f "$AUDIT"
+  gate_file "$NONDEV_PAYLOAD"
+  assert_success
+  [ "$(esc_rows)" = 0 ]
+  [ ! -f "$AUDIT" ] || [ "$(gate_row_esc)" = null ]
 }

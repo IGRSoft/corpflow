@@ -1324,6 +1324,35 @@ union_filter() { sed -n "/^_FACTS_UNION_FILTER='/,/'\$/p" "$1" | sed "1s/^_FACTS
     || fail "raising to blocking was refused: $out"
 }
 
+@test "q8 union: class is raise-only — escalate survives decision, a raise is honoured" {
+  local filter out
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-SR0-1","class":"escalate","ref":"a.md#x","blocks_next_stage":false}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-SR0-1","class":"decision","ref":"b.md#y","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0] | .class == "escalate" and .ref == "b.md#y"' > /dev/null \
+    || fail "an incumbent escalate was lowered: $out"
+  out="$(printf '%s' '{"facts":{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"a.md#x","blocks_next_stage":false}]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","class":"escalate","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0].class == "escalate"' > /dev/null \
+    || fail "a raise to escalate was refused: $out"
+}
+
+@test "q8 union: a stub that omits class keeps the incumbent's class, whatever it is" {
+  # Unreachable through --facts (the shape gate requires .class), so exercised on the filter.
+  local filter out cls
+  filter="$(union_filter "$PLUGIN_ROOT/$STATE_PATCH")"
+  for cls in escalate decision; do
+    out="$(printf '%s' "{\"facts\":{\"open_questions\":[{\"id\":\"sw-DV0-1\",\"class\":\"$cls\",\"ref\":\"a.md#x\",\"blocks_next_stage\":false}]}}" \
+          | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+    printf '%s' "$out" | jq -e --arg c "$cls" '.facts.open_questions[0].class == $c' > /dev/null \
+      || fail "an omitted class dropped the incumbent $cls: $out"
+  done
+  out="$(printf '%s' '{"facts":{"open_questions":[]}}' \
+        | jq -c --arg sweep_stage "" --argjson f '{"open_questions":[{"id":"sw-DV0-1","ref":"a.md#x","blocks_next_stage":false}]}' "$filter")"
+  printf '%s' "$out" | jq -e '.facts.open_questions[0] | has("class") | not' > /dev/null \
+    || fail "a new stub with no class gained a class key: $out"
+}
+
 @test "q9: the raise-only lattice is scoped to labellers, and transports are named a defect" {
   # Without this scope the orchestrator reaches for the nearest rule when an agent's artifact
   # and its own ledger stub disagree, ORs them, and manufactures a gate out of a bookkeeping slip.
@@ -1618,7 +1647,8 @@ check_no_legacy_pl_ids() {  # <repo-root> <files...>
 # One resolution idiom across all thirteen stages: an answered item is MARKED resolved,
 # never deleted. Deleting it takes its ref anchor and its recorded answer with it, so a
 # resumed run can neither re-render the question nor show what was decided.
-PL_RESOLVERS="$WORKTASK_CMD $WORKTASK_SKILL $PL0_PROC"
+AUTO_DECISION="skills/worktask/references/auto-decision.md"
+PL_RESOLVERS="$AUTO_DECISION $WORKTASK_SKILL $PL0_PROC"
 
 check_resolved_not_dropped() {  # <repo-root> <files...>
   local root="$1"; shift
@@ -1650,7 +1680,7 @@ check_resolved_not_dropped() {  # <repo-root> <files...>
     cp "$PLUGIN_ROOT/$f" "$d/$f"
   done
   printf '\nThe orchestrator then drops the resolved entries from `facts.open_questions[]`.\n' \
-    >> "$d/$WORKTASK_CMD"
+    >> "$d/$AUTO_DECISION"
   run check_resolved_not_dropped "$d" $PL_RESOLVERS
   assert_failure
   assert_output --partial "deleting answered"
@@ -1787,18 +1817,20 @@ resolver_body() {
   [ -f "$PLUGIN_ROOT/$LADDER" ]
 }
 
-@test "the in-process effort caveat matches what headless-dispatch.md actually says" {
-  # The contract claims effort is advisory in-process; that claim is only safe while the
-  # translation table still says so. If the table gains in-process support, this fires and the
-  # caveat becomes wrong rather than merely stale.
-  grep -qE '^\| `effort` \|.*\| Advisory \|' "$PLUGIN_ROOT/$HEADLESS"
+@test "the in-process effort claim matches what headless-dispatch.md actually says" {
+  # The contract claims the Agent tool carries effort in-process; that claim is only
+  # safe while the translation table says so too. If the table falls back to Advisory, this
+  # fires and the contract's claim becomes wrong rather than merely stale.
+  grep -qE '^\| `effort` \|.*\| \*\*Yes\*\* \(`Agent` `effort`' "$PLUGIN_ROOT/$HEADLESS"
   run resolver_body "$PLUGIN_ROOT/$CONTRACTS"
-  assert_output --partial "advisory"
+  assert_output --partial "\`effort\` parameter"
+  refute_output --partial "takes no effort parameter"
 }
 
 @test "the resolver records effort_transport on every path" {
   run bash -c "sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' '$PLUGIN_ROOT/$WORKTASK_CMD'"
   assert_output --partial "effort_transport"
+  assert_output --partial '`agent-param`'
   assert_output --partial "dispatch-flag"
   assert_output --partial '`none`'
 }
@@ -1822,14 +1854,17 @@ resolver_body() {
 AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
 
 @test "the resolver-effort fixture has one row per transport, pairing with C.0a's prose" {
-  local none_resolved dispatch_resolved frontmatter_resolved c0a
+  local none_resolved dispatch_resolved frontmatter_resolved agent_param_resolved c0a
   none_resolved=$(jq -r 'select(.metadata.effort_transport == "none") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
   dispatch_resolved=$(jq -r 'select(.metadata.effort_transport == "dispatch-flag") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
   frontmatter_resolved=$(jq -r 'select(.metadata.effort_transport == "frontmatter") | .metadata.effort_resolved' \
     "$PLUGIN_ROOT/$AUDIT_FIXTURE")
+  agent_param_resolved=$(jq -r 'select(.metadata.effort_transport == "agent-param") | .metadata.effort_resolved' \
+    "$PLUGIN_ROOT/$AUDIT_FIXTURE")
   [ "$none_resolved" = "requested, not applied" ]
+  [[ "$agent_param_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
   [[ "$dispatch_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
   [[ "$frontmatter_resolved" =~ ^(low|medium|high|xhigh|max)$ ]]
 
@@ -1837,6 +1872,7 @@ AUDIT_FIXTURE="tests/fixtures/worktask/audit.resolver-effort.jsonl"
   c0a=$(sed -n '/^#### Step C.0a/,/^#### Step C.0 —/p' "$PLUGIN_ROOT/$WORKTASK_CMD")
   grep -qF "$none_resolved" <<< "$c0a"
   grep -qF '`dispatch-flag`' <<< "$c0a"
+  grep -qF '`agent-param`' <<< "$c0a"
   # A bare `frontmatter` substring passes on almost any prose (it also occurs inside
   # "frontmatter tier", "agent's own frontmatter", etc.) — require the backtick-quoted
   # table-cell form the other two transports are also checked against.

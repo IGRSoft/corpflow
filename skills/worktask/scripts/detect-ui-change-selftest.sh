@@ -127,6 +127,20 @@ MD
   out=$(DESIGNS_DIR="$td/.context/designs.absent" bash "$0" "$td/android-kw.md" --platform android)
   _assert "t8-android-S3-keyword" true "$out"
 
+  # t9 — generic UI-ish words alone fire no S3 (framework terms only).
+  cat > "$td/generic.md" <<'MD'
+---
+ui_visual_check: false
+---
+# Plan
+## requirements
+- REQ-1: tidy the view component, screen layout, theme, styling, animation and HTML docs
+## scope
+In: docs. Out: docker Compose files.
+MD
+  out=$(DESIGNS_DIR="$td/.context/designs.absent" bash "$0" "$td/generic.md" --platform all)
+  _assert "t9-generic-words-no-S3" false "$out"
+
   rm -rf "$td"
   echo "detect-ui-change: self-test summary — pass=$pass fail=$fail"
   [ "$fail" -eq 0 ]

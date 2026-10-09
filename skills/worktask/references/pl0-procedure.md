@@ -7,8 +7,8 @@ disagreement, and a change here that alters the steady path updates that runbook
 change. Non-PL0 invocations (`/estimate`, `/product-requirements`, `/roadmap`, `/milestone`) never
 need it.
 
-Every `skills/…` and `commands/…` path below is relative to the corpflow plugin root, not the
-worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
+Every `skills/`, `commands/` and `hooks/` path below is relative to the corpflow plugin root, not
+the worktask repo — resolve per `agents/product-manager.md § Plugin paths`. `<plan_file>`: see § Notation.
 
 ## Test Strategy Definition
 
@@ -69,7 +69,7 @@ When `true` AND `.context/designs/` has artifacts, QA performs Design Comparison
 
 Drives `dv-screenshot-capture` and its SubagentStop gate (`hooks/dv-screenshot-gate.sh`). `true` ⇒ each DV task leaves valid evidence in `.context/images/<worktask_id>/screenshots-<TASK_ID>.md` (on `backend`/`systems` the gate also passes no captures, or a `tool_missing` row), whose captures are embedded in both the PR body and the GitHub issue. `false` ⇒ DV writes a skip-rationale manifest and the gate passes.
 
-PL0 is the only writer of this flag; the downstream `?? true` defaults only cover ad-hoc runs. Stamp it per the steps below.
+The planning model decides this flag; the detector is advisory input. DV and the SubagentStop gate may only raise it to `true` (`skills/dv-screenshot-capture/scripts/escalate-flag.sh`), never lower it. The downstream `?? true` defaults only cover ad-hoc runs. Stamp it per the steps below.
 
 ##### Detector run (step 1)
 
@@ -77,12 +77,13 @@ PL0 is the only writer of this flag; the downstream `?? true` defaults only cove
    ```bash
    skills/worktask/scripts/detect-ui-change.sh <draft-plan> --platform <platform>
    ```
-   It emits `{requires_screenshots, signals, rationale}`. Signals (any true ⇒ true): **S1** `ui_visual_check: true`; **S2** `.context/designs/` has `figma-registry.md`/`*.png`; **S3** `## scope`/`## requirements` matches the UI keyword set; **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/`, `Screens/`, `*.storyboard`, `*.tsx`, …). Exits 0 always; any error ⇒ `true` (`fail_safe_default`).
+   It emits `{requires_screenshots, signals, rationale}` as advisory input. Signals (any true ⇒ detector true): **S1** `ui_visual_check: true`; **S2** `.context/designs/` has `figma-registry.md`/`*.png`; **S3** `## scope`/`## requirements` matches the UI framework-term set (`SwiftUI`, `UIKit`, `Composable`, `CSS`, …; generic words like "view" or "screen" do not count); **S4** platform ∈ {apple, web, android} AND scope names UI path classes (`Views/*`, `Screens/*`, `*.storyboard`, `*.tsx`, …). Exits 0 always; any error ⇒ `true` (`fail_safe_default`).
 
-##### Stamp, override, propagate (steps 2–3)
+##### Judge, stamp, propagate (steps 2–4)
 
-2. Stamp the returned value on the plan frontmatter `metadata.requires_screenshots` and record the `rationale` line in the plan.
-3. Override asymmetry: force `true` freely. Forcing `false` against a `true` detector needs an explicit user directive quoted in the plan rationale — the detector never silently downgrades.
+2. Judge whether the planned diff alters rendered output (views, styles, layout, assets, on-screen copy). Refactor, logic, networking, tooling, tests and docs ⇒ `false`. Stamp your verdict on the plan frontmatter `metadata.requires_screenshots`.
+3. Floor and rationale: S1 (`ui_visual_check: true`) ⇒ `true`, no exceptions. `false` over an S2 hit needs a written reason. Uncertain ⇒ `true`. A `false` names the touched surfaces and why none renders. Write the test-strategy line as `<true|false> — <why>; detector signals: [S…]`.
+4. Never raise an `open_questions[]` item about screenshots; the decision is yours, and DV's upward-only escalation covers a wrong `false`.
 
 Propagate the flag on all three writer surfaces (§ Downstream propagation): plan frontmatter, DV+QA task metadata, and `state.json .metadata.requires_screenshots` — the channel the gate reads, because SubagentStop stdin carries no task metadata in live runs.
 
@@ -118,7 +119,7 @@ The never-overwrite rule protects finished runs' plans; a plan under active revi
 #### Step 4 — state.json reset
 
 4. Reset `state.json` (new run in an existing `.context/`; skipped on a `plan_revision` turn):
-   atomically rewrite `.context/state.json` with `"run_index": N`, `"tasks": {"PL0": {"status": "in_progress"}}`, `metadata.requires_screenshots` = the detector's value (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` = the detected integration branch (below), and empty `facts.*` (preserving `version`, `worktask_id`, `platform`). Use `handoff-protocol.md#atomic-write`.
+   atomically rewrite `.context/state.json` with `"run_index": N`, `"tasks": {"PL0": {"status": "in_progress"}}`, `metadata.requires_screenshots` = the planner's verdict (the channel `hooks/dv-screenshot-gate.sh` and `attach-visual-evidence.sh` read), `metadata.base_ref` = the detected integration branch (below), and empty `facts.*` (preserving `version`, `worktask_id`, `platform`). Use `handoff-protocol.md#atomic-write`.
 
 ##### Step 4 — plan_file shape
 
@@ -138,8 +139,8 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp e
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Task()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
-| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Agent frontmatter `effort:` fixes the in-process tier and matches the matrix (`agent-effort-frontmatter.bats`; `stage-codes.md § Model alias notes`). A row's stamped `metadata.effort` deviating from that static tier is the condition the effort router acts on. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
+| `metadata.model` | PL0 resolves it via `model-matrix.sh --resolve` (§ Agent Model Matrix, via the agent in § Primary Stages) and pastes the pair into its own `--metadata`, or takes § Secure overrides when the row's condition matches. `--task-create` does not fill an absent value. | Passed to `Agent()`; never inherited from frontmatter — no agent file carries a `model:` key (sw-PL1-1). |
+| `metadata.effort` | same resolver, or the override actually dispatched | Required: Step C.0a reads it. Agent frontmatter `effort:` fixes the in-process tier and matches the matrix (`agent-effort-frontmatter.bats`; `stage-codes.md § Model alias notes`). The Step 6 `Agent()` call passes the stamped `metadata.effort` as `effort` (2.1.292), which outranks that static tier. A row without a stamped value is skipped (`resolver_skipped`, `reason: "effort_unstamped"`). |
 
 ##### Propagation fields — gates
 
@@ -154,7 +155,7 @@ When PL seeds downstream stage tasks via `state-patch.sh --task-create`, stamp e
 |---|---|---|
 | `metadata.skip_exploration` | `true` if `.context/exploration.md` exists | Suppress redundant Glob/Grep in AR/TL/DV |
 | `metadata.exploration_anchors` | `["exploration.md#facts", "exploration.md#refs", "planning-${N}.md#requirements"]` (when `skip_exploration: true`) | Authoritative pre-explored set |
-| `metadata.requires_screenshots` | detector value (boolean) | Drives DV capture + gate; read by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on every downstream task. |
+| `metadata.requires_screenshots` | planner's verdict (boolean; detector is advisory) | Drives DV capture + gate; read by DV, QA (Q1.5), `attach-visual-evidence.sh`. Stamp on every downstream task. |
 
 ##### Propagation fields — DV rows
 
@@ -175,7 +176,7 @@ artifacts`.
 
 | Key | Value | Purpose |
 |---|---|---|
-| `metadata.produces` | `[path, ...]`, repo-relative post-merge, alphabet `[A-Za-z0-9._@+/-]` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
+| `metadata.produces` | `[path, ...]`, repo-relative post-merge, matching `^[A-Za-z0-9._@+/-]+$` | Producer row. It `git add`s each path before its completion patch; landing copies that index blob. |
 | `metadata.consumes` | `[{"from": "DV<n>", "paths": [path, ...]}]`, each path listed in that producer's `produces` | Consumer row. Block it on every `from` too (`--task-block C --on P`), or landing refuses it with `not_blocked_on_producer`. |
 
 ##### Propagation fields — base branch & test scope
@@ -195,7 +196,7 @@ Full propagation contract: `skills/agent-coordination/SKILL.md § metadata.skip_
 
 #### Optional dispatch metadata
 
-PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to the headless `claude -p --agent` recipe's flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above). Every agent file also carries a static `effort:` key next to `maxTurns:` (`skills/shared/stage-codes.md § Model alias notes`), which Claude Code applies in-process, so a stamped `metadata.effort` equal to that key needs no dispatch flag. A stamped value that differs from it is exactly the condition that routes the dispatch headless, since in-process `Task()` still has no effort parameter to carry a deviation.
+PL0 may set the remaining optional dispatch fields (`skills/shared/state-ledger.md § Dispatch metadata`); they map 1:1 to the headless `claude -p --agent` recipe's flags (`skills/agent-coordination/references/headless-dispatch.md`), honoured in-process for `model` (always) and `permission_mode` (audited), advisory otherwise. `effort` is not in this set: it is a required ledger field (above). Every agent file also carries a static `effort:` key next to `maxTurns:` (`skills/shared/stage-codes.md § Model alias notes`), which Claude Code applies only when a call passes no `effort`. The stamped value always rides the in-process `Agent()` call's `effort` parameter (2.1.292), which outranks that key; it goes headless only under the operator opt-in `CORPFLOW_HEADLESS_ROUTE=on`.
 
 ##### Default writer rules
 
@@ -278,7 +279,7 @@ through the reconcile stub below.
 ##### Reconcile a disagreeing fork point — never override it
 
 With `$BASE` known, compute `fork_base "$BASE"` (its argument is the tie-break and keeps rank 0
-from recursing). When the answer is non-empty and differs from `$BASE` after stripping `origin/`,
+from recursing). When the answer is non-empty and differs from `$BASE` after stripping the `origin` remote prefix,
 emit one sweep stub — `class: decision`, `blocks_next_stage: false` — carrying both branch names
 and both ahead-counts, fork point recommended:
 
@@ -428,7 +429,7 @@ implementation body. § Exact-output criteria are byte-exact, above, wins on any
 
 #### Anchor-lint enforcement
 
-At write time `hooks/anchor-preflight.sh` denies an H2 outside the allow-list and flags a missing anchor after the write (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
+At write time `hooks/anchor-preflight.sh` denies an Edit that adds an H2 outside the allow-list; after a Write it reports an off-list H2, a missing anchor or a frontmatter finding for an Edit fix (`handoff-protocol.md § Anchor Pre-Flight`). Without the hook, `handoff-harness.sh --validate-frontmatter` fails the stage boundary on either — same fix, discovered late.
 
 #### Workspace Mode
 
@@ -500,7 +501,7 @@ Stage artifact paths in task descriptions use `<basename>-${N}.md` (e.g., `archi
 
 #### Agent mapping for `metadata.agent`
 
-Always emit the fully-qualified `plugin:agent` form; bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the routing matrix, never memory: entry and functional-role aliases (architect, security auditor, test generator, code fixer) in `skills/shared/routing-matrix.md` — a project `CORPFLOW.md § Routing` override wins, and the resolved map persists as `state.routing`; DV specialists in `skills/shared/platform-detection.md`. Code pattern: `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks`.
+Always emit the fully-qualified `plugin:agent` form; bare names are not accepted. The prefix follows the owning plugin: `corpflow:` for orchestration/process agents, the detected platform's dev-plugin prefix for platform work. Resolve platform agents from the routing matrix, never memory: entry and functional-role aliases (architect, security auditor, test generator, code fixer) in `skills/shared/routing-matrix.md` — a `CORPFLOW.md § Routing` override (project root, else user scope) wins, and the resolved map persists as `state.routing`; DV specialists in `skills/shared/platform-detection.md`. Code pattern: `skills/worktask/references/initialization-patterns.md § PL Creates Subsequent Tasks`.
 
 ##### Stage → agent table
 
@@ -553,14 +554,14 @@ Weighted-score the task description for design indicators:
 
 Flag gate: invoke `corpflow:designer` only under `--with-design` (`PL0.metadata.with_design == true`, stamped by `/worktask` Step 4); the keyword score is advisory. Without the flag, skip Designer even for UI apps and note the skip in `## summary`.
 
-Threshold met AND flag set ⇒ `Task(subagent_type: "corpflow:designer")` requesting:
+Threshold met AND flag set ⇒ `Agent(subagent_type: "corpflow:designer")` requesting:
 1. UX Assessment, Design Scope, Technical Design, Pencil Mockups, Effort Estimate
 2. Mockups saved to `.context/designs/` as `mockup-[feature]-[screen]-[variant].pen`
 3. Critical states: default, error, empty, loading
 
 ##### Combined Output
 
-`<plan_file>` gets a Design Requirements section: Figma Design References (URLs + node descriptions → `.context/designs/figma-*.png`), Visual Mockups (`.context/designs/mockup-*.pen`), UX, UI Components, Accessibility.
+Designer writes `.context/designs/ux-assessment-N.md` and returns its path; PM merges it. `<plan_file>` gets a Design Requirements section: Figma Design References (URLs + node descriptions → `.context/designs/figma-*.png`), Visual Mockups (`.context/designs/mockup-*.pen`), UX, UI Components, Accessibility.
 
 ##### Placement guard (non-negotiable)
 

@@ -157,9 +157,9 @@ teardown() {
   assert_success
 }
 
-@test "13: Task carrying the literal ban text -> allow + test_delegation_observed, NEVER a deny (AR-2 deadlock guard)" {
+@test "13: Agent carrying the literal ban text -> allow + test_delegation_observed, NEVER a deny (AR-2 deadlock guard)" {
   state_with DR
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"DO NOT execute tests: bats, pytest, cargo test are forbidden outside DV/QA"}}'
+  local payload='{"tool_name":"Agent","tool_input":{"subagent_type":"corpflow:developer","prompt":"DO NOT execute tests: bats, pytest, cargo test are forbidden outside DV/QA"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]
@@ -254,9 +254,9 @@ teardown() {
 
 # --- DR remediation regression scenarios (developer-review-1.md P1-1..P1-4) ---
 
-@test "P1-1: Task dispatch with NO .context/ at all -> zero filesystem side effects, no observe row" {
+@test "P1-1: Agent dispatch with NO .context/ at all -> zero filesystem side effects, no observe row" {
   rm -rf "$WD/.context"   # simulate a third-party repo with no worktask in flight
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change to the algorithm"}}'
+  local payload='{"tool_name":"Agent","tool_input":{"subagent_type":"corpflow:developer","prompt":"go ahead and make the change to the algorithm"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]
@@ -265,7 +265,7 @@ teardown() {
 
 @test "P1-1: word-boundary token match — 'algorithm' does not trip the observe row (bare substring 'go' inside it)" {
   state_with DR
-  local payload='{"tool_name":"Task","tool_input":{"subagent_type":"corpflow:developer","prompt":"refine the sorting algorithm and category logic"}}'
+  local payload='{"tool_name":"Agent","tool_input":{"subagent_type":"corpflow:developer","prompt":"refine the sorting algorithm and category logic"}}'
   run env CLAUDE_PROJECT_DIR="$WD" bash "$PLUGIN_ROOT/$SCRIPT" <<< "$payload"
   assert_success
   [ -z "$output" ]

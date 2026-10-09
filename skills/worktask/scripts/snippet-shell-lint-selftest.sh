@@ -31,6 +31,7 @@ _slt_count() {
 _slt_case() {
   if "$2"; then
     printf 'snippet-shell-lint self-test: ok   %s\n' "$1"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'snippet-shell-lint self-test: FAIL %s (rc=%s)\n' "$1" "$_SLT_RC"
     _SLT_FAILS=$((_SLT_FAILS + 1))
@@ -55,6 +56,10 @@ _slt_fixtures() {
   printf '%s\n' "${fence}text" '## Target S' "$fence" '## Target S' "${fence}bash" \
     '## not a heading' "$fence" "${fence}bash" 'inside.sh' "$fence" '## Next' \
     "${fence}bash" 'after.sh' "$fence" > "$_SLT_TD/s.md"
+  printf '%s\n' '## Target D' "${fence}bash" 'rm $FILE' 'for f in ${FILES}; do' \
+    'rm "$FILE" "${arr[@]}"' 'X=$FILE y=$Z' '[[ $a == b ]] && echo ok' 'echo $((a + $b))' \
+    "echo '\$FILE' \"\$FILE\"" 'case $x in' 'echo ${=LIST}' '# rm $COMMENT' "jq '" '  {a: $v}' \
+    "' x.json" 'cmd $A # tail comment' "$fence" > "$_SLT_TD/d.md"
   printf '%s\n' '## Target U' "${fence}bash" 'bash a.sh' > "$_SLT_TD/u.md"
 }
 
@@ -86,6 +91,15 @@ _slt_boundary() {
   [ "$_SLT_RC" -eq 1 ] && _slt_has "s.md:9: rule-c:" && [ "$(_slt_count)" -eq 1 ]
 }
 
+_slt_rule_d() {
+  _slt_run --target "$_SLT_TD/d.md::## Target D"
+  [ "$_SLT_RC" -eq 0 ] || return 1
+  _slt_run --word-split --target "$_SLT_TD/d.md::## Target D"
+  [ "$_SLT_RC" -eq 1 ] && _slt_has "d.md:3: rule-d: unquoted \$FILE splits" \
+    && _slt_has "d.md:4: rule-d: unquoted \$FILES splits" && _slt_has "d.md:16: rule-d:" \
+    && [ "$(_slt_count)" -eq 3 ]
+}
+
 _slt_errors() {
   _slt_run --target "$_SLT_TD/a.md::## No Such Heading"
   [ "$_SLT_RC" -eq 2 ] || return 1
@@ -105,6 +119,7 @@ self_test() {
   _SLT_TD=$(mktemp -d "${TMPDIR:-/tmp}/snippet-shell-lint.XXXXXX") || return 1
   trap 'rm -rf "$_SLT_TD"' EXIT
   _SLT_FAILS=0
+  _SELFTEST_PASSED=0
   _slt_fixtures || return 1
 
   _slt_case "rule a: indented blocks, one report per block" _slt_rule_a
@@ -112,12 +127,13 @@ self_test() {
   _slt_case "rule c: bare .sh runs in bash fences" _slt_rule_c
   _slt_case "negatives: sourcing, assignments, bash runs, json" _slt_negatives
   _slt_case "section boundary and fenced heading lookalikes" _slt_boundary
+  _slt_case "rule d: unquoted variables, opt-in via --word-split" _slt_rule_d
   _slt_case "errors exit 2" _slt_errors
 
   if [ "$_SLT_FAILS" -eq 0 ]; then
-    printf 'snippet-shell-lint self-test: ALL PASS\n'
+    printf 'snippet-shell-lint self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
     return 0
   fi
-  printf 'snippet-shell-lint self-test: %s case(s) failed\n' "$_SLT_FAILS"
+  printf 'snippet-shell-lint self-test: FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$_SLT_FAILS"
   return 1
 }

@@ -41,7 +41,7 @@ _DISPATCH_ROW = re.compile(
     re.MULTILINE,
 )
 
-_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5"}
+_MODEL_TERMS = {"opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"}
 _EFFORT_TERMS = {"low", "medium", "high", "xhigh", "max"}
 
 
@@ -63,13 +63,14 @@ def _primary_stage_agents() -> dict:
 def _resolve(agent: str) -> tuple:
     """(model_alias, effort) via the model-matrix.sh wrapper — the same consumer path a
     non-bash caller uses, so this test never reimplements the extractor."""
-    # A bare --resolve reads state.models/CORPFLOW.md from the root ladder; pin CONTEXT_DIR
-    # to an empty dir so the parity is against the matrix, not this checkout's own ledger.
+    # A bare --resolve reads state.models/CORPFLOW.md from the root ladder and the user-scope
+    # config dir; pin both to an empty dir so the parity is against the matrix, not this
+    # checkout's own ledger or the operator's ~/.claude/CORPFLOW.md.
     with tempfile.TemporaryDirectory() as ctx:
         out = subprocess.run(
             ["bash", _MODEL_MATRIX_SH, "--resolve", agent],
             capture_output=True, text=True, timeout=30, check=True,
-            env={**os.environ, "CONTEXT_DIR": ctx},
+            env={**os.environ, "CONTEXT_DIR": ctx, "CLAUDE_CONFIG_DIR": ctx},
         ).stdout.strip()
     model, effort, _source = out.split("\t")
     return model, effort

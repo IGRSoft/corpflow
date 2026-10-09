@@ -11,6 +11,7 @@
 self_test() {
   td=$(mktemp -d "${TMPDIR:-/tmp}/desc-lint-XXXXXX")
   trap 'rm -rf "$td"' EXIT
+  _SELFTEST_PASSED=0
   mkdir -p "$td/agents" "$td/commands" "$td/skills/nested/deep"
 
   # length parser
@@ -38,6 +39,7 @@ self_test() {
   if ! lint $pass_files >/dev/null; then
     echo "desc-lint self-test: FAIL (compliant fixture flagged)" >&2; exit 2
   fi
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   for f in over:G6 agents/capability-first:G1 agents/no-connective:G2 \
            agents/workflow:G3 agents/first-person:G5 skills/nested/deep/SKILL:G1; do
     path="$td/${f%%:*}.md"; rule="${f##*:}"
@@ -52,6 +54,7 @@ self_test() {
       *"$path"*) ;;
       *) echo "desc-lint self-test: FAIL (message does not name $path)" >&2; exit 2 ;;
     esac
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   done
   # G4 is reported alongside G3 on the workflow fixture; assert it explicitly.
   if out=$(lint "$td/agents/workflow.md"); then :; fi
@@ -59,5 +62,6 @@ self_test() {
     *"[G4]"*) ;;
     *) echo "desc-lint self-test: FAIL (G4 not reported)" >&2; exit 2 ;;
   esac
-  echo "desc-lint self-test: ALL PASS"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
+  echo "desc-lint self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }

@@ -22,7 +22,7 @@ STAGE_TABLE = {
     "DR": ("corpflow:technical-lead", "claude-opus-5-5", "high"),
     "SR": ("corpflow:security-reviewer", "claude-opus-5-5", "xhigh"),
     "QA": ("corpflow:qa-engineer", "claude-sonnet-5-5", "medium"),
-    "DC": ("corpflow:technical-writer", "claude-haiku-4-5", "low"),
+    "DC": ("corpflow:technical-writer", "claude-haiku-5-5", "low"),
     "FN": ("corpflow:project-manager", "claude-sonnet-5-5", "medium"),
     "ST": ("corpflow:stakeholder", "claude-sonnet-5-5", "low"),
 }

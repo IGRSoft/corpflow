@@ -635,7 +635,7 @@ A valid `tests_executed` list is excluded from that count up to 96 proxy tokens 
 
 ## Handoff Schemas {#handoff-schemas}
 
-Canonical typed-return schemas — the single source of truth for the structured object a stage agent returns from its `Task()` dispatch (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
+Canonical typed-return schemas — the single source of truth for the structured object a stage agent returns from its `Agent()` dispatch (`skills/worktask/SKILL.md § Orchestrator Execution Loop` Step 6).
 
 Two parallel channels, neither replacing the other: the typed return is *validated*, the `handoff:` frontmatter is the *cache-friendly on-disk* form. So even on the typed path every stage still mirrors to `state.json facts` and writes its `.context/<stage>-N.md` artifact with frontmatter (durability, human readability, F4 regeneration — `#frontmatter-schema`, `#fallback-paths`).
 
@@ -655,9 +655,9 @@ Every stage schema requires `open_questions` — the closing elicitation sweep (
 
 ###### Conventions — the $defs pointer is an obligation
 
-The stage schemas below are printed without it, or without `TestRunEntry` (`#frontmatter-schema § Schema — $defs: TestRunEntry`, referenced by DVHandoff and QAHandoff), so an item shape is never restated per stage. Whatever passes a stage schema to `Task()` must inline those `$defs` blocks alongside it; no shipped file implements that step today, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution.
+The stage schemas below are printed without it, or without `TestRunEntry` (`#frontmatter-schema § Schema — $defs: TestRunEntry`, referenced by DVHandoff and QAHandoff), so an item shape is never restated per stage. Whatever passes a stage schema to `Agent()` must inline those `$defs` blocks alongside it; no shipped file implements that step today, and nothing executes these schemas, so the `$ref` is a specification pointer rather than a live resolution.
 
-The schema is passed as a `Task()`/`agent()` argument, never inserted into preamble sections [1][2][4][4b], so schema dispatch leaves cache-prefix byte-identity untouched (`#cache-prefix`).
+The schema is passed as an `Agent()`/`agent()` argument, never inserted into preamble sections [1][2][4][4b], so schema dispatch leaves cache-prefix byte-identity untouched (`#cache-prefix`).
 
 ### PLHandoff
 
@@ -1012,7 +1012,7 @@ its own artifact (§ DV fan-out — ledger tasks).
 | Schema field | state.json target | Artifact anchor |
 |--------------|-------------------|-----------------|
 | `FN.verdict` | `tasks.FN0.verdict` | complete-summary-N.md `## summary` |
-| `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
+| `FN.pr_url` | `handoffs["RE→FN0"]`/`DC→FN0`/`QA→FN0` (ref pointer) | complete-summary-N.md `## artifacts` |
 | `ST.verdict` | `tasks.ST0.verdict` + `facts.verdicts.ST0` + derived `facts.verdicts.ST` | retrospective-N.md `## decision` |
 | `IR.verdict` | `tasks.IR0.verdict` | incident-N.md `## root-cause` |
 | `IR.root_cause` | `facts.decisions[]` | incident-N.md `## root-cause` |
@@ -1053,7 +1053,7 @@ an upstream stage's entries.
 | Array | Identity | Collision | Order |
 |---|---|---|---|
 | `decisions` | `.id` | last writer wins | survivor moves to the tail |
-| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped | survivor moves to the tail |
+| `open_questions` | `.id` | monotone join (`_union_sweep`): `status` `open < resolved`, `resolution` never dropped, `class` `decision < escalate` raise-only (an omitted class keeps the incumbent's; a refused downgrade exits 2 with a `facts_items_rejected` row) | survivor moves to the tail |
 | `files_modified`, `tests_added` | the string itself | duplicate dropped | first-seen position kept |
 | `stream_branches` (object) | the stream key | later value for that key wins; other keys kept | key insertion order |
 
@@ -1546,7 +1546,7 @@ migration, no tolerant reader.
 
 ```yaml
 # …continued: dispatched_agents.items.properties
-            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (background-default dispatch); resume degrades to best-effort subagent_type match when absent" }
+            agent_id: { type: string, description: "OPTIONAL launch-ack id when the runtime surfaces one (background-default dispatch); resume degrades to best-effort subagent_type match when absent; for an in-process teammate it is the agent ID, its name@team address is teammate_id (CC 2.1.290)" }
             name: { type: string, description: "OPTIONAL named-spawn handle (megatask lanes); readable default names, /rename persists across restarts" }
             model_requested: { type: string, description: "OPTIONAL — metadata.model alias at dispatch" }
             model_resolved: { type: string, description: "OPTIONAL best-effort — model that actually ran (claude agents --json / audit); omit when unknown" }
@@ -1595,8 +1595,8 @@ written is the one whose when-clause holds. A stage that never ran never appears
 
 The tables are exhaustive across all three pipelines (standard, secure/full, emergency). The
 emergency pipeline (`IR→DV→DR→QA→RE→FN`) has no PL, AR or TL stage, so DV's predecessor there is
-`IR` and RE's is `QA`. Any predecessor not listed is not a legal edge; add a row before writing
-one.
+`IR` and RE's is `QA`. RE's predecessor is also `QA` on a standard, secure or full run that
+excluded DC. Any predecessor not listed is not a legal edge; add a row before writing one.
 
 ##### Edge table — standard and secure pipelines
 
@@ -1614,8 +1614,17 @@ one.
 | `SR→QA` / `DR→QA` | SR ran / SR was excluded | QA |
 | `QA→DC` | DC is in the plan | DC |
 | `DC→RE` | RE is in the plan AND DC ran | RE |
-| `RE→FN` / `DC→FN` | RE ran / RE was excluded | FN |
-| `FN→ST` | ST is in the plan | ST |
+| `QA→RE` | RE is in the plan AND DC was excluded | RE |
+| `RE→FN` | FN is in the plan AND RE ran | FN |
+| `DC→FN` | FN is in the plan AND DC ran AND RE did not | FN |
+| `QA→FN` | FN is in the plan AND neither RE nor DC ran | FN |
+| `FN→ST` | ST is in the plan AND FN ran | ST |
+| `RE→ST` / `DC→ST` / `QA→ST` | ST in plan, FN not run: latest of RE, DC, QA that ran | ST |
+
+##### Edge table — what "ran" means
+
+A stage ran when its `tasks` row exists and is not `skipped`. With FN and ST both excluded, no edge
+names FN: the run ends on the edge into the last stage that ran.
 
 ##### Edge table — emergency pipeline and the ethics gate
 
@@ -1910,7 +1919,7 @@ All stage artifacts are numbered; N is allocated by PL0 (same value as `planning
 ### DV fan-out — ledger tasks
 
 DV fans out as ledger tasks, never as sub-agents. `DV0`, `DV1`, … are rows in `state.json`: the
-orchestrator dispatches each on its own `Task()`, each writes its own artifact, each patches its own
+orchestrator dispatches each on its own `Agent()`, each writes its own artifact, each patches its own
 row. No entry agent assembles a canonical file afterwards — every DV artifact is a handoff carrier
 in its own right, and downstream stages reach them by iterating the rows.
 
@@ -2137,7 +2146,7 @@ artifact, never a `--stage` or basename (edge tables: `USER→PL`, `USER→IR`).
 
 ## #cache-prefix
 
-Anthropic prompt cache matches by prefix equality, not full-block equality, so the orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Task()` calls within one `worktask_id`.
+Anthropic prompt cache matches by prefix equality, not full-block equality, so the orchestrator builds the preamble in this order to maximize the byte-identical prefix shared across consecutive `Agent()` calls within one `worktask_id`.
 
 ### Preamble layout (binding)
 
@@ -2339,12 +2348,12 @@ Allowed in that stage's artifact only, required in none; title-case entries are 
 3. Anchor IDs come from GitHub-style slugify, but the H2 title is already the kebab-case form; do not rely on slugify.
 4. `key_decisions[].anchor` and `refs.*` resolve to a real `## <slug>` heading in the target file. Enforcement is narrower than the rule: the handoff harness validates cross-file resolution only for the AR→DV edge (`--validate-frontmatter <DV row artifact> --state <state.json>` checks the architecture reference's pattern and that the file exists next to the artifact). Every other `refs.*` entry is checked for key presence only, so a dangling target elsewhere is an author-owned contract violation the harness will not catch.
 
-### Anchor Pre-Flight (PreToolUse deny, PostToolUse advisory)
+### Anchor Pre-Flight (PreToolUse Edit deny, PostToolUse feedback)
 
 One managed plugin hook (`hooks/anchor-preflight.sh`, default-on) checks anchors at write before stray H2 costs rework; the harness gates the boundary. All three share `cache-lint.sh --anchor-diff`:
 
-- **`PreToolUse` deny** — Path on artifact regex, basename exactly `<canonical>-<N>.md` (or DV's `development-<N>-<stream>.md`), `state.json` beside it. Unexpected H2 in Write `content` (or Edit `new_string`/`old_string`) gets `deny` with those H2s and allowed set. Missing required H2 never denies; hook error allows.
-- **`PostToolUse` advisory** — Control-byte scan, then `--anchor-lint` on artifact paths (§ Preflight behavior and cost — scan logic).
+- **`PreToolUse` deny (Edit only)** — Path on artifact regex, basename exactly `<canonical>-<N>.md` (or DV's `development-<N>-<stream>.md`), `state.json` beside it. An Edit whose `new_string` adds an off-list H2 that `old_string` lacks gets `deny` naming it and the allowed set. A Write (Codex patches too) is never denied: an Edit fix is cheaper than a re-emit. Missing H2 never denies; hook error allows.
+- **`PostToolUse` feedback** — Control-byte scan, `--anchor-lint`, one line per off-list H2 or frontmatter finding (§ Post frontmatter check).
 - **Stage boundary** — `handoff-harness.sh --validate-frontmatter` fails on missing/unexpected H2 for all 13 stages; fails closed when `cache-lint.sh` cannot run.
 
 #### Managed hook entries (plugin.json)
@@ -2360,7 +2369,11 @@ One managed plugin hook (`hooks/anchor-preflight.sh`, default-on) checks anchors
 
 #### Preflight behavior and cost — scan logic
 
-`anchor-preflight.sh` scans allowlisted text writes for control bytes before artifact check. Anchor-lint runs only on canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); other Write/Edit gets control-byte scan alone. Finding exits 2 (only PostToolUse exit routing stderr to model). Producer sees diagnostic and amends, so downstream doesn't pay. `continueOnBlock` follows managed-hook discipline (diagnostic surfaced, unrelated write never blocked). Non-hook environments use stage-boundary harness only. Cost: O(seconds) per Write/Edit.
+`anchor-preflight.sh` scans allowlisted text writes for control bytes before artifact check. Anchor-lint runs only on canonical artifact regex (`\.context/((planning|architecture|coordination|developer-review|security-review|testing|documentation|release|complete-summary|retrospective|incident|ethics-review)-[0-9]+|development-[0-9]+(-[a-z0-9]+)*)\.md$`); other Write/Edit gets control-byte scan alone. Finding exits 2 (only PostToolUse exit routing stderr to model). Producer sees diagnostic and amends, so downstream doesn't pay.
+
+#### Post frontmatter check
+
+The frontmatter check, like the off-list H2 line, runs only when a ledger `state.json` sits beside the artifact. It runs `handoff-harness.sh --validate-frontmatter` on a same-basename temp copy of the file on disk and reports three classes only: `handoff:` over the 200-token budget, a digitless `summary_line`, a sweep stub without 2-4 `options[]`. It runs after a Write, a Codex patch, an unreadable payload, or an Edit whose `new_string` is empty or lands in the frontmatter or `## elicitation-sweep`; a body-only Edit is skipped. Each finding is one stderr line ending `fix it with a small Edit, do not re-Write the file.` Without `yq` the check fails open; the boundary still gates. `continueOnBlock` follows managed-hook discipline (diagnostic surfaced, unrelated write never blocked). Non-hook environments use stage-boundary harness only. Cost: O(seconds) per Write/Edit.
 
 ---
 

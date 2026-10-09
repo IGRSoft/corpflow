@@ -1,7 +1,7 @@
 ---
 name: self-improvement
 description: Use when the ST stage runs or post-delivery user edits need classifying. Capture user edits at ST stage, classify them, propose scoped updates to agents/skills/commands that participated in the worktask; human-in-the-loop, never auto-applies.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Self-Improvement Skill
@@ -53,6 +53,17 @@ Execute the five steps in order. If any step fails, write the failure to `.conte
 
 Assign every hunk exactly one of six categories — `tone` (reworded, same meaning), `structure` (sections added/removed/reordered), `accuracy` (fact corrections: numbers, names, technical claims), `completeness` (new content fills a gap), `style` (formatting, naming, indentation), `domain-knowledge` (project-specific rules the agent did not know) — plus `high | medium | low` confidence. Low-confidence items go to Deferred in `learnings.md`, never the active approval list. Decision tree, confidence heuristics, per-category proposal shapes and worked examples: `references/change-categories.md`.
 
+#### Step 3 — enforcement form
+
+Give each proposal one enforcement form as well, because a rule a model can skip is weaker than a check that fails:
+
+- `mechanical` — a fixed pattern, banned API, path or naming rule. Propose a deterministic check (lint rule, bats test, hook). If a check for it already exists but nothing runs it, propose the wiring; the unwired check is the finding. If no check could catch it, say so: a gap with no guardrail is also a finding.
+- `judgement` — needs reading in context. Propose prose. A standards rule goes to the reviewer (`agents/technical-lead.md`) before the implementer, because the reviewer is the stage that applies standards to a diff.
+
+#### Step 3 — target and cited hunk
+
+Never target an always-loaded file (`CLAUDE.md`, `AGENTS.md`) with a new rule: every session pays for it, and most sessions do not need it. Each proposal cites the diff hunk it came from (path and line range), so no proposal rests on a guess. Decision rule and examples: `references/change-categories.md § Enforcement Form`.
+
 ### Step 4 — Map + Filter to Owning Target
 
 **Goal:** every classified change maps to exactly one owning file, **then** is filtered against Step 1's used-in-context set.
@@ -78,11 +89,11 @@ Happy path: a prompt file (`agents/*.md`, `skills/**/SKILL.md`, `commands/*.md`)
 
 Write it per `references/retrospective-template.md` — header block, What Worked / What the User Changed / Proposed Updates / Deferred / Out-of-Context Discards, approval footer. Follow that template rather than improvising: it fixes proposal ordering and the sub-bullets each numbered, independently tickable `- [ ]` proposal carries.
 
-**Versioning:** a proposal that modifies a file's frontmatter instructs prompt-engineer to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
+**Versioning:** a proposal that modifies a file's frontmatter instructs the applying agent (§ Handoff to the applying agent) to bump `version: x.y.z` — semver minor for additions, patch for wording tweaks.
 
 ### Step 5b — Append to the label dataset
 
-**Goal:** retain each classified edit as a durable failure label, recorded under plugin data outside the repo and never committed. `learnings.md` lives under the gitignored `.context/`, so labels are otherwise discarded when the run ends — and a user correcting delivered output is domain-expert ground truth, what `evals/failure-taxonomy.md` and any future evaluator get built from.
+**Goal:** retain each classified edit as a durable failure label, recorded under plugin data outside the repo and never committed. `learnings.md` lives under the gitignored `.context/`, so labels are otherwise discarded when the run ends — and a user correcting delivered output is domain-expert ground truth, what a failure taxonomy under evals/ and any future evaluator get built from.
 
 **Runs regardless of approval:** only the *proposal* is gated on approval; a rejected proposal is still evidence the output needed changing.
 
@@ -148,7 +159,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/self-improvement/scripts/pipeline-counts.sh \
 
 ##### Counts semantics and output
 
-The script counts rows in the stage output files, so no count comes from prose. An absent input file counts 0. Under plugin data it appends one `self-improve-counts/v1` row to `pipeline-counts.jsonl` with fields: `ts`, `worktask_id`, `run_index`, `stage`, `context_paths`, `changed_paths`, `mapped_rows`, `appended_rows`, `labels_enabled`, `dataset_source`. On the fallback rung or with `--dry-run`, no row is written. Stderr always carries progress information; the row is the authoritative record.
+The script counts rows in the stage output files, so no count comes from prose. An absent input file counts 0. Under plugin data it appends one row of schema self-improve-counts/v1 to `pipeline-counts.jsonl` with fields: `ts`, `worktask_id`, `run_index`, `stage`, `context_paths`, `changed_paths`, `mapped_rows`, `appended_rows`, `labels_enabled`, `dataset_source`. On the fallback rung or with `--dry-run`, no row is written. Stderr always carries progress information; the row is the authoritative record.
 
 ## Output Contract
 
@@ -171,14 +182,21 @@ The script counts rows in the stage output files, so no count comes from prose. 
 
 Filename grammar follows `skills/logging-conventions/SKILL.md`.
 
-## Hand-off to prompt-engineer
+## Handoff to the applying agent
 
-After user approval (orchestrated per `commands/worktask.md`), each checked item goes to `prompt-engineer`, one commit per proposal: `agents/prompt-engineer.md § Self-Improvement Patch Application`.
+After user approval (orchestrated per `commands/worktask.md`), each checked item goes to the agent that owns its enforcement form, one commit per proposal:
+
+- `judgement` → `corpflow:prompt-engineer`, which owns prompt prose: `agents/prompt-engineer.md § Self-Improvement Patch Application`.
+- `mechanical` → `corpflow:workflow-engineer`, which owns the scripts, hooks and bats tests a deterministic check lives in.
+
+Step 4 filters a finding by its owning file, the prompt file its hunk maps to; a `mechanical` proposal that passes the filter targets a check file, which need not be in the used-in-context set.
+
+A target that carries frontmatter (an agent, skill or command file) takes one `version:` bump per proposal. A script, hook or bats file has no frontmatter and takes no bump.
 
 ## Constraints (DO NOT)
 
 - DO NOT auto-apply any proposal. Human approval is mandatory.
-- DO NOT propose changes to files outside the used-in-context set.
+- DO NOT propose changes to files outside the used-in-context set. A `mechanical` proposal's check file is the one exception (§ Hand-off to the applying agent).
 - DO NOT react to low-confidence items — park them in Deferred.
 - DO NOT edit the target file directly; this skill only proposes.
 - DO NOT commit `.context/learnings.md` (lives under the already-gitignored `.context/`).
@@ -194,6 +212,7 @@ After user approval (orchestrated per `commands/worktask.md`), each checked item
 - `commands/prompt-audit.md` — health-score format
 - `commands/improve-yourself.md` — manual entry point (`--since`, `--target`, `--dry-run`, `--apply`)
 - `agents/stakeholder.md` — invokes this skill (automatic path at ST)
-- `agents/prompt-engineer.md` — applies approved proposals
+- `agents/prompt-engineer.md` — applies approved `judgement` proposals
+- `agents/workflow-engineer.md` — applies approved `mechanical` proposals
 - `commands/worktask.md` — orchestrator wires the approval loop after ST
 - `tests/shell/skills/{detect-user-changes,build-context-set,map-and-filter,append-labels,label-stats,pipeline-counts}.bats` — executable behavior fixtures for the pipeline scripts

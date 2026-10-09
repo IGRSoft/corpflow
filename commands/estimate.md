@@ -18,10 +18,12 @@ related:
 
 Estimate task complexity, effort, and resources before starting a worktask. Helps determine the appropriate worktask tier and provides sizing guidance.
 
-## Modes
+## Options
 
-`estimate` operates in three mutually-exclusive modes. Flags are scoped to their
-mode — do not cross-apply them:
+### Modes
+
+`estimate` operates in three modes, each selected by its trigger. `--export` follows a `--detailed`
+estimate; a Review flag mixed with another mode is a usage error.
 
 | Mode | Trigger | Purpose | Mode-scoped flags |
 |------|---------|---------|-------------------|
@@ -30,8 +32,6 @@ mode — do not cross-apply them:
 | **Export** | `--export csv` | Emit the 13-CSV estimation pack for Google Sheets | `--dir`, `--delimiter`, `--validate` |
 
 `--platform` is shared by all three modes — see § Options → Shared.
-
-## Options
 
 ### Estimate mode (default)
 

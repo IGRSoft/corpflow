@@ -2,7 +2,7 @@
 
 Read this on platform ambiguity, or when the common rows inline in `agents/developer.md`
 (§ Detection Rules) do not cover the specialist you need. Routing target = the qualified
-agent ID in the **Agent** column, passed as the Task `subagent_type`. Keep no second copy of
+agent ID in the **Agent** column, passed as the Agent `subagent_type`. Keep no second copy of
 this map elsewhere. Alias routing and project overrides: `skills/shared/routing-matrix.md`.
 The specialist tables below apply only when the platform's entry alias resolves to its default
 plugin — on override, dispatch the override target and let it specialize internally.
@@ -80,7 +80,7 @@ rely on build/test transcripts under `.context/logs/`.
 
 ### Review-only specialists
 
-Reached **through the stage flow** (DR/SR/QA), never as direct DV `Task(...)` targets:
+Reached **through the stage flow** (DR/SR/QA), never as direct DV `Agent(...)` targets:
 
 | Platform | Review-only specialists |
 |----------|-------------------------|

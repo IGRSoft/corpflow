@@ -75,8 +75,9 @@ render_stage() {
       print ""
       printf "`%s` carries only these H2 headings; nest every other heading as H3. ", artifact_name(base)
       printf "Generated from `cache-lint.sh` by `output-sections.sh --write` — never edit by hand. "
-      printf "`hooks/anchor-preflight.sh` denies a write that adds any other H2; "
-      print "`handoff-harness.sh --validate-frontmatter` fails the stage on a missing required or an unexpected H2."
+      printf "An Edit adding another H2 is denied; a Write lands and Post feedback asks for an Edit fix, never a re-Write. "
+      printf "The stage gate (`handoff-harness.sh --validate-frontmatter`) fails a missing or unexpected H2, "
+      print "`handoff:` over 200 discretionary tokens, or a non-`escalate` sweep stub lacking 2-4 `options[]`."
       print ""
       print "- Required: " req
       if (opt != "") print "- Optional for " s ": " opt
@@ -233,6 +234,7 @@ print_regions() {
 }
 
 self_test() {
+  _SELFTEST_PASSED=0
   local td fx rc s
   td="$(mktemp -d "${TMPDIR:-/tmp}/output-sections-selftest.XXXXXX")"
   # shellcheck disable=SC2064  # the paths are fixed at set time on purpose
@@ -256,6 +258,7 @@ self_test() {
     bash "$0" --root "$fx" "$@" > "$td/out" 2>&1 || rc=$?
     [ "$rc" -eq "$want" ] || { printf 'self-test: %s: FAIL (rc=%s want=%s)\n' "$label" "$rc" "$want" >&2; cat "$td/out" >&2; exit 1; }
     printf 'self-test: %s: ok\n' "$label"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   }
 
   _st "check fails on missing regions" 1 --check
@@ -272,7 +275,7 @@ self_test() {
   printf '<!-- output-sections:begin stage=DV -->\n<!-- output-sections:end stage=DV -->\n' >> "$fx/agents/developer.md"
   _st "duplicate pair fails" 1 --check
   _st "write refuses a duplicate pair" 1 --write
-  echo "self-test: ALL PASS"
+  echo "self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }
 
 MODE=""

@@ -95,6 +95,18 @@
 # @arg --task-block   <ID> --on  <ID[,ID...]> Union into blocked_by[].
 # @arg --task-unblock <ID> --off <ID[,ID...]> Subtract from blocked_by[].
 # @arg --task-meta    <ID> --set <json>       Merge into tasks.<ID>.metadata.
+#                                             --unset <key[,key...]>: delete those keys
+#                                             after the merge, under the same lock and
+#                                             atomic write; alone or beside --set, and it
+#                                             wins over a key --set also names. An absent
+#                                             key is a no-op (exit 0, bytes unchanged). A
+#                                             pipeline key (stage, agent, model, effort,
+#                                             plan_gate, decision_gate, fn_gate,
+#                                             workspace_path, isolation, base_ref,
+#                                             requires_screenshots) exits 2, unchanged.
+#                                             On create and meta a description over 240
+#                                             chars is cut to 239 + "…", never refused;
+#                                             stderr gets description_truncated=<id>:<len>.
 #                                             --raise-only: drop `model`/`effort` from the
 #                                             merge when it would lower the row's CURRENT
 #                                             value (ladder rank; opus>sonnet>haiku) — every
@@ -107,13 +119,16 @@
 #                                             no scripted writer, so they were hand-edited
 #                                             into state.json around this script.
 # @arg --resolve-models [--corpflow <path>]   Stamp state.models{<agent>: {model,effort,source}}
-#                                             for every agents/*.md row, merging a project-root
-#                                             CORPFLOW.md `## Models` override (default lookup:
-#                                             ${CONTEXT_DIR%/.context}/CORPFLOW.md) row by row,
-#                                             fail-open, over the built-in matrix
-#                                             (skills/shared/stage-codes.md § Agent Model
-#                                             Matrix). Resolved once; --task-create reads the
-#                                             result. Idempotent overwrite, not a merge.
+#                                             for every agents/*.md row, merging a CORPFLOW.md
+#                                             `## Models` override row by row, fail-open, over
+#                                             the built-in matrix (skills/shared/stage-codes.md
+#                                             § Agent Model Matrix). Default lookup, per
+#                                             heading: ${CONTEXT_DIR%/.context}/CORPFLOW.md
+#                                             when it has `## Models`, else
+#                                             ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md;
+#                                             --corpflow beats both. Resolved once;
+#                                             --task-create reads the result. Idempotent
+#                                             overwrite, not a merge.
 # @arg --task-replay  <ID> [--cascade]        Reset one settled/failed task to pending so the
 #                                             stage loop dispatches it again.  Clears
 #                                             metadata.retry_count, metadata.error_escalated_to
@@ -1276,6 +1291,11 @@ _STATE_BOUNDS_FILTER='
 # never truthiness, tells those apart — conflating them made `true` unclearable. Legacy
 # payloads only: `--facts` requires the key. facts.decisions keeps _union_keyed.
 #
+# `class` is raise-only on `decision < escalate`: labellers are indistinguishable here, so
+# a re-run lowering another labeller's `escalate` would route it to an unattended answer. An
+# absent or null class keeps the incumbent's. A third SWEEP_CLASS_ENUM value means revisiting
+# this arm. An `escalate` already evicted to the spill has no incumbent and is not guarded.
+#
 # Object-merge (`. * $patch`) REPLACES arrays, so without this a downstream patch would drop
 # every entry an upstream stage recorded. Identity is `.id`, or the string itself for the
 # scalar arrays. Keyed survivors move to the TAIL because _STATE_BOUNDS_FILTER keeps the
@@ -1300,7 +1320,12 @@ _FACTS_UNION_FILTER='
         + (if ($new.resolution // null) == null and ($prev.resolution // null) != null
            then { resolution: $prev.resolution } else {} end)
         + (if ($prev.blocks_next_stage // false) == true and (($new | has("blocks_next_stage")) | not)
-           then { blocks_next_stage: true } else {} end);
+           then { blocks_next_stage: true } else {} end)
+        + (if ($prev.class // null) == "escalate"
+           then { class: "escalate" }
+           elif ($new.class // null) == null and ($prev.class // null) != null
+           then { class: $prev.class }
+           else {} end);
       def _sweep_defaults:
         # $ARGS.named, not a bare $sweep_stage: a hard reference makes the whole
         # filter fail to COMPILE for any caller that does not pass --arg, which
@@ -1339,6 +1364,19 @@ _FACTS_UNION_FILTER='
         | (if (($f.stream_branches // {}) | length) > 0
            then .stream_branches = ((.stream_branches // {}) + $f.stream_branches)
            else . end))'
+
+# Run against the post-union state INSIDE the lock (ATOMIC_APPLY_PROBE): post `escalate` under
+# a non-escalate last write for that id can only be the class arm refusing a downgrade. Emits
+# the _FACTS_PARTITION_FILTER `.rejects[]` shape so one reporter serves both.
+_FACTS_CLASS_REFUSAL_PROBE='
+      (.facts.open_questions // []) as $post
+      | [ ($f.open_questions // []) | reduce .[] as $e ({}; .[$e.id] = $e) | .[]
+          | select((.class // null) != null and .class != "escalate")
+          | . as $n
+          | select(any($post[]; .id == $n.id and .class == "escalate"))
+          | { key: "open_questions", label: $n.id,
+              reason: ("class downgrade escalate -> " + ($n.class | tostring)
+                       + " refused; the ledger keeps escalate — set class: escalate in your artifact stub") } ]'
 
 # Per-item gate for --facts. Returns {fatal, clean, rejects[]}: `fatal` is a whole-payload
 # refusal, `clean` carries only the items that passed, `rejects` names each dropped item and
@@ -1534,9 +1572,14 @@ _spill_evicted() {
 # The filter is evaluated against the file contents INSIDE the lock. Read-modify-write ops
 # (blocked_by union/subtraction) MUST come through here rather than precomputing from an
 # unlocked read: a pre-lock read races a sibling writer and silently drops its edges.
+#
+# Opt-in observer: a caller that sets ATOMIC_APPLY_PROBE (jq text, same args) gets its
+# output over the about-to-commit state in ATOMIC_APPLY_PROBE_OUT. A probe failure only
+# loses the report, never the write.
 atomic_apply() {
   local state="$1" filter="$2"
   shift 2
+  ATOMIC_APPLY_PROBE_OUT=""
   # `${state%/*}` returns $state unchanged when the path has no directory component,
   # so a bare `--state state.json` derived `state.json/.state.json….tmp` — ENOTDIR,
   # and every ledger op failed with the file untouched. Same guard the spill path
@@ -1556,6 +1599,13 @@ atomic_apply() {
   local rc=0
   if jq "$@" "( ${filter} ) | ${_STATE_BOUNDS_FILTER}" "$state" > "$tmp" 2>> "$LOG_FILE"; then
     _spill_evicted "$state" "$tmp" "$filter" "$@"
+    if [[ -n "${ATOMIC_APPLY_PROBE:-}" ]]; then
+      ATOMIC_APPLY_PROBE_OUT=$(jq -c "$@" "$ATOMIC_APPLY_PROBE" "$tmp" 2>> "$LOG_FILE") || {
+        ATOMIC_APPLY_PROBE_OUT=""
+        printf >&2 'warn: class-downgrade detection failed; join still enforced (merge unaffected)\n'
+        log_msg WARN "class-downgrade detection failed; join still enforced (merge unaffected)"
+      }
+    fi
     sync "$tmp" 2> /dev/null || sync 2> /dev/null || true
     mv -f "$tmp" "$state"
     rc=0
@@ -1702,6 +1752,9 @@ VERIFY_EXPECT_GIVEN=""
 FACTS_ARG=""
 REPLAY_CASCADE="false"
 RAISE_ONLY_FLAG=""
+UNSET_KEYS=""
+UNSET_GIVEN=""
+DESC_TRUNCATED=""
 AGENTS_JSON_ARG=""
 DISPATCH_AGENT_ID=""
 DISPATCH_STATUS=""
@@ -1772,6 +1825,7 @@ while [[ $# -gt 0 ]]; do
     --ledger-meta) shift; LEDGER_META_OP="1" ;;
     --resolve-models) shift; RESOLVE_MODELS_OP="1" ;;
     --raise-only) RAISE_ONLY_FLAG="1"; shift ;;
+    --unset) shift; UNSET_KEYS="${1:-}"; UNSET_GIVEN="1"; shift ;;
     --corpflow) shift; RESOLVE_MODELS_CORPFLOW_ARG="${1:-}"; shift ;;
     --task-replay) shift; TASK_OP="replay"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
     --task-reopen) shift; TASK_OP="reopen"; OTHER_TASK_OP_SEEN="1"; TASK_OP_ID="${1:-}"; shift ;;
@@ -1960,31 +2014,6 @@ fi
 # they point inside it: a plugin developed with itself, run from its own checkout, legitimately
 # keeps its ledger there.
 
-# _sp_physical <path> — physical form of a path whose tail may not exist yet. The deepest
-# existing ancestor is resolved with `pwd -P` and the missing tail re-appended; without
-# that a symlinked tmp root (macOS /var -> /private/var) defeats the prefix comparison
-# below.
-_sp_physical() {
-  local p="$1" tail="" head base
-  case "$p" in
-    /*) ;;
-    *) p="$PWD/$p" ;;
-  esac
-  head="$p"
-  while [[ -n "$head" && ! -d "$head" ]]; do
-    base="${head##*/}"
-    tail="/${base}${tail}"
-    head="${head%/*}"
-  done
-  [[ -n "$head" ]] || head="/"
-  head="$(CDPATH='' cd -P -- "$head" 2> /dev/null && pwd -P)" || head=""
-  [[ -n "$head" ]] || {
-    printf '%s' "$p"
-    return 0
-  }
-  printf '%s%s' "${head%/}" "$tail"
-}
-
 # _sp_refuse_plugin_root <ctx-dir> — exit 4 when a ledger dir INFERRED from the cwd lies
 # inside the plugin's own install/checkout, unless the caller is standing at the git toplevel
 # itself (running the plugin from its own repo root). A nested subdirectory such as a benchmark
@@ -1993,34 +2022,11 @@ _sp_physical() {
 # wrong project. Both the root this script lives in and the host-reported root count, because a
 # dev checkout and an installed copy are different trees.
 _sp_refuse_plugin_root() {
-  local ctx_phys root root_phys top top_phys pwd_phys host_root="" base_lib
-  ctx_phys="$(_sp_physical "$1")"
-  top="$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null || true)"
-  top_phys=""
-  [[ -z "$top" ]] || top_phys="$(_sp_physical "$top")"
-  pwd_phys="$(_sp_physical "$PWD")"
-  # The shared resolver owns the host env ladder; a missing lib only narrows the guard to
-  # this script's own tree, which still covers a dev checkout.
-  base_lib="$(dirname "${BASH_SOURCE[0]}")/../../shared/lib/corpflow-base.sh"
-  if [[ -r "$base_lib" ]]; then
-    # shellcheck source=skills/shared/lib/corpflow-base.sh
-    . "$base_lib"
-    host_root="$(corpflow_plugin_root 2> /dev/null || true)"
-  fi
-  for root in "$(dirname "${BASH_SOURCE[0]}")/../../.." "$host_root"; do
-    [[ -n "$root" && -d "$root" ]] || continue
-    root_phys="$(CDPATH='' cd -P -- "$root" 2> /dev/null && pwd -P)" || continue
-    [[ -n "$root_phys" && "$root_phys" != "/" ]] || continue
-    case "$ctx_phys/" in
-      "$root_phys/"*)
-        # Rank 5 landing here with the caller at the toplevel is the self-hosted case.
-        [[ -n "$top_phys" && "$pwd_phys" == "$top_phys" ]] && continue
-        printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root %s\n' "$ctx_phys" "$root_phys"
-        printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
-        exit 4
-        ;;
-    esac
-  done
+  # The rule itself is corpflow_inferred_ctx_ok (state-read-lib.sh), shared with the readers.
+  corpflow_inferred_ctx_ok "$1" && return 0
+  printf >&2 'state-patch.sh: refusing ledger dir %s — inferred from the cwd, and it lies inside the plugin root\n' "$1"
+  printf >&2 'state-patch.sh: run from the project directory, or pass --state / set CONTEXT_DIR to its .context\n'
+  exit 4
 }
 
 if [[ -z "$STATE_ARG_GIVEN" ]]; then
@@ -2296,14 +2302,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
   # shellcheck source=model-matrix-lib.sh
   . "$_RM_LIB"
 
-  # Project root is one level above .context/ — the same anchor CORPFLOW.md § Routing already
-  # reads from (skills/worktask/SKILL.md § Validation check 12).
+  # Same per-heading precedence CORPFLOW.md § Routing follows (skills/worktask/SKILL.md
+  # § Validation check 12): project root, then the user-scope file. No hit -> matrix only.
   _RM_CORPFLOW="$RESOLVE_MODELS_CORPFLOW_ARG"
   if [[ -z "$_RM_CORPFLOW" ]]; then
-    _RM_ROOT="$CTX"
-    case "$_RM_ROOT" in */.context) _RM_ROOT="${_RM_ROOT%/.context}" ;; esac
-    _RM_CORPFLOW="${_RM_ROOT}/CORPFLOW.md"
+    _RM_HIT=""
+    _RM_HIT=$(corpflow_md_locate "$CTX" '## Models') || _RM_HIT=""
+    _RM_CORPFLOW="${_RM_HIT%%$'\t'*}"
   fi
+  _RM_OV_SOURCE=$(corpflow_md_source "$_RM_CORPFLOW")
 
   _RM_AUDIT_DIR="${CTX}/logs"
   if ! command -v corpflow_audit_row > /dev/null 2>&1; then
@@ -2368,15 +2375,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
       _rm_effort="${_rm_rest%%$'\t'*}"
       _rm_src="${_rm_rest##*$'\t'}"
     fi
-    if [[ "$_rm_src" == "project-override" ]]; then
-      _RM_SOURCE_OVERALL="project-override"
+    if [[ "$_rm_src" == "project-override" || "$_rm_src" == "user-override" ]]; then
+      _RM_SOURCE_OVERALL="$_rm_src"
       if command -v corpflow_audit_row > /dev/null 2>&1; then
         corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
           --action model_override --subject "$_rm_agent" --result ok \
           --task-id "$(_audit_task_ref)" \
           --meta "$(jq -cn --arg a "$_rm_agent" --arg dm "$_rm_dmodel" --arg de "$_rm_deffort" \
-            --arg om "$_rm_model" --arg oe "$_rm_effort" \
-            '{agent:$a, default_model:$dm, default_effort:$de, override_model:$om, override_effort:$oe}')"
+            --arg om "$_rm_model" --arg oe "$_rm_effort" --arg s "$_rm_src" --arg p "$_RM_CORPFLOW" \
+            '{agent:$a, default_model:$dm, default_effort:$de, override_model:$om, override_effort:$oe, source:$s, path:$p}')"
       fi
     fi
     _RM_JSON=$(printf '%s' "$_RM_JSON" | jq -c --arg a "$_rm_agent" --arg m "$_rm_model" \
@@ -2393,7 +2400,7 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
         corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
           --action model_override_unparsed --subject "CORPFLOW.md" --result degraded \
           --task-id "$(_audit_task_ref)" --meta-kv "path=${_RM_CORPFLOW}" \
-          --meta-kv "reason=header_or_rows"
+          --meta-kv "source=${_RM_OV_SOURCE}" --meta-kv "reason=header_or_rows"
       fi
     elif [[ "$_RM_OV_RC" -eq 0 && -n "$_RM_OV_OUT" ]] && command -v corpflow_audit_row > /dev/null 2>&1; then
       while IFS=$'\t' read -r _rov_agent _rov_model _rov_effort _rov_status; do
@@ -2402,13 +2409,15 @@ if [[ -n "$RESOLVE_MODELS_OP" ]]; then
             corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
               --action model_override_unknown --subject "$_rov_agent" --result degraded \
               --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
-              --meta-kv "reason=no-matrix-row"
+              --meta-kv "reason=no-matrix-row" --meta-kv "source=${_RM_OV_SOURCE}" \
+              --meta-kv "path=${_RM_CORPFLOW}"
             ;;
           invalid)
             corpflow_audit_row --file "${_RM_AUDIT_DIR}/audit.jsonl" --actor "${VIA_ARG:-agent}:state-patch" \
               --action model_override_unknown --subject "$_rov_agent" --result degraded \
               --task-id "$(_audit_task_ref)" --meta-kv "agent=${_rov_agent}" \
-              --meta-kv "reason=invalid-cell" --meta-kv "cell=${_rov_model}/${_rov_effort}"
+              --meta-kv "reason=invalid-cell" --meta-kv "cell=${_rov_model}/${_rov_effort}" \
+              --meta-kv "source=${_RM_OV_SOURCE}" --meta-kv "path=${_RM_CORPFLOW}"
             ;;
         esac
       done <<< "$_RM_OV_OUT"
@@ -2489,6 +2498,10 @@ if [[ -n "$TASK_OP" ]]; then
   fi
   if [[ "$TASK_OP" != "meta" && -n "$RAISE_ONLY_FLAG" ]]; then
     printf >&2 -- '--raise-only applies to --task-meta only (got --task-%s)\n' "$TASK_OP"
+    usage
+  fi
+  if [[ "$TASK_OP" != "meta" && -n "$UNSET_GIVEN" ]]; then
+    printf >&2 -- '--unset applies to --task-meta only (got --task-%s)\n' "$TASK_OP"
     usage
   fi
 
@@ -2605,12 +2618,45 @@ if [[ -n "$TASK_OP" ]]; then
   # R-4.4 — the ONLY two paths that persist a task description. Dispatch-time appends
   # (the orchestrator's test-scope, ban and FN banners) mutate an in-memory copy and are
   # never written back, so capping post-append would strip banners that no ledger holds.
-  # Truncate, never reject: a refused --task-create would break PL0 stage creation.
+  # Truncate, never reject: a refused --task-create would break PL0 stage creation. The
+  # cut is still reported (description_truncated=<id>:<len> on stderr after the write), so a
+  # caller can tell its value no longer holds the whole text.
   # 240 chars matches the facts.goal precedent in initialization-patterns.md.
   _DESC_CAP='def _cap_desc:
       if (type == "object") and ((.description? | type) == "string")
          and ((.description | length) > 240)
       then .description = (.description[0:239] + "…") else . end;'
+
+  # Keys a stage dispatch, gate or resume reads. Deleting one leaves a row the loop cannot
+  # dispatch or resume, which a --set to the right value repairs and a delete never does.
+  _UNSET_PROTECTED="stage agent model effort plan_gate decision_gate fn_gate workspace_path isolation base_ref requires_screenshots"
+  # _unset_keys_json <key[,key...]> — the list as a JSON array on stdout; exits 2 on a
+  # malformed or pipeline key, before any write.
+  _unset_keys_json() {
+    local k out='[]'
+    local -a _keys
+    IFS=',' read -r -a _keys <<< "$1"
+    [[ "${#_keys[@]}" -gt 0 ]] || {
+      printf >&2 'missing value: --unset requires <key[,key...]>\n'
+      exit 2
+    }
+    for k in "${_keys[@]}"; do
+      if [[ ! "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        printf >&2 'refused --unset: "%s" is not a metadata key name; state.json unchanged\n' "$k"
+        exit 2
+      fi
+      case " $_UNSET_PROTECTED " in
+        *" $k "*)
+          printf >&2 'refused --unset %s: the pipeline reads tasks.%s.metadata.%s; set it to the right value instead; state.json unchanged\n' \
+            "$k" "$TASK_OP_ID" "$k"
+          log_msg ERROR "refused --unset ${k} on tasks.${TASK_OP_ID}: pipeline key; state.json unchanged"
+          exit 2
+          ;;
+      esac
+      out=$(jq -c --arg k "$k" '. + [$k] | unique' <<< "$out")
+    done
+    printf '%s' "$out"
+  }
 
   TASK_FILTER=""
   TASK_JQ_ARGS=()
@@ -2692,6 +2738,8 @@ if [[ -n "$TASK_OP" ]]; then
             else .tasks[$r.id] = {status: "pending", metadata: (($r.meta // {}) | _cap_desc)} end)'
         TASK_JQ_ARGS=(--argjson rows "$_TC_ROWS_JSON")
         TASK_OP_VALUE="batch=${DIGEST_TOUCHED}"
+        DESC_TRUNCATED=$(jq -r '.[] | (.meta.description? | strings | length) as $n
+          | select($n > 240) | "\(.id):\($n)"' <<< "$_TC_ROWS_JSON" 2> /dev/null) || DESC_TRUNCATED=""
       else
         # Seeding is idempotent: an existing task keeps the metadata it has accumulated, so a
         # re-run of a seed script cannot roll it back to the seed's view.
@@ -2704,6 +2752,9 @@ if [[ -n "$TASK_OP" ]]; then
         fi
         _tc_required_gate "$TASK_OP_ID" "$TASK_OP_VALUE"
         # --metadata is optional; absent ⇒ an empty object, never a parse abort.
+        DESC_TRUNCATED=$(jq -rn --arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" \
+          '$meta.description? | strings | length | select(. > 240) | "\($id):\(.)"' 2> /dev/null) \
+          || DESC_TRUNCATED=""
         TASK_FILTER="${_DESC_CAP}"'.tasks[$id] = {status: "pending", metadata: (($meta // {}) | _cap_desc)}'
         TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
       fi
@@ -2750,9 +2801,30 @@ if [[ -n "$TASK_OP" ]]; then
       ;;
     meta)
       require_task_exists "$TASK_OP_ID" meta
-      # Recursive merge, so a partial --set updates named keys without dropping the rest.
-      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = (((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)'
-      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}")
+      _UNSET_JSON='[]'
+      if [[ -n "$UNSET_GIVEN" ]]; then
+        # Runs in a subshell, so its exit 2 only ends the subshell: re-raise it here.
+        _UNSET_JSON=$(_unset_keys_json "$UNSET_KEYS") || exit 2
+        # Nothing to merge and nothing to delete: skip the write so the bytes stay as they are.
+        if [[ -z "$TASK_OP_VALUE" ]] && ! jq -e --arg id "$TASK_OP_ID" --argjson u "$_UNSET_JSON" \
+          '(.tasks[$id].metadata // {}) as $m | any($u[]; . as $k | $m | has($k))' \
+          "$STATE_PATH" > /dev/null 2>&1; then
+          log_msg INFO "idempotent: tasks.${TASK_OP_ID}.metadata has none of ${UNSET_KEYS}"
+          _post_success "$TASK_OP_ID" "$TASK_OP_ID" "" 0
+          exit 0
+        fi
+      fi
+      # Read before the lock: it only words the notice, the cap itself runs inside the write.
+      DESC_TRUNCATED=$(jq -r --arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" \
+        --argjson u "$_UNSET_JSON" '((.tasks[$id].metadata // {}) * ($meta // {})) as $m
+          | select(($u | index("description")) == null)
+          | $m.description? | strings | length | select(. > 240) | "\($id):\(.)"' \
+        "$STATE_PATH" 2> /dev/null) || DESC_TRUNCATED=""
+      # Recursive merge, so a partial --set updates named keys without dropping the rest;
+      # --unset runs after it, so it wins over a key the same --set names.
+      TASK_FILTER="${_DESC_CAP}"'.tasks[$id].metadata = ((((.tasks[$id].metadata // {}) * ($meta // {})) | _cap_desc)
+        | delpaths($unset | map([.])))'
+      TASK_JQ_ARGS=(--arg id "$TASK_OP_ID" --argjson meta "${TASK_OP_VALUE:-null}" --argjson unset "$_UNSET_JSON")
       ;;
     replay)
       require_task_exists "$TASK_OP_ID" replay
@@ -3182,6 +3254,14 @@ if [[ -n "$TASK_OP" ]]; then
 
   if atomic_apply "$STATE_PATH" "$TASK_FILTER" "${TASK_JQ_ARGS[@]}"; then
     log_msg INFO "ledger ${TASK_OP}: tasks.${TASK_OP_ID} ${TASK_OP_VALUE}"
+    # After the rename only: a cut that did not land must not be reported as made.
+    if [[ -n "$DESC_TRUNCATED" ]]; then
+      while IFS= read -r _dt; do
+        [[ -n "$_dt" ]] || continue
+        printf >&2 'description_truncated=%s\n' "$_dt"
+        log_msg INFO "description_truncated=${_dt} (cap 240)"
+      done <<< "$DESC_TRUNCATED"
+    fi
     if [[ "$TASK_OP" == "replay" ]]; then
       replay_audit
     fi
@@ -3397,20 +3477,21 @@ if [[ -n "$FACTS_ARG" ]]; then
     exit 2
   fi
 
-  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
-  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+  # _facts_report_rejects <header> <rejects-json-array> <log-line>
+  # Sets FACTS_REJECTED=1, so every exit site below turns it into exit 2.
+  _facts_report_rejects() {
+    local header="$1" rejects="$2" logline="$3" list msg
     FACTS_REJECTED=1
     # Built ONCE, then written to each stream. Two independent emissions read as two
     # separate rejections in any caller that merges the streams. Stdout as well as stderr
     # because a caller whose harness swallows stderr otherwise ships a stage one item short,
     # and the artifact/ledger divergence then surfaces a boundary later than its cause.
-    FACTS_REJECT_LIST=$(printf '%s' "$FACTS_PART" \
-      | jq -r '.rejects[] | "  - " + .key + " " + .label + ": " + .reason')
-    FACTS_REJECT_MSG="invalid --facts: ${FACTS_REJECT_N} item(s) rejected, the rest still persist:
-${FACTS_REJECT_LIST}"
-    printf '%s\n' "$FACTS_REJECT_MSG" >&2
-    printf '%s\n' "$FACTS_REJECT_MSG"
-    log_msg ERROR "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
+    list=$(printf '%s' "$rejects" | jq -r '.[] | "  - " + .key + " " + .label + ": " + .reason')
+    msg="${header}
+${list}"
+    printf '%s\n' "$msg" >&2
+    printf '%s\n' "$msg"
+    log_msg ERROR "$logline"
     # Neither stream above is durable. stderr inside a subagent turn is read by whatever
     # is reattaching, if anything; stdout is the tool result the model may or may not
     # quote. An audit row is the only channel a later sweep can find, and "which items
@@ -3419,8 +3500,15 @@ ${FACTS_REJECT_LIST}"
       corpflow_audit_row --file "${STATE_PATH%/*}/logs/audit.jsonl" \
         --actor "${VIA_ARG:-agent}:state-patch" --action facts_items_rejected --subject facts --result degraded \
         --task-id "$(_audit_task_ref)" \
-        --meta "$(printf '%s' "$FACTS_PART" | jq -c '{rejected: [.rejects[] | {key, label, reason}]}')"
+        --meta "$(printf '%s' "$rejects" | jq -c '{rejected: [.[] | {key, label, reason}]}')"
     fi
+  }
+
+  FACTS_REJECT_N=$(printf '%s' "$FACTS_PART" | jq -r '.rejects | length')
+  if [[ "$FACTS_REJECT_N" -gt 0 ]]; then
+    _facts_report_rejects "invalid --facts: ${FACTS_REJECT_N} item(s) rejected, the rest still persist:" \
+      "$(printf '%s' "$FACTS_PART" | jq -c '.rejects')" \
+      "--facts: ${FACTS_REJECT_N} item(s) rejected; valid remainder persisted"
   fi
 
   FACTS_ARG=$(printf '%s' "$FACTS_PART" | jq -c '.clean')
@@ -3463,10 +3551,24 @@ ${FACTS_REJECT_LIST}"
     printf >&2 'no ledger at %s — --facts landed nothing\n' "$STATE_PATH"
     log_msg ERROR "no ledger at ${STATE_PATH}; --facts landed nothing"
     exit 1
-  elif atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
-    --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK" \
-    --arg decision_task "$DECISION_TASK_ID"; then
+  elif {
+    # Read-after-release would misreport a sibling's concurrent raise; so the probe runs in-lock.
+    [[ "$(printf '%s' "$FACTS_ARG" | jq -r '(.open_questions // []) | length')" -gt 0 ]] \
+      && ATOMIC_APPLY_PROBE="$_FACTS_CLASS_REFUSAL_PROBE"
+    _facts_apply_rc=0
+    atomic_apply "$STATE_PATH" "$_FACTS_UNION_FILTER" \
+      --argjson f "$FACTS_ARG" --arg sweep_stage "$SWEEP_STAGE_FALLBACK" \
+      --arg decision_task "$DECISION_TASK_ID" || _facts_apply_rc=$?
+    unset ATOMIC_APPLY_PROBE
+    [[ "$_facts_apply_rc" -eq 0 ]]
+  }; then
     log_msg INFO "facts union: $(printf '%s' "$FACTS_ARG" | jq -r 'keys | join(",")')"
+    _FACTS_REFUSED_N=$(printf '%s' "${ATOMIC_APPLY_PROBE_OUT:-[]}" | jq -r 'length' 2> /dev/null || printf '0')
+    if [[ "${_FACTS_REFUSED_N:-0}" -gt 0 ]]; then
+      _facts_report_rejects "invalid --facts: ${_FACTS_REFUSED_N} class downgrade(s) refused, the rest still persist:" \
+        "$ATOMIC_APPLY_PROBE_OUT" \
+        "--facts: ${_FACTS_REFUSED_N} class downgrade(s) refused; remainder persisted"
+    fi
     # Post-write assertion: keys in the log are not evidence the ids landed. An id that went
     # in and is not there afterwards was evicted by a clamp, which is exactly the silent loss
     # this stage exists to remove. Loud on stderr; the merge itself stands.

@@ -13,4 +13,6 @@ This skill is the Codex entry point for the canonical Corpflow command.
 2. Read `skills/shared/codex-runtime.md` and `commands/milestone.md` from that root completely.
 3. Apply the command's argument grammar, workflow, write boundaries, and output contract to the
    user's request. Translate Claude-only operations through the Codex runtime adapter.
-4. Use `$milestone` for Codex-facing follow-ups. Do not edit the canonical command while running it.
+   Done when the artifact named in the command's § Output Format exists.
+4. Use `$milestone` for Codex-facing follow-ups. Do not edit the canonical command while running it,
+   because the command is shared canon for Claude Code.

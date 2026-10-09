@@ -249,7 +249,7 @@ The orchestrator runs validation between a stage's `completed` patch and the nex
 ### Steps 1–2
 
 1. File check: every file in the next stage's `metadata.context_refs` exists on disk. A missing `metadata.error_file` means "no prior retries", not a failure.
-2. Frontmatter / typed-return check: a valid typed object returned by the stage's `Task()` (the orchestrator passed the `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honoured it) supersedes this step. Verdict and facts come from the validated object via `handoff-protocol.md#schema-to-state-map`, and the grep below is skipped.
+2. Frontmatter / typed-return check: a valid typed object returned by the stage's `Agent()` (the orchestrator passed the `schema` from `handoff-protocol.md#handoff-schemas` and the runtime honoured it) supersedes this step. Verdict and facts come from the validated object via `handoff-protocol.md#schema-to-state-map`, and the grep below is skipped.
 
 #### Step 2 — no-typed-return grep path
 
@@ -257,7 +257,7 @@ With no typed return (the dispatch primitive takes no `schema` argument, or the 
 
 ### Steps 3–5
 
-3. Anchor lint (every stage boundary): every produced artifact's H2 headings match its stage's allow-list in `handoff-protocol.md#anchor-allow-list`. `handoff-harness.sh --validate-frontmatter` fails the transition on a missing required or an unexpected H2; at write time `hooks/anchor-preflight.sh` denies a `PreToolUse` write that adds an unexpected H2 and re-lints advisorily on `PostToolUse` (`handoff-protocol.md § Anchor Pre-Flight`). No CI counterpart exists.
+3. Anchor lint (every stage boundary): every produced artifact's H2 headings match its stage's allow-list in `handoff-protocol.md#anchor-allow-list`. `handoff-harness.sh --validate-frontmatter` fails the transition on a missing required or an unexpected H2; at write time `hooks/anchor-preflight.sh` denies a `PreToolUse` Edit that adds an unexpected H2 and reports a Write's off-list H2 or frontmatter finding on `PostToolUse`, for an Edit fix (`handoff-protocol.md § Anchor Pre-Flight`). No CI counterpart exists.
 4. Section check: grep the output artifact for required section headers.
 5. Side-artifact check: for DV/QA, the corresponding `.context/logs/` build/test capture exists.
 
@@ -265,7 +265,7 @@ With no typed return (the dispatch primitive takes no `schema` argument, or the 
 
 6. Metadata check: task `metadata` validates against `state-ledger` § JSON Schema.
 7. Error file check: if `retry_count > 0`, `metadata.error_file` exists on disk. If it is set but absent (the orchestrator stamped the path, no agent has appended yet), treat it as `retry_count = 0` rather than a failure. The first appending agent creates it (`mkdir -p` its parent, then append the retry block).
-8. state.json patch check: after `Task()` returns, re-read `.context/state.json`. If `tasks.<ID>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge it in (the third safety layer; `handoff-protocol.md#fallback-paths` F2/F3).
+8. state.json patch check: after `Agent()` returns, re-read `.context/state.json`. If `tasks.<ID>.status` is still `in_progress`, parse the artifact's `handoff:` frontmatter and atomic-merge it in (the third safety layer; `handoff-protocol.md#fallback-paths` F2/F3).
 
 ### Step 9 — AR-reference check (DV completion, warn-only)
 
@@ -509,7 +509,7 @@ There is exactly one auto-answer authority — the existing Fable decision deleg
 
 #### Self-labels raise, never lower
 
-`class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)`, computed before any auto-answer, so raising is honoured and lowering is refused by construction. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. The two axes are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class behaviour under a bypassed gate or an unattended lane is per carrier, one row each in § Unattended fallbacks.
+`class` is the ordered lattice `decision < escalate`, and the orchestrator's effective class is `max(agent label, orchestrator label)`, computed before any auto-answer, so raising is honoured and lowering is refused by construction. The ledger enforces the join on `class` too: `state-patch.sh --facts` keeps an `escalate` item at `escalate` whatever a later stub says, so a stage cannot lower an item another labeller raised; the refusal exits 2 and writes a `facts_items_rejected` audit row. `blocks_next_stage` is the 2-element lattice `false < true` and joins the same way, by OR: the orchestrator may raise an item to blocking, never clear the agent's flag. The two axes are orthogonal — an `escalate` item may or may not block. Mechanism: `commands/worktask.md § Escalation guard — raise-only self-labels`. Escalation-class behaviour under a bypassed gate or an unattended lane is per carrier, one row each in § Unattended fallbacks.
 
 ##### The join is over labellers, never transports
 
@@ -561,15 +561,15 @@ Ladder, from `skills/shared/model-selection.md § Effort Levels`: `low < medium 
 
 ### The tier is a request, not a guarantee
 
-`metadata.effort` is honoured on the headless dispatch surface (`claude -p --agent … --effort`) and, for an agent carrying its own `effort:` frontmatter, in-process too — but only at that agent's OWN frontmatter tier: `Task()` takes no effort parameter, so a bumped tier that differs from the frontmatter tier cannot be carried in-process at all. That gap is exactly what `skills/worktask/scripts/effort-route.sh` routes on: a bumped tier equal to the frontmatter tier stays in-process (nothing to gain by leaving); a bumped tier that differs is routed headless, where `--effort` actually carries it. The bump is computed and recorded on every path and applied on the surface the route decision picked.
+`metadata.effort` is carried in-process by the `Agent` tool's `effort` parameter (2.1.292) and on the opt-in headless surface by `claude -p --agent … --effort`. `skills/worktask/scripts/effort-route.sh` picks the surface: in-process by default, headless only when `CORPFLOW_HEADLESS_ROUTE=on`. A request is still not a guarantee: a managed `maxEffortLevel` can cap it, so the hook row decides what ran. The bump is computed and recorded on every path and applied on the surface the route decision picked.
 
-#### Routing precedence and transport audit
+#### Transport audit
 
-Per-stage routing outranks an operator-set `CLAUDE_CODE_EFFORT_LEVEL` (sw-AR0-1): the pin no longer short-circuits the route. Every resolver audit row carries `effort_transport` saying which of the three transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
+Every resolver audit row carries `effort_transport` saying which of the four transports it was (`agent-coordination/references/headless-dispatch.md § Translation table — model & effort`; `commands/worktask.md § Step C.0a`).
 
 #### Recorded vs applied tiers
 
-Under `none` (in-process, no frontmatter to fall back to) the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier. Under `frontmatter` (in-process, tier equal to the agent's own file) `effort_resolved` is that frontmatter tier. Under `dispatch-flag` (headless) `effort_resolved` is the tier the child's own hook rows observed — `null` with `effort_resolved_reason: no_hook_rows` if none were, never copied from the request. Recording the unapplied tier under `none` still gives the ledger the tier the item deserved. Don't reach that tier another way: substituting a different agent believed to run higher trades the domain expertise answering the question for a guess.
+Under `none` (haiku, no `effort` passed) the `auto_decision_resolved` row records `effort_resolved: "requested, not applied"` and `effort_requested` keeps the computed tier. Under `frontmatter` (no `effort` passed: an unstamped row) `effort_resolved` comes from the hook row like `agent-param`. Under `agent-param` (in-process) and `dispatch-flag` (headless) `effort_resolved` is the tier the subagent's or child's own hook rows observed — `null` with `effort_resolved_reason: no_hook_rows` if none were (a row reading `"unknown"` observed nothing), never copied from the request. Recording the unapplied tier under `none` still gives the ledger the tier the item deserved. Don't reach that tier another way: substituting a different agent believed to run higher trades the domain expertise answering the question for a guess.
 
 ### The tier the model can actually carry
 
@@ -580,6 +580,15 @@ A second silent path cannot be clamped and is read from the audit row instead: a
 ## Per-Stage Frontmatter Templates
 
 Canonical YAML templates for the `handoff:` block atop every stage artifact. Each agent's `## Handoff Protocol` pastes the matching block verbatim (with substitutions) into `.context/<artifact>-N.md` (N per [#run-index-resolution](#run-index-resolution)); agents keep the field shape below. To change a template, edit here, then re-run `cache-lint.sh --frontmatter-template-lint agents/*.md` to revalidate every agent's inline copy. `#tpl-pl` has one more copy to mirror: the top of `skills/worktask/templates/planning.md`, which PL0 copies.
+
+### Two first-write rules the stage gate enforces
+
+Read these before the first artifact write. `handoff-harness.sh --validate-frontmatter` fails the stage on either.
+
+1. **Frontmatter budget.** The `handoff:` block stays at or under 200 discretionary tokens. The harness counts words × 1.33, comments included, so the limit is about 150 words. `open_questions` stubs and `tests_executed` do not count.
+2. **Sweep stubs.** Each `open_questions` stub has an item under `## elicitation-sweep` with 2–4 `options[]` (`label:`), or it is an `escalate` item whose question ends in `?`. Never write a status-note stub. The empty case is in § Closing Elicitation Sweep.
+
+A Write that breaks either rule lands. `hooks/anchor-preflight.sh` then reports it at PostToolUse: fix it with a small Edit, do not re-Write the file. Every stage agent carries a short form of both rules in its generated "Artifact anchors" block.
 
 ### Typed-return equivalent
 
@@ -774,9 +783,26 @@ The same line goes in the frontmatter as the `summary_line` of that runner's `te
 DV and QA carry it on every entry whose `count` is non-zero. `handoff-harness.sh
 --validate-frontmatter` fails an entry whose line is absent, empty, digitless, or found neither in
 the artifact body nor in a `.context/logs/` capture the artifact names, one `fail:` per bad entry in
-a single run. It only warns when the line does not carry that entry's `count` as a whole-number
-token, because a TAP plan line (`1..840`) is a whole summary and a Gradle or Xcode formatter need
-not repeat the count.
+a single run. It also fails an entry from a strict runner when the line does not carry that
+entry's `count` as a whole-number token (§ Strict runners fail a count-less line).
+
+##### Strict runners fail a count-less line (tpl-dv, tpl-qa)
+
+The strict runners are listed once, in `skills/shared/testing-strategy.md § Strict-count runners`,
+with the one exception for a failing pytest run. The list covers every name that starts with
+`gradle` or `junit`, in any case. For every other runner the missing token only warns, with one
+`count_corroboration` audit row. A `bash-*` live script then names a `.context/logs/` capture
+whose result line carries the count. `xcodebuild` stays at warn: a mixed XCTest + Swift
+Testing scheme prints one tally per framework and no total.
+
+##### Gradle and JUnit quote the junit-tally line (tpl-dv, tpl-qa)
+
+Gradle prints no count (`BUILD SUCCESSFUL in 4s`). For a `gradle*` or `junit*` runner, run
+`skills/worktask/scripts/junit-tally.sh <results-dir>` on the JUnit XML directory (Gradle:
+`build/test-results/test`). Capture its line to `.context/logs/`, name that capture in the
+artifact, and quote the line as the `summary_line`:
+`JUnit XML tally: 58 tests executed, 0 failures, 0 errors, 0 skipped`. The executed count is
+`tests` minus `skipped`, summed over the leaf `<testsuite>` elements.
 
 ##### tests_executed carries one entry per runner (tpl-dv)
 
@@ -883,6 +909,10 @@ handoff:
 
 Prev→this label: `DR→SR`.
 
+A question whose options include accepting a known vulnerability, a CVE or a security finding is
+`class: escalate`, never `decision`: accepting one is an escalation-class choice per
+`commands/worktask.md § Escalation guard (BINDING)`.
+
 ### #tpl-qa — QA (qa-engineer)
 
 ```yaml
@@ -908,6 +938,12 @@ handoff:
 ```
 
 Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
+
+#### QA summary lines take the tpl-dv checks (tpl-qa)
+
+Every QA `tests_executed` entry takes the `#tpl-dv` `summary_line` checks, the strict-runner fail
+included. A `gradle*` or `junit*` entry quotes the `junit-tally.sh` line
+(§ Gradle and JUnit quote the junit-tally line).
 
 #### An unverified security claim in shipped docs is a finding (tpl-qa)
 
@@ -974,6 +1010,14 @@ a tree or doc cannot be read.
 Exit 1 is a gate failure, not a warning, and neither 2 nor 3 is a pass. `--allow` suppresses a name
 the host sets, and each use names that host in `documentation-N.md`. The steady-path steps live in
 `agents/technical-writer.md § Option-existence gate (DC2)`.
+
+#### DC exempts a runtime path with --allow-path (tpl-dc)
+
+`--allow-path <path>` suppresses a `missing` path finding at that tree-relative path or below it, for a path the code creates at run
+time. The value must not be empty, `.`, absolute, or hold `..`. Each use records the creating
+`file:line` or the `.gitignore` line in `documentation-N.md`. DC uses it after one failed fix
+attempt, never deletes a correct claim to quiet the check, and runs the gate at most 3 times per doc
+set.
 
 #### A finding routes by who wrote the line (tpl-dc)
 
@@ -1049,7 +1093,10 @@ handoff:
 ---
 ```
 
-Prev→this label: `DC→RE`.
+Prev→this label: `DC→RE` (or `QA→RE` when DC did not run).
+
+A question offering to ship with a known vulnerability, CVE or open security finding is
+`class: escalate` per `commands/worktask.md § Escalation guard (BINDING)`.
 
 ### #tpl-fn — Finalization (project-manager)
 
@@ -1070,7 +1117,7 @@ handoff:
 ---
 ```
 
-Prev→this label: `RE→FN` (or `DC→FN` when RE is absent).
+Prev→this label: `RE→FN` (or `DC→FN` without RE, `QA→FN` without RE and DC).
 
 `fn-preflight.sh staging` fails on a raw control byte in a staged text file (`control-byte-lint.sh
 --staged`). When the file belongs to another task — its handoff `files_touched` lists it — that is a
@@ -1095,7 +1142,9 @@ handoff:
 ---
 ```
 
-Prev→this label: `FN→ST`.
+Prev→this label: `FN→ST` (or `RE→ST`/`DC→ST`/`QA→ST`, from the latest of those that ran, when FN did not run).
+
+ST treats every `escalate` item as a recommendation only and never resolves it, in prose or in the ledger; the user answers it at its checkpoint.
 
 ### #tpl-ir — Incident Response (incident-responder)
 

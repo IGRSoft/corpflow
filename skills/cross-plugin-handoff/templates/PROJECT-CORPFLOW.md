@@ -1,9 +1,14 @@
 <!--
 TEMPLATE. Copy to the root of a USER PROJECT as CORPFLOW.md to override corpflow's
-default plugin routing. corpflow reads exactly one heading from this file — `## Routing`
-— everything else is yours (or delete everything else). Not to be confused with the
-plugin-side CORPFLOW.md stage contract (templates/CORPFLOW.md), which sits at a sibling
-plugin's root and must NOT contain a `## Routing` heading.
+default plugin routing and agent models — or to ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md
+to apply the same overrides to every project. corpflow reads two headings from this file,
+`## Routing` and `## Models`; everything else is yours (or delete everything else).
+Precedence is per heading: a heading present in the project-root file wins over the same
+heading in the user-scope file as a whole; a heading the project file lacks, or leaves bare
+with nothing under it, comes from the user-scope file; neither → built-in defaults. Any
+content under a project heading, even a garbled table, claims it. Not to be confused with the plugin-side
+CORPFLOW.md stage contract (templates/CORPFLOW.md), which sits at a sibling plugin's root and
+must NOT contain a `## Routing` or `## Models` heading.
 
 How overrides apply: rows here win over skills/shared/routing-matrix.md § Matrix, alias
 by alias, resolved ONCE at worktask init into `state.routing` — edits mid-worktask take
@@ -42,8 +47,9 @@ CORPFLOW.md stage contract.
 Keep only the rows you override; delete the rest. Same lifecycle as `## Routing`: rows here win
 over the built-in default matrix (`corpflow skills/shared/stage-codes.md § Agent Model Matrix`),
 row by row, resolved ONCE at worktask init into `state.models` — edits mid-worktask take effect
-on the next worktask. This heading belongs to the **project-root** kind of this file only; the
-plugin-root CORPFLOW.md stage contract (`templates/CORPFLOW.md`) must NOT carry it.
+on the next worktask. This heading belongs to the **project-root** or **user-scope** kind of
+this file only; the plugin-root CORPFLOW.md stage contract (`templates/CORPFLOW.md`) must NOT
+carry it. Audit rows carry `metadata.source` (`project-override` | `user-override`) and `path`.
 
 | Agent | Model | Effort |
 |-------|-------|--------|
@@ -66,4 +72,5 @@ A config typo must never brick a pipeline, and never silently lower a tier:
 | Heading present, header garbled, or no rows | whole section ignored, `state.models_source` stays `"matrix"` | `model_override_unparsed` |
 | An agent the matrix has no built-in row for and this section does not override either | dispatch falls back to the session model, warning names the agent | `model_unresolved` |
 
-No `CORPFLOW.md`, or no `## Models` heading → all-default, no rows, no warning.
+No `## Models` heading in either the project-root or the user-scope file → all-default, no rows,
+no warning.

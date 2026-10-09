@@ -1,6 +1,6 @@
 ---
 name: testing-strategy
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Testing Strategy
@@ -104,10 +104,64 @@ silently instead of erroring.
 
 - Put `--include=`/`--exclude-dir=` before the pattern, and use `-e` for any pattern containing
   `--` — past a `--` terminator ugrep reads the filter as a filename.
-- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./…` matches nothing and the
+- Never anchor an exclusion regex on a `./` prefix; ugrep omits it, so `^\./.*` matches nothing and the
   exclusion silently does not apply.
 - Report the per-file decomposition, not only the total — a filter that stopped applying looks
   identical to one that found nothing to exclude.
+
+## Skipped tests
+
+A skipped test is not a pass: it proves nothing about the change, yet most runners print it beside a
+green summary. So every DV or QA run reports its skip count next to its pass count.
+
+A worktree is the common cause. It lacks gitignored material the main checkout has: fixtures,
+local databases, credentials. A test that skips because that material is absent reads as green while
+it checked nothing. Record each such skip with its cause in the stage artifact, and treat it as
+missing coverage, not a result.
+
+The remedy is `.worktreeinclude`, which copies named gitignored paths into each new worktree
+(`skills/megatask/SKILL.md § Including gitignored paths`). Never copy credentials this way unless
+the test needs them and the worktree stays local.
+
+## Strict-count runners
+
+A strict runner has a summary line that always carries the executed count. For these runners
+`handoff-harness.sh` fails a `tests_executed` entry whose `summary_line` does not carry its `count`
+as a whole-number token. The canonical list:
+
+| Runner name | Match | The line that carries the count |
+|---|---|---|
+| `bats` | exact | the TAP plan, `1..N` |
+| `pytest` | exact | `N passed in …`; for a failing run, the outcome counts (below) |
+| `jest`, `vitest` | exact | the `Tests` tally line (jest: `… N total`; vitest: `… (N)`) |
+| `swift-testing` | exact | `Test run with N tests …` |
+| `gradle*`, `junit*` | prefix | the `skills/worktask/scripts/junit-tally.sh <results-dir>` line |
+
+The match ignores case. Every other runner only warns and writes one `count_corroboration` audit
+row: a `bash-*` live script, `xcodebuild`, `swift`, and unknown names. `xcodebuild` stays at warn
+because a mixed XCTest + Swift Testing scheme prints one tally per framework and no total.
+
+### A failing pytest run: the outcome sum
+
+pytest prints a total only when every case passed. A failing run prints a list of outcome counts,
+for example `1 failed, 57 passed in 3.2s`. So a pytest line with no `count` token still passes
+when `count` lies between two sums:
+
+- the base: the `passed`, `failed`, `xpassed` and `xfailed` counts;
+- the base plus the `error`/`errors` count.
+
+An error is either a case of its own (its setup failed) or a second report on a case already
+counted (`1 passed, 1 error` when the teardown fails), so both ends are honest. A count below the
+base or above the base plus errors fails. `skipped`, `deselected` and `warnings` never add: they
+are not executed cases. When the base is 0 (`3 errors in 0.2s`), the range is off. Such errors
+may be collection errors, which are no cases, so only a count the line carries as a token is
+proven. This outcome-sum rule applies to pytest only.
+
+### What a whole-number token is
+
+A digit run that is not part of a decimal: the `1` in `0.1s` and the digits of `8.3.1` are not
+tokens. A TAP plan `1..N` is one token worth N. Its lower bound is not a count, so `count: 1`
+does not match a `1..840` plan.
 
 ## DV vs QA Boundary
 
@@ -180,7 +234,7 @@ Fail-open by construction: a future unstripped flag degrades to an allow, never 
 ##### The Node runner
 
 `node` is a runner only with `--test`. A bare `node <script>` is script execution and classifies
-as not a test run, the same discrimination `gradle`/`./gradlew` get from their task name — without it
+as not a test run, the same discrimination `gradle`/`gradlew` get from their task name — without it
 every `node` invocation in a Node project would deny at a banned stage. `--test-reporter` and
 `--test-concurrency` are configuration, not selection; `--test-name-pattern` and `--test-only` are
 genuine selectors and classify scoped.
@@ -300,7 +354,7 @@ audit rows, which `skills/agent-coordination/SKILL.md` binds as audit-only, neve
 ### SR/RE control layering
 
 For SR and RE specifically, the hook is not a backstop behind the grant narrowing — it is the only
-control. Their platform-auditor delegates (e.g. `Task(system-developer:sys-security-auditor)`) hold
+control. Their platform-auditor delegates (e.g. `Agent(system-developer:sys-security-auditor)`) hold
 test-capable Bash grants of their own (`ctest`, `make`, …) that narrowing SR's/RE's own grant does not
 touch; the hook denies the delegate's leaf call via the same state.json stage resolution. Correct by
 design — but it means a regression in stage resolution is a complete loss of enforcement for SR/RE,
@@ -310,7 +364,7 @@ not a degradation of a defense-in-depth layer.
 
 `CORPFLOW_TEST_GATE=off` and `CLAUDE_PROJECT_DIR` (pointed at a directory with no
 `.context/state.json`) are both agent-writable across sessions, not agent-proof: any stage holding
-`Write`/`Edit` can write `.claude/settings.json` `env`, effective on the next session or resume.
+`Write`/`Edit` can write `<project>/.claude/settings.json` `env`, effective on the next session or resume.
 Within a live session neither is reachable from a command string — the hook reads process env, not
 payload text — which is what makes the hatch a human relief valve rather than an agent-serviceable
 retry. Across sessions it is human-intent-scoped, not a hard boundary; layers 1 and 2 do not share
@@ -345,7 +399,7 @@ warns if `< 50%` of test files lack any marker).
 
 #### Comment/doc-only diffs — PL *selects* `build-only`
 
-When every hunk of the planned diff is a comment, a prose file (`docs/`, `*.md`), or a non-executable
+When every hunk of the planned diff is a comment, a prose file (`docs/**`, `*.md`), or a non-executable
 string, no test outcome can change: PL sets `test_mode: build-only` and says why in
 `<plan_file> § test-strategy`. The one case where the marker-coverage precondition does not apply —
 the mode is chosen because nothing executable changed, not because markers stand in for a run. One

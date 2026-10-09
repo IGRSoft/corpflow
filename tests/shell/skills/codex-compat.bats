@@ -8,7 +8,7 @@ CAPTURE="tests/fixtures/hooks/codex-capture.sh"
 @test "manifests: portable, Codex, Claude and marketplace versions agree" {
   run jq -er '
     input as $codex | input as $claude | input as $market
-    | .version == "4.1.0"
+    | .version == "4.1.1"
       and $codex.version == .version
       and $claude.version == .version
       and $market.metadata.version == .version
@@ -92,14 +92,14 @@ EOF
   assert_success
 }
 
-@test "adapter: spawn_agent becomes the canonical Task payload" {
+@test "adapter: spawn_agent becomes the canonical Agent payload" {
   local wd; wd="$(mk_tmpworkdir)"
   run env BASE_PLUGIN_ROOT="$PLUGIN_ROOT" WORKSPACE_ROOT="$wd" \
     bash "$PLUGIN_ROOT/$ADAPTER" --mode tool --target "$CAPTURE" <<'JSON'
 {"cwd":"/tmp","tool_name":"spawn_agent","tool_input":{"task_name":"cf_dv0_1","message":"Implement the stage"}}
 JSON
   assert_success
-  echo "$output" | jq -e '.tool_name == "Task" and .tool_input.subagent_type == "cf_dv0_1" and .tool_input.prompt == "Implement the stage"'
+  echo "$output" | jq -e '.tool_name == "Agent" and .tool_input.subagent_type == "cf_dv0_1" and .tool_input.prompt == "Implement the stage"'
 }
 
 @test "adapter: request_user_input answers are keyed by canonical question text" {

@@ -38,6 +38,7 @@ handoff:
 1. **Reference, don't duplicate** — point to artifacts instead of including their content.
 2. **Summarize decisions, not deliberation** — capture the why and what, not the discussion.
 3. **Use structured formats** — consistent templates compress better than prose.
+4. **Write handoff lines per `skills/shared/writing-style.md`** — short, active, one term per meaning.
 
 Worked before/after pairs, reference formats, handoff anti-patterns and the pre-handoff checklist: `references/compression-examples.md`.
 
@@ -147,7 +148,9 @@ Over budget, cut in this order:
 | Context > 50% window | Summarize completed stages |
 | Error retry | Trim non-essential context |
 | User request | Manual compression |
-| Post-compaction | Deferred tool schemas preserved — no re-fetch needed |
+| Post-compaction | Deferred tool schemas preserved — no re-fetch needed; a folder's CLAUDE.md is not attached a second time after a compaction or resume |
+| Write/Edit or a Bash view in a rule's scope | Path-scoped `.claude/rules` and nested CLAUDE.md load on Write and Edit too, and on a single-file Bash `cat`/`head`/`tail`/`sed -n`/`grep` view (2.1.293), not only on Read — count them in the stage budget of every agent with those Bash grants |
+| Context too long for the auto-mode classifier | The conversation is compacted instead of every tool call prompting or failing |
 | Last few turns are noise | `/rewind`, not `/compact` (`skills/cost-optimization/references/token-baselines.md § Session commands`) |
 
 ## Compact Instructions
@@ -193,7 +196,7 @@ The orchestrator's next turn reads the newest `post-compact-*.json`, follows its
 On any compaction signal — sudden loss of earlier context, an explicit `/compact`, or a `PostCompact` pointer file — before the next action:
 
 1. Re-read `.context/state.json` and the active stage artifact. The files are the source of truth; where a fresh read contradicts what you remember, follow the file.
-2. Restate the active stage's constraints and acceptance criteria before the next edit, so a requirement dropped by compaction resurfaces.
+2. Before the next edit, restate the active stage's constraints, restating every acceptance-criterion ID listed in the active stage artifact, so a requirement dropped by compaction resurfaces.
 
 Write decisions into files as they are made, so compaction has nothing load-bearing left to drop.
 

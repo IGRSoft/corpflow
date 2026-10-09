@@ -602,7 +602,7 @@ _section() {
 
 @test "doc-contract AC6: the 6.5a4 park arm forbids hand-landing the denied command and spending a retry" {
   local block
-  block="$(_section "$SKILL_MD" '##### Step 6.5a4 — detect and park' '^##### Step 6.5a4 — rationalizations')"
+  block="$(_section "$SKILL_MD" '##### Step 6.5a4 — detect and park' '^##### Step 6.5 — verdict')"
   [ -n "$block" ] || fail "Step 6.5a4 detect-and-park block not found"
   grep -qF 'permission-park.sh' <<< "$block" || fail "6.5a4 does not route to permission-park.sh"
   grep -qF 'Never land the denied command yourself' <<< "$block" || fail "6.5a4 lacks the hand-landing prohibition"
@@ -681,7 +681,7 @@ _section() {
 @test "doc-contract AC13: the megatask fallback never hand-writes a symlinked workspace.json" {
   local spec file start stop block
   for spec in 'commands/worktask.md|##### Boundary permission prompt — only the user answers|^####' \
-    "$SKILL_MD|##### Step 7a — the megatask arm|^##### "; do
+    "skills/worktask/references/step-7a-arms.md|## Step 7a — the megatask arm|^## "; do
     IFS='|' read -r file start stop <<< "$spec"
     block="$(_section "$file" "$start" "$stop")"
     [ -n "$block" ] || fail "$file: section '$start' not found"
@@ -719,4 +719,5 @@ _section() {
   run_script_env "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "self-test OK"
+  assert_output --regexp 'self-test OK \([1-9][0-9]* passed, 0 failed\)'
 }

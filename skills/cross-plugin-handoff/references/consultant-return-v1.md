@@ -122,7 +122,7 @@ The first reject re-dispatches the consultant once with the verbatim line; a rej
 return blocks the stage.
 
 - **SR** re-dispatches its own auditor: `agents/security-reviewer.md § Consultant return`.
-- **DR** holds no `Task`, so it returns `verdict: blocked` and the orchestrator re-dispatches:
+- **DR** holds no `Agent`, so it returns `verdict: blocked` and the orchestrator re-dispatches:
   `agents/technical-lead.md § Sibling Consultant Returns`.
 
 ## Change protocol

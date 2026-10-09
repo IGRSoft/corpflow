@@ -4,9 +4,9 @@ Repository-tracked memory (lean rolling format). Narratives live in git history,
 
 ## Version Tracking
 
-- Plugin version: **4.1.0** (2026-09-28; Codex compatibility with portable packaging, skill adapters, hooks, model translation, and host-neutral path resolution.)
-- Claude Code min required: **2.1.284** (README.md is authoritative; load-bearing: 2.1.282 settings honor mid-pattern `:*` Bash rules that preflight now matches, and 2.1.284 makes Sonnet 5.5 the `sonnet` alias target on the Anthropic API)
-- Claude Code latest integrated band: **2.1.281→2.1.284**
+- Plugin version: **4.1.1** (2026-10-05; user-scope `~/.claude/CORPFLOW.md` fallback for `## Routing` / `## Models`, project root wins per heading.)
+- Claude Code min required: **2.1.294** (README.md is authoritative; load-bearing: 2.1.293 `haiku` → Haiku 5.5, 2.1.292 `Agent` tool `effort` param, 2.1.288 reports a held message as not delivered, 2.1.285 time-limits unattended background commands)
+- Claude Code latest integrated band: **2.1.293→2.1.294**
 
 ## CC Feature Band Index
 
@@ -14,10 +14,12 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 | Band | Canonical file | Plugin release |
 |------|----------------|----------------|
-| 2.1.281→2.1.284 | cc-features-2.1.281-284.md | v4.1.0 develop (Sonnet 5.5 repin, mid-pattern :* preflight parity, ultracode toggle; min CC → 2.1.284) |
-| 2.1.271→2.1.280 | cc-features-2.1.271-280.md | v4.0.32 develop (Opus 5.5 default, workflow-size 15→10, TaskOutput removal, held-message delivery notice; min CC → 2.1.280) |
-| 2.1.252→2.1.270 | cc-features-2.1.252-270.md | v4.0.32 develop (queued reattach, SessionEnd timeout, FORCE preflight; min CC → 2.1.270) |
-| 2.1.234→2.1.251 | cc-features-2.1.234-251.md | v4.0.27 (cross-session comms, delivery-checked reattach, PreModelSwitch gate; min CC → 2.1.251) |
+| 2.1.293→2.1.294 | cc-features-2.1.293-294.md | v4.1.1 develop (Haiku 5.5 rates, DC repin; min CC → 2.1.294) |
+| 2.1.285→2.1.292 | cc-features-2.1.285-292.md | v4.1.1 develop (in-process Agent effort, Task→Agent, held reattach; min CC → 2.1.292) |
+| 2.1.281→2.1.284 | cc-features-2.1.281-284.md | v4.1.0 develop (Sonnet 5.5 repin, mid-pattern :* preflight; min CC → 2.1.284) |
+| 2.1.271→2.1.280 | cc-features-2.1.271-280.md | v4.0.32 develop (Opus 5.5 default, TaskOutput removal; min CC → 2.1.280) |
+| 2.1.252→2.1.270 | cc-features-2.1.252-270.md | v4.0.32 develop (queued reattach, SessionEnd timeout; min CC → 2.1.270) |
+| 2.1.234→2.1.251 | cc-features-2.1.234-251.md | v4.0.27 (delivery-checked reattach, PreModelSwitch gate) |
 | 2.1.221→2.1.233 | cc-features-2.1.221-233.md | v4.0.15 (Todo-tool removal → state ledger) |
 | 2.1.216→2.1.220 | cc-features-2.1.216-220.md | v3.37.0 (nesting depth 3; Opus 5 default) |
 | 2.1.210→2.1.215 | cc-features-2.1.210-215.md | v3.35.0 (MCP auto-background, spawn cap) |
@@ -43,6 +45,10 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 
 ## Release History (last 12, newest first)
 
+- 2026-10-08: v4.1.1 (develop) — Claude Code 2.1.294 update (17 files, min CC → 2.1.294, Haiku 5.5 rates, benchmark DC repin).
+- 2026-10-06: v4.1.1 (develop) — Claude Code 2.1.292 update (75 files, min CC → 2.1.292, `agent-param` effort, headless opt-in, Task→Agent gate fix).
+- 2026-10-06: v4.1.1 (develop) — Claude Code 2.1.291 update (22 files, min CC → 2.1.291, held reattach mode, 2 h background timeout).
+- 2026-10-05: v4.1.1 — user-scope CORPFLOW.md fallback (`corpflow_md_locate`); CHANGELOG backfill for consultant-return.v1, screenshot manifests, `## Models`.
 - 2026-09-29: v4.1.0 (develop) — Claude Code 2.1.284 update (33 files, min CC → 2.1.284, Opus/Sonnet 5.5-only guidance, preflight mid-pattern :* parity).
 - 2026-09-23: v4.0.32 (develop) — Claude Code 2.1.280 update (6 files, min CC → 2.1.280, Opus 5.5 default, workflow-size 15→10, TaskOutput removal, held-message delivery notice).
 - 2026-09-13: v4.0.32 (develop) — Claude Code 2.1.270 update (18 files, min CC → 2.1.270, queued reattach row, SessionEnd hook timeout, FORCE preflight).
@@ -51,7 +57,3 @@ Canonical band files live in the authoritative memory directory (`~/.claude/proj
 - 2026-09-08: v4.0.30 — leaderboard V1 self-hosting findings; breaking `handoffs` re-key per task id, per-task decision clamps.
 - 2026-09-03/04: v4.0.29 — `fn-preflight base-sanity` for wrong PR bases on stacked branches, plus 13 run-remediation findings.
 - 2026-09-03: v4.0.28 — closing-sweep transport divergence: `blocks_next_stage` stickiness and harness class checks.
-- 2026-08-29: v4.0.27 — CC 2.1.234→2.1.251 band; delivery-checked reattach, cross_session_ask, PreModelSwitch gate; min CC → 2.1.251.
-- 2026-08-26: v4.0.26 — command-surface reorganization: 38 → 28 commands, 26 → 23 skills; cost observability retired.
-- 2026-08-24: v4.0.25 — plan-approval carrier `PL0.metadata.approved` gets writers at all three approval arms.
-- 2026-08-22: v4.0.23 — CI pipeline from scratch with pipefail gate; POSIX `df -Pk` ENOSPC guard.

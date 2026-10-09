@@ -3,14 +3,20 @@
 #   Every env var and long flag a doc names must appear in a tracked or untracked,
 #   not-ignored file of an assigned tree, and every link target or backticked relative path must resolve inside a tree and
 #   exist. Doc text is only scanned: nothing from it is eval'd, executed or used as a regex.
+#   Backticked tokens that only look like paths (git refs, owner/repo slugs, host/... URLs,
+#   ellipses, regex fragments) are skipped; a link target is always checked.
 #
-# Usage: doc-option-check.sh [--tree <path>]... [--allow <NAME>]... <doc>...
+# Usage: doc-option-check.sh [--tree <path>]... [--allow <NAME>]... [--allow-path <path>]... <doc>...
 #        doc-option-check.sh --self-test | -h | --help
 #
 # @arg --tree <path>   Assigned tree root, repeatable. Absent: state.json
 #                      .metadata.workspace_path (via corpflow_context_dir), then
 #                      $WORKSPACE_ROOT, else exit 3.
 # @arg --allow <NAME>  Host-provided env var or flag that no tree defines; repeatable.
+# @arg --allow-path <path>  Tree-relative path the code creates at runtime; repeatable.
+#                      Suppresses only a `missing` finding whose resolved path is <path> or
+#                      lies below it, compared as a literal string. Exit 2 when <path> is
+#                      empty, `.`, absolute or holds a `..` segment: each is a broad exemption.
 # @arg <doc>           Documentation files to check.
 #
 # Evidence: `git ls-files --cached --others --exclude-standard` of each tree, minus the
@@ -19,7 +25,8 @@
 # stdout: JSON Lines, one finding per line, nothing when clean:
 #   {"check":"option-exists"|"assigned-tree","kind":"env"|"flag"|"path","name":"<token>",
 #    "doc":"<tree-relative doc path>","line":<n>,"reason":"undefined"|"outside"|"missing"}
-# stderr: "<doc>:<line>: <kind> <name> <reason>" per finding, plus diagnostics.
+# stderr: "<doc>:<line>: <kind> <name> <reason>" per finding, plus diagnostics. A `missing`
+#   path that its tree git-ignores also gets a runtime-path hint; it still counts as a finding.
 #
 # @exitcode 0  Clean.
 # @exitcode 1  At least one finding.
@@ -39,7 +46,7 @@ BUILTIN_ALLOW=$'\nHOME\nPATH\nPWD\nSHELL\nTMPDIR\nUSER\n'
 
 usage_error() {
   printf >&2 'doc-option-check: %s\n' "$1"
-  printf >&2 'usage: doc-option-check.sh [--tree <path>]... [--allow <NAME>]... <doc>...\n'
+  printf >&2 'usage: doc-option-check.sh [--tree <path>]... [--allow <NAME>]... [--allow-path <path>]... <doc>...\n'
   exit 2
 }
 
@@ -170,12 +177,52 @@ option_defined() { # <name> <env|flag>
   return 1
 }
 
-# Sets PATH_NAME to the checked path and PATH_REASON to "", "outside" or "missing".
+# True when a backticked token only looks like a path: a git ref, a regex fragment, an
+# ellipsis, or an owner/repo slug or host/... URL whose first segment exists in no tree.
+# A missing in-tree path (`docs/gone.md`, `skills/gone`) is never exempt.
+not_a_path() { # <token> <physical doc dir>
+  local p="$1" docdir="$2" first root known=0
+  local slug_re='^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$'
+  case "$p" in
+    *')'* | *'…'* | *...* | origin/* | upstream/* | refs/* | remotes/*) return 0 ;;
+  esac
+  first="${p%%/*}"
+  for root in "$docdir" "${TREES[@]}"; do
+    if [ -e "$root/$first" ]; then known=1; fi
+  done
+  # A regex metacharacter reads as a fragment only when no tree holds the first segment, so
+  # a real directory with an odd character in a deeper name still reaches the path check.
+  if [ "$known" -eq 0 ]; then
+    case "$p" in
+      *'['* | *']'* | *'|'* | *'^'* | *'+'* | *'?'* | *"\\"*) return 0 ;;
+    esac
+  fi
+  [ "$first" != "$p" ] || return 1
+  [ "$known" -eq 0 ] || return 1
+  case "$first" in .*) return 1 ;; *.*) return 0 ;; esac
+  [[ $p =~ $slug_re ]]
+}
+
+# path_allowed <tree-relative path> — exact or descendant match against --allow-path.
+path_allowed() {
+  local a rest="${ALLOW_PATH_NL#$'\n'}"
+  while [ -n "$rest" ]; do
+    a="${rest%%$'\n'*}"
+    rest="${rest#*$'\n'}"
+    [ "$1" = "$a" ] && return 0
+    case "$1" in "$a"/*) return 0 ;; esac
+  done
+  return 1
+}
+
+# Sets PATH_NAME to the checked path, PATH_REASON to "", "outside" or "missing", and MISS_RELS
+# to the "<tree>\t<rel>" lines of a missing path's in-tree candidates.
 check_path() { # <token> <link|code> <physical doc dir>
-  local tok="$1" src="$2" docdir="$3" p cand inside=0 root cands
+  local tok="$1" src="$2" docdir="$3" p cand inside=0 root cands rel
   local scheme_re='^[A-Za-z][A-Za-z0-9+.-]*:' lineref_re='^(.*[^:]):[0-9]+(:[0-9]+)?$'
   PATH_NAME=""
   PATH_REASON=""
+  MISS_RELS=""
   case "$tok" in '#'* | //*) return 0 ;; esac
   [[ $tok =~ $scheme_re ]] && return 0
   p="${tok%%#*}"
@@ -184,6 +231,7 @@ check_path() { # <token> <link|code> <physical doc dir>
     # ~/.claude would otherwise fail every doc that mentions them.
     case "$p" in /* | '~'* | .context/*) return 0 ;; esac
     [[ $p =~ $lineref_re ]] && p="${BASH_REMATCH[1]}"
+    not_a_path "$p" "$docdir" && return 0
   fi
   [ -n "$p" ] || return 0
   PATH_NAME="$p"
@@ -199,6 +247,9 @@ check_path() { # <token> <link|code> <physical doc dir>
     tree_of "$NORM" || continue
     inside=1
     [ -e "$NORM" ] && return 0
+    rel="${NORM#"$TREE_OF"/}"
+    path_allowed "$rel" && return 0
+    MISS_RELS="$MISS_RELS$TREE_OF"$'\t'"$rel"$'\n'
   done
   if [ "$inside" -eq 1 ]; then PATH_REASON=missing; else PATH_REASON=outside; fi
 }
@@ -427,6 +478,23 @@ scan_doc() { # <doc>
   ' "$1"
 }
 
+# A git-ignored missing path is often runtime output; say so, but never exempt it unasked.
+# Both spellings are probed because a `dir/` pattern matches only the slash form.
+ignored_hint() { # <doc label> <line>
+  local line tree rel rest="$MISS_RELS"
+  while [ -n "$rest" ]; do
+    line="${rest%%$'\n'*}"
+    rest="${rest#*$'\n'}"
+    tree="${line%%$'\t'*}"
+    rel="${line#*$'\t'}"
+    if printf '%s\n%s/\n' "$rel" "$rel" | git -C "$tree" check-ignore -q --stdin 2> /dev/null; then
+      printf >&2 'doc-option-check: %s:%s: path %s is git-ignored; if the code creates it at runtime, re-run with --allow-path %s\n' \
+        "$1" "$2" "$PATH_NAME" "$rel"
+      return 0
+    fi
+  done
+}
+
 check_doc() { # <doc as given> <physical abs path>
   local given="$1" abs="$2" label docdir kind name lineno src
   label="$given"
@@ -443,6 +511,7 @@ check_doc() { # <doc as given> <physical abs path>
       path)
         check_path "$name" "$src" "$docdir"
         [ -z "$PATH_REASON" ] || report assigned-tree path "$PATH_NAME" "$label" "$lineno" "$PATH_REASON"
+        [ "$PATH_REASON" != missing ] || ignored_hint "$label" "$lineno"
         ;;
     esac
   done < "$WORK/candidates"
@@ -450,6 +519,8 @@ check_doc() { # <doc as given> <physical abs path>
 
 TREE_ARGS=()
 ALLOW_NL=$'\n'
+# A newline string, not an array: an empty array under `set -u` fails on bash 3.2.
+ALLOW_PATH_NL=$'\n'
 DOC_ARGS=()
 CMD=check
 
@@ -458,6 +529,27 @@ while [ "$#" -gt 0 ]; do
     --tree | --allow)
       [ "$#" -ge 2 ] && [ -n "$2" ] || usage_error "$1 needs a value"
       if [ "$1" = --tree ]; then TREE_ARGS+=("$2"); else ALLOW_NL="$ALLOW_NL$2"$'\n'; fi
+      shift 2
+      ;;
+    --allow-path)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || usage_error "$1 needs a value"
+      v="$2"
+      # Validate the normalized form: `.//x` strips to `/x`, which would never match.
+      while [ "${v#./}" != "$v" ]; do v="${v#./}"; done
+      while [ "${v%/}" != "$v" ]; do v="${v%/}"; done
+      case "$v" in /*) usage_error "--allow-path must be tree-relative: $2" ;; esac
+      # Candidates are compared in normalize_path form, so a//b and a/./b must reach it as a/b.
+      while :; do
+        case "$v" in
+          *//*) v="${v%%//*}/${v#*//}" ;;
+          */./*) v="${v%%/./*}/${v#*/./}" ;;
+          *) break ;;
+        esac
+      done
+      case "$v" in */.) v="${v%/.}" ;; esac
+      case "/$v/" in */../*) usage_error "--allow-path must not hold '..': $2" ;; esac
+      case "$v" in '' | .) usage_error "--allow-path would exempt the whole tree: $2" ;; esac
+      ALLOW_PATH_NL="$ALLOW_PATH_NL$v"$'\n'
       shift 2
       ;;
     --self-test)
@@ -533,6 +625,7 @@ NORM=""
 TREE_OF=""
 PATH_NAME=""
 PATH_REASON=""
+MISS_RELS=""
 
 build_evidence
 i=0

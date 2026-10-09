@@ -246,6 +246,21 @@ check() {
   assert_success
 }
 
+@test "backticked git refs, slugs, hosts, ellipses and regex fragments are not paths" {
+  tree_with 'docs/a.md:`origin/develop` `refs/heads/x` `IGRSoft/corpflow` `github.com/IGRSoft/x` `skills/...` `(a)/b` `^docs/[a-z]+` `a|b/c`\n'
+  check --tree "$T" "$T/docs/a.md"
+  assert_success
+  assert_output ""
+}
+
+@test "a missing in-tree path is still a finding next to the skipped tokens" {
+  tree_with 'docs/a.md:`origin/develop` `docs/gone.md` `docs/gonedir` `IGRSoft/corpflow`\n'
+  check --tree "$T" "$T/docs/a.md"
+  assert_failure 1
+  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" = 2 ]
+  [[ "$output" == *'"name":"docs/gone.md"'* && "$output" == *'"name":"docs/gonedir"'* ]]
+}
+
 @test "a JSON-hostile path token is escaped, not emitted raw" {
   # mk_git_fixture writes through printf %b, which turns this \\ into one backslash.
   tree_with 'docs/a.md:See `docs/a"b\\c/d.md`.\n'
@@ -271,6 +286,86 @@ check() {
   check --tree "$T" --allow GITHUB_TOKEN --allow --print "$T/docs/a.md"
   assert_success
   assert_output ""
+}
+
+# --- --allow-path ------------------------------------------------------------
+
+@test "--allow-path exempts an exact runtime path; another missing path is still one finding" {
+  tree_with 'README.md:Saves under `./.tictactoe/`.\n'
+  check --tree "$T" --allow-path .tictactoe "$T/README.md"
+  assert_success
+  assert_output ""
+  printf 'Saves under `./.tictactoe/`.\nSee `docs/gone.md`.\n' > "$T/README.md"
+  check --tree "$T" --allow-path .tictactoe "$T/README.md"
+  assert_failure 1
+  [ "${#lines[@]}" -eq 1 ]
+  jq -e '.name == "docs/gone.md" and .reason == "missing"' <<< "$output"
+}
+
+@test "--allow-path exempts a descendant and normalizes ./ and a trailing /" {
+  tree_with 'README.md:See `var/cache/run.db` and [log](var/log/a.txt).\n'
+  check --tree "$T" --allow-path ./var/ "$T/README.md"
+  assert_success
+  assert_output ""
+}
+
+@test "--allow-path is a path prefix by segment, not by string" {
+  tree_with 'README.md:See `variant/x.md`.\n'
+  check --tree "$T" --allow-path var "$T/README.md"
+  assert_failure 1
+  jq -e '.name == "variant/x.md"' <<< "$output"
+}
+
+@test "--allow-path never suppresses an outside finding, an env var or a flag" {
+  tree_with 'docs/a.md:See [x](/etc/hosts), set `API_BIND`, pass `--print`.\n'
+  check --tree "$T" --allow-path etc --allow-path API_BIND --allow-path print "$T/docs/a.md"
+  assert_failure 1
+  [ "${#lines[@]}" -eq 3 ]
+  [[ "$output" == *'"reason":"outside"'* && "$output" == *'"name":"API_BIND"'* && "$output" == *'"name":"--print"'* ]]
+}
+
+@test "--allow-path validates the normalized value: .//x is absolute and exits 2" {
+  tree_with 'docs/a.md:x\n'
+  check --tree "$T" --allow-path .//x "$T/docs/a.md"
+  assert_failure 2
+  [[ "$stderr" == *"must be tree-relative: .//x"* ]]
+}
+
+@test "--allow-path canonicalizes inner // and /./, so a//b and a/./b match a/b" {
+  tree_with 'README.md:See `a/b/run.db`.\n'
+  local v
+  for v in a//b a/./b a/.//b/. ; do
+    check --tree "$T" --allow-path "$v" "$T/README.md"
+    assert_success
+    assert_output ""
+  done
+}
+
+@test "--allow-path rejects a broad value with exit 2" {
+  tree_with 'docs/a.md:x\n'
+  local v
+  for v in '' . ./ /abs a/../b ..; do
+    check --tree "$T" --allow-path "$v" "$T/docs/a.md"
+    assert_failure 2
+  done
+  check --tree "$T" --allow-path
+  assert_failure 2
+}
+
+@test "a missing git-ignored path keeps its finding and gets the runtime hint on stderr" {
+  tree_with '.gitignore:.tictactoe/\n' 'README.md:Saves under `./.tictactoe/`.\n'
+  check --tree "$T" "$T/README.md"
+  assert_failure 1
+  [ "${#lines[@]}" -eq 1 ]
+  jq -e '. == {"check":"assigned-tree","kind":"path","name":"./.tictactoe/","doc":"README.md","line":1,"reason":"missing"}' <<< "$output"
+  [[ "$stderr" == *"README.md:1: path ./.tictactoe/ is git-ignored; if the code creates it at runtime, re-run with --allow-path .tictactoe"* ]]
+}
+
+@test "a missing path that is not ignored gets no runtime hint" {
+  tree_with 'README.md:See `docs/gone.md`.\n'
+  check --tree "$T" "$T/README.md"
+  assert_failure 1
+  [[ "$stderr" != *"git-ignored"* ]]
 }
 
 @test "an unresolvable tree exits 3 with empty stdout" {
@@ -379,4 +474,5 @@ check() {
   assert_output --partial "S1: undefined env var is a finding: ok"
   assert_output --partial "S5: unresolved tree exits 3: ok"
   assert_output --partial "self-test: ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }

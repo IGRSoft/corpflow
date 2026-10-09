@@ -2,7 +2,7 @@
 name: arch-review
 description: Perform architecture review evaluating architectural integrity, scalability, and maintainability
 argument-hint: '[--pr <number> | --path <dir>] [--scope full|focused] [--checklist]'
-allowed-tools: Read, Glob, Grep, Task, Bash(gh pr diff:*), Bash(gh pr view:*)
+allowed-tools: Read, Glob, Grep, Agent, Bash(gh pr diff:*), Bash(gh pr view:*)
 related:
   - agents/software-architector.md
   - commands/arch-decision.md
@@ -22,6 +22,8 @@ current working tree.
 | `--path <dir>` | directory or module | Review that directory (default: the current working tree) |
 | `--scope <depth>` | `full`, `focused` | Review depth (default: `focused`) |
 | `--checklist` | — | Score against § Review Checklist |
+
+## Examples
 
 ```
 /arch-review [--pr <number> | --path <dir>] [--scope full|focused] [--checklist]
@@ -97,7 +99,7 @@ Detect the platform per `skills/shared/platform-detection.md § Detection Rules`
 platform has an architect agent, run both passes:
 
 1. **General review** — SOLID, scalability, security, error handling (this command)
-2. **Platform architecture review** — dispatch that architect with `Task` for pattern
+2. **Platform architecture review** — dispatch that architect with `Agent` for pattern
    compliance, boundary violations, and language/runtime-specific concerns
 
 ### Resolving and combining

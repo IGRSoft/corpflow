@@ -74,7 +74,7 @@ only purpose and normative use.
 |-------|---------|
 | `stage` | Stage code, unnumbered. The schema enum is the full vocabulary, not the per-run set — AR and TL tasks exist only when PL0 included them |
 | `agent` | Agent to execute this task, in fully-qualified `plugin:agent` form (`corpflow:software-architector`, `apple-developer:ios-developer`); bare names are rejected |
-| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Task()`: frontmatter inheritance falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
+| `model` | Model alias (fable, opus, sonnet, haiku), always passed explicitly to `Agent()`: frontmatter inheritance falls through to `CLAUDE_CODE_SUBAGENT_MODEL` when unset |
 
 #### Model field details
 
@@ -226,17 +226,17 @@ PL0 should set `permission_mode: default` on SR/FN tasks under `--secure`/`--ful
 stamped, not dispatch-optional) names the worktree a headless dispatcher `cd`s into before running
 `claude -p --agent` — there is no top-level `--cwd` flag to carry it instead.
 
-#### effort is mandatory, and a deviation from the agent's own tier routes headless
+#### effort is mandatory, and the Agent call carries it
 
 As a ledger record `effort` is required: the Step C.0a resolver
 (`skills/shared/stage-contracts.md § Blocking items are resolved, not asked`) bumps it one rung, and
 a per-stage override exists nowhere else. Every agent file also carries a static `effort:` key
 next to `maxTurns:`, held equal to its `skills/shared/stage-codes.md § Agent Model Matrix` row by
-`tests/shell/worktask/agent-effort-frontmatter.bats`; Claude Code applies that key in-process, so a
-stamped `metadata.effort` equal to it needs no dispatch flag. In-process `Task()` still takes no
-effort argument, so a stamped value that *differs* from the agent's frontmatter tier — a
-default-writer raise, a resolver bump, a `CORPFLOW.md § Models`/`state.models` override — is the
-condition the effort router acts on rather than leaving advisory. `state-patch.sh` validates
+`tests/shell/worktask/agent-effort-frontmatter.bats`; Claude Code applies that key only when a
+call passes no `effort`. Since 2.1.292 the in-process `Agent()` call always passes the stamped
+value as `effort` (`effort_transport: "agent-param"`), which outranks the key, so a raise, a
+resolver bump or a `CORPFLOW.md § Models` override applies in-process. Only
+`CORPFLOW_HEADLESS_ROUTE=on` sends it headless instead. `state-patch.sh` validates
 `effort` against `EFFORT_ENUM` on `--task-create` and `--task-meta` either way.
 
 ### JSON Schema
@@ -271,7 +271,10 @@ The orchestrator should validate metadata before spawning the stage agent. Non-P
 #### `description` is capped at 240 chars
 
 Both writers — `--task-create --metadata` and `--task-meta --set` — truncate a longer value with an
-ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation.
+ellipsis rather than rejecting it: a refused `--task-create` would break PL0 stage creation. Each
+cut prints `description_truncated=<id>:<original length>` on stderr, so the caller knows the field
+no longer holds the whole text. The field is a label: the planner's input is the full statement in
+the PL0 dispatch prompt (`commands/worktask.md § Step 6 — the planning prompt`).
 
 The orchestrator's dispatch-time appends (test scope, bans, the FN banner) mutate an in-memory copy
 that is never written back, so they stay uncapped — capping them would strip those banners from
@@ -418,7 +421,7 @@ the prompt that needs them.
 ```json
     "requires_screenshots": {
       "type": "boolean",
-      "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: product-manager via detect-ui-change.sh). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
+      "description": "Advisory: DV and QA tasks SHOULD carry this, stamped by PL0 from the plan frontmatter (writer: the planning model's judgment; detect-ui-change.sh is advisory input; DV or the DV SubagentStop gate may raise it to true via escalate-flag.sh, never lower it). Drives dv-screenshot-capture + hooks/dv-screenshot-gate.sh + attach-visual-evidence.sh. Downstream readers default it true as defense-in-depth when absent."
     }
   },
   "allOf": [
@@ -513,6 +516,9 @@ audit row naming every task still `in_progress` at teardown; it never mutates ta
 
 With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` every session has one implicit team: spawn teammates
 with the Agent tool's `name` parameter (`team_name` is ignored) and message them with `SendMessage`.
+A plugin-defined agent spawned by name runs with its own prompt, tools, `disallowedTools` and
+effort. The Agent result's `agent_id` is the teammate's agent ID; its `name@team` address is in
+`teammate_id`.
 Teammates coordinate through the same `.context/state.json` ledger as every other stage and can
 self-claim available work. Live teammates are visible to `ListAgents`/`claude agents --json`, so a
 lead resuming mid-batch uses the stage loop's pre-check

@@ -152,3 +152,10 @@ _reply() {
   [[ "$stderr" == *"mailbox unavailable"* ]] || fail "stderr: $stderr"
   [ -z "$(find "$real" -mindepth 1 2> /dev/null)" ]
 }
+
+@test "contract: --self-test passes and reports its case count" {
+  run_script_env "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_success
+  assert_output --partial "self-test OK"
+  assert_output --regexp 'self-test OK \([1-9][0-9]* passed, 0 failed\)'
+}

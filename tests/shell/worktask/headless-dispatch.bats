@@ -159,14 +159,15 @@ argv_has() { grep -qxF -- "$1" "$PA_OUT_FILE"; } # <exact-token>
 @test "a live dispatch with no --ledger-root is a usage error before any spawn" {
   echo hi > "$WS/prompt.txt"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
-    --permission-mode manual --workspace "$WS" --baseline high --prompt "$WS/prompt.txt"
+    --permission-mode manual --workspace "$WS" --prompt "$WS/prompt.txt"
   assert_failure 2
 }
 
-@test "a live dispatch with no --baseline is a usage error before any spawn" {
+@test "a removed --baseline flag is a usage error before any spawn" {
   echo hi > "$WS/prompt.txt"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
-    --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
+    --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
+    --baseline high --prompt "$WS/prompt.txt"
   assert_failure 2
 }
 
@@ -174,58 +175,76 @@ argv_has() { grep -qxF -- "$1" "$PA_OUT_FILE"; } # <exact-token>
   echo hi > "$WS/prompt.txt"
   run_script "$SCRIPT" --task DV0 --agent "corpflow:no-such-agent" --model opus \
     --effort high --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "not registered"
 }
 
-# --- spawn / fallback (each fallback reason -> one warn result, frontmatter transport) --------
+# --- spawn / fallback (each fallback reason -> one warn result, agent-param transport, tier unobserved)
 
-@test "cli_missing: claude absent from PATH degrades to warn/frontmatter" {
+@test "cli_missing: claude absent from PATH degrades to warn/agent-param" {
   echo hi > "$WS/prompt.txt"
   run_script_env --path "/usr/bin:/bin" "$SCRIPT" --task DV0 --agent corpflow:developer \
     --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
-    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt"
+    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"result":"warn"'
   assert_output --partial '"fallback_reason":"cli_missing"'
-  assert_output --partial '"effort_transport":"frontmatter"'
-  assert_output --partial '"effort_resolved":"high"'
+  assert_output --partial '"effort_transport":"agent-param"'
+  assert_output --partial '"effort_resolved":null'
+  assert_output --partial '"effort_resolved_reason":"inproc_fallback"'
 }
 
-@test "cli_below_floor: an old claude --version degrades to warn/frontmatter" {
+@test "cli_below_floor: an old claude --version degrades to warn/agent-param" {
   stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi; exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"fallback_reason":"cli_below_floor"'
 }
 
 @test "cli_below_floor: the release just below the floor degrades too" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.283"; exit 0; fi; exit 0'
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.293"; exit 0; fi; exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"fallback_reason":"cli_below_floor"'
 }
 
-@test "opted_out: CORPFLOW_HEADLESS_ROUTE=off degrades to warn before any spawn" {
-  stub_cmd claude --body 'exit 0'
+@test "CORPFLOW_HEADLESS_ROUTE=off is not a fallback reason: the spawn still runs" {
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
+cat > /dev/null
+echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
+exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path --env "CORPFLOW_HEADLESS_ROUTE=off" "$SCRIPT" --task DV0 \
     --agent corpflow:developer --model opus --effort xhigh --permission-mode manual \
-    --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt"
+    --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_success
-  assert_output --partial '"fallback_reason":"opted_out"'
-  [ "$(stub_log --count claude)" -eq 0 ]
+  refute_output --partial 'opted_out'
+  assert_output --partial '"result":"ok"'
+}
+
+@test "without jq a warn row still emits JSON null, never the string \"null\"" {
+  echo hi > "$WS/prompt.txt"
+  run_script_env --hide jq --hide claude "$SCRIPT" --task DV0 --agent corpflow:developer \
+    --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
+    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
+  assert_success
+  assert_output --partial '"effort_resolved":null'
+  assert_output --partial '"effort_resolved_reason":"inproc_fallback"'
+  assert_output --partial '"fallback_reason":"cli_missing"'
+  refute_output --partial '"null"'
+  # Only the jq branch prints session_id, so its absence proves the printf branch ran.
+  refute_output --partial '"session_id"'
 }
 
 @test "the child's cwd is the worktree and WORKSPACE_ROOT is the ledger root, not the worktree" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 pwd > "$STUB_CWD_FILE"
 printf "%s" "$WORKSPACE_ROOT" > "$STUB_ROOT_FILE"
@@ -237,21 +256,42 @@ exit 0'
   STUB_CWD_FILE="$STUB_CWD_FILE" STUB_ROOT_FILE="$STUB_ROOT_FILE" \
     run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   [ "$(cat "$STUB_CWD_FILE")" = "$(cd "$WS" && pwd -P)" ]
   [ "$(cat "$STUB_ROOT_FILE")" = "$(cd "$LR" && pwd -P)" ]
 }
 
+@test "the tier reaches the child as --effort only, never through an effort env var" {
+  # An ambient operator value would leak through to the stub and mask the script's own env.
+  unset CLAUDE_CODE_EFFORT_LEVEL
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
+cat > /dev/null
+printf "%s\n" "$@" > "$STUB_ARGS_FILE"
+printf "%s" "${CLAUDE_CODE_EFFORT_LEVEL-unset}" > "$STUB_ENV_FILE"
+echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
+exit 0'
+  echo hi > "$WS/prompt.txt"
+  STUB_ARGS_FILE="$(mk_tmpworkdir)/args.txt"
+  STUB_ENV_FILE="$(mk_tmpworkdir)/env.txt"
+  STUB_ARGS_FILE="$STUB_ARGS_FILE" STUB_ENV_FILE="$STUB_ENV_FILE" \
+    run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
+    --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
+    --prompt "$WS/prompt.txt"
+  assert_success
+  grep -A1 -x -- '--effort' "$STUB_ARGS_FILE" | grep -qx xhigh
+  [ "$(cat "$STUB_ENV_FILE")" = "unset" ]
+}
+
 @test "a successful child reports ok/dispatch-flag with duration/usage but no effort_resolved (no hook rows yet)" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":4200,\"usage\":{\"input_tokens\":10},\"total_cost_usd\":0.02,\"effort\":{\"level\":\"xhigh\"}}"
 exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
   assert_output --partial '"effort_transport":"dispatch-flag"'
@@ -261,53 +301,54 @@ exit 0'
 }
 
 @test "exit_before_artifact: a plain non-zero exit with no side effects degrades to warn" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 exit 1'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"fallback_reason":"exit_before_artifact"'
-  assert_output --partial '"effort_resolved":"high"'
+  assert_output --partial '"effort_resolved":null'
+  assert_output --partial '"effort_resolved_reason":"inproc_fallback"'
 }
 
 @test "auth_failed is detected from the transcript and reported as the fallback reason" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "Authentication failed: please run claude login"
 exit 1'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"fallback_reason":"auth_failed"'
 }
 
 @test "agent_unresolved is detected from the transcript" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "Unknown agent: corpflow:developer"
 exit 1'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"fallback_reason":"agent_unresolved"'
 }
 
 @test "a side effect after a failed child refuses to fall back and errors instead" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "dirty" >> dirty.txt
 exit 1'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_failure 3
   assert_output --partial '"fallback_reason":"side_effects_present"'
   assert_output --partial '"result":"error"'
@@ -329,14 +370,14 @@ exit 1'
   cat > "$LR/.context/state.json" << EOF3
 {"tasks":{"DV0":{"status":"in_progress","metadata":{"artifact":"$ARTIFACT_REL"}}}}
 EOF3
-  stub_cmd claude --body "if [ \"\$1\" = \"--version\" ]; then echo \"2.1.284\"; exit 0; fi
+  stub_cmd claude --body "if [ \"\$1\" = \"--version\" ]; then echo \"2.1.294\"; exit 0; fi
 cat > /dev/null
 echo after >> $ARTIFACT_ABS
 exit 1"
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt"
+    --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_failure 3
   assert_output --partial '"fallback_reason":"side_effects_present"'
   assert_output --partial '"result":"error"'
@@ -344,7 +385,7 @@ exit 1"
 
 @test "a missing shasum fails closed on the side-effect snapshot, never a silent pass" {
   echo hi > "$WS/prompt.txt"
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
@@ -352,14 +393,14 @@ exit 0'
   # included shasum in the first place — the real check under test.
   run_script_env --hide shasum "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort high --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high \
+    --out "$LR/.context/logs/run.jsonl" \
     --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "shasum"
 }
 
 @test "effort_resolved is filled from the child's own audit-tooluse row after it exits" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
@@ -371,7 +412,7 @@ exit 0'
 EOF3
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt" --session-id sess-observed
+    --prompt "$WS/prompt.txt" --session-id sess-observed
   assert_success
   assert_output --partial '"effort_resolved":"xhigh"'
   assert_output --partial '"effort_resolved_reason":null'
@@ -383,7 +424,7 @@ EOF3
   # script's OWN internal SESSION_ID still has to come from somewhere, since it is what
   # emit_result reports and what the post-exit audit-log lookup keys on. Passing --session-id
   # alongside --resume is how the caller supplies that value on a resume round-trip.
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
@@ -394,7 +435,7 @@ exit 0'
 EOF3
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt" \
+    --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt" \
     --session-id sess-resumed --resume sess-resumed
   assert_success
   assert_output --partial '"session_id":"sess-resumed"'
@@ -403,7 +444,7 @@ EOF3
 }
 
 @test "effort_resolved stays null/no_hook_rows when no audit row matches the session" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
@@ -414,7 +455,7 @@ exit 0'
 EOF3
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt" --session-id sess-observed
+    --prompt "$WS/prompt.txt" --session-id sess-observed
   assert_success
   assert_output --partial '"effort_resolved":null'
   assert_output --partial '"effort_resolved_reason":"no_hook_rows"'
@@ -422,13 +463,13 @@ EOF3
 
 @test "a platform-plugin agent (non-corpflow prefix) registered in routing-matrix.md is accepted without a local agents/ file" {
   echo hi > "$WS/prompt.txt"
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent apple-developer:apple-developer \
     --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
-    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt"
+    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
 }
@@ -437,7 +478,7 @@ exit 0'
   echo hi > "$WS/prompt.txt"
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent other-plugin:no-such-agent \
     --model opus --effort xhigh --permission-mode manual --workspace "$WS" \
-    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --baseline high --prompt "$WS/prompt.txt"
+    --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "not registered"
 }
@@ -523,13 +564,13 @@ exit 0'
   cat > "$LR/.context/state.json" << EOF3
 {"tasks":{"DV0":{"status":"in_progress","metadata":{"effort":"xhigh","permission_mode":"manual","workspace_path":"$WS","artifact":".context/development-0.md"}}}}
 EOF3
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
 }
@@ -542,13 +583,13 @@ exit 0'
   cat > "$LR/.context/state.json" << EOF3
 {"tasks":{"DV0":{"status":"in_progress","metadata":{"effort":"xhigh","permission_mode":null,"workspace_path":"$WS","artifact":".context/development-0.md"}}}}
 EOF3
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
 }
@@ -560,7 +601,7 @@ exit 0'
 EOF3
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --ledger-root "$LR" --out "$LR/.context/logs/run.jsonl" \
-    --baseline high --prompt "$WS/prompt.txt"
+    --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "missing"
 }
@@ -574,7 +615,7 @@ EOF3
   git -C "$OTHER_LR" worktree add -q -b wt-other "$OTHER_WS" > /dev/null 2>&1
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
     --permission-mode manual --workspace "$OTHER_WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high \
+    --out "$LR/.context/logs/run.jsonl" \
     --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "not a worktree this ledger pins"
@@ -582,13 +623,13 @@ EOF3
 
 @test "the ledger root itself is an accepted workspace (single-worktree case)" {
   echo hi > "$LR/prompt.txt"
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort high --permission-mode manual --workspace "$LR" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high \
+    --out "$LR/.context/logs/run.jsonl" \
     --prompt "$LR/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
@@ -609,7 +650,7 @@ EOF3
   echo hi > "$SIBLING/prompt.txt"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
     --permission-mode manual --workspace "$SIBLING" --ledger-root "$LR2" \
-    --out "$LR2/.context/logs/run.jsonl" --baseline high \
+    --out "$LR2/.context/logs/run.jsonl" \
     --prompt "$SIBLING/prompt.txt"
   assert_failure 2
   assert_output --partial "not a worktree this ledger pins"
@@ -626,13 +667,13 @@ EOF3
 {"tasks":{"DV0":{"status":"in_progress","metadata":{"workspace_path":"$PINNED"}}}}
 EOF3
   echo hi > "$PINNED/prompt.txt"
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort high --permission-mode manual --workspace "$PINNED" --ledger-root "$LR2" \
-    --out "$LR2/.context/logs/run.jsonl" --baseline high \
+    --out "$LR2/.context/logs/run.jsonl" \
     --prompt "$PINNED/prompt.txt"
   assert_success
   assert_output --partial '"result":"ok"'
@@ -655,7 +696,7 @@ EOF3
   echo hi > "$FOREIGN_WS/prompt.txt"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
     --permission-mode manual --workspace "$FOREIGN_WS" --ledger-root "$LR2" \
-    --out "$LR2/.context/logs/run.jsonl" --baseline high \
+    --out "$LR2/.context/logs/run.jsonl" \
     --prompt "$FOREIGN_WS/prompt.txt"
   assert_failure 2
   assert_output --partial "not a worktree this ledger pins"
@@ -676,7 +717,7 @@ EOF3
   # the DV-pin set at all.
   run_script_env --hide jq "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort high --permission-mode manual --workspace "$SIBLING" --ledger-root "$LR2" \
-    --out "$LR2/.context/logs/run.jsonl" --baseline high \
+    --out "$LR2/.context/logs/run.jsonl" \
     --prompt "$SIBLING/prompt.txt"
   assert_failure 2
   assert_output --partial "requires jq"
@@ -689,7 +730,7 @@ EOF3
   OUTSIDE="$(mk_tmpworkdir)/elsewhere.jsonl"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
     --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$OUTSIDE" --baseline high --prompt "$WS/prompt.txt"
+    --out "$OUTSIDE" --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "out log"
 }
@@ -700,7 +741,7 @@ EOF3
   ln -s "$TARGET" "$LR/.context/logs/link.jsonl"
   run_script "$SCRIPT" --task DV0 --agent corpflow:developer --model opus --effort high \
     --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/link.jsonl" --baseline high \
+    --out "$LR/.context/logs/link.jsonl" \
     --prompt "$WS/prompt.txt"
   assert_failure 2
   assert_output --partial "symlink"
@@ -709,7 +750,7 @@ EOF3
 # --- P3 CWE-345: an observed effort off the tier ladder is never trusted ----------------------
 
 @test "an observed effort not on the enum is ignored, not passed downstream" {
-  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.284"; exit 0; fi
+  stub_cmd claude --body 'if [ "$1" = "--version" ]; then echo "2.1.294"; exit 0; fi
 cat > /dev/null
 echo "{\"type\":\"result\",\"duration_ms\":1,\"usage\":null,\"total_cost_usd\":null}"
 exit 0'
@@ -719,7 +760,7 @@ exit 0'
 EOF3
   run_script_env --stub-path "$SCRIPT" --task DV0 --agent corpflow:developer --model opus \
     --effort xhigh --permission-mode manual --workspace "$WS" --ledger-root "$LR" \
-    --out "$LR/.context/logs/run.jsonl" --baseline high \
+    --out "$LR/.context/logs/run.jsonl" \
     --prompt "$WS/prompt.txt" --session-id sess-bad
   assert_success
   assert_output --partial '"effort_resolved":null'

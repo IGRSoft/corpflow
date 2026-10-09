@@ -1,12 +1,12 @@
 # Company Worktask Plugin
 
 [![OS](https://img.shields.io/badge/OS-macOS%20%7C%20Linux-2f81f7)](#requirements)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.284%2B-d97757)](#requirements)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.294%2B-d97757)](#requirements)
 [![Codex](https://img.shields.io/badge/Codex-0.156.1%20verified-10a37f)](#requirements)
 
 A staged worktask system for Claude Code and Codex — **9 stages standard, 11 with `--secure`** — with a durable state ledger, worktree-isolated execution behind two human approval gates (plan + finalization), stage transitions, and structured task management.
 
-**Plugin 4.1.0 · Requires Claude Code 2.1.284+ · Verified with Codex CLI 0.156.1**
+**Plugin 4.1.1 · Requires Claude Code 2.1.294+ · Verified with Codex CLI 0.156.1**
 
 ## Features
 
@@ -44,8 +44,8 @@ lock, the atomic write, and the disk guard.
 - **Metadata support**: routing, gates, and dispatch config per task
 
 > corpflow does **not** use Claude Code's `TaskCreate`/`TaskUpdate`/`TaskGet`/`TaskList` tools.
-> Opus 5.5, Sonnet 5.5 and Fable 5.x are not offered them; Haiku 4.5 still is. The ledger is the one mechanism that works on every stage — including a
-> haiku-tier stage that still sees the tools. See `skills/shared/state-ledger.md`.
+> No current model (Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.x) is offered them, so the ledger is the one
+> mechanism that works on every stage. See `skills/shared/state-ledger.md`.
 
 ## Installation
 
@@ -58,7 +58,7 @@ Tools listed below are organized by status (required, optional, platform-specifi
 | Tool | Status | Needed for | Degradation | macOS | Linux |
 |------|--------|-----------|-------------|-------|-------|
 | **bash 3.2+** | Required | Plugin scripts run on bash; 3.2 is the declared floor on macOS | No worktask will start | Installed by default | `apt-get install bash` or `dnf install bash` |
-| **Claude Code 2.1.284+ or Codex CLI 0.156.1+** | Required | Host runtime for commands/skills, subagents, hooks, and user decisions | No worktask will start | N/A | N/A |
+| **Claude Code 2.1.294+ or Codex CLI 0.156.1+** | Required | Host runtime for commands/skills, subagents, hooks, and user decisions | No worktask will start | N/A | N/A |
 | **git** | Required | Worktask isolation via git worktree; worktask state from branch tracking | No worktask will start | Installed with Xcode CLT | `apt-get install git` or `dnf install git` |
 | **POSIX text toolchain** — `awk`, `sed`, `grep`, `find`, `tr`, `mktemp`, `cut`, `sort`, `comm` | Required | Core shell scripting throughout hooks, skills, tests | No worktask will start | Installed by default (BSD variants) | `apt-get install gawk sed grep findutils coreutils` or `dnf install gawk sed grep findutils coreutils` |
 | **Hash tools** — `md5`, `md5sum`, `sha256sum`, `shasum` | Required | File integrity checks; used unguarded in tests and build | No worktask will start | Stock macOS ships `md5` and `shasum` (Perl-shipped). `sha1sum` and `sha256sum` are not available by default; dual-path code handles this (uses `shasum` instead) | `apt-get install coreutils` or `dnf install coreutils` |
@@ -163,7 +163,9 @@ apple-developer:apple-developer`, `corpflow:web-code-fixer →
 frontend-developer:fe-code-fixer`, …). A project can swap any of them: copy
 `skills/cross-plugin-handoff/templates/PROJECT-CORPFLOW.md` to the project root as
 `CORPFLOW.md`, keep only the rows you override under `## Routing`, and the next worktask
-resolves through your targets instead:
+resolves through your targets instead. The same file at
+`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CORPFLOW.md` applies to every project; a project-root file
+wins per heading (`## Routing`, `## Models`), so a project overrides only what it names:
 
 ```markdown
 ## Routing
@@ -440,7 +442,7 @@ The store flows themselves live in the plugin that ships to that store
 and Play Console differ field by field. `--apple-platform` selects an Apple device class and is
 passed through unchanged — it is deliberately distinct from the plugin-wide `--platform`.
 
-### Skills (23 total)
+### Skills (24 total)
 - `agent-coordination` — Multi-agent coordination, handoffs, parallel execution, error escalation
 - `claude-constitution` — Constitutional principles and ethics framework
 - `code-comment-standard` — Compact source-comment standard (WHY/contract only); loadable skill wrapping code-documentation.md
@@ -464,6 +466,7 @@ passed through unchanged — it is deliberately distinct from the plugin-wide `-
 - `task-folder-organization` — `.context/` folder structure and artifact naming
 - `worktask` — Complete staged worktask system (dynamic sizing, init, stage management)
 - `worktask-testing-strategy` — Test-strategy planning for PL/AR stages
+- `writing-style` — ASD-STE100-derived prose standard (~80%) for replies, handoffs, reports and docs; loadable skill wrapping writing-style.md
 
 Each name above is the invocable id — prefix with `corpflow:` (e.g. `Skill({skill:"corpflow:worktask"})`). See [skills/README.md](skills/README.md) for the full index with effort levels and shared (non-loadable) utilities.
 
@@ -473,11 +476,11 @@ Registered in `.claude-plugin/plugin.json`. Several are **gates** — they can b
 
 | Hook | Event | Purpose |
 |------|-------|---------|
-| `test-execution-gate.sh` | PreToolUse (`Bash`/`Skill`/`Task`/test MCP) | **Blocks** a test run by a stage that holds no test-execution authority |
+| `test-execution-gate.sh` | PreToolUse (`Bash`/`Skill`/`Agent`/test MCP) | **Blocks** a test run by a stage that holds no test-execution authority |
 | `model-switch-gate.sh` | PreModelSwitch | **Blocks** a mid-worktask re-tier away from the stage's pinned `metadata.model` |
 | `model-switch-audit.sh` | PostModelSwitch | Records `model_switched` so cost is attributed to the model that ran |
 | `audit-tooluse.sh` | PostToolUse (`Bash`/`Write`/`Edit`) | Appends canonical tool rows to `.context/logs/audit.jsonl`; Bash rows only for ledger patches |
-| `anchor-preflight.sh` | PostToolUse (`Write`/`Edit`) | Anchor-lint pre-flight on `.context/<stage>-N.md` artifacts |
+| `anchor-preflight.sh` | PreToolUse + PostToolUse (`Write`/`Edit`) | Denies an Edit adding an off-list H2 to `.context/<stage>-N.md`; after a write, reports anchor and frontmatter findings for an Edit fix |
 | `comment-standard-context.sh` | PostToolUse (`Write`/`Edit`) | Injects the comment standard once per session on the first source edit |
 | `audit-subagent.sh` | SubagentStop | Writes `subagent_stopped` audit rows |
 | `dv-screenshot-gate.sh` | SubagentStop | **Blocks** DV completion on missing or invalid evidence in a task's `screenshots-<TASK_ID>.md`; no captures passes only on backend/systems or `requires_screenshots=false` |

@@ -17,7 +17,7 @@ metadata:
   test_mode: scoped              # build-only | scoped | full
   always_required_tests: []      # explicit override list of test IDs
   ui_visual_check: false         # gate for QA's visual/design comparison
-  requires_screenshots: false    # stamp the detect-ui-change.sh value
+  requires_screenshots: false    # PL judgment: does the diff alter rendered output? detector is advisory; S1 forces true
 ---
 
 # <Plan title>
@@ -59,7 +59,7 @@ Score <0–50>: patterns <n>, integration <n>, concerns <n>, risk <n>, docs <n>.
 - Framework: <the repo's own, else the platform default>
 - New test files: <paths>, <n> unit scenarios per feature
 - Effort: DV <h>, QA <h>
-- `requires_screenshots`: <detector rationale line>
+- `requires_screenshots`: <true|false> — <why>; detector signals: [S…]
 
 ## summary
 

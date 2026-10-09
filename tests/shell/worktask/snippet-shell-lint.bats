@@ -5,6 +5,8 @@
 #   - rule b: a sh/shell/zsh/console fence, or an unlabelled fence with a shell body
 #   - rule c: a bare *.sh run inside a bash fence; `.`, source, assignments and
 #     `bash x.sh` are fine
+#   - rule d (opt-in, --word-split): an unquoted $name or ${name} as a command word or
+#     argument; assignments, [[ ]], case words, $(( )), quotes and comments are fine
 #   - the section ends at the next heading of the same or higher level, outside fences
 #   - exit 2 on a missing heading, an unreadable file or a bad flag
 #   - default run (ENFORCEMENT): the four seed-path sections are clean —
@@ -31,6 +33,10 @@ setup() {
     "${f}bash" 'cmd --flag \' '  next.sh' 'echo "a; b.sh"' "$f" > "$WD/n.md"
   printf '%s\n' "${f}text" '## Target S' "$f" '## Target S' "${f}bash" '## not a heading' \
     "$f" "${f}bash" 'inside.sh' "$f" '## Next' "${f}bash" 'after.sh' "$f" > "$WD/s.md"
+  printf '%s\n' '## Target D' "${f}bash" 'rm $FILE' 'for f in ${FILES}; do' \
+    'rm "$FILE" "${arr[@]}"' 'X=$FILE y=$Z' '[[ $a == b ]] && echo ok' 'echo $((a + $b))' \
+    "echo '\$FILE' \"\$FILE\"" 'case $x in' 'echo ${=LIST}' '# rm $COMMENT' "jq '" '  {a: $v}' \
+    "' x.json" 'cmd $A # tail comment' "$f" > "$WD/d.md"
 }
 
 @test "rule a: indented code blocks are flagged once per block" {
@@ -104,4 +110,18 @@ setup() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
+}
+
+@test "rule d: --word-split flags unquoted variables only; the default run ignores them" {
+  run bash "$PLUGIN_ROOT/$SCRIPT" --target "$WD/d.md::## Target D"
+  assert_success
+  run bash "$PLUGIN_ROOT/$SCRIPT" --word-split --target "$WD/d.md::## Target D"
+  assert_failure 1
+  assert_output --partial "$WD/d.md:3: rule-d: unquoted \$FILE splits in bash but not in zsh"
+  assert_output --partial "$WD/d.md:4: rule-d: unquoted \$FILES splits"
+  assert_output --partial "$WD/d.md:16: rule-d:"
+  assert_output --partial "3 violation(s)"
+  refute_output --partial "$WD/d.md:5:"
+  refute_output --partial "$WD/d.md:14:"
 }

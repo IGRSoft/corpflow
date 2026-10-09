@@ -30,7 +30,7 @@ Effort (`low` ○, `medium` ◐, `high` ●, `xhigh` ⬣, `max` ⬛) maps to a t
 
 ### 1. Model Right-Sizing
 
-Use the cheapest model that can do the task: tiers and mapping in `../shared/model-selection.md` (§ Cost Tiers, § Selection Criteria); a worktask stage's model and effort are its row in `../shared/stage-codes.md`. Moving procedural work (status checks, formatting, simple validation) off sonnet saves ~30% on those stages; opus costs ~50x haiku, so reserve it for architecture-grade reasoning. Outside the matrix, pass `effort: medium` for cost-sensitive work, since non-Pro plans default to `high`.
+Use the cheapest model that can do the task: tiers and mapping in `../shared/model-selection.md` (§ Cost Tiers, § Selection Criteria); a worktask stage's model and effort are its row in `../shared/stage-codes.md`. Moving procedural work (status checks, formatting, simple validation) off sonnet cuts the rate for those stages to 1/20 (1/4 on Haiku prompts over 100K); opus costs ~40x haiku, so reserve it for architecture-grade reasoning. Outside the matrix, pass `effort: medium` for cost-sensitive work, since non-Pro plans default to `high`.
 
 ### 2. Context Compression
 

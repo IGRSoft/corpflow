@@ -14,6 +14,7 @@
 # shellcheck disable=SC2016
 self_test() {
   local td rc=0
+  _SELFTEST_PASSED=0 _SELFTEST_FAILED=0
   td=$(mktemp -d "${TMPDIR:-/tmp}/pr-body-lint-XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT
@@ -25,17 +26,19 @@ self_test() {
     if [ -n "$want" ]; then
       if grep -q "warn: $want" "$td/err.txt"; then
         printf 'pr-body-lint: self-test %s PASS\n' "$name"
+        _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
       else
         printf 'pr-body-lint: self-test %s FAIL (expected %s; findings=%s)\n' "$name" "$want" "$got" >&2
-        rc=1
+        rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
       fi
     else
       if [ "$got" = "0" ]; then
         printf 'pr-body-lint: self-test %s PASS\n' "$name"
+        _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
       else
         printf 'pr-body-lint: self-test %s FAIL (expected clean, got %s)\n' "$name" "$got" >&2
         cat "$td/err.txt" >&2
-        rc=1
+        rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
       fi
     fi
   }
@@ -46,6 +49,8 @@ Because.
 - did a thing
 ## Test plan
 - ran tests
+## Merge danger
+two-way: prose only. Blast radius: none.
 Closes #12
 '
   _expect clean-body            ""   "$CLEAN"
@@ -89,6 +94,14 @@ x
 - y
 Closes #1
 '
+  _expect p4-missing-merge-danger P4 '## Motivation
+x
+## Changes
+- y
+## Test plan
+- z
+Closes #1
+'
   # Both trailer arms are pinned with the anchor forced, never inherited from the
   # cwd: a self-test whose verdict depends on whether it ran inside a git checkout
   # with a `#NNN` in recent history is not pinning anything.
@@ -98,11 +111,15 @@ x
 - y
 ## Test plan
 - z
+## Merge danger
+two-way: y. Blast radius: none.
 '
   ISSUE_ANCHOR=42
   ISSUE_ANCHOR_RESOLVED=1
   _expect p4-missing-closes     P4   "$NO_TRAILER"
+  # shellcheck disable=SC2034  # read by pr-body-lint.sh, which sources this file
   ISSUE_ANCHOR=""
+  # shellcheck disable=SC2034  # read by pr-body-lint.sh, which sources this file
   ISSUE_ANCHOR_RESOLVED=1
   _expect p4-no-issue-anchor    ""   "$NO_TRAILER"
 
@@ -117,9 +134,10 @@ x
   set -e
   if [ "$u_rc" -eq 2 ] && [ -z "$u_out" ] && grep -q 'unknown argument' "$td/uerr.txt"; then
     printf 'pr-body-lint: self-test usage-error-stderr-only PASS\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'pr-body-lint: self-test usage-error-stderr-only FAIL (rc=%s stdout=%s)\n' "$u_rc" "$(printf '%s' "$u_out" | head -1)" >&2
-    rc=1
+    rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
   fi
 
   # -h/--help keeps stdout: an explicit help request is output, not a diagnostic.
@@ -129,15 +147,16 @@ x
   set -e
   if [ "$u_rc" -eq 2 ] && [ -n "$u_out" ]; then
     printf 'pr-body-lint: self-test help-on-stdout PASS\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'pr-body-lint: self-test help-on-stdout FAIL (rc=%s)\n' "$u_rc" >&2
-    rc=1
+    rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
   fi
 
   if [ "$rc" -eq 0 ]; then
-    printf 'pr-body-lint self-test: ALL PASS\n'
+    printf 'pr-body-lint self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   else
-    printf 'pr-body-lint self-test: FAIL\n' >&2
+    printf 'pr-body-lint self-test: FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$_SELFTEST_FAILED" >&2
     exit 2
   fi
 }

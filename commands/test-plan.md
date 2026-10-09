@@ -18,12 +18,14 @@ a requirements file. The plan is written to `.context/test-plan-<slug>.md` (`<sl
 
 ## Options
 
-| Option | Values | Purpose |
-|--------|--------|---------|
+| Option | Values | Effect |
+|--------|--------|--------|
 | `--from-pr <number>` | PR number | Plan from that PR's changes: read its title, body and file list with `gh pr view <number> --json title,body,files` and its changes with `gh pr diff <number>` |
 | `--from-file <path>` | requirements file, e.g. a PL `planning-N.md` | Plan from that file |
 | `--automation` | — | Focus on automation-ready test cases |
 | `--platform <p>` | `apple`, `android`, `web`, `systems`, `backend`, `ai`, `all` | Target platform context (default: `all`; detected per `skills/shared/platform-detection.md`) |
+
+## Examples
 
 ```
 /test-plan "<feature or requirement>" | --from-pr <number> | --from-file <path> [--automation] [--platform <p>]

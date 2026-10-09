@@ -53,9 +53,36 @@ The classifier must be conservative. Prefer `low` when in doubt — low-confiden
 
 The pattern each row follows: read the diff, then propose against the *producing* prompt file — never against the artifact the user edited.
 
+## Enforcement Form
+
+The category says what the user changed; the enforcement form says how to stop it recurring. Assign exactly one per proposal, after the category:
+
+1. **Could a script detect a violation without reading for meaning?** A fixed string or pattern, a banned API, a path, a file name or a naming rule → `mechanical`.
+2. **Otherwise** → `judgement`.
+
+| Form | Proposal | Target | Applied by |
+|------|----------|--------|------------|
+| `mechanical` | A deterministic check: lint rule, bats test or hook. When a check already exists but no hook, gate or test runs it, propose the wiring. | The script, hook or test file | `corpflow:workflow-engineer` |
+| `judgement` | A prose rule with its reason | Standards rule: the reviewer (`agents/technical-lead.md`) before the implementer. Other rules: the producing prompt file. | `corpflow:prompt-engineer` |
+
+### Rules for both forms
+
+- A prose rule for a `mechanical` finding is the weaker fix: a model under pressure skips prose, a check fails. Propose prose only alongside the check, never instead of it.
+- No guardrail at all is a finding. When no check exists and none could be written, say so in the proposal's Rationale.
+- Never target an always-loaded file (`CLAUDE.md`, `AGENTS.md`) with a new rule. Every session pays its token cost; scope the rule to the agent or skill that needs it.
+- Cite the diff hunk (path and line range) the proposal came from. A proposal that cannot name its hunk is a guess; drop it.
+
+### Enforcement Form Examples
+
+| Observed diff | Category / form | Proposal |
+|---------------|-----------------|----------|
+| User renamed `development.md` → `development-0.md` in 3 artifacts | `accuracy` / `mechanical` | A bats predicate that names any un-indexed artifact path; target the test file |
+| User fixed a violation that an existing lint script detects, but no hook, gate or test calls that script | `accuracy` / `mechanical` | Wire the existing script into the gate; the unwired check is the finding |
+| User rewrote a DR finding to name the trigger, not the symptom | `accuracy` / `judgement` | A finding-shape rule in `agents/technical-lead.md`, not in the implementer |
+
 ## Cross References
 
 - `SKILL.md § Step 3` — where classification happens in the pipeline
-- `references/retrospective-template.md` — how categories render in `learnings.md`
-- `references/target-mapping.md` — mapping categorized diffs to target files
+- `skills/self-improvement/references/retrospective-template.md` — how categories render in `learnings.md`
+- `skills/self-improvement/references/target-mapping.md` — mapping categorized diffs to target files
 - `commands/optimize-agent.md § Focus Areas` — similar category taxonomy (clarity/efficiency/consistency/tools/model)

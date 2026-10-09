@@ -17,6 +17,10 @@
 #        checked out there, so the main checkout, every linked worktree and any
 #        subdirectory of either must land on the same main worktree.
 #
+#   This script is a plain git lookup and applies no plugin-root policy: path-scrub.sh needs the
+#   raw main root. The reader guard (corpflow_inferred_ctx_ok in state-read-lib.sh) vets its
+#   answer for every ledger caller.
+#
 #   The common-dir probe trusts `--path-format=absolute` only when the result starts
 #   with `/` and names a directory: git versions without the flag echo it back as a
 #   revision argument, which would otherwise read as a bogus path.

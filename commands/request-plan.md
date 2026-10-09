@@ -2,11 +2,14 @@
 name: request-plan
 description: Turn a free-form request into a lightweight, context-aware plan (goal, scope, phases, rough effort, risks) and recommend the worktask trigger to execute it
 argument-hint: '"<request>" [--save]'
-allowed-tools: Read, Glob, Grep, Write, Task, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh *)
+allowed-tools: Read, Glob, Grep, Write, Agent, Bash(bash ${CLAUDE_PLUGIN_ROOT}/skills/request-plan/scripts/capability-registry.sh *)
 related:
   - skills/request-plan/SKILL.md
   - skills/estimation-methodology/SKILL.md
   - skills/shared/three-stage-planning.md
+  - commands/worktask.md
+  - commands/estimate.md
+  - commands/product-requirements.md
 ---
 
 # Request Plan Command
@@ -19,9 +22,11 @@ Thin entry point to the `request-plan` skill, which holds the full workflow and 
 
 ## Options
 
-| Option | Effect |
-|--------|--------|
-| `--save` | Also write the plan to `.context/request-plan-0.md` (naming per `skills/task-folder-organization/SKILL.md`). Default: inline output only. |
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--save` | — | Also write the plan to `.context/request-plan-0.md`, named per `skills/task-folder-organization/SKILL.md` (default: off, inline output only) |
+
+## Examples
 
 ```
 /request-plan "<request>" [--save]
@@ -35,17 +40,20 @@ Thin entry point to the `request-plan` skill, which holds the full workflow and 
 - Line 3 — a refactor: no new behaviour, so Scope carries the seams and Risks the regression surface.
 - Line 4 — XL work: the plan splits it into sub-tasks and triggers the first.
 
-## Workflow
-
-1. Load the `request-plan` skill (`skills/request-plan/SKILL.md`) and follow its five steps.
-2. Keep it lightweight. A heavier sibling command may be named alongside the handoff, never in
-   place of it — `SKILL.md § 4` holds the list and is the authority.
-3. End with a single ready-to-paste `/worktask` command line (PL0 dynamic sizing drops stages for
-   small tasks), with the one exception `SKILL.md § 4` states. XL work still gets its line, for
-   the first sub-task — `skills/request-plan/references/handoff.md § Escalation beats size`.
-
 ## Output Format
 
 `skills/request-plan/references/plan-template.md` — `# Plan: <one-line goal>` then
 Context · Goal · Scope · Phases · Effort (rough) · Risks & Dependencies ·
 Recommended next step (the single `/worktask` command line).
+
+## Workflow
+
+1. Load the `request-plan` skill (`skills/request-plan/SKILL.md`) and follow its five steps. Done
+   when the plan carries every section of `skills/request-plan/references/plan-template.md`, or,
+   under the `SKILL.md § 4` exception, cites where the asked-for thing already exists.
+2. Keep it lightweight. A heavier sibling command may be named alongside the handoff, never in
+   place of it — `SKILL.md § 4` holds the list and is the authority. Done when every sibling
+   command the plan names sits in its Recommended next step section next to the `/worktask` line.
+3. End with a single ready-to-paste `/worktask` command line (PL0 dynamic sizing drops stages for
+   small tasks), with the one exception `SKILL.md § 4` states. XL work still gets its line, for
+   the first sub-task — `skills/request-plan/references/handoff.md § Escalation beats size`.

@@ -17,6 +17,7 @@
 load "${BATS_TEST_DIRNAME}/../../lib/test_helper.bash"
 
 WORKTASK_DOC="commands/worktask.md"
+AUTO_DECISION_DOC="skills/worktask/references/auto-decision.md"
 MEGATASK_DOC="commands/megatask.md"
 DEVELOPER_DOC="agents/developer.md"
 PRODUCT_MANAGER_DOC="agents/product-manager.md"
@@ -220,6 +221,9 @@ eg1_arm() {
   local text
   text="$(arm_text "$WORKTASK_DOC" '^### Step A\.4 — Auto-Decision Pre-Pass' '^### Step A\.4b —')"
   [ -n "$text" ] || fail "Step A.4 range empty — the section heading in $WORKTASK_DOC moved"
+  # The delegate procedure Step A.4 points at is part of the pre-pass, so it is held to the same rule.
+  [ -s "$PLUGIN_ROOT/$AUTO_DECISION_DOC" ] || fail "$AUTO_DECISION_DOC is missing or empty"
+  text+=$'\n'"$(cat "$PLUGIN_ROOT/$AUTO_DECISION_DOC")"
   if printf '%s\n' "$text" | grep -q "task-meta PL0 --set .*approved"; then
     fail "Step A.4 stamps an approval carrier; it bypasses no gate and must not"
   fi

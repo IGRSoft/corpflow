@@ -31,7 +31,7 @@ git worktree prune
 | DV | Branch checked out, commit to workspace branch |
 | FN | Push branch, create PR, signal orchestrator |
 
-Fresh agent context per issue — the orchestrator delegates via Task, each subagent starts clean.
+Fresh agent context per issue — the orchestrator delegates via Agent, each subagent starts clean.
 
 ## Worktree Lifecycle
 

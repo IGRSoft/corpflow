@@ -20,7 +20,7 @@ selftest_case() { # <label> <expected rc> <stdout must contain, or "" for empty>
     exit 1
   fi
   case "$out" in
-    *"$want_out"*) printf '%s: ok\n' "$label" ;;
+    *"$want_out"*) printf '%s: ok\n' "$label"; _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)) ;;
     *)
       printf >&2 '%s: FAIL (stdout lacks %s: %s)\n' "$label" "$want_out" "$out"
       exit 1
@@ -31,6 +31,7 @@ selftest_case() { # <label> <expected rc> <stdout must contain, or "" for empty>
 # shellcheck disable=SC2016  # fixture text: backticks and $NAME must reach the doc unexpanded
 run_self_test() {
   local td tree
+  _SELFTEST_PASSED=0
   td=$(mktemp -d "${TMPDIR:-/tmp}/doc-option-check-selftest.XXXXXX")
   # shellcheck disable=SC2064  # expand $td now so the trap removes the right dir
   trap "rm -rf -- '${td}'" EXIT
@@ -40,7 +41,9 @@ run_self_test() {
   printf 'Set `API_PORT` first.\n' > "$tree/docs/defined.md"
   printf 'See [x](/etc/hosts).\n' > "$tree/docs/outside.md"
   printf 'See [x](gone.md).\n' > "$tree/docs/missing.md"
+  printf 'Refs `origin/develop`, `refs/heads/x`, `IGRSoft/corpflow`, `github.com/IGRSoft/x`, `a|b/c`, `(x)/y`, `skills/...` and `^docs/[a-z]+`.\n' > "$tree/docs/notpaths.md"
   printf '#!/usr/bin/env bash\nprintf "%%s" "$API_PORT"\n' > "$tree/run.sh"
+  printf 'See `docs/a"b\\c/d.md`.\n' > "$tree/docs/hostile.md"
   git -C "$tree" init -q .
   git -C "$tree" add -- .
 
@@ -54,7 +57,13 @@ run_self_test() {
     bash "$SELF" --tree "$tree" "$tree/docs/missing.md"
   selftest_case 'S5: unresolved tree exits 3' 3 '' \
     bash "$SELF" --tree "$td/no-such-tree" "$tree/docs/defined.md"
+  selftest_case 'S6: refs, slugs, hosts and regex fragments are not paths' 0 '' \
+    bash "$SELF" --tree "$tree" "$tree/docs/notpaths.md"
+  selftest_case 'S7: a JSON-hostile path under a real dir is still a finding' 1 '"name":"docs/a\"b\\c/d.md"' \
+    bash "$SELF" --tree "$tree" "$tree/docs/hostile.md"
+  selftest_case 'S8: --allow-path exempts an exact missing path' 0 '' \
+    bash "$SELF" --tree "$tree" --allow-path docs/gone.md "$tree/docs/missing.md"
 
-  printf 'self-test: ALL PASS\n'
+  printf 'self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   exit 0
 }

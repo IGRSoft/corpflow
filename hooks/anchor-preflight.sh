@@ -8,27 +8,32 @@
 # fell through to the Post checks would exit 2 on the not-yet-written file's old contents and
 # block the write. With no --event the payload's hook_event_name decides, then Post.
 #
-# PreToolUse: denies a write to a canonical .context/<stage>-N.md artifact (DV also its
-# development-N-<stream>.md) whose content adds an H2 outside that stage's allow-list
-# (cache-lint.sh --anchor-diff). A missing required H2
-# never denies: artifacts are built in steps, and the stage-boundary harness owns that check.
-# An Edit is judged on new_string, minus the H2s old_string already carries. Fails open
-# (allows) without jq, without a state.json beside the artifact, or without a plugin root.
+# PreToolUse: denies only an Edit to a canonical .context/<stage>-N.md artifact (DV also its
+# development-N-<stream>.md) whose new_string adds an H2 outside that stage's allow-list
+# (cache-lint.sh --anchor-diff), minus the H2s old_string already carries. Re-issuing an Edit
+# is cheap. A whole-file Write (every Codex patch maps to one) is never denied: a deny there
+# forces a full re-emit of the artifact, while every defect it could carry is fixable by a
+# small Edit. Its findings come back from the Post arm instead. A missing required H2 never
+# denies: artifacts are built in steps. Fails open (allows) without jq, without a state.json
+# beside the artifact, or without a plugin root.
 #
 # PostToolUse: a write under a .context/ that holds a state.json, whose extension is on the
 # control-byte-lib text allowlist, is scanned for raw C0 control bytes (a form feed in a project's
-# own source is not the plugin's business);
-# a path matching the canonical .context/<stage>-N.md regex also runs cache-lint.sh
-# --anchor-lint, so a bad H2 anchor surfaces at the producing write rather than at the DR gate.
+# own source is not the plugin's business). A path matching the canonical .context/<stage>-N.md
+# regex also runs cache-lint.sh --anchor-lint; under a ledger .context/ it adds one line per H2
+# outside the allow-list, and handoff-harness.sh --validate-frontmatter on a same-basename temp copy of the file on disk for
+# three classes only: frontmatter over the token budget, a digitless test summary_line, a sweep
+# stub whose item has under 2 options. The frontmatter check runs for a Write, a Codex patch, an
+# unreadable payload, and an Edit whose new_string is empty or lands in the frontmatter block or
+# the ## elicitation-sweep section; a body-only Edit cannot change those classes. It fails open
+# without yq or the harness.
 #
-# Post reads tool_input.file_path from the hook stdin JSON, falling back to
-# CLAUDE_TOOL_INPUT_FILE_PATH without jq. Exit 2 on any Post finding: in PostToolUse only
-# exit 2 routes stderr to the model, and continueOnBlock keeps the turn going. Pre always
-# exits 0; a deny travels as JSON on stdout.
+# Moving these findings from a Pre deny to Post feedback loosens a write-time control on purpose:
+# the stage-boundary harness (Step B.1) still fails closed, so nothing invalid crosses a stage.
 #
 # Plugin root is env-first ($CLAUDE_PLUGIN_ROOT), else self-located from $0. An empty root
-# skips both lints. --self-test asserts the gating regex, the control-byte scan, the Pre deny
-# arm and the no-jq `--event pre` exit.
+# skips both lints. --self-test asserts the gating regex, the control-byte scan, the Pre Edit
+# deny, the Pre Write allow, the Post frontmatter finding and the no-jq `--event pre` exit.
 set -eu
 
 SELF_TEST=0
@@ -111,20 +116,37 @@ if [ "$SELF_TEST" -eq 1 ]; then
   if command -v jq > /dev/null 2>&1; then
     mkdir -p "$_st_td/.context"
     : > "$_st_td/.context/state.json"
-    _st_pre() {  # <file_path> -> the hook's stdout for a PreToolUse Write adding `## Approach`
-      jq -cn --arg p "$1" '{hook_event_name: "PreToolUse", tool_name: "Write",
-        tool_input: {file_path: $p, content: "## files-changed\n## Approach\n"}}' \
-        | CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname -- "$0")/..}" bash "$0"
+    _st_root="${CLAUDE_PLUGIN_ROOT:-$(dirname -- "$0")/..}"
+    _st_pre() {  # <tool> <file_path> -> the hook's stdout for a PreToolUse write adding `## Approach`
+      jq -cn --arg t "$1" --arg p "$2" '{hook_event_name: "PreToolUse", tool_name: $t,
+        tool_input: (if $t == "Write" then {file_path: $p, content: "## files-changed\n## Approach\n"}
+          else {file_path: $p, new_string: "## Approach\n", old_string: ""} end)}' \
+        | CLAUDE_PLUGIN_ROOT="$_st_root" bash "$0"
     }
-    _st_out=$(_st_pre "$_st_td/.context/development-0.md") || _st_out=""
+    _st_out=$(_st_pre Edit "$_st_td/.context/development-0.md") || _st_out=""
     case "$_st_out" in
       *'"permissionDecision":"deny"'*'## Approach'*) ;;
-      *) echo "anchor-preflight: self-test FAIL (bad H2 on an artifact path not denied: $_st_out)"; exit 1 ;;
+      *) echo "anchor-preflight: self-test FAIL (bad H2 in an artifact Edit not denied: $_st_out)"; exit 1 ;;
     esac
-    _st_out=$(_st_pre "$_st_td/notes-0.md") || _st_out="rc!=0"
+    _st_out=$(_st_pre Write "$_st_td/.context/development-0.md") || _st_out="rc!=0"
+    [ -z "$_st_out" ] || { echo "anchor-preflight: self-test FAIL (artifact Write denied: $_st_out)"; exit 1; }
+    if command -v yq > /dev/null 2>&1; then
+      printf -- '---\nhandoff:\n  stage: QA\n  verdict: go\n  summary: "s"\n  tests_executed:\n    - { runner: bats, count: 3, summary_line: "ALL PASS" }\n  files_touched: []\n  key_decisions: []\n  open_questions: []\n  refs:\n    results: testing-0.md#results\n---\n\n## results\n' \
+        > "$_st_td/.context/testing-0.md"
+      _st_rc=0
+      _st_out=$(jq -cn --arg p "$_st_td/.context/testing-0.md" '{hook_event_name: "PostToolUse", tool_name: "Write",
+        tool_input: {file_path: $p}}' \
+        | CLAUDE_PLUGIN_ROOT="$_st_root" bash "$0" --event post 2>&1 > /dev/null) || _st_rc=$?
+      case "$_st_rc:$_st_out" in
+        2:*'carries no digit'*'do not re-Write the file'*) ;;
+        *) echo "anchor-preflight: self-test FAIL (digitless summary_line not reported at Post: rc=$_st_rc $_st_out)"; exit 1 ;;
+      esac
+      rm -f "$_st_td/.context/testing-0.md"
+    fi
+    _st_out=$(_st_pre Edit "$_st_td/notes-0.md") || _st_out="rc!=0"
     [ -z "$_st_out" ] || { echo "anchor-preflight: self-test FAIL (non-artifact write denied: $_st_out)"; exit 1; }
   else
-    echo "anchor-preflight: self-test SKIP pre-write deny arm (jq unavailable; the arm fails open)"
+    echo "anchor-preflight: self-test SKIP pre-write deny and post frontmatter arms (jq unavailable; both fail open)"
   fi
 
   # The farm carries the control-byte scan's tools but no jq, so the NUL file would exit 2 if
@@ -181,7 +203,7 @@ resolve_plugin_root() {
 
 # The deny reason names the stage's whole allowed set, because an agent outside corpflow
 # writing a canonical artifact name sees the contract nowhere else.
-pre_allowed_set() {
+allowed_set() {
   bash "$1" --allow-list 2> /dev/null | awk -F'\t' -v b="$2" '
     function add(l, h) { return l (l == "" ? "" : ", ") "## " h }
     $3 == b && ($4 == "required" || $4 == "universal") { req = add(req, $5); st = $1 }
@@ -191,6 +213,20 @@ pre_allowed_set() {
       if (st == "") exit 1
       printf "%s\n%s%s%s", st, req, (opt == "" ? "" : "; optional: " opt), (any == "" ? "" : "; any stage: " any)
     }'
+}
+
+_nl='
+'
+
+# unexpected_h2s <anchor-diff rows> -> "## A, ## B" for the `unexpected` rows.
+unexpected_h2s() {
+  printf '%s\n' "$1" | awk -F'\t' '$1 == "unexpected" { printf "%s## %s", (n++ ? ", " : ""), $2 }'
+}
+
+# canonical_base <basename> — strip the run index and any DV stream suffix: the allow-list keys
+# rows by canonical basename.
+canonical_base() {
+  printf '%s' "${1%.md}" | sed -E 's/-[0-9]+(-[a-z0-9-]+)?$//'
 }
 
 pre_tool_use_arm() {
@@ -205,26 +241,23 @@ pre_tool_use_arm() {
   _lint="$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh"
   [ -r "$_lint" ] || return 0
 
+  # A Write never reaches the deny below; see the header for why.
+  [ "$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.content | type' 2> /dev/null)" != string ] || return 0
+
   # Model-authored text reaches the lint only as file contents, never as argv.
   _pre_td=$(mktemp -d "${TMPDIR:-/tmp}/anchor-preflight.XXXXXX") || return 0
   # shellcheck disable=SC2064  # the path is fixed at set time on purpose
   trap "rm -rf '$_pre_td'" EXIT
-  printf '%s' "$PAYLOAD" | jq -r 'if (.tool_input.content | type) == "string" then .tool_input.content
-    else (.tool_input.new_string // "") end' > "$_pre_td/new" 2> /dev/null || return 0
+  printf '%s' "$PAYLOAD" | jq -r '.tool_input.new_string // ""' > "$_pre_td/new" 2> /dev/null || return 0
   printf '%s' "$PAYLOAD" | jq -r '.tool_input.old_string // ""' > "$_pre_td/old" 2> /dev/null || return 0
 
   _rc=0
   _rows=$(bash "$_lint" --anchor-diff --for-path "$FILE_PATH" --baseline "$_pre_td/old" "$_pre_td/new" 2> /dev/null) || _rc=$?
-  [ "$_rc" -eq 1 ] || return 0
-  _bad=$(printf '%s\n' "$_rows" | awk -F'\t' '$1 == "unexpected" { printf "%s## %s", (n++ ? ", " : ""), $2 }')
+  _bad=""
+  [ "$_rc" -ne 1 ] || _bad=$(unexpected_h2s "$_rows")
   [ -n "$_bad" ] || return 0
-
   _base="${FILE_PATH##*/}"
-  # Strip the run index and any DV stream suffix: the allow-list keys rows by canonical basename.
-  _canon=$(printf '%s' "${_base%.md}" | sed -E 's/-[0-9]+(-[a-z0-9-]+)?$//')
-  _set=$(pre_allowed_set "$_lint" "$_canon") || return 0
-  _nl='
-'
+  _set=$(allowed_set "$_lint" "$(canonical_base "$_base")") || return 0
   _reason="anchor-preflight: $_base (stage=${_set%%"$_nl"*}) adds H2 outside the allow-list: $_bad. Allowed: ${_set#*"$_nl"}. Nest other headings as H3."
   _doc=$(jq -cn --arg reason "$_reason" \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $reason}}' \
@@ -236,6 +269,7 @@ pre_tool_use_arm() {
 # Resolve the written file path: prefer hook stdin JSON, fall back to env.
 FILE_PATH=""
 PAYLOAD=""
+TOOL_NAME=""
 if [ "$EVENT" = pre ] && ! command -v jq > /dev/null 2>&1; then
   exit 0
 fi
@@ -252,6 +286,7 @@ if command -v jq >/dev/null 2>&1; then
       exit 0
     fi
     FILE_PATH=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null || true)
+    TOOL_NAME=$(printf '%s' "$PAYLOAD" | jq -r '.tool_name // empty' 2>/dev/null || true)
   fi
 fi
 [ -z "$FILE_PATH" ] && FILE_PATH="${CLAUDE_TOOL_INPUT_FILE_PATH:-}"
@@ -305,10 +340,68 @@ if ! is_artifact "$FILE_PATH" || [ ! -f "$FILE_PATH" ]; then
   exit 0
 fi
 
+# The Edit-fix feedback is the worktask contract, so it fires only beside a ledger, as the Pre
+# deny does; --anchor-lint keeps its wider, pre-existing scope.
+LEDGER=0
+if in_ledger_context "$FILE_PATH"; then LEDGER=1; fi
+
 arc=0
 LINT="$PLUGIN_ROOT/skills/worktask/scripts/cache-lint.sh"
 if [ -f "$LINT" ]; then
   bash "$LINT" --anchor-lint "$FILE_PATH" || arc=$?
 fi
-[ "$cbrc" -eq 0 ] && [ "$arc" -eq 0 ] || exit 2
+if [ -f "$LINT" ] && [ "$LEDGER" -eq 1 ]; then
+  # --anchor-lint prints `unexpected: X`; the model-facing line names the H2 and the Edit fix.
+  _rows=$(bash "$LINT" --anchor-diff --for-path "$FILE_PATH" "$FILE_PATH" 2> /dev/null) || true
+  _bad=$(unexpected_h2s "$_rows")
+  if [ -n "$_bad" ]; then
+    _base="${FILE_PATH##*/}"
+    if _set=$(allowed_set "$LINT" "$(canonical_base "$_base")"); then
+      printf >&2 'anchor-preflight: %s (stage=%s) has H2 outside the allow-list: %s. Allowed: %s; fix it with an Edit, do not re-Write the file.\n' \
+        "$_base" "${_set%%"$_nl"*}" "$_bad" "${_set#*"$_nl"}"
+    fi
+  fi
+fi
+
+# frontmatter_edit_scope — rc 0 when the frontmatter classes need judging after this write.
+# Only an Edit can be skipped, and only when its new_string provably sits in the body: in doubt
+# (empty fragment, unreadable payload, a fragment spanning a region edge) it judges.
+frontmatter_edit_scope() {
+  [ "$TOOL_NAME" = Edit ] || return 0
+  _new=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.new_string // ""' 2> /dev/null) || return 0
+  [ -n "$_new" ] || return 0
+  ! printf '%s\n' "$_new" | grep -qxE -- '---|## elicitation-sweep[[:space:]]*' || return 0
+  _fm=$(awk 'NR == 1 && $0 != "---" { exit } { print } NR > 1 && $0 == "---" { exit }' "$FILE_PATH")
+  case "$_fm" in *"$_new"*) return 0 ;; esac
+  # Sweep to end of file: a fragment that starts in the sweep may run into a later H2.
+  _sw=$(awk '/^## elicitation-sweep[[:space:]]*$/ { on = 1 } on' "$FILE_PATH")
+  case "$_sw" in *"$_new"*) return 0 ;; esac
+  return 1
+}
+
+# post_frontmatter_check — one stderr line per harness finding of the three Edit-fixable
+# classes; rc 1 on any. The temp copy keeps the harness from consulting sibling files.
+post_frontmatter_check() {
+  head -n 1 "$FILE_PATH" | grep -q '^---$' || return 0
+  command -v yq > /dev/null 2>&1 || return 0
+  _hh="$PLUGIN_ROOT/skills/worktask/scripts/handoff-harness.sh"
+  [ -r "$_hh" ] || return 0
+  frontmatter_edit_scope || return 0
+  _post_td=$(mktemp -d "${TMPDIR:-/tmp}/anchor-preflight.XXXXXX") || return 0
+  # shellcheck disable=SC2064  # the path is fixed at set time on purpose
+  trap "rm -rf '$_post_td'" EXIT
+  _copy="$_post_td/${FILE_PATH##*/}"
+  cp "$FILE_PATH" "$_copy" || return 0
+  _fails=$(bash "$_hh" --validate-frontmatter "$_copy" 2>&1 > /dev/null \
+    | grep -E '^fail: .*(discretionary tokens >|summary_line carries no digit|is a status note, not a question)') || return 0
+  [ -n "$_fails" ] || return 0
+  printf '%s\n' "$_fails" | while IFS= read -r _f; do
+    printf >&2 'anchor-preflight: %s: %s; fix it with a small Edit, do not re-Write the file.\n' "${FILE_PATH##*/}" "$_f"
+  done
+  return 1
+}
+
+frc=0
+[ "$LEDGER" -eq 0 ] || post_frontmatter_check || frc=$?
+[ "$cbrc" -eq 0 ] && [ "$arc" -eq 0 ] && [ "$frc" -eq 0 ] || exit 2
 exit 0
