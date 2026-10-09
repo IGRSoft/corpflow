@@ -783,9 +783,26 @@ The same line goes in the frontmatter as the `summary_line` of that runner's `te
 DV and QA carry it on every entry whose `count` is non-zero. `handoff-harness.sh
 --validate-frontmatter` fails an entry whose line is absent, empty, digitless, or found neither in
 the artifact body nor in a `.context/logs/` capture the artifact names, one `fail:` per bad entry in
-a single run. It only warns when the line does not carry that entry's `count` as a whole-number
-token, because a TAP plan line (`1..840`) is a whole summary and a Gradle or Xcode formatter need
-not repeat the count.
+a single run. It also fails an entry from a strict runner when the line does not carry that
+entry's `count` as a whole-number token (§ Strict runners fail a count-less line).
+
+##### Strict runners fail a count-less line (tpl-dv, tpl-qa)
+
+The strict runners are listed once, in `skills/shared/testing-strategy.md § Strict-count runners`,
+with the one exception for a failing pytest run. The list covers every name that starts with
+`gradle` or `junit`, in any case. For every other runner the missing token only warns, with one
+`count_corroboration` audit row. A `bash-*` live script then names a `.context/logs/` capture
+whose result line carries the count. `xcodebuild` stays at warn: a mixed XCTest + Swift
+Testing scheme prints one tally per framework and no total.
+
+##### Gradle and JUnit quote the junit-tally line (tpl-dv, tpl-qa)
+
+Gradle prints no count (`BUILD SUCCESSFUL in 4s`). For a `gradle*` or `junit*` runner, run
+`skills/worktask/scripts/junit-tally.sh <results-dir>` on the JUnit XML directory (Gradle:
+`build/test-results/test`). Capture its line to `.context/logs/`, name that capture in the
+artifact, and quote the line as the `summary_line`:
+`JUnit XML tally: 58 tests executed, 0 failures, 0 errors, 0 skipped`. The executed count is
+`tests` minus `skipped`, summed over the leaf `<testsuite>` elements.
 
 ##### tests_executed carries one entry per runner (tpl-dv)
 
@@ -921,6 +938,12 @@ handoff:
 ```
 
 Prev→this label: `DR→QA` (or `SR→QA` when SR runs).
+
+#### QA summary lines take the tpl-dv checks (tpl-qa)
+
+Every QA `tests_executed` entry takes the `#tpl-dv` `summary_line` checks, the strict-runner fail
+included. A `gradle*` or `junit*` entry quotes the `junit-tally.sh` line
+(§ Gradle and JUnit quote the junit-tally line).
 
 #### An unverified security claim in shipped docs is a finding (tpl-qa)
 

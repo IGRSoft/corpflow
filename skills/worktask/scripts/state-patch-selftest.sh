@@ -11,6 +11,7 @@
 # for this invocation (0 on ALL PASS, 1 on the first failing case).
 
 run_self_test() {
+  _SELFTEST_PASSED=0
   # Resolve path BEFORE any cd so subprocess calls work.
   local SELF
   SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
@@ -63,6 +64,7 @@ EOART
   if jq -e '.tasks.DV0.status == "completed" and .tasks.DV0.verdict == "ok"' \
     .context/state.json > /dev/null; then
     printf 'T1: explicit artifact → patched: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T1: explicit artifact → patch missing: FAIL\n' >&2
     exit 1
@@ -73,6 +75,7 @@ EOART
   bash "$SELF" --stage DV --artifact .context/development-0.md
   if diff -q .context/state.json .context/state.json.snap > /dev/null; then
     printf 'T2: idempotent re-run: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T2: idempotent re-run: FAIL (state changed)\n' >&2
     exit 1
@@ -89,6 +92,7 @@ EOART
   if jq -e '.tasks.DV0.status == "completed" and (.tasks.DV0.artifact | endswith("development-0.md"))' \
     .context/state.json > /dev/null; then
     printf 'T3: run_index-resolved artifact: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T3: run_index-resolved artifact: FAIL\n' >&2
     exit 1
@@ -124,6 +128,7 @@ EOART
   if jq -e '.tasks.AR0.verdict == "blocked" and (.tasks.AR0.artifact | endswith("architecture-1.md"))' \
     .context/state.json > /dev/null; then
     printf 'T4: highest-N wins when run_index absent: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T4: highest-N resolution: FAIL\n' >&2
     jq '.tasks.AR0' .context/state.json >&2
@@ -143,6 +148,7 @@ EOSTATE
     }
   if diff -q .context/state.json .context/state.json.snap2 > /dev/null; then
     printf 'T5: absent artifact → no-op: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T5: absent artifact → no-op: FAIL (state changed)\n' >&2
     exit 1
@@ -168,6 +174,7 @@ EOART
     }
   if jq -e '.tasks.QA0.status == "completed"' .context/state.json > /dev/null; then
     printf 'T6: disk-guard degrade on unparseable df → patch applied: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T6: disk-guard degrade: FAIL\n' >&2
     exit 1
@@ -192,6 +199,7 @@ EOART
   if jq -e '(.handoffs["PL→AR0"] // "") | test("approach validated") and test("ref:architecture-0.md")' \
     .context/state.json > /dev/null; then
     printf 'T8: --prev writes handoffs edge from summary+ref: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T8: --prev handoffs edge: FAIL\n' >&2
     jq '.handoffs' .context/state.json >&2
@@ -202,6 +210,7 @@ EOART
   bash "$SELF" --stage AR --artifact .context/architecture-0.md
   if jq -e '(.handoffs | length) == 0' .context/state.json > /dev/null; then
     printf 'T8: absent --prev leaves handoffs untouched: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T8: absent --prev must not add handoffs: FAIL\n' >&2
     exit 1
@@ -240,6 +249,7 @@ EOART
   if jq -e '(.handoffs["AR→DV0"] // "") | test("remediated after DR round 1")' \
     .context/state.json > /dev/null; then
     printf 'T10: same-verdict remediation refreshes handoff edge: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T10: same-verdict remediation left a stale handoff edge: FAIL\n' >&2
     jq '.handoffs' .context/state.json >&2
@@ -250,6 +260,7 @@ EOART
   bash "$SELF" --stage DV --prev AR --artifact .context/development-0.md
   if cmp -s .context/state.json .context/state.before; then
     printf 'T10: unchanged re-run stays idempotent: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T10: unchanged re-run must not rewrite state: FAIL\n' >&2
     exit 1
@@ -285,6 +296,7 @@ EOART
             and ([.facts.decisions[] | select(.stage == "AR0") | .id] == ["a2","a3","a4","a5","a6","a7","a8","a9"])' \
     .context/state.json > /dev/null; then
     printf 'T9: facts.decisions clamped to newest-8 per task, both buckets survive: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T9: decisions bound: FAIL\n' >&2
     jq '.facts.decisions | map(.id)' .context/state.json >&2
@@ -293,6 +305,7 @@ EOART
   if jq -e '(.facts.dispatched_agents | length) == 6 and ([.facts.dispatched_agents[] | select(.status == "launched")] | length) == 2' \
     .context/state.json > /dev/null; then
     printf 'T9: dispatched_agents clamped to 6, launched survive: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T9: dispatched_agents bound: FAIL\n' >&2
     jq '.facts.dispatched_agents | map({task_id, status})' .context/state.json >&2
@@ -319,6 +332,7 @@ EOART
   if jq -e '.tasks.QA0.status == "completed" and (.tasks.QA0.artifact | endswith("qa-0.md"))' \
     .context/state.json > /dev/null; then
     printf 'T11: alias basename resolves: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T11: alias basename resolution: FAIL\n' >&2
     exit 1
@@ -336,6 +350,7 @@ EOART
   bash "$SELF" --stage QA
   if jq -e '(.tasks.QA0.artifact | endswith("testing-0.md"))' .context/state.json > /dev/null; then
     printf 'T11: canonical preferred over alias: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T11: canonical must outrank alias: FAIL\n' >&2
     exit 1
@@ -352,12 +367,14 @@ EOART
   set -e
   if [[ "$st12_rc" -eq 3 ]] && printf '%s' "$st12_out" | grep -q 'retrospective-N.md'; then
     printf 'T12: unresolved self-patch exits 3 naming the basenames: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T12: unresolved self-patch must exit 3 (got %s): FAIL\n' "$st12_rc" >&2
     exit 1
   fi
   if diff -q .context/state.json .context/state.json.snap3 > /dev/null; then
     printf 'T12: exit 3 leaves state untouched: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T12: exit 3 must not alter state: FAIL\n' >&2
     exit 1
@@ -369,6 +386,7 @@ EOART
   set -e
   if [[ "$st12b_rc" -eq 0 ]]; then
     printf 'T12: --via keeps the unresolved no-op at exit 0: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T12: --via must not fail loudly (got %s): FAIL\n' "$st12b_rc" >&2
     exit 1
@@ -393,6 +411,7 @@ EOART
   if jq -e '(.handoffs["USER→PL0"] // "") | test("origin edge from the user")' \
     .context/state.json > /dev/null; then
     printf 'T13: --prev USER writes the USER→PL0 edge: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T13: --prev USER edge: FAIL\n' >&2
     jq '.handoffs' .context/state.json >&2
@@ -422,6 +441,7 @@ EOART
   t15_id=$(bash "$SELF" --resolve-task-id DV)
   if [[ "$t15_id" == "DV0" ]]; then
     printf 'T15: in_progress instance outranks pending: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15: in_progress must win (got %s): FAIL\n' "$t15_id" >&2
     jq '.tasks' .context/state.json >&2
@@ -432,6 +452,7 @@ EOART
   t15_id=$(bash "$SELF" --resolve-task-id DV)
   if [[ "$t15_id" == "DV1" ]]; then
     printf 'T15: settled instance yields to the pending one: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15: pending must win once DV0 settles (got %s): FAIL\n' "$t15_id" >&2
     exit 1
@@ -452,6 +473,7 @@ EOSPLIT
   if jq -e '.tasks.DV1.status == "completed" and .tasks.DV1.verdict == "ok"
             and (.tasks.DV0.artifact // "") == ""' .context/state.json > /dev/null; then
     printf 'T15: --stage resolves to the open split instance: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15: split-stage resolution: FAIL\n' >&2
     jq '.tasks' .context/state.json >&2
@@ -462,6 +484,7 @@ EOSPLIT
   if jq -e '(.tasks.DV0.artifact // "") | endswith("development-0.md")' \
     .context/state.json > /dev/null; then
     printf 'T15: explicit --task-id overrides resolution: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15: --task-id override: FAIL\n' >&2
     exit 1
@@ -477,6 +500,7 @@ EOSTATE
   t15b_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-0-ledger.md)
   if [[ "$t15b_id" == "DV1" ]]; then
     printf 'T15b: --artifact picks the matching instance out of two in_progress: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15b: artifact-first resolution (got %s, want DV1): FAIL\n' "$t15b_id" >&2
     exit 1
@@ -487,6 +511,7 @@ EOSTATE
   t15e_id2=$(bash "$SELF" --resolve-task-id DV --artifact ./.context/development-0-ledger.md)
   if [[ "$t15e_id" == "DV1" && "$t15e_id2" == "DV1" ]]; then
     printf 'T15e: absolute and ./-prefixed artifacts resolve like the relative one: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15e: path normalisation (abs=%s dot=%s, want DV1): FAIL\n' "$t15e_id" "$t15e_id2" >&2
     exit 1
@@ -500,6 +525,7 @@ EOSTATE
   t15f_id=$(bash "$SELF" --resolve-task-id DV --artifact .context/development-1.md)
   if [[ "$t15f_id" == "DV0" ]]; then
     printf 'T15f: recorded artifact outranks a stale planned one: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15f: recorded-before-planned precedence (got %s, want DV0): FAIL\n' "$t15f_id" >&2
     exit 1
@@ -517,6 +543,7 @@ EOSTATE
     && printf '%s' "$t15c_err" | grep -q 'DV0,DV1' \
     && diff -q .context/state.json .context/state.json.snap15c > /dev/null; then
     printf 'T15c: ambiguous stage refuses with exit 4, both named, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15c: ambiguity must fail closed (rc=%s err=%s): FAIL\n' "$t15c_rc" "$t15c_err" >&2
     exit 1
@@ -535,6 +562,7 @@ EOSTATE
     && jq -e '.tasks.DV0.status == "completed" and .tasks.DV1.status == "pending"' \
       .context/state.json > /dev/null; then
     printf 'T15d: bare --stage with one open instance is unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T15d: bare --stage regression (id=%s rc=%s): FAIL\n' "$t15d_id" "$t15d_rc" >&2
     exit 1
@@ -566,6 +594,7 @@ EOSTATE
             and (.tasks.DV0.metadata | has("error_escalated_to") | not)
             and .tasks.PL0.status == "completed"' .context/state.json > /dev/null; then
     printf 'T18: replay resets the target and leaves PL0 alone: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T18: replay blast radius: FAIL\n' >&2
     jq '.tasks' .context/state.json >&2
@@ -575,6 +604,7 @@ EOSTATE
             | .task_id == "DV0" and .metadata.escalation_cap_override == true' \
     .context/logs/audit.jsonl > /dev/null; then
     printf 'T18: replay audits the cap override on success: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T18: stage_replay audit row missing: FAIL\n' >&2
     cat .context/logs/audit.jsonl >&2 2> /dev/null || true
@@ -591,6 +621,7 @@ EOSTATE
   if [[ "$st18_rc" -eq 4 ]] \
     && diff -q .context/state.json .context/state.json.snap18 > /dev/null; then
     printf 'T18: live target refuses with exit 4, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T18: live-target guard (rc=%s): FAIL\n' "$st18_rc" >&2
     exit 1
@@ -611,6 +642,7 @@ EOSTATE
   if [[ "$st19_rc" -eq 2 ]] \
     && diff -q .context/state.json .context/state.json.snap19 > /dev/null; then
     printf 'T19: partial sweep stub exits 2, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T19: partial-stub guard (rc=%s): FAIL\n' "$st19_rc" >&2
     exit 1
@@ -624,6 +656,7 @@ EOSTATE
   if [[ "$st19b_rc" -eq 2 ]] \
     && diff -q .context/state.json .context/state.json.snap19b > /dev/null; then
     printf 'T19: a stub omitting blocks_next_stage exits 2, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T19: missing-blocks_next_stage guard (rc=%s): FAIL\n' "$st19b_rc" >&2
     exit 1
@@ -646,6 +679,7 @@ EOSTATE
   bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":true}]}' > /dev/null
   if jq -e '.facts.open_questions[0].blocks_next_stage == true' .context/state.json > /dev/null; then
     printf 'T20: raising blocks_next_stage is honoured: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20: a raise to blocking was refused: FAIL\n' >&2
     exit 1
@@ -660,6 +694,7 @@ EOSTATE
   bash "$SELF" --facts '{"open_questions":[{"id":"sw-DV0-1","class":"decision","ref":"development-0.md#elicitation-sweep","blocks_next_stage":false}]}' > /dev/null
   if jq -e '.facts.open_questions[0].blocks_next_stage == false' .context/state.json > /dev/null; then
     printf 'T20b: an explicit false clears an incumbent true: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20b: explicit false could not clear the flag: FAIL\n' >&2
     exit 1
@@ -683,6 +718,7 @@ EOSTATE
     && grep -q 'class downgrade escalate -> decision refused' .context/t20c.out \
     && grep -q 'class downgrade escalate -> decision refused' .context/t20c.err; then
     printf 'T20c: escalate -> decision refused, other fields land, one audit row, rc=2: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20c: class downgrade not refused/reported (rc=%s): FAIL\n' "$st20c_rc" >&2
     jq -c '.facts.open_questions' .context/state.json >&2
@@ -700,6 +736,7 @@ EOSTATE
     && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]] \
     && jq -e '.facts.open_questions[0].class == "escalate"' .context/state.json > /dev/null; then
     printf 'T20d: refused downgrade with --stage still merges the stage and exits 2: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20d: refusal lost or merge aborted on --stage (rc=%s): FAIL\n' "$st20d_rc" >&2
     exit 1
@@ -716,6 +753,7 @@ EOSTATE
     && jq -e '.facts.open_questions[0].class == "escalate"' .context/state.json > /dev/null \
     && ! grep -q 'facts_items_rejected' .context/logs/audit.jsonl 2> /dev/null; then
     printf 'T20e: decision -> escalate raise honoured, rc=0, no rejection row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20e: class raise refused or reported (rc=%s): FAIL\n' "$st20e_rc" >&2
     exit 1
@@ -733,6 +771,7 @@ EOSTATE
   if [[ "$t20f_ok" -eq 1 ]] \
     && [[ "$(grep -c '"facts_items_rejected"' .context/logs/audit.jsonl)" -eq 3 ]]; then
     printf 'T20f: 3 replayed downgrades keep escalate, 3 rejection rows: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T20f: replayed downgrade lowered the class or miscounted rows: FAIL\n' >&2
     exit 1
@@ -757,6 +796,7 @@ EOSTATE
       .context/state.json > /dev/null \
     && grep -q 'sw-DV0-2' .context/t24.err; then
     printf 'T24: --facts persists the valid remainder and names each rejection (rc=2): ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24: per-item rejection did not partition the payload (rc=%s): FAIL\n' "$st24_rc" >&2
     jq -c '.facts' .context/state.json >&2
@@ -773,6 +813,7 @@ EOSTATE
   if [[ "$st24b_rc" -eq 2 ]] \
     && diff -q .context/state.json .context/state.json.snap24b > /dev/null; then
     printf 'T24b: an unknown key refuses the whole payload, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24b: unknown-key guard (rc=%s): FAIL\n' "$st24b_rc" >&2
     exit 1
@@ -784,6 +825,7 @@ EOSTATE
   if [[ "$(grep -c '^' .context/t24c.err)" -le 6 ]] \
     && ! grep -q 'state-patch.sh --stage' .context/t24c.err; then
     printf 'T24c: a rejection prints its diagnostic, not the usage block: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24c: rejection diagnostic buried under usage (%s lines): FAIL\n' \
       "$(grep -c '^' .context/t24c.err)" >&2
@@ -800,6 +842,7 @@ EOSTATE
   if [[ "$st24d_rc" -eq 0 ]] \
     && diff -q .context/state.json .context/state.json.snap24d > /dev/null; then
     printf 'T24d: an empty --facts payload is a no-op success, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24d: empty payload refused (rc=%s): FAIL\n' "$st24d_rc" >&2
     exit 1
@@ -811,6 +854,7 @@ EOSTATE
   if [[ "$st24e_rc" -eq 0 ]] \
     && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]]; then
     printf 'T24e: --stage paired with an empty --facts still patches the ledger: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24e: empty --facts aborted the stage merge (rc=%s): FAIL\n' "$st24e_rc" >&2
     jq -c '.tasks.DV0' .context/state.json >&2
@@ -827,6 +871,7 @@ EOSTATE
     && [[ "$(jq -r '.tasks.DV0.status' .context/state.json)" == "completed" ]] \
     && jq -e '[.facts.decisions[].id] | index("d-ok")' .context/state.json > /dev/null; then
     printf 'T24f: a partial --facts beside --stage completes the merge and still exits 2: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T24f: combined partial-facts exit wrong (rc=%s): FAIL\n' "$st24f_rc" >&2
     exit 1
@@ -840,6 +885,7 @@ EOSTATE
   bash "$SELF" --facts '{"decisions":[{"id":"d-1"}]}' > /dev/null 2> t25.err || st25_rc=$?
   if [[ "$st25_rc" -ne 0 ]] && grep -q 'no ledger' t25.err; then
     printf 'T25: a facts write with no ledger fails loudly on stderr: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T25: absent-ledger facts write was silent (rc=%s): FAIL\n' "$st25_rc" >&2
     exit 1
@@ -854,6 +900,7 @@ EOSTATE
             and (.tasks.DV9.metadata.description | endswith("…"))
             and .tasks.DV9.metadata.stage == "DV"' .context/state.json > /dev/null; then
     printf 'T26: an over-long description is truncated, not rejected, on create and meta: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26: description cap did not apply: FAIL\n' >&2
     jq -c '.tasks.DV9' .context/state.json >&2
@@ -864,6 +911,7 @@ EOSTATE
   if grep -qx 'description_truncated=DV9:400' t26c.err && grep -qx 'description_truncated=DV9:400' t26m.err \
     && ! grep -q 'description_truncated' t26s.err; then
     printf 'T26: a cut prints description_truncated=<id>:<len> on stderr, a short value prints none: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26: truncation notice missing or spurious: FAIL\n' >&2
     cat t26c.err t26m.err t26s.err >&2
@@ -877,6 +925,7 @@ EOSTATE
   if ! jq -e '.tasks.DV9.metadata | has("note")' .context/state.json > /dev/null \
     && jq -e '.tasks.DV9.metadata.flag == true and .tasks.DV9.metadata.stage == "DV"' .context/state.json > /dev/null; then
     printf 'T26b: --unset removes an existing key and keeps the rest: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26b: --unset did not remove the key: FAIL\n' >&2
     jq -c '.tasks.DV9.metadata' .context/state.json >&2
@@ -887,6 +936,7 @@ EOSTATE
   bash "$SELF" --task-meta DV9 --unset never_there > /dev/null 2>&1 || t26b_rc=$?
   if [[ "$t26b_rc" -eq 0 ]] && cmp -s t26b.before .context/state.json; then
     printf 'T26b: --unset of an absent key exits 0 and leaves the bytes unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26b: absent-key --unset rc=%s or changed state: FAIL\n' "$t26b_rc" >&2
     exit 1
@@ -895,6 +945,7 @@ EOSTATE
   bash "$SELF" --task-meta DV9 --unset flag,stage > /dev/null 2> t26b.err || t26b_rc=$?
   if [[ "$t26b_rc" -eq 2 ]] && grep -q 'refused --unset stage' t26b.err && cmp -s t26b.before .context/state.json; then
     printf 'T26b: --unset of a pipeline key exits 2, names it, and changes nothing: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26b: protected-key --unset rc=%s or changed state: FAIL\n' "$t26b_rc" >&2
     cat t26b.err >&2
@@ -903,6 +954,7 @@ EOSTATE
   bash "$SELF" --task-meta DV9 --set '{"owner":"qa"}' --unset flag > /dev/null
   if jq -e '.tasks.DV9.metadata.owner == "qa" and (.tasks.DV9.metadata | has("flag") | not)' .context/state.json > /dev/null; then
     printf 'T26b: --set and --unset in one call apply both: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T26b: combined --set/--unset did not apply both: FAIL\n' >&2
     jq -c '.tasks.DV9.metadata' .context/state.json >&2
@@ -948,6 +1000,7 @@ EOART
             | select((.metadata.gate_from_stage // "") == "")] | length == 0)
     ' .context/state.json > /dev/null; then
     printf 'T27: 9-verdict seam matches the literal table, pending rows carry gate_from_stage: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T27: seam mismatch: FAIL\n' >&2
     jq -c '.tasks' .context/state.json >&2
@@ -962,6 +1015,7 @@ EOART
     || t27c_rc=$?
   if [[ "$t27c_rc" == "3" ]] && diff -q .context/state.json .context/state.json.snap27 > /dev/null; then
     printf 'T27: an unrecognized verdict ("conditional") refuses with exit 3, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T27: unrecognized verdict must refuse (rc=%s): FAIL\n' "$t27c_rc" >&2
     exit 1
@@ -986,6 +1040,7 @@ EOART
   bash "$SELF" --stage DV --task-id V28 --artifact .context/t28.md > /dev/null 2>&1 || t28_rc=$?
   if [[ "$t28_rc" == "3" ]] && diff -q .context/state.json .context/state.json.snap28 > /dev/null; then
     printf 'T28: missing verdict refuses with exit 3, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T28: missing verdict must refuse (rc=%s): FAIL\n' "$t28_rc" >&2
     exit 1
@@ -999,6 +1054,7 @@ EOART
   if jq -e '.facts.verdicts.DV0 == "pass" and .facts.verdicts.DV == "pass"' \
     .context/state.json > /dev/null; then
     printf 'T29: single reporting instance: DV0 and derived DV both pass: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T29: DV0-only derivation wrong: FAIL\n' >&2
     exit 1
@@ -1009,6 +1065,7 @@ EOART
   if jq -e '.facts.verdicts.DV0 == "pass" and .facts.verdicts.DV1 == "fail"
             and .facts.verdicts.DV == "fail"' .context/state.json > /dev/null; then
     printf 'T29: DV1 fail outranks DV0 pass in the derived DV key: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T29: worst-of-two derivation wrong: FAIL\n' >&2
     jq -c '.facts.verdicts' .context/state.json >&2
@@ -1020,6 +1077,7 @@ EOART
   if jq -e '.facts.verdicts.DV1 == "escalate" and .facts.verdicts.DV == "escalate"' \
     .context/state.json > /dev/null; then
     printf 'T29: DV1 escalate outranks fail and pass in the derived DV key: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T29: escalate-outranks derivation wrong: FAIL\n' >&2
     exit 1
@@ -1029,6 +1087,7 @@ EOART
   if jq -e '.facts.verdicts.DV == "escalate" and (.tasks.DV2.verdict // "") == ""' \
     .context/state.json > /dev/null; then
     printf 'T29: a verdict-less DV2 row is ignored by the derivation: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T29: verdict-less row must not affect the derived key: FAIL\n' >&2
     exit 1
@@ -1041,6 +1100,7 @@ EOART
   bash "$SELF" --stage DV --task-id V29 --artifact .context/t27-fail2.md > /dev/null
   if diff -q .context/state.json .context/state.json.snap29 > /dev/null; then
     printf 'T29: re-patching a fail artifact twice is idempotent on the second run: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T29: re-patching a fail artifact was not idempotent: FAIL\n' >&2
     exit 1
@@ -1058,6 +1118,7 @@ EOART
             and (.tasks.DV0.claimed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
     .context/state.json > /dev/null; then
     printf 'T30: pending -> in_progress + claimed_at stamp: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T30: claim stamp: FAIL\n' >&2
     jq -c '.tasks.DV0' .context/state.json >&2
@@ -1067,6 +1128,7 @@ EOART
   bash "$SELF" --claim DV0 > /dev/null
   if diff -q .context/state.json .context/state.json.snap30 > /dev/null; then
     printf 'T30: re-claim is byte-identical: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T30: re-claim must not change claimed_at: FAIL\n' >&2
     exit 1
@@ -1078,6 +1140,7 @@ EOART
   bash "$SELF" --claim DV0 > /dev/null 2>&1 || st30_rc=$?
   if [[ "$st30_rc" -eq 4 ]] && diff -q .context/state.json .context/state.json.snap30b > /dev/null; then
     printf 'T30: claim on a settled row refuses with exit 4, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T30: claim-on-settled guard (rc=%s): FAIL\n' "$st30_rc" >&2
     exit 1
@@ -1087,6 +1150,7 @@ EOART
   bash "$SELF" --claim ET9 > /dev/null 2>&1 || st30c_rc=$?
   if [[ "$st30c_rc" -eq 1 ]]; then
     printf 'T30: claim on an unknown id exits 1: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T30: claim unknown-id guard (rc=%s): FAIL\n' "$st30c_rc" >&2
     exit 1
@@ -1101,6 +1165,7 @@ EOART
   }
   if jq -e '.tasks.DV0.status == "stale"' .context/state.json > /dev/null; then
     printf 'T-stale-1: --task-status <ID> stale accepted: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-stale-1: stale not written: FAIL\n' >&2
     jq -c '.tasks.DV0' .context/state.json >&2
@@ -1113,6 +1178,7 @@ EOART
   bash "$SELF" --task-status DV0 stalled > /dev/null 2>&1 || ts1_rc=$?
   if [[ "$ts1_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snapS1 > /dev/null; then
     printf 'T-stale-1: an unknown status still refuses with exit 2, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-stale-1: unknown-status guard (rc=%s): FAIL\n' "$ts1_rc" >&2
     exit 1
@@ -1129,6 +1195,7 @@ EOART
     && diff -q .context/state.json .context/state.json.snapS2 > /dev/null \
     && [[ "$ts2_err" == *"claim refused: tasks.DV0 is stale"* ]]; then
     printf 'T-stale-2: claim on a stale row refuses with exit 4, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-stale-2: claim-on-stale guard (rc=%s): FAIL\n%s\n' "$ts2_rc" "$ts2_err" >&2
     exit 1
@@ -1150,6 +1217,7 @@ EOART
     ts3_ready=$(bash "$ts3_digest" --state .context/state.json | sed -n 's/^ready: //p')
     if [[ "$ts3_ready" == "QA0" ]]; then
       printf 'T-stale-3: stale DV0 and its blocked dependent DR0 are both out of the ready set: ok\n'
+      _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
     else
       printf 'T-stale-3: ready set is "%s", expected "QA0": FAIL\n' "$ts3_ready" >&2
       exit 1
@@ -1208,6 +1276,7 @@ EOART
   _tr1_guard 1 "unknown source" --task-reopen DV0 --from DC9
   _tr1_guard 4 "target not completed" --task-reopen QA0 --from DC0
   printf 'T-reopen-1: every guard refuses with the ledger byte-identical: ok\n'
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   rm -f .context/state.json.snapR1
 
   # The finding is piped, never passed as an argument: the op reads stdin under
@@ -1226,6 +1295,7 @@ EOART
             and (.tasks.DV0.artifact | endswith("development-0.md"))' \
     .context/state.json > /dev/null; then
     printf 'T-reopen-1: target pending, fix_round 1, gate stamped, artifact and verdict kept: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-1: re-open write: FAIL\n' >&2
     jq -c '.tasks.DV0' .context/state.json >&2
@@ -1239,6 +1309,7 @@ EOART
   printf 'same finding\n' | bash "$SELF" --task-reopen DV0 --from DC0 --finding-file - > /dev/null 2>&1 || tr1_rc=$?
   if [[ "$tr1_rc" -eq 4 ]] && diff -q .context/state.json .context/state.json.snapR1b > /dev/null; then
     printf 'T-reopen-1: a re-routed correction is refused, fix_round stays 1: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-1: re-route idempotence (rc=%s): FAIL\n' "$tr1_rc" >&2
     exit 1
@@ -1255,6 +1326,7 @@ EOART
             and .tasks.DV0.metadata.gate_blockers == ["the fix regressed case 7"]' \
     .context/state.json > /dev/null; then
     printf 'T-reopen-1: a second correction bumps fix_round to 2 and re-stamps the source: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-1: second-round bump: FAIL\n' >&2
     jq -c '.tasks.DV0.metadata' .context/state.json >&2
@@ -1274,6 +1346,7 @@ EOART
   if [[ "$tr1b_rc" -eq 2 && "$tr1c_rc" -eq 2 ]] \
     && diff -q .context/state.json .context/state.json.snapR1c > /dev/null; then
     printf 'T-reopen-1: an oversized or control-byte finding exits 2, ledger byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-1: finding bounds (oversized rc=%s, control rc=%s): FAIL\n' "$tr1b_rc" "$tr1c_rc" >&2
     exit 1
@@ -1323,6 +1396,7 @@ EOART
             and .tasks.ST0.status == "pending"
             and .tasks.PL0.status == "completed"' .context/state.json > /dev/null; then
     printf 'T-reopen-2: transitive consumers stale; source, FN/RE, non-completed and unrelated rows untouched: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-2: consumer set: FAIL\n' >&2
     jq -c '.tasks | map_values(.status)' .context/state.json >&2
@@ -1333,6 +1407,7 @@ EOART
             and (.tasks.DR0.artifact | endswith("developer-review-0.md"))
             and (.tasks.DR0 | has("rework_pending") | not)' .context/state.json > /dev/null; then
     printf 'T-reopen-2: a parked consumer keeps its verdict and artifact: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-reopen-2: parked consumer was reset: FAIL\n' >&2
     jq -c '.tasks.DR0' .context/state.json >&2
@@ -1363,6 +1438,7 @@ EOART
     && jq -e '.tasks.DR0.status == "pending" and .tasks.QA0.status == "completed"' \
       .context/state.json > /dev/null; then
     printf 'T-settle-1: a cited change re-verifies, an uncited one lets the result stand: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: artifact-sourced settlement: FAIL\n%s\n' "$ts1_out" >&2
     jq -c '.tasks | map_values(.status)' .context/state.json >&2
@@ -1377,6 +1453,7 @@ EOART
   if jq -e '[.settled[] | select(.to != "completed")] | length == 0' <<< "$ts1_ctx" > /dev/null \
     && jq -e '.tasks.DR0.status == "completed"' .context/state.json > /dev/null; then
     printf 'T-settle-1: a .context/-only change set settles every dependent completed: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: .context/ exclusion: FAIL\n%s\n' "$ts1_ctx" >&2
     exit 1
@@ -1388,6 +1465,7 @@ EOART
                          {"task":"QA0","to":"pending","reason":"cited-file-changed"}]' \
     <<< "$ts1_seam" > /dev/null; then
     printf 'T-settle-1: --changed substitutes the change set whole: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: --changed seam: FAIL\n%s\n' "$ts1_seam" >&2
     exit 1
@@ -1406,6 +1484,7 @@ EOART
             == [{"task":"QA0","to":"pending","reason":"cited-file-changed"}]' \
     <<< "$ts1_fr" > /dev/null; then
     printf 'T-settle-1: facts.files_read supplies the cited set when consumes[] is empty: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: files_read cited source: FAIL\n%s\n' "$ts1_fr" >&2
     exit 1
@@ -1418,6 +1497,7 @@ EOART
     && jq -e '.tasks.DR0.status == "pending" and .tasks.QA0.status == "pending"' \
       .context/state.json > /dev/null; then
     printf 'T-settle-1: an empty change set fails safe to pending for every dependent: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: fail-safe direction: FAIL\n%s\n' "$ts1_safe" >&2
     exit 1
@@ -1429,6 +1509,7 @@ EOART
   if jq -e '.settled == [{"task":"ST0","to":"pending","reason":"cited-set-empty"}]' \
     <<< "$ts1_empty" > /dev/null; then
     printf 'T-settle-1: an empty cited set fails safe to pending: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: empty cited set: FAIL\n%s\n' "$ts1_empty" >&2
     exit 1
@@ -1456,6 +1537,7 @@ EOART
   if jq -e '[.settled[] | select(.to == "pending" and .reason == "change-set-unknown")] | length == 2' \
     <<< "$ts1_declared_empty" > /dev/null; then
     printf 'T-settle-1: a declared-but-empty files_touched reads absent on both readers: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: empty files_touched: FAIL\n%s\n' "$ts1_declared_empty" >&2
     exit 1
@@ -1466,6 +1548,7 @@ EOART
   ts1_none=$(bash "$SELF" --task-settle-stale DV0 --changed "skills/worktask/scripts/a.sh")
   if [[ "$ts1_none" == '{"settled":[]}' ]]; then
     printf 'T-settle-1: no stale row settles to an empty list: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-settle-1: empty settle list: FAIL\n%s\n' "$ts1_none" >&2
     exit 1
@@ -1486,6 +1569,7 @@ EOART
   if jq -e '.facts.dispatched_agents == [{"stage":"DV","task_id":"DV0","subagent_type":"corpflow:developer","agent_id":"sess-dv0","status":"launched","model_requested":"opus"}]' \
     .context/state.json > /dev/null; then
     printf 'T31: first dispatch appends the row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: dispatch append: FAIL\n' >&2
     jq -c '.facts.dispatched_agents' .context/state.json >&2
@@ -1497,6 +1581,7 @@ EOART
             and .facts.dispatched_agents[0].agent_id == "sess-dv0"' \
     .context/state.json > /dev/null; then
     printf 'T31: same agent_id updates status in place: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: same-agent update: FAIL\n' >&2
     exit 1
@@ -1507,6 +1592,7 @@ EOART
             and .facts.dispatched_agents[0].status == "launched"' \
     .context/state.json > /dev/null; then
     printf 'T31: a different agent_id replaces the row at the tail: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: agent_id replacement: FAIL\n' >&2
     exit 1
@@ -1516,6 +1602,7 @@ EOART
             and .facts.dispatched_agents[0].agent_id == "/root/cf_dv0_1"' \
     .context/state.json > /dev/null; then
     printf 'T31: a Codex canonical task name is a valid dispatch identifier: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: Codex canonical dispatch identifier: FAIL\n' >&2
     exit 1
@@ -1530,6 +1617,7 @@ EOART
             and ([.facts.dispatched_agents[].task_id] == ["DV1","DV2","DV3","DV4","DV5","DV6"])' \
     .context/state.json > /dev/null; then
     printf 'T31: 7 distinct launched task ids clamp to the 6 newest: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: launched clamp: FAIL\n' >&2
     jq -c '.facts.dispatched_agents | map(.task_id)' .context/state.json >&2
@@ -1540,6 +1628,7 @@ EOART
   bash "$SELF" --dispatch DV0 sess-x bogus > /dev/null 2>&1 || st31a_rc=$?
   if [[ "$st31a_rc" -eq 2 ]]; then
     printf 'T31: an invalid dispatch status exits 2: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: bad-status guard (rc=%s): FAIL\n' "$st31a_rc" >&2
     exit 1
@@ -1550,6 +1639,7 @@ EOART
   bash "$SELF" --dispatch QA0 sess-qa0 launched > /dev/null 2>&1 || st31b_rc=$?
   if [[ "$st31b_rc" -eq 2 ]]; then
     printf 'T31: a row without metadata.agent exits 2: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: missing-metadata.agent guard (rc=%s): FAIL\n' "$st31b_rc" >&2
     exit 1
@@ -1559,6 +1649,7 @@ EOART
   bash "$SELF" --dispatch ET9 sess-x launched > /dev/null 2>&1 || st31c_rc=$?
   if [[ "$st31c_rc" -eq 1 ]]; then
     printf 'T31: dispatch on an unknown id exits 1: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T31: dispatch unknown-id guard (rc=%s): FAIL\n' "$st31c_rc" >&2
     exit 1
@@ -1577,6 +1668,7 @@ EOART
             and (([.facts.files_read[].stage] | unique) == ["DR"])' \
     .context/state.json > /dev/null; then
     printf 'T32: an overlapping path collapses to one entry at the newest position, stage from id: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T32: files-read overlap/positioning: FAIL\n' >&2
     jq -c '.facts.files_read' .context/state.json >&2
@@ -1596,6 +1688,7 @@ EOART
             and (.facts.files_read[-1].path == "file31.sh")' \
     .context/state.json > /dev/null; then
     printf 'T32: 31 paths in one call clamp to the last 30: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T32: files-read 30-clamp: FAIL\n' >&2
     jq -c '.facts.files_read | map(.path)' .context/state.json >&2
@@ -1607,6 +1700,7 @@ EOART
   bash "$SELF" --files-read DR1 "$(printf 'bad\tpath.sh')" > /dev/null 2>&1 || st32_rc=$?
   if [[ "$st32_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap32 > /dev/null; then
     printf 'T32: a path containing a TAB exits 2, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T32: bad-path guard (rc=%s): FAIL\n' "$st32_rc" >&2
     exit 1
@@ -1621,6 +1715,7 @@ EOART
   }
   if jq -e '.facts.branch == "feature/x"' .context/state.json > /dev/null; then
     printf 'T33: a branch-only payload is stored: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T33: branch storage: FAIL\n' >&2
     exit 1
@@ -1630,6 +1725,7 @@ EOART
   bash "$SELF" --facts '{"branch": 5}' > /dev/null 2>&1 || st33_rc=$?
   if [[ "$st33_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap33 > /dev/null; then
     printf 'T33: a non-string branch is a fatal whole-payload refusal, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T33: non-string-branch guard (rc=%s): FAIL\n' "$st33_rc" >&2
     exit 1
@@ -1643,6 +1739,7 @@ EOART
   bash "$SELF" --task-create DV0 > /dev/null 2>&1 || st34_rc=$?
   if [[ "$st34_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snap34 > /dev/null; then
     printf 'T34: a bare non-PL/IR task-create is refused, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T34: bare task-create guard (rc=%s): FAIL\n' "$st34_rc" >&2
     exit 1
@@ -1661,6 +1758,7 @@ EOART
     }
   if jq -e '.tasks.PL0.metadata == {} and .tasks.IR0.metadata == {}' .context/state.json > /dev/null; then
     printf 'T34: bare PL0/IR0 on a fresh ledger accepted with empty metadata: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T34: bare PL0/IR0 metadata: FAIL\n' >&2
     exit 1
@@ -1688,6 +1786,7 @@ EOART
             and .metadata.msg_id == "DV0-m1"' .context/logs/audit.jsonl > /dev/null \
     && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
     printf 'T-ack: one message_ack row carries the msg_id, state byte-unchanged: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: ack row or state: FAIL\n' >&2
     exit 1
@@ -1697,6 +1796,7 @@ EOART
   bash "$SELF" --ack ET9 x > /dev/null 2>&1 || tack_rc=$?
   if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 ]]; then
     printf 'T-ack: an unknown id exits 1 with no row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: unknown-id guard (rc=%s): FAIL\n' "$tack_rc" >&2
     exit 1
@@ -1708,6 +1808,7 @@ EOART
   bash "$SELF" --ack DV0 a b > /dev/null 2>&1 || tack_rc3=$?
   if [[ "$tack_rc" -eq 2 && "$tack_rc3" -eq 2 && "$(_tack_rows)" -eq 1 ]]; then
     printf 'T-ack: one or three args exit 2 with no row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: arg-count guard (rc=%s/%s): FAIL\n' "$tack_rc" "$tack_rc3" >&2
     exit 1
@@ -1718,6 +1819,7 @@ EOART
   if [[ "$tack_rc" -eq 2 && "$(_tack_rows)" -eq 1 ]] \
     && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
     printf 'T-ack: a msg_id containing a TAB exits 2 with no row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: msg_id grammar guard (rc=%s): FAIL\n' "$tack_rc" >&2
     exit 1
@@ -1728,6 +1830,7 @@ EOART
   bash "$SELF" --ack > /dev/null 2>&1 || tack_rc=$?
   if [[ "$tack_rc" -eq 2 && "$(_tack_rows)" -eq 1 ]]; then
     printf 'T-ack: zero args exit 2 with no row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: zero-arg guard (rc=%s): FAIL\n' "$tack_rc" >&2
     exit 1
@@ -1737,6 +1840,7 @@ EOART
   bash "$SELF" --state .context/absent.json --ack DV0 DV0-m1 > /dev/null 2>&1 || tack_rc=$?
   if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 && ! -e .context/absent.json ]]; then
     printf 'T-ack: a missing ledger exits 1 with no row: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: missing-ledger guard (rc=%s): FAIL\n' "$tack_rc" >&2
     exit 1
@@ -1752,6 +1856,7 @@ EOART
   if [[ "$tack_rc" -eq 1 && "$(_tack_rows)" -eq 1 ]] \
     && diff -q .context/state.json .context/state.json.snapack > /dev/null; then
     printf 'T-ack: a lost audit row (symlinked log) exits 1: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-ack: lost-row guard (rc=%s): FAIL\n' "$tack_rc" >&2
     exit 1
@@ -1780,6 +1885,7 @@ EOART
               and (.tasks.DV0 | has("rework_pending") | not)' .context/state.json > /dev/null \
       && diff -q .context/state.json .context/state.json.snap35 > /dev/null; then
       printf 'T35: replayed round filed once under rework_runs, re-merge is a no-op: ok\n'
+      _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
     else
       printf 'T35: rework_runs append: FAIL\n' >&2
       jq '.tasks.DV0' .context/state.json >&2
@@ -1793,6 +1899,7 @@ EOART
     if jq -e '.tasks.DV0.tests_executed == [{runner:"bats",count:16,summary_line:"1..16"}]
               and (.tasks.DV0.rework_runs | length) == 1' .context/state.json > /dev/null; then
       printf 'T35: a changed list under the same artifact and verdict re-merges: ok\n'
+      _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
     else
       printf 'T35: changed-list re-merge: FAIL\n' >&2
       jq '.tasks.DV0' .context/state.json >&2
@@ -1812,6 +1919,7 @@ EOART
   rm -f .context/development-0-swift-app.md .context/development-0-Swift_App.md
   if [[ "$tstream_out" != *"is not the canonical name"* && "$tstream_bad" == *"is not the canonical name"* ]]; then
     printf 'T-stream: DV -<stream> suffix is canonical, a malformed slug warns: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-stream: DV stream-suffix canonical check: FAIL\n%s\n%s\n' "$tstream_out" "$tstream_bad" >&2
     exit 1
@@ -1831,12 +1939,13 @@ EOART
     && [[ "$tbatch_rc" -eq 2 ]] && diff -q .context/state.json .context/state.json.snapb > /dev/null \
     && [[ "$(wc -l < .context/logs/audit.jsonl | tr -d ' ')" == "1" ]]; then
     printf 'T-batch: batched create + digest + audit-row, bad row refuses whole batch: ok\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'T-batch: FAIL (rc=%s)\n%s\n' "$tbatch_rc" "$tbatch_out" >&2
     exit 1
   fi
   rm -f .context/state.json.snapb
 
-  printf 'self-test: ALL PASS\n'
+  printf 'self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   exit 0
 }

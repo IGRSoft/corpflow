@@ -253,6 +253,7 @@ _write_n_decisions() {  # <count> [id-prefix]
   assert_output --partial "T18: replay resets the target"
   assert_output --partial "T-ack:"
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 # ---------------------------------------------------------------------------

@@ -205,6 +205,7 @@ _st_case() { # <name> <want-rc> <args...>
   bash "$SELF" --task DV0 "$@" > /dev/null 2>&1 || rc=$?
   if [ "$rc" -eq "$want" ]; then
     printf 'self-test: %s exits %s: ok\n' "$name" "$want"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'self-test: %s exited %s, want %s: FAIL\n' "$name" "$rc" "$want" >&2
     exit 1
@@ -221,6 +222,7 @@ _st_artifact() { # <path> [acted_on_msg_id]  empty: the field is absent
 }
 
 self_test() {
+  _SELFTEST_PASSED=0
   local td send1 send2 ack2 ack1
   work_dir
   td="$WORK_DIR"
@@ -251,7 +253,7 @@ self_test() {
   _st_case run-scope-bad-flag 2 --run-index -1 --audit "$td/supersede.jsonl"
   _st_case run-scope-bad-row 2 --run-index 0 --audit "$td/bad-run.jsonl"
   _st_case run-scope-bad-row-unscoped 1 --audit "$td/bad-run.jsonl"
-  printf 'self-test: ALL PASS\n'
+  printf 'self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   exit 0
 }
 

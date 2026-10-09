@@ -411,3 +411,33 @@ EOF
   [ ! -e "$WD/.context/logs/state-merge.log" ]
   [ ! -e "$WD/.context/state.json" ]
 }
+
+# A stub delegate keeps these cases fast; state-patch.bats runs the real suite.
+_stub_patch() { # <shell body for the stub state-patch.sh>
+  mkdir -p "$WD/root/skills/worktask/scripts"
+  printf '#!/usr/bin/env bash\n%s\n' "$1" > "$WD/root/skills/worktask/scripts/state-patch.sh"
+}
+
+@test "--self-test: the wrapper line repeats the delegate's executed-case count" {
+  _stub_patch "printf 'T1: ok\nT2: ok\nself-test: ALL PASS (2 passed, 0 failed)\n'"
+  run env CLAUDE_PLUGIN_ROOT="$WD/root" bash "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_success
+  assert_output --partial "T2: ok"
+  assert_output --partial "self-test (via state-patch.sh): ALL PASS (2 passed, 0 failed)"
+}
+
+@test "--self-test: a digitless delegate pass line fails the wrapper" {
+  _stub_patch "printf 'self-test: ALL PASS\n'"
+  run env CLAUDE_PLUGIN_ROOT="$WD/root" bash "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_failure 1
+  assert_output --partial "passed without a case count"
+  refute_output --partial "self-test (via state-patch.sh): ALL PASS"
+}
+
+@test "--self-test: a failing delegate keeps exit 1 and its output" {
+  _stub_patch "printf 'T1: FAIL\n'; exit 1"
+  run env CLAUDE_PLUGIN_ROOT="$WD/root" bash "$PLUGIN_ROOT/$SCRIPT" --self-test
+  assert_failure 1
+  assert_output --partial "T1: FAIL"
+  assert_output --partial "state-patch.sh --self-test FAILED"
+}

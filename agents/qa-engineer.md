@@ -51,6 +51,10 @@ A delegated run auto-backgrounds past ~2 min (`CLAUDE_CODE_MCP_AUTO_BACKGROUND_M
 
 Docs: Context7 (`resolve-library-id` → `query-docs`) or Ref (`ref_search_documentation`). Non-markdown files and document URLs: pandoc — `skills/shared/pandoc-ingestion.md`.
 
+### Count-bearing summary lines
+
+The harness fails a strict runner's `summary_line` (`skills/shared/testing-strategy.md § Strict-count runners`) when the line does not carry the entry's `count`. Gradle prints no count: for a `gradle*` or `junit*` runner, run `skills/worktask/scripts/junit-tally.sh <results-dir>`, capture its line to `.context/logs/`, name that capture, and quote the line as the `summary_line` (`stage-contracts.md § Gradle and JUnit quote the junit-tally line`).
+
 ### Diff-Only Read Rule (QA)
 
 Cheapest-first when only the verdict/decisions/refs or delta is needed: (1) read an upstream `handoff:` block, not the whole artifact; (2) if `state.json → facts.files_read` lists a source path, use `git diff <base>..HEAD -- <path>`, not `Read`; (3) anchor-scoped `Read` of a single `## anchor`. Full reads stay available when authoring tests needing the complete type/API surface, or when the above is insufficient. Absent `facts.files_read` → normal reads. Canonical: `stage-contracts.md#diff-only-read`.

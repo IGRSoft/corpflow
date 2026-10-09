@@ -16,6 +16,7 @@
 
 # ---------- Self-test ----------
 self_test() {
+  _SELFTEST_PASSED=0
   local td
   td=$(mktemp -d "${TMPDIR:-/tmp}/handoff-selftest-XXXXXX")
   trap "rm -rf '$td'" EXIT
@@ -28,6 +29,7 @@ self_test() {
 
   if run_token_count "$td" >/dev/null 2>&1; then
     echo "self-test: token-count ≥30% reduction: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: token-count: FAIL" >&2; exit 1
   fi
@@ -39,7 +41,7 @@ self_test() {
   self_test_control_bytes "$td"
   self_test_blocked_on "$td"
 
-  echo "self-test: ALL PASS"
+  echo "self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }
 
 # One case per blocked_on kind, plus each refusal and a cross_session_ask key read as no need.
@@ -93,6 +95,7 @@ self_test_blocked_on() {
       echo "self-test: blocked_on $1: FAIL (pattern not found: $3)" >&2; exit 1
     fi
     echo "self-test: blocked_on $1: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   }
 
   while IFS='|' read -r kind detail rw; do
@@ -146,6 +149,7 @@ KINDS
     echo "self-test: blocked_on old-name/reads-as-absent: FAIL (rc=$rc)" >&2; exit 1
   fi
   echo "self-test: blocked_on old-name/reads-as-absent: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 }
 
 # tests_executed is a per-runner list: a list passes, a scalar fails, an entry without a
@@ -183,6 +187,7 @@ self_test_tests_executed() {
     echo "self-test: tests-executed list: FAIL (rc=$rc) $out" >&2; exit 1
   fi
   echo "self-test: tests-executed list: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
   _te_artifact "$ctx/dv-te-scalar.md" '  tests_executed: 12' '  test_summary_line: "1..12"  # legacy shape'
   rc=0; out=$(validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
@@ -190,6 +195,7 @@ self_test_tests_executed() {
     echo "self-test: tests-executed scalar: FAIL (rc=$rc) $out" >&2; exit 1
   fi
   echo "self-test: tests-executed scalar: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
   _te_artifact "$ctx/dv-te-norunner.md" '  tests_executed:
     - { count: 12, summary_line: "1..12" }'
@@ -198,12 +204,14 @@ self_test_tests_executed() {
     echo "self-test: tests-executed no-runner: FAIL (rc=$rc) $out" >&2; exit 1
   fi
   echo "self-test: tests-executed no-runner: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
   rc=0; out=$(LEGACY_TE=1 validate_frontmatter "$ctx/dv-te-scalar.md" 2>&1) || rc=$?
   if [[ "$rc" -ne 0 ]] || [[ "$(printf '%s\n' "$out" | grep -c 'is a legacy scalar')" -ne 1 ]]; then
     echo "self-test: tests-executed legacy opt-in: FAIL (rc=$rc) $out" >&2; exit 1
   fi
   echo "self-test: tests-executed legacy opt-in: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 }
 
 # Every stage's H2 set is enforced: a drifted retrospective names each defect on its own line.
@@ -221,6 +229,7 @@ self_test_anchors() {
     echo "self-test: anchors: FAIL (rc=$rc)" >&2; exit 1
   fi
   echo "self-test: anchors: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 }
 
 # A raw NUL is a gate failure naming the path; the same text spelling the escape passes.
@@ -243,6 +252,7 @@ self_test_control_bytes() {
     echo "self-test: control-bytes: FAIL (literal escape text: rc=$rc)" >&2; exit 1
   fi
   echo "self-test: control-bytes: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 }
 
 # The frontmatter body reports every failure per invocation, and the divergence check no
@@ -276,6 +286,7 @@ self_test_collect_all() {
     echo "self-test: collect-all: FAIL (one invocation did not report both faults)" >&2; exit 1
   fi
   echo "self-test: collect-all: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
   {
     echo '---'; echo 'handoff:'; echo '  stage: DV'; echo '  verdict: ok'; echo '  tests_executed: [{ runner: bats, count: 12, summary_line: "12 tests, 0 failures" }]'
@@ -297,6 +308,7 @@ self_test_collect_all() {
     echo "self-test: harvest: FAIL (a filename digit still blocks the boundary)" >&2; exit 1
   fi
   echo "self-test: harvest: ok"
+  _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 }
 
 # Exercises every branch of the AR->DV gate. Each case restores STATE_ARG/STRICT
@@ -375,6 +387,7 @@ self_test_ar_gate() {
       echo "self-test: ar-ref $label: FAIL (pattern not found: $want_pat)" >&2; exit 1
     fi
     echo "self-test: ar-ref $label: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   }
 
   _ar_case "AR+missing/default"  "$ctx/state.json"       0 0 "warn: AR completed but DV refs.decisions missing" "$ctx/dv-no-ref.md"

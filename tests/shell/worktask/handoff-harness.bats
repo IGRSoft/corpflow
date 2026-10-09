@@ -394,19 +394,174 @@ mk_te_legacy() {
   assert_success
 }
 
-@test "entries: a count the line does not name warns once with one audit row, not a block" {
-  # Warn-only because `verbatim` is not mechanically decidable: a TAP plan line is the
-  # whole summary a scoped bats run prints, and blocking on the token would fail a stage
-  # that satisfies the contract.
+@test "entries: a bash-live count the line does not name warns once with one audit row, not a block" {
+  # Warn-only for a free-form runner: a live script prints what its author chose, and
+  # blocking on the token would fail a stage that satisfies the contract.
   mkdir -p "$WD/logs"
-  mk_te "$WD/te-tap.md" DV '    - { runner: bats, count: 1814, summary_line: "1..840" }
-    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }' '1..840' '3 passed in 0.4s'
-  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-tap.md"
+  mk_te "$WD/te-live.md" DV '    - { runner: bash-live, count: 12, summary_line: "RESULT: PASS (run 3)" }
+    - { runner: pytest, count: 3, summary_line: "3 passed in 0.4s" }' 'RESULT: PASS (run 3)' '3 passed in 0.4s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-live.md"
   assert_success
-  assert_output --partial 'warn: stage=DV tests_executed[0] runner=bats count: 1814 is not a whole-number token of summary_line "1..840" — the excerpt is corroborated, the count is not'
+  assert_output --partial 'warn: stage=DV tests_executed[0] runner=bash-live count: 12 is not a whole-number token of summary_line "RESULT: PASS (run 3)" — the excerpt is corroborated, the count is not; a bash-* script names a .context/logs/ capture whose result line carries the count'
   [[ "$output" != *"fail:"* ]] || fail "the soft tier blocked: $output"
   assert_audit_row count_corroboration --file "$WD/logs/audit.jsonl" --subject DV \
-    --count 1 --meta tests_executed=1814 --meta runner=bats --meta summary_line=1..840
+    --count 1 --meta tests_executed=12 --meta runner=bash-live --meta 'summary_line=RESULT: PASS (run 3)'
+}
+
+@test "entries: an xcodebuild count the line does not name still warns" {
+  mk_te "$WD/te-xc.md" DV '    - { runner: xcodebuild, count: 58, summary_line: "Executed 40 tests, with 0 failures (0 unexpected) in 1.2 (1.3) seconds" }' \
+    'Executed 40 tests, with 0 failures (0 unexpected) in 1.2 (1.3) seconds'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-xc.md"
+  assert_success
+  assert_output --partial 'warn: stage=DV tests_executed[0] runner=xcodebuild count: 58 is not a whole-number token'
+}
+
+@test "entries: a bats count the TAP plan does not name fails (strict)" {
+  mkdir -p "$WD/logs"
+  mk_te "$WD/te-tap.md" DV '    - { runner: bats, count: 1814, summary_line: "1..840" }' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-tap.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=bats count: 1814 is not a whole-number token of summary_line "1..840"'
+  [[ ! -f "$WD/logs/audit.jsonl" ]] || ! grep -q count_corroboration "$WD/logs/audit.jsonl" \
+    || fail "a strict fail wrote a warn-tier audit row"
+}
+
+@test "entries: every strict runner name fails a count-less line (strict)" {
+  local r
+  for r in gradle gradlew Gradle junit junit5 swift-testing vitest jest pytest bats; do
+    mk_te "$WD/te-strict.md" DV "    - { runner: $r, count: 58, summary_line: \"BUILD SUCCESSFUL in 4s\" }" 'BUILD SUCCESSFUL in 4s'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-strict.md"
+    [[ "$status" -eq 1 ]] || fail "runner=$r exited $status: $output"
+    [[ "$output" == *"fail: stage=DV tests_executed[0] runner=$r count: 58 is not a whole-number token"* ]] \
+      || fail "runner=$r: $output"
+  done
+}
+
+@test "entries: a failing pytest line whose outcome counts sum to count passes with no warn (strict)" {
+  mkdir -p "$WD/logs"
+  mk_te "$WD/te-pyfail.md" DV '    - { runner: pytest, count: 60, summary_line: "1 failed, 57 passed, 2 xfailed, 3 skipped, 4 warnings in 3.2s" }' \
+    '1 failed, 57 passed, 2 xfailed, 3 skipped, 4 warnings in 3.2s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pyfail.md"
+  assert_success
+  [[ "$output" != *"is not a whole-number token"* ]] || fail "$output"
+  [[ ! -f "$WD/logs/audit.jsonl" ]] || ! grep -q count_corroboration "$WD/logs/audit.jsonl" \
+    || fail "a proven sum wrote a warn-tier audit row"
+}
+
+@test "entries: a pytest outcome sum that misses count, or counts skipped, still fails (strict)" {
+  local line
+  # 1 + 56 = 57, not 58; then 57 passed + 1 skipped = 58 only if skipped counted.
+  for line in "1 failed, 56 passed in 3.2s" "57 passed, 1 skipped in 3.2s"; do
+    mk_te "$WD/te-pymiss.md" DV "    - { runner: pytest, count: 58, summary_line: \"$line\" }" "$line"
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pymiss.md"
+    [[ "$status" -eq 1 ]] || fail "line=$line exited $status: $output"
+    [[ "$output" == *"fail: stage=DV tests_executed[0] runner=pytest count: 58"* ]] || fail "line=$line: $output"
+  done
+}
+
+@test "entries: a pytest teardown error on a passing case passes at either honest count (strict)" {
+  local count
+  # `1 passed, 1 error`: one case whose teardown failed (count 1), or two cases (count 2).
+  for count in 1 2; do
+    mk_te "$WD/te-pyerr.md" DV "    - { runner: pytest, count: $count, summary_line: \"1 passed, 1 error in 0.1s\" }" '1 passed, 1 error in 0.1s'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pyerr.md"
+    [[ "$status" -eq 0 ]] || fail "count=$count exited $status: $output"
+    [[ "$output" != *"is not a whole-number token"* ]] || fail "count=$count: $output"
+  done
+  # Count 1 above is also a token of the line; here neither end of [20, 22] is a token of the
+  # line, so the range alone accepts them.
+  for count in 20 22; do
+    mk_te "$WD/te-pyerr.md" DV "    - { runner: pytest, count: $count, summary_line: \"5 failed, 15 passed, 2 errors in 0.5s\" }" '5 failed, 15 passed, 2 errors in 0.5s'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pyerr.md"
+    [[ "$status" -eq 0 ]] || fail "count=$count exited $status: $output"
+    [[ "$output" != *"is not a whole-number token"* ]] || fail "count=$count: $output"
+  done
+}
+
+@test "entries: a pytest count outside [base, base + errors] still fails (strict)" {
+  local count
+  # base 30 (10 failed + 20 passed), errors 3: 30..33 are honest; 29 is below, 34 above.
+  # Neither number is a token of the line, so only the range decides.
+  for count in 29 34; do
+    mk_te "$WD/te-pyerr-out.md" DV "    - { runner: pytest, count: $count, summary_line: \"10 failed, 20 passed, 3 errors in 0.1s\" }" '10 failed, 20 passed, 3 errors in 0.1s'
+    run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pyerr-out.md"
+    [[ "$status" -eq 1 ]] || fail "count=$count exited $status: $output"
+    [[ "$output" == *"fail: stage=DV tests_executed[0] runner=pytest count: $count"* ]] || fail "count=$count: $output"
+  done
+}
+
+@test "entries: pytest errors with no other outcome prove only a count the line carries (strict)" {
+  # `3 errors` may be collection errors, which are no cases: the range is off.
+  mk_te "$WD/te-pycoll.md" DV '    - { runner: pytest, count: 2, summary_line: "3 errors in 0.2s" }' '3 errors in 0.2s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pycoll.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=pytest count: 2'
+
+  mk_te "$WD/te-pycoll3.md" DV '    - { runner: pytest, count: 3, summary_line: "3 errors in 0.2s" }' '3 errors in 0.2s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-pycoll3.md"
+  assert_success
+}
+
+@test "entries: a digit inside a decimal is not a count token (strict)" {
+  mk_te "$WD/te-dec.md" DV '    - { runner: jest, count: 1, summary_line: "Done in 0.1s" }' 'Done in 0.1s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-dec.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=jest count: 1 is not a whole-number token of summary_line "Done in 0.1s"'
+
+  mk_te "$WD/te-dec-ok.md" DV '    - { runner: jest, count: 1, summary_line: "Tests: 1 passed, 1 total in 0.1s" }' 'Tests: 1 passed, 1 total in 0.1s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-dec-ok.md"
+  assert_success
+}
+
+@test "entries: a TAP plan counts as its upper bound, never its lower bound (strict)" {
+  mk_te "$WD/te-plan.md" DV '    - { runner: bats, count: 840, summary_line: "1..840" }' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-plan.md"
+  assert_success
+
+  mk_te "$WD/te-plan1.md" DV '    - { runner: bats, count: 1, summary_line: "1..840" }' '1..840'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-plan1.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=bats count: 1 is not a whole-number token of summary_line "1..840"'
+}
+
+@test "entries: a one-case TAP plan 1..1 proves count 1 (strict)" {
+  mk_te "$WD/te-plan11.md" DV '    - { runner: bats, count: 1, summary_line: "1..1" }' '1..1'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-plan11.md"
+  assert_success
+}
+
+@test "entries: the outcome-sum rule is pytest only; vitest with no total still fails (strict)" {
+  mk_te "$WD/te-vsum.md" DV '    - { runner: vitest, count: 58, summary_line: "1 failed, 57 passed" }' '1 failed, 57 passed'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-vsum.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=vitest count: 58'
+}
+
+@test "entries: a gradle BUILD SUCCESSFUL line fails and names junit-tally.sh" {
+  mk_te "$WD/te-gradle.md" DV '    - { runner: gradle, count: 58, summary_line: "BUILD SUCCESSFUL in 4s" }' 'BUILD SUCCESSFUL in 4s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-gradle.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=DV tests_executed[0] runner=gradle count: 58 is not a whole-number token of summary_line "BUILD SUCCESSFUL in 4s"'
+  assert_output --partial 'run skills/worktask/scripts/junit-tally.sh <results-dir>'
+}
+
+@test "entries: a gradle junit-tally line in a named logs capture passes" {
+  mkdir -p "$WD/logs"
+  printf 'JUnit XML tally: 58 tests executed, 0 failures, 0 errors, 0 skipped\n' > "$WD/logs/dv0-junit-tally.log"
+  mk_te "$WD/te-tally.md" DV '    - { runner: gradle, count: 58, summary_line: "JUnit XML tally: 58 tests executed, 0 failures, 0 errors, 0 skipped" }' \
+    'Capture: .context/logs/dv0-junit-tally.log'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-tally.md"
+  assert_success
+  [[ "$output" != *"fail:"* ]] || fail "$output"
+  [[ "$output" != *"is not a whole-number token"* ]] || fail "$output"
+}
+
+@test "entries: a replayed QA gradle BUILD SUCCESSFUL line fails" {
+  mk_te "$WD/te-qa-gradle.md" QA '    - { runner: gradle, count: 58, summary_line: "BUILD SUCCESSFUL in 4s" }' 'BUILD SUCCESSFUL in 4s'
+  run bash "$PLUGIN_ROOT/$SCRIPT" --validate-frontmatter "$WD/te-qa-gradle.md"
+  assert_failure 1
+  assert_output --partial 'fail: stage=QA tests_executed[0] runner=gradle count: 58 is not a whole-number token'
+  assert_output --partial 'junit-tally.sh'
 }
 
 @test "entries: a zero count needs no summary_line" {
@@ -520,6 +675,7 @@ mk_te_legacy() {
   run bash "$PLUGIN_ROOT/$SCRIPT" --self-test
   assert_success
   assert_output --partial "ALL PASS"
+  assert_output --regexp 'ALL PASS \([1-9][0-9]* passed, 0 failed\)'
 }
 
 # --- the sweep stub's ref must be anchor-shaped, not merely present ----------

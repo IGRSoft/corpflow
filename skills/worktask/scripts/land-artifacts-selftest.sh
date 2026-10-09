@@ -21,6 +21,7 @@ cleanup() {
   [ -n "$TD" ] && [ -d "$TD" ] && rm -rf -- "$TD"
 }
 trap cleanup EXIT INT TERM
+_SELFTEST_PASSED=0
 
 fail() {
   printf >&2 'land-artifacts-selftest: FAIL: %s\n' "$*"
@@ -98,6 +99,7 @@ landed=$(jq -r '.tasks.DV1.metadata.landed_paths // [] | .[]?' "$LEDGER")
 rows=$(jq -c 'select(.action=="contract_landed" and .result=="ok")' "$TD/logs/audit.jsonl" 2> /dev/null | wc -l | tr -d ' ')
 [ "$rows" = "1" ] || fail "S1 happy path: expected exactly one ok row, got $rows"
 printf 'S1 happy path: ok\n'
+_SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
 # ---------- S2: sha mismatch (corrupted `git cat-file` stdout) ----------
 S2_ROOT="$TD/s2"
@@ -155,6 +157,7 @@ cstat=$(jq -r '.tasks.DV1.status' "$S2_LEDGER")
 reason=$(jq -r '.tasks.DV1.metadata.landing_error.reason // ""' "$S2_LEDGER")
 [ "$reason" = "sha256_mismatch" ] || fail "S2 sha mismatch: expected sha256_mismatch, got $reason"
 printf 'S2 sha mismatch: ok\n'
+_SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
 # ---------- S3: traversal refusal ----------
 S3_ROOT="$TD/s3"
@@ -191,6 +194,7 @@ s3_after=$(find "$S3_ROOT/consumer" -mindepth 1 -not -path '*/.git*' | sort)
 reason=$(jq -r '.tasks.DV1.metadata.landing_error.reason // ""' "$S3_LEDGER")
 [ "$reason" = "dotdot" ] || fail "S3 traversal refusal: expected dotdot, got $reason"
 printf 'S3 traversal refusal: ok\n'
+_SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
 
-printf 'land-artifacts-selftest: ALL PASS\n'
+printf 'land-artifacts-selftest: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
 exit 0

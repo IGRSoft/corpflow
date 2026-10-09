@@ -9,6 +9,7 @@
 
 self_test() {
   local self td state out rc fails=0
+  _SELFTEST_PASSED=0
   self="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/permission-park.sh"
   command -v jq > /dev/null 2>&1 || { echo "permission-park: self-test FAIL (jq missing)"; return 1; }
   td=$(mktemp -d) || return 1
@@ -21,7 +22,7 @@ self_test() {
     "FN0":{"status":"in_progress","metadata":{"retry_count":2}},
     "DR0":{"status":"in_progress","metadata":{}}}}' > "$state"
 
-  _st_pass() { printf '  ok   %s\n' "$1"; }
+  _st_pass() { printf '  ok   %s\n' "$1"; _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)); }
   _st_fail() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
   _st_run() {
     env -u WORKSPACE_ROOT -u CONTEXT_DIR -u CLAUDE_PROJECT_DIR bash "$self" "$@" 2> /dev/null
@@ -88,9 +89,9 @@ self_test() {
   fi
 
   if [ "$fails" -eq 0 ]; then
-    echo "permission-park: self-test OK"
+    echo "permission-park: self-test OK ($_SELFTEST_PASSED passed, 0 failed)"
     return 0
   fi
-  echo "permission-park: self-test FAIL ($fails)"
+  echo "permission-park: self-test FAIL ($_SELFTEST_PASSED passed, $fails failed)"
   return 1
 }

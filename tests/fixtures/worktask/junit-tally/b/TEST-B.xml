@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- <testsuite tests="40" skipped="0" failures="0" errors="0"/> is a comment, not a suite -->
+<testsuite name="com.example.BTest" tests='3' skipped='0' failures='0' errors='1' time="0.2">
+  <testcase name="one" classname="com.example.BTest" time="0.1"/>
+  <testcase name="two" classname="com.example.BTest" time="0.1"><error message="boom"/></testcase>
+  <testcase name="three" classname="com.example.BTest" time="0.0"/>
+</testsuite>

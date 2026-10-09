@@ -31,6 +31,7 @@ _slt_count() {
 _slt_case() {
   if "$2"; then
     printf 'snippet-shell-lint self-test: ok   %s\n' "$1"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'snippet-shell-lint self-test: FAIL %s (rc=%s)\n' "$1" "$_SLT_RC"
     _SLT_FAILS=$((_SLT_FAILS + 1))
@@ -118,6 +119,7 @@ self_test() {
   _SLT_TD=$(mktemp -d "${TMPDIR:-/tmp}/snippet-shell-lint.XXXXXX") || return 1
   trap 'rm -rf "$_SLT_TD"' EXIT
   _SLT_FAILS=0
+  _SELFTEST_PASSED=0
   _slt_fixtures || return 1
 
   _slt_case "rule a: indented blocks, one report per block" _slt_rule_a
@@ -129,9 +131,9 @@ self_test() {
   _slt_case "errors exit 2" _slt_errors
 
   if [ "$_SLT_FAILS" -eq 0 ]; then
-    printf 'snippet-shell-lint self-test: ALL PASS\n'
+    printf 'snippet-shell-lint self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
     return 0
   fi
-  printf 'snippet-shell-lint self-test: %s case(s) failed\n' "$_SLT_FAILS"
+  printf 'snippet-shell-lint self-test: FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$_SLT_FAILS"
   return 1
 }

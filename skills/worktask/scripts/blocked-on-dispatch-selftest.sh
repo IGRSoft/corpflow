@@ -10,6 +10,7 @@
 
 self_test() {
   local self td state audit stub out rc fails=0 before
+  _SELFTEST_PASSED=0
   self="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/blocked-on-dispatch.sh"
   command -v jq > /dev/null 2>&1 || { echo "blocked-on-dispatch: self-test FAIL (jq missing)"; return 1; }
   td=$(mktemp -d) || return 1
@@ -31,7 +32,7 @@ self_test() {
     'printf "result_json=%s\n" "{\"version\":1,\"result\":\"fail\",\"ran_at\":\"unknown\",\"platforms\":[],\"checks\":[{\"id\":\"gh-pr-create\",\"kind\":\"permission\",\"status\":\"pass\",\"detail\":\"ok\"},{\"id\":\"git-push\",\"kind\":\"permission\",\"status\":\"fail\",\"detail\":\"no\"}],\"tools_absent\":[]}"' \
     > "$stub"
 
-  _st_pass() { printf '  ok   %s\n' "$1"; }
+  _st_pass() { printf '  ok   %s\n' "$1"; _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1)); }
   _st_fail() { printf '  FAIL %s\n' "$1"; fails=$((fails + 1)); }
   # MAILBOX_DIR and MAILBOX_NOW are set for every case, not just the peer one: without them the
   # peer arm would resolve the real run's mailbox and write an ask into it from a self-test.
@@ -196,9 +197,9 @@ self_test() {
   fi
 
   if [ "$fails" -eq 0 ]; then
-    echo "blocked-on-dispatch: self-test OK"
+    echo "blocked-on-dispatch: self-test OK ($_SELFTEST_PASSED passed, 0 failed)"
     return 0
   fi
-  echo "blocked-on-dispatch: self-test FAIL ($fails)"
+  echo "blocked-on-dispatch: self-test FAIL ($_SELFTEST_PASSED passed, $fails failed)"
   return 1
 }

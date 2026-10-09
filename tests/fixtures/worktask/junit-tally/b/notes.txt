@@ -1,0 +1,1 @@
+Not JUnit XML: a non-.xml file in the results tree is never read.

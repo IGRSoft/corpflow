@@ -161,6 +161,25 @@ screenshot flag (#470), and the lessons adopted from mattpocock/skills `959a8e9.
 
 ### Fixed
 
+- **A count-less summary line no longer proves a test count for a counting runner.**
+  `handoff-harness.sh` only warned when a corroborated `summary_line` did not carry its entry's
+  `count`, so `BUILD SUCCESSFUL in 4s` could stand in for "58 tests ran". It now fails the entry
+  for the strict runners: `bats`, `pytest`, `jest`, `vitest`, `swift-testing`, and every `gradle*`
+  or `junit*` name, matched case-insensitively. A failing pytest line, which prints no total,
+  passes when its executed outcome counts sum to `count`. `bash-*` live scripts, `xcodebuild` and other
+  runners keep the warn and the `count_corroboration` audit row. The new
+  `skills/worktask/scripts/junit-tally.sh <results-dir>` prints one count-bearing line from a JUnit
+  XML directory (`JUnit XML tally: N tests executed, F failures, E errors, S skipped`, N = tests
+  minus skipped), and the fail message names it for Gradle and JUnit. `stage-contracts.md`
+  (`#tpl-dv`, `#tpl-qa`), developer and qa-engineer say the same.
+- **Every worktask self-test now prints how many cases it ran.** The pass lines
+  (`self-test: ALL PASS`, `desc-lint self-test: ALL PASS`, `self-test OK`, …) had no digit, so
+  the harness digit rule refused them as a `summary_line`. Each of the 21 `*-selftest.sh` and
+  inline `--self-test` printers in `skills/worktask/scripts/` and `hooks/state-merge.sh` now
+  appends `(N passed, 0 failed)`. N is a counter that goes up once per case that passed, never a
+  constant. Counting self-tests print `(P passed, F failed)` on failure, and exit codes do not
+  change. `state-merge.sh` repeats the count of the `state-patch.sh` run it delegates to, and
+  fails if that line has no count. The old text stays as a prefix, so existing matches still hold.
 - **A sweep item's `class` can no longer be lowered from `escalate`.** `state-patch.sh --facts`
   joined `class` last-writer-wins, so a stage re-run could write `decision` over an item another
   labeller raised to `escalate`. The ledger then agreed with the artifact, and the harness passed.

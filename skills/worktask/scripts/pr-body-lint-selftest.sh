@@ -14,6 +14,7 @@
 # shellcheck disable=SC2016
 self_test() {
   local td rc=0
+  _SELFTEST_PASSED=0 _SELFTEST_FAILED=0
   td=$(mktemp -d "${TMPDIR:-/tmp}/pr-body-lint-XXXXXX")
   # shellcheck disable=SC2064
   trap "rm -rf '$td'" EXIT
@@ -25,17 +26,19 @@ self_test() {
     if [ -n "$want" ]; then
       if grep -q "warn: $want" "$td/err.txt"; then
         printf 'pr-body-lint: self-test %s PASS\n' "$name"
+        _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
       else
         printf 'pr-body-lint: self-test %s FAIL (expected %s; findings=%s)\n' "$name" "$want" "$got" >&2
-        rc=1
+        rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
       fi
     else
       if [ "$got" = "0" ]; then
         printf 'pr-body-lint: self-test %s PASS\n' "$name"
+        _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
       else
         printf 'pr-body-lint: self-test %s FAIL (expected clean, got %s)\n' "$name" "$got" >&2
         cat "$td/err.txt" >&2
-        rc=1
+        rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
       fi
     fi
   }
@@ -131,9 +134,10 @@ two-way: y. Blast radius: none.
   set -e
   if [ "$u_rc" -eq 2 ] && [ -z "$u_out" ] && grep -q 'unknown argument' "$td/uerr.txt"; then
     printf 'pr-body-lint: self-test usage-error-stderr-only PASS\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'pr-body-lint: self-test usage-error-stderr-only FAIL (rc=%s stdout=%s)\n' "$u_rc" "$(printf '%s' "$u_out" | head -1)" >&2
-    rc=1
+    rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
   fi
 
   # -h/--help keeps stdout: an explicit help request is output, not a diagnostic.
@@ -143,15 +147,16 @@ two-way: y. Blast radius: none.
   set -e
   if [ "$u_rc" -eq 2 ] && [ -n "$u_out" ]; then
     printf 'pr-body-lint: self-test help-on-stdout PASS\n'
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     printf 'pr-body-lint: self-test help-on-stdout FAIL (rc=%s)\n' "$u_rc" >&2
-    rc=1
+    rc=1; _SELFTEST_FAILED=$((_SELFTEST_FAILED + 1))
   fi
 
   if [ "$rc" -eq 0 ]; then
-    printf 'pr-body-lint self-test: ALL PASS\n'
+    printf 'pr-body-lint self-test: ALL PASS (%d passed, 0 failed)\n' "$_SELFTEST_PASSED"
   else
-    printf 'pr-body-lint self-test: FAIL\n' >&2
+    printf 'pr-body-lint self-test: FAIL (%d passed, %d failed)\n' "$_SELFTEST_PASSED" "$_SELFTEST_FAILED" >&2
     exit 2
   fi
 }

@@ -600,6 +600,14 @@ entries, never one summed count. A rework round records only its own runs: the l
 rounds (`tasks.<ID>.rework_runs`), so never copy one into this artifact. A scalar `tests_executed`
 fails the harness.
 
+##### Field notes — strict runners and the junit-tally line
+
+For a strict runner (`skills/shared/testing-strategy.md § Strict-count runners`) the
+harness fails a `summary_line` that does not carry the entry's `count`. Gradle prints no count, so
+for a `gradle*` or `junit*` runner run `skills/worktask/scripts/junit-tally.sh <results-dir>`,
+capture its line to `.context/logs/`, name that capture, and quote the line as the `summary_line`.
+Contract: `stage-contracts.md § Gradle and JUnit quote the junit-tally line`.
+
 ##### Field notes — zero executed tests
 
 Zero is a legal value. Report it honestly when the gate denied the run, when the selector matched

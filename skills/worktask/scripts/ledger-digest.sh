@@ -116,6 +116,7 @@ print_digest() {
 # re-invokes this script as "$0" against each, so the assertions exercise the
 # real CLI (arg parsing, exit codes) rather than print_digest in isolation.
 self_test() {
+  _SELFTEST_PASSED=0
   local td
   td=$(mktemp -d "${TMPDIR:-/tmp}/ledger-digest-XXXXXX")
   # Expanded now on purpose: `td` is local and out of scope when the EXIT trap fires.
@@ -145,6 +146,7 @@ EOF
   }
   if [[ "$got_mixed" == "$expected_mixed" ]]; then
     echo "self-test: mixed ledger digest (ready/in_progress/blocked): ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: mixed ledger digest: FAIL" >&2
     echo "  expected: $expected_mixed" >&2
@@ -168,6 +170,7 @@ EOF
   }
   if [[ "$got_empty" == "$expected_empty" ]]; then
     echo "self-test: empty-category 'none' rendering: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: empty-category 'none' rendering: FAIL" >&2
     echo "  expected: $expected_empty" >&2
@@ -198,6 +201,7 @@ EOF
   }
   if grep -qx 'open_blocking_questions: 2' <<< "$got_obq"; then
     echo "self-test: open_blocking_questions count (missing status counts as open): ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: open_blocking_questions count: FAIL (got: $got_obq)" >&2
     exit 1
@@ -208,6 +212,7 @@ EOF
   "$0" --state "$td/does-not-exist.json" > /dev/null 2>&1 || rc=$?
   if [[ $rc -eq 3 ]]; then
     echo "self-test: missing-ledger exit 3: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: missing-ledger exit 3: FAIL (rc=$rc)" >&2; exit 1
   fi
@@ -218,11 +223,12 @@ EOF
   "$0" --state "$td/ledger-bad.json" > /dev/null 2>&1 || rc=$?
   if [[ $rc -eq 3 ]]; then
     echo "self-test: invalid-JSON exit 3: ok"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   else
     echo "self-test: invalid-JSON exit 3: FAIL (rc=$rc)" >&2; exit 1
   fi
 
-  echo "self-test: ALL PASS"
+  echo "self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }
 
 if [[ "$SELFTEST" -eq 1 ]]; then

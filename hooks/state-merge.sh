@@ -55,10 +55,19 @@ if [[ "${1:-}" == "--self-test" ]]; then
   fi
 
   # Run the canonical self-test from state-patch.sh (covers all paths this hook uses).
-  if bash "$PATCH_SCRIPT" --self-test; then
-    printf 'self-test (via state-patch.sh): ALL PASS\n'
+  # Captured, not streamed: the wrapper line must repeat the delegate's executed-case count,
+  # so a digitless line here cannot hide that the cases ran in another process.
+  if st_out=$(bash "$PATCH_SCRIPT" --self-test); then
+    printf '%s\n' "$st_out"
+    st_n=$(printf '%s\n' "$st_out" | sed -n 's/^self-test: ALL PASS (\([0-9][0-9]*\) passed, 0 failed)$/\1/p' | tail -n 1)
+    if [[ -z "$st_n" ]]; then
+      printf 'self-test: state-patch.sh --self-test passed without a case count\n' >&2
+      exit 1
+    fi
+    printf 'self-test (via state-patch.sh): ALL PASS (%s passed, 0 failed)\n' "$st_n"
     exit 0
   else
+    printf '%s\n' "$st_out"
     printf 'self-test: state-patch.sh --self-test FAILED\n' >&2
     exit 1
   fi

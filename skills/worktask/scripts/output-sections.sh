@@ -234,6 +234,7 @@ print_regions() {
 }
 
 self_test() {
+  _SELFTEST_PASSED=0
   local td fx rc s
   td="$(mktemp -d "${TMPDIR:-/tmp}/output-sections-selftest.XXXXXX")"
   # shellcheck disable=SC2064  # the paths are fixed at set time on purpose
@@ -257,6 +258,7 @@ self_test() {
     bash "$0" --root "$fx" "$@" > "$td/out" 2>&1 || rc=$?
     [ "$rc" -eq "$want" ] || { printf 'self-test: %s: FAIL (rc=%s want=%s)\n' "$label" "$rc" "$want" >&2; cat "$td/out" >&2; exit 1; }
     printf 'self-test: %s: ok\n' "$label"
+    _SELFTEST_PASSED=$((_SELFTEST_PASSED + 1))
   }
 
   _st "check fails on missing regions" 1 --check
@@ -273,7 +275,7 @@ self_test() {
   printf '<!-- output-sections:begin stage=DV -->\n<!-- output-sections:end stage=DV -->\n' >> "$fx/agents/developer.md"
   _st "duplicate pair fails" 1 --check
   _st "write refuses a duplicate pair" 1 --write
-  echo "self-test: ALL PASS"
+  echo "self-test: ALL PASS ($_SELFTEST_PASSED passed, 0 failed)"
 }
 
 MODE=""
